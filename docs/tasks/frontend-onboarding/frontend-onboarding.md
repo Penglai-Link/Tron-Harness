@@ -24,7 +24,7 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 ## Steps
 | step | description | status | note |
 | --- | --- | --- | --- |
-| 1 | [frontend-onboarding-1](frontend-onboarding-1.md) - Initialize from tech stack plus design docs and create `/design-standard`. | finished | commits: 9abf746, 22b7191; gate=none; run_action=auto_accept_current_step; acceptance commit pending |
+| 1 | [frontend-onboarding-1](frontend-onboarding-1.md) - Initialize from tech stack plus design docs and create `/design-standard`. | finished | commits: 9abf746, 22b7191, 3a66384; gate=none; run_action=auto_accept_current_step |
 | 2 | [frontend-onboarding-2](frontend-onboarding-2.md) - Read product/design docs, scan every prototype page, and establish shared layout plus common components. | notrun | commit: pending; gate=none |
 | 3 | [frontend-onboarding-3](frontend-onboarding-3.md) - Traverse all Stitch pages, implement them with mock data plus API boundaries, and record page acceptance evidence. | notrun | commit: pending; gate=none |
 | 4 | [frontend-onboarding-4](frontend-onboarding-4.md) - Perform final quality acceptance across coverage, visual structure, interactions, and deviations. | notrun | commit: pending; gate=none |
@@ -37,3 +37,4 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 | 2026-05-01 13:20:39 +0800 | waiting_human_decision | 25% | Step 1 executed: initialized Vite React TypeScript workspace and `/design-standard`; validation passed and checkpoint pending. |
 | 2026-05-01 13:20:39 +0800 | waiting_human_decision | 25% | Step 1 checkpoint created as `22b7191`; next run should auto-accept Step 1 only. |
 | 2026-05-01 13:31:30 +0800 | waiting_human_decision | 25% | Step 1 auto-accepted after source, stack, `/design-standard`, typecheck, build, route probe, and diff-check validation; Step 2 remains notrun for the next run. |
+| 2026-05-01 13:31:30 +0800 | waiting_human_decision | 25% | Step 1 acceptance checkpoint created as `3a66384`; next run should execute Step 2 only. |

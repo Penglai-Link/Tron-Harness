@@ -25,7 +25,7 @@ Initialize the frontend project from the selected tech stack and design docs, th
 | --- | --- | --- | --- |
 | 1 | Read source docs and confirm stack/design inputs. | finished | commit: 9abf746; read tech stack, design doc, and PRD during Step 1 execution |
 | 2 | Initialize project structure according to the stack document. | finished | commit: 22b7191; Vite 8, React 19, TypeScript 6, Tailwind 4, shadcn-style UI primitives, and `@chenglou/pretext` dependency added |
-| 3 | Create `/design-standard` route and validation evidence. | finished | commit: 22b7191; `/design-standard` implemented; `npm run typecheck`, `npm run build`, route probe, and `git diff --check` passed; acceptance commit pending |
+| 3 | Create `/design-standard` route and validation evidence. | finished | commits: 22b7191, 3a66384; `/design-standard` implemented; `npm run typecheck`, `npm run build`, route probe, and `git diff --check` passed |
 
 ## Update Log
 | time | status | process | update |
@@ -35,3 +35,4 @@ Initialize the frontend project from the selected tech stack and design docs, th
 | 2026-05-01 13:20:39 +0800 | waiting_human_decision | 95% | Step 1 source docs read, frontend scaffold plus `/design-standard` route created, and validation passed; checkpoint pending. |
 | 2026-05-01 13:20:39 +0800 | waiting_human_decision | 95% | Step 1 implementation checkpoint created as `22b7191`; waiting for automatic acceptance. |
 | 2026-05-01 13:31:30 +0800 | finished | 100% | Step 1 auto-accepted after validation: source docs reviewed, stack matched, `/design-standard` rendered with HTTP 200, typecheck/build/diff-check passed. |
+| 2026-05-01 13:31:30 +0800 | finished | 100% | Step 1 acceptance checkpoint recorded as `3a66384`. |
