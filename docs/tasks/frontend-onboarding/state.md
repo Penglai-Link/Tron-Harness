@@ -78,3 +78,4 @@ Every listed page currently has both `code.html` and `screen.png`.
 | 2026-05-01 13:20:39 +0800 | `npm run build` | passed |
 | 2026-05-01 13:20:39 +0800 | `curl -I http://127.0.0.1:4173/design-standard` | passed: HTTP 200 |
 | 2026-05-01 13:20:39 +0800 | `git diff --check` | passed |
+| 2026-05-01 13:20:39 +0800 | `git commit -m "Execute frontend onboarding step 1"` | passed: `22b7191` |

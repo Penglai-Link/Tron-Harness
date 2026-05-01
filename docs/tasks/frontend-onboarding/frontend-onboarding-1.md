@@ -24,8 +24,8 @@ Initialize the frontend project from the selected tech stack and design docs, th
 | step | description | status | note |
 | --- | --- | --- | --- |
 | 1 | Read source docs and confirm stack/design inputs. | finished | commit: 9abf746; read tech stack, design doc, and PRD during Step 1 execution |
-| 2 | Initialize project structure according to the stack document. | finished | commit: pending; Vite 8, React 19, TypeScript 6, Tailwind 4, shadcn-style UI primitives, and `@chenglou/pretext` dependency added |
-| 3 | Create `/design-standard` route and validation evidence. | waiting_human_decision | commit: pending; `/design-standard` implemented; `npm run typecheck`, `npm run build`, route probe, and `git diff --check` passed |
+| 2 | Initialize project structure according to the stack document. | finished | commit: 22b7191; Vite 8, React 19, TypeScript 6, Tailwind 4, shadcn-style UI primitives, and `@chenglou/pretext` dependency added |
+| 3 | Create `/design-standard` route and validation evidence. | waiting_human_decision | commit: 22b7191; `/design-standard` implemented; `npm run typecheck`, `npm run build`, route probe, and `git diff --check` passed |
 
 ## Update Log
 | time | status | process | update |
@@ -33,3 +33,4 @@ Initialize the frontend project from the selected tech stack and design docs, th
 | 2026-05-01 13:00:02 +0800 | notrun | 0% | Step 1 tracker initialized; implementation has not started. |
 | 2026-05-01 13:00:02 +0800 | notrun | 0% | Init checkpoint recorded as `9abf746`; Step 1 remains notrun. |
 | 2026-05-01 13:20:39 +0800 | waiting_human_decision | 95% | Step 1 source docs read, frontend scaffold plus `/design-standard` route created, and validation passed; checkpoint pending. |
+| 2026-05-01 13:20:39 +0800 | waiting_human_decision | 95% | Step 1 implementation checkpoint created as `22b7191`; waiting for automatic acceptance. |
