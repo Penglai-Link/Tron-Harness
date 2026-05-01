@@ -103,6 +103,8 @@ function tagList(tags: string[]) {
   );
 }
 
+const promptShellNavItems = ["Home", "Library", "Deployments", "Experiments", "Usage", "Settings"];
+
 export function AddModelPage() {
   const costs = useMemo(() => getModelCostPreview(), []);
   const [provider, setProvider] = useState("openai");
@@ -769,9 +771,16 @@ export function CreateAutomationPage() {
 export function CreatePromptPage() {
   const variables = useMemo(() => getPromptVariables(), []);
   const [tab, setTab] = useState("prompts");
+  const [navItem, setNavItem] = useState("Library");
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [visibility, setVisibility] = useState("Workspace");
   const [temperature, setTemperature] = useState(0.7);
   const [notice, setNotice] = useState("2 Detected variables.");
+  const toggleNotifications = () => {
+    const nextOpen = !notificationsOpen;
+    setNotificationsOpen(nextOpen);
+    setNotice(nextOpen ? "Notifications panel opened" : "Notifications closed");
+  };
 
   return (
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]">
@@ -784,8 +793,18 @@ export function CreatePromptPage() {
           <Plus size={15} />
           New Project
         </Button>
-        {["Home", "Library", "Deployments", "Experiments", "Usage", "Settings"].map((item) => (
-          <button className={cn("mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm", item === "Library" ? "bg-white font-medium shadow-sm" : "text-[var(--color-on-surface-variant)] hover:bg-white")} type="button" key={item}>
+        {promptShellNavItems.map((item) => (
+          <button
+            aria-pressed={navItem === item}
+            className={cn("mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm", navItem === item ? "bg-white font-medium shadow-sm" : "text-[var(--color-on-surface-variant)] hover:bg-white")}
+            data-selected={navItem === item ? "true" : "false"}
+            type="button"
+            key={item}
+            onClick={() => {
+              setNavItem(item);
+              setNotice(`${item} navigation selected`);
+            }}
+          >
             <Layers3 size={16} />
             {item}
           </button>
@@ -797,9 +816,20 @@ export function CreatePromptPage() {
           <SegmentedTabs value={tab} onValueChange={setTab} items={[{ label: "Dashboard", value: "dashboard" }, { label: "Prompts", value: "prompts" }, { label: "Models", value: "models" }, { label: "Datasets", value: "datasets" }, { label: "Logs", value: "logs" }]} />
         </div>
         <div className="flex items-center gap-2">
-          <IconButton label="Notifications">
-            <Settings2 size={16} />
-          </IconButton>
+          <div className="relative">
+            <IconButton label="Notifications" onClick={toggleNotifications}>
+              <Settings2 size={16} />
+            </IconButton>
+            {notificationsOpen ? (
+              <div className="absolute right-0 top-10 z-40 w-72 rounded-xl border border-[var(--color-outline-variant)] bg-white p-3 text-sm shadow-lg">
+                <p className="font-semibold">Notifications</p>
+                <p className="mt-1 text-[var(--color-on-surface-variant)]">3 prompt workflow alerts are ready for review.</p>
+                <button className="mt-3 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white" type="button" onClick={() => setNotice("Notification center opened")}>
+                  Open center
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
       <main className="ml-[280px] pt-16">

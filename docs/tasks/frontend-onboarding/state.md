@@ -3,9 +3,9 @@
 ## FSM
 - current_step: frontend-onboarding-3
 - gate: waiting_auto_acceptance
-- run_action: auto_accept_current_step
-- repair_attempts: 3
-- blocker_key: step3_prompt_shell_noop_controls
+- run_action: repair_current_step
+- repair_attempts: 4
+- blocker_key: none
 
 ## Source Paths
 - tech_stack: `docs/tech-stack.md`
@@ -311,6 +311,14 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 16:41:09 +0800 | `npm run build` | passed |
 | 2026-05-01 16:41:09 +0800 | Playwright Step 3 interaction repair smoke | passed: 16 repaired routes opened and repaired controls produced visible feedback |
 | 2026-05-01 16:41:09 +0800 | Playwright current route structure/screenshot check | failed: structure markers and screenshots were checked for all 30 routes, but source interaction audit found two visible prompt-shell no-op controls |
+| 2026-05-01 16:48:11 +0800 | Step 3 prompt shell repair | passed: `/prompts/new` sidebar navigation now updates selected state/notice and Notifications opens a visible panel with follow-up feedback |
+| 2026-05-01 16:48:11 +0800 | `npm run typecheck` | passed |
+| 2026-05-01 16:48:11 +0800 | `npm run build` | passed |
+| 2026-05-01 16:48:11 +0800 | `curl -I http://127.0.0.1:4173/prompts/new` | passed: HTTP 200 |
+| 2026-05-01 16:48:11 +0800 | `curl -I http://127.0.0.1:4173/design-standard` | passed: HTTP 200 |
+| 2026-05-01 16:48:11 +0800 | Playwright prompt shell repair smoke | passed: selected nav state, navigation feedback, notifications panel, notification center feedback, and screenshot refresh |
+| 2026-05-01 16:48:11 +0800 | screenshot dimension check | passed: `docs/tasks/frontend-onboarding/evidence/step3-current/create_new_prompt_tron.png` is 1440x1100 |
+| 2026-05-01 16:48:11 +0800 | `git diff --check` | passed |
 
 ## Step 3 Interaction Auto Acceptance Findings
 - Result: repair required; `frontend-onboarding-3` remains `waiting_human_decision` with `gate=waiting_auto_acceptance`.
@@ -355,3 +363,14 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Manifest correction: only `create_new_prompt_tron` is marked `repair`; all other rows remain pass.
 - Failure checkpoint: `09f4376`.
 - Next action: `repair_current_step` should add navigation, selected state, feedback, or explicit disabled reasons for those prompt-shell controls only, then return to `gate=waiting_auto_acceptance`.
+
+## Step 3 Prompt Shell Repair Findings
+- Result: repaired, waiting for the next `auto_accept_current_step` run.
+- Scope: repaired only the distinct `create_new_prompt_tron` shell controls identified by the strict interaction gate; Step 4 remains `notrun`.
+- Source changes: `/prompts/new` sidebar navigation buttons now maintain selected state and visible notice feedback, and the Notifications IconButton opens a visible notifications panel with an Open center feedback action.
+- Evidence refreshed: `docs/tasks/frontend-onboarding/evidence/step3-current/create_new_prompt_tron.png` is a current 1440x1100 screenshot.
+- Interaction evidence added: `docs/tasks/frontend-onboarding/evidence/step3-prompt-shell-repair.spec.cjs` clicks prompt-shell navigation and notification controls and asserts visible state/feedback.
+- Manifest: all 30 rows in `acceptance-manifest.md` now record `pass`; no `repair` rows remain.
+- Validation passed: `npm run typecheck`, `npm run build`, `/prompts/new` HTTP 200, `/design-standard` HTTP 200, Playwright prompt shell repair smoke, screenshot dimension check, and `git diff --check`.
+- Current FSM: `current_step=frontend-onboarding-3`, `gate=waiting_auto_acceptance`, `run_action=repair_current_step`, `repair_attempts=4`, `blocker_key=none`.
+- Repair checkpoint: pending.
