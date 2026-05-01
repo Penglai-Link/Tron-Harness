@@ -3,9 +3,9 @@
 ## FSM
 - current_step: frontend-onboarding-3
 - gate: waiting_auto_acceptance
-- run_action: auto_accept_current_step
-- repair_attempts: 2
-- blocker_key: step3_noninteractive_primary_actions
+- run_action: repair_current_step
+- repair_attempts: 3
+- blocker_key: none
 
 ## Source Paths
 - tech_stack: `docs/tech-stack.md`
@@ -296,6 +296,15 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 16:04:49 +0800 | source interaction coverage check | passed: search, filters, bulk/import/new, checkbox selection, row menu, pagination, topbar controls, and support FAB handlers present |
 | 2026-05-01 16:04:49 +0800 | `git diff --check` | passed |
 | 2026-05-01 16:04:49 +0800 | `git commit -m "Repair step 3 resources page"` | passed: `28ef7cd` |
+| 2026-05-01 16:30:41 +0800 | `npm install -D @playwright/test` | passed: local Playwright test runner added so evidence specs can run repeatably |
+| 2026-05-01 16:30:41 +0800 | Step 3 interaction repair | passed: 16 pages gained observable action behavior or state feedback |
+| 2026-05-01 16:30:41 +0800 | `npm run typecheck` | passed |
+| 2026-05-01 16:30:41 +0800 | `npm run build` | passed |
+| 2026-05-01 16:30:41 +0800 | Playwright interaction repair smoke | passed: 16 repaired routes opened, screenshots refreshed, and repaired controls clicked with visible feedback |
+| 2026-05-01 16:30:41 +0800 | Step 3 evidence inventory | passed: 30 manifest pass rows, 30 ledger rows, 30 code/screen sources, and 30 current screenshots at 1440x1100 |
+| 2026-05-01 16:30:41 +0800 | HTTP route probes | passed: 30 prototype routes plus `/design-standard` returned HTTP 200 |
+| 2026-05-01 16:30:41 +0800 | `rg '\| repair \||\| blocked \|' docs/tasks/frontend-onboarding/acceptance-manifest.md` | passed: no repair or blocked rows remain |
+| 2026-05-01 16:30:41 +0800 | `git diff --check` | passed |
 
 ## Step 3 Interaction Auto Acceptance Findings
 - Result: repair required; `frontend-onboarding-3` remains `waiting_human_decision` with `gate=waiting_auto_acceptance`.
@@ -321,3 +330,13 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Failure checkpoint: `b4b2efb`.
 - Next action: `repair_current_step` should add observable behavior or explicit disabled reasons for the listed controls only, then return to `gate=waiting_auto_acceptance`.
 - Validation log: 2026-05-01 16:19:19 +0800 Step 3 source interaction audit failed because 16 prototype pages have visible no-op action controls; Step 3 was not accepted.
+
+## Step 3 Interaction Repair Findings
+- Result: repaired, waiting for the next `auto_accept_current_step` run.
+- Scope: repaired the 16 pages marked `repair` by the Step 3 noninteractive primary/action control audit.
+- Source changes: added observable notice/status/state behavior for audit export, automation creation/filter/delete, prompt New Project, graph Edit Entity, agent attach, memory import/sync, model add/settings, role add/filter, skills New Skill, task execute/add-subtask, kanban sync/create, user export/add/row/role select, and variable new/edit/delete/usage links.
+- Evidence refreshed: `docs/tasks/frontend-onboarding/evidence/step3-current/` screenshots for all 16 repaired pages were regenerated at 1440x1100.
+- Interaction evidence added: `docs/tasks/frontend-onboarding/evidence/step3-interaction-repair.spec.cjs` opens all repaired routes, captures screenshots, and clicks the repaired controls to assert visible feedback/state.
+- Manifest: all 30 rows in `acceptance-manifest.md` now record `pass`; no `repair` rows remain.
+- Validation passed: `npm run typecheck`, `npm run build`, Playwright Step 3 interaction repair smoke, screenshot dimension checks, manifest repair-status check, and `git diff --check`.
+- Current FSM: `current_step=frontend-onboarding-3`, `gate=waiting_auto_acceptance`, `run_action=repair_current_step`, `repair_attempts=3`, `blocker_key=none`.

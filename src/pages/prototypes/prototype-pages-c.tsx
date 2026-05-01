@@ -586,6 +586,7 @@ export function RoleMatrixPage() {
   const [activeTab, setActiveTab] = useState("roles");
   const [query, setQuery] = useState("");
   const [overrides, setOverrides] = useState<Record<string, string[]>>({});
+  const [notice, setNotice] = useState("Role matrix ready.");
   const filteredRoles = roles.filter((role) => role.name.toLowerCase().includes(query.toLowerCase()));
 
   function togglePermission(roleId: string, domain: string, code: string) {
@@ -600,17 +601,20 @@ export function RoleMatrixPage() {
       <PageHeader
         title="Users & Roles"
         status="Permission grid"
-        actions={<Button><Plus size={16} aria-hidden="true" />Add Custom Role</Button>}
+        actions={<Button onClick={() => setNotice("Custom role editor opened")}><Plus size={16} aria-hidden="true" />Add Custom Role</Button>}
       />
       <SurfaceCard className="mb-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SegmentedTabs value={activeTab} onValueChange={setActiveTab} items={[{ label: "User Directory", value: "users" }, { label: "Role Matrix", value: "roles" }, { label: "Audit Logs", value: "audit" }]} />
           <div className="flex items-center gap-2">
             <SearchField placeholder="Search roles..." value={query} onChange={setQuery} />
-            <Button size="sm" variant="secondary"><Filter size={14} aria-hidden="true" />Filter</Button>
+            <Button size="sm" variant="secondary" onClick={() => setNotice(`Filter drawer opened for ${filteredRoles.length} roles`)}><Filter size={14} aria-hidden="true" />Filter</Button>
           </div>
         </div>
       </SurfaceCard>
+      <div className="mb-4">
+        <Notice value={notice} />
+      </div>
       <SurfaceCard className="overflow-hidden p-0">
         <div className="flex items-center justify-between border-b border-[var(--color-outline-variant)] p-5">
           <h2 className="text-xl font-semibold">Platform Permissions</h2>
@@ -665,6 +669,7 @@ export function SkillsPage() {
   const [mode, setMode] = useState<"skills" | "mcp">("skills");
   const [query, setQuery] = useState("");
   const [capabilities, setCapabilities] = useState(() => listCapabilities());
+  const [notice, setNotice] = useState("Capability directory ready.");
   const filtered = capabilities.filter((item) => item.mode === mode && item.name.toLowerCase().includes(query.toLowerCase()));
   const [selectedId, setSelectedId] = useState(filtered[0]?.id ?? "python");
   const selected = capabilities.find((item) => item.id === selectedId) ?? filtered[0] ?? capabilities[0];
@@ -681,10 +686,13 @@ export function SkillsPage() {
         actions={
           <>
             <SegmentedTabs value={mode} onValueChange={(value) => setMode(value as "skills" | "mcp")} items={[{ label: "Skills", value: "skills" }, { label: "MCP Servers", value: "mcp" }]} />
-            <Button><Plus size={16} aria-hidden="true" />New Skill</Button>
+            <Button onClick={() => setNotice("New skill workflow opened")}><Plus size={16} aria-hidden="true" />New Skill</Button>
           </>
         }
       />
+      <div className="mb-4">
+        <Notice value={notice} />
+      </div>
       <div className="grid min-h-[760px] gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
         <SurfaceCard className="p-0">
           <div className="border-b border-[var(--color-outline-variant)] p-4">
@@ -751,6 +759,7 @@ export function TaskDetailsPage() {
   const task = useMemo(() => getTaskDetail(), []);
   const [status, setStatus] = useState(task.status);
   const [subtasks, setSubtasks] = useState(task.subtasks);
+  const [notice, setNotice] = useState("Task execution context ready.");
   const completed = subtasks.filter((item) => item.done).length;
 
   return (
@@ -758,8 +767,14 @@ export function TaskDetailsPage() {
       <PageHeader
         breadcrumbs={[{ label: "Tasks", href: "/tasks" }, { label: "Core Infrastructure Update" }, { label: task.id }]}
         title="Task Details"
-        actions={<Button>Execute Task</Button>}
+        actions={<Button onClick={() => {
+          setStatus("In Progress");
+          setNotice("Task execution queued");
+        }}>Execute Task</Button>}
       />
+      <div className="mb-4">
+        <Notice value={notice} />
+      </div>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
           <SurfaceCard>
@@ -789,7 +804,7 @@ export function TaskDetailsPage() {
           </SurfaceCard>
           <div className="grid gap-5 md:grid-cols-2">
             <SurfaceCard><h3 className="mb-3 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Resource Inheritance</h3><div className="rounded-lg bg-[var(--color-surface-container-low)] p-3">Model Config → gpt-4-turbo-config-v2</div></SurfaceCard>
-            <SurfaceCard><h3 className="mb-3 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Linked Resources</h3>{task.resources.map((item) => <button className="mb-2 flex w-full rounded-lg border border-transparent p-2 text-left hover:border-[var(--color-outline-variant)] hover:bg-[var(--color-surface-container-low)]" type="button" key={item}>{item}</button>)}</SurfaceCard>
+            <SurfaceCard><h3 className="mb-3 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Linked Resources</h3>{task.resources.map((item) => <button className="mb-2 flex w-full rounded-lg border border-transparent p-2 text-left hover:border-[var(--color-outline-variant)] hover:bg-[var(--color-surface-container-low)]" type="button" key={item} onClick={() => setNotice(`${item} resource selected`)}>{item}</button>)}</SurfaceCard>
           </div>
           <SurfaceCard>
             <div className="mb-3 flex items-center justify-between border-b border-[var(--color-outline-variant)] pb-2">
@@ -824,7 +839,11 @@ export function TaskDetailsPage() {
                 </label>
               ))}
             </div>
-            <Button className="mt-3 w-full" variant="secondary"><Plus size={14} aria-hidden="true" />Add Sub-task</Button>
+            <Button className="mt-3 w-full" variant="secondary" onClick={() => {
+              const nextIndex = subtasks.length + 1;
+              setSubtasks((rows) => [...rows, { id: `sub-${nextIndex}`, title: `Draft follow-up ${nextIndex}`, done: false, status: "Pending", progress: 0 }]);
+              setNotice(`Sub-task ${nextIndex} added`);
+            }}><Plus size={14} aria-hidden="true" />Add Sub-task</Button>
           </SurfaceCard>
         </aside>
       </div>
@@ -836,6 +855,7 @@ export function TasksKanbanPage() {
   const columns = useMemo(() => listKanbanColumns(), []);
   const [query, setQuery] = useState("");
   const [selectedTask, setSelectedTask] = useState<KanbanTask | null>(null);
+  const [notice, setNotice] = useState("Kanban board ready.");
   const visibleColumns = columns.map((column) => ({ ...column, tasks: column.tasks.filter((task) => task.title.toLowerCase().includes(query.toLowerCase()) || task.id.toLowerCase().includes(query.toLowerCase())) }));
 
   return (
@@ -845,11 +865,14 @@ export function TasksKanbanPage() {
         status={selectedTask ? selectedTask.id : "Kanban"}
         actions={
           <>
-            <Button variant="secondary"><RefreshCcw size={16} aria-hidden="true" />Sync</Button>
-            <Button><Plus size={16} aria-hidden="true" />Create Task</Button>
+            <Button variant="secondary" onClick={() => setNotice("Kanban sync completed")}><RefreshCcw size={16} aria-hidden="true" />Sync</Button>
+            <Button onClick={() => setNotice("Create task workflow opened")}><Plus size={16} aria-hidden="true" />Create Task</Button>
           </>
         }
       />
+      <div className="mb-4">
+        <Notice value={notice} />
+      </div>
       <SurfaceCard className="mb-4 p-4">
         <SearchField placeholder="Filter kanban cards..." value={query} onChange={setQuery} />
       </SurfaceCard>
@@ -888,15 +911,24 @@ function KanbanCard({ task, selected, onSelect }: { task: KanbanTask; selected: 
 }
 
 export function UsersPage() {
-  const users = useMemo(() => listUsers(), []);
+  const [users, setUsers] = useState(() => listUsers());
   const [tab, setTab] = useState("users");
   const [query, setQuery] = useState("");
   const [role, setRole] = useState("All");
+  const [notice, setNotice] = useState("User directory ready.");
   const filtered = users.filter((user) => (role === "All" || user.role === role) && `${user.name} ${user.email}`.toLowerCase().includes(query.toLowerCase()));
+
+  function updateUserRole(id: string, value: UserRecord["role"]) {
+    setUsers((rows) => rows.map((user) => (user.id === id ? { ...user, role: value } : user)));
+    setNotice(`Role updated to ${value}`);
+  }
 
   return (
     <TronShell activeItem="Users" searchPlaceholder="Search users or roles...">
-      <PageHeader title="Users & Roles" actions={<><Button variant="secondary">Export</Button><Button><UserPlus size={16} aria-hidden="true" />Add User</Button></>} />
+      <PageHeader title="Users & Roles" actions={<><Button variant="secondary" onClick={() => setNotice(`${filtered.length} users exported`)}>Export</Button><Button onClick={() => setNotice("Add user drawer opened")}><UserPlus size={16} aria-hidden="true" />Add User</Button></>} />
+      <div className="mb-4">
+        <Notice value={notice} />
+      </div>
       <div className="mb-5 grid gap-4 xl:grid-cols-3">
         <MetricCard label="Users" value={String(users.length)} trend="Across enterprise workspace" icon={<ShieldCheck size={18} aria-hidden="true" />} />
         <MetricCard label="Active" value={String(users.filter((u) => u.status === "Active").length)} trend="Signed in recently" />
@@ -920,11 +952,11 @@ export function UsersPage() {
         pagination={<span>{filtered.length} users visible · page 1 of 3</span>}
         columns={[
           { id: "name", header: "User", render: (row) => <div><div className="font-medium">{row.name}</div><div className="text-[13px] text-[var(--color-on-surface-variant)]">{row.email}</div></div> },
-          { id: "role", header: "Role", render: (row) => <SelectInput className="h-8" value={row.role} onChange={() => undefined}><option>Admin</option><option>Editor</option><option>Viewer</option></SelectInput> },
+          { id: "role", header: "Role", render: (row) => <SelectInput className="h-8" value={row.role} onChange={(event) => updateUserRole(row.id, event.target.value as UserRecord["role"])}><option>Admin</option><option>Editor</option><option>Viewer</option></SelectInput> },
           { id: "workspace", header: "Workspace", render: (row) => row.workspace },
           { id: "status", header: "Status", render: (row) => <Badge tone={badgeToneByStatus(row.status)}>{row.status}</Badge> },
           { id: "last", header: "Last Active", render: (row) => row.lastActive },
-          { id: "menu", header: "", align: "right", render: () => <Button size="icon" variant="ghost" aria-label="Open user row actions"><MoreHorizontal size={16} aria-hidden="true" /></Button> },
+          { id: "menu", header: "", align: "right", render: (row) => <Button size="icon" variant="ghost" aria-label={`Open actions for ${row.name}`} onClick={() => setNotice(`${row.name} action menu opened`)}><MoreHorizontal size={16} aria-hidden="true" /></Button> },
         ]}
       />
     </TronShell>
@@ -936,17 +968,21 @@ function VariablesBasePage({ variant }: { variant: "standard" | "details" }) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(variables[0]?.id ?? "");
   const [revealed, setRevealed] = useState(false);
+  const [notice, setNotice] = useState("Variable inspector ready.");
   const selected = variables.find((variable) => variable.id === selectedId) ?? variables[0];
   const filtered = variables.filter((variable) => variable.key.toLowerCase().includes(query.toLowerCase()));
 
   return (
     <TronShell activeItem="Variables" searchPlaceholder="Search variables...">
-      {variant === "details" ? <PageHeader title="Variable Management" status="Details" actions={<Button><Plus size={16} aria-hidden="true" />New Variable</Button>} /> : null}
+      {variant === "details" ? <PageHeader title="Variable Management" status="Details" actions={<Button onClick={() => setNotice("New variable editor opened")}><Plus size={16} aria-hidden="true" />New Variable</Button>} /> : null}
+      <div className="mb-4">
+        <Notice value={notice} />
+      </div>
       <div className="grid min-h-[760px] gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <SurfaceCard className="p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] p-4">
             <SearchField placeholder="Search variables..." value={query} onChange={setQuery} />
-            {variant === "standard" ? <Button><Plus size={16} aria-hidden="true" />New Variable</Button> : null}
+            {variant === "standard" ? <Button onClick={() => setNotice("New variable editor opened")}><Plus size={16} aria-hidden="true" />New Variable</Button> : null}
           </div>
           <DataTable<VariableRecord>
             rows={filtered}
@@ -958,7 +994,13 @@ function VariablesBasePage({ variant }: { variant: "standard" | "details" }) {
               { id: "type", header: "Type", render: (row) => row.type },
               { id: "status", header: "Status", render: (row) => <Badge tone={badgeToneByStatus(row.status)}>{row.status}</Badge> },
               { id: "updated", header: "Updated", render: (row) => row.updated },
-              { id: "actions", header: "", align: "right", render: (row) => <div className="flex justify-end gap-1"><Button size="icon" variant="ghost" aria-label={`Edit ${row.key}`} onClick={() => setSelectedId(row.id)}><KeyRound size={15} aria-hidden="true" /></Button><Button size="icon" variant="ghost" aria-label={`Delete ${row.key}`}><X size={15} aria-hidden="true" /></Button></div> },
+              { id: "actions", header: "", align: "right", render: (row) => <div className="flex justify-end gap-1"><Button size="icon" variant="ghost" aria-label={`Edit ${row.key}`} onClick={() => {
+                setSelectedId(row.id);
+                setNotice(`${row.key} selected for editing`);
+              }}><KeyRound size={15} aria-hidden="true" /></Button><Button size="icon" variant="ghost" aria-label={`Delete ${row.key}`} onClick={() => {
+                setSelectedId(row.id);
+                setNotice(`Delete ${row.key} requested`);
+              }}><X size={15} aria-hidden="true" /></Button></div> },
             ]}
           />
         </SurfaceCard>
@@ -976,7 +1018,7 @@ function VariablesBasePage({ variant }: { variant: "standard" | "details" }) {
           </div>
           <h3 className="mt-8 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Usage in Prompts</h3>
           <div className="mt-3 space-y-2">
-            {selected.usage.map((usage) => <button className="flex w-full items-center justify-between rounded-lg border border-[var(--color-outline-variant)] p-3 text-left text-sm hover:bg-[var(--color-surface-container-low)]" type="button" key={usage}><span>{usage}</span><ChevronRight size={15} aria-hidden="true" /></button>)}
+            {selected.usage.map((usage) => <button className="flex w-full items-center justify-between rounded-lg border border-[var(--color-outline-variant)] p-3 text-left text-sm hover:bg-[var(--color-surface-container-low)]" type="button" key={usage} onClick={() => setNotice(`${usage} usage link opened`)}><span>{usage}</span><ChevronRight size={15} aria-hidden="true" /></button>)}
           </div>
         </SurfaceCard>
       </div>

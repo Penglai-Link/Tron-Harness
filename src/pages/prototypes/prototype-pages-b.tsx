@@ -59,6 +59,10 @@ function SmallStatus({ children, tone = "neutral" }: { children: React.ReactNode
   return <Badge tone={tone}>{children}</Badge>;
 }
 
+function Notice({ value }: { value: string }) {
+  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+}
+
 export function DashboardPage() {
   const { activities, metrics } = useMemo(getDashboardData, []);
   const [expanded, setExpanded] = useState(false);
@@ -359,6 +363,8 @@ function GraphCanvas({ entities, selected, setInspectorOpen, setSelectedId, setZ
 }
 
 function GraphInspector({ onClose, selected }: { onClose: () => void; selected: GraphEntity }) {
+  const [notice, setNotice] = useState("Entity properties ready.");
+
   return (
     <aside className="border-l border-[var(--color-outline-variant)] bg-white">
       <div className="flex items-start justify-between border-b border-[var(--color-outline-variant)] p-4">
@@ -391,7 +397,8 @@ function GraphInspector({ onClose, selected }: { onClose: () => void; selected: 
             ))}
           </div>
         </section>
-        <Button className="w-full">Edit Entity</Button>
+        <Button className="w-full" onClick={() => setNotice(`Editing ${selected.label}`)}>Edit Entity</Button>
+        <Notice value={notice} />
       </div>
     </aside>
   );
@@ -508,7 +515,7 @@ export function MainAgentPage() {
                 </div>
                 <div className="border-t border-[var(--color-outline-variant)] p-4">
                   <div className="flex items-end gap-2 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-1.5">
-                    <Button size="icon" variant="ghost"><Plus size={18} /></Button>
+                    <Button size="icon" variant="ghost" aria-label="Open attachment picker" onClick={() => setStatus("Attachment picker opened")}><Plus size={18} /></Button>
                     <TextArea className="min-h-9 flex-1 border-0 bg-transparent" rows={1} placeholder="Message Main Agent..." value={draft} onChange={(event) => setDraft(event.target.value)} />
                     <Button size="icon" onClick={() => setDraft("")}><Send size={16} /></Button>
                   </div>
@@ -530,6 +537,7 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState(["Namespace: UserPrefs", "Entity: usr_982x", "Confidence: > 0.85"]);
   const [selectedId, setSelectedId] = useState("mem-1");
+  const [notice, setNotice] = useState("Memory search studio ready.");
   const visible = fragments.filter((fragment) => fragment.content.toLowerCase().includes(query.toLowerCase()) || fragment.namespace.toLowerCase().includes(query.toLowerCase()));
   const selected = fragments.find((fragment) => fragment.id === selectedId) ?? fragments[0];
 
@@ -557,8 +565,11 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
       <PageHeader
         title="Memory Repository"
         description="Manage, query, and structure agent memory fragments."
-        actions={<><Button variant="secondary"><Upload size={16} />Import Data</Button><Button><RefreshCw size={16} />Sync Indices</Button></>}
+        actions={<><Button variant="secondary" onClick={() => setNotice("Import data drawer opened")}><Upload size={16} />Import Data</Button><Button onClick={() => setNotice("Index sync queued")}><RefreshCw size={16} />Sync Indices</Button></>}
       />
+      <div className="mb-4">
+        <Notice value={notice} />
+      </div>
       <SurfaceCard className="mb-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
           <div className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-white px-3">
@@ -622,6 +633,7 @@ export function ModelRegistryPage() {
   const [vendor, setVendor] = useState("All Vendors");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState("gpt-4-turbo");
+  const [notice, setNotice] = useState("Model registry ready.");
   const visible = models.filter((model) => (vendor === "All Vendors" || model.vendor === vendor) && model.name.toLowerCase().includes(query.toLowerCase()));
   const selected = models.find((model) => model.id === selectedId) ?? models[0];
 
@@ -629,7 +641,10 @@ export function ModelRegistryPage() {
     <PrototypeShell activeItem="Models">
       <div className="grid min-h-[740px] gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <section>
-          <PageHeader title="Model Registry" description="Manage AI vendors, configurations, and inheritance rules." actions={<Button><Plus size={16} />Add Model</Button>} />
+          <PageHeader title="Model Registry" description="Manage AI vendors, configurations, and inheritance rules." actions={<Button onClick={() => setNotice("Add model workflow opened")}><Plus size={16} />Add Model</Button>} />
+          <div className="mb-4">
+            <Notice value={notice} />
+          </div>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] pb-4">
             <div className="flex flex-wrap gap-2">
               {["All Vendors", "OpenAI", "Anthropic", "Google"].map((item) => (
@@ -666,7 +681,7 @@ function ModelInspector({ model }: { model: ModelRegistryItem }) {
   return (
     <SurfaceCard className="p-0">
       <div className="border-b border-[var(--color-outline-variant)] p-5">
-        <div className="mb-4 flex items-start justify-between"><span className="flex size-12 items-center justify-center rounded-lg border border-[var(--color-outline-variant)]"><Sparkles size={24} /></span><Button size="icon" variant="ghost"><Settings2 size={17} /></Button></div>
+        <div className="mb-4 flex items-start justify-between"><span className="flex size-12 items-center justify-center rounded-lg border border-[var(--color-outline-variant)]"><Sparkles size={24} /></span><Button size="icon" variant="ghost" aria-label={`Open ${model.name} settings`} onClick={() => setState("Settings opened")}><Settings2 size={17} /></Button></div>
         <h2 className="text-xl font-semibold">{model.name}</h2>
         <p className="mb-4 mt-1 text-sm text-[var(--color-on-surface-variant)]">{model.vendor} - {model.price}</p>
         <div className="flex gap-2"><Button className="flex-1" variant="secondary" onClick={() => setState("Configure opened")}>Configure</Button><Button className="flex-1" variant="secondary" onClick={() => setState("Disabled")}>Disable</Button></div>

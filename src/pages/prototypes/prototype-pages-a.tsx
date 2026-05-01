@@ -339,6 +339,7 @@ export function AuditLogsPage() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(613);
+  const [notice, setNotice] = useState("Audit log export is ready.");
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return rows.filter((row) => (status === "all" || row.status === status) && (!normalized || Object.values(row).join(" ").toLowerCase().includes(normalized)));
@@ -350,12 +351,15 @@ export function AuditLogsPage() {
         title="Users & Roles"
         description="Audit all administrative changes, inherited policy updates, and workspace access events."
         actions={
-          <Button variant="secondary">
+          <Button variant="secondary" onClick={() => setNotice(`${filteredRows.length} audit rows exported`)}>
             <FileText size={15} />
             Export
           </Button>
         }
       />
+      <div className="mb-4">
+        <Notice value={notice} />
+      </div>
       <SurfaceCard className="mb-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SegmentedTabs
@@ -416,6 +420,7 @@ export function AutomationsPage() {
   const [selectedId, setSelectedId] = useState(rows[0]?.id ?? "");
   const [tab, setTab] = useState("details");
   const [query, setQuery] = useState("");
+  const [notice, setNotice] = useState("Automation inspector ready.");
   const selected = rows.find((row) => row.id === selectedId) ?? rows[0];
   const filteredRows = rows.filter((row) => row.name.toLowerCase().includes(query.trim().toLowerCase()));
 
@@ -463,19 +468,22 @@ export function AutomationsPage() {
         title="Automations Management"
         description="Configure and monitor scheduled intelligence workflows."
         actions={
-          <Button>
+          <Button onClick={() => setNotice("New automation draft opened")}>
             <Plus size={15} />
             New Automation
           </Button>
         }
       />
+      <div className="mb-4">
+        <Notice value={notice} />
+      </div>
       <DataTable<AutomationRecord>
         rows={filteredRows}
         rowKey={(row) => row.id}
         toolbar={
           <>
             <TextInput className="h-8 w-56" placeholder="Search automations..." value={query} onChange={(event) => setQuery(event.target.value)} />
-            <Button size="sm" variant="secondary">
+            <Button size="sm" variant="secondary" onClick={() => setNotice(`Filter panel opened for ${filteredRows.length} automations`)}>
               <Filter size={14} />
               Filter
             </Button>
@@ -504,7 +512,7 @@ export function AutomationsPage() {
                 <IconButton label={`Edit ${row.name}`} onClick={() => setSelectedId(row.id)}>
                   <Settings2 size={15} />
                 </IconButton>
-                <IconButton label={`Delete ${row.name}`}>
+                <IconButton label={`Delete ${row.name}`} onClick={() => setNotice(`Delete ${row.name} requested`)}>
                   <Trash2 size={15} />
                 </IconButton>
               </div>
@@ -772,7 +780,7 @@ export function CreatePromptPage() {
           <h1 className="text-base font-black">Tron AI</h1>
           <p className="text-sm text-[var(--color-on-surface-variant)]">Enterprise Workspace</p>
         </div>
-        <Button className="mb-4 w-full">
+        <Button className="mb-4 w-full" onClick={() => setNotice("New project draft opened")}>
           <Plus size={15} />
           New Project
         </Button>
