@@ -3,9 +3,9 @@
 ## FSM
 - current_step: frontend-onboarding-2
 - gate: waiting_auto_acceptance
-- run_action: auto_accept_current_step
-- repair_attempts: 0
-- blocker_key: step2_route_contract_mismatch
+- run_action: repair_current_step
+- repair_attempts: 1
+- blocker_key: none
 
 ## Source Paths
 - tech_stack: `docs/tech-stack.md`
@@ -116,6 +116,12 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Failed: `src/lib/prototype-routes.ts` route/archetype contract does not match this state file for six prototypes: `automations_management_light`, `chat_sessions_updated_tron_1`, `chat_sessions_updated_tron_2`, `import_application_tron_unified_navigation_1`, `import_application_tron_unified_navigation_2`, and `memory_management_tron_data_isolation_1`.
 - Next action: `repair_current_step` should align `src/lib/prototype-routes.ts` with the recorded Step 2 route/archetype contract, then reset gate to `waiting_auto_acceptance`.
 
+## Step 2 Repair Findings
+- Result: repaired, waiting for the next `auto_accept_current_step` run.
+- Repaired: aligned `src/lib/prototype-routes.ts` with the Step 2 route/archetype contract for automations, both chat variants, both import variants, and the first memory management page.
+- Manifest: the six previously `repair` rows now record `pass`; no `| repair |` rows remain in `acceptance-manifest.md`.
+- Validation passed: `npm run typecheck`, `npm run build`, route/archetype contract repair check, manifest repair-status check, and `git diff --check`.
+
 ## Decisions
 - Use `docs/tasks/frontend-onboarding/` as the only onboarding bookkeeping root.
 - Preserve existing source docs and prototype files as user-provided inputs.
@@ -162,3 +168,9 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 14:40:42 +0800 | Playwright shared-shell interaction smoke | passed: sidebar accordion, tab state/content, search filter, pagination, toggle, topbar menu, primary action feedback, and FAB open/close |
 | 2026-05-01 14:40:42 +0800 | Step 2 route/archetype source contract compare | failed: six `src/lib/prototype-routes.ts` mismatches against `state.md`; Step 2 not auto-accepted |
 | 2026-05-01 14:40:42 +0800 | `git commit -m "Record step 2 acceptance failure"` | passed: `3d984cc` |
+| 2026-05-01 14:46:22 +0800 | Step 2 route/archetype source contract repair | passed: updated six mismatched route/archetype entries in `src/lib/prototype-routes.ts` |
+| 2026-05-01 14:46:22 +0800 | `npm run typecheck` | passed |
+| 2026-05-01 14:46:22 +0800 | `npm run build` | passed |
+| 2026-05-01 14:46:22 +0800 | Step 2 route/archetype repair check | passed: six repaired entries match `state.md` |
+| 2026-05-01 14:46:22 +0800 | `rg '\| repair \|' docs/tasks/frontend-onboarding/acceptance-manifest.md` | passed: no repair rows remain |
+| 2026-05-01 14:46:22 +0800 | `git diff --check` | passed |
