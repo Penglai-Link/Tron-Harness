@@ -3,9 +3,9 @@
 ## FSM
 - current_step: frontend-onboarding-3
 - gate: waiting_auto_acceptance
-- run_action: auto_accept_current_step
-- repair_attempts: 0
-- blocker_key: step3_shell_topbar_sidebar_collapse_mismatch
+- run_action: repair_current_step
+- repair_attempts: 1
+- blocker_key: none
 
 ## Source Paths
 - tech_stack: `docs/tech-stack.md`
@@ -156,6 +156,16 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Failure checkpoint: `615d3e5`.
 - Next action: `repair_current_step` should fix Step 3 shell layout and collapse behavior only, then refresh current screenshots and return to `gate=waiting_auto_acceptance`.
 
+## Step 3 Repair Findings
+- Result: repaired, waiting for the next `auto_accept_current_step` run.
+- Shell layout: `src/components/tron/tron-shell.tsx` now uses a fixed full-width `h-14` topbar and a fixed sidebar starting at `top-14`, with content padded below the topbar and offset by the sidebar width.
+- Sidebar collapse: added whole-sidebar collapsed state, a topbar collapse/expand control, icon-only collapsed navigation, `data-collapsed` evidence, and active nav preservation.
+- Manifest: all 30 rows in `acceptance-manifest.md` now record `pass`; the 29 shared-shell rows cite the expanded/collapsed Step 3 shell repair screenshots.
+- Visual evidence refreshed: all 30 `docs/tasks/frontend-onboarding/evidence/step3-current/*.png` screenshots were regenerated at 1440x1100 after the shell repair.
+- Interaction evidence added: `docs/tasks/frontend-onboarding/evidence/step3-shell-repair-skills-expanded.png` and `docs/tasks/frontend-onboarding/evidence/step3-shell-repair-skills-collapsed.png`.
+- Validation passed: `npm run typecheck`, `npm run build`, 31 HTTP 200 route probes, Playwright shell layout/collapse test, screenshot dimension checks, manifest repair-status check, and `git diff --check`.
+- Current FSM: `current_step=frontend-onboarding-3`, `gate=waiting_auto_acceptance`, `run_action=repair_current_step`, `repair_attempts=1`, `blocker_key=none`.
+
 ## Decisions
 - Use `docs/tasks/frontend-onboarding/` as the only onboarding bookkeeping root.
 - Preserve existing source docs and prototype files as user-provided inputs.
@@ -237,3 +247,11 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 15:27:28 +0800 | Playwright screenshot `/skills` | passed: captured current render for shell inspection |
 | 2026-05-01 15:27:28 +0800 | Step 3 shell structure and interaction gate | failed: sidebar occupies the topbar row and lacks whole-sidebar collapse support |
 | 2026-05-01 15:27:28 +0800 | `git commit -m "Record step 3 shell acceptance failure"` | passed: `615d3e5` |
+| 2026-05-01 15:42:08 +0800 | `npm run typecheck` | passed |
+| 2026-05-01 15:42:08 +0800 | `npm run build` | passed |
+| 2026-05-01 15:42:08 +0800 | Playwright shell repair check | passed: `/skills` topbar 1440x56, sidebar top 56, expanded width 280, collapsed width 76 |
+| 2026-05-01 15:42:08 +0800 | Step 3 current route screenshots | passed: refreshed 30 screenshots under `docs/tasks/frontend-onboarding/evidence/step3-current/` |
+| 2026-05-01 15:42:08 +0800 | HTTP route probes | passed: 30 prototype routes plus `/design-standard` returned HTTP 200 |
+| 2026-05-01 15:42:08 +0800 | screenshot dimension check | passed: 30 current screenshots plus expanded/collapsed repair screenshots are 1440x1100 |
+| 2026-05-01 15:42:08 +0800 | `rg '\| repair \|' docs/tasks/frontend-onboarding/acceptance-manifest.md` | passed: no repair rows remain |
+| 2026-05-01 15:42:08 +0800 | `git diff --check` | passed |
