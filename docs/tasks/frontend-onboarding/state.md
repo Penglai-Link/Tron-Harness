@@ -174,6 +174,7 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Current implementation mismatch: `/resources` uses generic TronShell, Storage Used/Synced Assets/Selected cards, NAME/TYPE/SCOPE/SIZE/STATUS columns, and Import/New Resource/Bulk actions.
 - Visual evidence captured: `docs/tasks/frontend-onboarding/evidence/step3-failure-resources-current.png`.
 - Manifest correction: `resources_management_tron` is marked `repair`; all other rows remain unchanged.
+- Failure checkpoint: `75a17b3`.
 - Next action: `repair_current_step` should repair only the resources page structure and interactions, then return to `gate=waiting_auto_acceptance`.
 
 ## Decisions
@@ -273,3 +274,4 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 15:56:48 +0800 | Playwright screenshot `/resources` | passed: `docs/tasks/frontend-onboarding/evidence/step3-failure-resources-current.png` |
 | 2026-05-01 15:56:48 +0800 | Step 3 resources structure gate | failed: prototype Enterprise Management shell, metric cards, actions, and table columns are not preserved |
 | 2026-05-01 15:56:48 +0800 | `git diff --check` | passed before failure recording |
+| 2026-05-01 15:56:48 +0800 | `git commit -m "Record step 3 resources acceptance failure"` | passed: `75a17b3` |
