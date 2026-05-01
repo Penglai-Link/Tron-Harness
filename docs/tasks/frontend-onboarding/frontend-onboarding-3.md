@@ -12,18 +12,18 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 - [ ] `acceptance-manifest.md` records page-by-page evidence.
 
 ## Overall Status
-- status: notrun
-- process: 0%
+- status: running
+- process: 5%
 - current_step: frontend-onboarding-3
 - gate: none
-- run_action: init
+- run_action: execute_current_step
 - repair_attempts: 0
 - blocker_key: none
 
 ## Steps
 | step | description | status | note |
 | --- | --- | --- | --- |
-| 1 | Implement page batch routes/components. | notrun | commit: pending |
+| 1 | Implement page batch routes/components. | running | commit: pending |
 | 2 | Add mock data and API-ready service boundaries. | notrun | commit: pending |
 | 3 | Record ledger and acceptance evidence. | notrun | commit: pending |
 
@@ -31,3 +31,4 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 | time | status | process | update |
 | --- | --- | --- | --- |
 | 2026-05-01 13:00:02 +0800 | notrun | 0% | Step 3 tracker initialized; implementation has not started. |
+| 2026-05-01 15:00:49 +0800 | running | 5% | Step 3 execution started with mandatory worker delegation for prototype page batches. |

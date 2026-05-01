@@ -3,7 +3,7 @@
 ## FSM
 - current_step: frontend-onboarding-3
 - gate: none
-- run_action: auto_accept_current_step
+- run_action: execute_current_step
 - repair_attempts: 0
 - blocker_key: none
 
@@ -196,3 +196,4 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 14:56:12 +0800 | screenshot dimension check | passed: current preview and interaction screenshots are nonempty PNGs |
 | 2026-05-01 14:56:12 +0800 | `git diff --check` | passed |
 | 2026-05-01 14:57:27 +0800 | `git commit -m "Accept frontend onboarding step 2"` | passed: `75df2b3` |
+| 2026-05-01 15:00:49 +0800 | Step 3 execution start | running: mandatory worker delegation planned for prototype page batches |
