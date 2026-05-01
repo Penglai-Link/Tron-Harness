@@ -24,7 +24,7 @@ Scan product/design docs and every Stitch prototype page, then establish shared 
 | --- | --- | --- | --- |
 | 1 | Scan docs and prototype pages. | finished | commits: 05e2c3d, 81d6c72; scanned 30 `code.html` files and 30 `screen.png` visual targets |
 | 2 | Define shared route, shell, and component contracts. | finished | commit: 81d6c72; route map and archetype preservation contract recorded in `state.md` |
-| 3 | Implement shared layout/components and validation evidence. | waiting_human_decision | commit: 81d6c72; shared preview route `/shared-shell-preview` added; gate=waiting_auto_acceptance; auto_accept failed because `src/lib/prototype-routes.ts` mismatches `state.md` for automations, chat variants, import variants, and memory table archetype; next action: repair_current_step |
+| 3 | Implement shared layout/components and validation evidence. | waiting_human_decision | commits: 81d6c72, 3d984cc; shared preview route `/shared-shell-preview` added; gate=waiting_auto_acceptance; auto_accept failed because `src/lib/prototype-routes.ts` mismatches `state.md` for automations, chat variants, import variants, and memory table archetype; next action: repair_current_step |
 
 ## Update Log
 | time | status | process | update |
@@ -34,3 +34,4 @@ Scan product/design docs and every Stitch prototype page, then establish shared 
 | 2026-05-01 13:56:42 +0800 | waiting_human_decision | 95% | Step 2 work completed and validation passed; waiting for automatic acceptance in the next run. |
 | 2026-05-01 13:56:42 +0800 | waiting_human_decision | 95% | Step 2 execution checkpoint created as `81d6c72`. |
 | 2026-05-01 14:40:42 +0800 | waiting_human_decision | 95% | Auto-acceptance failed: prototype inventory, manifest coverage, screenshot, typecheck, build, route probe, and interaction smoke passed, but source route/archetype contract has six mismatches and must be repaired before Step 2 can finish. |
+| 2026-05-01 14:40:42 +0800 | waiting_human_decision | 95% | Acceptance-failure evidence checkpoint created as `3d984cc`. |

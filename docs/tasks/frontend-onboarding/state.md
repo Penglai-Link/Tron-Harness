@@ -161,3 +161,4 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 14:40:42 +0800 | Playwright screenshot `/shared-shell-preview` | passed: `docs/tasks/frontend-onboarding/evidence/step2-shared-shell-preview.png` |
 | 2026-05-01 14:40:42 +0800 | Playwright shared-shell interaction smoke | passed: sidebar accordion, tab state/content, search filter, pagination, toggle, topbar menu, primary action feedback, and FAB open/close |
 | 2026-05-01 14:40:42 +0800 | Step 2 route/archetype source contract compare | failed: six `src/lib/prototype-routes.ts` mismatches against `state.md`; Step 2 not auto-accepted |
+| 2026-05-01 14:40:42 +0800 | `git commit -m "Record step 2 acceptance failure"` | passed: `3d984cc` |
