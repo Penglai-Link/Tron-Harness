@@ -174,3 +174,4 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 14:46:22 +0800 | Step 2 route/archetype repair check | passed: six repaired entries match `state.md` |
 | 2026-05-01 14:46:22 +0800 | `rg '\| repair \|' docs/tasks/frontend-onboarding/acceptance-manifest.md` | passed: no repair rows remain |
 | 2026-05-01 14:46:22 +0800 | `git diff --check` | passed |
+| 2026-05-01 14:46:22 +0800 | `git commit -m "Repair step 2 route contract"` | passed: `dbabf30` |
