@@ -305,6 +305,7 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 16:30:41 +0800 | HTTP route probes | passed: 30 prototype routes plus `/design-standard` returned HTTP 200 |
 | 2026-05-01 16:30:41 +0800 | `rg '\| repair \||\| blocked \|' docs/tasks/frontend-onboarding/acceptance-manifest.md` | passed: no repair or blocked rows remain |
 | 2026-05-01 16:30:41 +0800 | `git diff --check` | passed |
+| 2026-05-01 16:30:41 +0800 | `git commit -m "Repair step 3 action interactions"` | passed: `47daac6` |
 
 ## Step 3 Interaction Auto Acceptance Findings
 - Result: repair required; `frontend-onboarding-3` remains `waiting_human_decision` with `gate=waiting_auto_acceptance`.
