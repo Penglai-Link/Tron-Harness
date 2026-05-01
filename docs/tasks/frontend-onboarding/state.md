@@ -383,4 +383,4 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Structure evidence: browser smoke verified key visible structure for the shell, page headers, and primary archetypes including kanban, split panes, data tables, forms, chat, graph, dashboard, detail, auth, resources, and permission grid pages.
 - Interaction evidence: browser smoke verified sidebar collapse/expand, Main Agent open/close, primary action feedback, row/select mutations, inspector/detail actions, kanban actions, memory/model/admin/variable actions, prompt-shell navigation/notifications, and the main agent composer send clear behavior.
 - Baseline validation passed: `npm run typecheck`, `npm run build`, 31 HTTP 200 route probes, and `git diff --check`.
-- Acceptance checkpoint: pending.
+- Acceptance checkpoint: `f2eaad0`.
