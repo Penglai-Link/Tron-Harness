@@ -136,6 +136,7 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 ## Step 3 Implementation Findings
 - Result: executed, waiting for the next `auto_accept_current_step` run.
 - Start checkpoint: `e127111`.
+- Implementation checkpoint: `e83f445`.
 - Worker delegation: three non-overlapping batches implemented all 30 prototype routes.
 - Source files added: `src/pages/prototypes/prototype-pages-a.tsx`, `src/pages/prototypes/prototype-pages-b.tsx`, `src/pages/prototypes/prototype-pages-c.tsx`, `src/services/prototypes/prototype-data-a.ts`, `src/services/prototypes/prototype-data-b.ts`, and `src/services/prototypes/prototype-data-c.ts`.
 - Route integration: `src/App.tsx` now resolves `src/lib/prototype-routes.ts` entries, including query variants, to the worker page maps.
@@ -219,3 +220,4 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 15:15:19 +0800 | `npm run typecheck` | passed |
 | 2026-05-01 15:15:19 +0800 | `npm run build` | passed |
 | 2026-05-01 15:15:19 +0800 | `git diff --check` | passed |
+| 2026-05-01 15:15:19 +0800 | `git commit -m "Execute frontend onboarding step 3"` | passed: `e83f445` |
