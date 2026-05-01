@@ -43,6 +43,8 @@ export interface ResourceRecord {
   scope: string;
   size: string;
   status: string;
+  location: string;
+  lastAccessed: string;
   updated: string;
 }
 
@@ -182,11 +184,11 @@ const prompts: PromptRecord[] = [
 ];
 
 const resources: ResourceRecord[] = [
-  { id: "res-models", name: "Model Artifacts", type: "Object Storage", owner: "ML Platform", scope: "Workspace", size: "8.4 TB", status: "Healthy", updated: "8m ago" },
-  { id: "res-vectors", name: "Memory Vector Store", type: "Postgres", owner: "Data", scope: "Inherited", size: "1.8 TB", status: "Syncing", updated: "22m ago" },
-  { id: "res-prompts", name: "Prompt Registry", type: "Git Source", owner: "Agents", scope: "Local", size: "214 MB", status: "Healthy", updated: "1h ago" },
-  { id: "res-traces", name: "Trace Warehouse", type: "ClickHouse", owner: "Observability", scope: "Workspace", size: "4.6 TB", status: "Review", updated: "2h ago" },
-  { id: "res-assets", name: "Support Attachments", type: "S3 Bucket", owner: "Support", scope: "App", size: "392 GB", status: "Healthy", updated: "Today" },
+  { id: "res-prod-db", name: "Production DB (Primary)", type: "PostgreSQL 14", owner: "Data Platform", scope: "Workspace", size: "3.8 TB", status: "Active", location: "us-east-1a", lastAccessed: "Just now", updated: "Just now" },
+  { id: "res-user-uploads", name: "User Uploads Archive", type: "AWS S3 Bucket", owner: "Platform Storage", scope: "Workspace", size: "2.4 TB", status: "Active", location: "eu-west-2", lastAccessed: "2 mins ago", updated: "2 mins ago" },
+  { id: "res-auth-configs", name: "Global Auth Configs", type: "JSON Config File", owner: "Identity", scope: "Inherited", size: "18 MB", status: "Inherited", location: "Global Edge", lastAccessed: "1 hr ago", updated: "1 hr ago" },
+  { id: "res-hero-assets", name: "Marketing Hero Assets", type: "Media Library", owner: "Brand", scope: "App", size: "392 GB", status: "Active", location: "CDN Core", lastAccessed: "5 hrs ago", updated: "5 hrs ago" },
+  { id: "res-legacy-redis", name: "Legacy Redis Cache", type: "Redis 5.0", owner: "Infrastructure", scope: "Workspace", size: "92 GB", status: "Deprecated", location: "us-west-2b", lastAccessed: "3 days ago", updated: "3 days ago" },
 ];
 
 const permissionDomains = ["Workspace", "Models", "Tasks", "Memory", "Skills", "MCP"];

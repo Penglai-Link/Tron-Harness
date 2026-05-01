@@ -3,9 +3,9 @@
 ## FSM
 - current_step: frontend-onboarding-3
 - gate: waiting_auto_acceptance
-- run_action: auto_accept_current_step
-- repair_attempts: 1
-- blocker_key: step3_resources_structure_mismatch
+- run_action: repair_current_step
+- repair_attempts: 2
+- blocker_key: none
 
 ## Source Paths
 - tech_stack: `docs/tech-stack.md`
@@ -177,6 +177,17 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Failure checkpoint: `75a17b3`.
 - Next action: `repair_current_step` should repair only the resources page structure and interactions, then return to `gate=waiting_auto_acceptance`.
 
+## Step 3 Resources Repair Findings
+- Result: repaired, waiting for the next `auto_accept_current_step` run.
+- Scope: repaired only `resources_management_tron`; Step 4 remains `notrun`.
+- Structure: `/resources` now uses the distinct Enterprise Management shell with Tron Console branding, Resources active nav, top Resources Management bar, Data & Assets header, prototype metric cards, filter toolbar, table columns Resource Name/Type/Status/Location/Last Accessed, sidebar New Asset action, and support FAB.
+- Interactions: search, type/status filters, Bulk Actions, Import Resource, New Asset, checkboxes, row action menu, pagination, topbar controls, and support FAB all expose observable state or feedback.
+- Evidence refreshed: `docs/tasks/frontend-onboarding/evidence/step3-current/resources_management_tron.png` and `docs/tasks/frontend-onboarding/evidence/step3-repair-resources-current.png` are 1440x1100 current screenshots.
+- Manifest: `resources_management_tron` is back to `pass`; no `repair` rows remain in `acceptance-manifest.md`.
+- Validation passed: `npm run typecheck`, `npm run build`, `/resources` HTTP 200, `/design-standard` HTTP 200, screenshot dimension checks, source interaction coverage check, and `git diff --check`.
+- Repair checkpoint: pending.
+- Current FSM: `current_step=frontend-onboarding-3`, `gate=waiting_auto_acceptance`, `run_action=repair_current_step`, `repair_attempts=2`, `blocker_key=none`.
+
 ## Decisions
 - Use `docs/tasks/frontend-onboarding/` as the only onboarding bookkeeping root.
 - Preserve existing source docs and prototype files as user-provided inputs.
@@ -275,3 +286,12 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 15:56:48 +0800 | Step 3 resources structure gate | failed: prototype Enterprise Management shell, metric cards, actions, and table columns are not preserved |
 | 2026-05-01 15:56:48 +0800 | `git diff --check` | passed before failure recording |
 | 2026-05-01 15:56:48 +0800 | `git commit -m "Record step 3 resources acceptance failure"` | passed: `75a17b3` |
+| 2026-05-01 16:04:49 +0800 | Step 3 resources page repair | passed: restored Enterprise Management shell, prototype metrics, action labels, table columns, filters, row menu, pagination, and support FAB |
+| 2026-05-01 16:04:49 +0800 | `npm run typecheck` | passed |
+| 2026-05-01 16:04:49 +0800 | `npm run build` | passed |
+| 2026-05-01 16:04:49 +0800 | `curl -I http://127.0.0.1:4173/resources` | passed: HTTP 200 |
+| 2026-05-01 16:04:49 +0800 | `curl -I http://127.0.0.1:4173/design-standard` | passed: HTTP 200 |
+| 2026-05-01 16:04:49 +0800 | Playwright screenshot `/resources` | passed: refreshed `docs/tasks/frontend-onboarding/evidence/step3-current/resources_management_tron.png` and added `docs/tasks/frontend-onboarding/evidence/step3-repair-resources-current.png` |
+| 2026-05-01 16:04:49 +0800 | screenshot dimension check | passed: resources current and repair screenshots are 1440x1100 |
+| 2026-05-01 16:04:49 +0800 | source interaction coverage check | passed: search, filters, bulk/import/new, checkbox selection, row menu, pagination, topbar controls, and support FAB handlers present |
+| 2026-05-01 16:04:49 +0800 | `git diff --check` | passed |
