@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 import { prototypeRoutes } from "@/lib/prototype-routes";
 import { DesignStandardPage } from "@/pages/design-standard";
 import { prototypePagesA } from "@/pages/prototypes/prototype-pages-a";
-import { prototypePagesB } from "@/pages/prototypes/prototype-pages-b";
-import { prototypePagesC } from "@/pages/prototypes/prototype-pages-c";
+import { LoginPage, prototypePagesB } from "@/pages/prototypes/prototype-pages-b";
+import { prototypePagesC, TasksImportPage } from "@/pages/prototypes/prototype-pages-c";
 import { SharedShellPreviewPage } from "@/pages/shared-shell-preview";
 
 type PrototypePageComponent = () => ReactNode;
@@ -63,12 +63,20 @@ export function App() {
   const path = window.location.pathname;
   const search = window.location.search;
 
+  if (path === "/") {
+    return <LoginPage />;
+  }
+
   if (path === "/design-standard") {
     return <DesignStandardPage />;
   }
 
   if (path === "/shared-shell-preview") {
     return <SharedShellPreviewPage />;
+  }
+
+  if (path === "/tasks/import") {
+    return <TasksImportPage />;
   }
 
   const PrototypeComponent = resolvePrototypeComponent(path, search);

@@ -12,12 +12,12 @@ Perform final quality acceptance across coverage, visual structure, interactions
 - [x] `npm run typecheck`, `npm run build`, route probes, and `git diff --check` pass.
 
 ## Overall Status
-- status: finished
-- process: 100%
-- current_step: completed
-- gate: none
-- run_action: auto_accept_current_step
-- repair_attempts: 0
+- status: waiting_human_decision
+- process: 95%
+- current_step: frontend-onboarding-4
+- gate: waiting_auto_acceptance
+- run_action: repair_current_step
+- repair_attempts: 1
 - blocker_key: none
 
 ## Steps
@@ -25,7 +25,7 @@ Perform final quality acceptance across coverage, visual structure, interactions
 | --- | --- | --- | --- |
 | 1 | Run baseline coverage and validation checks. | finished | commit: 0701451; 30/30 ledger and manifest coverage, 31 HTTP 200 route probes, typecheck, build, and diff-check passed |
 | 2 | Verify visual and structural evidence for every page. | finished | commit: 0701451; 30 source `code.html`, 30 `screen.png`, 30 Step 3 screenshots, 30 Step 4 screenshots, and three worker page audits passed |
-| 3 | Verify interaction evidence and finalize acceptance. | finished | commits: 0701451, 664d7d2; 36 Playwright Step 4 checks passed again, including per-page structure screenshots and representative interactions; gate=none; run_action=auto_accept_current_step |
+| 3 | Verify interaction evidence and finalize acceptance. | waiting_human_decision | commits: 0701451, 664d7d2, pending; repaired `/` login, Sign In to dashboard, task import route, task create route, and task card detail navigation; gate=waiting_auto_acceptance; run_action=repair_current_step |
 
 ## Update Log
 | time | status | process | update |
@@ -36,3 +36,5 @@ Perform final quality acceptance across coverage, visual structure, interactions
 | 2026-05-01 17:16:33 +0800 | waiting_human_decision | 90% | Step 4 execution checkpoint created as `0701451`; awaiting automatic acceptance in the next run. |
 | 2026-05-01 17:57:03 +0800 | finished | 100% | Step 4 auto-accepted after strict final gates: all source, visual, structure, interaction, manifest, ledger, route, typecheck, build, and diff-check checks passed. |
 | 2026-05-01 17:57:03 +0800 | finished | 100% | Step 4 acceptance checkpoint created as `664d7d2`; no blocker remains. |
+| 2026-05-01 18:09:38 +0800 | waiting_human_decision | 95% | User-reported integration defects invalidated finished status: root did not show login, Sign In did not enter dashboard, and task import/create actions did not navigate. |
+| 2026-05-01 18:09:38 +0800 | waiting_human_decision | 95% | Repair applied and validated: root login, login-to-dashboard, `/tasks/import`, `/tasks/new`, `/tasks/detail`, typecheck, build, route probes, Browser smoke, Playwright final-quality script, and diff-check passed; checkpoint pending. |

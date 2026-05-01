@@ -428,13 +428,14 @@ export function LoginPage() {
         </div>
         <form className="space-y-5" onSubmit={(event) => {
           event.preventDefault();
-          setStatus("Sign-in request submitted");
+          setStatus("Entering workspace...");
+          window.location.assign("/dashboard");
         }}>
           <Field label="Operator ID">
-            <TextInput required placeholder="TRON-XXXX" />
+            <TextInput placeholder="TRON-XXXX" />
           </Field>
           <Field label="Passkey">
-            <TextInput required type="password" placeholder="........" />
+            <TextInput type="password" placeholder="........" />
           </Field>
           <div>
             <div className="mb-2 flex items-center justify-between">
@@ -446,7 +447,7 @@ export function LoginPage() {
             </div>
             <div className="flex gap-3">
               <div className="flex w-1/3 items-center justify-center rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] font-mono text-lg font-semibold tracking-[0.2em]">{captcha}</div>
-              <TextInput className="w-2/3" required placeholder="Enter code" />
+              <TextInput className="w-2/3" placeholder="Enter code" />
             </div>
           </div>
           <Button className="w-full" type="submit">Sign In</Button>

@@ -1,10 +1,10 @@
 # Frontend Onboarding State
 
 ## FSM
-- current_step: completed
-- gate: none
-- run_action: auto_accept_current_step
-- repair_attempts: 0
+- current_step: frontend-onboarding-4
+- gate: waiting_auto_acceptance
+- run_action: repair_current_step
+- repair_attempts: 1
 - blocker_key: none
 
 ## Source Paths
@@ -211,6 +211,15 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Baseline validation passed: `npm run typecheck`, `npm run build`, 31 HTTP 200 route probes including `/design-standard`, and `git diff --check`.
 - Acceptance checkpoint: `664d7d2`.
 
+## Step 4 Integration Repair Findings
+- Result: repaired, waiting for the next `auto_accept_current_step` run.
+- Current FSM: `current_step=frontend-onboarding-4`, `gate=waiting_auto_acceptance`, `run_action=repair_current_step`, `repair_attempts=1`, `blocker_key=none`.
+- User defect signal: `/` rendered the onboarding workspace landing page instead of login; mock Sign In did not enter the system; task board action buttons did not connect to task import/create/detail flows.
+- Repair: `/` now renders `LoginPage`; Sign In navigates to `/dashboard`; `/tasks` now includes Import Task to `/tasks/import`, Create Task to `/tasks/new`, and card click to `/tasks/detail`; `/tasks/import` provides a task import form and import feedback; `/tasks/new` Cancel returns to `/tasks` and Create Task submits to `/tasks/detail`.
+- Evidence refreshed: `docs/tasks/frontend-onboarding/evidence/step4-final-quality.spec.cjs` now asserts the repaired login and task workflow links, and `docs/tasks/frontend-onboarding/evidence/step4-current/task_management_light.png` was regenerated at 1440x1100.
+- Validation passed: Browser smoke against `http://localhost:5173/`, `/dashboard`, `/tasks`, `/tasks/import`, `/tasks/new`, and `/tasks/detail`; `npm run typecheck`; `npm run build`; 36 Playwright final-quality checks; route probes for the repaired flow; and `git diff --check`.
+- Next action: `auto_accept_current_step` should strictly auto-accept Step 4 only; do not mark completion in this repair run.
+
 ## Decisions
 - Use `docs/tasks/frontend-onboarding/` as the only onboarding bookkeeping root.
 - Preserve existing source docs and prototype files as user-provided inputs.
@@ -221,6 +230,12 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 ## Validation Log
 | time | command | result |
 | --- | --- | --- |
+| 2026-05-01 18:09:38 +0800 | Browser smoke on `http://localhost:5173/`, login, dashboard, tasks, import, create, and detail flow | passed |
+| 2026-05-01 18:09:38 +0800 | `npm run typecheck` | passed |
+| 2026-05-01 18:09:38 +0800 | `npm run build` | passed |
+| 2026-05-01 18:09:38 +0800 | `TRON_BASE_URL=http://127.0.0.1:5173 npx playwright test docs/tasks/frontend-onboarding/evidence/step4-final-quality.spec.cjs --reporter=line` | passed: 36 checks |
+| 2026-05-01 18:09:38 +0800 | route probes for `/`, `/dashboard`, `/tasks`, `/tasks/import`, `/tasks/new`, `/tasks/detail` | passed: HTTP 200 |
+| 2026-05-01 18:09:38 +0800 | `git diff --check` | passed |
 | 2026-05-01 13:00:02 +0800 | `git rev-parse --is-inside-work-tree` | failed before init: not a git repository |
 | 2026-05-01 13:00:02 +0800 | `git init` | passed |
 | 2026-05-01 13:00:02 +0800 | prototype inventory scan | found 30 pages with `code.html` and `screen.png` |

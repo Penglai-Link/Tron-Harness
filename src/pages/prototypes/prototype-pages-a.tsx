@@ -1094,10 +1094,13 @@ export function CreateTaskPage() {
           </SurfaceCard>
           <Notice value={`${notice} Priority: ${priority}.`} />
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => setNotice("Task creation cancelled")}>
+            <Button variant="secondary" onClick={() => window.location.assign("/tasks")}>
               Cancel
             </Button>
-            <Button onClick={() => setNotice("Task creation submitted")}>
+            <Button onClick={() => {
+              setNotice("Task creation submitted");
+              window.location.assign("/tasks/detail");
+            }}>
               <Plus size={15} />
               Create Task
             </Button>

@@ -244,10 +244,19 @@ test("Step 4 kanban interactions", async ({ page }) => {
   await page.goto(`${baseUrl}/tasks`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Sync" }).click();
   await expect(page.getByText("Kanban sync completed")).toBeVisible();
+  await page.getByRole("button", { name: "Import Task" }).click();
+  await expect(page).toHaveURL(`${baseUrl}/tasks/import`);
+  await expect(page.getByRole("heading", { name: "Import Task" })).toBeVisible();
+  await page.getByRole("button", { name: "Start Import" }).click();
+  await expect(page.getByText("GITLAB import scanned 4 candidate tasks")).toBeVisible();
+  await page.goto(`${baseUrl}/tasks`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Create Task" }).click();
-  await expect(page.getByText("Create task workflow opened")).toBeVisible();
+  await expect(page).toHaveURL(`${baseUrl}/tasks/new`);
+  await expect(page.getByRole("heading", { name: "Create Task" })).toBeVisible();
+  await page.goto(`${baseUrl}/tasks`, { waitUntil: "networkidle" });
   await page.locator("button").filter({ hasText: /AGT-\d+/ }).first().click();
-  await expect(page.getByText(/AGT-\d+/).first()).toBeVisible();
+  await expect(page).toHaveURL(`${baseUrl}/tasks/detail`);
+  await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
 });
 
 test("Step 4 memory interactions", async ({ page }) => {
@@ -282,6 +291,11 @@ test("Step 4 prompt-shell interactions", async ({ page }) => {
 
 test("Step 4 auth interactions", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.goto(baseUrl, { waitUntil: "networkidle" });
+  await expect(page.getByRole("heading", { name: "Tron" })).toBeVisible();
+  await page.getByRole("button", { name: "Sign In" }).click();
+  await expect(page).toHaveURL(`${baseUrl}/dashboard`);
+  await expect(page.getByText("Workspace Overview")).toBeVisible();
   await page.goto(`${baseUrl}/login`, { waitUntil: "networkidle" });
   await page.getByRole("button", { name: "Refresh" }).click();
   await expect(page.getByText("M2R8")).toBeVisible();
