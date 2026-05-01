@@ -195,3 +195,4 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 14:56:12 +0800 | Playwright shared-shell interaction smoke | passed: sidebar accordion, tab state/content, search filter, pagination, toggle, topbar menu, primary action feedback, and FAB open/close |
 | 2026-05-01 14:56:12 +0800 | screenshot dimension check | passed: current preview and interaction screenshots are nonempty PNGs |
 | 2026-05-01 14:56:12 +0800 | `git diff --check` | passed |
+| 2026-05-01 14:57:27 +0800 | `git commit -m "Accept frontend onboarding step 2"` | passed: `75df2b3` |
