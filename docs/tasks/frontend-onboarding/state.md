@@ -3,9 +3,9 @@
 ## FSM
 - current_step: frontend-onboarding-3
 - gate: waiting_auto_acceptance
-- run_action: repair_current_step
+- run_action: auto_accept_current_step
 - repair_attempts: 3
-- blocker_key: none
+- blocker_key: step3_prompt_shell_noop_controls
 
 ## Source Paths
 - tech_stack: `docs/tech-stack.md`
@@ -306,6 +306,11 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 16:30:41 +0800 | `rg '\| repair \||\| blocked \|' docs/tasks/frontend-onboarding/acceptance-manifest.md` | passed: no repair or blocked rows remain |
 | 2026-05-01 16:30:41 +0800 | `git diff --check` | passed |
 | 2026-05-01 16:30:41 +0800 | `git commit -m "Repair step 3 action interactions"` | passed: `47daac6` |
+| 2026-05-01 16:41:09 +0800 | Step 3 strict evidence inventory | passed: 30 `code.html`, 30 `screen.png`, 30 current screenshots, 30 ledger rows, 30 manifest rows, 30 route contracts, and 31 HTTP 200 probes verified |
+| 2026-05-01 16:41:09 +0800 | `npm run typecheck` | passed |
+| 2026-05-01 16:41:09 +0800 | `npm run build` | passed |
+| 2026-05-01 16:41:09 +0800 | Playwright Step 3 interaction repair smoke | passed: 16 repaired routes opened and repaired controls produced visible feedback |
+| 2026-05-01 16:41:09 +0800 | Playwright current route structure/screenshot check | failed: structure markers and screenshots were checked for all 30 routes, but source interaction audit found two visible prompt-shell no-op controls |
 
 ## Step 3 Interaction Auto Acceptance Findings
 - Result: repair required; `frontend-onboarding-3` remains `waiting_human_decision` with `gate=waiting_auto_acceptance`.
@@ -341,3 +346,11 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Manifest: all 30 rows in `acceptance-manifest.md` now record `pass`; no `repair` rows remain.
 - Validation passed: `npm run typecheck`, `npm run build`, Playwright Step 3 interaction repair smoke, screenshot dimension checks, manifest repair-status check, and `git diff --check`.
 - Current FSM: `current_step=frontend-onboarding-3`, `gate=waiting_auto_acceptance`, `run_action=repair_current_step`, `repair_attempts=3`, `blocker_key=none`.
+
+## Step 3 Prompt Shell Auto Acceptance Findings
+- Result: repair required; `frontend-onboarding-3` remains `waiting_human_decision` with `gate=waiting_auto_acceptance`.
+- Passed baseline gates before failure recording: `npm run typecheck`, `npm run build`, 30 `code.html` reads, 30 `screen.png` checks, 30 current route screenshots, 30 ledger rows, 30 manifest rows, 31 HTTP 200 route probes, and the Step 3 repaired-action Playwright smoke.
+- Passed structure gate before failure: all 30 implementation routes opened in Playwright, current screenshots were refreshed or checked, shared-shell collapse controls were present on standard-shell pages, and route-specific structure markers matched the expected archetypes.
+- Failed interaction gate: `create_new_prompt_tron` still has visible distinct-shell controls without observable behavior: the Tron AI sidebar navigation buttons at `src/pages/prototypes/prototype-pages-a.tsx:788` and the Notifications IconButton at `src/pages/prototypes/prototype-pages-a.tsx:800`.
+- Manifest correction: only `create_new_prompt_tron` is marked `repair`; all other rows remain pass.
+- Next action: `repair_current_step` should add navigation, selected state, feedback, or explicit disabled reasons for those prompt-shell controls only, then return to `gate=waiting_auto_acceptance`.
