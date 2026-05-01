@@ -10,14 +10,14 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 - [x] Every Stitch page with `code.html` has a route/component, mock-data service boundary, structure evidence, and interaction evidence.
 - [x] `docs/tasks/frontend-onboarding/implemented-pages.txt` covers every Stitch page.
 - [x] `docs/tasks/frontend-onboarding/acceptance-manifest.md` records page-by-page visual, structural, and interaction acceptance.
-- [ ] Step 1 through Step 4 are completed and checkpointed.
+- [x] Step 1 through Step 4 are completed and checkpointed.
 
 ## Overall Status
-- status: waiting_human_decision
-- process: 90%
-- current_step: frontend-onboarding-4
-- gate: waiting_auto_acceptance
-- run_action: execute_current_step
+- status: finished
+- process: 100%
+- current_step: completed
+- gate: none
+- run_action: auto_accept_current_step
 - repair_attempts: 0
 - blocker_key: none
 
@@ -27,7 +27,7 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 | 1 | [frontend-onboarding-1](frontend-onboarding-1.md) - Initialize from tech stack plus design docs and create `/design-standard`. | finished | commits: 9abf746, 22b7191, 3a66384; gate=none; run_action=auto_accept_current_step |
 | 2 | [frontend-onboarding-2](frontend-onboarding-2.md) - Read product/design docs, scan every prototype page, and establish shared layout plus common components. | finished | commits: 05e2c3d, 81d6c72, 3d984cc, dbabf30, 75df2b3; gate=none; run_action=auto_accept_current_step; strict post-repair acceptance passed |
 | 3 | [frontend-onboarding-3](frontend-onboarding-3.md) - Traverse all Stitch pages, implement them with mock data plus API boundaries, and record page acceptance evidence. | finished | commits: e127111, e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd, b4b2efb, 47daac6, 09f4376, bdf673f, f2eaad0; strict auto-acceptance passed; gate=none; run_action=auto_accept_current_step; repair_attempts=0; blocker_key=none |
-| 4 | [frontend-onboarding-4](frontend-onboarding-4.md) - Perform final quality acceptance across coverage, visual structure, interactions, and deviations. | waiting_human_decision | commits: 025e089, 0701451; gate=waiting_auto_acceptance; run_action=execute_current_step; final quality execution passed and awaits auto acceptance |
+| 4 | [frontend-onboarding-4](frontend-onboarding-4.md) - Perform final quality acceptance across coverage, visual structure, interactions, and deviations. | finished | commits: 025e089, 0701451, pending; gate=none; run_action=auto_accept_current_step; strict final auto-acceptance passed |
 
 ## Update Log
 | time | status | process | update |
@@ -70,3 +70,4 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 | 2026-05-01 16:58:31 +0800 | running | 85% | Step 4 execution started: final quality acceptance audit will verify coverage, source evidence, current screenshots, structure parity, interaction evidence, and validation commands without auto-accepting in this run. |
 | 2026-05-01 17:16:33 +0800 | waiting_human_decision | 90% | Step 4 executed: 30-page worker audits passed, coverage/manifest/source evidence passed, 30 Step 4 screenshots were captured, 36 Playwright structure/interaction checks passed, route probes/typecheck/build/diff-check passed; next run must only auto-accept Step 4. |
 | 2026-05-01 17:16:33 +0800 | waiting_human_decision | 90% | Step 4 execution checkpoint created as `0701451`; next run must only auto-accept Step 4. |
+| 2026-05-01 17:57:03 +0800 | finished | 100% | Step 4 auto-accepted after strict final gates: 30 `code.html` reads, 30 `screen.png` checks, 30 current screenshots, manifest/ledger coverage, 31 route probes, typecheck, build, 36 Playwright structure/interaction checks, and diff-check passed. |
