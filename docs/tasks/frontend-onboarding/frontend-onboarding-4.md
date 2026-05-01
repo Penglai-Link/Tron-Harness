@@ -23,9 +23,9 @@ Perform final quality acceptance across coverage, visual structure, interactions
 ## Steps
 | step | description | status | note |
 | --- | --- | --- | --- |
-| 1 | Run baseline coverage and validation checks. | finished | commit: pending; 30/30 ledger and manifest coverage, 31 HTTP 200 route probes, typecheck, build, and diff-check passed |
-| 2 | Verify visual and structural evidence for every page. | finished | commit: pending; 30 source `code.html`, 30 `screen.png`, 30 Step 3 screenshots, 30 Step 4 screenshots, and three worker page audits passed |
-| 3 | Verify interaction evidence and finalize acceptance. | waiting_human_decision | commit: pending; 36 Playwright Step 4 checks passed, including per-page structure screenshots and representative interactions; gate=waiting_auto_acceptance |
+| 1 | Run baseline coverage and validation checks. | finished | commit: 0701451; 30/30 ledger and manifest coverage, 31 HTTP 200 route probes, typecheck, build, and diff-check passed |
+| 2 | Verify visual and structural evidence for every page. | finished | commit: 0701451; 30 source `code.html`, 30 `screen.png`, 30 Step 3 screenshots, 30 Step 4 screenshots, and three worker page audits passed |
+| 3 | Verify interaction evidence and finalize acceptance. | waiting_human_decision | commit: 0701451; 36 Playwright Step 4 checks passed, including per-page structure screenshots and representative interactions; gate=waiting_auto_acceptance |
 
 ## Update Log
 | time | status | process | update |
@@ -33,3 +33,4 @@ Perform final quality acceptance across coverage, visual structure, interactions
 | 2026-05-01 13:00:02 +0800 | notrun | 0% | Step 4 tracker initialized; implementation has not started. |
 | 2026-05-01 16:58:31 +0800 | running | 10% | Step 4 execution started: baseline validation, evidence inventory, and page-batch quality audits are in progress. |
 | 2026-05-01 17:16:33 +0800 | waiting_human_decision | 90% | Step 4 execution completed without blockers: coverage, manifest, current visual evidence, structure parity, interaction smoke, route probes, typecheck, build, and diff-check passed; next run must only auto-accept Step 4. |
+| 2026-05-01 17:16:33 +0800 | waiting_human_decision | 90% | Step 4 execution checkpoint created as `0701451`; awaiting automatic acceptance in the next run. |

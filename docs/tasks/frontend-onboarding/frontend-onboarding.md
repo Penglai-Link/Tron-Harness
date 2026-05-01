@@ -27,7 +27,7 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 | 1 | [frontend-onboarding-1](frontend-onboarding-1.md) - Initialize from tech stack plus design docs and create `/design-standard`. | finished | commits: 9abf746, 22b7191, 3a66384; gate=none; run_action=auto_accept_current_step |
 | 2 | [frontend-onboarding-2](frontend-onboarding-2.md) - Read product/design docs, scan every prototype page, and establish shared layout plus common components. | finished | commits: 05e2c3d, 81d6c72, 3d984cc, dbabf30, 75df2b3; gate=none; run_action=auto_accept_current_step; strict post-repair acceptance passed |
 | 3 | [frontend-onboarding-3](frontend-onboarding-3.md) - Traverse all Stitch pages, implement them with mock data plus API boundaries, and record page acceptance evidence. | finished | commits: e127111, e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd, b4b2efb, 47daac6, 09f4376, bdf673f, f2eaad0; strict auto-acceptance passed; gate=none; run_action=auto_accept_current_step; repair_attempts=0; blocker_key=none |
-| 4 | [frontend-onboarding-4](frontend-onboarding-4.md) - Perform final quality acceptance across coverage, visual structure, interactions, and deviations. | waiting_human_decision | commit: pending; gate=waiting_auto_acceptance; run_action=execute_current_step; final quality execution passed and awaits auto acceptance |
+| 4 | [frontend-onboarding-4](frontend-onboarding-4.md) - Perform final quality acceptance across coverage, visual structure, interactions, and deviations. | waiting_human_decision | commits: 025e089, 0701451; gate=waiting_auto_acceptance; run_action=execute_current_step; final quality execution passed and awaits auto acceptance |
 
 ## Update Log
 | time | status | process | update |
@@ -69,3 +69,4 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 | 2026-05-01 16:53:39 +0800 | waiting_human_decision | 75% | Step 3 acceptance checkpoint created as `f2eaad0`; next run must execute Step 4 only. |
 | 2026-05-01 16:58:31 +0800 | running | 85% | Step 4 execution started: final quality acceptance audit will verify coverage, source evidence, current screenshots, structure parity, interaction evidence, and validation commands without auto-accepting in this run. |
 | 2026-05-01 17:16:33 +0800 | waiting_human_decision | 90% | Step 4 executed: 30-page worker audits passed, coverage/manifest/source evidence passed, 30 Step 4 screenshots were captured, 36 Playwright structure/interaction checks passed, route probes/typecheck/build/diff-check passed; next run must only auto-accept Step 4. |
+| 2026-05-01 17:16:33 +0800 | waiting_human_decision | 90% | Step 4 execution checkpoint created as `0701451`; next run must only auto-accept Step 4. |

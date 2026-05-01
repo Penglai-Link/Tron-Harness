@@ -191,6 +191,8 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 ## Step 4 Execution Findings
 - Result: executed, waiting for the next `auto_accept_current_step` run.
 - Current FSM: `current_step=frontend-onboarding-4`, `gate=waiting_auto_acceptance`, `run_action=execute_current_step`, `repair_attempts=0`, `blocker_key=none`.
+- Start checkpoint: `025e089`.
+- Execution checkpoint: `0701451`.
 - Worker audits: three read-only page batches covered all 30 prototypes and reported no blockers, no generic fallback mismatch, and route/component/service wiring present.
 - Coverage: source inventory has 30 `code.html` pages; `implemented-pages.txt` has the same 30 exact prototype names; no missing or extra ledger rows.
 - Manifest: `acceptance-manifest.md` has 30 rows, all `pass`, with no `repair` or `blocked` status.
@@ -278,6 +280,7 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 17:16:33 +0800 | `npx playwright test docs/tasks/frontend-onboarding/evidence/step4-final-quality.spec.cjs --reporter=line` | passed: 36 checks, 0 failures |
 | 2026-05-01 17:16:33 +0800 | Step 4 screenshot dimension check | passed: 30 screenshots at 1440x1100 |
 | 2026-05-01 17:16:33 +0800 | `git diff --check` | passed |
+| 2026-05-01 17:16:33 +0800 | `git commit -m "Execute frontend onboarding step 4"` | passed: `0701451` |
 | 2026-05-01 15:15:19 +0800 | `npm run typecheck` | passed |
 | 2026-05-01 15:15:19 +0800 | `npm run build` | passed |
 | 2026-05-01 15:15:19 +0800 | `git diff --check` | passed |
