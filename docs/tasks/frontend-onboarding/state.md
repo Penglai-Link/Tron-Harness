@@ -2,7 +2,7 @@
 
 ## FSM
 - current_step: frontend-onboarding-4
-- gate: none
+- gate: waiting_auto_acceptance
 - run_action: execute_current_step
 - repair_attempts: 0
 - blocker_key: none
@@ -188,6 +188,17 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Repair checkpoint: `28ef7cd`.
 - Current FSM: `current_step=frontend-onboarding-3`, `gate=waiting_auto_acceptance`, `run_action=repair_current_step`, `repair_attempts=2`, `blocker_key=none`.
 
+## Step 4 Execution Findings
+- Result: executed, waiting for the next `auto_accept_current_step` run.
+- Current FSM: `current_step=frontend-onboarding-4`, `gate=waiting_auto_acceptance`, `run_action=execute_current_step`, `repair_attempts=0`, `blocker_key=none`.
+- Worker audits: three read-only page batches covered all 30 prototypes and reported no blockers, no generic fallback mismatch, and route/component/service wiring present.
+- Coverage: source inventory has 30 `code.html` pages; `implemented-pages.txt` has the same 30 exact prototype names; no missing or extra ledger rows.
+- Manifest: `acceptance-manifest.md` has 30 rows, all `pass`, with no `repair` or `blocked` status.
+- Visual evidence: 30 source `screen.png` files are represented in the manifest; 30 Step 3 current screenshots exist; 30 Step 4 current screenshots were captured under `docs/tasks/frontend-onboarding/evidence/step4-current/` at 1440x1100.
+- Structure and interaction evidence: `docs/tasks/frontend-onboarding/evidence/step4-final-quality.spec.cjs` passed 36 Playwright checks covering every prototype route, shell archetype markers, distinct prompt/resources/login shells, shared shell collapse, segmented tabs, kanban selection, memory filters, resource filters/selection, prompt-shell notifications, and auth captcha refresh.
+- Baseline validation passed: `npm run typecheck`, `npm run build`, 31 HTTP 200 route probes including `/design-standard`, and `git diff --check`.
+- Next action: `auto_accept_current_step` should strictly auto-accept Step 4 only; do not start any additional work in the same run.
+
 ## Decisions
 - Use `docs/tasks/frontend-onboarding/` as the only onboarding bookkeeping root.
 - Preserve existing source docs and prototype files as user-provided inputs.
@@ -258,6 +269,15 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 15:15:19 +0800 | HTTP route probes | passed: 30 prototype routes plus `/design-standard` returned HTTP 200 |
 | 2026-05-01 15:15:19 +0800 | ledger coverage diff | passed: no source prototype pages missing from `implemented-pages.txt` |
 | 2026-05-01 15:15:19 +0800 | manifest and screenshot count check | passed: 30 manifest rows, 30 pass rows, and 30 current screenshots |
+| 2026-05-01 17:16:33 +0800 | Step 4 worker audits | passed: three read-only batches covered all 30 prototypes with no blockers |
+| 2026-05-01 17:16:33 +0800 | Step 4 coverage diff | passed: 30 source `code.html` pages match 30 `implemented-pages.txt` rows |
+| 2026-05-01 17:16:33 +0800 | Step 4 manifest status check | passed: 30 rows, 30 `pass`, 0 `repair`, 0 `blocked` |
+| 2026-05-01 17:16:33 +0800 | `npm run typecheck` | passed |
+| 2026-05-01 17:16:33 +0800 | `npm run build` | passed |
+| 2026-05-01 17:16:33 +0800 | HTTP route probes | passed: 30 prototype routes plus `/design-standard` returned HTTP 200 |
+| 2026-05-01 17:16:33 +0800 | `npx playwright test docs/tasks/frontend-onboarding/evidence/step4-final-quality.spec.cjs --reporter=line` | passed: 36 checks, 0 failures |
+| 2026-05-01 17:16:33 +0800 | Step 4 screenshot dimension check | passed: 30 screenshots at 1440x1100 |
+| 2026-05-01 17:16:33 +0800 | `git diff --check` | passed |
 | 2026-05-01 15:15:19 +0800 | `npm run typecheck` | passed |
 | 2026-05-01 15:15:19 +0800 | `npm run build` | passed |
 | 2026-05-01 15:15:19 +0800 | `git diff --check` | passed |
