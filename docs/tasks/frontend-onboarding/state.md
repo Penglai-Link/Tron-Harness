@@ -218,6 +218,7 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Repair: `/` now renders `LoginPage`; Sign In navigates to `/dashboard`; `/tasks` now includes Import Task to `/tasks/import`, Create Task to `/tasks/new`, and card click to `/tasks/detail`; `/tasks/import` provides a task import form and import feedback; `/tasks/new` Cancel returns to `/tasks` and Create Task submits to `/tasks/detail`.
 - Evidence refreshed: `docs/tasks/frontend-onboarding/evidence/step4-final-quality.spec.cjs` now asserts the repaired login and task workflow links, and `docs/tasks/frontend-onboarding/evidence/step4-current/task_management_light.png` was regenerated at 1440x1100.
 - Validation passed: Browser smoke against `http://localhost:5173/`, `/dashboard`, `/tasks`, `/tasks/import`, `/tasks/new`, and `/tasks/detail`; `npm run typecheck`; `npm run build`; 36 Playwright final-quality checks; route probes for the repaired flow; and `git diff --check`.
+- Repair checkpoint: `d4cc98b`.
 - Next action: `auto_accept_current_step` should strictly auto-accept Step 4 only; do not mark completion in this repair run.
 
 ## Decisions

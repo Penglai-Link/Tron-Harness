@@ -25,7 +25,7 @@ Perform final quality acceptance across coverage, visual structure, interactions
 | --- | --- | --- | --- |
 | 1 | Run baseline coverage and validation checks. | finished | commit: 0701451; 30/30 ledger and manifest coverage, 31 HTTP 200 route probes, typecheck, build, and diff-check passed |
 | 2 | Verify visual and structural evidence for every page. | finished | commit: 0701451; 30 source `code.html`, 30 `screen.png`, 30 Step 3 screenshots, 30 Step 4 screenshots, and three worker page audits passed |
-| 3 | Verify interaction evidence and finalize acceptance. | waiting_human_decision | commits: 0701451, 664d7d2, pending; repaired `/` login, Sign In to dashboard, task import route, task create route, and task card detail navigation; gate=waiting_auto_acceptance; run_action=repair_current_step |
+| 3 | Verify interaction evidence and finalize acceptance. | waiting_human_decision | commits: 0701451, 664d7d2, d4cc98b; repaired `/` login, Sign In to dashboard, task import route, task create route, and task card detail navigation; gate=waiting_auto_acceptance; run_action=repair_current_step |
 
 ## Update Log
 | time | status | process | update |
@@ -37,4 +37,4 @@ Perform final quality acceptance across coverage, visual structure, interactions
 | 2026-05-01 17:57:03 +0800 | finished | 100% | Step 4 auto-accepted after strict final gates: all source, visual, structure, interaction, manifest, ledger, route, typecheck, build, and diff-check checks passed. |
 | 2026-05-01 17:57:03 +0800 | finished | 100% | Step 4 acceptance checkpoint created as `664d7d2`; no blocker remains. |
 | 2026-05-01 18:09:38 +0800 | waiting_human_decision | 95% | User-reported integration defects invalidated finished status: root did not show login, Sign In did not enter dashboard, and task import/create actions did not navigate. |
-| 2026-05-01 18:09:38 +0800 | waiting_human_decision | 95% | Repair applied and validated: root login, login-to-dashboard, `/tasks/import`, `/tasks/new`, `/tasks/detail`, typecheck, build, route probes, Browser smoke, Playwright final-quality script, and diff-check passed; checkpoint pending. |
+| 2026-05-01 18:09:38 +0800 | waiting_human_decision | 95% | Repair applied and validated: root login, login-to-dashboard, `/tasks/import`, `/tasks/new`, `/tasks/detail`, typecheck, build, route probes, Browser smoke, Playwright final-quality script, and diff-check passed; checkpoint `d4cc98b`. |
