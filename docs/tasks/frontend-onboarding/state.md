@@ -209,7 +209,7 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Visual evidence: 30 current route screenshots exist under `docs/tasks/frontend-onboarding/evidence/step4-current/` and match the 30 source prototypes.
 - Structure and interaction evidence: `docs/tasks/frontend-onboarding/evidence/step4-final-quality.spec.cjs` passed 36 Playwright checks covering every prototype route, shell archetype markers, distinct prompt/resources/login shells, shared shell collapse, segmented tabs, kanban selection, memory filters, resource filters/selection, prompt-shell notifications, and auth captcha refresh.
 - Baseline validation passed: `npm run typecheck`, `npm run build`, 31 HTTP 200 route probes including `/design-standard`, and `git diff --check`.
-- Acceptance checkpoint: pending.
+- Acceptance checkpoint: `664d7d2`.
 
 ## Decisions
 - Use `docs/tasks/frontend-onboarding/` as the only onboarding bookkeeping root.
@@ -298,6 +298,7 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 17:57:03 +0800 | HTTP route probes | passed: 30 prototype routes plus `/design-standard` returned HTTP 200 |
 | 2026-05-01 17:57:03 +0800 | `npx playwright test docs/tasks/frontend-onboarding/evidence/step4-final-quality.spec.cjs --reporter=line` | passed: 36 checks, 0 failures |
 | 2026-05-01 17:57:03 +0800 | `git diff --check` | passed |
+| 2026-05-01 17:57:03 +0800 | `git commit -m "Accept frontend onboarding step 4"` | passed: `664d7d2` |
 | 2026-05-01 15:15:19 +0800 | `npm run typecheck` | passed |
 | 2026-05-01 15:15:19 +0800 | `npm run build` | passed |
 | 2026-05-01 15:15:19 +0800 | `git diff --check` | passed |
