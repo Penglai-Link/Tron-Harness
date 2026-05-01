@@ -3,9 +3,9 @@
 ## FSM
 - current_step: frontend-onboarding-3
 - gate: waiting_auto_acceptance
-- run_action: repair_current_step
+- run_action: auto_accept_current_step
 - repair_attempts: 1
-- blocker_key: none
+- blocker_key: step3_resources_structure_mismatch
 
 ## Source Paths
 - tech_stack: `docs/tech-stack.md`
@@ -167,6 +167,15 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Repair checkpoint: `e5e2953`.
 - Current FSM: `current_step=frontend-onboarding-3`, `gate=waiting_auto_acceptance`, `run_action=repair_current_step`, `repair_attempts=1`, `blocker_key=none`.
 
+## Step 3 Post-Repair Auto Acceptance Findings
+- Result: repair required; `frontend-onboarding-3` remains `waiting_human_decision` with `gate=waiting_auto_acceptance`.
+- Passed baseline gates before failure: 30 `code.html` files read, 30 `screen.png` targets inspected, 30 ledger rows, 30 manifest rows, `npm run typecheck`, `npm run build`, 31 HTTP 200 route probes, and `git diff --check`.
+- Failed structure gate: `resources_management_tron` prototype requires a distinct Enterprise Management shell, Active Data Sources/Managed Files/Total Storage metric cards, Resource Name/Type/Status/Location/Last Accessed table columns, and Bulk Actions/Import Resource/New Asset actions.
+- Current implementation mismatch: `/resources` uses generic TronShell, Storage Used/Synced Assets/Selected cards, NAME/TYPE/SCOPE/SIZE/STATUS columns, and Import/New Resource/Bulk actions.
+- Visual evidence captured: `docs/tasks/frontend-onboarding/evidence/step3-failure-resources-current.png`.
+- Manifest correction: `resources_management_tron` is marked `repair`; all other rows remain unchanged.
+- Next action: `repair_current_step` should repair only the resources page structure and interactions, then return to `gate=waiting_auto_acceptance`.
+
 ## Decisions
 - Use `docs/tasks/frontend-onboarding/` as the only onboarding bookkeeping root.
 - Preserve existing source docs and prototype files as user-provided inputs.
@@ -257,3 +266,10 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 15:42:08 +0800 | `rg '\| repair \|' docs/tasks/frontend-onboarding/acceptance-manifest.md` | passed: no repair rows remain |
 | 2026-05-01 15:42:08 +0800 | `git diff --check` | passed |
 | 2026-05-01 15:42:08 +0800 | `git commit -m "Repair step 3 shell layout"` | passed: `e5e2953` |
+| 2026-05-01 15:56:48 +0800 | Step 3 strict inventory script | passed: 30 `code.html`, 30 `screen.png`, 30 ledger rows, 30 manifest rows, 30 route/archetype contracts, and 30 current screenshot files verified |
+| 2026-05-01 15:56:48 +0800 | `npm run typecheck` | passed |
+| 2026-05-01 15:56:48 +0800 | `npm run build` | passed |
+| 2026-05-01 15:56:48 +0800 | `curl` / Node HTTP route probes | passed: 30 prototype routes plus `/design-standard` returned HTTP 200 |
+| 2026-05-01 15:56:48 +0800 | Playwright screenshot `/resources` | passed: `docs/tasks/frontend-onboarding/evidence/step3-failure-resources-current.png` |
+| 2026-05-01 15:56:48 +0800 | Step 3 resources structure gate | failed: prototype Enterprise Management shell, metric cards, actions, and table columns are not preserved |
+| 2026-05-01 15:56:48 +0800 | `git diff --check` | passed before failure recording |
