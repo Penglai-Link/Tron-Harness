@@ -15,10 +15,10 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 ## Overall Status
 - status: waiting_human_decision
 - process: 75%
-- current_step: frontend-onboarding-3
-- gate: waiting_auto_acceptance
-- run_action: repair_current_step
-- repair_attempts: 4
+- current_step: frontend-onboarding-4
+- gate: none
+- run_action: auto_accept_current_step
+- repair_attempts: 0
 - blocker_key: none
 
 ## Steps
@@ -26,7 +26,7 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 | --- | --- | --- | --- |
 | 1 | [frontend-onboarding-1](frontend-onboarding-1.md) - Initialize from tech stack plus design docs and create `/design-standard`. | finished | commits: 9abf746, 22b7191, 3a66384; gate=none; run_action=auto_accept_current_step |
 | 2 | [frontend-onboarding-2](frontend-onboarding-2.md) - Read product/design docs, scan every prototype page, and establish shared layout plus common components. | finished | commits: 05e2c3d, 81d6c72, 3d984cc, dbabf30, 75df2b3; gate=none; run_action=auto_accept_current_step; strict post-repair acceptance passed |
-| 3 | [frontend-onboarding-3](frontend-onboarding-3.md) - Traverse all Stitch pages, implement them with mock data plus API boundaries, and record page acceptance evidence. | waiting_human_decision | commits: e127111, e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd, b4b2efb, 47daac6, 09f4376, bdf673f; prompt-shell no-op controls repaired and awaiting strict auto-acceptance; gate=waiting_auto_acceptance; run_action=repair_current_step; repair_attempts=4; blocker_key=none |
+| 3 | [frontend-onboarding-3](frontend-onboarding-3.md) - Traverse all Stitch pages, implement them with mock data plus API boundaries, and record page acceptance evidence. | finished | commits: e127111, e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd, b4b2efb, 47daac6, 09f4376, bdf673f; strict auto-acceptance passed; acceptance commit pending; gate=none; run_action=auto_accept_current_step; repair_attempts=0; blocker_key=none |
 | 4 | [frontend-onboarding-4](frontend-onboarding-4.md) - Perform final quality acceptance across coverage, visual structure, interactions, and deviations. | notrun | commit: pending; gate=none |
 
 ## Update Log
@@ -65,3 +65,4 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 | 2026-05-01 16:41:09 +0800 | waiting_human_decision | 75% | Step 3 auto-acceptance failed: `/prompts/new` still has visible Tron AI sidebar navigation buttons and a Notifications IconButton without observable behavior; next run must repair those controls only. |
 | 2026-05-01 16:41:09 +0800 | waiting_human_decision | 75% | Step 3 prompt-shell acceptance-failure checkpoint created as `09f4376`; next run must repair those controls only. |
 | 2026-05-01 16:48:11 +0800 | waiting_human_decision | 75% | Step 3 prompt-shell repair applied: `/prompts/new` sidebar navigation now has selected state and notice feedback, Notifications opens a visible panel, screenshot evidence refreshed, and validation passed; repair checkpoint `bdf673f`; next run must only auto-accept Step 3. |
+| 2026-05-01 16:53:39 +0800 | waiting_human_decision | 75% | Step 3 auto-accepted after strict gates: 30 source `code.html` reads, 30 `screen.png` targets, 30 current screenshots, manifest/ledger coverage, structure smoke, interaction smoke, typecheck, build, route probes, and diff-check passed; Step 4 remains notrun. |

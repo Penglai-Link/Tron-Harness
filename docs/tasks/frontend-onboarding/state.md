@@ -1,10 +1,10 @@
 # Frontend Onboarding State
 
 ## FSM
-- current_step: frontend-onboarding-3
-- gate: waiting_auto_acceptance
-- run_action: repair_current_step
-- repair_attempts: 4
+- current_step: frontend-onboarding-4
+- gate: none
+- run_action: auto_accept_current_step
+- repair_attempts: 0
 - blocker_key: none
 
 ## Source Paths
@@ -374,3 +374,13 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Validation passed: `npm run typecheck`, `npm run build`, `/prompts/new` HTTP 200, `/design-standard` HTTP 200, Playwright prompt shell repair smoke, screenshot dimension check, and `git diff --check`.
 - Current FSM: `current_step=frontend-onboarding-3`, `gate=waiting_auto_acceptance`, `run_action=repair_current_step`, `repair_attempts=4`, `blocker_key=none`.
 - Repair checkpoint: `bdf673f`.
+
+## Step 3 Final Auto Acceptance Findings
+- Result: passed; `frontend-onboarding-3` is finished and `frontend-onboarding-4` is the next notrun step.
+- Prototype evidence: all 30 source `code.html` files were read and all 30 `screen.png` visual targets were checked as nonempty current source evidence.
+- Manifest and ledger: 30 manifest rows are `pass`, 30 ledger rows match the source prototype inventory, and no `repair` or `blocked` rows remain.
+- Visual evidence: all 30 current screenshots under `docs/tasks/frontend-onboarding/evidence/step3-current/` exist and are nonempty; Playwright opened all 30 implementation routes and verified fresh 1440x1100 screenshot buffers.
+- Structure evidence: browser smoke verified key visible structure for the shell, page headers, and primary archetypes including kanban, split panes, data tables, forms, chat, graph, dashboard, detail, auth, resources, and permission grid pages.
+- Interaction evidence: browser smoke verified sidebar collapse/expand, Main Agent open/close, primary action feedback, row/select mutations, inspector/detail actions, kanban actions, memory/model/admin/variable actions, prompt-shell navigation/notifications, and the main agent composer send clear behavior.
+- Baseline validation passed: `npm run typecheck`, `npm run build`, 31 HTTP 200 route probes, and `git diff --check`.
+- Acceptance checkpoint: pending.
