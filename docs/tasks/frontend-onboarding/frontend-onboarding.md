@@ -15,18 +15,18 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 ## Overall Status
 - status: waiting_human_decision
 - process: 50%
-- current_step: frontend-onboarding-2
-- gate: waiting_auto_acceptance
-- run_action: repair_current_step
-- repair_attempts: 1
+- current_step: frontend-onboarding-3
+- gate: none
+- run_action: auto_accept_current_step
+- repair_attempts: 0
 - blocker_key: none
 
 ## Steps
 | step | description | status | note |
 | --- | --- | --- | --- |
 | 1 | [frontend-onboarding-1](frontend-onboarding-1.md) - Initialize from tech stack plus design docs and create `/design-standard`. | finished | commits: 9abf746, 22b7191, 3a66384; gate=none; run_action=auto_accept_current_step |
-| 2 | [frontend-onboarding-2](frontend-onboarding-2.md) - Read product/design docs, scan every prototype page, and establish shared layout plus common components. | waiting_human_decision | commits: 05e2c3d, 81d6c72, 3d984cc, dbabf30; gate=waiting_auto_acceptance; run_action=repair_current_step; repaired `src/lib/prototype-routes.ts` route/archetype mismatches and reset for next auto acceptance |
-| 3 | [frontend-onboarding-3](frontend-onboarding-3.md) - Traverse all Stitch pages, implement them with mock data plus API boundaries, and record page acceptance evidence. | notrun | commit: pending; gate=none |
+| 2 | [frontend-onboarding-2](frontend-onboarding-2.md) - Read product/design docs, scan every prototype page, and establish shared layout plus common components. | finished | commits: 05e2c3d, 81d6c72, 3d984cc, dbabf30; acceptance commit pending; gate=none; run_action=auto_accept_current_step; strict post-repair acceptance passed |
+| 3 | [frontend-onboarding-3](frontend-onboarding-3.md) - Traverse all Stitch pages, implement them with mock data plus API boundaries, and record page acceptance evidence. | notrun | commit: pending; gate=none; next action=execute_current_step |
 | 4 | [frontend-onboarding-4](frontend-onboarding-4.md) - Perform final quality acceptance across coverage, visual structure, interactions, and deviations. | notrun | commit: pending; gate=none |
 
 ## Update Log
@@ -45,3 +45,5 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 | 2026-05-01 14:40:42 +0800 | waiting_human_decision | 50% | Step 2 acceptance-failure evidence checkpoint created as `3d984cc`. |
 | 2026-05-01 14:46:22 +0800 | waiting_human_decision | 50% | Step 2 repair applied: aligned six source route/archetype contracts with `state.md`, updated manifest rows to `pass`, and kept gate waiting for the next auto-acceptance run. |
 | 2026-05-01 14:46:22 +0800 | waiting_human_decision | 50% | Step 2 repair checkpoint created as `dbabf30`; next run must only auto-accept Step 2. |
+| 2026-05-01 14:56:12 +0800 | waiting_human_decision | 50% | Step 2 auto-accepted after strict post-repair gates: 30 `code.html` reads, 30 `screen.png` visual targets, manifest pass rows, route/archetype contract, typecheck, build, route probes, current screenshots, interaction smoke, and diff-check passed; Step 3 remains notrun. |
+| 2026-05-01 14:56:12 +0800 | waiting_human_decision | 50% | Step 2 acceptance checkpoint pending commit; next run must execute Step 3 only. |

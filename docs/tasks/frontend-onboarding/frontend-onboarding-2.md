@@ -11,12 +11,12 @@ Scan product/design docs and every Stitch prototype page, then establish shared 
 - [x] Validate shared layout coverage and create a git checkpoint.
 
 ## Overall Status
-- status: waiting_human_decision
-- process: 95%
-- current_step: frontend-onboarding-2
-- gate: waiting_auto_acceptance
-- run_action: repair_current_step
-- repair_attempts: 1
+- status: finished
+- process: 100%
+- current_step: completed
+- gate: none
+- run_action: auto_accept_current_step
+- repair_attempts: 0
 - blocker_key: none
 
 ## Steps
@@ -24,7 +24,7 @@ Scan product/design docs and every Stitch prototype page, then establish shared 
 | --- | --- | --- | --- |
 | 1 | Scan docs and prototype pages. | finished | commits: 05e2c3d, 81d6c72; scanned 30 `code.html` files and 30 `screen.png` visual targets |
 | 2 | Define shared route, shell, and component contracts. | finished | commit: 81d6c72; route map and archetype preservation contract recorded in `state.md` |
-| 3 | Implement shared layout/components and validation evidence. | waiting_human_decision | commits: 81d6c72, 3d984cc, dbabf30; shared preview route `/shared-shell-preview` added; gate=waiting_auto_acceptance; repaired source route/archetype mismatches for automations, chat variants, import variants, and memory table archetype |
+| 3 | Implement shared layout/components and validation evidence. | finished | commits: 81d6c72, 3d984cc, dbabf30; acceptance commit pending; shared preview route `/shared-shell-preview` added; strict post-repair acceptance passed |
 
 ## Update Log
 | time | status | process | update |
@@ -37,3 +37,5 @@ Scan product/design docs and every Stitch prototype page, then establish shared 
 | 2026-05-01 14:40:42 +0800 | waiting_human_decision | 95% | Acceptance-failure evidence checkpoint created as `3d984cc`. |
 | 2026-05-01 14:46:22 +0800 | waiting_human_decision | 95% | Repair completed for the six route/archetype mismatches; typecheck, build, contract repair check, manifest repair-status check, and diff-check passed. |
 | 2026-05-01 14:46:22 +0800 | waiting_human_decision | 95% | Repair checkpoint created as `dbabf30`; waiting for the next automatic acceptance run. |
+| 2026-05-01 14:56:12 +0800 | finished | 100% | Step 2 auto-accepted after strict post-repair gates: all prototype code and screenshots rechecked, manifest rows are pass, route/archetype contract matches source, current screenshots were generated, shared-shell interactions passed, and baseline commands passed. |
+| 2026-05-01 14:56:12 +0800 | finished | 100% | Step 2 acceptance checkpoint pending commit; parent current step advanced to `frontend-onboarding-3`. |

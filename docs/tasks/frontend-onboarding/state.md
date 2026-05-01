@@ -1,10 +1,10 @@
 # Frontend Onboarding State
 
 ## FSM
-- current_step: frontend-onboarding-2
-- gate: waiting_auto_acceptance
-- run_action: repair_current_step
-- repair_attempts: 1
+- current_step: frontend-onboarding-3
+- gate: none
+- run_action: auto_accept_current_step
+- repair_attempts: 0
 - blocker_key: none
 
 ## Source Paths
@@ -122,6 +122,17 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Manifest: the six previously `repair` rows now record `pass`; no `| repair |` rows remain in `acceptance-manifest.md`.
 - Validation passed: `npm run typecheck`, `npm run build`, route/archetype contract repair check, manifest repair-status check, and `git diff --check`.
 
+## Step 2 Repair Auto Acceptance Findings
+- Result: passed; `frontend-onboarding-2` is finished and `frontend-onboarding-3` is the next notrun step.
+- Prototype evidence: 30 `code.html` files were reread and 30 `screen.png` visual targets were verified from current PNG dimensions.
+- Manifest: 30 rows in `acceptance-manifest.md` are `pass`, include `code.html`/`screen.png` evidence, and contain no `repair` or `blocked` status.
+- Structure contract: `docs/tasks/frontend-onboarding/state.md` and `src/lib/prototype-routes.ts` match for all 30 prototype route/archetype pairs.
+- Visual evidence captured: `docs/tasks/frontend-onboarding/evidence/step2-shared-shell-preview-current.png`.
+- Interaction evidence captured: `docs/tasks/frontend-onboarding/evidence/step2-shared-shell-interactions-current.png`.
+- Interaction smoke passed: sidebar accordion, active navigation, segmented tabs, search/filter feedback, pagination, toggle state, topbar menu, primary action feedback, and Main Agent open/close.
+- Baseline validation passed: `npm run typecheck`, `npm run build`, `/shared-shell-preview` HTTP 200, `/design-standard` HTTP 200, screenshot dimension checks, and `git diff --check`.
+- Tool note: the first Playwright attempt failed due concurrent `npx` cache contention and an over-broad selector; rerunning serially with an isolated cache and narrowed selectors passed.
+
 ## Decisions
 - Use `docs/tasks/frontend-onboarding/` as the only onboarding bookkeeping root.
 - Preserve existing source docs and prototype files as user-provided inputs.
@@ -175,3 +186,12 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 14:46:22 +0800 | `rg '\| repair \|' docs/tasks/frontend-onboarding/acceptance-manifest.md` | passed: no repair rows remain |
 | 2026-05-01 14:46:22 +0800 | `git diff --check` | passed |
 | 2026-05-01 14:46:22 +0800 | `git commit -m "Repair step 2 route contract"` | passed: `dbabf30` |
+| 2026-05-01 14:56:12 +0800 | Step 2 strict evidence script | passed: 30 `code.html`, 30 `screen.png`, 30 manifest pass rows, and 30 route/archetype pairs verified |
+| 2026-05-01 14:56:12 +0800 | `npm run typecheck` | passed |
+| 2026-05-01 14:56:12 +0800 | `npm run build` | passed |
+| 2026-05-01 14:56:12 +0800 | `curl -I http://127.0.0.1:4173/shared-shell-preview` | passed: HTTP 200 |
+| 2026-05-01 14:56:12 +0800 | `curl -I http://127.0.0.1:4173/design-standard` | passed: HTTP 200 |
+| 2026-05-01 14:56:12 +0800 | Playwright screenshot `/shared-shell-preview` | passed: `docs/tasks/frontend-onboarding/evidence/step2-shared-shell-preview-current.png` |
+| 2026-05-01 14:56:12 +0800 | Playwright shared-shell interaction smoke | passed: sidebar accordion, tab state/content, search filter, pagination, toggle, topbar menu, primary action feedback, and FAB open/close |
+| 2026-05-01 14:56:12 +0800 | screenshot dimension check | passed: current preview and interaction screenshots are nonempty PNGs |
+| 2026-05-01 14:56:12 +0800 | `git diff --check` | passed |
