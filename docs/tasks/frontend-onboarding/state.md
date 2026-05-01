@@ -2,7 +2,7 @@
 
 ## FSM
 - current_step: frontend-onboarding-2
-- gate: none
+- gate: waiting_auto_acceptance
 - run_action: execute_current_step
 - repair_attempts: 0
 - blocker_key: none
@@ -57,6 +57,57 @@ Every listed page currently has both `code.html` and `screen.png`.
 | variable_management_tron_standardized_1 | yes | yes | discovered |
 | variable_management_tron_standardized_2 | yes | yes | discovered |
 
+## Step 2 Prototype Archetype Scan
+Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets inspected with `sips` dimensions. Route mapping is a Step 2 contract for Step 3 implementation and does not add pages to `implemented-pages.txt`.
+
+| prototype | route | archetype | shell/header | local structure to preserve | interaction categories |
+| --- | --- | --- | --- | --- | --- |
+| add_model_tron_standardized_navigation | `/models/new` | form-inspector | Standard Tron top bar, Models active, secondary back/actions header | Provider/API/key/base URL fields, sliders, inheritable toggle, sticky JSON/cost preview | search, back, refresh, more, deploy, selects, password reveal, sliders, toggle |
+| app_management_light | `/apps` | data-table | Standard Tron shell, Apps active, title/subtitle actions | Toolbar and table columns App Name/Source/Path/Worktree/Tags/Actions, pagination | import/new, search, filters, sort, row actions, pagination |
+| audit_logs_tron_standardized_navigation | `/admin/audit-logs` | data-table | Standard Tron admin shell, Audit Logs active, Users & Roles title | Tabs User Directory/Role Matrix/Audit Logs, log table Timestamp/Actor/Action/Resource ID/Status/IP | tabs, search, filter, export, pagination |
+| automations_management_light | `/automations` | split-pane | Standard Tron shell, Automations active | Automations table plus fixed right inspector with Details/Logs/Traces and dependency flow | search, filter, new, row actions, inspector tabs, pagination |
+| chat_sessions_updated_tron_1 | `/chats/8842-alpha` | chat | Standard shell, Chats active, session rail, chat header and right inspector | Three-pane session tree, rich chat feed, reasoning/tool cards, composer, metadata/tools/files panels | new chat, session selection, inspector tabs, attach/build/send |
+| chat_sessions_updated_tron_2 | `/chats/8842-alpha?variant=execution` | chat | Same chat shell and panes as variant 1 | Three-pane chat with plain terminal/code execution cards and right utility hub | session selection, composer, inspector tabs, attach/send |
+| create_automation_tron_standardized | `/automations/new` | form | Standard top/side shell, breadcrumb AUTOMATIONS / NEW | Basic info, trigger/schedule, app/agent selects, dependency map | back, create, selects, parse, add/remove prereqs, add action |
+| create_new_prompt_tron | `/prompts/new` | form-inspector | Distinct Tron AI shell with product sidebar and top tabs | Prompt metadata, visibility radios, line-number editor, model/token/test variable cards | top tabs, back, test/save, selects, radios, slider, variable inputs |
+| create_new_skill_tron_standardized | `/skills/new` | form-inspector | Standard shell, Skills active, right inspector, sticky bottom action bar | General details, JSON schema editor, toggles, validation preview, agent view preview | back, fields, load template, toggles, cancel/create |
+| create_task_full_width_console_layout | `/tasks/new` | form | Standard shell, Tasks active, full-width create header | Title, agent/app selects, priority segments, markdown toolbar, quick reference card | back, selects, segmented priority, editor toolbar, cancel/create |
+| dashboard_light | `/dashboard` | dashboard | Fixed Tron top bar, Dashboard active, Main Agent FAB | KPI cards, inheritance map tree, recent activity | export, map expand, view all, search, nav, FAB |
+| import_application_tron_unified_navigation_1 | `/apps/import?source=github` | form | Standard shell, Apps active, back to Apps | Source tiles, repo/token/local path/app/tags/branch fields | source tile selection, inputs, tag remove, cancel/import/back |
+| import_application_tron_unified_navigation_2 | `/apps/import?source=local` | form | Standard shell, Apps active, content back link | Source tiles, local path/app/tags fields | source tile selection, inputs, tag remove, cancel/import/back |
+| knowledge_graph_tron | `/knowledge-graph` | graph | Standard shell, Graph active | Entity filter/list, graph canvas, right Properties/Relationships inspector | node filter, node select, zoom controls, close inspector, edit |
+| knowledge_graph_tron_domain_filtering | `/knowledge-graph/domain-filtering` | graph | Same graph shell, Graph active | Domain select plus scoped entity search, graph canvas, inspector | domain dropdown, scoped search, zoom controls, close inspector, edit |
+| login_tron_light_theme_centered | `/login` | auth | No app chrome; centered enterprise auth card | Operator ID, passkey, CAPTCHA block/input, footer links | text/password inputs, captcha refresh, sign in, forgot/footer links |
+| main_agent_chat_tron | `/agent` | chat | Dashboard shell behind dim overlay, Main Agent dialog | Floating chat dialog with reasoning, tool terminal, actions, composer | minimize, close, execute/review, attach, textarea, send |
+| memory_management_tron_data_isolation_1 | `/memory` | data-table | Standard shell, Memory active | Search/filter studio, strategy segmented control, filter chips, dense memory table | import/sync, search, strategy toggle, filter chips, add filter, pagination |
+| memory_management_tron_data_isolation_2 | `/memory/details` | split-pane | Standard shell, Memory active | Same table plus selected row and Memory Details inspector | row selection, close inspector, edit/invalidate, filters, pagination |
+| model_registry_tron | `/models` | split-pane | Standard shell, Models active, no global search | Vendor pills, model list/table, selected row, right model inspector | add, vendor filters, search, row selection, more, configure/disable |
+| observability_dashboard_light | `/observability` | dashboard | Standard shell, Observability active, right inspector | KPI cards, charts, traces table, heatmap, inspector tabs Details/Logs/Traces/Health | search, chart/menu, view all, inspector tabs/close, pause/edit |
+| prompt_management_tron_standardized | `/prompts` | split-pane | Standard shell, prompt table plus details/testing inspector | Prompt category tabs, table Name/Category/Inheritance/Last Updated/Actions, right panel | tabs, search, filter, bulk export/new, row actions, close/copy/test |
+| resources_management_tron | `/resources` | data-table | Distinct Enterprise Management shell, Resources active | Stat cards, filters, checkbox table, pagination, floating support | search, bulk/import/new, checkboxes, dropdown filters, row menu, pagination |
+| role_matrix_tron_standardized | `/admin/roles` | permission-grid | Standard shell, Permissions active, Users & Roles title | User/Role/Audit tabs, Role x Workspace/Models/Tasks/Memory/Skills/MCP matrix | search, tabs, filter, add role, permission cells |
+| skills_mcp_management_tron | `/skills` | split-pane | Standard shell, Skills active | Skills/MCP tabs, capability list, status toggles, right detail/schema/activity panel | tabs, search, new, toggles, row selection, more, copy schema |
+| task_details_lumina_workspace_updated_hierarchy | `/tasks/detail` | detail | Standard shell, Tasks active, breadcrumbs and Execute Task | Header card, description, inheritance/resources, timeline, right task metadata/subtasks | breadcrumbs/back, execute, status dropdown, subtask checks, add subtask |
+| task_management_light | `/tasks` | kanban | Standard shell, Tasks active | Horizontal columns Backlog/To Do/In Progress/Review/Done with cards/progress | search, sync, create, card selection, horizontal scroll |
+| user_permissions_tron | `/admin/users` | data-table | Standard admin shell, Admin active | KPI cards, User Directory/Role Matrix/Audit Logs tabs, user table and pagination | export/add, tabs, search, role select, filter, row menu, pagination |
+| variable_management_tron_standardized_1 | `/variables` | split-pane | Standard shell, Variables active, no visible page title | Variable table, pagination, right usage inspector | search, new variable, edit/delete, pagination, usage links, reveal |
+| variable_management_tron_standardized_2 | `/variables/details` | split-pane | Standard shell, Variables active, page title visible | Same variable table and usage inspector with restored page hierarchy | search, new variable, edit/delete, pagination, usage links, reveal |
+
+## Step 2 Shared UI Contract
+- App shell: fixed 280px sidebar, accordion sections, active nav state, top search/workspace/utility controls, optional right inspector, and stateful Main Agent floating entry.
+- Page header: breadcrumbs, eyebrow, status badge, title, description, primary and secondary actions.
+- Primitives: metric cards, surface cards, data table with toolbar and pagination slot, form fields, inputs, textarea, select, toggle, segmented tabs, inspector panel, and badges.
+- Preview route: `/shared-shell-preview` exercises shared layout, tab filtering, search filtering, pagination state, toggle state, top bar menu state, primary action feedback, and Main Agent open/close behavior.
+- Step 3 preservation rule: page implementations may reuse shared primitives, but kanban, split-pane, graph, chat, permission matrix, auth, and form-inspector pages must preserve their primary archetype instead of collapsing into a generic table/card renderer.
+
+## Step 2 Risks For Step 3
+- `task_management_light` must remain a horizontal kanban board; a card list or stats dashboard is not acceptable.
+- `skills_mcp_management_tron`, `prompt_management_tron_standardized`, `model_registry_tron`, `memory_management_tron_data_isolation_2`, and variable pages require real split-pane row selection plus details/inspector state.
+- `chat_sessions_updated_tron_1` and `_2` require three-pane session rail, chat canvas, composer, and utility hub; a single chat card view is insufficient.
+- `knowledge_graph_*` pages require graph-canvas composition plus entity/domain filtering controls; a static table is insufficient.
+- `role_matrix_tron_standardized` requires a permission matrix with cell-level R/W/D/A affordances.
+- `create_new_prompt_tron` intentionally uses a non-standard Tron AI shell; Step 3 should either preserve that shell or document a material normalization decision before changing it.
+
 ## Decisions
 - Use `docs/tasks/frontend-onboarding/` as the only onboarding bookkeeping root.
 - Preserve existing source docs and prototype files as user-provided inputs.
@@ -86,3 +137,10 @@ Every listed page currently has both `code.html` and `screen.png`.
 | 2026-05-01 13:31:30 +0800 | `git diff --check` | passed |
 | 2026-05-01 13:31:30 +0800 | `git commit -m "Accept frontend onboarding step 1"` | passed: `3a66384` |
 | 2026-05-01 13:47:33 +0800 | Step 2 worker delegation | started: three non-overlapping prototype scan batches |
+| 2026-05-01 13:56:42 +0800 | Step 2 prototype scan | passed: 30 `code.html` files read and 30 `screen.png` files inspected |
+| 2026-05-01 13:56:42 +0800 | Step 2 manifest update | passed: 30 prototype rows recorded with route, archetype, visual evidence, structure result, interaction result, deviations, and status |
+| 2026-05-01 13:56:42 +0800 | `npm run typecheck` | passed |
+| 2026-05-01 13:56:42 +0800 | `npm run build` | passed |
+| 2026-05-01 13:56:42 +0800 | `curl -I http://127.0.0.1:4173/shared-shell-preview` | passed: HTTP 200 |
+| 2026-05-01 13:56:42 +0800 | `curl -I http://127.0.0.1:4173/design-standard` | passed: HTTP 200 |
+| 2026-05-01 13:56:42 +0800 | `git diff --check` | passed |

@@ -2,6 +2,7 @@ import { ArrowRight, LayoutDashboard } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DesignStandardPage } from "@/pages/design-standard";
+import { SharedShellPreviewPage } from "@/pages/shared-shell-preview";
 
 function HomePage() {
   return (
@@ -25,6 +26,12 @@ function HomePage() {
                 <ArrowRight size={16} aria-hidden="true" />
               </a>
             </Button>
+            <Button asChild variant="secondary">
+              <a href="/shared-shell-preview">
+                Open shared shell
+                <ArrowRight size={16} aria-hidden="true" />
+              </a>
+            </Button>
           </div>
         </div>
       </section>
@@ -37,6 +44,10 @@ export function App() {
 
   if (path === "/design-standard") {
     return <DesignStandardPage />;
+  }
+
+  if (path === "/shared-shell-preview") {
+    return <SharedShellPreviewPage />;
   }
 
   return <HomePage />;
