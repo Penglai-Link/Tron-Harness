@@ -153,6 +153,7 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Failed interaction gate: the original shell requires whole-sidebar collapse support, but current `TronShell` only supports section accordion toggles and has no collapsed-sidebar state or control.
 - Passed baseline evidence before failure: 30 `code.html` files, 30 `screen.png` targets, 30 current screenshots, 30 route probes plus `/design-standard`, `npm run typecheck`, `npm run build`, Playwright `/skills` screenshot, source route/component/service checks, and `git diff --check`.
 - Manifest correction: 29 shared-shell affected pages are now marked `repair`; `login_tron_light_theme_centered` remains `pass` because it has no app shell.
+- Failure checkpoint: `615d3e5`.
 - Next action: `repair_current_step` should fix Step 3 shell layout and collapse behavior only, then refresh current screenshots and return to `gate=waiting_auto_acceptance`.
 
 ## Decisions
@@ -235,3 +236,4 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 15:27:28 +0800 | HTTP route probes | passed: 30 prototype routes plus `/design-standard` returned HTTP 200 |
 | 2026-05-01 15:27:28 +0800 | Playwright screenshot `/skills` | passed: captured current render for shell inspection |
 | 2026-05-01 15:27:28 +0800 | Step 3 shell structure and interaction gate | failed: sidebar occupies the topbar row and lacks whole-sidebar collapse support |
+| 2026-05-01 15:27:28 +0800 | `git commit -m "Record step 3 shell acceptance failure"` | passed: `615d3e5` |

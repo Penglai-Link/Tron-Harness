@@ -24,9 +24,9 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 ## Steps
 | step | description | status | note |
 | --- | --- | --- | --- |
-| 1 | Implement page batch routes/components. | waiting_human_decision | commits: e127111, e83f445; 30 routes/components implemented by worker batches A/B/C; shell repair required |
+| 1 | Implement page batch routes/components. | waiting_human_decision | commits: e127111, e83f445, 615d3e5; 30 routes/components implemented by worker batches A/B/C; shell repair required |
 | 2 | Add mock data and API-ready service boundaries. | waiting_human_decision | commit: e83f445; service modules `prototype-data-a.ts`, `prototype-data-b.ts`, and `prototype-data-c.ts` added |
-| 3 | Record ledger and acceptance evidence. | waiting_human_decision | commit: e83f445; acceptance failed; manifest now has 29 repair rows and 1 pass row; current screenshots show shell mismatch |
+| 3 | Record ledger and acceptance evidence. | waiting_human_decision | commits: e83f445, 615d3e5; acceptance failed; manifest now has 29 repair rows and 1 pass row; current screenshots show shell mismatch |
 
 ## Update Log
 | time | status | process | update |
@@ -36,3 +36,4 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 | 2026-05-01 15:15:19 +0800 | waiting_human_decision | 95% | Step 3 implementation completed and baseline validation passed; waiting for automatic acceptance in the next run. |
 | 2026-05-01 15:15:19 +0800 | waiting_human_decision | 95% | Step 3 implementation checkpoint created as `e83f445`; next run must only auto-accept Step 3. |
 | 2026-05-01 15:27:28 +0800 | waiting_human_decision | 95% | Step 3 strict auto-acceptance failed on shell structure and interaction: the topbar must span full width above the sidebar, and the sidebar needs whole-sidebar collapse support. |
+| 2026-05-01 15:27:28 +0800 | waiting_human_decision | 95% | Step 3 acceptance-failure checkpoint created as `615d3e5`; next run must repair Step 3 shell only. |
