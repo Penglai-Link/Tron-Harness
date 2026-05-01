@@ -164,6 +164,7 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Visual evidence refreshed: all 30 `docs/tasks/frontend-onboarding/evidence/step3-current/*.png` screenshots were regenerated at 1440x1100 after the shell repair.
 - Interaction evidence added: `docs/tasks/frontend-onboarding/evidence/step3-shell-repair-skills-expanded.png` and `docs/tasks/frontend-onboarding/evidence/step3-shell-repair-skills-collapsed.png`.
 - Validation passed: `npm run typecheck`, `npm run build`, 31 HTTP 200 route probes, Playwright shell layout/collapse test, screenshot dimension checks, manifest repair-status check, and `git diff --check`.
+- Repair checkpoint: `e5e2953`.
 - Current FSM: `current_step=frontend-onboarding-3`, `gate=waiting_auto_acceptance`, `run_action=repair_current_step`, `repair_attempts=1`, `blocker_key=none`.
 
 ## Decisions
@@ -255,3 +256,4 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 15:42:08 +0800 | screenshot dimension check | passed: 30 current screenshots plus expanded/collapsed repair screenshots are 1440x1100 |
 | 2026-05-01 15:42:08 +0800 | `rg '\| repair \|' docs/tasks/frontend-onboarding/acceptance-manifest.md` | passed: no repair rows remain |
 | 2026-05-01 15:42:08 +0800 | `git diff --check` | passed |
+| 2026-05-01 15:42:08 +0800 | `git commit -m "Repair step 3 shell layout"` | passed: `e5e2953` |

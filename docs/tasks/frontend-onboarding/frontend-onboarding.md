@@ -26,7 +26,7 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 | --- | --- | --- | --- |
 | 1 | [frontend-onboarding-1](frontend-onboarding-1.md) - Initialize from tech stack plus design docs and create `/design-standard`. | finished | commits: 9abf746, 22b7191, 3a66384; gate=none; run_action=auto_accept_current_step |
 | 2 | [frontend-onboarding-2](frontend-onboarding-2.md) - Read product/design docs, scan every prototype page, and establish shared layout plus common components. | finished | commits: 05e2c3d, 81d6c72, 3d984cc, dbabf30, 75df2b3; gate=none; run_action=auto_accept_current_step; strict post-repair acceptance passed |
-| 3 | [frontend-onboarding-3](frontend-onboarding-3.md) - Traverse all Stitch pages, implement them with mock data plus API boundaries, and record page acceptance evidence. | waiting_human_decision | commits: e127111, e83f445, 615d3e5; repair pending checkpoint; gate=waiting_auto_acceptance; run_action=repair_current_step; blocker_key=none |
+| 3 | [frontend-onboarding-3](frontend-onboarding-3.md) - Traverse all Stitch pages, implement them with mock data plus API boundaries, and record page acceptance evidence. | waiting_human_decision | commits: e127111, e83f445, 615d3e5, e5e2953; repair applied; gate=waiting_auto_acceptance; run_action=repair_current_step; blocker_key=none |
 | 4 | [frontend-onboarding-4](frontend-onboarding-4.md) - Perform final quality acceptance across coverage, visual structure, interactions, and deviations. | notrun | commit: pending; gate=none |
 
 ## Update Log
@@ -53,3 +53,4 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 | 2026-05-01 15:27:28 +0800 | waiting_human_decision | 75% | Step 3 auto-acceptance failed: shared shell sidebar starts at viewport top instead of below the full-width topbar, and the sidebar lacks whole-sidebar collapse control/state; next run should repair Step 3 shell only. |
 | 2026-05-01 15:27:28 +0800 | waiting_human_decision | 75% | Step 3 acceptance-failure checkpoint created as `615d3e5`; next run must repair Step 3 only. |
 | 2026-05-01 15:42:08 +0800 | waiting_human_decision | 75% | Step 3 shell repaired: full-width fixed topbar, below-topbar sidebar, whole-sidebar collapse state/control, refreshed 30 route screenshots, and validation passed; next run must only auto-accept Step 3. |
+| 2026-05-01 15:42:08 +0800 | waiting_human_decision | 75% | Step 3 repair checkpoint created as `e5e2953`; next run must auto-accept Step 3 only. |

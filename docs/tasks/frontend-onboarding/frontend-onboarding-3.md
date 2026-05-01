@@ -24,9 +24,9 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 ## Steps
 | step | description | status | note |
 | --- | --- | --- | --- |
-| 1 | Implement page batch routes/components. | waiting_human_decision | commits: e127111, e83f445, 615d3e5; 30 routes/components implemented by worker batches A/B/C; shell repair pending checkpoint |
+| 1 | Implement page batch routes/components. | waiting_human_decision | commits: e127111, e83f445, 615d3e5, e5e2953; 30 routes/components implemented by worker batches A/B/C; shell repair applied |
 | 2 | Add mock data and API-ready service boundaries. | waiting_human_decision | commit: e83f445; service modules `prototype-data-a.ts`, `prototype-data-b.ts`, and `prototype-data-c.ts` added |
-| 3 | Record ledger and acceptance evidence. | waiting_human_decision | commits: e83f445, 615d3e5; repair pending checkpoint; manifest now has 30 pass rows and refreshed shell evidence |
+| 3 | Record ledger and acceptance evidence. | waiting_human_decision | commits: e83f445, 615d3e5, e5e2953; repair applied; manifest now has 30 pass rows and refreshed shell evidence |
 
 ## Update Log
 | time | status | process | update |
@@ -38,3 +38,4 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 | 2026-05-01 15:27:28 +0800 | waiting_human_decision | 95% | Step 3 strict auto-acceptance failed on shell structure and interaction: the topbar must span full width above the sidebar, and the sidebar needs whole-sidebar collapse support. |
 | 2026-05-01 15:27:28 +0800 | waiting_human_decision | 95% | Step 3 acceptance-failure checkpoint created as `615d3e5`; next run must repair Step 3 shell only. |
 | 2026-05-01 15:42:08 +0800 | waiting_human_decision | 95% | Step 3 shell repair applied: full-width topbar, below-topbar sidebar, collapse/expand control, refreshed current screenshots, manifest pass rows, and validation passed; next run must auto-accept Step 3 only. |
+| 2026-05-01 15:42:08 +0800 | waiting_human_decision | 95% | Step 3 repair checkpoint created as `e5e2953`; next run must only auto-accept Step 3. |
