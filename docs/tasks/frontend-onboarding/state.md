@@ -3,9 +3,9 @@
 ## FSM
 - current_step: frontend-onboarding-2
 - gate: waiting_auto_acceptance
-- run_action: execute_current_step
+- run_action: auto_accept_current_step
 - repair_attempts: 0
-- blocker_key: none
+- blocker_key: step2_route_contract_mismatch
 
 ## Source Paths
 - tech_stack: `docs/tech-stack.md`
@@ -108,6 +108,14 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - `role_matrix_tron_standardized` requires a permission matrix with cell-level R/W/D/A affordances.
 - `create_new_prompt_tron` intentionally uses a non-standard Tron AI shell; Step 3 should either preserve that shell or document a material normalization decision before changing it.
 
+## Step 2 Auto Acceptance Findings
+- Result: repair required.
+- Visual evidence captured: `docs/tasks/frontend-onboarding/evidence/step2-shared-shell-preview.png`.
+- Interaction evidence captured: `docs/tasks/frontend-onboarding/evidence/step2-shared-shell-interactions.png`.
+- Passed: 30 prototype `code.html` rows, 30 `screen.png` rows, acceptance-manifest coverage, `/shared-shell-preview` HTTP 200, `/design-standard` HTTP 200, `npm run typecheck`, `npm run build`, and shared-shell interaction smoke.
+- Failed: `src/lib/prototype-routes.ts` route/archetype contract does not match this state file for six prototypes: `automations_management_light`, `chat_sessions_updated_tron_1`, `chat_sessions_updated_tron_2`, `import_application_tron_unified_navigation_1`, `import_application_tron_unified_navigation_2`, and `memory_management_tron_data_isolation_1`.
+- Next action: `repair_current_step` should align `src/lib/prototype-routes.ts` with the recorded Step 2 route/archetype contract, then reset gate to `waiting_auto_acceptance`.
+
 ## Decisions
 - Use `docs/tasks/frontend-onboarding/` as the only onboarding bookkeeping root.
 - Preserve existing source docs and prototype files as user-provided inputs.
@@ -145,3 +153,11 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 13:56:42 +0800 | `curl -I http://127.0.0.1:4173/design-standard` | passed: HTTP 200 |
 | 2026-05-01 13:56:42 +0800 | `git diff --check` | passed |
 | 2026-05-01 13:56:42 +0800 | `git commit -m "Execute frontend onboarding step 2"` | passed: `81d6c72` |
+| 2026-05-01 14:40:42 +0800 | Step 2 prototype evidence verification | passed: 30 `code.html` rows and 30 `screen.png` rows are represented in `acceptance-manifest.md` |
+| 2026-05-01 14:40:42 +0800 | `npm run typecheck` | passed |
+| 2026-05-01 14:40:42 +0800 | `npm run build` | passed |
+| 2026-05-01 14:40:42 +0800 | `curl -I http://127.0.0.1:4173/shared-shell-preview` | passed: HTTP 200 |
+| 2026-05-01 14:40:42 +0800 | `curl -I http://127.0.0.1:4173/design-standard` | passed: HTTP 200 |
+| 2026-05-01 14:40:42 +0800 | Playwright screenshot `/shared-shell-preview` | passed: `docs/tasks/frontend-onboarding/evidence/step2-shared-shell-preview.png` |
+| 2026-05-01 14:40:42 +0800 | Playwright shared-shell interaction smoke | passed: sidebar accordion, tab state/content, search filter, pagination, toggle, topbar menu, primary action feedback, and FAB open/close |
+| 2026-05-01 14:40:42 +0800 | Step 2 route/archetype source contract compare | failed: six `src/lib/prototype-routes.ts` mismatches against `state.md`; Step 2 not auto-accepted |
