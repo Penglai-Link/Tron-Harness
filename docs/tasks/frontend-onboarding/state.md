@@ -185,7 +185,7 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Evidence refreshed: `docs/tasks/frontend-onboarding/evidence/step3-current/resources_management_tron.png` and `docs/tasks/frontend-onboarding/evidence/step3-repair-resources-current.png` are 1440x1100 current screenshots.
 - Manifest: `resources_management_tron` is back to `pass`; no `repair` rows remain in `acceptance-manifest.md`.
 - Validation passed: `npm run typecheck`, `npm run build`, `/resources` HTTP 200, `/design-standard` HTTP 200, screenshot dimension checks, source interaction coverage check, and `git diff --check`.
-- Repair checkpoint: pending.
+- Repair checkpoint: `28ef7cd`.
 - Current FSM: `current_step=frontend-onboarding-3`, `gate=waiting_auto_acceptance`, `run_action=repair_current_step`, `repair_attempts=2`, `blocker_key=none`.
 
 ## Decisions
@@ -295,3 +295,4 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 16:04:49 +0800 | screenshot dimension check | passed: resources current and repair screenshots are 1440x1100 |
 | 2026-05-01 16:04:49 +0800 | source interaction coverage check | passed: search, filters, bulk/import/new, checkbox selection, row menu, pagination, topbar controls, and support FAB handlers present |
 | 2026-05-01 16:04:49 +0800 | `git diff --check` | passed |
+| 2026-05-01 16:04:49 +0800 | `git commit -m "Repair step 3 resources page"` | passed: `28ef7cd` |

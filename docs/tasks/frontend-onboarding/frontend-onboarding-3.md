@@ -24,9 +24,9 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 ## Steps
 | step | description | status | note |
 | --- | --- | --- | --- |
-| 1 | Implement page batch routes/components. | waiting_human_decision | commits: e127111, e83f445, 615d3e5, e5e2953, 75a17b3, pending resources repair; 30 routes/components implemented by worker batches A/B/C; shell and resources repairs applied |
+| 1 | Implement page batch routes/components. | waiting_human_decision | commits: e127111, e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd; 30 routes/components implemented by worker batches A/B/C; shell and resources repairs applied |
 | 2 | Add mock data and API-ready service boundaries. | waiting_human_decision | commit: e83f445; service modules `prototype-data-a.ts`, `prototype-data-b.ts`, and `prototype-data-c.ts` added |
-| 3 | Record ledger and acceptance evidence. | waiting_human_decision | commits: e83f445, 615d3e5, e5e2953, 75a17b3, pending resources repair; resources manifest row restored to `pass`; gate=waiting_auto_acceptance |
+| 3 | Record ledger and acceptance evidence. | waiting_human_decision | commits: e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd; resources manifest row restored to `pass`; gate=waiting_auto_acceptance |
 
 ## Update Log
 | time | status | process | update |
@@ -42,3 +42,4 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 | 2026-05-01 15:56:48 +0800 | waiting_human_decision | 95% | Step 3 post-repair auto-acceptance failed: the resources page normalizes the distinct Enterprise Management prototype into generic TronShell/table content; next run must repair that page only. |
 | 2026-05-01 15:56:48 +0800 | waiting_human_decision | 95% | Step 3 acceptance-failure checkpoint created as `75a17b3`; next run must only repair `resources_management_tron`. |
 | 2026-05-01 16:04:49 +0800 | waiting_human_decision | 95% | Step 3 resources repair applied: `/resources` now preserves the Enterprise Management shell, metric cards, action labels, table columns, and visible interaction feedback; next run must only auto-accept Step 3. |
+| 2026-05-01 16:04:49 +0800 | waiting_human_decision | 95% | Step 3 resources repair checkpoint created as `28ef7cd`; next run must only auto-accept Step 3. |
