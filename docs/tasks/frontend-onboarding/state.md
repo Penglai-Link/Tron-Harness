@@ -353,4 +353,5 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Passed structure gate before failure: all 30 implementation routes opened in Playwright, current screenshots were refreshed or checked, shared-shell collapse controls were present on standard-shell pages, and route-specific structure markers matched the expected archetypes.
 - Failed interaction gate: `create_new_prompt_tron` still has visible distinct-shell controls without observable behavior: the Tron AI sidebar navigation buttons at `src/pages/prototypes/prototype-pages-a.tsx:788` and the Notifications IconButton at `src/pages/prototypes/prototype-pages-a.tsx:800`.
 - Manifest correction: only `create_new_prompt_tron` is marked `repair`; all other rows remain pass.
+- Failure checkpoint: `09f4376`.
 - Next action: `repair_current_step` should add navigation, selected state, feedback, or explicit disabled reasons for those prompt-shell controls only, then return to `gate=waiting_auto_acceptance`.
