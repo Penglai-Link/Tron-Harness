@@ -1,8 +1,28 @@
 import { ArrowRight, LayoutDashboard } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
+import { prototypeRoutes } from "@/lib/prototype-routes";
 import { DesignStandardPage } from "@/pages/design-standard";
+import { prototypePagesA } from "@/pages/prototypes/prototype-pages-a";
+import { prototypePagesB } from "@/pages/prototypes/prototype-pages-b";
+import { prototypePagesC } from "@/pages/prototypes/prototype-pages-c";
 import { SharedShellPreviewPage } from "@/pages/shared-shell-preview";
+
+type PrototypePageComponent = () => ReactNode;
+
+const prototypePageComponents: Record<string, PrototypePageComponent> = {
+  ...prototypePagesA,
+  ...prototypePagesB,
+  ...prototypePagesC,
+};
+
+function resolvePrototypeComponent(pathname: string, search: string) {
+  const exactRoute = `${pathname}${search}`;
+  const route = prototypeRoutes.find((item) => item.route === exactRoute) ?? prototypeRoutes.find((item) => item.route === pathname);
+
+  return route ? prototypePageComponents[route.prototype] : undefined;
+}
 
 function HomePage() {
   return (
@@ -41,6 +61,7 @@ function HomePage() {
 
 export function App() {
   const path = window.location.pathname;
+  const search = window.location.search;
 
   if (path === "/design-standard") {
     return <DesignStandardPage />;
@@ -48,6 +69,11 @@ export function App() {
 
   if (path === "/shared-shell-preview") {
     return <SharedShellPreviewPage />;
+  }
+
+  const PrototypeComponent = resolvePrototypeComponent(path, search);
+  if (PrototypeComponent) {
+    return <PrototypeComponent />;
   }
 
   return <HomePage />;

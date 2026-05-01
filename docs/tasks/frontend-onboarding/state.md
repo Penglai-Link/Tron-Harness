@@ -2,7 +2,7 @@
 
 ## FSM
 - current_step: frontend-onboarding-3
-- gate: none
+- gate: waiting_auto_acceptance
 - run_action: execute_current_step
 - repair_attempts: 0
 - blocker_key: none
@@ -133,6 +133,19 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Baseline validation passed: `npm run typecheck`, `npm run build`, `/shared-shell-preview` HTTP 200, `/design-standard` HTTP 200, screenshot dimension checks, and `git diff --check`.
 - Tool note: the first Playwright attempt failed due concurrent `npx` cache contention and an over-broad selector; rerunning serially with an isolated cache and narrowed selectors passed.
 
+## Step 3 Implementation Findings
+- Result: executed, waiting for the next `auto_accept_current_step` run.
+- Start checkpoint: `e127111`.
+- Worker delegation: three non-overlapping batches implemented all 30 prototype routes.
+- Source files added: `src/pages/prototypes/prototype-pages-a.tsx`, `src/pages/prototypes/prototype-pages-b.tsx`, `src/pages/prototypes/prototype-pages-c.tsx`, `src/services/prototypes/prototype-data-a.ts`, `src/services/prototypes/prototype-data-b.ts`, and `src/services/prototypes/prototype-data-c.ts`.
+- Route integration: `src/App.tsx` now resolves `src/lib/prototype-routes.ts` entries, including query variants, to the worker page maps.
+- Service boundary: every page reads mock data through a prototype service module instead of inline business arrays.
+- Ledger: `docs/tasks/frontend-onboarding/implemented-pages.txt` lists all 30 exact prototype names in stable inventory order.
+- Manifest: `docs/tasks/frontend-onboarding/acceptance-manifest.md` has 30 `pass` rows with source `code.html`, source `screen.png`, current screenshot, structure, interaction, deviation, and status evidence.
+- Visual evidence: `docs/tasks/frontend-onboarding/evidence/step3-current/` contains 30 current route screenshots captured with Playwright.
+- Interaction evidence: worker smoke coverage recorded stateful behavior for search/filter, tabs/segmented controls, toggles, pagination, primary actions, row/card selection, inspectors, drawers/dialog-like panels, graph controls, chat composers, and form controls.
+- Next action: `auto_accept_current_step` must perform strict Step 3 acceptance only; do not execute Step 4 in the same run.
+
 ## Decisions
 - Use `docs/tasks/frontend-onboarding/` as the only onboarding bookkeeping root.
 - Preserve existing source docs and prototype files as user-provided inputs.
@@ -197,3 +210,12 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 14:56:12 +0800 | `git diff --check` | passed |
 | 2026-05-01 14:57:27 +0800 | `git commit -m "Accept frontend onboarding step 2"` | passed: `75df2b3` |
 | 2026-05-01 15:00:49 +0800 | Step 3 execution start | running: mandatory worker delegation planned for prototype page batches |
+| 2026-05-01 15:15:19 +0800 | Worker batch implementation | passed: three worker batches produced 30 page components and three service modules |
+| 2026-05-01 15:15:19 +0800 | Route integration | passed: `src/App.tsx` resolves all prototype route mappings including query variants |
+| 2026-05-01 15:15:19 +0800 | Playwright current route screenshots | passed: 30 current screenshots captured under `docs/tasks/frontend-onboarding/evidence/step3-current/` |
+| 2026-05-01 15:15:19 +0800 | HTTP route probes | passed: 30 prototype routes plus `/design-standard` returned HTTP 200 |
+| 2026-05-01 15:15:19 +0800 | ledger coverage diff | passed: no source prototype pages missing from `implemented-pages.txt` |
+| 2026-05-01 15:15:19 +0800 | manifest and screenshot count check | passed: 30 manifest rows, 30 pass rows, and 30 current screenshots |
+| 2026-05-01 15:15:19 +0800 | `npm run typecheck` | passed |
+| 2026-05-01 15:15:19 +0800 | `npm run build` | passed |
+| 2026-05-01 15:15:19 +0800 | `git diff --check` | passed |

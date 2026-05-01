@@ -7,16 +7,16 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 - [x] Frontend project follows `docs/tech-stack.md`.
 - [x] `/design-standard` is created from design docs and remains routable.
 - [x] Shared layout and common components are derived from product/design docs plus all Stitch pages.
-- [ ] Every Stitch page with `code.html` has a route/component, mock-data service boundary, structure evidence, and interaction evidence.
-- [ ] `docs/tasks/frontend-onboarding/implemented-pages.txt` covers every Stitch page.
-- [ ] `docs/tasks/frontend-onboarding/acceptance-manifest.md` records page-by-page visual, structural, and interaction acceptance.
+- [x] Every Stitch page with `code.html` has a route/component, mock-data service boundary, structure evidence, and interaction evidence.
+- [x] `docs/tasks/frontend-onboarding/implemented-pages.txt` covers every Stitch page.
+- [x] `docs/tasks/frontend-onboarding/acceptance-manifest.md` records page-by-page visual, structural, and interaction acceptance.
 - [ ] Step 1 through Step 4 are completed and checkpointed.
 
 ## Overall Status
-- status: running
-- process: 65%
+- status: waiting_human_decision
+- process: 75%
 - current_step: frontend-onboarding-3
-- gate: none
+- gate: waiting_auto_acceptance
 - run_action: execute_current_step
 - repair_attempts: 0
 - blocker_key: none
@@ -26,7 +26,7 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 | --- | --- | --- | --- |
 | 1 | [frontend-onboarding-1](frontend-onboarding-1.md) - Initialize from tech stack plus design docs and create `/design-standard`. | finished | commits: 9abf746, 22b7191, 3a66384; gate=none; run_action=auto_accept_current_step |
 | 2 | [frontend-onboarding-2](frontend-onboarding-2.md) - Read product/design docs, scan every prototype page, and establish shared layout plus common components. | finished | commits: 05e2c3d, 81d6c72, 3d984cc, dbabf30, 75df2b3; gate=none; run_action=auto_accept_current_step; strict post-repair acceptance passed |
-| 3 | [frontend-onboarding-3](frontend-onboarding-3.md) - Traverse all Stitch pages, implement them with mock data plus API boundaries, and record page acceptance evidence. | running | commit: pending; gate=none; run_action=execute_current_step |
+| 3 | [frontend-onboarding-3](frontend-onboarding-3.md) - Traverse all Stitch pages, implement them with mock data plus API boundaries, and record page acceptance evidence. | waiting_human_decision | commits: e127111; implementation commit pending; gate=waiting_auto_acceptance; run_action=execute_current_step |
 | 4 | [frontend-onboarding-4](frontend-onboarding-4.md) - Perform final quality acceptance across coverage, visual structure, interactions, and deviations. | notrun | commit: pending; gate=none |
 
 ## Update Log
@@ -48,3 +48,4 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 | 2026-05-01 14:56:12 +0800 | waiting_human_decision | 50% | Step 2 auto-accepted after strict post-repair gates: 30 `code.html` reads, 30 `screen.png` visual targets, manifest pass rows, route/archetype contract, typecheck, build, route probes, current screenshots, interaction smoke, and diff-check passed; Step 3 remains notrun. |
 | 2026-05-01 14:57:27 +0800 | waiting_human_decision | 50% | Step 2 acceptance checkpoint created as `75df2b3`; next run must execute Step 3 only. |
 | 2026-05-01 15:00:49 +0800 | running | 65% | Step 3 execution started: page implementation will be delegated across non-overlapping worker batches; lead owns integration, evidence, validation, and checkpointing. |
+| 2026-05-01 15:15:19 +0800 | waiting_human_decision | 75% | Step 3 executed: three worker batches implemented 30 routes with service boundaries, current screenshots were captured, ledger and manifest cover all pages, and baseline validation passed; next run must auto-accept Step 3 only. |
