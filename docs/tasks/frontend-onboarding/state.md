@@ -2,8 +2,8 @@
 
 ## FSM
 - current_step: frontend-onboarding-1
-- gate: none
-- run_action: init
+- gate: waiting_auto_acceptance
+- run_action: execute_current_step
 - repair_attempts: 0
 - blocker_key: none
 
@@ -61,6 +61,8 @@ Every listed page currently has both `code.html` and `screen.png`.
 - Use `docs/tasks/frontend-onboarding/` as the only onboarding bookkeeping root.
 - Preserve existing source docs and prototype files as user-provided inputs.
 - Do not start Step 1 implementation during the init action.
+- Step 1 stack baseline uses Vite 8.0.10, React 19.2.5, TypeScript 6.0.3, Tailwind CSS 4.2.4, shadcn-style Radix primitives, and `@chenglou/pretext` from the referenced `chenglou/pretext` package.
+- PreText is installed as a dependency for the selected stack; no runtime API is assumed in Step 1 because the first deliverable is the design-standard preview.
 
 ## Validation Log
 | time | command | result |
@@ -70,3 +72,9 @@ Every listed page currently has both `code.html` and `screen.png`.
 | 2026-05-01 13:00:02 +0800 | prototype inventory scan | found 30 pages with `code.html` and `screen.png` |
 | 2026-05-01 13:00:02 +0800 | `git diff --check` | passed |
 | 2026-05-01 13:00:02 +0800 | `git commit -m "Initialize frontend onboarding tracker"` | passed: `9abf746` |
+| 2026-05-01 13:20:39 +0800 | source docs read | passed: `docs/tech-stack.md`, `docs/google-stitch/tron_design_md/DESIGN.md`, `docs/google-stitch/tron_platform_prd.md` |
+| 2026-05-01 13:20:39 +0800 | `npm install` | passed: lockfile created, 0 vulnerabilities |
+| 2026-05-01 13:20:39 +0800 | `npm run typecheck` | passed after adding Vite CSS declarations and removing deprecated `baseUrl` |
+| 2026-05-01 13:20:39 +0800 | `npm run build` | passed |
+| 2026-05-01 13:20:39 +0800 | `curl -I http://127.0.0.1:4173/design-standard` | passed: HTTP 200 |
+| 2026-05-01 13:20:39 +0800 | `git diff --check` | passed |

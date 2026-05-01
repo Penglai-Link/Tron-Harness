@@ -13,18 +13,18 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 - [ ] Step 1 through Step 4 are completed and checkpointed.
 
 ## Overall Status
-- status: notrun
-- process: 0%
+- status: waiting_human_decision
+- process: 25%
 - current_step: frontend-onboarding-1
-- gate: none
-- run_action: init
+- gate: waiting_auto_acceptance
+- run_action: execute_current_step
 - repair_attempts: 0
 - blocker_key: none
 
 ## Steps
 | step | description | status | note |
 | --- | --- | --- | --- |
-| 1 | [frontend-onboarding-1](frontend-onboarding-1.md) - Initialize from tech stack plus design docs and create `/design-standard`. | notrun | commit: 9abf746; gate=none; run_action=init |
+| 1 | [frontend-onboarding-1](frontend-onboarding-1.md) - Initialize from tech stack plus design docs and create `/design-standard`. | waiting_human_decision | commits: 9abf746, pending; gate=waiting_auto_acceptance; run_action=execute_current_step |
 | 2 | [frontend-onboarding-2](frontend-onboarding-2.md) - Read product/design docs, scan every prototype page, and establish shared layout plus common components. | notrun | commit: pending; gate=none |
 | 3 | [frontend-onboarding-3](frontend-onboarding-3.md) - Traverse all Stitch pages, implement them with mock data plus API boundaries, and record page acceptance evidence. | notrun | commit: pending; gate=none |
 | 4 | [frontend-onboarding-4](frontend-onboarding-4.md) - Perform final quality acceptance across coverage, visual structure, interactions, and deviations. | notrun | commit: pending; gate=none |
@@ -34,3 +34,4 @@ Restart the Tron frontend onboarding workflow from the current docs and Google S
 | --- | --- | --- | --- |
 | 2026-05-01 13:00:02 +0800 | notrun | 0% | Initialized restart tracker from current docs inventory after confirming no existing tracker files were present. |
 | 2026-05-01 13:00:02 +0800 | notrun | 0% | Created init checkpoint `9abf746`; next run should execute Step 1 only. |
+| 2026-05-01 13:20:39 +0800 | waiting_human_decision | 25% | Step 1 executed: initialized Vite React TypeScript workspace and `/design-standard`; validation passed and checkpoint pending. |
