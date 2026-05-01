@@ -8,8 +8,8 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 - [x] Every page has a component and service/API boundary.
 - [x] Every page preserves the primary prototype archetype.
 - [x] Shared shell preserves the prototype full-width topbar, below-topbar sidebar, and sidebar collapse behavior.
-- [x] Every visible interaction category has observable behavior or a recorded blocker.
-- [x] `implemented-pages.txt` lists only pages that pass route/component/service/structure/interaction checks.
+- [ ] Every visible interaction category has observable behavior or a recorded blocker.
+- [ ] `implemented-pages.txt` lists only pages that pass route/component/service/structure/interaction checks.
 - [x] `acceptance-manifest.md` records page-by-page evidence.
 
 ## Overall Status
@@ -17,16 +17,16 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 - process: 95%
 - current_step: frontend-onboarding-3
 - gate: waiting_auto_acceptance
-- run_action: repair_current_step
+- run_action: auto_accept_current_step
 - repair_attempts: 2
-- blocker_key: none
+- blocker_key: step3_noninteractive_primary_actions
 
 ## Steps
 | step | description | status | note |
 | --- | --- | --- | --- |
-| 1 | Implement page batch routes/components. | waiting_human_decision | commits: e127111, e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd; 30 routes/components implemented by worker batches A/B/C; shell and resources repairs applied |
+| 1 | Implement page batch routes/components. | waiting_human_decision | commits: e127111, e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd; 30 routes/components implemented, but strict interaction audit failed on 16 pages; failure checkpoint pending |
 | 2 | Add mock data and API-ready service boundaries. | waiting_human_decision | commit: e83f445; service modules `prototype-data-a.ts`, `prototype-data-b.ts`, and `prototype-data-c.ts` added |
-| 3 | Record ledger and acceptance evidence. | waiting_human_decision | commits: e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd; resources manifest row restored to `pass`; gate=waiting_auto_acceptance |
+| 3 | Record ledger and acceptance evidence. | waiting_human_decision | commits: e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd; 16 manifest rows marked repair for no-op action controls; gate=waiting_auto_acceptance; blocker_key=step3_noninteractive_primary_actions; failure checkpoint pending |
 
 ## Update Log
 | time | status | process | update |
@@ -43,3 +43,4 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 | 2026-05-01 15:56:48 +0800 | waiting_human_decision | 95% | Step 3 acceptance-failure checkpoint created as `75a17b3`; next run must only repair `resources_management_tron`. |
 | 2026-05-01 16:04:49 +0800 | waiting_human_decision | 95% | Step 3 resources repair applied: `/resources` now preserves the Enterprise Management shell, metric cards, action labels, table columns, and visible interaction feedback; next run must only auto-accept Step 3. |
 | 2026-05-01 16:04:49 +0800 | waiting_human_decision | 95% | Step 3 resources repair checkpoint created as `28ef7cd`; next run must only auto-accept Step 3. |
+| 2026-05-01 16:19:19 +0800 | waiting_human_decision | 95% | Step 3 auto-acceptance failed: 16 pages have visible primary/action controls with no observable click behavior, navigation, feedback, or disabled reason; repair is required before acceptance. |

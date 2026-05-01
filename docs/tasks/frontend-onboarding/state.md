@@ -3,9 +3,9 @@
 ## FSM
 - current_step: frontend-onboarding-3
 - gate: waiting_auto_acceptance
-- run_action: repair_current_step
+- run_action: auto_accept_current_step
 - repair_attempts: 2
-- blocker_key: none
+- blocker_key: step3_noninteractive_primary_actions
 
 ## Source Paths
 - tech_stack: `docs/tech-stack.md`
@@ -296,3 +296,27 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 16:04:49 +0800 | source interaction coverage check | passed: search, filters, bulk/import/new, checkbox selection, row menu, pagination, topbar controls, and support FAB handlers present |
 | 2026-05-01 16:04:49 +0800 | `git diff --check` | passed |
 | 2026-05-01 16:04:49 +0800 | `git commit -m "Repair step 3 resources page"` | passed: `28ef7cd` |
+
+## Step 3 Interaction Auto Acceptance Findings
+- Result: repair required; `frontend-onboarding-3` remains `waiting_human_decision` with `gate=waiting_auto_acceptance`.
+- Passed baseline gates before failure recording: 30 `code.html` files readable, 30 `screen.png` targets readable, 30 current route screenshots present, 30 ledger rows, 30 manifest rows, `npm run typecheck`, `npm run build`, 31 HTTP 200 route probes, and source shell/resources structure checks.
+- Failed interaction gate: source audit found visible buttons/action controls without navigation, state mutation, feedback, or disabled reason in 16 prototype pages.
+- audit_logs_tron_standardized_navigation: Export button has no observable behavior.
+- automations_management_light: New Automation and Filter buttons have no observable behavior.
+- create_new_prompt_tron: New Project button in the distinct Tron AI shell has no observable behavior.
+- knowledge_graph_tron: Edit Entity action has no observable behavior.
+- knowledge_graph_tron_domain_filtering: Edit Entity action has no observable behavior.
+- main_agent_chat_tron: composer add/attach button has no observable behavior.
+- memory_management_tron_data_isolation_1: Import Data and Sync Indices actions have no observable behavior.
+- memory_management_tron_data_isolation_2: Import Data and Sync Indices actions have no observable behavior.
+- model_registry_tron: Add Model and model settings actions have no observable behavior.
+- role_matrix_tron_standardized: Add Custom Role and Filter buttons have no observable behavior.
+- skills_mcp_management_tron: New Skill button has no observable behavior.
+- task_details_lumina_workspace_updated_hierarchy: Execute Task and Add Sub-task buttons have no observable behavior.
+- task_management_light: Sync and Create Task buttons have no observable behavior.
+- user_permissions_tron: Export, Add User, and row action buttons have no observable behavior.
+- variable_management_tron_standardized_1: New Variable and Delete variable actions have no observable behavior.
+- variable_management_tron_standardized_2: New Variable and Delete variable actions have no observable behavior.
+- Manifest correction: the 16 affected rows are marked `repair`; all other rows remain unchanged.
+- Next action: `repair_current_step` should add observable behavior or explicit disabled reasons for the listed controls only, then return to `gate=waiting_auto_acceptance`.
+- Validation log: 2026-05-01 16:19:19 +0800 Step 3 source interaction audit failed because 16 prototype pages have visible no-op action controls; Step 3 was not accepted.
