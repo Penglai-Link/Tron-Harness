@@ -318,5 +318,6 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - variable_management_tron_standardized_1: New Variable and Delete variable actions have no observable behavior.
 - variable_management_tron_standardized_2: New Variable and Delete variable actions have no observable behavior.
 - Manifest correction: the 16 affected rows are marked `repair`; all other rows remain unchanged.
+- Failure checkpoint: `b4b2efb`.
 - Next action: `repair_current_step` should add observable behavior or explicit disabled reasons for the listed controls only, then return to `gate=waiting_auto_acceptance`.
 - Validation log: 2026-05-01 16:19:19 +0800 Step 3 source interaction audit failed because 16 prototype pages have visible no-op action controls; Step 3 was not accepted.

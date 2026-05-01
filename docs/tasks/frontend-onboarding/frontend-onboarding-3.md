@@ -24,9 +24,9 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 ## Steps
 | step | description | status | note |
 | --- | --- | --- | --- |
-| 1 | Implement page batch routes/components. | waiting_human_decision | commits: e127111, e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd; 30 routes/components implemented, but strict interaction audit failed on 16 pages; failure checkpoint pending |
+| 1 | Implement page batch routes/components. | waiting_human_decision | commits: e127111, e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd, b4b2efb; 30 routes/components implemented, but strict interaction audit failed on 16 pages |
 | 2 | Add mock data and API-ready service boundaries. | waiting_human_decision | commit: e83f445; service modules `prototype-data-a.ts`, `prototype-data-b.ts`, and `prototype-data-c.ts` added |
-| 3 | Record ledger and acceptance evidence. | waiting_human_decision | commits: e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd; 16 manifest rows marked repair for no-op action controls; gate=waiting_auto_acceptance; blocker_key=step3_noninteractive_primary_actions; failure checkpoint pending |
+| 3 | Record ledger and acceptance evidence. | waiting_human_decision | commits: e83f445, 615d3e5, 9a47038, e5e2953, 75a17b3, 28ef7cd, b4b2efb; 16 manifest rows marked repair for no-op action controls; gate=waiting_auto_acceptance; blocker_key=step3_noninteractive_primary_actions |
 
 ## Update Log
 | time | status | process | update |
@@ -44,3 +44,4 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 | 2026-05-01 16:04:49 +0800 | waiting_human_decision | 95% | Step 3 resources repair applied: `/resources` now preserves the Enterprise Management shell, metric cards, action labels, table columns, and visible interaction feedback; next run must only auto-accept Step 3. |
 | 2026-05-01 16:04:49 +0800 | waiting_human_decision | 95% | Step 3 resources repair checkpoint created as `28ef7cd`; next run must only auto-accept Step 3. |
 | 2026-05-01 16:19:19 +0800 | waiting_human_decision | 95% | Step 3 auto-acceptance failed: 16 pages have visible primary/action controls with no observable click behavior, navigation, feedback, or disabled reason; repair is required before acceptance. |
+| 2026-05-01 16:19:19 +0800 | waiting_human_decision | 95% | Step 3 interaction acceptance-failure checkpoint created as `b4b2efb`; next run must repair those interactions only. |
