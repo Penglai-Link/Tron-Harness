@@ -3,7 +3,7 @@
 ## FSM
 - current_step: frontend-onboarding-4
 - gate: none
-- run_action: auto_accept_current_step
+- run_action: execute_current_step
 - repair_attempts: 0
 - blocker_key: none
 
