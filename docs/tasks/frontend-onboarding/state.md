@@ -19,6 +19,7 @@
 - initial_check: current directory was not a Git repository.
 - init_command: `git init`
 - init_result: initialized `/Users/clouds3n/Coding/open-source/ai/Tron/.git/`.
+- init_checkpoint: `9abf746`
 
 ## Prototype Inventory
 Every listed page currently has both `code.html` and `screen.png`.
@@ -67,3 +68,5 @@ Every listed page currently has both `code.html` and `screen.png`.
 | 2026-05-01 13:00:02 +0800 | `git rev-parse --is-inside-work-tree` | failed before init: not a git repository |
 | 2026-05-01 13:00:02 +0800 | `git init` | passed |
 | 2026-05-01 13:00:02 +0800 | prototype inventory scan | found 30 pages with `code.html` and `screen.png` |
+| 2026-05-01 13:00:02 +0800 | `git diff --check` | passed |
+| 2026-05-01 13:00:02 +0800 | `git commit -m "Initialize frontend onboarding tracker"` | passed: `9abf746` |

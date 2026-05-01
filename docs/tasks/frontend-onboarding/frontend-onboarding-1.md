@@ -23,7 +23,7 @@ Initialize the frontend project from the selected tech stack and design docs, th
 ## Steps
 | step | description | status | note |
 | --- | --- | --- | --- |
-| 1 | Read source docs and confirm stack/design inputs. | notrun | commit: pending |
+| 1 | Read source docs and confirm stack/design inputs. | notrun | commit: 9abf746; tracker initialized before Step 1 execution |
 | 2 | Initialize project structure according to the stack document. | notrun | commit: pending |
 | 3 | Create `/design-standard` route and validation evidence. | notrun | commit: pending |
 
@@ -31,3 +31,4 @@ Initialize the frontend project from the selected tech stack and design docs, th
 | time | status | process | update |
 | --- | --- | --- | --- |
 | 2026-05-01 13:00:02 +0800 | notrun | 0% | Step 1 tracker initialized; implementation has not started. |
+| 2026-05-01 13:00:02 +0800 | notrun | 0% | Init checkpoint recorded as `9abf746`; Step 1 remains notrun. |
