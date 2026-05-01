@@ -24,9 +24,9 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 ## Steps
 | step | description | status | note |
 | --- | --- | --- | --- |
-| 1 | Implement page batch routes/components. | waiting_human_decision | commits: e127111, e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd, b4b2efb, 47daac6, 09f4376, pending; 30 routes/components implemented; prompt shell no-op controls repaired and awaiting strict auto-acceptance |
+| 1 | Implement page batch routes/components. | waiting_human_decision | commits: e127111, e83f445, 615d3e5, e5e2953, 75a17b3, 28ef7cd, b4b2efb, 47daac6, 09f4376, bdf673f; 30 routes/components implemented; prompt shell no-op controls repaired and awaiting strict auto-acceptance |
 | 2 | Add mock data and API-ready service boundaries. | waiting_human_decision | commit: e83f445; service modules `prototype-data-a.ts`, `prototype-data-b.ts`, and `prototype-data-c.ts` added |
-| 3 | Record ledger and acceptance evidence. | waiting_human_decision | commits: e83f445, 615d3e5, 9a47038, e5e2953, 75a17b3, 28ef7cd, b4b2efb, 47daac6, 09f4376, pending; manifest now marks all 30 rows pass after prompt-shell interaction repair; gate=waiting_auto_acceptance; blocker_key=none |
+| 3 | Record ledger and acceptance evidence. | waiting_human_decision | commits: e83f445, 615d3e5, 9a47038, e5e2953, 75a17b3, 28ef7cd, b4b2efb, 47daac6, 09f4376, bdf673f; manifest now marks all 30 rows pass after prompt-shell interaction repair; gate=waiting_auto_acceptance; blocker_key=none |
 
 ## Update Log
 | time | status | process | update |
@@ -49,4 +49,4 @@ Implement every Stitch page with mock data through API-ready boundaries and reco
 | 2026-05-01 16:30:41 +0800 | waiting_human_decision | 95% | Step 3 interaction repair checkpoint created as `47daac6`; next run must only auto-accept Step 3. |
 | 2026-05-01 16:41:09 +0800 | waiting_human_decision | 95% | Step 3 auto-acceptance failed: `/prompts/new` still has visible distinct-shell navigation and notification controls with no observable behavior; repair is required before acceptance. |
 | 2026-05-01 16:41:09 +0800 | waiting_human_decision | 95% | Step 3 prompt-shell acceptance-failure checkpoint created as `09f4376`; next run must repair those controls only. |
-| 2026-05-01 16:48:11 +0800 | waiting_human_decision | 95% | Step 3 prompt-shell repair applied: distinct-shell sidebar navigation and notification controls now expose observable selected state, visible panel state, and feedback; next run must only auto-accept Step 3. |
+| 2026-05-01 16:48:11 +0800 | waiting_human_decision | 95% | Step 3 prompt-shell repair applied: distinct-shell sidebar navigation and notification controls now expose observable selected state, visible panel state, and feedback; repair checkpoint `bdf673f`; next run must only auto-accept Step 3. |

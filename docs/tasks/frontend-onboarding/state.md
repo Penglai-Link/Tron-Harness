@@ -373,4 +373,4 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 - Manifest: all 30 rows in `acceptance-manifest.md` now record `pass`; no `repair` rows remain.
 - Validation passed: `npm run typecheck`, `npm run build`, `/prompts/new` HTTP 200, `/design-standard` HTTP 200, Playwright prompt shell repair smoke, screenshot dimension check, and `git diff --check`.
 - Current FSM: `current_step=frontend-onboarding-3`, `gate=waiting_auto_acceptance`, `run_action=repair_current_step`, `repair_attempts=4`, `blocker_key=none`.
-- Repair checkpoint: pending.
+- Repair checkpoint: `bdf673f`.
