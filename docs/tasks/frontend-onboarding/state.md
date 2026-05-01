@@ -144,3 +144,4 @@ Source coverage: 30 `code.html` files read and 30 `screen.png` visual targets in
 | 2026-05-01 13:56:42 +0800 | `curl -I http://127.0.0.1:4173/shared-shell-preview` | passed: HTTP 200 |
 | 2026-05-01 13:56:42 +0800 | `curl -I http://127.0.0.1:4173/design-standard` | passed: HTTP 200 |
 | 2026-05-01 13:56:42 +0800 | `git diff --check` | passed |
+| 2026-05-01 13:56:42 +0800 | `git commit -m "Execute frontend onboarding step 2"` | passed: `81d6c72` |
