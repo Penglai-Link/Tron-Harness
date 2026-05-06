@@ -1,14 +1,10 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
-  Activity,
   AlertCircle,
-  BarChart3,
-  Bell,
   Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CircleUserRound,
   Copy,
   Database,
   Eye,
@@ -17,11 +13,8 @@ import {
   Filter,
   FolderOpen,
   Gauge,
-  HelpCircle,
   Image,
   KeyRound,
-  LayoutDashboard,
-  LifeBuoy,
   MoreHorizontal,
   Pause,
   Plus,
@@ -40,6 +33,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable, Field, InspectorPanel, MetricCard, PageHeader, SegmentedTabs, SelectInput, SurfaceCard, TextArea, TextInput, ToggleSwitch, TronShell } from "@/components/tron";
+import { ClientLink, useNavigate } from "@/lib/client-router";
 import {
   getTaskDetail,
   listCapabilities,
@@ -317,7 +311,6 @@ export function ResourcesPage() {
   const [statusFilter, setStatusFilter] = useState("Active");
   const [page, setPage] = useState(1);
   const [rowMenu, setRowMenu] = useState<string | null>(null);
-  const [agentOpen, setAgentOpen] = useState(false);
   const [notice, setNotice] = useState("Resource inventory ready");
   const filtered = resources.filter((resource) => {
     const matchesSearch = resource.name.toLowerCase().includes(query.toLowerCase()) || resource.type.toLowerCase().includes(query.toLowerCase()) || resource.location.toLowerCase().includes(query.toLowerCase());
@@ -344,79 +337,8 @@ export function ResourcesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]">
-      <aside className="fixed bottom-0 left-0 top-0 z-50 hidden w-[280px] flex-col border-r border-[var(--color-outline-variant)] bg-white p-5 lg:flex">
-        <a className="mb-14 flex items-center gap-3" href="/dashboard" aria-label="Tron Console dashboard">
-          <span className="flex size-10 items-center justify-center rounded-lg bg-[var(--color-primary)] text-[var(--color-on-primary)]">
-            <Database size={18} aria-hidden="true" />
-          </span>
-          <span>
-            <span className="block text-xl font-semibold leading-tight">Tron Console</span>
-            <span className="block text-base text-[var(--color-on-surface-variant)]">Enterprise Management</span>
-          </span>
-        </a>
-
-        <nav className="flex flex-1 flex-col gap-3" aria-label="Enterprise management navigation">
-          {[
-            { label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
-            { label: "Resources", icon: FolderOpen, href: "/resources" },
-            { label: "Workflows", icon: Workflow, href: "/automations" },
-            { label: "Analytics", icon: BarChart3, href: "/observability" },
-            { label: "Settings", icon: Settings2, href: "/admin/workspace" },
-          ].map((item) => {
-            const Icon = item.icon;
-            const active = item.label === "Resources";
-            return (
-              <a
-                className={cn(
-                  "flex h-11 items-center gap-3 rounded-lg px-4 text-base transition-colors",
-                  active ? "bg-[var(--color-surface-container-high)] font-semibold text-[var(--color-on-surface)]" : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-surface-container-low)] hover:text-[var(--color-on-surface)]",
-                )}
-                aria-current={active ? "page" : undefined}
-                href={item.href}
-                key={item.label}
-              >
-                <Icon size={22} aria-hidden="true" />
-                {item.label}
-              </a>
-            );
-          })}
-        </nav>
-
-        <div className="border-t border-[var(--color-outline-variant)] pt-5">
-          <Button className="w-full" onClick={() => setNotice("New asset workflow opened")}>
-            <Plus size={17} aria-hidden="true" />
-            New Asset
-          </Button>
-        </div>
-      </aside>
-
-      <div className="min-h-screen lg:ml-[280px]">
-        <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-[var(--color-outline-variant)] bg-white/85 px-6 backdrop-blur">
-          <div className="flex min-w-0 flex-1 items-center gap-6">
-            <h2 className="shrink-0 text-sm font-medium">Resources Management</h2>
-            <div className="relative w-full max-w-[320px]">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={18} aria-hidden="true" />
-              <input
-                className="h-10 w-full rounded-lg border border-transparent bg-[var(--color-surface-container-low)] pl-10 pr-3 text-sm outline-none transition-colors focus:border-[var(--color-outline-variant)] focus:bg-white"
-                placeholder="Search resources..."
-                type="search"
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setNotice(event.target.value ? `Search filtered to ${event.target.value}` : "Search cleared");
-                }}
-              />
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button size="icon" variant="ghost" aria-label="View notifications" onClick={() => setNotice("Notifications panel opened")}><Bell size={20} aria-hidden="true" /></Button>
-            <Button size="icon" variant="ghost" aria-label="Open help" onClick={() => setNotice("Help center opened")}><HelpCircle size={20} aria-hidden="true" /></Button>
-            <Button size="icon" variant="ghost" aria-label="Open account menu" onClick={() => setNotice("Account menu opened")}><CircleUserRound size={22} aria-hidden="true" /></Button>
-          </div>
-        </header>
-
-        <main className="flex min-h-[calc(100vh-3.5rem)] flex-col gap-6 px-6 py-8">
+    <TronShell activeItem="Resources" searchPlaceholder="Search resources...">
+        <div className="flex min-h-[calc(100vh-3.5rem)] flex-col gap-6">
           <section className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="text-3xl font-semibold leading-tight">Data &amp; Assets</h1>
@@ -442,7 +364,17 @@ export function ResourcesPage() {
 
           <section className="flex min-h-[640px] flex-1 flex-col overflow-hidden rounded-xl border border-[var(--color-outline-variant)] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.04)]">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-3">
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-1 flex-wrap items-center gap-2">
+                <div className="min-w-[240px] flex-1 sm:max-w-[360px]">
+                  <SearchField
+                    placeholder="Search resources..."
+                    value={query}
+                    onChange={(value) => {
+                      setQuery(value);
+                      setNotice(value ? `Search filtered to ${value}` : "Search cleared");
+                    }}
+                  />
+                </div>
                 <button className="inline-flex h-10 items-center gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 text-sm hover:bg-[var(--color-surface-container)]" type="button" onClick={cycleTypeFilter}>
                   Type: {typeFilter}
                   <ChevronDown size={16} aria-hidden="true" />
@@ -531,30 +463,8 @@ export function ResourcesPage() {
           </section>
 
           <p className="sr-only" aria-live="polite">{notice}</p>
-        </main>
-      </div>
-
-      <button
-        className="fixed bottom-6 right-6 z-50 flex size-14 items-center justify-center rounded-full bg-[var(--color-primary)] text-[var(--color-on-primary)] shadow-[0_8px_24px_rgba(0,0,0,0.16)] transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
-        type="button"
-        aria-expanded={agentOpen}
-        aria-label="Open support agent"
-        onClick={() => setAgentOpen((current) => !current)}
-      >
-        <LifeBuoy size={26} aria-hidden="true" />
-      </button>
-      {agentOpen ? (
-        <section className="fixed bottom-24 right-6 z-50 w-80 rounded-xl border border-[var(--color-outline-variant)] bg-white p-4 shadow-[0_16px_42px_rgba(0,0,0,0.14)]">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="font-semibold">Support Agent</p>
-              <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">Resource import, access, and storage help is available.</p>
-            </div>
-            <Button size="icon" variant="ghost" aria-label="Close support agent" onClick={() => setAgentOpen(false)}><X size={16} aria-hidden="true" /></Button>
-          </div>
-        </section>
-      ) : null}
-    </div>
+        </div>
+    </TronShell>
   );
 }
 
@@ -856,6 +766,7 @@ export function TasksKanbanPage() {
   const [query, setQuery] = useState("");
   const [selectedTask, setSelectedTask] = useState<KanbanTask | null>(null);
   const [notice, setNotice] = useState("Kanban board ready.");
+  const navigate = useNavigate();
   const visibleColumns = columns.map((column) => ({ ...column, tasks: column.tasks.filter((task) => task.title.toLowerCase().includes(query.toLowerCase()) || task.id.toLowerCase().includes(query.toLowerCase())) }));
 
   return (
@@ -866,8 +777,8 @@ export function TasksKanbanPage() {
         actions={
           <>
             <Button variant="secondary" onClick={() => setNotice("Kanban sync completed")}><RefreshCcw size={16} aria-hidden="true" />Sync</Button>
-            <Button variant="secondary" onClick={() => window.location.assign("/tasks/import")}><Upload size={16} aria-hidden="true" />Import Task</Button>
-            <Button onClick={() => window.location.assign("/tasks/new")}><Plus size={16} aria-hidden="true" />Create Task</Button>
+            <Button variant="secondary" onClick={() => navigate("/tasks/import")}><Upload size={16} aria-hidden="true" />Import Task</Button>
+            <Button onClick={() => navigate("/tasks/new")}><Plus size={16} aria-hidden="true" />Create Task</Button>
           </>
         }
       />
@@ -892,7 +803,7 @@ export function TasksKanbanPage() {
                   selected={selectedTask?.id === task.id}
                   onSelect={() => {
                     setSelectedTask(task);
-                    window.location.assign("/tasks/detail");
+                    navigate("/tasks/detail");
                   }}
                 />
               ))}
@@ -907,6 +818,7 @@ export function TasksKanbanPage() {
 export function TasksImportPage() {
   const [source, setSource] = useState("gitlab");
   const [status, setStatus] = useState("Select a source and start the import.");
+  const navigate = useNavigate();
 
   return (
     <TronShell activeItem="Tasks" searchPlaceholder="Search task imports...">
@@ -918,7 +830,7 @@ export function TasksImportPage() {
         actions={
           <>
             <Button asChild variant="secondary">
-              <a href="/tasks">Back to Board</a>
+              <ClientLink href="/tasks">Back to Board</ClientLink>
             </Button>
             <Button onClick={() => setStatus(`${source.toUpperCase()} import scanned 4 candidate tasks`)}>
               <Upload size={16} aria-hidden="true" />
@@ -966,7 +878,7 @@ export function TasksImportPage() {
             </div>
           </SurfaceCard>
           <Notice value={status} />
-          <Button className="w-full" onClick={() => window.location.assign("/tasks/new")}>
+          <Button className="w-full" onClick={() => navigate("/tasks/new")}>
             <Plus size={16} aria-hidden="true" />
             Create Task from Import
           </Button>

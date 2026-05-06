@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tron - Role Matrix</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed": "#e6e2df",
+                        "primary-fixed-dim": "#c8c6c5",
+                        "on-surface": "#1c1b1b",
+                        "on-primary-fixed": "#1c1b1b",
+                        "tertiary-fixed-dim": "#cac6c4",
+                        "error": "#ba1a1a",
+                        "tertiary": "#000000",
+                        "on-tertiary-fixed-variant": "#484645",
+                        "on-secondary-fixed-variant": "#46464b",
+                        "surface-dim": "#ddd9d8",
+                        "surface-tint": "#5f5e5e",
+                        "inverse-on-surface": "#f4f0ef",
+                        "surface-container-low": "#f7f3f2",
+                        "inverse-surface": "#313030",
+                        "surface-bright": "#fdf8f8",
+                        "secondary-fixed": "#e3e2e7",
+                        "secondary-fixed-dim": "#c7c6cb",
+                        "secondary-container": "#e0dfe4",
+                        "on-background": "#1c1b1b",
+                        "on-secondary": "#ffffff",
+                        "on-primary-container": "#858383",
+                        "surface-container": "#f1edec",
+                        "primary": "#000000",
+                        "on-error-container": "#93000a",
+                        "surface-container-highest": "#e5e2e1",
+                        "on-surface-variant": "#444748",
+                        "on-primary": "#ffffff",
+                        "outline-variant": "#c4c7c7",
+                        "surface-variant": "#e5e2e1",
+                        "inverse-primary": "#c8c6c5",
+                        "tertiary-container": "#1c1b1a",
+                        "surface": "#fdf8f8",
+                        "on-primary-fixed-variant": "#474746",
+                        "background": "#fdf8f8",
+                        "secondary": "#5e5e63",
+                        "on-tertiary-container": "#868382",
+                        "primary-container": "#1c1b1b",
+                        "outline": "#747878",
+                        "on-secondary-container": "#626267",
+                        "surface-container-high": "#ebe7e6",
+                        "on-error": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-fixed": "#e5e2e1",
+                        "on-tertiary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed": "#1a1b1f",
+                        "on-tertiary-fixed": "#1c1b1a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "base": "4px",
+                        "lg": "24px",
+                        "xs": "4px",
+                        "md": "16px",
+                        "margin": "24px",
+                        "gutter": "16px",
+                        "xl": "40px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "display": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "tabular": ["Inter"],
+                        "h1": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "h2": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-md": ["14px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "display": ["40px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "body-sm": ["13px", { "lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "400" }],
+                        "tabular": ["13px", { "lineHeight": "1.4", "fontWeight": "400" }],
+                        "h1": ["24px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "h2": ["20px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Inter', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .icon-fill { font-variation-settings: 'FILL' 1; }
+    </style>
+</head>
+<body class="bg-background text-on-surface h-screen w-full overflow-hidden flex">
+<!-- TopNavBar (Shared Component JSON) -->
+<nav class="fixed top-0 left-0 w-full z-40 flex justify-between items-center px-6 h-14 bg-white/80 backdrop-blur-md dark:bg-gray-950/80 border-b border-gray-100 dark:border-gray-800 shadow-sm shadow-black/5 text-gray-900 dark:text-gray-100 font-['Inter'] text-sm antialiased">
+<div class="flex items-center gap-md">
+<span class="text-lg font-semibold tracking-tight text-gray-900 dark:text-white" style="">Tron</span>
+<div class="ml-xl flex items-center bg-surface-container-low rounded-full px-sm py-xs border border-outline-variant w-64">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]" style="">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body-sm font-body-sm text-on-surface w-full py-0" placeholder="Search tasks..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-sm">
+<button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-gray-500 dark:text-gray-400" style="">
+<span class="material-symbols-outlined text-[20px]" style="">notifications</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-gray-500 dark:text-gray-400" style="">
+<span class="material-symbols-outlined text-[20px]" style="">settings</span>
+</button>
+<img alt="User profile" class="w-8 h-8 rounded-full border border-outline-variant ml-sm cursor-pointer hover:opacity-80 transition-opacity" data-alt="Close up portrait of a professional man in soft natural lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBOjl4k-FX0qLmJp5ZVI1wDbBoOCmL5qyST4CEAOhnmfk88R1sAub1HF4tsjB24oUMtpvkq9O3SuhvF8u0jOmQWb-x330NlVNWT0FfF6GsqMoxREKbC29UJbVOJsfhYM7XPplpl_DDjAUcmvhc2sgUPQQhmxp-l_e1qKfeGdOhFeSievZl_yWo-KKUYgHVmCiTLynQH6vZCrb5LPAPpT1W1vvzUncxbzghteVa0Lz5wR4f7d2lf02BeRxkSBH5yYc4gAs0otJMWKKi8" style=""/>
+</div>
+</nav>
+<!-- SideNavBar (Shared Component JSON) -->
+<aside class="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-[280px] border-r border-gray-100 dark:border-gray-800 bg-[#FFFFFF] dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-['Inter'] text-[13px] leading-tight flex flex-col py-4 px-3 overflow-y-auto">
+<div class="px-3 mb-6 flex items-center gap-sm">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px] icon-fill" style="">smart_toy</span>
+</div>
+<div>
+<h2 class="font-bold text-gray-900 dark:text-white" style="">Main Console</h2>
+<p class="text-gray-500 text-[11px]" style="">Enterprise AI</p>
+</div>
+</div>
+<nav class="flex flex-col gap-xs">
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">dashboard</span>
+<span class="" style="">Dashboard</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">assignment</span>
+<span class="" style="">Tasks</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">apps</span>
+<span class="" style="">Apps</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">chat</span>
+<span class="" style="">Chats</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">variables</span>
+<span class="" style="">Variables</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">model_training</span>
+<span class="" style="">Models</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">star</span>
+<span class="" style="">Skills</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">settings_input_component</span>
+<span class="" style="">MCP</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">memory</span>
+<span class="" style="">Memory</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">account_tree</span>
+<span class="" style="">Graph</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">monitoring</span>
+<span class="" style="">Observability</span>
+</a>
+<div class="mt-6 mb-2 px-3">
+<span class="font-label-caps text-label-caps text-gray-400" style="">ADMIN</span>
+</div>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">admin_panel_settings</span>
+<span class="" style="">Workspace Admin</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">manage_accounts</span>
+<span class="" style="">User Admin</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-medium scale-100 active:scale-[0.98] transition-transform" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">vpn_key</span>
+<span class="" style="">Permissions</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Canvas -->
+<main class="flex-1 ml-[280px] mt-14 p-margin overflow-y-auto bg-background">
+<!-- Header & Sub-Navigation -->
+<div class="mb-lg">
+<h1 class="font-h1 text-h1 text-on-surface mb-md">Users &amp; Roles</h1>
+<div class="flex gap-lg border-b border-outline-variant">
+<button class="pb-sm font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface border-b-2 border-transparent transition-colors">User Directory</button>
+<button class="pb-sm font-body-sm text-body-sm text-on-surface border-b-2 border-primary font-medium">Role Matrix</button>
+<button class="pb-sm font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface border-b-2 border-transparent transition-colors">Audit Logs</button>
+</div>
+</div>
+<!-- Role Matrix Container (High Density) -->
+<div class="bg-surface-container-lowest rounded-lg border border-outline-variant shadow-sm overflow-hidden flex flex-col">
+<!-- Matrix Toolbar -->
+<div class="flex justify-between items-center p-md border-b border-outline-variant bg-surface-container-low/50">
+<h2 class="font-h2 text-h2 text-on-surface">Platform Permissions</h2>
+<div class="flex gap-sm">
+<button class="px-3 py-1.5 text-body-sm font-body-sm font-medium text-on-surface-variant hover:bg-surface-variant rounded transition-colors flex items-center gap-1.5">
+<span class="material-symbols-outlined text-[16px]">filter_list</span>
+                        Filter
+                    </button>
+<button class="px-3 py-1.5 bg-primary text-on-primary text-body-sm font-body-sm font-medium rounded shadow-sm hover:bg-on-surface transition-colors">
+                        Add Custom Role
+                    </button>
+</div>
+</div>
+<!-- The Matrix Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant">
+<th class="p-md font-label-caps text-label-caps text-on-surface-variant w-[180px] sticky left-0 bg-surface-container-low z-10 border-r border-outline-variant">Role Name</th>
+<th class="p-md font-label-caps text-label-caps text-on-surface-variant text-center border-r border-outline-variant/50">Workspace</th>
+<th class="p-md font-label-caps text-label-caps text-on-surface-variant text-center border-r border-outline-variant/50">Models</th>
+<th class="p-md font-label-caps text-label-caps text-on-surface-variant text-center border-r border-outline-variant/50">Tasks</th>
+<th class="p-md font-label-caps text-label-caps text-on-surface-variant text-center border-r border-outline-variant/50">Memory</th>
+<th class="p-md font-label-caps text-label-caps text-on-surface-variant text-center border-r border-outline-variant/50">Skills</th>
+<th class="p-md font-label-caps text-label-caps text-on-surface-variant text-center">MCP</th>
+</tr>
+</thead>
+<tbody class="font-tabular text-tabular">
+<!-- Row: Admin -->
+<tr class="border-b border-outline-variant/50 hover:bg-surface-container-lowest/50 transition-colors group">
+<td class="p-md font-medium text-on-surface sticky left-0 bg-surface-container-lowest group-hover:bg-surface-container-lowest/50 border-r border-outline-variant">
+                                Admin
+                                <div class="font-body-sm text-[11px] text-on-surface-variant mt-0.5">Full System Access</div>
+</td>
+<!-- Cells with custom permission pill indicator -->
+<td class="p-md border-r border-outline-variant/50 align-middle">
+<div class="flex justify-center gap-1">
+<span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]" title="Read">R</span>
+<span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]" title="Write">W</span>
+<span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]" title="Delete">D</span>
+<span class="w-5 h-5 flex items-center justify-center rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-caps text-[10px]" title="Admin">A</span>
+</div>
+</td>
+<td class="p-md border-r border-outline-variant/50 align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-caps text-[10px]">A</span></div></td>
+<td class="p-md border-r border-outline-variant/50 align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-caps text-[10px]">A</span></div></td>
+<td class="p-md border-r border-outline-variant/50 align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-caps text-[10px]">A</span></div></td>
+<td class="p-md border-r border-outline-variant/50 align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-caps text-[10px]">A</span></div></td>
+<td class="p-md align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-caps text-[10px]">A</span></div></td>
+</tr>
+<!-- Row: Editor -->
+<tr class="border-b border-outline-variant/50 hover:bg-surface-container-lowest/50 transition-colors group">
+<td class="p-md font-medium text-on-surface sticky left-0 bg-surface-container-lowest group-hover:bg-surface-container-lowest/50 border-r border-outline-variant">
+                                Editor
+                                <div class="font-body-sm text-[11px] text-on-surface-variant mt-0.5">Content Management</div>
+</td>
+<td class="p-md border-r border-outline-variant/50 align-middle">
+<div class="flex justify-center gap-1">
+<span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]" title="Read">R</span>
+<span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]" title="Write">W</span>
+<span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40" title="Delete">D</span>
+<span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40" title="Admin">A</span>
+</div>
+</td>
+<td class="p-md border-r border-outline-variant/50 align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">A</span></div></td>
+<td class="p-md border-r border-outline-variant/50 align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">A</span></div></td>
+<td class="p-md border-r border-outline-variant/50 align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">A</span></div></td>
+<td class="p-md border-r border-outline-variant/50 align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">A</span></div></td>
+<td class="p-md align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">A</span></div></td>
+</tr>
+<!-- Row: Viewer -->
+<tr class="border-b border-outline-variant/50 hover:bg-surface-container-lowest/50 transition-colors group">
+<td class="p-md font-medium text-on-surface sticky left-0 bg-surface-container-lowest group-hover:bg-surface-container-lowest/50 border-r border-outline-variant">
+                                Viewer
+                                <div class="font-body-sm text-[11px] text-on-surface-variant mt-0.5">Read-Only Access</div>
+</td>
+<td class="p-md border-r border-outline-variant/50 align-middle">
+<div class="flex justify-center gap-1">
+<span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]" title="Read">R</span>
+<span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40" title="Write">W</span>
+<span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40" title="Delete">D</span>
+<span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40" title="Admin">A</span>
+</div>
+</td>
+<td class="p-md border-r border-outline-variant/50 align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">A</span></div></td>
+<td class="p-md border-r border-outline-variant/50 align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">A</span></div></td>
+<td class="p-md border-r border-outline-variant/50 align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">A</span></div></td>
+<td class="p-md border-r border-outline-variant/50 align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">A</span></div></td>
+<td class="p-md align-middle"><div class="flex justify-center gap-1"><span class="w-5 h-5 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[10px]">R</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">W</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">D</span><span class="w-5 h-5 flex items-center justify-center rounded bg-surface-variant text-on-surface-variant font-label-caps text-[10px] opacity-40">A</span></div></td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Footer Legend -->
+<div class="p-md bg-surface-container-low border-t border-outline-variant flex items-center gap-lg">
+<span class="font-label-caps text-label-caps text-on-surface-variant">Legend:</span>
+<div class="flex gap-md">
+<div class="flex items-center gap-2">
+<span class="w-4 h-4 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[8px]">R</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Read</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-4 h-4 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[8px]">W</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Write</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-4 h-4 flex items-center justify-center rounded bg-primary-fixed text-on-primary-fixed font-label-caps text-[8px]">D</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Delete</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-4 h-4 flex items-center justify-center rounded bg-tertiary-fixed text-on-tertiary-fixed font-label-caps text-[8px]">A</span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">Admin</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

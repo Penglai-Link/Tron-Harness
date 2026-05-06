@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Create Automation - Tron</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface": "#fdf8f8",
+                        "background": "#fdf8f8",
+                        "secondary-fixed": "#e3e2e7",
+                        "on-secondary-fixed-variant": "#46464b",
+                        "on-surface-variant": "#444748",
+                        "primary": "#000000",
+                        "on-primary-container": "#858383",
+                        "on-secondary-container": "#626267",
+                        "on-error": "#ffffff",
+                        "outline-variant": "#c4c7c7",
+                        "inverse-on-surface": "#f4f0ef",
+                        "on-tertiary-fixed-variant": "#484645",
+                        "error-container": "#ffdad6",
+                        "surface-bright": "#fdf8f8",
+                        "surface-variant": "#e5e2e1",
+                        "on-primary-fixed": "#1c1b1b",
+                        "outline": "#747878",
+                        "secondary-fixed-dim": "#c7c6cb",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-container": "#1c1b1b",
+                        "inverse-primary": "#c8c6c5",
+                        "primary-fixed": "#e5e2e1",
+                        "error": "#ba1a1a",
+                        "secondary-container": "#e0dfe4",
+                        "on-error-container": "#93000a",
+                        "on-background": "#1c1b1b",
+                        "tertiary-fixed": "#e6e2df",
+                        "surface-container": "#f1edec",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary-fixed": "#1a1b1f",
+                        "on-secondary": "#ffffff",
+                        "on-primary-fixed-variant": "#474746",
+                        "tertiary": "#000000",
+                        "on-surface": "#1c1b1b",
+                        "secondary": "#5e5e63",
+                        "surface-tint": "#5f5e5e",
+                        "surface-container-high": "#ebe7e6",
+                        "inverse-surface": "#313030",
+                        "primary-fixed-dim": "#c8c6c5",
+                        "surface-dim": "#ddd9d8",
+                        "tertiary-container": "#1c1b1a",
+                        "on-primary": "#ffffff",
+                        "tertiary-fixed-dim": "#cac6c4",
+                        "on-tertiary-fixed": "#1c1b1a",
+                        "surface-container-highest": "#e5e2e1",
+                        "surface-container-low": "#f7f3f2",
+                        "on-tertiary-container": "#868382"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "base": "4px",
+                        "xs": "4px",
+                        "sm": "8px",
+                        "md": "16px",
+                        "xl": "40px",
+                        "gutter": "16px",
+                        "lg": "24px",
+                        "margin": "24px"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "display": ["Inter"],
+                        "h2": ["Inter"],
+                        "h1": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "tabular": ["Inter"],
+                        "body-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["11px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "body-sm": ["13px", { "lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "400" }],
+                        "display": ["40px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "h2": ["20px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "h1": ["24px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "tabular": ["13px", { "lineHeight": "1.4", "fontWeight": "400" }],
+                        "body-md": ["14px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .shadow-soft { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04); }
+        .shadow-softer { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02); }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .icon-fill { font-variation-settings: 'FILL' 1; }
+    </style>
+</head>
+<body class="bg-surface-container-low text-on-surface font-body-md min-h-screen">
+<!-- TopAppBar -->
+<nav class="fixed top-0 left-0 w-full z-40 flex justify-between items-center px-6 h-14 bg-white/80 backdrop-blur-md dark:bg-gray-950/80 border-b border-gray-100 dark:border-gray-800 shadow-sm shadow-black/5 text-gray-900 dark:text-gray-100 font-['Inter'] text-sm antialiased">
+<div class="flex items-center gap-md">
+<span class="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Tron</span>
+<div class="ml-xl flex items-center bg-surface-container-low rounded-full px-sm py-xs border border-outline-variant w-64">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body-sm font-body-sm text-on-surface w-full py-0 outline-none" placeholder="Search..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-sm">
+<button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-gray-500 dark:text-gray-400">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-gray-500 dark:text-gray-400">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+<img alt="User profile" class="w-8 h-8 rounded-full border border-outline-variant ml-sm cursor-pointer hover:opacity-80 transition-opacity" data-alt="Close up portrait of a professional man in soft natural lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBOjl4k-FX0qLmJp5ZVI1wDbBoOCmL5qyST4CEAOhnmfk88R1sAub1HF4tsjB24oUMtpvkq9O3SuhvF8u0jOmQWb-x330NlVNWT0FfF6GsqMoxREKbC29UJbVOJsfhYM7XPplpl_DDjAUcmvhc2sgUPQQhmxp-l_e1qKfeGdOhFeSievZl_yWo-KKUYgHVmCiTLynQH6vZCrb5LPAPpT1W1vvzUncxbzghteVa0Lz5wR4f7d2lf02BeRxkSBH5yYc4gAs0otJMWKKi8"/>
+</div>
+</nav>
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-[280px] border-r border-gray-100 dark:border-gray-800 bg-[#FFFFFF] dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-['Inter'] text-[13px] leading-tight flex flex-col py-4 px-3 overflow-y-auto z-50">
+<div class="px-3 mb-6 flex items-center gap-sm">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px] icon-fill">smart_toy</span>
+</div>
+<div>
+<h2 class="font-bold text-gray-900 dark:text-white">Main Console</h2>
+<p class="text-gray-500 text-[11px]">Enterprise AI</p>
+</div>
+</div>
+<nav class="flex flex-col gap-xs">
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-medium scale-100 active:scale-[0.98] transition-transform" href="#">
+<span class="material-symbols-outlined text-[18px]">assignment</span>
+<span>Tasks</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">apps</span>
+<span>Apps</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">chat</span>
+<span>Chats</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">variables</span>
+<span>Variables</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">model_training</span>
+<span>Models</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">star</span>
+<span>Skills</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">settings_input_component</span>
+<span>MCP</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">memory</span>
+<span>Memory</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">account_tree</span>
+<span>Graph</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">monitoring</span>
+<span>Observability</span>
+</a>
+<div class="mt-6 mb-2 px-3">
+<span class="font-label-caps text-label-caps text-gray-400">ADMIN</span>
+</div>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">admin_panel_settings</span>
+<span>Workspace Admin</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">manage_accounts</span>
+<span>User Admin</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">vpn_key</span>
+<span>Permissions</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-[280px] mt-14 p-margin max-w-7xl">
+<!-- Header -->
+<div class="flex justify-between items-center mb-lg">
+<div class="flex items-center space-x-4">
+<button class="flex items-center justify-center w-8 h-8 rounded-full bg-surface-container-lowest border border-surface-variant text-on-surface-variant hover:bg-surface-container hover:text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[18px]">arrow_back</span>
+</button>
+<div>
+<span class="font-label-caps text-label-caps text-on-surface-variant block mb-1">AUTOMATIONS / NEW</span>
+<h2 class="font-h1 text-h1 text-on-surface">Create Automation</h2>
+</div>
+</div>
+<button class="bg-primary text-on-primary px-5 py-2 rounded-md font-body-md text-body-md hover:bg-surface-tint transition-colors shadow-softer">
+                Create
+            </button>
+</div>
+<div class="grid grid-cols-1 xl:grid-cols-12 gap-gutter">
+<!-- Left Column: Form Sections (8 cols) -->
+<div class="xl:col-span-8 space-y-md">
+<!-- Section 1: Basic Info -->
+<section class="bg-surface-container-lowest rounded-xl border border-surface-variant p-lg shadow-soft">
+<h3 class="font-h2 text-h2 mb-md border-b border-surface-variant pb-2">Basic Info</h3>
+<div class="space-y-4">
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">AUTOMATION NAME</label>
+<input class="w-full bg-surface-container-low border border-outline-variant rounded-md px-3 py-2 text-body-md focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow" placeholder="e.g., Daily Sync Job" type="text"/>
+</div>
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">DESCRIPTION (OPTIONAL)</label>
+<textarea class="w-full bg-surface-container-low border border-outline-variant rounded-md px-3 py-2 text-body-md focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-shadow resize-none" placeholder="Describe what this automation does..." rows="3"></textarea>
+</div>
+</div>
+</section>
+<!-- Section 2: Trigger Configuration -->
+<section class="bg-surface-container-lowest rounded-xl border border-surface-variant p-lg shadow-soft">
+<div class="flex items-center justify-between border-b border-surface-variant pb-2 mb-md">
+<h3 class="font-h2 text-h2 flex items-center space-x-2">
+<span class="material-symbols-outlined text-secondary text-[20px]">schedule</span>
+<span>Trigger Configuration</span>
+</h3>
+</div>
+<div class="space-y-6">
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">TRIGGER TYPE</label>
+<div class="relative">
+<select class="w-full bg-surface-container-low border border-outline-variant rounded-md px-3 py-2 text-body-md focus:outline-none focus:border-primary appearance-none cursor-pointer">
+<option>Scheduled</option>
+<option>Webhook</option>
+<option>Event-driven</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">expand_more</span>
+</div>
+</div>
+<div class="bg-surface-container rounded-lg p-4 border border-surface-variant">
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">SCHEDULE DEFINITION</label>
+<div class="flex items-center space-x-2 mb-2">
+<input class="flex-1 bg-surface-container-lowest border border-outline-variant rounded-md px-3 py-2 text-body-md focus:outline-none focus:border-primary font-tabular" placeholder="e.g., Every day at midnight" type="text" value="Every day at midnight"/>
+<button class="px-3 py-2 bg-surface-variant text-on-surface rounded-md font-body-sm text-body-sm hover:bg-surface-dim transition-colors">Parse</button>
+</div>
+<p class="font-tabular text-tabular text-secondary flex items-center space-x-1">
+<span class="material-symbols-outlined text-[14px]">check_circle</span>
+<span>Parsed as CRON: <code class="bg-surface-container-lowest px-1 rounded border border-surface-variant">0 0 * * *</code></span>
+</p>
+</div>
+</div>
+</section>
+<!-- Section 3: Application & Agent -->
+<section class="bg-surface-container-lowest rounded-xl border border-surface-variant p-lg shadow-soft">
+<h3 class="font-h2 text-h2 mb-md border-b border-surface-variant pb-2 flex items-center space-x-2">
+<span class="material-symbols-outlined text-secondary text-[20px]">apps</span>
+<span>Application &amp; Agent</span>
+</h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">TARGET APPLICATION</label>
+<div class="relative">
+<select class="w-full bg-surface-container-low border border-outline-variant rounded-md px-3 py-2 text-body-md focus:outline-none focus:border-primary appearance-none cursor-pointer">
+<option>Select App...</option>
+<option>Salesforce Data Sync</option>
+<option>AWS S3 Bucket Monitor</option>
+<option>Internal HR Portal</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">expand_more</span>
+</div>
+</div>
+<div>
+<label class="block font-label-caps text-label-caps text-on-surface-variant mb-2">ASSIGNED AGENT</label>
+<div class="relative">
+<select class="w-full bg-surface-container-low border border-outline-variant rounded-md px-3 py-2 text-body-md focus:outline-none focus:border-primary appearance-none cursor-pointer">
+<option>Select Agent...</option>
+<option>Agent Alpha (US-East)</option>
+<option>Agent Beta (EU-West)</option>
+<option>Global Pool</option>
+</select>
+<span class="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">expand_more</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Section 4: Dependencies -->
+<section class="bg-surface-container-lowest rounded-xl border border-surface-variant p-lg shadow-soft">
+<div class="flex justify-between items-center border-b border-surface-variant pb-2 mb-md">
+<h3 class="font-h2 text-h2 flex items-center space-x-2">
+<span class="material-symbols-outlined text-secondary text-[20px]">account_tree</span>
+<span>Dependencies</span>
+</h3>
+</div>
+<div class="space-y-6">
+<!-- Pre-requisites -->
+<div>
+<div class="flex justify-between items-center mb-2">
+<label class="font-label-caps text-label-caps text-on-surface-variant">PRE-REQUISITE TASKS</label>
+<button class="text-secondary hover:text-on-surface text-body-sm font-body-sm flex items-center space-x-1">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>Add Task</span>
+</button>
+</div>
+<div class="bg-surface-container-low border border-outline-variant rounded-md divide-y divide-surface-variant">
+<div class="p-3 flex items-center justify-between group">
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-secondary text-[18px]">task_alt</span>
+<span class="font-body-md text-body-md text-on-surface">Data Extract Job (ID: 8821)</span>
+</div>
+<button class="text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+<div class="p-3 flex items-center justify-between group">
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-secondary text-[18px]">task_alt</span>
+<span class="font-body-md text-body-md text-on-surface">Validation Check (ID: 9012)</span>
+</div>
+<button class="text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Post-actions -->
+<div>
+<div class="flex justify-between items-center mb-2">
+<label class="font-label-caps text-label-caps text-on-surface-variant">POST-EXECUTION ACTIONS</label>
+<button class="text-secondary hover:text-on-surface text-body-sm font-body-sm flex items-center space-x-1">
+<span class="material-symbols-outlined text-[16px]">add</span>
+<span>Add Action</span>
+</button>
+</div>
+<div class="bg-surface-container-low border border-outline-variant border-dashed rounded-md p-4 text-center text-on-surface-variant font-body-sm text-body-sm">
+                                No post-actions defined. Add an action to trigger after this automation completes.
+                            </div>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column: Inspector Panel (4 cols) -->
+<div class="xl:col-span-4">
+<div class="bg-surface-container-lowest rounded-xl border border-surface-variant p-md shadow-soft sticky top-[88px]">
+<h3 class="font-h2 text-h2 mb-4 flex items-center space-x-2">
+<span class="material-symbols-outlined text-secondary text-[20px]">map</span>
+<span>Dependency Map Preview</span>
+</h3>
+<div class="bg-surface-container rounded-lg p-4 border border-surface-variant relative flex flex-col items-center min-h-[300px] justify-center space-y-4">
+<!-- Simple Visual Flowchart -->
+<div class="flex space-x-4">
+<div class="bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 shadow-softer text-center min-w-[120px]">
+<span class="block font-label-caps text-label-caps text-on-surface-variant mb-1">PRE-REQ</span>
+<span class="font-tabular text-tabular text-on-surface">ID: 8821</span>
+</div>
+<div class="bg-surface-container-lowest border border-outline-variant rounded px-3 py-2 shadow-softer text-center min-w-[120px]">
+<span class="block font-label-caps text-label-caps text-on-surface-variant mb-1">PRE-REQ</span>
+<span class="font-tabular text-tabular text-on-surface">ID: 9012</span>
+</div>
+</div>
+<!-- Connector -->
+<div class="flex space-x-4 h-6 w-full justify-center relative">
+<div class="absolute w-1/2 h-full border-b border-r border-l border-outline-variant top-0 -mt-2 rounded-b-md"></div>
+<div class="absolute w-px h-4 bg-outline-variant bottom-0"></div>
+<span class="material-symbols-outlined text-outline-variant absolute -bottom-2 text-[16px]">arrow_drop_down</span>
+</div>
+<!-- Current Item -->
+<div class="bg-primary-fixed border-2 border-primary rounded-lg px-4 py-3 shadow-soft text-center z-10 w-full max-w-[200px]">
+<span class="block font-label-caps text-label-caps text-on-surface-variant mb-1">NEW AUTOMATION</span>
+<span class="font-body-md text-body-md text-primary font-medium">Daily Sync Job</span>
+</div>
+<!-- Connector Down (Empty) -->
+<div class="h-8 w-full flex justify-center relative opacity-30">
+<div class="w-px h-full bg-outline-variant border-dashed border-l"></div>
+<span class="material-symbols-outlined text-outline-variant absolute -bottom-2 text-[16px]">arrow_drop_down</span>
+</div>
+<div class="border border-outline-variant border-dashed rounded px-3 py-2 text-center text-on-surface-variant font-label-caps text-label-caps opacity-50">
+                            NO POST ACTIONS
+                        </div>
+</div>
+<div class="mt-4 p-3 bg-surface-container-low rounded border border-surface-variant">
+<p class="font-body-sm text-body-sm text-secondary">
+<strong class="text-on-surface">Note:</strong> This preview shows the immediate logical execution flow. Complex workflows may involve external triggers not visible here.
+                        </p>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

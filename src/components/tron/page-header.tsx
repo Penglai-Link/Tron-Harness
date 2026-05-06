@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import { ClientLink } from "@/lib/client-router";
 import { cn } from "@/lib/utils";
 
 export interface BreadcrumbItem {
@@ -27,9 +28,9 @@ export function PageHeader({ actions, breadcrumbs, className, description, eyebr
             {breadcrumbs.map((item, index) => (
               <span className="flex items-center gap-1" key={`${item.label}-${index}`}>
                 {item.href ? (
-                  <a className="hover:text-[var(--color-on-surface)]" href={item.href}>
+                  <ClientLink className="hover:text-[var(--color-on-surface)]" href={item.href}>
                     {item.label}
-                  </a>
+                  </ClientLink>
                 ) : (
                   <span>{item.label}</span>
                 )}
@@ -49,4 +50,3 @@ export function PageHeader({ actions, breadcrumbs, className, description, eyebr
     </header>
   );
 }
-

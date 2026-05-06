@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Audit Logs - Tron Enterprise Admin</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed": "#e6e2df",
+                        "primary-fixed-dim": "#c8c6c5",
+                        "on-surface": "#1c1b1b",
+                        "on-primary-fixed": "#1c1b1b",
+                        "tertiary-fixed-dim": "#cac6c4",
+                        "error": "#ba1a1a",
+                        "tertiary": "#000000",
+                        "on-tertiary-fixed-variant": "#484645",
+                        "on-secondary-fixed-variant": "#46464b",
+                        "surface-dim": "#ddd9d8",
+                        "surface-tint": "#5f5e5e",
+                        "inverse-on-surface": "#f4f0ef",
+                        "surface-container-low": "#f7f3f2",
+                        "inverse-surface": "#313030",
+                        "surface-bright": "#fdf8f8",
+                        "secondary-fixed": "#e3e2e7",
+                        "secondary-fixed-dim": "#c7c6cb",
+                        "secondary-container": "#e0dfe4",
+                        "on-background": "#1c1b1b",
+                        "on-secondary": "#ffffff",
+                        "on-primary-container": "#858383",
+                        "surface-container": "#f1edec",
+                        "primary": "#000000",
+                        "on-error-container": "#93000a",
+                        "surface-container-highest": "#e5e2e1",
+                        "on-surface-variant": "#444748",
+                        "on-primary": "#ffffff",
+                        "outline-variant": "#c4c7c7",
+                        "surface-variant": "#e5e2e1",
+                        "inverse-primary": "#c8c6c5",
+                        "tertiary-container": "#1c1b1a",
+                        "surface": "#fdf8f8",
+                        "on-primary-fixed-variant": "#474746",
+                        "background": "#fdf8f8",
+                        "secondary": "#5e5e63",
+                        "on-tertiary-container": "#868382",
+                        "primary-container": "#1c1b1b",
+                        "outline": "#747878",
+                        "on-secondary-container": "#626267",
+                        "surface-container-high": "#ebe7e6",
+                        "on-error": "#ffffff",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-fixed": "#e5e2e1",
+                        "on-tertiary": "#ffffff",
+                        "error-container": "#ffdad6",
+                        "on-secondary-fixed": "#1a1b1f",
+                        "on-tertiary-fixed": "#1c1b1a"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "base": "4px",
+                        "lg": "24px",
+                        "xs": "4px",
+                        "md": "16px",
+                        "margin": "24px",
+                        "gutter": "16px",
+                        "xl": "40px"
+                    },
+                    "fontFamily": {
+                        "body-md": ["Inter"],
+                        "label-caps": ["Inter"],
+                        "display": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "tabular": ["Inter"],
+                        "h1": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "h2": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-md": ["14px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "display": ["40px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "body-sm": ["13px", { "lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "400" }],
+                        "tabular": ["13px", { "lineHeight": "1.4", "fontWeight": "400" }],
+                        "h1": ["24px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "h2": ["20px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .icon-fill { font-variation-settings: 'FILL' 1; }
+    </style>
+</head>
+<body class="bg-background text-on-background antialiased min-h-screen overflow-x-hidden">
+<!-- TopNavBar -->
+<nav class="fixed top-0 left-0 w-full z-40 flex justify-between items-center px-6 h-14 bg-white/80 backdrop-blur-md dark:bg-gray-950/80 border-b border-gray-100 dark:border-gray-800 shadow-sm shadow-black/5 text-gray-900 dark:text-gray-100 font-['Inter'] text-sm antialiased">
+<div class="flex items-center gap-md">
+<span class="text-lg font-semibold tracking-tight text-gray-900 dark:text-white" style="">Tron</span>
+<div class="ml-xl flex items-center bg-surface-container-low rounded-full px-sm py-xs border border-outline-variant w-64">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]" style="">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body-sm font-body-sm text-on-surface w-full py-0" placeholder="Search..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-sm">
+<button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-gray-500 dark:text-gray-400" style="">
+<span class="material-symbols-outlined text-[20px]" style="">notifications</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-gray-500 dark:text-gray-400" style="">
+<span class="material-symbols-outlined text-[20px]" style="">settings</span>
+</button>
+<img alt="User profile" class="w-8 h-8 rounded-full border border-outline-variant ml-sm cursor-pointer hover:opacity-80 transition-opacity" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCTapCn5bmq5MHRyemYa5tBwmgNK3MIt_0Z9bPd3hpk12-k0rRPpzVWthapuBdU9Ac8qxwKWmh-r1i7rOxpDebMQq07AZrIXcfXBz-odw-MY8lkq71lvrXkv4QmmkSFC5jmRzB90I8-9A9ZX4yD4DmnCHwLIHRCdt7hrd7r35ekpMKGZBHpFKpe4oVmBhMdkWS44Vv3jGr5FxzxoJGc49CQvt3we92ZE9oFkT3NW-Y-OMy2GM6FTESO9HTt-olN9VF9v4794XTPk2CU"/>
+</div>
+</nav>
+<!-- SideNavBar -->
+<aside class="hidden md:flex flex-col py-4 px-3 overflow-y-auto fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-[280px] border-r border-gray-100 dark:border-gray-800 bg-[#FFFFFF] dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-['Inter'] text-[13px] leading-tight z-40">
+<div class="px-3 mb-6 flex items-center gap-sm">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px] icon-fill" style="">smart_toy</span>
+</div>
+<div>
+<h2 class="font-bold text-gray-900 dark:text-white" style="">Main Console</h2>
+<p class="text-gray-500 text-[11px]" style="">Enterprise AI</p>
+</div>
+</div>
+<nav class="flex flex-col gap-xs">
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">dashboard</span>
+<span class="" style="">Dashboard</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">assignment</span>
+<span class="" style="">Tasks</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">apps</span>
+<span class="" style="">Apps</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">chat</span>
+<span class="" style="">Chats</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">auto_mode</span>
+<span class="" style="">Automations</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">terminal</span>
+<span class="" style="">Prompt Library</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">variables</span>
+<span class="" style="">Variables</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">model_training</span>
+<span class="" style="">Models</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">star</span>
+<span class="" style="">Skills</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">settings_input_component</span>
+<span class="" style="">MCP</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">memory</span>
+<span class="" style="">Memory</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">account_tree</span>
+<span class="" style="">Graph</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">monitoring</span>
+<span class="" style="">Observability</span>
+</a>
+<div class="mt-6 mb-2 px-3">
+<span class="font-label-caps text-label-caps text-gray-400" style="">ADMIN</span>
+</div>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">admin_panel_settings</span>
+<span class="" style="">Workspace Admin</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">manage_accounts</span>
+<span class="" style="">User Admin</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">vpn_key</span>
+<span class="" style="">Permissions</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-medium scale-100 active:scale-[0.98] transition-transform" href="#" style="">
+<span class="material-symbols-outlined text-[18px]" style="">list_alt</span>
+<span class="" style="">Audit Logs</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Area -->
+<main class="flex-1 ml-0 md:ml-[280px] mt-14 flex flex-col min-h-[calc(100vh-3.5rem)] max-w-full overflow-x-hidden bg-background">
+<div class="px-margin py-xl max-w-7xl mx-auto w-full flex-1">
+<!-- Page Header & Inner Nav -->
+<div class="mb-lg">
+<h2 class="font-h1 text-h1 text-on-surface mb-md">Users &amp; Roles</h2>
+<div class="flex items-center gap-6 border-b border-outline-variant/30 pb-0">
+<a class="text-on-surface-variant hover:text-on-surface font-body-sm font-medium pb-sm border-b-2 border-transparent transition-colors" href="#">User Directory</a>
+<a class="text-on-surface-variant hover:text-on-surface font-body-sm font-medium pb-sm border-b-2 border-transparent transition-colors" href="#">Role Matrix</a>
+<a class="text-on-surface font-body-sm font-semibold pb-sm border-b-2 border-primary" href="#">Audit Logs</a>
+</div>
+</div>
+<!-- Workspace Card / Table Container -->
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant/50 shadow-sm overflow-hidden flex flex-col">
+<!-- Toolbar -->
+<div class="px-lg py-md border-b border-outline-variant/30 flex justify-between items-center bg-white">
+<div class="flex items-center gap-3">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">search</span>
+<input class="pl-9 pr-4 py-1.5 text-body-sm font-body-sm rounded-lg border border-outline-variant bg-surface focus:ring-2 focus:ring-primary focus:border-primary w-64 outline-none transition-shadow" placeholder="Search events..." type="text"/>
+</div>
+<button class="flex items-center gap-2 px-3 py-1.5 text-body-sm font-body-sm font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/30 rounded-lg transition-colors border border-outline-variant/50">
+<span class="material-symbols-outlined text-[18px]">filter_list</span>
+                            Filter
+                        </button>
+</div>
+<div class="flex gap-2">
+<button class="px-3 py-1.5 text-body-sm font-body-sm font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/30 rounded-lg transition-colors">
+                            Export CSV
+                        </button>
+</div>
+</div>
+<!-- Data Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead class="bg-[#Fdf8f8]">
+<tr>
+<th class="px-lg py-3 font-label-caps text-label-caps text-on-surface-variant font-semibold border-b border-outline-variant/30">Timestamp</th>
+<th class="px-lg py-3 font-label-caps text-label-caps text-on-surface-variant font-semibold border-b border-outline-variant/30">Actor</th>
+<th class="px-lg py-3 font-label-caps text-label-caps text-on-surface-variant font-semibold border-b border-outline-variant/30">Action</th>
+<th class="px-lg py-3 font-label-caps text-label-caps text-on-surface-variant font-semibold border-b border-outline-variant/30">Resource ID</th>
+<th class="px-lg py-3 font-label-caps text-label-caps text-on-surface-variant font-semibold border-b border-outline-variant/30">Status</th>
+<th class="px-lg py-3 font-label-caps text-label-caps text-on-surface-variant font-semibold border-b border-outline-variant/30 text-right">IP Address</th>
+</tr>
+</thead>
+<tbody class="font-tabular text-tabular text-on-surface">
+<tr class="hover:bg-[#F2F2F7] transition-colors border-b border-outline-variant/20">
+<td class="px-lg py-2.5 whitespace-nowrap text-on-surface-variant">2023-10-27 14:32:01</td>
+<td class="px-lg py-2.5">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant flex items-center justify-center text-[10px] font-bold">JD</div>
+<span>jdoe@tron.com</span>
+</div>
+</td>
+<td class="px-lg py-2.5 font-medium">Update Model Config</td>
+<td class="px-lg py-2.5 text-on-surface-variant">model-v4-beta</td>
+<td class="px-lg py-2.5">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-[#E5F6E6] text-[#0A5C10] text-[11px] font-medium">Success</span>
+</td>
+<td class="px-lg py-2.5 text-right text-on-surface-variant">192.168.1.105</td>
+</tr>
+<tr class="hover:bg-[#F2F2F7] transition-colors border-b border-outline-variant/20">
+<td class="px-lg py-2.5 whitespace-nowrap text-on-surface-variant">2023-10-27 13:15:44</td>
+<td class="px-lg py-2.5">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant flex items-center justify-center text-[10px] font-bold">AS</div>
+<span>asmith@tron.com</span>
+</div>
+</td>
+<td class="px-lg py-2.5 font-medium flex items-center gap-2">
+                                    Delete Workspace
+                                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-sm bg-surface-variant text-on-surface-variant text-[9px] uppercase tracking-wider font-bold">Inheritance</span>
+</td>
+<td class="px-lg py-2.5 text-on-surface-variant">ws-x9f8-temp</td>
+<td class="px-lg py-2.5">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-[#FFF4E5] text-[#804D00] text-[11px] font-medium">Warning</span>
+</td>
+<td class="px-lg py-2.5 text-right text-on-surface-variant">10.0.0.42</td>
+</tr>
+<tr class="hover:bg-[#F2F2F7] transition-colors border-b border-outline-variant/20">
+<td class="px-lg py-2.5 whitespace-nowrap text-on-surface-variant">2023-10-27 11:05:12</td>
+<td class="px-lg py-2.5">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-primary text-on-primary flex items-center justify-center text-[10px] font-bold">SYS</div>
+<span>system_agent</span>
+</div>
+</td>
+<td class="px-lg py-2.5 font-medium">Auto-Scale Provision</td>
+<td class="px-lg py-2.5 text-on-surface-variant">cluster-eu-west</td>
+<td class="px-lg py-2.5">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-[#E5F6E6] text-[#0A5C10] text-[11px] font-medium">Success</span>
+</td>
+<td class="px-lg py-2.5 text-right text-on-surface-variant">Internal</td>
+</tr>
+<tr class="hover:bg-[#F2F2F7] transition-colors">
+<td class="px-lg py-2.5 whitespace-nowrap text-on-surface-variant">2023-10-27 09:42:19</td>
+<td class="px-lg py-2.5">
+<div class="flex items-center gap-2">
+<div class="w-6 h-6 rounded-full bg-surface-variant flex items-center justify-center text-[10px] font-bold">JD</div>
+<span>jdoe@tron.com</span>
+</div>
+</td>
+<td class="px-lg py-2.5 font-medium">Modify Access Policy</td>
+<td class="px-lg py-2.5 text-on-surface-variant">policy-admin-read</td>
+<td class="px-lg py-2.5">
+<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-[#E5F6E6] text-[#0A5C10] text-[11px] font-medium">Success</span>
+</td>
+<td class="px-lg py-2.5 text-right text-on-surface-variant">192.168.1.105</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Pagination Footer -->
+<div class="px-lg py-3 border-t border-outline-variant/30 flex justify-between items-center bg-[#Fdf8f8]">
+<span class="text-body-sm text-on-surface-variant">Showing 1 to 4 of 2,451 entries</span>
+<div class="flex items-center gap-1">
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/50 rounded transition-colors disabled:opacity-30" disabled="">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<div class="flex items-center gap-1 mx-2">
+<button class="w-8 h-8 flex items-center justify-center text-body-sm font-semibold bg-primary text-on-primary rounded">1</button>
+<button class="w-8 h-8 flex items-center justify-center text-body-sm font-medium text-on-surface-variant hover:bg-surface-variant/50 rounded transition-colors">2</button>
+<button class="w-8 h-8 flex items-center justify-center text-body-sm font-medium text-on-surface-variant hover:bg-surface-variant/50 rounded transition-colors">3</button>
+<span class="px-1 text-on-surface-variant text-[11px]">...</span>
+<button class="w-8 h-8 flex items-center justify-center text-body-sm font-medium text-on-surface-variant hover:bg-surface-variant/50 rounded transition-colors">613</button>
+</div>
+<button class="p-1.5 text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/50 rounded transition-colors">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

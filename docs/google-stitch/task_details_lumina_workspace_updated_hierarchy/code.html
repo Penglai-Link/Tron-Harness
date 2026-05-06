@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tron - Task Details</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-fill { font-variation-settings: 'FILL' 1; }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-container": "#1c1b1b",
+                        "on-tertiary": "#ffffff",
+                        "on-secondary-fixed": "#1a1b1f",
+                        "on-primary-fixed": "#1c1b1b",
+                        "outline": "#747878",
+                        "on-surface": "#1c1b1b",
+                        "background": "#fdf8f8",
+                        "tertiary": "#000000",
+                        "surface-dim": "#ddd9d8",
+                        "surface-variant": "#e5e2e1",
+                        "secondary-fixed": "#e3e2e7",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-fixed-variant": "#46464b",
+                        "primary": "#000000",
+                        "primary-fixed": "#e5e2e1",
+                        "error-container": "#ffdad6",
+                        "error": "#ba1a1a",
+                        "surface-tint": "#5f5e5e",
+                        "outline-variant": "#c4c7c7",
+                        "on-error": "#ffffff",
+                        "inverse-primary": "#c8c6c5",
+                        "surface-container": "#f1edec",
+                        "surface-container-low": "#f7f3f2",
+                        "on-surface-variant": "#444748",
+                        "on-tertiary-fixed": "#1c1b1a",
+                        "on-primary": "#ffffff",
+                        "surface-container-highest": "#e5e2e1",
+                        "on-secondary-container": "#626267",
+                        "tertiary-container": "#1c1b1a",
+                        "on-tertiary-fixed-variant": "#484645",
+                        "inverse-surface": "#313030",
+                        "surface": "#fdf8f8",
+                        "tertiary-fixed-dim": "#cac6c4",
+                        "secondary": "#5e5e63",
+                        "surface-bright": "#fdf8f8",
+                        "secondary-container": "#e0dfe4",
+                        "on-tertiary-container": "#868382",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed-dim": "#c8c6c5",
+                        "on-primary-container": "#858383",
+                        "on-primary-fixed-variant": "#474746",
+                        "on-error-container": "#93000a",
+                        "on-background": "#1c1b1b",
+                        "surface-container-high": "#ebe7e6",
+                        "tertiary-fixed": "#e6e2df",
+                        "inverse-on-surface": "#f4f0ef",
+                        "secondary-fixed-dim": "#c7c6cb"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "sm": "8px",
+                        "base": "4px",
+                        "margin": "24px",
+                        "md": "16px",
+                        "lg": "24px",
+                        "xs": "4px",
+                        "gutter": "16px",
+                        "xl": "40px"
+                    },
+                    "fontFamily": {
+                        "h1": ["Inter", "sans-serif"],
+                        "tabular": ["Inter", "sans-serif"],
+                        "body-sm": ["Inter", "sans-serif"],
+                        "h2": ["Inter", "sans-serif"],
+                        "display": ["Inter", "sans-serif"],
+                        "body-md": ["Inter", "sans-serif"],
+                        "label-caps": ["Inter", "sans-serif"],
+                        "body-lg": ["Inter", "sans-serif"]
+                    },
+                    "fontSize": {
+                        "h1": ["24px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "tabular": ["13px", { "lineHeight": "1.4", "fontWeight": "400", "fontVariantNumeric": "tabular-nums" }],
+                        "body-sm": ["13px", { "lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "400" }],
+                        "h2": ["20px", { "lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600" }],
+                        "display": ["40px", { "lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "body-md": ["14px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }],
+                        "label-caps": ["11px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600" }],
+                        "body-lg": ["16px", { "lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400" }]
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-surface text-on-surface font-body-md antialiased min-h-screen">
+<!-- TopNavBar Shared Component -->
+<nav class="fixed top-0 left-0 w-full z-40 flex justify-between items-center px-6 h-14 bg-white/80 backdrop-blur-md dark:bg-gray-950/80 border-b border-gray-100 dark:border-gray-800 shadow-sm shadow-black/5 text-gray-900 dark:text-gray-100 font-['Inter'] text-sm antialiased">
+<div class="flex items-center gap-md">
+<span class="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Tron</span>
+<div class="ml-xl flex items-center bg-surface-container-low rounded-full px-sm py-xs border border-outline-variant w-64">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body-sm font-body-sm text-on-surface w-full py-0 outline-none" placeholder="Search tasks..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-sm">
+<button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-gray-500 dark:text-gray-400">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-gray-500 dark:text-gray-400">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+<img alt="User profile" class="w-8 h-8 rounded-full border border-outline-variant ml-sm cursor-pointer hover:opacity-80 transition-opacity" data-alt="Close up portrait of a professional man in soft natural lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBOjl4k-FX0qLmJp5ZVI1wDbBoOCmL5qyST4CEAOhnmfk88R1sAub1HF4tsjB24oUMtpvkq9O3SuhvF8u0jOmQWb-x330NlVNWT0FfF6GsqMoxREKbC29UJbVOJsfhYM7XPplpl_DDjAUcmvhc2sgUPQQhmxp-l_e1qKfeGdOhFeSievZl_yWo-KKUYgHVmCiTLynQH6vZCrb5LPAPpT1W1vvzUncxbzghteVa0Lz5wR4f7d2lf02BeRxkSBH5yYc4gAs0otJMWKKi8"/>
+</div>
+</nav>
+<!-- SideNavBar Shared Component -->
+<aside class="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-[280px] border-r border-gray-100 dark:border-gray-800 bg-[#FFFFFF] dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-['Inter'] text-[13px] leading-tight flex flex-col py-4 px-3 overflow-y-auto z-30">
+<div class="px-3 mb-6 flex items-center gap-sm">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px] icon-fill">smart_toy</span>
+</div>
+<div>
+<h2 class="font-bold text-gray-900 dark:text-white">Tron</h2>
+<p class="text-gray-500 text-[11px]">Enterprise AI</p>
+</div>
+</div>
+<nav class="flex flex-col gap-xs">
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-medium scale-100 active:scale-[0.98] transition-transform" href="#">
+<span class="material-symbols-outlined text-[18px]">assignment</span>
+<span>Tasks</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">apps</span>
+<span>Apps</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">chat</span>
+<span>Chats</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">variables</span>
+<span>Variables</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">model_training</span>
+<span>Models</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">star</span>
+<span>Skills</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">settings_input_component</span>
+<span>MCP</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">memory</span>
+<span>Memory</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">account_tree</span>
+<span>Graph</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">monitoring</span>
+<span>Observability</span>
+</a>
+<div class="mt-6 mb-2 px-3">
+<span class="font-label-caps text-label-caps text-gray-400">ADMIN</span>
+</div>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">admin_panel_settings</span>
+<span>Workspace Admin</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">manage_accounts</span>
+<span>User Admin</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">vpn_key</span>
+<span>Permissions</span>
+</a>
+</nav>
+</aside>
+<!-- Main Content Wrapper -->
+<div class="ml-[280px] mt-14 min-h-[calc(100vh-3.5rem)] flex flex-col bg-surface">
+<header class="flex items-center justify-between px-margin py-md">
+<div class="flex flex-col gap-1">
+<nav aria-label="Breadcrumb" class="flex items-center gap-1 -ml-2 px-2 py-1 text-on-surface-variant font-body-sm w-fit">
+<a class="hover:text-on-surface hover:bg-surface-container px-1 rounded transition-colors flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-[16px]">arrow_back</span> Tasks
+                </a>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<a class="hover:text-on-surface hover:bg-surface-container px-1 rounded transition-colors truncate max-w-[200px]" href="#">Core Infrastructure Update</a>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="text-on-surface font-medium truncate max-w-[200px]">AGT-101</span>
+</nav>
+<div class="text-xl font-bold tracking-tight text-[#1A1A1A] dark:text-[#F5F5F7]">
+                Task Details
+            </div>
+</div>
+<div class="flex items-center gap-md">
+<button class="bg-primary text-on-primary font-sans text-base font-semibold px-4 py-1.5 rounded-full hover:opacity-90 transition-opacity">
+                    Execute Task
+                </button>
+</div>
+</header>
+<!-- Canvas -->
+<main class="flex-1 px-margin pb-margin grid grid-cols-1 xl:grid-cols-3 gap-margin items-start max-w-[1600px] mx-auto w-full">
+<!-- Left Column: Primary Content -->
+<div class="xl:col-span-2 flex flex-col gap-margin">
+<!-- 1. Header Section -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-lg flex flex-col gap-md">
+<div class="flex items-start justify-between">
+<div>
+<div class="flex items-center gap-sm mb-2">
+<span class="font-tabular text-tabular text-on-surface-variant">AGT-101</span>
+<div class="relative group">
+<button class="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-caps text-label-caps uppercase flex items-center gap-1 hover:bg-outline-variant transition-colors"><span>In Progress 45%</span>
+<span class="material-symbols-outlined text-[14px]">expand_more</span></button>
+<div class="hidden group-focus-within:block absolute top-full left-0 mt-1 bg-surface-container-lowest border border-outline-variant rounded-lg shadow-lg z-50 min-w-[120px] py-1">
+<button class="w-full text-left px-3 py-1.5 text-label-caps uppercase hover:bg-surface-container transition-colors">To Do</button>
+<button class="w-full text-left px-3 py-1.5 text-label-caps uppercase hover:bg-surface-container transition-colors">In Progress</button>
+<button class="w-full text-left px-3 py-1.5 text-label-caps uppercase hover:bg-surface-container transition-colors">Review</button>
+<button class="w-full text-left px-3 py-1.5 text-label-caps uppercase hover:bg-surface-container transition-colors text-primary font-bold">Completed</button>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded-full bg-error-container text-on-error-container font-label-caps text-label-caps uppercase flex items-center gap-1 ml-2">
+<span class="material-symbols-outlined text-[12px]" data-icon="priority_high">priority_high</span> High
+                                </span>
+</div>
+<h2 class="font-h1 text-h1 text-on-surface">Implement new LLM routing logic for failover</h2>
+</div>
+<div class="flex items-center gap-sm bg-surface-container px-3 py-1.5 rounded-lg border border-outline-variant">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="robot_2">robot_2</span>
+<div class="flex flex-col">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Assigned Agent</span>
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Meta-Agent</span>
+</div>
+</div>
+</div>
+</section>
+<!-- 2. Description & Requirements -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-lg flex flex-col gap-md">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase border-b border-outline-variant pb-2">Description &amp; Requirements</h3>
+<div class="font-body-md text-body-md text-on-surface flex flex-col gap-4">
+<p>The current LLM routing mechanism is susceptible to latency spikes when the primary node experiences high load. This task requires implementing a seamless failover logic that automatically reroutes requests to secondary regional nodes if the primary fails to respond within the 400ms threshold.</p>
+<ul class="list-disc pl-5 text-on-surface-variant space-y-1">
+<li>Implement health check polling for all registered LLM endpoints.</li>
+<li>Develop the fallback routing controller in `core/router.py`.</li>
+<li>Ensure failover events are logged structurally for audit trails.</li>
+<li>Maintain exact state consistency during the handoff process.</li>
+</ul>
+</div>
+</section>
+<!-- Two Column Sub-Grid for Inheritance & Linked Resources -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-margin">
+<!-- 3. Resource Inheritance -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col gap-sm">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">Resource Inheritance</h3>
+<div class="flex items-center gap-md bg-surface-container-low p-3 rounded-lg border border-outline-variant">
+<div class="w-8 h-8 rounded bg-primary-container text-on-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" data-icon="account_tree">account_tree</span>
+</div>
+<div class="flex-1">
+<p class="font-body-sm text-body-sm font-medium text-on-surface">Model Config</p>
+<p class="font-tabular text-tabular text-on-surface-variant">Inherited from Parent Workspace</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="link">link</span>
+</div>
+<div class="pl-6 border-l-2 border-surface-variant ml-4 mt-1 flex flex-col gap-2">
+<div class="flex items-center gap-2 text-on-surface-variant">
+<span class="material-symbols-outlined text-sm" data-icon="turn_right">turn_right</span>
+<span class="font-tabular text-tabular">gpt-4-turbo-config-v2</span>
+</div>
+</div>
+</section>
+<!-- 5. Linked Resources -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col gap-sm">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase mb-2">Linked Resources</h3>
+<div class="flex flex-col gap-2">
+<a class="flex items-center gap-sm p-2 rounded-lg hover:bg-surface-container-low transition-colors border border-transparent hover:border-outline-variant group" href="#">
+<div class="w-8 h-8 rounded bg-surface-variant text-on-surface-variant flex items-center justify-center group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-sm" data-icon="web">web</span>
+</div>
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Customer Portal</span>
+</a>
+<a class="flex items-center gap-sm p-2 rounded-lg hover:bg-surface-container-low transition-colors border border-transparent hover:border-outline-variant group" href="#">
+<div class="w-8 h-8 rounded bg-surface-variant text-on-surface-variant flex items-center justify-center group-hover:bg-surface-container-highest">
+<span class="material-symbols-outlined text-sm" data-icon="space_dashboard">space_dashboard</span>
+</div>
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Main Console</span>
+</a>
+</div>
+</section>
+</div>
+<!-- 4. Execution Timeline -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-lg flex flex-col gap-md">
+<div class="flex items-center justify-between border-b border-outline-variant pb-2">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase">Execution Timeline</h3>
+<div class="flex items-center gap-1">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+<span class="font-label-caps text-label-caps text-on-surface-variant">Live</span>
+</div>
+</div>
+<div class="bg-surface-container-low p-4 rounded-lg font-tabular text-tabular text-on-surface flex flex-col gap-2 border border-outline-variant overflow-x-auto">
+<div class="flex gap-4">
+<span class="text-on-surface-variant w-20 shrink-0">10:45:02</span>
+<span class="text-primary-container">Initializing MCP connector...</span>
+</div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant w-20 shrink-0">10:45:05</span>
+<span>Validating workspace credentials [OK]</span>
+</div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant w-20 shrink-0">10:45:15</span>
+<span class="text-secondary">Fetching failover nodes metadata...</span>
+</div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant w-20 shrink-0">10:45:18</span>
+<span>Identified 3 potential fallback targets. Analyzing latency.</span>
+</div>
+<div class="flex gap-4">
+<span class="text-on-surface-variant w-20 shrink-0">10:46:01</span>
+<span class="text-on-surface-variant animate-pulse">Awaiting sub-task completion...</span>
+</div>
+</div>
+</section>
+</div>
+<!-- Right Column: Inspector Panel -->
+<aside class="flex flex-col gap-margin">
+<!-- Task Metadata -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col gap-md">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase border-b border-outline-variant pb-2">Task Metadata</h3>
+<div class="flex flex-col gap-3">
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Parent Task</span>
+<a class="font-tabular text-tabular text-primary hover:opacity-80 transition-opacity flex items-center gap-1" href="#">
+<span class="material-symbols-outlined text-[14px]">link</span> AGT-090
+        </a>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Owner</span>
+<div class="flex items-center gap-2">
+<div class="w-5 h-5 rounded-full bg-secondary text-on-secondary flex items-center justify-center text-[10px] font-bold">AJ</div>
+<span class="font-body-sm text-body-sm font-medium text-on-surface">Alex J.</span>
+</div>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Created Date</span>
+<span class="font-tabular text-tabular text-on-surface">Oct 24, 2023</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Estimated Tokens</span>
+<span class="font-tabular text-tabular text-on-surface bg-surface-container px-2 py-0.5 rounded text-xs border border-outline-variant">~4,500</span>
+</div>
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Branch</span>
+<span class="font-tabular text-tabular text-on-surface flex items-center gap-1"><span class="material-symbols-outlined text-[14px]" data-icon="call_split">call_split</span> feature/llm-failover</span>
+</div>
+</div>
+</section>
+<!-- Sub-task Checklist -->
+<section class="bg-surface-container-lowest border border-outline-variant rounded-xl p-md flex flex-col gap-sm">
+<div class="flex items-center justify-between border-b border-outline-variant pb-2 mb-2"><h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase">Sub-tasks</h3><div class="flex items-center gap-2"><span class="font-tabular text-tabular text-on-surface-variant text-xs">1/4 Completed</span><button class="p-1 rounded-full hover:bg-surface-container transition-colors text-on-surface-variant"><span class="material-symbols-outlined text-[18px]">settings</span></button></div></div>
+<div class="flex flex-col gap-2">
+<label class="flex items-start gap-3 p-2 rounded hover:bg-surface-container-low transition-colors cursor-pointer group"><input checked="" class="mt-1 rounded border-outline text-primary focus:ring-primary" type="checkbox"/><div class="flex-1 flex flex-col gap-1"><div class="flex items-center justify-between gap-2"><span class="font-body-sm text-body-sm text-on-surface-variant line-through group-hover:text-on-surface transition-colors">Draft architectural diagram for routing</span><span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 uppercase tracking-wider">Completed</span></div><div class="w-full bg-surface-container rounded-full h-1"><div class="bg-green-500 h-1 rounded-full" style="width: 100%"></div></div></div></label>
+<label class="flex items-start gap-3 p-2 rounded hover:bg-surface-container-low transition-colors cursor-pointer group"><input class="mt-1 rounded border-outline text-primary focus:ring-primary" type="checkbox"/><div class="flex-1 flex flex-col gap-1"><div class="flex items-center justify-between gap-2"><span class="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">Implement Ping/Health endpoint in Python</span><span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 uppercase tracking-wider">In Progress</span></div><div class="w-full bg-surface-container rounded-full h-1"><div class="bg-blue-500 h-1 rounded-full" style="width: 45%"></div></div></div></label>
+<label class="flex items-start gap-3 p-2 rounded hover:bg-surface-container-low transition-colors cursor-pointer group"><input class="mt-1 rounded border-outline text-primary focus:ring-primary" type="checkbox"/><div class="flex-1 flex flex-col gap-1"><div class="flex items-center justify-between gap-2"><span class="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">Write integration tests for timeout scenarios</span><span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 uppercase tracking-wider">Pending</span></div><div class="w-full bg-surface-container rounded-full h-1"><div class="bg-gray-300 dark:bg-gray-700 h-1 rounded-full" style="width: 0%"></div></div></div></label>
+<label class="flex items-start gap-3 p-2 rounded hover:bg-surface-container-low transition-colors cursor-pointer group"><input class="mt-1 rounded border-outline text-primary focus:ring-primary" type="checkbox"/><div class="flex-1 flex flex-col gap-1"><div class="flex items-center justify-between gap-2"><span class="font-body-sm text-body-sm text-on-surface group-hover:text-primary transition-colors">Deploy to staging and run shadow traffic</span><span class="px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400 uppercase tracking-wider">Pending</span></div><div class="w-full bg-surface-container rounded-full h-1"><div class="bg-gray-300 dark:bg-gray-700 h-1 rounded-full" style="width: 0%"></div></div></div></label>
+</div>
+<button class="mt-2 w-full py-2 flex items-center justify-center gap-2 font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container rounded-lg transition-colors border border-transparent hover:border-outline-variant">
+<span class="material-symbols-outlined text-sm" data-icon="add">add</span> Add Sub-task
+                    </button>
+</section>
+</aside>
+</main>
+</div>
+</body></html>

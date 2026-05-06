@@ -36,6 +36,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable, Field, InspectorPanel, PageHeader, SegmentedTabs, SelectInput, SurfaceCard, TextArea, TextInput, ToggleSwitch, TronShell } from "@/components/tron";
+import { useNavigate } from "@/lib/client-router";
 import { cn } from "@/lib/utils";
 import {
   getApps,
@@ -783,65 +784,13 @@ export function CreatePromptPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]">
-      <aside className="fixed inset-y-0 left-0 z-30 w-[280px] border-r border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
-        <div className="mb-4 border-b border-[var(--color-outline-variant)] px-3 py-4">
-          <h1 className="text-base font-black">Tron AI</h1>
-          <p className="text-sm text-[var(--color-on-surface-variant)]">Enterprise Workspace</p>
-        </div>
-        <Button className="mb-4 w-full" onClick={() => setNotice("New project draft opened")}>
-          <Plus size={15} />
-          New Project
-        </Button>
-        {promptShellNavItems.map((item) => (
-          <button
-            aria-pressed={navItem === item}
-            className={cn("mb-1 flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm", navItem === item ? "bg-white font-medium shadow-sm" : "text-[var(--color-on-surface-variant)] hover:bg-white")}
-            data-selected={navItem === item ? "true" : "false"}
-            type="button"
-            key={item}
-            onClick={() => {
-              setNavItem(item);
-              setNotice(`${item} navigation selected`);
-            }}
-          >
-            <Layers3 size={16} />
-            {item}
-          </button>
-        ))}
-      </aside>
-      <header className="fixed left-[280px] right-0 top-0 z-20 flex h-16 items-center justify-between border-b border-[var(--color-outline-variant)] bg-white/90 px-6 backdrop-blur">
-        <div className="flex h-full items-center gap-6">
-          <TextInput className="h-8 w-60 rounded-full" placeholder="Search..." />
-          <SegmentedTabs value={tab} onValueChange={setTab} items={[{ label: "Dashboard", value: "dashboard" }, { label: "Prompts", value: "prompts" }, { label: "Models", value: "models" }, { label: "Datasets", value: "datasets" }, { label: "Logs", value: "logs" }]} />
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <IconButton label="Notifications" onClick={toggleNotifications}>
-              <Settings2 size={16} />
-            </IconButton>
-            {notificationsOpen ? (
-              <div className="absolute right-0 top-10 z-40 w-72 rounded-xl border border-[var(--color-outline-variant)] bg-white p-3 text-sm shadow-lg">
-                <p className="font-semibold">Notifications</p>
-                <p className="mt-1 text-[var(--color-on-surface-variant)]">3 prompt workflow alerts are ready for review.</p>
-                <button className="mt-3 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white" type="button" onClick={() => setNotice("Notification center opened")}>
-                  Open center
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </header>
-      <main className="ml-[280px] pt-16">
-        <div className="flex items-center justify-between border-b border-[var(--color-outline-variant)] bg-white px-6 py-4">
-          <div>
-            <button className="mb-2 flex items-center gap-1 text-sm text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]" type="button" onClick={() => setNotice("Back to Prompts requested")}>
-              <ArrowLeft size={15} />
-              Back to Prompts
-            </button>
-            <h1 className="text-2xl font-semibold">Create New Prompt</h1>
-          </div>
-          <div className="flex gap-2">
+    <TronShell activeItem="Prompts" searchPlaceholder="Search prompts...">
+      <PageHeader
+        breadcrumbs={[{ label: "Prompts", href: "/prompts" }, { label: "New" }]}
+        title="Create New Prompt"
+        status={navItem}
+        actions={
+          <>
             <Button variant="secondary" onClick={() => setNotice("Prompt test queued")}>
               <Play size={15} />
               Test Prompt
@@ -850,9 +799,49 @@ export function CreatePromptPage() {
               <Save size={15} />
               Save Prompt
             </Button>
+          </>
+        }
+      />
+      <SurfaceCard className="mb-6 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap gap-2">
+            {promptShellNavItems.map((item) => (
+              <button
+                aria-pressed={navItem === item}
+                className={cn("inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm", navItem === item ? "bg-[var(--color-surface-container-high)] font-medium" : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]")}
+                data-selected={navItem === item ? "true" : "false"}
+                type="button"
+                key={item}
+                onClick={() => {
+                  setNavItem(item);
+                  setNotice(`${item} navigation selected`);
+                }}
+              >
+                <Layers3 size={15} />
+                {item}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SegmentedTabs value={tab} onValueChange={setTab} items={[{ label: "Dashboard", value: "dashboard" }, { label: "Prompts", value: "prompts" }, { label: "Models", value: "models" }, { label: "Datasets", value: "datasets" }, { label: "Logs", value: "logs" }]} />
+            <div className="relative">
+              <IconButton label="Notifications" onClick={toggleNotifications}>
+                <Settings2 size={16} />
+              </IconButton>
+              {notificationsOpen ? (
+                <div className="absolute right-0 top-10 z-40 w-72 rounded-xl border border-[var(--color-outline-variant)] bg-white p-3 text-sm shadow-lg">
+                  <p className="font-semibold">Notifications</p>
+                  <p className="mt-1 text-[var(--color-on-surface-variant)]">3 prompt workflow alerts are ready for review.</p>
+                  <button className="mt-3 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-xs font-semibold text-white" type="button" onClick={() => setNotice("Notification center opened")}>
+                    Open center
+                  </button>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
-        <div className="grid gap-6 p-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+      </SurfaceCard>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-6">
             <SurfaceCard>
               <div className="grid gap-4 md:grid-cols-3">
@@ -921,8 +910,7 @@ export function CreatePromptPage() {
             </SurfaceCard>
           </div>
         </div>
-      </main>
-    </div>
+    </TronShell>
   );
 }
 
@@ -1015,6 +1003,7 @@ export function CreateTaskPage() {
   const quickReference = useMemo(() => getTaskQuickReference(), []);
   const [priority, setPriority] = useState("Med");
   const [notice, setNotice] = useState("Draft task ready.");
+  const navigate = useNavigate();
 
   return (
     <TronShell activeItem="Tasks" searchPlaceholder="Search tasks...">
@@ -1094,12 +1083,12 @@ export function CreateTaskPage() {
           </SurfaceCard>
           <Notice value={`${notice} Priority: ${priority}.`} />
           <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => window.location.assign("/tasks")}>
+            <Button variant="secondary" onClick={() => navigate("/tasks")}>
               Cancel
             </Button>
             <Button onClick={() => {
               setNotice("Task creation submitted");
-              window.location.assign("/tasks/detail");
+              navigate("/tasks/detail");
             }}>
               <Plus size={15} />
               Create Task

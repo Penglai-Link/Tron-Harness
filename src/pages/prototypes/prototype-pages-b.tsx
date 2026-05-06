@@ -29,10 +29,12 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { DataTable, Field, MetricCard, PageHeader, SegmentedTabs, SelectInput, SurfaceCard, TextArea, TextInput, TronShell } from "@/components/tron";
+import { DataTable, Field, MetricCard, PageHeader, SegmentedTabs, SelectInput, SurfaceCard, TextArea, TextInput, TronShell, useWorkspaceSpaces } from "@/components/tron";
+import { ClientLink, useNavigate } from "@/lib/client-router";
 import { cn } from "@/lib/utils";
 import {
   getDashboardData,
@@ -64,12 +66,25 @@ function Notice({ value }: { value: string }) {
 }
 
 export function DashboardPage() {
-  const { activities, metrics } = useMemo(getDashboardData, []);
-  const [expanded, setExpanded] = useState(false);
-  const [showAll, setShowAll] = useState(false);
-
   return (
     <PrototypeShell activeItem="Dashboard">
+      <DashboardContent />
+    </PrototypeShell>
+  );
+}
+
+function DashboardContent() {
+  const { activities, metrics } = useMemo(getDashboardData, []);
+  const { secondarySpaces, selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
+  const [expanded, setExpanded] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const primaryName = selectedPrimarySpace?.name ?? "Enterprise Workspace";
+  const primaryMeta = selectedPrimarySpace
+    ? `${selectedPrimarySpace.region} · ${selectedPrimarySpace.status} · ${selectedPrimarySpace.description}`
+    : "Global · Active · Global governance, security, and shared AI resource policy.";
+
+  return (
+    <>
       <PageHeader
         title="Workspace Overview"
         description="Monitor agent health, task execution, and system inheritance."
@@ -80,14 +95,14 @@ export function DashboardPage() {
           </Button>
         }
       />
-      <div className="grid gap-4 md:grid-cols-3">
-        {metrics.map((metric, index) => (
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {metrics.map((metric) => (
           <MetricCard
             key={metric.label}
             label={metric.label}
             value={metric.value}
             trend={metric.trend}
-            icon={index === 0 ? <Shield size={18} /> : index === 1 ? <Bot size={18} /> : <RefreshCw size={18} />}
+            icon={getDashboardMetricIcon(metric.label)}
           />
         ))}
       </div>
@@ -101,13 +116,26 @@ export function DashboardPage() {
             </Button>
           </div>
           <div className={cn("space-y-4 text-sm", expanded ? "min-h-[360px]" : "min-h-[260px]")}>
-            <TreeNode title="Global Enterprise Policies" meta="Models: 12  Guards: 4" root />
+            <TreeNode title={primaryName} meta={primaryMeta} root />
             <div className="ml-4 border-l border-[var(--color-outline-variant)] pl-8">
-              <TreeNode title="EMEA Regional Dept" meta="Overrides: LLM Routing (Europe Region)" />
-              <TreeNode title="Customer Support Workspace (Current)" meta="24 Custom Skills  5 Local Vectors" active />
+              {secondarySpaces.length ? (
+                secondarySpaces.map((space) => {
+                  const active = space.id === selectedSecondarySpace?.id;
+                  return (
+                    <TreeNode
+                      active={active}
+                      key={space.id}
+                      title={`${space.name}${active ? " (Current)" : ""}`}
+                      meta={`${space.description} · ${space.inheritedResources} inherited resources · ${space.localOverrides} local overrides · ${space.status}`}
+                    />
+                  );
+                })
+              ) : (
+                <p className="rounded-lg bg-[var(--color-surface-container-low)] p-3 text-[13px] text-[var(--color-on-surface-variant)]">No secondary spaces configured for this primary space.</p>
+              )}
             </div>
           </div>
-          <p className="mt-3 text-[13px] text-[var(--color-on-surface-variant)]">{expanded ? "Expanded map controls are visible." : "Compact map view."}</p>
+          <p className="mt-3 text-[13px] text-[var(--color-on-surface-variant)]">{expanded ? "Expanded map controls are visible." : "Current navigation context."}</p>
         </SurfaceCard>
 
         <SurfaceCard className="p-0">
@@ -132,8 +160,31 @@ export function DashboardPage() {
           </ul>
         </SurfaceCard>
       </div>
-    </PrototypeShell>
+    </>
   );
+}
+
+function getDashboardMetricIcon(label: string) {
+  switch (label) {
+    case "System Health":
+      return <Shield size={18} aria-hidden="true" />;
+    case "Active Agents":
+      return <Bot size={18} aria-hidden="true" />;
+    case "Running Tasks":
+      return <RefreshCw size={18} aria-hidden="true" />;
+    case "Models":
+      return <Sparkles size={18} aria-hidden="true" />;
+    case "MCP Servers":
+      return <Network size={18} aria-hidden="true" />;
+    case "Skills":
+      return <Zap size={18} aria-hidden="true" />;
+    case "Apps":
+      return <FolderOpen size={18} aria-hidden="true" />;
+    case "Memory Items":
+      return <Database size={18} aria-hidden="true" />;
+    default:
+      return <Settings2 size={18} aria-hidden="true" />;
+  }
 }
 
 function TreeNode({ active, meta, root, title }: { active?: boolean; meta: string; root?: boolean; title: string }) {
@@ -170,10 +221,10 @@ function ImportApplicationPage({ initialSource }: { initialSource: ImportApplica
     <PrototypeShell activeItem="Apps">
       <div className="mx-auto max-w-3xl">
         {initialSource === "local" ? (
-          <a className="mb-6 inline-flex items-center gap-1 text-sm text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]" href="/apps">
+          <ClientLink className="mb-6 inline-flex items-center gap-1 text-sm text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]" href="/apps">
             <ArrowLeft size={16} aria-hidden="true" />
             Back to Apps
-          </a>
+          </ClientLink>
         ) : null}
         <SurfaceCard className="overflow-hidden p-0">
           <div className="border-b border-[var(--color-outline-variant)] px-8 py-6">
@@ -413,8 +464,10 @@ export function KnowledgeGraphDomainPage() {
 }
 
 export function LoginPage() {
+  const { t } = useTranslation(["auth", "common"]);
   const [captcha, setCaptcha] = useState("K7Q4");
-  const [status, setStatus] = useState("Enterprise access required");
+  const [status, setStatus] = useState(() => t("auth:status"));
+  const navigate = useNavigate();
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-[var(--color-background)] px-6 py-10 text-[var(--color-on-surface)]">
@@ -423,40 +476,40 @@ export function LoginPage() {
           <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-xl bg-[var(--color-primary)] text-white">
             <Sparkles size={22} aria-hidden="true" />
           </div>
-          <h1 className="text-2xl font-semibold">Tron</h1>
-          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">Sign in to the agentic operations console.</p>
+          <h1 className="text-2xl font-semibold">{t("auth:title")}</h1>
+          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{t("auth:subtitle")}</p>
         </div>
         <form className="space-y-5" onSubmit={(event) => {
           event.preventDefault();
-          setStatus("Entering workspace...");
-          window.location.assign("/dashboard");
+          setStatus(t("auth:signingIn"));
+          navigate("/dashboard");
         }}>
-          <Field label="Operator ID">
+          <Field label={t("auth:fields.operatorId")}>
             <TextInput placeholder="TRON-XXXX" />
           </Field>
-          <Field label="Passkey">
-            <TextInput type="password" placeholder="........" />
+          <Field label={t("auth:fields.passkey")}>
+            <TextInput type="password" placeholder={t("auth:passkeyPlaceholder")} />
           </Field>
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Captcha</span>
+              <span className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{t("auth:captcha.label")}</span>
               <Button size="sm" variant="ghost" type="button" onClick={() => setCaptcha((current) => (current === "K7Q4" ? "M2R8" : "K7Q4"))}>
                 <RefreshCw size={14} aria-hidden="true" />
-                Refresh
+                {t("common:actions.refresh")}
               </Button>
             </div>
             <div className="flex gap-3">
               <div className="flex w-1/3 items-center justify-center rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] font-mono text-lg font-semibold tracking-[0.2em]">{captcha}</div>
-              <TextInput className="w-2/3" placeholder="Enter code" />
+              <TextInput className="w-2/3" placeholder={t("auth:captcha.placeholder")} />
             </div>
           </div>
-          <Button className="w-full" type="submit">Sign In</Button>
+          <Button className="w-full" type="submit">{t("common:actions.signIn")}</Button>
           <div className="flex justify-between text-[13px] text-[var(--color-on-surface-variant)]">
-            <button type="button" onClick={() => setStatus("Passkey recovery link requested")}>Forgot passkey?</button>
+            <button type="button" onClick={() => setStatus(t("auth:recoveryRequested"))}>{t("auth:forgotPasskey")}</button>
             <span>{status}</span>
           </div>
         </form>
-        <p className="mt-10 text-center text-xs text-[var(--color-on-surface-variant)]">Copyright 2026 Tron Agentic. All rights reserved.</p>
+        <p className="mt-10 text-center text-xs text-[var(--color-on-surface-variant)]">{t("auth:copyright")}</p>
       </section>
     </main>
   );

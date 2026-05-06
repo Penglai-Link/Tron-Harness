@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Tron - Memory Management</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "on-secondary-container": "#626267",
+                      "inverse-primary": "#c8c6c5",
+                      "tertiary": "#000000",
+                      "primary": "#000000",
+                      "surface-container-highest": "#e5e2e1",
+                      "surface-container-lowest": "#ffffff",
+                      "inverse-surface": "#313030",
+                      "on-surface": "#1c1b1b",
+                      "on-secondary": "#ffffff",
+                      "on-primary-container": "#858383",
+                      "secondary": "#5e5e63",
+                      "error-container": "#ffdad6",
+                      "on-primary-fixed-variant": "#474746",
+                      "tertiary-fixed-dim": "#cac6c4",
+                      "surface-container-low": "#f7f3f2",
+                      "primary-container": "#1c1b1b",
+                      "tertiary-container": "#1c1b1a",
+                      "surface-container": "#f1edec",
+                      "on-tertiary-container": "#868382",
+                      "secondary-fixed-dim": "#c7c6cb",
+                      "secondary-fixed": "#e3e2e7",
+                      "surface-tint": "#5f5e5e",
+                      "secondary-container": "#e0dfe4",
+                      "on-tertiary-fixed": "#1c1b1a",
+                      "error": "#ba1a1a",
+                      "surface-container-high": "#ebe7e6",
+                      "on-primary-fixed": "#1c1b1b",
+                      "on-primary": "#ffffff",
+                      "background": "#fdf8f8",
+                      "surface-bright": "#fdf8f8",
+                      "on-secondary-fixed-variant": "#46464b",
+                      "surface": "#fdf8f8",
+                      "primary-fixed": "#e5e2e1",
+                      "on-secondary-fixed": "#1a1b1f",
+                      "on-tertiary-fixed-variant": "#484645",
+                      "surface-variant": "#e5e2e1",
+                      "on-error-container": "#93000a",
+                      "outline-variant": "#c4c7c7",
+                      "surface-dim": "#ddd9d8",
+                      "primary-fixed-dim": "#c8c6c5",
+                      "inverse-on-surface": "#f4f0ef",
+                      "on-background": "#1c1b1b",
+                      "outline": "#747878",
+                      "on-surface-variant": "#444748",
+                      "on-tertiary": "#ffffff",
+                      "on-error": "#ffffff",
+                      "tertiary-fixed": "#e6e2df"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.25rem",
+                      "lg": "0.5rem",
+                      "xl": "0.75rem",
+                      "full": "9999px"
+              },
+              "spacing": {
+                      "sm": "8px",
+                      "md": "16px",
+                      "margin": "24px",
+                      "xl": "40px",
+                      "gutter": "16px",
+                      "xs": "4px",
+                      "lg": "24px",
+                      "base": "4px"
+              },
+              "fontFamily": {
+                      "h2": ["Inter"],
+                      "body-sm": ["Inter"],
+                      "h1": ["Inter"],
+                      "body-md": ["Inter"],
+                      "body-lg": ["Inter"],
+                      "label-caps": ["Inter"],
+                      "tabular": ["Inter"],
+                      "display": ["Inter"]
+              },
+              "fontSize": {
+                      "h2": ["20px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "body-sm": ["13px", {"lineHeight": "1.4", "letterSpacing": "0", "fontWeight": "400"}],
+                      "h1": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                      "body-md": ["14px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}],
+                      "body-lg": ["16px", {"lineHeight": "1.5", "letterSpacing": "0", "fontWeight": "400"}],
+                      "label-caps": ["11px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "600"}],
+                      "tabular": ["13px", {"lineHeight": "1.4", "fontWeight": "400"}],
+                      "display": ["40px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "600"}]
+              }
+            }
+          }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-fill {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+</head>
+<body class="bg-background text-on-background font-body-md text-body-md antialiased flex min-h-screen selection:bg-surface-variant selection:text-on-surface overflow-hidden">
+<!-- Top Navigation -->
+<nav class="fixed top-0 left-0 w-full z-40 flex justify-between items-center px-6 h-14 bg-white/80 backdrop-blur-md dark:bg-gray-950/80 border-b border-gray-100 dark:border-gray-800 shadow-sm shadow-black/5 text-gray-900 dark:text-gray-100 font-['Inter'] text-sm antialiased">
+<div class="flex items-center gap-md">
+<span class="text-lg font-semibold tracking-tight text-gray-900 dark:text-white">Tron</span>
+<div class="ml-xl flex items-center bg-surface-container-low rounded-full px-sm py-xs border border-outline-variant w-64">
+<span class="material-symbols-outlined text-on-surface-variant text-[18px]">search</span>
+<input class="bg-transparent border-none focus:ring-0 text-body-sm font-body-sm text-on-surface w-full py-0" placeholder="Search..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-sm">
+<button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-gray-500 dark:text-gray-400">
+<span class="material-symbols-outlined text-[20px]">notifications</span>
+</button>
+<button class="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors text-gray-500 dark:text-gray-400">
+<span class="material-symbols-outlined text-[20px]">settings</span>
+</button>
+<img alt="User profile" class="w-8 h-8 rounded-full border border-outline-variant ml-sm cursor-pointer hover:opacity-80 transition-opacity" data-alt="Close up portrait of a professional man in soft natural lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBOjl4k-FX0qLmJp5ZVI1wDbBoOCmL5qyST4CEAOhnmfk88R1sAub1HF4tsjB24oUMtpvkq9O3SuhvF8u0jOmQWb-x330NlVNWT0FfF6GsqMoxREKbC29UJbVOJsfhYM7XPplpl_DDjAUcmvhc2sgUPQQhmxp-l_e1qKfeGdOhFeSievZl_yWo-KKUYgHVmCiTLynQH6vZCrb5LPAPpT1W1vvzUncxbzghteVa0Lz5wR4f7d2lf02BeRxkSBH5yYc4gAs0otJMWKKi8"/>
+</div>
+</nav>
+<!-- Side Navigation -->
+<aside class="fixed left-0 top-14 h-[calc(100vh-3.5rem)] w-[280px] border-r border-gray-100 dark:border-gray-800 bg-[#FFFFFF] dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-['Inter'] text-[13px] leading-tight flex flex-col py-4 px-3 overflow-y-auto hidden md:flex">
+<div class="px-3 mb-6 flex items-center gap-sm">
+<div class="w-8 h-8 rounded bg-primary text-on-primary flex items-center justify-center shadow-sm">
+<span class="material-symbols-outlined text-[18px] icon-fill">smart_toy</span>
+</div>
+<div>
+<h2 class="font-bold text-gray-900 dark:text-white">Main Console</h2>
+<p class="text-gray-500 text-[11px]">Enterprise AI</p>
+</div>
+</div>
+<nav class="flex flex-col gap-xs">
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">assignment</span>
+<span>Tasks</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">bolt</span>
+<span>Automations</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">apps</span>
+<span>Apps</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">chat</span>
+<span>Chats</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">variables</span>
+<span>Variables</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">model_training</span>
+<span>Models</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">star</span>
+<span>Skills</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">settings_input_component</span>
+<span>MCP</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-white font-medium scale-100 active:scale-[0.98] transition-transform" href="#">
+<span class="material-symbols-outlined text-[18px] icon-fill">memory</span>
+<span>Memory</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">account_tree</span>
+<span>Graph</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">monitoring</span>
+<span>Observability</span>
+</a>
+<div class="mt-6 mb-2 px-3">
+<span class="font-label-caps text-label-caps text-gray-400">ADMIN</span>
+</div>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">admin_panel_settings</span>
+<span>Workspace Admin</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">manage_accounts</span>
+<span>User Admin</span>
+</a>
+<a class="flex items-center gap-sm px-3 py-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-900 transition-colors scale-100 active:scale-[0.98]" href="#">
+<span class="material-symbols-outlined text-[18px]">vpn_key</span>
+<span>Permissions</span>
+</a>
+</nav>
+</aside>
+<!-- Main Canvas -->
+<div class="flex flex-1 pt-14 md:ml-[280px] h-screen overflow-hidden">
+<main class="flex-1 flex flex-col pt-xl px-margin pb-xl gap-lg overflow-y-auto">
+<!-- Page Header -->
+<header class="flex items-center justify-between w-full shrink-0">
+<div>
+<h1 class="font-h1 text-h1 text-on-surface">Memory Repository</h1>
+<p class="font-body-md text-body-md text-on-surface-variant mt-1">Manage, query, and structure agent memory fragments.</p>
+</div>
+<div class="flex items-center gap-sm">
+<button class="px-md py-sm bg-surface rounded-DEFAULT border border-outline-variant font-body-sm text-body-sm text-on-surface hover:bg-surface-container transition-colors flex items-center gap-xs shadow-sm">
+<span class="material-symbols-outlined text-[16px]">upload_file</span>
+                    Import Data
+                </button>
+<button class="px-md py-sm bg-primary rounded-DEFAULT text-on-primary font-body-sm text-body-sm hover:opacity-90 transition-opacity flex items-center gap-xs shadow-sm">
+<span class="material-symbols-outlined text-[16px]">sync</span>
+                    Sync Indices
+                </button>
+</div>
+</header>
+<!-- Advanced Search & Filter Studio -->
+<section class="bg-surface rounded-xl border border-outline-variant p-md flex flex-col gap-md shadow-sm">
+<!-- Search & Strategy Row -->
+<div class="flex flex-col md:flex-row gap-sm items-start md:items-center w-full">
+<div class="relative flex-grow">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-on-surface-variant text-[20px]">search</span>
+</div>
+<input class="block w-full pl-10 pr-3 py-2 border border-outline-variant rounded-DEFAULT bg-surface text-on-surface placeholder-on-surface-variant focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary font-body-md text-body-md transition-all shadow-sm" placeholder="Query memory vectors via natural language or exact match..." type="text"/>
+</div>
+<div class="flex items-center bg-surface-container rounded-DEFAULT p-xs border border-outline-variant shrink-0">
+<button class="px-3 py-1 rounded-sm font-label-caps text-label-caps bg-surface shadow-sm text-on-surface">Hybrid</button>
+<button class="px-3 py-1 rounded-sm font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors">Semantic Only</button>
+<button class="px-3 py-1 rounded-sm font-label-caps text-label-caps text-on-surface-variant hover:text-on-surface transition-colors">Keyword Only</button>
+</div>
+</div>
+<!-- Filter Chips Row -->
+<div class="flex items-center gap-sm flex-wrap">
+<span class="font-label-caps text-label-caps text-on-surface-variant mr-1">Active Filters:</span>
+<div class="inline-flex items-center gap-xs bg-surface-container-high rounded-full pl-3 pr-2 py-1 border border-outline-variant/50">
+<span class="font-body-sm text-body-sm text-on-surface">Namespace: <span class="font-medium">UserPrefs</span></span>
+<button class="text-on-surface-variant hover:text-on-surface rounded-full p-xs hover:bg-surface-variant transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+</div>
+<div class="inline-flex items-center gap-xs bg-surface-container-high rounded-full pl-3 pr-2 py-1 border border-outline-variant/50">
+<span class="font-body-sm text-body-sm text-on-surface">Entity: <span class="font-medium">usr_982x</span></span>
+<button class="text-on-surface-variant hover:text-on-surface rounded-full p-xs hover:bg-surface-variant transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+</div>
+<div class="inline-flex items-center gap-xs bg-surface-container-high rounded-full pl-3 pr-2 py-1 border border-outline-variant/50">
+<span class="font-body-sm text-body-sm text-on-surface">Confidence: <span class="font-medium">&gt; 0.85</span></span>
+<button class="text-on-surface-variant hover:text-on-surface rounded-full p-xs hover:bg-surface-variant transition-colors flex items-center justify-center">
+<span class="material-symbols-outlined text-[14px]">close</span>
+</button>
+</div>
+<button class="ml-auto inline-flex items-center gap-xs font-body-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors px-2 py-1">
+<span class="material-symbols-outlined text-[16px]">add</span>
+                    Add Filter
+                </button>
+</div>
+</section>
+<!-- Data Density Table -->
+<section class="bg-surface border border-outline-variant rounded-xl flex flex-col shadow-sm overflow-hidden flex-grow">
+<div class="grid grid-cols-[minmax(300px,2fr)_1fr_1fr_120px_100px_120px_100px] gap-md items-center bg-surface-container-low border-b border-outline-variant px-md py-sm">
+<div class="font-label-caps text-label-caps text-on-surface-variant">Content Snippet</div>
+<div class="font-label-caps text-label-caps text-on-surface-variant">Namespace</div>
+<div class="font-label-caps text-label-caps text-on-surface-variant">Entity</div>
+<div class="font-label-caps text-label-caps text-on-surface-variant">Source</div>
+<div class="font-label-caps text-label-caps text-on-surface-variant text-right">Confidence</div>
+<div class="font-label-caps text-label-caps text-on-surface-variant">Created</div>
+<div class="font-label-caps text-label-caps text-on-surface-variant text-center">Inheritance</div>
+</div>
+<div class="flex flex-col">
+<div class="grid grid-cols-[minmax(300px,2fr)_1fr_1fr_120px_100px_120px_100px] gap-md items-center border-b border-outline-variant/50 px-md py-[10px] hover:bg-surface-container-lowest transition-colors group cursor-pointer bg-surface-container-low border-l-4 border-l-primary">
+<div class="font-body-sm text-body-sm text-on-surface truncate pr-4">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant inline-block align-text-bottom mr-1">data_object</span>
+                        User prefers terse, direct responses without conversational filler.
+                    </div>
+<div class="font-body-sm text-body-sm text-on-surface-variant truncate">UserPrefs</div>
+<div class="font-tabular text-tabular text-on-surface truncate">usr_982x</div>
+<div class="font-body-sm text-body-sm text-on-surface flex items-center gap-xs"><span class="material-symbols-outlined text-[16px] text-gray-500">domain</span>Core Workspace</div>
+<div class="font-tabular text-tabular text-on-surface text-right">0.98</div>
+<div class="font-tabular text-tabular text-on-surface-variant">2023-10-27</div>
+<div class="flex justify-center">
+<span class="inline-flex items-center px-2 py-[2px] rounded-full text-[10px] font-semibold tracking-wider uppercase bg-surface-container-highest text-on-surface">Local</span>
+</div>
+</div>
+<div class="grid grid-cols-[minmax(300px,2fr)_1fr_1fr_120px_100px_120px_100px] gap-md items-center border-b border-outline-variant/50 px-md py-[10px] hover:bg-surface-container-lowest transition-colors group cursor-pointer">
+<div class="font-body-sm text-body-sm text-on-surface truncate pr-4">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant inline-block align-text-bottom mr-1">settings_system_daydream</span>
+                        System default tone set to professional and helpful.
+                    </div>
+<div class="font-body-sm text-body-sm text-on-surface-variant truncate">SysConfig</div>
+<div class="font-tabular text-tabular text-on-surface truncate">global_v1</div>
+<div class="font-body-sm text-body-sm text-on-surface flex items-center gap-xs"><span class="material-symbols-outlined text-[16px] text-gray-500">apps</span>Agent Hub</div>
+<div class="font-tabular text-tabular text-on-surface text-right">1.00</div>
+<div class="font-tabular text-tabular text-on-surface-variant">2023-01-15</div>
+<div class="flex justify-center">
+<span class="inline-flex items-center px-2 py-[2px] rounded-full text-[10px] font-semibold tracking-wider uppercase bg-surface-variant text-on-surface-variant">Inherited</span>
+</div>
+</div>
+<div class="grid grid-cols-[minmax(300px,2fr)_1fr_1fr_120px_100px_120px_100px] gap-md items-center border-b border-outline-variant/50 px-md py-[10px] hover:bg-surface-container-lowest transition-colors group cursor-pointer">
+<div class="font-body-sm text-body-sm text-on-surface truncate pr-4">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant inline-block align-text-bottom mr-1">shield</span>
+                        Project Alpha requires strict adherence to security protocols...
+                    </div>
+<div class="font-body-sm text-body-sm text-on-surface-variant truncate">ContextDocs</div>
+<div class="font-tabular text-tabular text-on-surface truncate">proj_alpha</div>
+<div class="font-body-sm text-body-sm text-on-surface flex items-center gap-xs"><span class="material-symbols-outlined text-[16px] text-gray-500">apps</span>Data Extraction App</div>
+<div class="font-tabular text-tabular text-on-surface text-right">0.92</div>
+<div class="font-tabular text-tabular text-on-surface-variant">2023-10-20</div>
+<div class="flex justify-center">
+<span class="inline-flex items-center px-2 py-[2px] rounded-full text-[10px] font-semibold tracking-wider uppercase bg-primary text-on-primary">Override</span>
+</div>
+</div>
+<div class="grid grid-cols-[minmax(300px,2fr)_1fr_1fr_120px_100px_120px_100px] gap-md items-center border-b border-outline-variant/50 px-md py-[10px] hover:bg-surface-container-lowest transition-colors group cursor-pointer">
+<div class="font-body-sm text-body-sm text-on-surface truncate pr-4">
+<span class="material-symbols-outlined text-[14px] text-on-surface-variant inline-block align-text-bottom mr-1">insights</span>
+                        User frequently asks about deployment pipeline statuses on...
+                    </div>
+<div class="font-body-sm text-body-sm text-on-surface-variant truncate">BehavioralInsights</div>
+<div class="font-tabular text-tabular text-on-surface truncate">usr_982x</div>
+<div class="font-body-sm text-body-sm text-on-surface flex items-center gap-xs"><span class="material-symbols-outlined text-[16px] text-gray-500">domain</span>Core Workspace</div>
+<div class="font-tabular text-tabular text-on-surface text-right">0.86</div>
+<div class="font-tabular text-tabular text-on-surface-variant">2023-10-26</div>
+<div class="flex justify-center">
+<span class="inline-flex items-center px-2 py-[2px] rounded-full text-[10px] font-semibold tracking-wider uppercase bg-surface-container-highest text-on-surface">Local</span>
+</div>
+</div>
+</div>
+<div class="border-t border-outline-variant bg-surface-container-low px-md py-sm flex items-center justify-between mt-auto">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Showing 1-5 of 2,491 fragments</span>
+<div class="flex items-center gap-xs">
+<button class="p-1 rounded-DEFAULT hover:bg-surface-variant text-on-surface-variant transition-colors">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<button class="p-1 rounded-DEFAULT hover:bg-surface-variant text-on-surface transition-colors">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</section>
+</main>
+<!-- Inspector Panel -->
+<aside class="w-[400px] bg-white border-l border-outline-variant flex flex-col shadow-[-4px_0_12px_rgba(0,0,0,0.02)] transition-all">
+<div class="p-lg border-b border-outline-variant flex items-center justify-between">
+<h2 class="font-h2 text-h2 text-on-surface">Memory Details</h2>
+<button class="p-1 hover:bg-surface-container rounded-full transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant">close</span>
+</button>
+</div>
+<div class="flex-grow overflow-y-auto p-lg flex flex-col gap-xl">
+<!-- Content Section -->
+<div class="flex flex-col gap-sm">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Content Snippet</span>
+<div class="p-md bg-surface-container-low rounded-lg border border-outline-variant text-on-surface leading-relaxed font-body-md">
+                    User prefers terse, direct responses without conversational filler. This includes removing pleasantries such as "I hope you're having a great day" or "Sure, I can help with that." The user values efficiency and information density above all else.
+                </div>
+</div>
+<!-- Metadata Section -->
+<div class="flex flex-col gap-md">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Metadata</span>
+<div class="grid grid-cols-2 gap-y-lg border border-outline-variant rounded-lg p-md">
+<div>
+<p class="text-[11px] text-on-surface-variant mb-1">Entity</p>
+<p class="font-tabular text-tabular text-on-surface">usr_982x</p>
+</div>
+<div>
+<p class="text-[11px] text-on-surface-variant mb-1">Namespace</p>
+<p class="font-body-sm text-body-sm text-on-surface">UserPrefs</p>
+</div>
+<div>
+<p class="text-[11px] text-on-surface-variant mb-1">Confidence</p>
+<p class="font-tabular text-tabular text-on-surface">0.98</p>
+</div>
+<div>
+<p class="text-[11px] text-on-surface-variant mb-1">Inheritance</p>
+<span class="inline-flex items-center px-2 py-[2px] rounded-full text-[10px] font-semibold bg-surface-container-highest text-on-surface">LOCAL</span>
+</div>
+<div class="col-span-2">
+<p class="text-[11px] text-on-surface-variant mb-1">Created</p>
+<p class="font-tabular text-tabular text-on-surface">2023-10-27 14:22:45 UTC</p>
+</div>
+</div>
+</div>
+<!-- Source Info -->
+<div class="flex flex-col gap-sm">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Origin</span>
+<div class="flex items-center gap-sm p-md bg-white border border-outline-variant rounded-lg">
+<div class="w-8 h-8 rounded bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">domain</span>
+</div>
+<div>
+<p class="text-body-sm font-medium text-on-surface">Core Workspace</p>
+<p class="text-[11px] text-on-surface-variant">Primary Environment</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Actions Footer -->
+<div class="p-md border-t border-outline-variant bg-surface-container-lowest flex gap-sm">
+<button class="flex-1 py-2 px-4 border border-outline-variant rounded-DEFAULT font-body-sm text-body-sm hover:bg-surface-container transition-colors">Edit Fragment</button>
+<button class="flex-1 py-2 px-4 bg-primary text-on-primary rounded-DEFAULT font-body-sm text-body-sm hover:opacity-90 transition-opacity">Invalidate</button>
+</div>
+</aside>
+</div>
+</body></html>

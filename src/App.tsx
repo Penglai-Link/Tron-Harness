@@ -1,7 +1,10 @@
 import { ArrowRight, LayoutDashboard } from "lucide-react";
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
+import { TronShell, tronNavigation } from "@/components/tron";
 import { Button } from "@/components/ui/button";
+import { ClientLink, ClientRouterProvider, useRouteLocation } from "@/lib/client-router";
 import { prototypeRoutes } from "@/lib/prototype-routes";
 import { DesignStandardPage } from "@/pages/design-standard";
 import { prototypePagesA } from "@/pages/prototypes/prototype-pages-a";
@@ -17,40 +20,51 @@ const prototypePageComponents: Record<string, PrototypePageComponent> = {
   ...prototypePagesC,
 };
 
-function resolvePrototypeComponent(pathname: string, search: string) {
+function resolvePrototypeRoute(pathname: string, search: string) {
   const exactRoute = `${pathname}${search}`;
-  const route = prototypeRoutes.find((item) => item.route === exactRoute) ?? prototypeRoutes.find((item) => item.route === pathname);
+  const route =
+    prototypeRoutes.find((item) => item.route === exactRoute) ??
+    prototypeRoutes.find((item) => item.route === pathname) ??
+    (pathname === "/chats" ? prototypeRoutes.find((item) => item.route === "/chats/8842-alpha") : undefined);
 
-  return route ? prototypePageComponents[route.prototype] : undefined;
+  const Component = route ? prototypePageComponents[route.prototype] : undefined;
+
+  return route && Component ? { Component, route } : undefined;
+}
+
+function resolveActiveItem(pathname: string) {
+  return tronNavigation.flatMap((section) => section.items).find((item) => item.href === pathname)?.label ?? "Dashboard";
 }
 
 function HomePage() {
+  const { t } = useTranslation("home");
+
   return (
     <main className="min-h-screen bg-[var(--color-background)] px-6 py-8 text-[var(--color-on-surface)]">
       <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl flex-col justify-center gap-8">
         <div className="max-w-3xl">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[var(--color-outline-variant)] bg-white px-3 py-1 text-sm text-[var(--color-on-surface-variant)] shadow-sm">
             <LayoutDashboard size={16} aria-hidden="true" />
-            Tron frontend workspace
+            {t("badge")}
           </div>
           <h1 className="text-4xl font-semibold leading-tight tracking-normal text-[var(--color-on-surface)]">
-            Enterprise agent governance console
+            {t("title")}
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-7 text-[var(--color-on-surface-variant)]">
-            This Vite workspace is initialized for the Tron onboarding flow. The first routable artifact is the design-standard preview extracted from the supplied design docs.
+            {t("description")}
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild>
-              <a href="/design-standard">
-                Open design standard
+              <ClientLink href="/design-standard">
+                {t("cta.designStandard")}
                 <ArrowRight size={16} aria-hidden="true" />
-              </a>
+              </ClientLink>
             </Button>
             <Button asChild variant="secondary">
-              <a href="/shared-shell-preview">
-                Open shared shell
+              <ClientLink href="/shared-shell-preview">
+                {t("cta.sharedShell")}
                 <ArrowRight size={16} aria-hidden="true" />
-              </a>
+              </ClientLink>
             </Button>
           </div>
         </div>
@@ -59,11 +73,25 @@ function HomePage() {
   );
 }
 
-export function App() {
-  const path = window.location.pathname;
-  const search = window.location.search;
+function ConsoleFallbackPage() {
+  const { t } = useTranslation("console");
 
-  if (path === "/") {
+  return (
+    <section className="flex min-h-[calc(100vh-7rem)] items-center justify-center">
+      <div className="max-w-xl text-center">
+        <h1 className="text-2xl font-semibold">{t("fallback.title")}</h1>
+        <p className="mt-3 text-sm leading-6 text-[var(--color-on-surface-variant)]">
+          {t("fallback.description")}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function RoutedApp() {
+  const { pathname: path, search } = useRouteLocation();
+
+  if (path === "/" || path === "/login") {
     return <LoginPage />;
   }
 
@@ -76,13 +104,42 @@ export function App() {
   }
 
   if (path === "/tasks/import") {
-    return <TasksImportPage />;
+    return (
+      <TronShell activeItem="Tasks">
+        <TasksImportPage />
+      </TronShell>
+    );
   }
 
-  const PrototypeComponent = resolvePrototypeComponent(path, search);
-  if (PrototypeComponent) {
-    return <PrototypeComponent />;
+  const resolved = resolvePrototypeRoute(path, search);
+  if (resolved) {
+    const { Component, route } = resolved;
+    if (route.prototype === "login_tron_light_theme_centered") {
+      return <Component />;
+    }
+
+    return (
+      <TronShell activeItem={route.activeNav}>
+        <Component />
+      </TronShell>
+    );
+  }
+
+  if (path.startsWith("/")) {
+    return (
+      <TronShell activeItem={resolveActiveItem(path)}>
+        <ConsoleFallbackPage />
+      </TronShell>
+    );
   }
 
   return <HomePage />;
+}
+
+export function App() {
+  return (
+    <ClientRouterProvider>
+      <RoutedApp />
+    </ClientRouterProvider>
+  );
 }
