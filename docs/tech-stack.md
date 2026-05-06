@@ -42,6 +42,7 @@ UI is built from reusable and composable components before assembling pages and 
 
 - Component-first architecture
 - Reusable and composable UI components
+- Organize pages by route domain
 - Strong typing with TypeScript
 - UI primitives based on shadcn/ui, Radix UI, and Tailwind CSS
 - All data-dependent components use mock data during frontend development
