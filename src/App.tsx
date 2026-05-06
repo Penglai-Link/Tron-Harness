@@ -4,19 +4,19 @@ import { useTranslation } from "react-i18next";
 import { TronShell, tronNavigation } from "@/components/tron";
 import { Button } from "@/components/ui/button";
 import { ClientLink, ClientRouterProvider, useRouteLocation } from "@/lib/client-router";
-import { consoleRoutes } from "@/lib/console-routes";
+import { appRoutes } from "@/lib/app-routes";
 import { DesignStandardPage } from "@/pages/design-standard";
-import { consolePages, LoginPage, TasksImportPage } from "@/pages/console";
+import { LoginPage, routePages, TasksImportPage } from "@/pages/page-registry";
 import { SharedShellPreviewPage } from "@/pages/shared-shell-preview";
 
-function resolveConsoleRoute(pathname: string, search: string) {
+function resolveAppRoute(pathname: string, search: string) {
   const exactRoute = `${pathname}${search}`;
   const route =
-    consoleRoutes.find((item) => item.route === exactRoute) ??
-    consoleRoutes.find((item) => item.route === pathname) ??
-    (pathname === "/chats" ? consoleRoutes.find((item) => item.route === "/chats/8842-alpha") : undefined);
+    appRoutes.find((item) => item.route === exactRoute) ??
+    appRoutes.find((item) => item.route === pathname) ??
+    (pathname === "/chats" ? appRoutes.find((item) => item.route === "/chats/8842-alpha") : undefined);
 
-  const Component = route ? consolePages[route.pageId] : undefined;
+  const Component = route ? routePages[route.pageId] : undefined;
 
   return route && Component ? { Component, route } : undefined;
 }
@@ -100,7 +100,7 @@ function RoutedApp() {
     );
   }
 
-  const resolved = resolveConsoleRoute(path, search);
+  const resolved = resolveAppRoute(path, search);
   if (resolved) {
     const { Component, route } = resolved;
     if (route.pageId === "auth.login") {

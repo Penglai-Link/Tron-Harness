@@ -48,7 +48,7 @@ import {
   type ModelRegistryItem,
 } from "@/services/console/workspace-data";
 
-function ConsolePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
+function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
   return (
     <TronShell activeItem={activeItem} searchPlaceholder="Search Tron...">
       {children}
@@ -73,7 +73,7 @@ function ImportApplicationPage({ initialSource }: { initialSource: ImportApplica
   }
 
   return (
-    <ConsolePageShell activeItem="Apps">
+    <RoutePageShell activeItem="Apps">
       <div className="mx-auto max-w-3xl">
         {initialSource === "local" ? (
           <ClientLink className="mb-6 inline-flex items-center gap-1 text-sm text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]" href="/apps">
@@ -162,10 +162,10 @@ function ImportApplicationPage({ initialSource }: { initialSource: ImportApplica
           </div>
         </SurfaceCard>
       </div>
-    </ConsolePageShell>
+    </RoutePageShell>
   );
 }
 
-export function ImportApplicationLocalPage() {
-  return <ImportApplicationPage initialSource="local" />;
+export function ImportApplicationGithubPage() {
+  return <ImportApplicationPage initialSource="github" />;
 }

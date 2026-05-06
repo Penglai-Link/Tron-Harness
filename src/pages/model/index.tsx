@@ -48,7 +48,7 @@ import {
   type ModelRegistryItem,
 } from "@/services/console/workspace-data";
 
-function ConsolePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
+function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
   return (
     <TronShell activeItem={activeItem} searchPlaceholder="Search Tron...">
       {children}
@@ -98,7 +98,7 @@ export function ModelRegistryPage() {
   const selected = models.find((model) => model.id === selectedId) ?? models[0];
 
   return (
-    <ConsolePageShell activeItem="Models">
+    <RoutePageShell activeItem="Models">
       <div className="grid min-h-[740px] gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <section>
           <PageHeader title="Model Registry" description="Manage AI vendors, configurations, and inheritance rules." actions={<Button onClick={() => setNotice("Add model workflow opened")}><Plus size={16} />Add Model</Button>} />
@@ -132,6 +132,6 @@ export function ModelRegistryPage() {
         </section>
         <ModelInspector model={selected} />
       </div>
-    </ConsolePageShell>
+    </RoutePageShell>
   );
 }

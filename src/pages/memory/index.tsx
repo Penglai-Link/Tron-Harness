@@ -48,7 +48,7 @@ import {
   type ModelRegistryItem,
 } from "@/services/console/workspace-data";
 
-function ConsolePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
+function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
   return (
     <TronShell activeItem={activeItem} searchPlaceholder="Search Tron...">
       {children}
@@ -94,7 +94,7 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
   );
 
   return (
-    <ConsolePageShell activeItem="Memory">
+    <RoutePageShell activeItem="Memory">
       <PageHeader
         title="Memory Repository"
         description="Manage, query, and structure agent memory fragments."
@@ -123,7 +123,7 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
         </div>
       </SurfaceCard>
       {details ? <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">{table}<MemoryInspector fragment={selected} /></div> : table}
-    </ConsolePageShell>
+    </RoutePageShell>
   );
 }
 
@@ -153,6 +153,6 @@ function Meta({ label, value }: { label: string; value: string }) {
   return <div><p className="text-[11px] text-[var(--color-on-surface-variant)]">{label}</p><p className="mt-1 font-medium">{value}</p></div>;
 }
 
-export function MemoryDetailsPage() {
-  return <MemoryRepository details />;
+export function MemoryPage() {
+  return <MemoryRepository />;
 }

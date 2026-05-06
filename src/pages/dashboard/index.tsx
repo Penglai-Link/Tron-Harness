@@ -48,7 +48,7 @@ import {
   type ModelRegistryItem,
 } from "@/services/console/workspace-data";
 
-function ConsolePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
+function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
   return (
     <TronShell activeItem={activeItem} searchPlaceholder="Search Tron...">
       {children}
@@ -212,8 +212,8 @@ function TreeNode({ active, meta, root, title }: { active?: boolean; meta: strin
 
 export function DashboardPage() {
   return (
-    <ConsolePageShell activeItem="Dashboard">
+    <RoutePageShell activeItem="Dashboard">
       <DashboardContent />
-    </ConsolePageShell>
+    </RoutePageShell>
   );
 }

@@ -1,4 +1,4 @@
-export type ConsolePageArchetype =
+export type AppPageArchetype =
   | "auth"
   | "dashboard"
   | "data-table"
@@ -11,15 +11,15 @@ export type ConsolePageArchetype =
   | "detail"
   | "permission-grid";
 
-export interface ConsoleRoute {
+export interface AppRoute {
   pageId: string;
   route: string;
   activeNav: string;
   title: string;
-  archetype: ConsolePageArchetype;
+  archetype: AppPageArchetype;
 }
 
-export const consoleRoutes: ConsoleRoute[] = [
+export const appRoutes: AppRoute[] = [
   { pageId: "models.new", route: "/models/new", activeNav: "Models", title: "Add Model", archetype: "form-inspector" },
   { pageId: "apps.index", route: "/apps", activeNav: "Apps", title: "App Management", archetype: "data-table" },
   { pageId: "admin.auditLogs", route: "/admin/audit-logs", activeNav: "Audit Logs", title: "Audit Logs", archetype: "data-table" },
