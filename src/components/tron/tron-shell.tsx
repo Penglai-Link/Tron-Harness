@@ -139,7 +139,7 @@ const primarySpaceMocks: PrimarySpace[] = [
   {
     id: "ps-research",
     name: "Research Workspace",
-    description: "R&D model evaluation, prompt experiments, and internal prototypes.",
+    description: "R&D model evaluation, prompt experiments, and internal workspaces.",
     region: "APAC",
     status: "Active",
   },

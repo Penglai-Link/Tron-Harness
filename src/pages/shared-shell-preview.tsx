@@ -42,7 +42,7 @@ export function SharedShellPreviewPage() {
           <SurfaceCard className="rounded-xl p-4 shadow-none">
             <p className="text-sm font-semibold">Step 2 shared components</p>
             <p className="mt-2 text-[13px] leading-5 text-[var(--color-on-surface-variant)]">
-              Shell, page headers, tables, forms, tabs, badges, toggles, cards, and inspector panels are ready for prototype-specific composition.
+              Shell, page headers, tables, forms, tabs, badges, toggles, cards, and inspector panels are ready for console-page composition.
             </p>
           </SurfaceCard>
           <div className="space-y-3 rounded-xl bg-[var(--color-surface-container-low)] p-4">
@@ -61,7 +61,7 @@ export function SharedShellPreviewPage() {
           { label: "Tron", href: "/dashboard" },
           { label: "Shared Shell Preview" },
         ]}
-        description="Reusable layout and primitive contracts derived from the PRD, design system, and the full Stitch prototype scan."
+        description="Reusable layout and primitive contracts derived from the PRD, design system, and the full Stitch design scan."
         eyebrow="Frontend onboarding / Step 2"
         status="Shared contract"
         title="Workspace console foundation"
@@ -79,7 +79,7 @@ export function SharedShellPreviewPage() {
       />
 
       <div className="grid gap-4 xl:grid-cols-3">
-        <MetricCard icon={<Activity size={18} aria-hidden="true" />} label="Prototype pages" trend="All pages include code.html and screen.png" value="30" />
+        <MetricCard icon={<Activity size={18} aria-hidden="true" />} label="Console pages" trend="Routed pages are organized by product area" value="30" />
         <MetricCard icon={<ShieldCheck size={18} aria-hidden="true" />} label="Primary archetypes" trend="Kanban, split-pane, graph, chat, forms, tables" value="9" />
         <MetricCard label="Shell width" trend="Matches design doc fixed agent sidebar" value="280px" />
       </div>

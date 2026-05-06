@@ -1,33 +1,22 @@
 import { ArrowRight, LayoutDashboard } from "lucide-react";
-import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import { TronShell, tronNavigation } from "@/components/tron";
 import { Button } from "@/components/ui/button";
 import { ClientLink, ClientRouterProvider, useRouteLocation } from "@/lib/client-router";
-import { prototypeRoutes } from "@/lib/prototype-routes";
+import { consoleRoutes } from "@/lib/console-routes";
 import { DesignStandardPage } from "@/pages/design-standard";
-import { prototypePagesA } from "@/pages/prototypes/prototype-pages-a";
-import { LoginPage, prototypePagesB } from "@/pages/prototypes/prototype-pages-b";
-import { prototypePagesC, TasksImportPage } from "@/pages/prototypes/prototype-pages-c";
+import { consolePages, LoginPage, TasksImportPage } from "@/pages/console";
 import { SharedShellPreviewPage } from "@/pages/shared-shell-preview";
 
-type PrototypePageComponent = () => ReactNode;
-
-const prototypePageComponents: Record<string, PrototypePageComponent> = {
-  ...prototypePagesA,
-  ...prototypePagesB,
-  ...prototypePagesC,
-};
-
-function resolvePrototypeRoute(pathname: string, search: string) {
+function resolveConsoleRoute(pathname: string, search: string) {
   const exactRoute = `${pathname}${search}`;
   const route =
-    prototypeRoutes.find((item) => item.route === exactRoute) ??
-    prototypeRoutes.find((item) => item.route === pathname) ??
-    (pathname === "/chats" ? prototypeRoutes.find((item) => item.route === "/chats/8842-alpha") : undefined);
+    consoleRoutes.find((item) => item.route === exactRoute) ??
+    consoleRoutes.find((item) => item.route === pathname) ??
+    (pathname === "/chats" ? consoleRoutes.find((item) => item.route === "/chats/8842-alpha") : undefined);
 
-  const Component = route ? prototypePageComponents[route.prototype] : undefined;
+  const Component = route ? consolePages[route.pageId] : undefined;
 
   return route && Component ? { Component, route } : undefined;
 }
@@ -111,10 +100,10 @@ function RoutedApp() {
     );
   }
 
-  const resolved = resolvePrototypeRoute(path, search);
+  const resolved = resolveConsoleRoute(path, search);
   if (resolved) {
     const { Component, route } = resolved;
-    if (route.prototype === "login_tron_light_theme_centered") {
+    if (route.pageId === "auth.login") {
       return <Component />;
     }
 
