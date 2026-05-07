@@ -1,15 +1,15 @@
 import { getDashboardData } from "@/domain/dashboard/mock/data";
 
-import { useServiceQuery } from "@/domain/service-config";
+import { useServiceQuery } from "@/shared/api/serviceConfig";
 import type {
   DashboardMetric,
   DashboardActivity,
-} from "@/domain/dashboard/model/model";
+} from "@/domain/dashboard/model/DashboardModel";
 
 export type {
   DashboardMetric,
   DashboardActivity
-} from "@/domain/dashboard/model/model";
+} from "@/domain/dashboard/model/DashboardModel";
 
 export const dashboardApiEndpoints = {
   getDashboardOverview: "GET /api/v1/dashboard/overview",

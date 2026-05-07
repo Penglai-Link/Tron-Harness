@@ -2,14 +2,14 @@ import {
   getPromptVariables,
   listPrompts,
 } from "@/domain/prompt/mock/data";
-import { useServiceQuery } from "@/domain/service-config";
+import { useServiceQuery } from "@/shared/api/serviceConfig";
 export type {
   StatusTone
-} from "@/domain/prompt/model/enum";
+} from "@/domain/prompt/constants/StatusTone";
 export type {
   PromptVariable,
   PromptRecord
-} from "@/domain/prompt/model/model";
+} from "@/domain/prompt/model/PromptModel";
 
 export const promptApiEndpoints = {
   listPrompts: "GET /api/v1/prompts",

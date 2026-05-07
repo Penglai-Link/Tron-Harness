@@ -1,4 +1,4 @@
-import type { MemoryFragment } from "@/domain/memory/model/model";
+import type { MemoryFragment } from "@/domain/memory/model/MemoryModel";
 
 export function getMemoryFragments(): MemoryFragment[] {
   return [

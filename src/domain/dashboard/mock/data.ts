@@ -1,7 +1,7 @@
 import type {
   DashboardMetric,
   DashboardActivity,
-} from "@/domain/dashboard/model/model";
+} from "@/domain/dashboard/model/DashboardModel";
 
 export function getDashboardData() {
   return {

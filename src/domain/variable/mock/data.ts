@@ -1,4 +1,4 @@
-import type { VariableRecord } from "@/domain/variable/model/model";
+import type { VariableRecord } from "@/domain/variable/model/VariableModel";
 
 const variables: VariableRecord[] = [
   { id: "openai", key: "OPENAI_API_KEY", scope: "Workspace", type: "Secret", valuePreview: "sk-...a92f", status: "Active", updated: "Today", usage: ["LLM Router System", "Code Review Guidelines"] },

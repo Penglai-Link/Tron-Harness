@@ -4,13 +4,13 @@ import {
   listRoles,
   listUsers,
 } from "@/domain/admin/mock/data";
-import { useServiceQuery } from "@/domain/service-config";
+import { useServiceQuery } from "@/shared/api/serviceConfig";
 
 export type {
   AuditLogRecord,
   RoleRecord,
   UserRecord
-} from "@/domain/admin/model/model";
+} from "@/domain/admin/model/AdminModel";
 
 export const adminApiEndpoints = {
   listAuditLogs: "GET /api/v1/admin/audit-logs",

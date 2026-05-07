@@ -2,7 +2,7 @@ import type {
   AuditLogRecord,
   RoleRecord,
   UserRecord,
-} from "@/domain/admin/model/model";
+} from "@/domain/admin/model/AdminModel";
 
 const auditLogs: AuditLogRecord[] = [
   { id: "log-9131", timestamp: "2026-05-01 14:42:18", actor: "jdoe@tron.com", action: "Role updated", resourceId: "role.workspace.admin", status: "Success", ipAddress: "10.24.8.12" },

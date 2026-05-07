@@ -1,7 +1,7 @@
 import type {
   ChatSessionGroup,
   ChatMessage,
-} from "@/domain/chat/model/model";
+} from "@/domain/chat/model/ChatModel";
 
 const chatGroups: ChatSessionGroup[] = [
   {

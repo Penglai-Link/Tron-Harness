@@ -1,11 +1,11 @@
 import { getMemoryFragments } from "@/domain/memory/mock/data";
 
-import { useServiceQuery } from "@/domain/service-config";
-import type { MemoryFragment } from "@/domain/memory/model/model";
+import { useServiceQuery } from "@/shared/api/serviceConfig";
+import type { MemoryFragment } from "@/domain/memory/model/MemoryModel";
 
 export type {
   MemoryFragment
-} from "@/domain/memory/model/model";
+} from "@/domain/memory/model/MemoryModel";
 
 export const memoryApiEndpoints = {
   listMemoryFragments: "GET /api/v1/memory/fragments",

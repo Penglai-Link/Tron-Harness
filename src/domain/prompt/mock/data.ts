@@ -1,7 +1,7 @@
 import type {
   PromptVariable,
   PromptRecord,
-} from "@/domain/prompt/model/model";
+} from "@/domain/prompt/model/PromptModel";
 
 export function getPromptVariables(): PromptVariable[] {
   return [

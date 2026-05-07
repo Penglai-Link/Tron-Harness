@@ -1,12 +1,12 @@
 import { listVariables } from "@/domain/variable/mock/data";
 
-import { useServiceQuery } from "@/domain/service-config";
+import { useServiceQuery } from "@/shared/api/serviceConfig";
 export type {
   StatusTone
-} from "@/domain/variable/model/enum";
+} from "@/domain/variable/constants/StatusTone";
 export type {
   VariableRecord
-} from "@/domain/variable/model/model";
+} from "@/domain/variable/model/VariableModel";
 
 export const variableApiEndpoints = {
   listVariables: "GET /api/v1/variables",

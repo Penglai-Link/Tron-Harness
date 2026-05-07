@@ -1,7 +1,7 @@
 import type {
   SkillSchemaPreview,
   CapabilityRecord,
-} from "@/domain/skill/model/model";
+} from "@/domain/skill/model/SkillModel";
 
 export function getSkillSchemaPreview(): SkillSchemaPreview {
   return {

@@ -2,16 +2,16 @@ import {
   getApps,
   getImportApplicationDefaults,
 } from "@/domain/app/mock/data";
-import { useServiceQuery } from "@/domain/service-config";
+import { useServiceQuery } from "@/shared/api/serviceConfig";
 import type {
   AppRecord,
   ImportApplicationDefaults,
-} from "@/domain/app/model/model";
+} from "@/domain/app/model/AppModel";
 
 export type {
   AppRecord,
   ImportApplicationDefaults
-} from "@/domain/app/model/model";
+} from "@/domain/app/model/AppModel";
 
 export const appApiEndpoints = {
   listApps: "GET /api/v1/apps",

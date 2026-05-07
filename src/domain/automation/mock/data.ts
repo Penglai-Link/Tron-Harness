@@ -1,4 +1,4 @@
-import type { AutomationRecord } from "@/domain/automation/model/model";
+import type { AutomationRecord } from "@/domain/automation/model/AutomationModel";
 
 const automations: AutomationRecord[] = [
   {

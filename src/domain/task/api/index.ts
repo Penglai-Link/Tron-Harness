@@ -3,16 +3,16 @@ import {
   getTaskQuickReference,
   listKanbanColumns,
 } from "@/domain/task/mock/data";
-import { useServiceQuery } from "@/domain/service-config";
+import { useServiceQuery } from "@/shared/api/serviceConfig";
 export type {
   StatusTone
-} from "@/domain/task/model/enum";
+} from "@/domain/task/constants/StatusTone";
 export type {
   QuickReference,
   TaskDetailData,
   KanbanTask,
   KanbanColumn
-} from "@/domain/task/model/model";
+} from "@/domain/task/model/TaskModel";
 
 export const taskApiEndpoints = {
   getTaskDetail: "GET /api/v1/tasks/{taskId}",

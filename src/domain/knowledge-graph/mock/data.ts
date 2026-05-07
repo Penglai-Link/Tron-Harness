@@ -1,4 +1,4 @@
-import type { GraphEntity } from "@/domain/knowledge-graph/model/model";
+import type { GraphEntity } from "@/domain/knowledge-graph/model/KnowledgeGraphModel";
 
 export function getGraphData(domain = "customer-support") {
   const domainLabel = domain === "supply-chain" ? "Supply Chain" : domain === "hr" ? "HR" : "Customer Support";

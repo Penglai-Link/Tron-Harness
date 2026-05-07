@@ -1,11 +1,11 @@
 import { getMainAgentMessages } from "@/domain/agent/mock/data";
 
-import { useServiceQuery } from "@/domain/service-config";
-import type { AgentMessage } from "@/domain/agent/model/model";
+import { useServiceQuery } from "@/shared/api/serviceConfig";
+import type { AgentMessage } from "@/domain/agent/model/AgentModel";
 
 export type {
   AgentMessage
-} from "@/domain/agent/model/model";
+} from "@/domain/agent/model/AgentModel";
 
 export const agentApiEndpoints = {
   listMainAgentMessages: "GET /api/v1/agent/main/messages",

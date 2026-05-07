@@ -1,11 +1,11 @@
 import { getAutomations } from "@/domain/automation/mock/data";
 
-import { useServiceQuery } from "@/domain/service-config";
-import type { AutomationRecord } from "@/domain/automation/model/model";
+import { useServiceQuery } from "@/shared/api/serviceConfig";
+import type { AutomationRecord } from "@/domain/automation/model/AutomationModel";
 
 export type {
   AutomationRecord
-} from "@/domain/automation/model/model";
+} from "@/domain/automation/model/AutomationModel";
 
 export const automationApiEndpoints = {
   listAutomations: "GET /api/v1/automations",

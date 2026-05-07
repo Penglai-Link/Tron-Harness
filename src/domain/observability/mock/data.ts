@@ -1,4 +1,4 @@
-import type { ObservabilityData } from "@/domain/observability/model/model";
+import type { ObservabilityData } from "@/domain/observability/model/ObservabilityModel";
 
 const observabilityData: ObservabilityData = {
   metrics: [

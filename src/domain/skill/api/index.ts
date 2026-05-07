@@ -2,14 +2,14 @@ import {
   getSkillSchemaPreview,
   listCapabilities,
 } from "@/domain/skill/mock/data";
-import { useServiceQuery } from "@/domain/service-config";
+import { useServiceQuery } from "@/shared/api/serviceConfig";
 export type {
   StatusTone
-} from "@/domain/skill/model/enum";
+} from "@/domain/skill/constants/StatusTone";
 export type {
   SkillSchemaPreview,
   CapabilityRecord
-} from "@/domain/skill/model/model";
+} from "@/domain/skill/model/SkillModel";
 
 export const skillApiEndpoints = {
   listCapabilities: "GET /api/v1/capabilities",

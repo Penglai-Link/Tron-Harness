@@ -1,12 +1,12 @@
 import { listResources } from "@/domain/resource/mock/data";
 
-import { useServiceQuery } from "@/domain/service-config";
+import { useServiceQuery } from "@/shared/api/serviceConfig";
 export type {
   StatusTone
-} from "@/domain/resource/model/enum";
+} from "@/domain/resource/constants/StatusTone";
 export type {
   ResourceRecord
-} from "@/domain/resource/model/model";
+} from "@/domain/resource/model/ResourceModel";
 
 export const resourceApiEndpoints = {
   listResources: "GET /api/v1/resources",

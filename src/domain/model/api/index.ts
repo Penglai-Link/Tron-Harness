@@ -2,16 +2,16 @@ import {
   getModelCostPreview,
   getModels,
 } from "@/domain/model/mock/data";
-import { useServiceQuery } from "@/domain/service-config";
+import { useServiceQuery } from "@/shared/api/serviceConfig";
 import type {
   ModelCostLine,
   ModelRegistryItem,
-} from "@/domain/model/model/model";
+} from "@/domain/model/model/ModelRegistryModel";
 
 export type {
   ModelCostLine,
   ModelRegistryItem
-} from "@/domain/model/model/model";
+} from "@/domain/model/model/ModelRegistryModel";
 
 export const modelApiEndpoints = {
   listModels: "GET /api/v1/models",

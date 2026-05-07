@@ -1,7 +1,7 @@
 import type {
   AppRecord,
   ImportApplicationDefaults,
-} from "@/domain/app/model/model";
+} from "@/domain/app/model/AppModel";
 
 const apps: AppRecord[] = [
   { id: "app-customer", name: "Customer Portal", source: "Frontend", path: "/apps/customer-portal", worktree: "main", tags: ["React", "Public"], updated: "4m ago" },

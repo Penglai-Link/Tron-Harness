@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@/domain/agent/model/model";
+import type { AgentMessage } from "@/domain/agent/model/AgentModel";
 
 export function getMainAgentMessages(): AgentMessage[] {
   return [

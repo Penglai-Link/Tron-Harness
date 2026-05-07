@@ -1,11 +1,11 @@
 import { getGraphData } from "@/domain/knowledge-graph/mock/data";
 
-import { useServiceQuery } from "@/domain/service-config";
-import type { GraphEntity } from "@/domain/knowledge-graph/model/model";
+import { useServiceQuery } from "@/shared/api/serviceConfig";
+import type { GraphEntity } from "@/domain/knowledge-graph/model/KnowledgeGraphModel";
 
 export type {
   GraphEntity
-} from "@/domain/knowledge-graph/model/model";
+} from "@/domain/knowledge-graph/model/KnowledgeGraphModel";
 
 export const knowledgeGraphApiEndpoints = {
   getKnowledgeGraph: "GET /api/v1/knowledge-graph?domain={domain}",

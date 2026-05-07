@@ -2,16 +2,16 @@ import {
   getChatMessages,
   getChatSessionGroups,
 } from "@/domain/chat/mock/data";
-import { useServiceQuery } from "@/domain/service-config";
+import { useServiceQuery } from "@/shared/api/serviceConfig";
 import type {
   ChatSessionGroup,
   ChatMessage,
-} from "@/domain/chat/model/model";
+} from "@/domain/chat/model/ChatModel";
 
 export type {
   ChatSessionGroup,
   ChatMessage
-} from "@/domain/chat/model/model";
+} from "@/domain/chat/model/ChatModel";
 
 export const chatApiEndpoints = {
   listChatSessionGroups: "GET /api/v1/chats/session-groups",

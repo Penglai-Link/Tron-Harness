@@ -2,7 +2,7 @@ import type {
   QuickReference,
   TaskDetailData,
   KanbanColumn,
-} from "@/domain/task/model/model";
+} from "@/domain/task/model/TaskModel";
 
 export function getTaskQuickReference(): QuickReference {
   return {

@@ -1,4 +1,4 @@
-import type { ResourceRecord } from "@/domain/resource/model/model";
+import type { ResourceRecord } from "@/domain/resource/model/ResourceModel";
 
 const resources: ResourceRecord[] = [
   { id: "res-prod-db", name: "Production DB (Primary)", type: "PostgreSQL 14", owner: "Data Platform", scope: "Workspace", size: "3.8 TB", status: "Active", location: "us-east-1a", lastAccessed: "Just now", updated: "Just now" },

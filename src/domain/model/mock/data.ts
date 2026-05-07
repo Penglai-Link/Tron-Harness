@@ -1,7 +1,7 @@
 import type {
   ModelCostLine,
   ModelRegistryItem,
-} from "@/domain/model/model/model";
+} from "@/domain/model/model/ModelRegistryModel";
 
 export function getModelCostPreview(): ModelCostLine[] {
   return [
