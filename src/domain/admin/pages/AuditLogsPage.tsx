@@ -20,17 +20,14 @@ import {
   TronShell,
 } from "@/shared";
 
+import { useAuditLogs } from "@/domain/admin/hooks";
+import type { AuditLogRecord } from "@/domain/admin/model";
 import {
-  useAuditLogs,
-  type AuditLogRecord,
-} from "@/domain/admin/api";
+  adminAuditStatusOptions,
+  adminManagementTabs,
+  getStatusTone,
+} from "@/domain/admin/constants";
 
-function statusTone(status: AuditLogRecord["status"]) {
-  if (status === "Success") return "success";
-  if (status === "Warning") return "warning";
-  if (status === "Failed") return "error";
-  return "neutral";
-}
 
 function Notice({ value }: { value: string }) {
   return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
@@ -68,11 +65,7 @@ export function AuditLogsPage() {
           <SegmentedTabs
             value={tab}
             onValueChange={setTab}
-            items={[
-              { label: "User Directory", value: "users" },
-              { label: "Role Matrix", value: "roles" },
-              { label: "Audit Logs", value: "logs" },
-            ]}
+            items={adminManagementTabs}
           />
           <span className="text-sm text-[var(--color-on-surface-variant)]">{tab === "logs" ? "Log table active" : `${tab} tab staged for lead integration`}</span>
         </div>
@@ -84,10 +77,7 @@ export function AuditLogsPage() {
           <>
             <TextInput className="h-8 w-60" placeholder="Search audit logs..." value={query} onChange={(event) => setQuery(event.target.value)} />
             <SelectInput className="h-8 w-36" value={status} onChange={(event) => setStatus(event.target.value)}>
-              <option value="all">All status</option>
-              <option value="Success">Success</option>
-              <option value="Warning">Warning</option>
-              <option value="Failed">Failed</option>
+              {adminAuditStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </SelectInput>
           </>
         }
@@ -110,7 +100,7 @@ export function AuditLogsPage() {
           { id: "actor", header: "Actor", render: (row) => row.actor },
           { id: "action", header: "Action", render: (row) => row.action },
           { id: "resource", header: "Resource ID", render: (row) => <span className="font-mono text-[13px]">{row.resourceId}</span> },
-          { id: "status", header: "Status", render: (row) => <Badge tone={statusTone(row.status)}>{row.status}</Badge> },
+          { id: "status", header: "Status", render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },
           { id: "ip", header: "IP Address", align: "right", render: (row) => <span className="font-mono text-[13px]">{row.ipAddress}</span> },
         ]}
       />

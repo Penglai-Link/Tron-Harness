@@ -23,7 +23,7 @@ import {
   TronShell,
 } from "@/shared";
 
-import { useModelCostPreview } from "@/domain/model/api";
+import { useModelCostPreview } from "@/domain/model/hooks";
 
 function IconButton({ label, children, onClick }: { label: string; children: React.ReactNode; onClick?: () => void }) {
   return (

@@ -16,10 +16,8 @@ import {
   TronShell,
 } from "@/shared";
 
-import {
-  useKanbanColumns,
-  type KanbanTask,
-} from "@/domain/task/api";
+import { useKanbanColumns } from "@/domain/task/hooks";
+import type { KanbanTask } from "@/domain/task/model";
 import { cn } from "@/shared/lib/utils";
 
 function Notice({ value }: { value: string }) {

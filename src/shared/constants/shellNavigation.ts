@@ -1,0 +1,65 @@
+import {
+  Database,
+  FileClock,
+  FolderGit2,
+  Gauge,
+  GitBranch,
+  KeyRound,
+  LayoutDashboard,
+  LockKeyhole,
+  MessageSquareText,
+  Network,
+  PackageOpen,
+  ScrollText,
+  Settings2,
+  Sparkles,
+  UsersRound,
+  Workflow,
+  Wrench,
+} from "lucide-react";
+
+import type { TronNavSection } from "@/shared/types/ShellNavigation";
+
+export const tronNavigation: TronNavSection[] = [
+  {
+    label: "Core",
+    translationKey: "shell:nav.sections.core",
+    items: [
+      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, translationKey: "shell:nav.items.dashboard" },
+      { label: "Apps", href: "/apps", icon: FolderGit2, translationKey: "shell:nav.items.apps" },
+      { label: "Tasks", href: "/tasks", icon: GitBranch, translationKey: "shell:nav.items.tasks" },
+      { label: "Automations", href: "/automations", icon: Workflow, translationKey: "shell:nav.items.automations" },
+    ],
+  },
+  {
+    label: "Agent Operations",
+    translationKey: "shell:nav.sections.agentOperations",
+    items: [
+      { label: "Chats", href: "/chats", icon: MessageSquareText, translationKey: "shell:nav.items.chats" },
+      { label: "Prompts", href: "/prompts", icon: ScrollText, translationKey: "shell:nav.items.prompts" },
+      { label: "Models", href: "/models", icon: Sparkles, translationKey: "shell:nav.items.models" },
+      { label: "Skills", href: "/skills", icon: Wrench, translationKey: "shell:nav.items.skills" },
+      { label: "Resources", href: "/resources", icon: PackageOpen, translationKey: "shell:nav.items.resources" },
+    ],
+  },
+  {
+    label: "Data",
+    translationKey: "shell:nav.sections.data",
+    items: [
+      { label: "Memory", href: "/memory", icon: Database, translationKey: "shell:nav.items.memory" },
+      { label: "Graph", href: "/knowledge-graph", icon: Network, translationKey: "shell:nav.items.graph" },
+      { label: "Variables", href: "/variables", icon: KeyRound, translationKey: "shell:nav.items.variables" },
+      { label: "Observability", href: "/observability", icon: Gauge, translationKey: "shell:nav.items.observability" },
+    ],
+  },
+  {
+    label: "Administration",
+    translationKey: "shell:nav.sections.administration",
+    items: [
+      { label: "Users", href: "/admin/users", icon: UsersRound, translationKey: "shell:nav.items.users" },
+      { label: "Roles", href: "/admin/roles", icon: LockKeyhole, translationKey: "shell:nav.items.roles" },
+      { label: "Audit Logs", href: "/admin/audit-logs", icon: FileClock, translationKey: "shell:nav.items.auditLogs" },
+      { label: "Workspace Admin", href: "/admin/workspace", icon: Settings2, translationKey: "shell:nav.items.workspaceAdmin" },
+    ],
+  },
+];

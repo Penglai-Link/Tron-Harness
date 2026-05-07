@@ -17,9 +17,14 @@ import {
 
 import {
   usePermissionDomains,
-  useRoles,
-} from "@/domain/admin/api";
+  useRoles
+} from "@/domain/admin/hooks";
 import { cn } from "@/shared/lib/utils";
+import {
+  adminManagementTabs,
+  adminPermissionCodes,
+  adminPermissionLegend,
+} from "@/domain/admin/constants";
 
 function Notice({ value }: { value: string }) {
   return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
@@ -59,7 +64,7 @@ export function RoleMatrixPage() {
       />
       <SurfaceCard className="mb-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <SegmentedTabs value={activeTab} onValueChange={setActiveTab} items={[{ label: "User Directory", value: "users" }, { label: "Role Matrix", value: "roles" }, { label: "Audit Logs", value: "audit" }]} />
+          <SegmentedTabs value={activeTab} onValueChange={setActiveTab} items={adminManagementTabs} />
           <div className="flex items-center gap-2">
             <SearchField placeholder="Search roles..." value={query} onChange={setQuery} />
             <Button size="sm" variant="secondary" onClick={() => setNotice(`Filter drawer opened for ${filteredRoles.length} roles`)}><Filter size={14} aria-hidden="true" />Filter</Button>
@@ -94,7 +99,7 @@ export function RoleMatrixPage() {
                     return (
                       <td className="border-r border-[var(--color-outline-variant)] p-4" key={domain}>
                         <div className="flex justify-center gap-1">
-                          {["R", "W", "D", "A"].map((code) => {
+                          {adminPermissionCodes.map((code) => {
                             const active = permissions.includes(code);
                             return (
                               <button className={cn("flex size-6 items-center justify-center rounded text-[10px] font-semibold", active ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]" : "bg-[var(--color-surface-container-high)] text-[var(--color-on-surface-variant)] opacity-60")} type="button" key={code} title={code} onClick={() => togglePermission(role.id, domain, code)}>
@@ -112,7 +117,7 @@ export function RoleMatrixPage() {
           </table>
         </div>
         <div className="flex flex-wrap items-center gap-4 border-t border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-[13px] text-[var(--color-on-surface-variant)]">
-          {["R Read", "W Write", "D Delete", "A Admin"].map((item) => <span key={item}>{item}</span>)}
+          {adminPermissionLegend.map((item) => <span key={item}>{item}</span>)}
         </div>
       </SurfaceCard>
     </TronShell>

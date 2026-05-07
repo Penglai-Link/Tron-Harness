@@ -18,10 +18,12 @@ import {
   TronShell,
 } from "@/shared";
 
+import { useMemoryFragments } from "@/domain/memory/hooks";
+import type { MemoryFragment } from "@/domain/memory/model";
 import {
-  useMemoryFragments,
-  type MemoryFragment,
-} from "@/domain/memory/api";
+  defaultMemoryFilters,
+  memoryStrategyTabs,
+} from "@/domain/memory/constants";
 
 function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
   return (
@@ -43,7 +45,7 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
   const fragments = useMemoryFragments();
   const [strategy, setStrategy] = useState("hybrid");
   const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState(["Namespace: UserPrefs", "Entity: usr_982x", "Confidence: > 0.85"]);
+  const [filters, setFilters] = useState<string[]>([...defaultMemoryFilters]);
   const [selectedId, setSelectedId] = useState("mem-1");
   const [notice, setNotice] = useState("Memory search studio ready.");
   const visible = fragments.filter((fragment) => fragment.content.toLowerCase().includes(query.toLowerCase()) || fragment.namespace.toLowerCase().includes(query.toLowerCase()));
@@ -84,7 +86,7 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
             <Search size={16} />
             <input className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder="Query memory vectors via natural language or exact match..." value={query} onChange={(event) => setQuery(event.target.value)} />
           </div>
-          <SegmentedTabs value={strategy} onValueChange={setStrategy} items={[{ label: "Hybrid", value: "hybrid" }, { label: "Semantic Only", value: "semantic" }, { label: "Keyword Only", value: "keyword" }]} />
+          <SegmentedTabs value={strategy} onValueChange={setStrategy} items={memoryStrategyTabs} />
         </div>
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <span className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Active Filters:</span>

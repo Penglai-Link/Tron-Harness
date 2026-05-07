@@ -20,7 +20,8 @@ import {
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
-import { useTaskQuickReference } from "@/domain/task/api";
+import { useTaskQuickReference } from "@/domain/task/hooks";
+import { taskPriorityOptions } from "@/domain/task/constants";
 
 function IconButton({ label, children, onClick }: { label: string; children: React.ReactNode; onClick?: () => void }) {
   return (
@@ -82,7 +83,7 @@ export function CreateTaskPage() {
             </Field>
             <Field label="Priority">
               <div className="grid h-10 grid-cols-3 gap-2">
-                {["Low", "Med", "High"].map((item) => (
+                {taskPriorityOptions.map((item) => (
                   <button className={cn("rounded-lg border border-[var(--color-outline-variant)] text-sm", priority === item ? "bg-[var(--color-surface-variant)] font-medium text-[var(--color-on-surface)]" : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]")} type="button" key={item} onClick={() => setPriority(item)}>
                     {item}
                   </button>

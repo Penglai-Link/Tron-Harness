@@ -25,7 +25,7 @@ import {
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
-import { useDashboardData } from "@/domain/dashboard/api";
+import { useDashboardData } from "@/domain/dashboard/hooks";
 
 function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
   return (

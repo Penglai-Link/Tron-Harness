@@ -19,19 +19,11 @@ import {
   TronShell,
 } from "@/shared";
 
-import {
-  useVariables,
-  type StatusTone,
-  type VariableRecord,
-} from "@/domain/variable/api";
+import { useVariables } from "@/domain/variable/hooks";
+import type { VariableRecord } from "@/domain/variable/model";
 
-const badgeToneByStatus = (status: string): StatusTone => {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("healthy") || normalized.includes("active") || normalized.includes("connected") || normalized.includes("completed")) return "success";
-  if (normalized.includes("review") || normalized.includes("sync") || normalized.includes("progress") || normalized.includes("override")) return "warning";
-  if (normalized.includes("suspend") || normalized.includes("disabled") || normalized.includes("deprecated")) return "error";
-  return "neutral";
-};
+
+import { getStatusTone } from "@/domain/variable/constants";
 
 function Notice({ value }: { value: string }) {
   return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
@@ -75,7 +67,7 @@ function VariablesBasePage({ variant }: { variant: "standard" | "details" }) {
               { id: "key", header: "Key", render: (row) => <button className="font-mono text-[13px] font-medium" type="button" onClick={() => setSelectedId(row.id)}>{row.key}</button> },
               { id: "scope", header: "Scope", render: (row) => <Badge>{row.scope}</Badge> },
               { id: "type", header: "Type", render: (row) => row.type },
-              { id: "status", header: "Status", render: (row) => <Badge tone={badgeToneByStatus(row.status)}>{row.status}</Badge> },
+              { id: "status", header: "Status", render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },
               { id: "updated", header: "Updated", render: (row) => row.updated },
               { id: "actions", header: "", align: "right", render: (row) => <div className="flex justify-end gap-1"><Button size="icon" variant="ghost" aria-label={`Edit ${row.key}`} onClick={() => {
                 setSelectedId(row.id);

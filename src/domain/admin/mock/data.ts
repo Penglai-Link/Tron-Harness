@@ -1,3 +1,4 @@
+import { permissionDomains } from "@/domain/admin/constants";
 import type {
   AuditLogRecord,
   RoleRecord,
@@ -15,7 +16,6 @@ export function getAuditLogs() {
   return auditLogs;
 }
 
-const permissionDomains = ["Workspace", "Models", "Tasks", "Memory", "Skills", "MCP"];
 
 const roles: RoleRecord[] = [
   {
@@ -53,7 +53,7 @@ const users: UserRecord[] = [
 ];
 
 export function listPermissionDomains() {
-  return permissionDomains;
+  return [...permissionDomains];
 }
 
 export function listRoles() {

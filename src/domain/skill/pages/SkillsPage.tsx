@@ -19,20 +19,14 @@ import {
   TronShell,
 } from "@/shared";
 
-import {
-  useCapabilities,
-  type CapabilityRecord,
-  type StatusTone,
-} from "@/domain/skill/api";
+import { useCapabilities } from "@/domain/skill/hooks";
+import type { CapabilityRecord } from "@/domain/skill/model";
 import { cn } from "@/shared/lib/utils";
+import {
+  getStatusTone,
+  skillModeTabs,
+} from "@/domain/skill/constants";
 
-const badgeToneByStatus = (status: string): StatusTone => {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("healthy") || normalized.includes("active") || normalized.includes("connected") || normalized.includes("completed")) return "success";
-  if (normalized.includes("review") || normalized.includes("sync") || normalized.includes("progress") || normalized.includes("override")) return "warning";
-  if (normalized.includes("suspend") || normalized.includes("disabled") || normalized.includes("deprecated")) return "error";
-  return "neutral";
-};
 
 function Notice({ value }: { value: string }) {
   return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
@@ -69,7 +63,7 @@ function CapabilityInspector({ capability }: { capability: CapabilityRecord }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-xl font-semibold">{capability.name}</h2>
-          <div className="mt-2 flex items-center gap-2"><span className="size-2 rounded-full bg-[var(--color-success)]" /><Badge tone={badgeToneByStatus(capability.status)}>{capability.status}</Badge></div>
+          <div className="mt-2 flex items-center gap-2"><span className="size-2 rounded-full bg-[var(--color-success)]" /><Badge tone={getStatusTone(capability.status)}>{capability.status}</Badge></div>
         </div>
         <Button size="icon" variant="ghost" aria-label="Capability actions" onClick={() => setNotice("Capability menu opened")}><MoreHorizontal size={16} aria-hidden="true" /></Button>
       </div>
@@ -115,7 +109,7 @@ export function SkillsPage() {
         description="Configure agent skills and external MCP server connections."
         actions={
           <>
-            <SegmentedTabs value={mode} onValueChange={(value) => setMode(value as "skills" | "mcp")} items={[{ label: "Skills", value: "skills" }, { label: "MCP Servers", value: "mcp" }]} />
+            <SegmentedTabs value={mode} onValueChange={(value) => setMode(value as "skills" | "mcp")} items={skillModeTabs} />
             <Button onClick={() => setNotice("New skill workflow opened")}><Plus size={16} aria-hidden="true" />New Skill</Button>
           </>
         }

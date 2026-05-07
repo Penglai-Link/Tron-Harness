@@ -14,14 +14,13 @@ import {
   componentPrinciples,
   tronColors,
   typeScale,
-} from "@/shared/lib/designTokens";
+} from "@/shared/constants/designTokens";
+import {
+  designStandardSidebarItems,
+  designStandardTableRows,
+  designStandardSignalCards,
+} from "@/domain/design-standard/constants";
 
-const sidebarItems = ["Dashboard", "Apps", "Tasks", "Agents", "Data", "Security"];
-const tableRows = [
-  { workspace: "Core Platform", source: "Local", model: "GPT-5.4", usage: "284k", status: "Healthy" },
-  { workspace: "Agent Lab", source: "Inherited", model: "Claude Sonnet", usage: "119k", status: "Review" },
-  { workspace: "Ops Console", source: "Override", model: "Gemini", usage: "76k", status: "Healthy" },
-];
 
 export function DesignStandardPage() {
   return (
@@ -38,7 +37,7 @@ export function DesignStandardPage() {
             </div>
           </div>
           <nav className="mt-8 space-y-1" aria-label="Design standard preview navigation">
-            {sidebarItems.map((item) => (
+            {designStandardSidebarItems.map((item) => (
               <a
                 className="flex h-9 items-center justify-between rounded-lg px-3 text-sm text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] data-[active=true]:bg-[var(--color-surface-container-high)] data-[active=true]:text-[var(--color-on-surface)]"
                 data-active={item === "Dashboard"}
@@ -93,7 +92,7 @@ export function DesignStandardPage() {
                 </div>
 
                 <div className="mt-8 grid gap-3 md:grid-cols-3">
-                  {["Workspace isolation", "Inheritance aware", "Observable execution"].map((item) => (
+                  {designStandardSignalCards.map((item) => (
                     <div className="rounded-xl border border-[var(--color-card-border)] bg-[var(--color-surface-container-lowest)] p-4" key={item}>
                       <p className="text-sm font-semibold">{item}</p>
                       <p className="mt-2 text-[13px] leading-5 text-[var(--color-on-surface-variant)]">
@@ -168,7 +167,7 @@ export function DesignStandardPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {tableRows.map((row) => (
+                        {designStandardTableRows.map((row) => (
                           <tr className="border-b border-[var(--color-outline-variant)] last:border-0" key={row.workspace}>
                             <td className="px-5 py-3 font-medium">{row.workspace}</td>
                             <td className="px-5 py-3 text-[var(--color-on-surface-variant)]">{row.source}</td>

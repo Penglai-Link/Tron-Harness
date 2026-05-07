@@ -10,19 +10,13 @@ import {
   TronShell,
 } from "@/shared";
 
-import {
-  useTaskDetail,
-  type StatusTone,
-} from "@/domain/task/api";
+import { useTaskDetail } from "@/domain/task/hooks";
 import { cn } from "@/shared/lib/utils";
+import {
+  getStatusTone,
+  taskStatusOptions,
+} from "@/domain/task/constants";
 
-const badgeToneByStatus = (status: string): StatusTone => {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("healthy") || normalized.includes("active") || normalized.includes("connected") || normalized.includes("completed")) return "success";
-  if (normalized.includes("review") || normalized.includes("sync") || normalized.includes("progress") || normalized.includes("override")) return "warning";
-  if (normalized.includes("suspend") || normalized.includes("disabled") || normalized.includes("deprecated")) return "error";
-  return "neutral";
-};
 
 function Notice({ value }: { value: string }) {
   return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
@@ -64,7 +58,7 @@ export function TaskDetailsPage() {
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <span className="font-mono text-sm text-[var(--color-on-surface-variant)]">{task.id}</span>
                   <SelectInput className="h-8 w-40" value={status} onChange={(event) => setStatus(event.target.value)}>
-                    {["To Do", "In Progress", "Review", "Completed"].map((item) => <option key={item}>{item}</option>)}
+                    {taskStatusOptions.map((item) => <option key={item}>{item}</option>)}
                   </SelectInput>
                   <Badge tone="error">{task.priority}</Badge>
                 </div>
@@ -113,7 +107,7 @@ export function TaskDetailsPage() {
                     <input type="checkbox" checked={item.done} onChange={() => setSubtasks((rows) => rows.map((row) => row.id === item.id ? { ...row, done: !row.done, status: !row.done ? "Completed" : "Pending", progress: !row.done ? 100 : row.progress } : row))} />
                     <div className="flex-1">
                       <div className={cn("text-sm", item.done ? "text-[var(--color-on-surface-variant)] line-through" : "")}>{item.title}</div>
-                      <Badge tone={badgeToneByStatus(item.status)}>{item.status}</Badge>
+                      <Badge tone={getStatusTone(item.status)}>{item.status}</Badge>
                       <div className="mt-2"><ProgressBar value={item.progress} /></div>
                     </div>
                   </div>

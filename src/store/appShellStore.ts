@@ -1,7 +1,9 @@
 import { create } from "zustand";
 
-const defaultPrimarySpaceId = "ps-enterprise";
-const defaultSecondarySpaceId = "ss-tron-main";
+import {
+  defaultPrimarySpaceId,
+  defaultSecondarySpaceId,
+} from "@/shared/constants/workspaceSpaces";
 
 interface AppShellState {
   agentOpen: boolean;

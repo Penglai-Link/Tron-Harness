@@ -18,7 +18,7 @@ import {
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
-import { useMainAgentMessages } from "@/domain/agent/api";
+import { useMainAgentMessages } from "@/domain/agent/hooks";
 
 function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
   return (

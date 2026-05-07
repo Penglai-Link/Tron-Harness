@@ -19,20 +19,16 @@ import {
   TronShell,
 } from "@/shared";
 
+import { useUsers } from "@/domain/admin/hooks";
+import type { UserRecord } from "@/domain/admin/model";
+
+
 import {
-  useUsers,
-  type UserRecord,
-} from "@/domain/admin/api";
-
-type StatusTone = "neutral" | "accent" | "success" | "warning" | "error";
-
-const badgeToneByStatus = (status: string): StatusTone => {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("healthy") || normalized.includes("active") || normalized.includes("connected") || normalized.includes("completed")) return "success";
-  if (normalized.includes("review") || normalized.includes("sync") || normalized.includes("progress") || normalized.includes("override")) return "warning";
-  if (normalized.includes("suspend") || normalized.includes("disabled") || normalized.includes("deprecated")) return "error";
-  return "neutral";
-};
+  adminManagementTabs,
+  adminUserRoleFilters,
+  adminUserRoleOptions,
+  getStatusTone,
+} from "@/domain/admin/constants";
 
 function Notice({ value }: { value: string }) {
   return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
@@ -74,11 +70,11 @@ export function UsersPage() {
       </div>
       <SurfaceCard className="mb-4 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <SegmentedTabs value={tab} onValueChange={setTab} items={[{ label: "User Directory", value: "users" }, { label: "Role Matrix", value: "roles" }, { label: "Audit Logs", value: "audit" }]} />
+          <SegmentedTabs value={tab} onValueChange={setTab} items={adminManagementTabs} />
           <div className="flex gap-2">
             <SearchField placeholder="Filter users..." value={query} onChange={setQuery} />
             <SelectInput className="h-9" value={role} onChange={(event) => setRole(event.target.value)}>
-              {["All", "Admin", "Editor", "Viewer"].map((item) => <option key={item}>{item}</option>)}
+              {adminUserRoleFilters.map((item) => <option key={item}>{item}</option>)}
             </SelectInput>
           </div>
         </div>
@@ -90,9 +86,9 @@ export function UsersPage() {
         pagination={<span>{filtered.length} users visible · page 1 of 3</span>}
         columns={[
           { id: "name", header: "User", render: (row) => <div><div className="font-medium">{row.name}</div><div className="text-[13px] text-[var(--color-on-surface-variant)]">{row.email}</div></div> },
-          { id: "role", header: "Role", render: (row) => <SelectInput className="h-8" value={row.role} onChange={(event) => updateUserRole(row.id, event.target.value as UserRecord["role"])}><option>Admin</option><option>Editor</option><option>Viewer</option></SelectInput> },
+          { id: "role", header: "Role", render: (row) => <SelectInput className="h-8" value={row.role} onChange={(event) => updateUserRole(row.id, event.target.value as UserRecord["role"])}>{adminUserRoleOptions.map((item) => <option key={item}>{item}</option>)}</SelectInput> },
           { id: "workspace", header: "Workspace", render: (row) => row.workspace },
-          { id: "status", header: "Status", render: (row) => <Badge tone={badgeToneByStatus(row.status)}>{row.status}</Badge> },
+          { id: "status", header: "Status", render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },
           { id: "last", header: "Last Active", render: (row) => row.lastActive },
           { id: "menu", header: "", align: "right", render: (row) => <Button size="icon" variant="ghost" aria-label={`Open actions for ${row.name}`} onClick={() => setNotice(`${row.name} action menu opened`)}><MoreHorizontal size={16} aria-hidden="true" /></Button> },
         ]}

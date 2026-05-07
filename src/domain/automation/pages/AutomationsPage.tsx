@@ -19,16 +19,13 @@ import {
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
+import { useAutomations } from "@/domain/automation/hooks";
+import type { AutomationRecord } from "@/domain/automation/model";
 import {
-  useAutomations,
-  type AutomationRecord,
-} from "@/domain/automation/api";
+  automationInspectorTabs,
+  getAutomationStatusTone,
+} from "@/domain/automation/constants";
 
-function statusTone(status: AutomationRecord["status"]) {
-  if (status === "Success" || status === "Running") return "success";
-  if (status === "Failed") return "error";
-  return "neutral";
-}
 
 function IconButton({ label, children, onClick }: { label: string; children: React.ReactNode; onClick?: () => void }) {
   return (
@@ -67,7 +64,7 @@ export function AutomationsPage() {
       rightPanel={
         selected ? (
           <InspectorPanel title={selected.name}>
-            <SegmentedTabs value={tab} onValueChange={setTab} items={[{ label: "Details", value: "details" }, { label: "Logs", value: "logs" }, { label: "Traces", value: "traces" }]} />
+            <SegmentedTabs value={tab} onValueChange={setTab} items={automationInspectorTabs} />
             {tab === "details" ? (
               <div className="space-y-4">
                 <SurfaceCard className="rounded-xl p-4 shadow-none">
@@ -138,7 +135,7 @@ export function AutomationsPage() {
           { id: "cadence", header: "Cadence", render: (row) => row.cadence },
           { id: "cron", header: "CRON", render: (row) => <span className="font-mono text-[13px]">{row.cron}</span> },
           { id: "lastRun", header: "Last Run", render: (row) => row.lastRun },
-          { id: "status", header: "Status", render: (row) => <Badge tone={statusTone(row.status)}>{row.status}</Badge> },
+          { id: "status", header: "Status", render: (row) => <Badge tone={getAutomationStatusTone(row.status)}>{row.status}</Badge> },
           {
             id: "actions",
             header: "Actions",

@@ -20,10 +20,9 @@ import {
   TronShell,
 } from "@/shared";
 
-import {
-  usePrompts,
-  type PromptRecord,
-} from "@/domain/prompt/api";
+import { usePrompts } from "@/domain/prompt/hooks";
+import { promptCategoryFilters } from "@/domain/prompt/constants";
+import type { PromptRecord } from "@/domain/prompt/model";
 import { cn } from "@/shared/lib/utils";
 
 function Notice({ value }: { value: string }) {
@@ -99,7 +98,7 @@ export function PromptsPage() {
         <SurfaceCard className="p-0">
           <div className="border-b border-[var(--color-outline-variant)] px-5 pt-4">
             <div className="flex flex-wrap gap-1">
-              {["All", "System", "Persona", "Tools", "Templates"].map((item) => (
+              {promptCategoryFilters.map((item) => (
                 <button className={cn("border-b-2 px-4 py-2 text-sm", category === item ? "border-[var(--color-primary)] font-medium" : "border-transparent text-[var(--color-on-surface-variant)]")} type="button" key={item} onClick={() => setCategory(item)}>
                   {item === "All" ? "All Prompts" : item}
                 </button>

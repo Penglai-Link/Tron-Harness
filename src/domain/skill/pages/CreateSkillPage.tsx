@@ -17,7 +17,7 @@ import {
   TronShell,
 } from "@/shared";
 
-import { useSkillSchemaPreview } from "@/domain/skill/api";
+import { useSkillSchemaPreview } from "@/domain/skill/hooks";
 
 function SectionTitle({ icon, title }: { icon?: React.ReactNode; title: string }) {
   return (

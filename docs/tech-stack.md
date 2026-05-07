@@ -56,12 +56,12 @@ Application bootstrapping, routing, domain modules, shared UI, global state, and
 - App bootstrapping belongs in `src/app/`
 - Route declarations and page registration belong in `src/router/`
 - Route-domain code is colocated under `src/domain/<domain>/`:
-  - `api/` contains endpoint clients, query/mutation hooks, and data-source switching logic
+  - `api/` contains endpoint clients and backend contract names only
   - `constants/` contains domain constants and enum-like contracts
   - `schema/` contains validation, query, and form schemas
   - `model/` contains domain data models, DTO contracts, and domain-local stores
   - `adapters/` contains mapping between API DTOs, mock data, and UI models
-  - `hooks/` contains domain-specific React hooks that are not a feature implementation detail
+  - `hooks/` contains domain-specific React hooks, including query/mutation hooks and mock-to-backend data-source switching calls
   - `components/` contains domain-specific presentational components
   - `features/` contains user-action slices such as create, import, and delete flows
   - `pages/` contains thin route page components that compose domain features and components

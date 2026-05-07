@@ -1,14 +1,10 @@
 import { useState } from "react";
 import {
   ArrowLeft,
-  Code2,
-  FolderOpen,
-  Terminal,
   Upload,
   X,
 } from "lucide-react";
 
-import type { LucideIcon } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "@/shared/ui/Button";
 import {
@@ -19,10 +15,9 @@ import {
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
-import {
-  useImportApplicationDefaults,
-  type ImportApplicationDefaults,
-} from "@/domain/app/api";
+import { importApplicationSourceOptions } from "@/domain/app/constants";
+import { useImportApplicationDefaults } from "@/domain/app/hooks";
+import type { ImportApplicationDefaults } from "@/domain/app/model";
 
 function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
   return (
@@ -34,11 +29,6 @@ function RoutePageShell({ activeItem, children }: { activeItem: string; children
 
 function ImportApplicationPage({ initialSource }: { initialSource: ImportApplicationDefaults["source"] }) {
   const defaults = useImportApplicationDefaults(initialSource);
-  const sourceOptions: Array<{ value: ImportApplicationDefaults["source"]; label: string; icon: LucideIcon }> = [
-    { value: "github", label: "GitHub", icon: Code2 },
-    { value: "gitlab", label: "GitLab", icon: Terminal },
-    { value: "local", label: "Local Directory", icon: FolderOpen },
-  ];
   const [source, setSource] = useState(defaults.source);
   const [form, setForm] = useState(defaults);
   const [tags, setTags] = useState(defaults.tags);
@@ -66,7 +56,7 @@ function ImportApplicationPage({ initialSource }: { initialSource: ImportApplica
             <div>
               <p className="mb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Source</p>
               <div className="grid gap-3 sm:grid-cols-3">
-                {sourceOptions.map(({ icon: Icon, label, value }) => (
+                {importApplicationSourceOptions.map(({ icon: Icon, label, value }) => (
                   <button
                     className={cn(
                       "flex flex-col items-center justify-center rounded-lg border p-4 text-sm transition-colors",

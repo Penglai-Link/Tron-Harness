@@ -27,20 +27,16 @@ import {
   TronShell,
 } from "@/shared";
 
-import {
-  useResources,
-  type ResourceRecord,
-  type StatusTone,
-} from "@/domain/resource/api";
+import { useResources } from "@/domain/resource/hooks";
+import type { ResourceRecord } from "@/domain/resource/model";
 import { cn } from "@/shared/lib/utils";
+import {
+  getStatusTone,
+  resourceStatusFilters,
+  resourceTypeFilters,
+  resourcePaginationPages,
+} from "@/domain/resource/constants";
 
-const badgeToneByStatus = (status: string): StatusTone => {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("healthy") || normalized.includes("active") || normalized.includes("connected") || normalized.includes("completed")) return "success";
-  if (normalized.includes("review") || normalized.includes("sync") || normalized.includes("progress") || normalized.includes("override")) return "warning";
-  if (normalized.includes("suspend") || normalized.includes("disabled") || normalized.includes("deprecated")) return "error";
-  return "neutral";
-};
 
 function SearchField({ placeholder, value, onChange }: { placeholder: string; value: string; onChange: (value: string) => void }) {
   return (
@@ -94,14 +90,12 @@ export function ResourcesPage() {
     setNotice(allSelected ? "Visible resources cleared" : "Visible resources selected");
   };
   const cycleStatusFilter = () => {
-    const states = ["Active", "Inherited", "Deprecated"];
-    const next = states[(states.indexOf(statusFilter) + 1) % states.length];
+    const next = resourceStatusFilters[(resourceStatusFilters.indexOf(statusFilter as (typeof resourceStatusFilters)[number]) + 1) % resourceStatusFilters.length];
     setStatusFilter(next);
     setNotice(`Status filter changed to ${next}`);
   };
   const cycleTypeFilter = () => {
-    const states = ["All", "PostgreSQL 14", "AWS S3 Bucket", "JSON Config File", "Media Library", "Redis 5.0"];
-    const next = states[(states.indexOf(typeFilter) + 1) % states.length];
+    const next = resourceTypeFilters[(resourceTypeFilters.indexOf(typeFilter as (typeof resourceTypeFilters)[number]) + 1) % resourceTypeFilters.length];
     setTypeFilter(next);
     setNotice(`Type filter changed to ${next}`);
   };
@@ -187,7 +181,7 @@ export function ResourcesPage() {
                         </div>
                       </td>
                       <td className="px-5 py-4 text-[var(--color-on-surface-variant)]">{resource.type}</td>
-                      <td className="px-5 py-4"><Badge tone={badgeToneByStatus(resource.status)}>{resource.status}</Badge></td>
+                      <td className="px-5 py-4"><Badge tone={getStatusTone(resource.status)}>{resource.status}</Badge></td>
                       <td className="px-5 py-4 text-[var(--color-on-surface-variant)]">{resource.location}</td>
                       <td className="px-5 py-4 text-right text-[var(--color-on-surface-variant)]">{resource.lastAccessed}</td>
                       <td className="relative px-5 py-4 text-right">
@@ -211,7 +205,7 @@ export function ResourcesPage() {
               <span>Showing 1 to {filtered.length} of 1,516 resources</span>
               <div className="flex items-center gap-1">
                 <Button size="icon" variant="ghost" disabled={page === 1} aria-label="Previous resources page" onClick={() => setPage((current) => Math.max(1, current - 1))}><ChevronLeft size={18} aria-hidden="true" /></Button>
-                {[1, 2, 3].map((item) => (
+                {resourcePaginationPages.map((item) => (
                   <button
                     className={cn("flex size-8 items-center justify-center rounded-lg text-sm", page === item ? "bg-[var(--color-surface-container-high)] text-[var(--color-on-surface)]" : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-surface-container)]")}
                     type="button"

@@ -23,10 +23,8 @@ import {
   TronShell,
 } from "@/shared";
 
-import {
-  useApps,
-  type AppRecord,
-} from "@/domain/app/api";
+import { useApps } from "@/domain/app/hooks";
+import type { AppRecord } from "@/domain/app/model";
 
 function IconButton({ label, children, onClick }: { label: string; children: React.ReactNode; onClick?: () => void }) {
   return (

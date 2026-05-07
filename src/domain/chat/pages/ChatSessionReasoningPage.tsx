@@ -24,9 +24,9 @@ import {
 import { cn } from "@/shared/lib/utils";
 import {
   useChatMessages,
-  useChatSessionGroups,
-  type ChatMessage,
-} from "@/domain/chat/api";
+  useChatSessionGroups
+} from "@/domain/chat/hooks";
+import type { ChatMessage } from "@/domain/chat/model";
 
 function IconButton({ label, children, onClick }: { label: string; children: React.ReactNode; onClick?: () => void }) {
   return (

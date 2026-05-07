@@ -17,19 +17,13 @@ import {
   TronShell,
 } from "@/shared";
 
-import {
-  useObservabilityData,
-  type StatusTone,
-} from "@/domain/observability/api";
+import { useObservabilityData } from "@/domain/observability/hooks";
 import { cn } from "@/shared/lib/utils";
+import {
+  getStatusTone,
+  observabilityInspectorTabs,
+} from "@/domain/observability/constants";
 
-const badgeToneByStatus = (status: string): StatusTone => {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("healthy") || normalized.includes("active") || normalized.includes("connected") || normalized.includes("completed")) return "success";
-  if (normalized.includes("review") || normalized.includes("sync") || normalized.includes("progress") || normalized.includes("override")) return "warning";
-  if (normalized.includes("suspend") || normalized.includes("disabled") || normalized.includes("deprecated")) return "error";
-  return "neutral";
-};
 
 function Notice({ value }: { value: string }) {
   return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
@@ -49,7 +43,7 @@ function SimpleBarChart({ data }: { data: { label: string; value: number }[] }) 
   );
 }
 
-function InspectorTabs({ tabs, value, onValueChange }: { tabs: string[]; value: string; onValueChange: (value: string) => void }) {
+function InspectorTabs({ tabs, value, onValueChange }: { tabs: readonly string[]; value: string; onValueChange: (value: string) => void }) {
   return (
     <div className="flex border-b border-[var(--color-outline-variant)]">
       {tabs.map((tab) => {
@@ -83,7 +77,7 @@ export function ObservabilityPage() {
           <X size={16} aria-hidden="true" />
         </Button>
       </div>
-      <InspectorTabs tabs={["Details", "Logs", "Traces", "Health"]} value={inspectorTab} onValueChange={(value) => {
+      <InspectorTabs tabs={observabilityInspectorTabs} value={inspectorTab} onValueChange={(value) => {
         setInspectorTab(value);
         setNotice(`${value} inspector selected`);
       }} />
@@ -155,7 +149,7 @@ export function ObservabilityPage() {
           { id: "agent", header: "Agent", render: (row) => row.agent },
           { id: "span", header: "Span", render: (row) => <span className="font-mono text-[13px]">{row.span}</span> },
           { id: "latency", header: "Latency", render: (row) => row.latency },
-          { id: "status", header: "Status", render: (row) => <Badge tone={badgeToneByStatus(row.status)}>{row.status}</Badge> },
+          { id: "status", header: "Status", render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },
         ]}
       />
     </TronShell>

@@ -22,7 +22,12 @@ import {
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
-import { usePromptVariables } from "@/domain/prompt/api";
+import { usePromptVariables } from "@/domain/prompt/hooks";
+import {
+  promptShellNavItems,
+  promptVisibilityOptions,
+  promptWorkspaceTabs,
+} from "@/domain/prompt/constants";
 
 function IconButton({ label, children, onClick }: { label: string; children: React.ReactNode; onClick?: () => void }) {
   return (
@@ -54,7 +59,6 @@ function KeyValue({ label, value }: { label: string; value: string }) {
   );
 }
 
-const promptShellNavItems = ["Home", "Library", "Deployments", "Experiments", "Usage", "Settings"];
 
 export function CreatePromptPage() {
   const variables = usePromptVariables();
@@ -110,7 +114,7 @@ export function CreatePromptPage() {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <SegmentedTabs value={tab} onValueChange={setTab} items={[{ label: "Dashboard", value: "dashboard" }, { label: "Prompts", value: "prompts" }, { label: "Models", value: "models" }, { label: "Datasets", value: "datasets" }, { label: "Logs", value: "logs" }]} />
+            <SegmentedTabs value={tab} onValueChange={setTab} items={promptWorkspaceTabs} />
             <div className="relative">
               <IconButton label="Notifications" onClick={toggleNotifications}>
                 <Settings2 size={16} />
@@ -144,7 +148,7 @@ export function CreatePromptPage() {
                 </Field>
                 <Field label="Visibility">
                   <div className="flex h-10 items-center gap-4">
-                    {["Workspace", "Private", "Public"].map((item) => (
+                    {promptVisibilityOptions.map((item) => (
                       <label className="flex items-center gap-2 text-sm" key={item}>
                         <input checked={visibility === item} name="visibility" type="radio" onChange={() => setVisibility(item)} />
                         {item}

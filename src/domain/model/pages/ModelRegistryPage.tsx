@@ -16,10 +16,9 @@ import {
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
-import {
-  useModels,
-  type ModelRegistryItem,
-} from "@/domain/model/api";
+import { useModels } from "@/domain/model/hooks";
+import type { ModelRegistryItem } from "@/domain/model/model";
+import { modelVendorFilters } from "@/domain/model/constants";
 
 function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
   return (
@@ -80,7 +79,7 @@ export function ModelRegistryPage() {
           </div>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] pb-4">
             <div className="flex flex-wrap gap-2">
-              {["All Vendors", "OpenAI", "Anthropic", "Google"].map((item) => (
+              {modelVendorFilters.map((item) => (
                 <button className={cn("rounded-full border px-3 py-1.5 text-sm", vendor === item ? "bg-[var(--color-accent-container)] text-[var(--color-on-accent-container)]" : "border-[var(--color-outline-variant)] bg-white")} type="button" key={item} onClick={() => setVendor(item)}>
                   {item}
                 </button>

@@ -17,10 +17,8 @@ import {
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
-import {
-  useGraphData,
-  type GraphEntity,
-} from "@/domain/knowledge-graph/api";
+import { useGraphData } from "@/domain/knowledge-graph/hooks";
+import type { GraphEntity } from "@/domain/knowledge-graph/model";
 
 function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
   return (

@@ -17,6 +17,7 @@ import {
   TextInput,
   TronShell,
 } from "@/shared";
+import { defaultAutomationPrerequisites } from "@/domain/automation/constants";
 
 function IconButton({ label, children, onClick }: { label: string; children: React.ReactNode; onClick?: () => void }) {
   return (
@@ -42,7 +43,7 @@ function SectionTitle({ icon, title }: { icon?: React.ReactNode; title: string }
 export function CreateAutomationPage() {
   const [triggerType, setTriggerType] = useState("Scheduled");
   const [cron, setCron] = useState("0 0 * * *");
-  const [prereqs, setPrereqs] = useState(["Data Extract Job (ID: 8821)", "Validation Check (ID: 9012)"]);
+  const [prereqs, setPrereqs] = useState<string[]>([...defaultAutomationPrerequisites]);
   const [notice, setNotice] = useState("Parsed as CRON: 0 0 * * *");
 
   return (

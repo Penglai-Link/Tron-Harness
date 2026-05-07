@@ -20,6 +20,7 @@ import {
   TextInput,
   TronShell,
 } from "@/shared";
+import { taskImportPreviewSteps } from "@/domain/task/constants";
 
 function Notice({ value }: { value: string }) {
   return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
@@ -79,7 +80,7 @@ export function TasksImportPage() {
               <h2 className="text-base font-semibold">Import Preview</h2>
             </div>
             <div className="space-y-3 text-sm">
-              {["Normalize issue metadata", "Map assignee to agent", "Attach source link", "Prepare task draft"].map((item) => (
+              {taskImportPreviewSteps.map((item) => (
                 <div className="flex items-center gap-2" key={item}>
                   <Check size={15} className="text-[var(--color-success)]" aria-hidden="true" />
                   <span>{item}</span>

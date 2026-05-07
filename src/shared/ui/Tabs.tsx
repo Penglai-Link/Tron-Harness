@@ -8,7 +8,7 @@ export interface SegmentedTabItem {
 }
 
 interface SegmentedTabsProps {
-  items: SegmentedTabItem[];
+  items: readonly SegmentedTabItem[];
   onValueChange: (value: string) => void;
   value: string;
 }
@@ -54,4 +54,3 @@ export function InspectorPanel({ children, title }: InspectorPanelProps) {
     </section>
   );
 }
-
