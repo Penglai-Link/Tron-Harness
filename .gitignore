@@ -1,3 +1,9 @@
+# AI Tools
+.codex/
+.gemini/
+.qwen/
+.claude/
+
 # Dependencies
 node_modules/
 .pnp/
