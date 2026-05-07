@@ -1,4 +1,12 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+
 import {
   Bell,
   Bot,
@@ -32,7 +40,7 @@ import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/i18n";
-import { ClientLink } from "@/lib/client-router";
+import { ClientLink } from "@/router/client-router";
 import { cn } from "@/lib/utils";
 
 export interface TronNavItem {

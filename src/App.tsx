@@ -1,13 +1,30 @@
-import { ArrowRight, LayoutDashboard } from "lucide-react";
-import { useTranslation } from "react-i18next";
+import {
+  ArrowRight,
+  LayoutDashboard,
+} from "lucide-react";
 
-import { TronShell, tronNavigation } from "@/components/tron";
+import { useTranslation } from "react-i18next";
+import {
+  TronShell,
+  tronNavigation,
+} from "@/components/tron";
+
 import { Button } from "@/components/ui/button";
-import { ClientLink, ClientRouterProvider, useRouteLocation } from "@/lib/client-router";
-import { appRoutes } from "@/lib/app-routes";
-import { DesignStandardPage } from "@/pages/design-standard";
-import { LoginPage, routePages, TasksImportPage } from "@/pages/page-registry";
-import { SharedShellPreviewPage } from "@/pages/shared-shell-preview";
+import {
+  ClientLink,
+  ClientRouterProvider,
+  useRouteLocation,
+} from "@/router/client-router";
+
+import { appRoutes } from "@/router/app-routes";
+import { DesignStandardPage } from "@/domain/design-standard/page";
+import {
+  LoginPage,
+  routePages,
+  TasksImportPage,
+} from "@/router/page-registry";
+
+import { SharedShellPreviewPage } from "@/domain/shared-shell/page/preview";
 
 function resolveAppRoute(pathname: string, search: string) {
   const exactRoute = `${pathname}${search}`;

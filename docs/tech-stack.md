@@ -43,6 +43,12 @@ UI is built from reusable and composable components before assembling pages and 
 - Component-first architecture
 - Reusable and composable UI components
 - Organize pages by route domain
+- Route-domain code is colocated under `src/domain/<domain>/`:
+  - `page/` contains the route page components
+  - `mock/` contains static development fixtures
+  - `api/` contains endpoint definitions, hooks, and data-source switching logic
+  - `model/model.ts` contains domain data models and DTO contracts
+  - `model/enum.ts` contains domain enum-like contracts such as status and tone unions when needed
 - Strong typing with TypeScript
 - UI primitives based on shadcn/ui, Radix UI, and Tailwind CSS
 - All data-dependent components use mock data during frontend development
@@ -113,6 +119,11 @@ The project is designed to produce a single backend-driven runtime artifact.
 - Backend can run independently using Cargo
 - Frontend components use mock data by default
 - API integration is isolated behind hooks
+- Frontend data source selection is environment-driven:
+  - `VITE_TRON_DATA_SOURCE=mock|api` sets the global default
+  - `VITE_TRON_<DOMAIN>_DATA_SOURCE=mock|api` overrides one route domain, for example `VITE_TRON_VARIABLE_DATA_SOURCE=api`
+  - `VITE_TRON_API_BASE_URL` configures the backend API origin when API mode is enabled
+  - Page components must import route-domain hooks from `src/domain/<domain>/api/index.ts`; static fixtures stay isolated under `src/domain/<domain>/mock/data.ts`
 
 ### Production Mode
 

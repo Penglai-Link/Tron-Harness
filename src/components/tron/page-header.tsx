@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { ClientLink } from "@/lib/client-router";
+import { ClientLink } from "@/router/client-router";
 import { cn } from "@/lib/utils";
 
 export interface BreadcrumbItem {
