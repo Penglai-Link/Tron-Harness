@@ -80,7 +80,7 @@ Application bootstrapping, routing, domain modules, shared UI, global state, and
 
 ### Frontend Directory Standard
 
-New frontend code must follow this target structure. Existing legacy paths should migrate toward this shape when touched; avoid adding new domain code to legacy catch-all component folders.
+frontend code must follow this target structure.  
 
 ```text
 src/
