@@ -1,4 +1,7 @@
-import { useState } from "react";
+import {
+  useMemo,
+  useState,
+} from "react";
 import {
   MoreHorizontal,
   Search,
@@ -45,15 +48,19 @@ function SearchField({ placeholder, value, onChange }: { placeholder: string; va
 
 export function UsersPage() {
   const initialUsers = useUsers();
-  const [users, setUsers] = useState(initialUsers);
+  const [roleOverrides, setRoleOverrides] = useState<Record<string, UserRecord["role"]>>({});
   const [tab, setTab] = useState("users");
   const [query, setQuery] = useState("");
   const [role, setRole] = useState("All");
   const [notice, setNotice] = useState("User directory ready.");
+  const users = useMemo(
+    () => initialUsers.map((user) => ({ ...user, role: roleOverrides[user.id] ?? user.role })),
+    [initialUsers, roleOverrides],
+  );
   const filtered = users.filter((user) => (role === "All" || user.role === role) && `${user.name} ${user.email}`.toLowerCase().includes(query.toLowerCase()));
 
   function updateUserRole(id: string, value: UserRecord["role"]) {
-    setUsers((rows) => rows.map((user) => (user.id === id ? { ...user, role: value } : user)));
+    setRoleOverrides((current) => ({ ...current, [id]: value }));
     setNotice(`Role updated to ${value}`);
   }
 

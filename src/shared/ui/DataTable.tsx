@@ -62,15 +62,19 @@ export function DataTable<T>({ columns, emptyState, pagination, rowKey, rows, ti
         </table>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-outline-variant)] px-5 py-3 text-[13px] text-[var(--color-on-surface-variant)]">
-        {pagination ?? <span>{rows.length} visible records</span>}
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="secondary" disabled>
-            Previous
-          </Button>
-          <Button size="sm" variant="secondary" disabled>
-            Next
-          </Button>
-        </div>
+        {pagination ?? (
+          <>
+            <span>{rows.length} visible records</span>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="secondary" disabled>
+                Previous
+              </Button>
+              <Button size="sm" variant="secondary" disabled>
+                Next
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </section>
   );
