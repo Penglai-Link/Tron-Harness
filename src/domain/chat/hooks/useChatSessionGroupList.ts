@@ -2,7 +2,7 @@ import { getChatSessionGroups } from "@/domain/chat/mock/data";
 import { useServiceQuery } from "@/shared/api/serviceConfig";
 import { chatApiEndpoints } from "@/domain/chat/api";
 
-export function useChatSessionGroups() {
+export function useChatSessionGroupList() {
   return useServiceQuery({
     domain: "chat",
     endpoint: chatApiEndpoints.listChatSessionGroups,

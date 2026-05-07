@@ -20,7 +20,7 @@ import {
   TronShell,
 } from "@/shared";
 
-import { useAuditLogs } from "@/domain/admin/hooks";
+import { useAuditLogList } from "@/domain/admin/hooks";
 import type { AuditLogRecord } from "@/domain/admin/model";
 import {
   adminAuditStatusOptions,
@@ -34,7 +34,7 @@ function Notice({ value }: { value: string }) {
 }
 
 export function AuditLogsPage() {
-  const rows = useAuditLogs();
+  const rows = useAuditLogList();
   const [tab, setTab] = useState("logs");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");

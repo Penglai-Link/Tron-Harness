@@ -19,7 +19,7 @@ import {
   TronShell,
 } from "@/shared";
 
-import { useVariables } from "@/domain/variable/hooks";
+import { useVariableList } from "@/domain/variable/hooks";
 import type { VariableRecord } from "@/domain/variable/model";
 
 
@@ -39,7 +39,7 @@ function SearchField({ placeholder, value, onChange }: { placeholder: string; va
 }
 
 function VariablesBasePage({ variant }: { variant: "standard" | "details" }) {
-  const variables = useVariables();
+  const variables = useVariableList();
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(variables[0]?.id ?? "");
   const [revealed, setRevealed] = useState(false);

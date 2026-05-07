@@ -16,8 +16,8 @@ import {
 } from "@/shared";
 
 import {
-  usePermissionDomains,
-  useRoles
+  usePermissionDomainList,
+  useRoleList
 } from "@/domain/admin/hooks";
 import { cn } from "@/shared/lib/utils";
 import {
@@ -40,8 +40,8 @@ function SearchField({ placeholder, value, onChange }: { placeholder: string; va
 }
 
 export function RoleMatrixPage() {
-  const roles = useRoles();
-  const domains = usePermissionDomains();
+  const roles = useRoleList();
+  const domains = usePermissionDomainList();
   const [activeTab, setActiveTab] = useState("roles");
   const [query, setQuery] = useState("");
   const [overrides, setOverrides] = useState<Record<string, string[]>>({});

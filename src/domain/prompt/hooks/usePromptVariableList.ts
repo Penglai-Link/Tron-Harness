@@ -2,7 +2,7 @@ import { getPromptVariables } from "@/domain/prompt/mock/data";
 import { useServiceQuery } from "@/shared/api/serviceConfig";
 import { promptApiEndpoints } from "@/domain/prompt/api";
 
-export function usePromptVariables() {
+export function usePromptVariableList() {
   return useServiceQuery({
     domain: "prompt",
     endpoint: promptApiEndpoints.listPromptVariables,

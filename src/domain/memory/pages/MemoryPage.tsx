@@ -18,7 +18,7 @@ import {
   TronShell,
 } from "@/shared";
 
-import { useMemoryFragments } from "@/domain/memory/hooks";
+import { useMemoryFragmentList } from "@/domain/memory/hooks";
 import type { MemoryFragment } from "@/domain/memory/model";
 import {
   defaultMemoryFilters,
@@ -42,7 +42,7 @@ function Notice({ value }: { value: string }) {
 }
 
 function MemoryRepository({ details = false }: { details?: boolean }) {
-  const fragments = useMemoryFragments();
+  const fragments = useMemoryFragmentList();
   const [strategy, setStrategy] = useState("hybrid");
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<string[]>([...defaultMemoryFilters]);

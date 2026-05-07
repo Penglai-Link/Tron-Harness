@@ -22,7 +22,7 @@ import {
   TronShell,
 } from "@/shared";
 
-import { useUsers } from "@/domain/admin/hooks";
+import { useUserList } from "@/domain/admin/hooks";
 import type { UserRecord } from "@/domain/admin/model";
 
 
@@ -47,7 +47,7 @@ function SearchField({ placeholder, value, onChange }: { placeholder: string; va
 }
 
 export function UsersPage() {
-  const initialUsers = useUsers();
+  const initialUsers = useUserList();
   const [roleOverrides, setRoleOverrides] = useState<Record<string, UserRecord["role"]>>({});
   const [tab, setTab] = useState("users");
   const [query, setQuery] = useState("");

@@ -19,7 +19,7 @@ import {
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
-import { useAutomations } from "@/domain/automation/hooks";
+import { useAutomationList } from "@/domain/automation/hooks";
 import type { AutomationRecord } from "@/domain/automation/model";
 import {
   automationInspectorTabs,
@@ -49,7 +49,7 @@ function KeyValue({ label, value }: { label: string; value: string }) {
 }
 
 export function AutomationsPage() {
-  const rows = useAutomations();
+  const rows = useAutomationList();
   const [selectedId, setSelectedId] = useState(rows[0]?.id ?? "");
   const [tab, setTab] = useState("details");
   const [query, setQuery] = useState("");

@@ -16,7 +16,7 @@ import {
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
-import { useModels } from "@/domain/model/hooks";
+import { useModelList } from "@/domain/model/hooks";
 import type { ModelRegistryItem } from "@/domain/model/model";
 import { modelVendorFilters } from "@/domain/model/constants";
 
@@ -61,7 +61,7 @@ function ModelInspector({ model }: { model: ModelRegistryItem }) {
 }
 
 export function ModelRegistryPage() {
-  const models = useModels();
+  const models = useModelList();
   const [vendor, setVendor] = useState("All Vendors");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState("gpt-4-turbo");

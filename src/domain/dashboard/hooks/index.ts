@@ -1,1 +1,1 @@
-export * from "./useDashboardData";
+export * from "./useDashboardOverview";

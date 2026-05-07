@@ -1,3 +1,3 @@
 export * from "./useTaskQuickReference";
 export * from "./useTaskDetail";
-export * from "./useKanbanColumns";
+export * from "./useTaskKanbanColumns";

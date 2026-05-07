@@ -2,7 +2,7 @@ import { listPrompts } from "@/domain/prompt/mock/data";
 import { useServiceQuery } from "@/shared/api/serviceConfig";
 import { promptApiEndpoints } from "@/domain/prompt/api";
 
-export function usePrompts() {
+export function usePromptList() {
   return useServiceQuery({
     domain: "prompt",
     endpoint: promptApiEndpoints.listPrompts,

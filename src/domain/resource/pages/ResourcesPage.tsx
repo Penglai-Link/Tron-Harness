@@ -27,7 +27,7 @@ import {
   TronShell,
 } from "@/shared";
 
-import { useResources } from "@/domain/resource/hooks";
+import { useResourceList } from "@/domain/resource/hooks";
 import type { ResourceRecord } from "@/domain/resource/model";
 import { cn } from "@/shared/lib/utils";
 import {
@@ -70,7 +70,7 @@ function ResourceIcon({ resource }: { resource: ResourceRecord }) {
 }
 
 export function ResourcesPage() {
-  const resources = useResources();
+  const resources = useResourceList();
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState("All");

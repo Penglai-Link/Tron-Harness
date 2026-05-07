@@ -17,7 +17,7 @@ import {
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
-import { useGraphData } from "@/domain/knowledge-graph/hooks";
+import { useKnowledgeGraphByDomain } from "@/domain/knowledge-graph/hooks";
 import type { GraphEntity } from "@/domain/knowledge-graph/model";
 
 function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
@@ -37,7 +37,7 @@ function GraphPage({ domainFiltering = false }: { domainFiltering?: boolean }) {
   const [query, setQuery] = useState("");
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [zoom, setZoom] = useState(100);
-  const graph = useGraphData(domain);
+  const graph = useKnowledgeGraphByDomain(domain);
   const visibleEntities = graph.entities.filter((entity) => entity.label.toLowerCase().includes(query.toLowerCase()) || entity.type.toLowerCase().includes(query.toLowerCase()));
   const [selectedId, setSelectedId] = useState("customer-0192");
   const selected = graph.entities.find((entity) => entity.id === selectedId) ?? graph.entities[0];

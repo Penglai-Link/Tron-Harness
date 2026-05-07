@@ -16,7 +16,7 @@ import {
   TronShell,
 } from "@/shared";
 
-import { useKanbanColumns } from "@/domain/task/hooks";
+import { useTaskKanbanColumns } from "@/domain/task/hooks";
 import type { KanbanTask } from "@/domain/task/model";
 import { cn } from "@/shared/lib/utils";
 
@@ -59,7 +59,7 @@ function KanbanCard({ task, selected, onSelect }: { task: KanbanTask; selected: 
 }
 
 export function TasksKanbanPage() {
-  const columns = useKanbanColumns();
+  const columns = useTaskKanbanColumns();
   const [query, setQuery] = useState("");
   const [selectedTask, setSelectedTask] = useState<KanbanTask | null>(null);
   const [notice, setNotice] = useState("Kanban board ready.");

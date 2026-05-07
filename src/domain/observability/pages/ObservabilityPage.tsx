@@ -17,7 +17,7 @@ import {
   TronShell,
 } from "@/shared";
 
-import { useObservabilityData } from "@/domain/observability/hooks";
+import { useObservabilityOverview } from "@/domain/observability/hooks";
 import { cn } from "@/shared/lib/utils";
 import {
   getStatusTone,
@@ -64,7 +64,7 @@ function InspectorTabs({ tabs, value, onValueChange }: { tabs: readonly string[]
 }
 
 export function ObservabilityPage() {
-  const data = useObservabilityData();
+  const data = useObservabilityOverview();
   const [inspectorTab, setInspectorTab] = useState("Details");
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [notice, setNotice] = useState("Live trace stream active");

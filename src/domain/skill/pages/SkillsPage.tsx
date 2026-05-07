@@ -19,7 +19,7 @@ import {
   TronShell,
 } from "@/shared";
 
-import { useCapabilities } from "@/domain/skill/hooks";
+import { useCapabilityList } from "@/domain/skill/hooks";
 import type { CapabilityRecord } from "@/domain/skill/model";
 import { cn } from "@/shared/lib/utils";
 import {
@@ -91,7 +91,7 @@ function CapabilityInspector({ capability }: { capability: CapabilityRecord }) {
 export function SkillsPage() {
   const [mode, setMode] = useState<"skills" | "mcp">("skills");
   const [query, setQuery] = useState("");
-  const initialCapabilities = useCapabilities();
+  const initialCapabilities = useCapabilityList();
   const [capabilities, setCapabilities] = useState(initialCapabilities);
   const [notice, setNotice] = useState("Capability directory ready.");
   const filtered = capabilities.filter((item) => item.mode === mode && item.name.toLowerCase().includes(query.toLowerCase()));

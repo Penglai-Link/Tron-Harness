@@ -22,7 +22,7 @@ import {
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
-import { usePromptVariables } from "@/domain/prompt/hooks";
+import { usePromptVariableList } from "@/domain/prompt/hooks";
 import {
   promptShellNavItems,
   promptVisibilityOptions,
@@ -61,7 +61,7 @@ function KeyValue({ label, value }: { label: string; value: string }) {
 
 
 export function CreatePromptPage() {
-  const variables = usePromptVariables();
+  const variables = usePromptVariableList();
   const [tab, setTab] = useState("prompts");
   const [navItem, setNavItem] = useState("Library");
   const [notificationsOpen, setNotificationsOpen] = useState(false);

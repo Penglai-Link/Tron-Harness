@@ -23,8 +23,8 @@ import {
 
 import { cn } from "@/shared/lib/utils";
 import {
-  useChatMessages,
-  useChatSessionGroups
+  useChatMessageListBySession,
+  useChatSessionGroupList
 } from "@/domain/chat/hooks";
 import type { ChatMessage } from "@/domain/chat/model";
 
@@ -50,8 +50,8 @@ function KeyValue({ label, value }: { label: string; value: string }) {
 }
 
 function ChatSessionPage({ variant }: { variant: "reasoning" | "execution" }) {
-  const groups = useChatSessionGroups();
-  const messages = useChatMessages(variant);
+  const groups = useChatSessionGroupList();
+  const messages = useChatMessageListBySession(variant);
   const [activeSession, setActiveSession] = useState("primary");
   const [inspectorTab, setInspectorTab] = useState("info");
   const [composer, setComposer] = useState("");

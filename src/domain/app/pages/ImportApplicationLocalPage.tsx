@@ -16,7 +16,7 @@ import {
 
 import { cn } from "@/shared/lib/utils";
 import { importApplicationSourceOptions } from "@/domain/app/constants";
-import { useImportApplicationDefaults } from "@/domain/app/hooks";
+import { useImportApplicationDefaultsBySource } from "@/domain/app/hooks";
 import type { ImportApplicationDefaults } from "@/domain/app/model";
 
 function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
@@ -28,7 +28,7 @@ function RoutePageShell({ activeItem, children }: { activeItem: string; children
 }
 
 function ImportApplicationPage({ initialSource }: { initialSource: ImportApplicationDefaults["source"] }) {
-  const defaults = useImportApplicationDefaults(initialSource);
+  const defaults = useImportApplicationDefaultsBySource(initialSource);
   const [source, setSource] = useState(defaults.source);
   const [form, setForm] = useState(defaults);
   const [tags, setTags] = useState(defaults.tags);

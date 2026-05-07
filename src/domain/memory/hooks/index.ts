@@ -1,1 +1,1 @@
-export * from "./useMemoryFragments";
+export * from "./useMemoryFragmentList";

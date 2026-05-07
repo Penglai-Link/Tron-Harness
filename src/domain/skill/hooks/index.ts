@@ -1,2 +1,2 @@
 export * from "./useSkillSchemaPreview";
-export * from "./useCapabilities";
+export * from "./useCapabilityList";

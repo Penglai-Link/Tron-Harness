@@ -25,7 +25,7 @@ import {
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
-import { useDashboardData } from "@/domain/dashboard/hooks";
+import { useDashboardOverview } from "@/domain/dashboard/hooks";
 
 function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
   return (
@@ -36,7 +36,7 @@ function RoutePageShell({ activeItem, children }: { activeItem: string; children
 }
 
 function DashboardContent() {
-  const { activities, metrics } = useDashboardData();
+  const { activities, metrics } = useDashboardOverview();
   const { secondarySpaces, selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);

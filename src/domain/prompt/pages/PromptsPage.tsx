@@ -20,7 +20,7 @@ import {
   TronShell,
 } from "@/shared";
 
-import { usePrompts } from "@/domain/prompt/hooks";
+import { usePromptList } from "@/domain/prompt/hooks";
 import { promptCategoryFilters } from "@/domain/prompt/constants";
 import type { PromptRecord } from "@/domain/prompt/model";
 import { cn } from "@/shared/lib/utils";
@@ -74,7 +74,7 @@ function PromptInspector({ prompt, notice, setNotice }: { prompt: PromptRecord; 
 }
 
 export function PromptsPage() {
-  const prompts = usePrompts();
+  const prompts = usePromptList();
   const [category, setCategory] = useState("All");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(prompts[0]?.id ?? "");

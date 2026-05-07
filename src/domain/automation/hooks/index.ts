@@ -1,1 +1,1 @@
-export * from "./useAutomations";
+export * from "./useAutomationList";

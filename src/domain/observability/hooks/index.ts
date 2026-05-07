@@ -1,1 +1,1 @@
-export * from "./useObservabilityData";
+export * from "./useObservabilityOverview";

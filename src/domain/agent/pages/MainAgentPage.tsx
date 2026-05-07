@@ -18,7 +18,7 @@ import {
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
-import { useMainAgentMessages } from "@/domain/agent/hooks";
+import { useMainAgentMessageList } from "@/domain/agent/hooks";
 
 function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
   return (
@@ -29,7 +29,7 @@ function RoutePageShell({ activeItem, children }: { activeItem: string; children
 }
 
 export function MainAgentPage() {
-  const messages = useMainAgentMessages();
+  const messages = useMainAgentMessageList();
   const [open, setOpen] = useState(true);
   const [minimized, setMinimized] = useState(false);
   const [draft, setDraft] = useState("");

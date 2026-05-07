@@ -2,7 +2,7 @@ import { getAutomations } from "@/domain/automation/mock/data";
 import { useServiceQuery } from "@/shared/api/serviceConfig";
 import { automationApiEndpoints } from "@/domain/automation/api";
 
-export function useAutomations() {
+export function useAutomationList() {
   return useServiceQuery({
     domain: "automation",
     endpoint: automationApiEndpoints.listAutomations,

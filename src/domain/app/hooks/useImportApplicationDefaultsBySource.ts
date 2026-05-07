@@ -3,7 +3,7 @@ import { useServiceQuery } from "@/shared/api/serviceConfig";
 import { appApiEndpoints } from "@/domain/app/api";
 import type { ImportApplicationDefaults } from "@/domain/app/model";
 
-export function useImportApplicationDefaults(source: ImportApplicationDefaults["source"]) {
+export function useImportApplicationDefaultsBySource(source: ImportApplicationDefaults["source"]) {
   return useServiceQuery({
     domain: "app",
     endpoint: appApiEndpoints.getImportDefaults,

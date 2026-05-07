@@ -23,7 +23,7 @@ import {
   TronShell,
 } from "@/shared";
 
-import { useApps } from "@/domain/app/hooks";
+import { useAppList } from "@/domain/app/hooks";
 import type { AppRecord } from "@/domain/app/model";
 
 function IconButton({ label, children, onClick }: { label: string; children: React.ReactNode; onClick?: () => void }) {
@@ -51,7 +51,7 @@ function tagList(tags: string[]) {
 }
 
 export function AppsPage() {
-  const rows = useApps();
+  const rows = useAppList();
   const [query, setQuery] = useState("");
   const [source, setSource] = useState("all");
   const [page, setPage] = useState(1);

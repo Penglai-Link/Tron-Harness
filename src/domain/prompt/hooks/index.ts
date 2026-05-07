@@ -1,2 +1,2 @@
-export * from "./usePromptVariables";
-export * from "./usePrompts";
+export * from "./usePromptVariableList";
+export * from "./usePromptList";

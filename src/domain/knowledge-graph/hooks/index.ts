@@ -1,1 +1,1 @@
-export * from "./useGraphData";
+export * from "./useKnowledgeGraphByDomain";
