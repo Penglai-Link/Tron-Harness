@@ -5,16 +5,19 @@ import {
 
 import { useTranslation } from "react-i18next";
 import {
+  BrowserRouter,
+  Link,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+} from "react-router";
+import {
   TronShell,
   tronNavigation,
 } from "@/components/tron";
 
 import { Button } from "@/components/ui/button";
-import {
-  ClientLink,
-  ClientRouterProvider,
-  useRouteLocation,
-} from "@/router/client-router";
 
 import { appRoutes } from "@/router/app-routes";
 import { DesignStandardPage } from "@/domain/design-standard/page";
@@ -37,6 +40,14 @@ function resolveAppRoute(pathname: string, search: string) {
 
   return route && Component ? { Component, route } : undefined;
 }
+
+const appRoutePaths = Array.from(
+  new Set(
+    appRoutes
+      .filter((route) => route.route !== "/login")
+      .map((route) => new URL(route.route, "https://tron.local").pathname),
+  ),
+);
 
 function resolveActiveItem(pathname: string) {
   return tronNavigation.flatMap((section) => section.items).find((item) => item.href === pathname)?.label ?? "Dashboard";
@@ -61,16 +72,16 @@ function HomePage() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Button asChild>
-              <ClientLink href="/design-standard">
+              <Link to="/design-standard">
                 {t("cta.designStandard")}
                 <ArrowRight size={16} aria-hidden="true" />
-              </ClientLink>
+              </Link>
             </Button>
             <Button asChild variant="secondary">
-              <ClientLink href="/shared-shell-preview">
+              <Link to="/shared-shell-preview">
                 {t("cta.sharedShell")}
                 <ArrowRight size={16} aria-hidden="true" />
-              </ClientLink>
+              </Link>
             </Button>
           </div>
         </div>
@@ -94,30 +105,9 @@ function ConsoleFallbackPage() {
   );
 }
 
-function RoutedApp() {
-  const { pathname: path, search } = useRouteLocation();
-
-  if (path === "/" || path === "/login") {
-    return <LoginPage />;
-  }
-
-  if (path === "/design-standard") {
-    return <DesignStandardPage />;
-  }
-
-  if (path === "/shared-shell-preview") {
-    return <SharedShellPreviewPage />;
-  }
-
-  if (path === "/tasks/import") {
-    return (
-      <TronShell activeItem="Tasks">
-        <TasksImportPage />
-      </TronShell>
-    );
-  }
-
-  const resolved = resolveAppRoute(path, search);
+function AppRoutePage() {
+  const { pathname, search } = useLocation();
+  const resolved = resolveAppRoute(pathname, search);
   if (resolved) {
     const { Component, route } = resolved;
     if (route.pageId === "auth.login") {
@@ -131,21 +121,53 @@ function RoutedApp() {
     );
   }
 
-  if (path.startsWith("/")) {
-    return (
-      <TronShell activeItem={resolveActiveItem(path)}>
-        <ConsoleFallbackPage />
-      </TronShell>
-    );
-  }
+  return (
+    <TronShell activeItem={resolveActiveItem(pathname)}>
+      <ConsoleFallbackPage />
+    </TronShell>
+  );
+}
 
-  return <HomePage />;
+function TasksImportRoutePage() {
+  return (
+    <TronShell activeItem="Tasks">
+      <TasksImportPage />
+    </TronShell>
+  );
+}
+
+function ConsoleFallbackRoutePage() {
+  const { pathname } = useLocation();
+
+  return (
+    <TronShell activeItem={resolveActiveItem(pathname)}>
+      <ConsoleFallbackPage />
+    </TronShell>
+  );
+}
+
+function RoutedApp() {
+  return (
+    <Routes>
+      <Route path="/" element={<LoginPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/home" element={<HomePage />} />
+      <Route path="/design-standard" element={<DesignStandardPage />} />
+      <Route path="/shared-shell-preview" element={<SharedShellPreviewPage />} />
+      <Route path="/tasks/import" element={<TasksImportRoutePage />} />
+      <Route path="/chats" element={<Navigate replace to="/chats/8842-alpha" />} />
+      {appRoutePaths.map((path) => (
+        <Route element={<AppRoutePage />} key={path} path={path} />
+      ))}
+      <Route path="*" element={<ConsoleFallbackRoutePage />} />
+    </Routes>
+  );
 }
 
 export function App() {
   return (
-    <ClientRouterProvider>
+    <BrowserRouter>
       <RoutedApp />
-    </ClientRouterProvider>
+    </BrowserRouter>
   );
 }

@@ -30,6 +30,8 @@ UI is built from reusable and composable components before assembling pages and 
 ### Stack
 
 - **React**: latest stable version
+- **React Router**: route matching, browser history integration, redirects, and routable page composition
+- **Zustand**: lightweight global frontend state for app-shell UI and cross-route client state
 - **Vite 8**: fast frontend build tool and development server
 - **TypeScript**: latest stable version
 - **PreText**: text/state-oriented UI abstraction  
@@ -53,6 +55,8 @@ UI is built from reusable and composable components before assembling pages and 
 - UI primitives based on shadcn/ui, Radix UI, and Tailwind CSS
 - All data-dependent components use mock data during frontend development
 - Hooks are reserved as the boundary for future backend API integration
+- Routing uses React Router as the browser routing runtime; route metadata may remain in domain-specific typed registries when navigation labels, active menu state, and page archetypes need to stay colocated
+- Cross-route UI state uses Zustand rather than ad hoc router state or deeply nested shell-local state
 - Fast local development powered by Vite
 - Minimal and composable frontend abstractions
 - Internationalization is a first-class frontend concern; user-facing UI text must be resolved through translation keys rather than hard-coded component strings

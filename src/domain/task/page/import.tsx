@@ -1,5 +1,9 @@
 import { useState } from "react";
 import {
+  Link,
+  useNavigate,
+} from "react-router";
+import {
   Check,
   FolderOpen,
   Plus,
@@ -16,10 +20,6 @@ import {
   TextInput,
   TronShell,
 } from "@/components/tron";
-import {
-  ClientLink,
-  useNavigate,
-} from "@/router/client-router";
 
 function Notice({ value }: { value: string }) {
   return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
@@ -40,7 +40,7 @@ export function TasksImportPage() {
         actions={
           <>
             <Button asChild variant="secondary">
-              <ClientLink href="/tasks">Back to Board</ClientLink>
+              <Link to="/tasks">Back to Board</Link>
             </Button>
             <Button onClick={() => setStatus(`${source.toUpperCase()} import scanned 4 candidate tasks`)}>
               <Upload size={16} aria-hidden="true" />

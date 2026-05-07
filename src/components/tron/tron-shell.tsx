@@ -3,7 +3,6 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
   type ReactNode,
 } from "react";
 
@@ -37,10 +36,11 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 import { Button } from "@/components/ui/button";
 import { useLocale } from "@/i18n";
-import { ClientLink } from "@/router/client-router";
+import { useAppShellStore } from "@/store/app-shell-store";
 import { cn } from "@/lib/utils";
 
 export interface TronNavItem {
@@ -230,15 +230,22 @@ export function TronShell({
   const { t } = useTranslation(["common", "shell"]);
   const { changeLocale, currentLocale, supportedLocales: locales } = useLocale();
   const shellFrameMounted = useContext(TronShellFrameContext);
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(tronNavigation.map((section) => [section.label, sectionHasActiveItem(section, activeItem) || section.label === "Core"])),
-  );
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [utilityPanel, setUtilityPanel] = useState<string | null>(null);
-  const [agentOpen, setAgentOpen] = useState(false);
-  const [selectedPrimarySpaceId, setSelectedPrimarySpaceId] = useState(defaultPrimarySpaceId);
-  const [selectedSecondarySpaceId, setSelectedSecondarySpaceId] = useState(defaultSecondarySpaceId);
-  const [secondarySpaceMenuOpen, setSecondarySpaceMenuOpen] = useState(false);
+  const agentOpen = useAppShellStore((state) => state.agentOpen);
+  const ensureSectionOpen = useAppShellStore((state) => state.ensureSectionOpen);
+  const openSections = useAppShellStore((state) => state.openSections);
+  const secondarySpaceMenuOpen = useAppShellStore((state) => state.secondarySpaceMenuOpen);
+  const selectedPrimarySpaceId = useAppShellStore((state) => state.selectedPrimarySpaceId);
+  const selectedSecondarySpaceId = useAppShellStore((state) => state.selectedSecondarySpaceId);
+  const setAgentOpen = useAppShellStore((state) => state.setAgentOpen);
+  const setSidebarCollapsed = useAppShellStore((state) => state.setSidebarCollapsed);
+  const sidebarCollapsed = useAppShellStore((state) => state.sidebarCollapsed);
+  const toggleAgent = useAppShellStore((state) => state.toggleAgent);
+  const toggleSecondarySpaceMenu = useAppShellStore((state) => state.toggleSecondarySpaceMenu);
+  const toggleSection = useAppShellStore((state) => state.toggleSection);
+  const toggleUtilityPanel = useAppShellStore((state) => state.toggleUtilityPanel);
+  const utilityPanel = useAppShellStore((state) => state.utilityPanel);
+  const selectPrimarySpaceInStore = useAppShellStore((state) => state.selectPrimarySpace);
+  const selectSecondarySpaceInStore = useAppShellStore((state) => state.selectSecondarySpace);
 
   const primarySpaces = primarySpaceMocks;
   const secondarySpaces = getSecondarySpaceMocks(selectedPrimarySpaceId);
@@ -256,34 +263,18 @@ export function TronShell({
     [primarySpaces, secondarySpaces, selectedPrimarySpace, selectedPrimarySpaceId, selectedSecondarySpace, selectedSecondarySpaceId],
   );
 
-  function toggleUtilityPanel(panel: string) {
-    setSecondarySpaceMenuOpen(false);
-    setUtilityPanel((current) => (current === panel ? null : panel));
-  }
-
-  function toggleSecondarySpaceMenu() {
-    setUtilityPanel(null);
-    setSecondarySpaceMenuOpen((current) => !current);
-  }
-
   function selectPrimarySpace(spaceId: string) {
-    setSelectedPrimarySpaceId(spaceId);
-    setSelectedSecondarySpaceId(getSecondarySpaceMocks(spaceId)[0]?.id ?? "");
-    setSecondarySpaceMenuOpen(false);
-    setUtilityPanel(null);
+    selectPrimarySpaceInStore(spaceId, getSecondarySpaceMocks(spaceId)[0]?.id ?? "");
   }
 
   function selectSecondarySpace(spaceId: string) {
-    setSelectedSecondarySpaceId(spaceId);
-    setSecondarySpaceMenuOpen(false);
+    selectSecondarySpaceInStore(spaceId);
   }
 
   useEffect(() => {
     const activeSection = tronNavigation.find((section) => sectionHasActiveItem(section, activeItem));
-    if (!activeSection) return;
-
-    setOpenSections((current) => (current[activeSection.label] ? current : { ...current, [activeSection.label]: true }));
-  }, [activeItem]);
+    ensureSectionOpen(activeSection?.label);
+  }, [activeItem, ensureSectionOpen]);
 
   if (shellFrameMounted) {
     return <InlineTronShellContent activeItem={activeItem} contentClassName={contentClassName} rightPanel={rightPanel}>{children}</InlineTronShellContent>;
@@ -313,7 +304,7 @@ export function TronShell({
               variant="ghost"
               aria-label={sidebarCollapsed ? t("shell:aria.expandSidebar") : t("shell:aria.collapseSidebar")}
               aria-pressed={sidebarCollapsed}
-              onClick={() => setSidebarCollapsed((current) => !current)}
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             >
               {sidebarCollapsed ? <PanelLeftOpen size={17} aria-hidden="true" /> : <PanelLeftClose size={17} aria-hidden="true" />}
             </Button>
@@ -428,7 +419,7 @@ export function TronShell({
                     className="flex h-8 w-full items-center justify-between rounded-lg px-2 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]"
                     type="button"
                     aria-expanded={open}
-                    onClick={() => setOpenSections((current) => ({ ...current, [section.label]: !open }))}
+                    onClick={() => toggleSection(section.label)}
                   >
                     {t(section.translationKey)}
                     <ChevronDown className={cn("transition-transform", open ? "rotate-180" : "")} size={14} aria-hidden="true" />
@@ -441,7 +432,7 @@ export function TronShell({
                       const active = item.label === activeItem;
                       const itemLabel = t(item.translationKey);
                       return (
-                        <ClientLink
+                        <Link
                           className={cn(
                             "flex h-9 items-center rounded-lg text-sm transition-colors",
                             sidebarCollapsed ? "justify-center px-0" : "gap-2 px-3",
@@ -451,13 +442,13 @@ export function TronShell({
                           )}
                           aria-current={active ? "page" : undefined}
                           data-active={active}
-                          href={item.href}
                           key={item.label}
                           title={sidebarCollapsed ? itemLabel : undefined}
+                          to={item.href}
                         >
                           <Icon size={17} aria-hidden="true" />
                           <span className={cn(sidebarCollapsed ? "sr-only" : "")}>{itemLabel}</span>
-                        </ClientLink>
+                        </Link>
                       );
                     })}
                   </div>
@@ -517,7 +508,7 @@ export function TronShell({
         className="fixed bottom-6 right-6 z-40 flex h-12 items-center gap-2 rounded-full bg-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-on-primary)] shadow-[0_18px_45px_rgba(0,0,0,0.18)] transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
         type="button"
         aria-expanded={agentOpen}
-        onClick={() => setAgentOpen((current) => !current)}
+        onClick={toggleAgent}
       >
         <Bot size={18} aria-hidden="true" />
         {t("shell:assistant.title")}

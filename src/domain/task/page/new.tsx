@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import {
   Code2,
   Link,
@@ -18,7 +19,6 @@ import {
   TronShell,
 } from "@/components/tron";
 
-import { useNavigate } from "@/router/client-router";
 import { cn } from "@/lib/utils";
 import { useTaskQuickReference } from "@/domain/task/api";
 

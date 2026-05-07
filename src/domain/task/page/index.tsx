@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import {
   Plus,
   RefreshCcw,
@@ -14,7 +15,6 @@ import {
   TextInput,
   TronShell,
 } from "@/components/tron";
-import { useNavigate } from "@/router/client-router";
 
 import {
   useKanbanColumns,

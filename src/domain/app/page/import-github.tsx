@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import type { LucideIcon } from "lucide-react";
+import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import {
   Field,
@@ -16,7 +17,6 @@ import {
   TextInput,
   TronShell,
 } from "@/components/tron";
-import { ClientLink } from "@/router/client-router";
 
 import { cn } from "@/lib/utils";
 import {
@@ -52,10 +52,10 @@ function ImportApplicationPage({ initialSource }: { initialSource: ImportApplica
     <RoutePageShell activeItem="Apps">
       <div className="mx-auto max-w-3xl">
         {initialSource === "local" ? (
-          <ClientLink className="mb-6 inline-flex items-center gap-1 text-sm text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]" href="/apps">
+          <Link className="mb-6 inline-flex items-center gap-1 text-sm text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]" to="/apps">
             <ArrowLeft size={16} aria-hidden="true" />
             Back to Apps
-          </ClientLink>
+          </Link>
         ) : null}
         <SurfaceCard className="overflow-hidden p-0">
           <div className="border-b border-[var(--color-outline-variant)] px-8 py-6">

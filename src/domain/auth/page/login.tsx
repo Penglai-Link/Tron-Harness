@@ -5,12 +5,12 @@ import {
 } from "lucide-react";
 
 import { useTranslation } from "react-i18next";
+import { useNavigate } from "react-router";
 import { Button } from "@/components/ui/button";
 import {
   Field,
   TextInput,
 } from "@/components/tron";
-import { useNavigate } from "@/router/client-router";
 
 export function LoginPage() {
   const { t } = useTranslation(["auth", "common"]);
