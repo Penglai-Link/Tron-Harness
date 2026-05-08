@@ -1,6 +1,6 @@
 ## Backend Tech-Stack
 
-The backend is implemented in **Rust**, with a focus on performance, safety, and modularity.
+The backend is implemented in **Rust** and follows a **domain-driven** architecture, with a focus on performance, safety, and modularity.
 
 ### Stack
 
