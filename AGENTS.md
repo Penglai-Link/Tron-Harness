@@ -1,4 +1,8 @@
-# AGETNS.md
+# AGENTS.md
+
+## Instructions
+
+- Always use `Makefile` first.
 
 ## Skill Constraints
 

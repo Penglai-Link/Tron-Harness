@@ -1,0 +1,1 @@
+- Always follow `DESIGN.md` when developing new page
