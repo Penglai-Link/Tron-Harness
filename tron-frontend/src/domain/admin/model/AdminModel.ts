@@ -45,14 +45,14 @@ export interface RoleRecord {
 }
 
 /**
- * Represents a user within the system, including their role, status, and last active time.
+ * Represents a user within the system, including role assignments, workspace memberships, status, and last active time.
  */
 export interface UserRecord {
   id: string;
   name: string;
   email: string;
-  role: string;
-  workspace: string;
+  roles: string[];
+  workspaces: string[];
   status: string;
   lastActive: string;
 }

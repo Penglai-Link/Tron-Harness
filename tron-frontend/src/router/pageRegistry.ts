@@ -9,6 +9,7 @@ type RoutePageComponent = LazyExoticComponent<ComponentType>;
 export const routePages: Record<string, RoutePageComponent> = {
   "admin.auditLogs": lazy(() => import("@/domain/admin/pages/AuditLogsPage").then((module) => ({ default: module.AuditLogsPage }))),
   "admin.roles": lazy(() => import("@/domain/admin/pages/RoleMatrixPage").then((module) => ({ default: module.RoleMatrixPage }))),
+  "admin.userDetails": lazy(() => import("@/domain/admin/pages/UserDetailsPage").then((module) => ({ default: module.UserDetailsPage }))),
   "admin.users": lazy(() => import("@/domain/admin/pages/UsersPage").then((module) => ({ default: module.UsersPage }))),
   "agent.main": lazy(() => import("@/domain/agent/pages/MainAgentPage").then((module) => ({ default: module.MainAgentPage }))),
   "apps.index": lazy(() => import("@/domain/app/pages/AppsPage").then((module) => ({ default: module.AppsPage }))),

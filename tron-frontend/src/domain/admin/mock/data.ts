@@ -46,10 +46,10 @@ const roles: RoleRecord[] = [
 ];
 
 const users: UserRecord[] = [
-  { id: "usr-alex", name: "Alex Johnson", email: "alex@tron.ai", role: "Admin", workspace: "Enterprise", status: "Active", lastActive: "2m ago" },
-  { id: "usr-maya", name: "Maya Singh", email: "maya@tron.ai", role: "Editor", workspace: "Platform", status: "Active", lastActive: "14m ago" },
-  { id: "usr-chen", name: "Chen Wei", email: "chen@tron.ai", role: "Viewer", workspace: "Data", status: "Invited", lastActive: "Pending" },
-  { id: "usr-rina", name: "Rina Patel", email: "rina@tron.ai", role: "Editor", workspace: "Support", status: "Suspended", lastActive: "Apr 28" },
+  { id: "usr-alex", name: "Alex Johnson", email: "alex@tron.ai", roles: ["Admin", "Editor"], workspaces: ["Enterprise", "Platform"], status: "Active", lastActive: "2m ago" },
+  { id: "usr-maya", name: "Maya Singh", email: "maya@tron.ai", roles: ["Editor"], workspaces: ["Platform", "Data"], status: "Active", lastActive: "14m ago" },
+  { id: "usr-chen", name: "Chen Wei", email: "chen@tron.ai", roles: ["Viewer"], workspaces: ["Enterprise", "Data"], status: "Invited", lastActive: "Pending" },
+  { id: "usr-rina", name: "Rina Patel", email: "rina@tron.ai", roles: ["Editor", "Viewer"], workspaces: ["Support", "Platform"], status: "Suspended", lastActive: "Apr 28" },
 ];
 
 export function listPermissionDomains() {
