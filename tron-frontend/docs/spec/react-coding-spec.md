@@ -13,6 +13,7 @@
 
 - Domain-driven frontend architecture
 - Reusable and composable UI components
+- Use toast notifications for all user prompts.
 - App bootstrapping belongs in `src/app/`
 - Route declarations and page registration belong in `src/router/`
 - Route-domain code is colocated under `src/domain/<domain>/`:
