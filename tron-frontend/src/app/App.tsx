@@ -1,4 +1,9 @@
 import {
+  lazy,
+  Suspense,
+  type ReactNode,
+} from "react";
+import {
   ArrowRight,
   LayoutDashboard,
 } from "lucide-react";
@@ -20,14 +25,10 @@ import {
 import { Button } from "@/shared/ui/Button";
 
 import { appRoutes } from "@/router/routes";
-import { DesignStandardPage } from "@/domain/design-standard/pages/DesignStandardPage";
-import {
-  LoginPage,
-  routePages,
-  TasksImportPage,
-} from "@/router/pageRegistry";
+import { routePages } from "@/router/pageRegistry";
 
-import { SharedShellPreviewPage } from "@/domain/shared-shell/pages/SharedShellPreviewPage";
+const DesignStandardPage = lazy(() => import("@/domain/design-standard/pages/DesignStandardPage").then((module) => ({ default: module.DesignStandardPage })));
+const SharedShellPreviewPage = lazy(() => import("@/domain/shared-shell/pages/SharedShellPreviewPage").then((module) => ({ default: module.SharedShellPreviewPage })));
 
 function resolveAppRoute(pathname: string, search: string) {
   const exactRoute = `${pathname}${search}`;
@@ -105,18 +106,59 @@ function ConsoleFallbackPage() {
   );
 }
 
+function RouteLoadingFallback({ fullScreen = false }: { fullScreen?: boolean }) {
+  return (
+    <section
+      aria-busy="true"
+      className={fullScreen ? "flex min-h-screen items-center justify-center bg-[var(--color-background)] px-6" : "flex min-h-[calc(100vh-7rem)] items-center justify-center"}
+    >
+      <div className="h-1.5 w-32 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
+        <div className="h-full w-1/2 animate-pulse rounded-full bg-[var(--color-primary)]" />
+      </div>
+    </section>
+  );
+}
+
+function SuspendedRoute({ children, fullScreen = false }: { children: ReactNode; fullScreen?: boolean }) {
+  return (
+    <Suspense fallback={<RouteLoadingFallback fullScreen={fullScreen} />}>
+      {children}
+    </Suspense>
+  );
+}
+
+function PublicRoutePage({ pageId }: { pageId: string }) {
+  const Component = routePages[pageId];
+
+  if (!Component) {
+    return <RouteLoadingFallback fullScreen />;
+  }
+
+  return (
+    <SuspendedRoute fullScreen>
+      <Component />
+    </SuspendedRoute>
+  );
+}
+
 function AppRoutePage() {
   const { pathname, search } = useLocation();
   const resolved = resolveAppRoute(pathname, search);
   if (resolved) {
     const { Component, route } = resolved;
     if (route.pageId === "auth.login") {
-      return <Component />;
+      return (
+        <SuspendedRoute fullScreen>
+          <Component />
+        </SuspendedRoute>
+      );
     }
 
     return (
       <TronShell activeItem={route.activeNav}>
-        <Component />
+        <SuspendedRoute>
+          <Component />
+        </SuspendedRoute>
       </TronShell>
     );
   }
@@ -124,14 +166,6 @@ function AppRoutePage() {
   return (
     <TronShell activeItem={resolveActiveItem(pathname)}>
       <ConsoleFallbackPage />
-    </TronShell>
-  );
-}
-
-function TasksImportRoutePage() {
-  return (
-    <TronShell activeItem="Tasks">
-      <TasksImportPage />
     </TronShell>
   );
 }
@@ -149,12 +183,11 @@ function ConsoleFallbackRoutePage() {
 function RoutedApp() {
   return (
     <Routes>
-      <Route path="/" element={<LoginPage />} />
-      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<PublicRoutePage pageId="auth.login" />} />
+      <Route path="/login" element={<PublicRoutePage pageId="auth.login" />} />
       <Route path="/home" element={<HomePage />} />
-      <Route path="/design-standard" element={<DesignStandardPage />} />
-      <Route path="/shared-shell-preview" element={<SharedShellPreviewPage />} />
-      <Route path="/tasks/import" element={<TasksImportRoutePage />} />
+      <Route path="/design-standard" element={<SuspendedRoute fullScreen><DesignStandardPage /></SuspendedRoute>} />
+      <Route path="/shared-shell-preview" element={<SuspendedRoute fullScreen><SharedShellPreviewPage /></SuspendedRoute>} />
       <Route path="/chats" element={<Navigate replace to="/chats/8842-alpha" />} />
       {appRoutePaths.map((path) => (
         <Route element={<AppRoutePage />} key={path} path={path} />

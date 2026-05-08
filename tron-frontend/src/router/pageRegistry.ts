@@ -1,71 +1,41 @@
-import type { ReactNode } from "react";
+import {
+  lazy,
+  type ComponentType,
+  type LazyExoticComponent,
+} from "react";
 
-import { MainAgentPage } from "@/domain/agent/pages/MainAgentPage";
-import { AuditLogsPage } from "@/domain/admin/pages/AuditLogsPage";
-import { RoleMatrixPage } from "@/domain/admin/pages/RoleMatrixPage";
-import { UsersPage } from "@/domain/admin/pages/UsersPage";
-import { AppsPage } from "@/domain/app/pages/AppsPage";
-import { ImportApplicationGithubPage } from "@/domain/app/pages/ImportApplicationGithubPage";
-import { ImportApplicationLocalPage } from "@/domain/app/pages/ImportApplicationLocalPage";
-import { LoginPage } from "@/domain/auth/pages/LoginPage";
-import { AutomationsPage } from "@/domain/automation/pages/AutomationsPage";
-import { CreateAutomationPage } from "@/domain/automation/pages/CreateAutomationPage";
-import { ChatSessionExecutionPage } from "@/domain/chat/pages/ChatSessionExecutionPage";
-import { ChatSessionReasoningPage } from "@/domain/chat/pages/ChatSessionReasoningPage";
-import { DashboardPage } from "@/domain/dashboard/pages/DashboardPage";
-import { KnowledgeGraphPage } from "@/domain/knowledge-graph/pages/KnowledgeGraphPage";
-import { KnowledgeGraphDomainPage } from "@/domain/knowledge-graph/pages/KnowledgeGraphDomainPage";
-import { MemoryDetailsPage } from "@/domain/memory/pages/MemoryDetailsPage";
-import { MemoryPage } from "@/domain/memory/pages/MemoryPage";
-import { AddModelPage } from "@/domain/model/pages/AddModelPage";
-import { ModelRegistryPage } from "@/domain/model/pages/ModelRegistryPage";
-import { ObservabilityPage } from "@/domain/observability/pages/ObservabilityPage";
-import { CreatePromptPage } from "@/domain/prompt/pages/CreatePromptPage";
-import { PromptsPage } from "@/domain/prompt/pages/PromptsPage";
-import { ResourcesPage } from "@/domain/resource/pages/ResourcesPage";
-import { CreateSkillPage } from "@/domain/skill/pages/CreateSkillPage";
-import { SkillsPage } from "@/domain/skill/pages/SkillsPage";
-import { TaskDetailsPage } from "@/domain/task/pages/TaskDetailsPage";
-import { TasksImportPage } from "@/domain/task/pages/TasksImportPage";
-import { CreateTaskPage } from "@/domain/task/pages/CreateTaskPage";
-import { TasksKanbanPage } from "@/domain/task/pages/TasksKanbanPage";
-import { VariableDetailsPage } from "@/domain/variable/pages/VariableDetailsPage";
-import { VariablesPage } from "@/domain/variable/pages/VariablesPage";
-
-type RoutePageComponent = () => ReactNode;
+type RoutePageComponent = LazyExoticComponent<ComponentType>;
 
 export const routePages: Record<string, RoutePageComponent> = {
-  "admin.auditLogs": AuditLogsPage,
-  "admin.roles": RoleMatrixPage,
-  "admin.users": UsersPage,
-  "apps.index": AppsPage,
-  "apps.import.github": ImportApplicationGithubPage,
-  "apps.import.local": ImportApplicationLocalPage,
-  "automations.index": AutomationsPage,
-  "automations.new": CreateAutomationPage,
-  "chats.reasoning": ChatSessionReasoningPage,
-  "chats.execution": ChatSessionExecutionPage,
-  "dashboard.index": DashboardPage,
-  "knowledgeGraph.index": KnowledgeGraphPage,
-  "knowledgeGraph.domainFiltering": KnowledgeGraphDomainPage,
-  "auth.login": LoginPage,
-  "agent.main": MainAgentPage,
-  "memory.index": MemoryPage,
-  "memory.details": MemoryDetailsPage,
-  "models.index": ModelRegistryPage,
-  "models.new": AddModelPage,
-  "observability.index": ObservabilityPage,
-  "prompts.index": PromptsPage,
-  "prompts.new": CreatePromptPage,
-  "resources.index": ResourcesPage,
-  "skills.index": SkillsPage,
-  "skills.new": CreateSkillPage,
-  "tasks.index": TasksKanbanPage,
-  "tasks.detail": TaskDetailsPage,
-  "tasks.new": CreateTaskPage,
-  "variables.index": VariablesPage,
-  "variables.details": VariableDetailsPage,
+  "admin.auditLogs": lazy(() => import("@/domain/admin/pages/AuditLogsPage").then((module) => ({ default: module.AuditLogsPage }))),
+  "admin.roles": lazy(() => import("@/domain/admin/pages/RoleMatrixPage").then((module) => ({ default: module.RoleMatrixPage }))),
+  "admin.users": lazy(() => import("@/domain/admin/pages/UsersPage").then((module) => ({ default: module.UsersPage }))),
+  "agent.main": lazy(() => import("@/domain/agent/pages/MainAgentPage").then((module) => ({ default: module.MainAgentPage }))),
+  "apps.index": lazy(() => import("@/domain/app/pages/AppsPage").then((module) => ({ default: module.AppsPage }))),
+  "apps.import.github": lazy(() => import("@/domain/app/pages/ImportApplicationGithubPage").then((module) => ({ default: module.ImportApplicationGithubPage }))),
+  "apps.import.local": lazy(() => import("@/domain/app/pages/ImportApplicationLocalPage").then((module) => ({ default: module.ImportApplicationLocalPage }))),
+  "auth.login": lazy(() => import("@/domain/auth/pages/LoginPage").then((module) => ({ default: module.LoginPage }))),
+  "automations.index": lazy(() => import("@/domain/automation/pages/AutomationsPage").then((module) => ({ default: module.AutomationsPage }))),
+  "automations.new": lazy(() => import("@/domain/automation/pages/CreateAutomationPage").then((module) => ({ default: module.CreateAutomationPage }))),
+  "chats.execution": lazy(() => import("@/domain/chat/pages/ChatSessionExecutionPage").then((module) => ({ default: module.ChatSessionExecutionPage }))),
+  "chats.reasoning": lazy(() => import("@/domain/chat/pages/ChatSessionReasoningPage").then((module) => ({ default: module.ChatSessionReasoningPage }))),
+  "dashboard.index": lazy(() => import("@/domain/dashboard/pages/DashboardPage").then((module) => ({ default: module.DashboardPage }))),
+  "knowledgeGraph.domainFiltering": lazy(() => import("@/domain/knowledge-graph/pages/KnowledgeGraphDomainPage").then((module) => ({ default: module.KnowledgeGraphDomainPage }))),
+  "knowledgeGraph.index": lazy(() => import("@/domain/knowledge-graph/pages/KnowledgeGraphPage").then((module) => ({ default: module.KnowledgeGraphPage }))),
+  "memory.details": lazy(() => import("@/domain/memory/pages/MemoryDetailsPage").then((module) => ({ default: module.MemoryDetailsPage }))),
+  "memory.index": lazy(() => import("@/domain/memory/pages/MemoryPage").then((module) => ({ default: module.MemoryPage }))),
+  "models.index": lazy(() => import("@/domain/model/pages/ModelRegistryPage").then((module) => ({ default: module.ModelRegistryPage }))),
+  "models.new": lazy(() => import("@/domain/model/pages/AddModelPage").then((module) => ({ default: module.AddModelPage }))),
+  "observability.index": lazy(() => import("@/domain/observability/pages/ObservabilityPage").then((module) => ({ default: module.ObservabilityPage }))),
+  "prompts.index": lazy(() => import("@/domain/prompt/pages/PromptsPage").then((module) => ({ default: module.PromptsPage }))),
+  "prompts.new": lazy(() => import("@/domain/prompt/pages/CreatePromptPage").then((module) => ({ default: module.CreatePromptPage }))),
+  "resources.index": lazy(() => import("@/domain/resource/pages/ResourcesPage").then((module) => ({ default: module.ResourcesPage }))),
+  "skills.index": lazy(() => import("@/domain/skill/pages/SkillsPage").then((module) => ({ default: module.SkillsPage }))),
+  "skills.new": lazy(() => import("@/domain/skill/pages/CreateSkillPage").then((module) => ({ default: module.CreateSkillPage }))),
+  "tasks.detail": lazy(() => import("@/domain/task/pages/TaskDetailsPage").then((module) => ({ default: module.TaskDetailsPage }))),
+  "tasks.import": lazy(() => import("@/domain/task/pages/TasksImportPage").then((module) => ({ default: module.TasksImportPage }))),
+  "tasks.index": lazy(() => import("@/domain/task/pages/TasksKanbanPage").then((module) => ({ default: module.TasksKanbanPage }))),
+  "tasks.new": lazy(() => import("@/domain/task/pages/CreateTaskPage").then((module) => ({ default: module.CreateTaskPage }))),
+  "variables.details": lazy(() => import("@/domain/variable/pages/VariableDetailsPage").then((module) => ({ default: module.VariableDetailsPage }))),
+  "variables.index": lazy(() => import("@/domain/variable/pages/VariablesPage").then((module) => ({ default: module.VariablesPage }))),
 };
-
-export { LoginPage } from "@/domain/auth/pages/LoginPage";
-export { TasksImportPage } from "@/domain/task/pages/TasksImportPage";

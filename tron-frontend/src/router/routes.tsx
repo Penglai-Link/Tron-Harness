@@ -30,6 +30,7 @@ export const appRoutes: AppRoute[] = [
   { pageId: "prompts.new", route: "/prompts/new", activeNav: "Prompts", title: "Create New Prompt", archetype: "form-inspector" },
   { pageId: "skills.new", route: "/skills/new", activeNav: "Skills", title: "Create New Skill", archetype: "form-inspector" },
   { pageId: "tasks.new", route: "/tasks/new", activeNav: "Tasks", title: "Create Task", archetype: "form" },
+  { pageId: "tasks.import", route: "/tasks/import", activeNav: "Tasks", title: "Import Task", archetype: "form" },
   { pageId: "dashboard.index", route: "/dashboard", activeNav: "Dashboard", title: "Dashboard", archetype: "dashboard" },
   { pageId: "apps.import.github", route: "/apps/import?source=github", activeNav: "Apps", title: "Import Application", archetype: "form" },
   { pageId: "apps.import.local", route: "/apps/import?source=local", activeNav: "Apps", title: "Import Application Review", archetype: "form" },
