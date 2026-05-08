@@ -32,7 +32,7 @@ function IconButton({ label, children, onClick }: { label: string; children: Rea
 }
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 function SectionTitle({ icon, title }: { icon?: React.ReactNode; title: string }) {
@@ -47,7 +47,7 @@ function SectionTitle({ icon, title }: { icon?: React.ReactNode; title: string }
 export function CreateTaskPage() {
   const quickReference = useTaskQuickReference();
   const [priority, setPriority] = useState("Med");
-  const [notice, setNotice] = useState("Draft task ready.");
+  const [notice, setNotice] = useState("");
   const navigate = useNavigate();
 
   return (
@@ -126,7 +126,7 @@ export function CreateTaskPage() {
               ))}
             </div>
           </SurfaceCard>
-          <Notice value={`${notice} Priority: ${priority}.`} />
+          <Notice value={notice ? `${notice} Priority: ${priority}.` : ""} />
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => navigate("/tasks")}>
               Cancel

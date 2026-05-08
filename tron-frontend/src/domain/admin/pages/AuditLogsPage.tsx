@@ -13,9 +13,7 @@ import { Button } from "@/shared/ui/Button";
 import {
   DataTable,
   PageHeader,
-  SegmentedTabs,
   SelectInput,
-  SurfaceCard,
   TextInput,
   TronShell,
 } from "@/shared";
@@ -24,22 +22,15 @@ import { useAuditLogList } from "@/domain/admin/hooks";
 import type { AuditLogRecord } from "@/domain/admin/model";
 import {
   adminAuditStatusOptions,
-  adminManagementTabs,
   getStatusTone,
 } from "@/domain/admin/constants";
 
-
-function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
-}
-
 export function AuditLogsPage() {
   const rows = useAuditLogList();
-  const [tab, setTab] = useState("logs");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(613);
-  const [notice, setNotice] = useState("Audit log export is ready.");
+  const [notice, setNotice] = useState("");
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return rows.filter((row) => (status === "all" || row.status === status) && (!normalized || Object.values(row).join(" ").toLowerCase().includes(normalized)));
@@ -57,20 +48,9 @@ export function AuditLogsPage() {
           </Button>
         }
       />
-      <div className="mb-4">
-        <Notice value={notice} />
-      </div>
-      <SurfaceCard className="mb-4 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <SegmentedTabs
-            value={tab}
-            onValueChange={setTab}
-            items={adminManagementTabs}
-          />
-          <span className="text-sm text-[var(--color-on-surface-variant)]">{tab === "logs" ? "Log table active" : `${tab} tab staged for lead integration`}</span>
-        </div>
-      </SurfaceCard>
+      <p className="sr-only" aria-live="polite">{notice}</p>
       <DataTable<AuditLogRecord>
+        title="Audit Logs"
         rows={filteredRows}
         rowKey={(row) => row.id}
         toolbar={

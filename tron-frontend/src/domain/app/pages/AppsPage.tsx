@@ -35,7 +35,7 @@ function IconButton({ label, children, onClick }: { label: string; children: Rea
 }
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 function tagList(tags: string[]) {
@@ -55,7 +55,7 @@ export function AppsPage() {
   const [query, setQuery] = useState("");
   const [source, setSource] = useState("all");
   const [page, setPage] = useState(1);
-  const [notice, setNotice] = useState("No app action selected.");
+  const [notice, setNotice] = useState("");
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return rows.filter((row) => (source === "all" || row.source === source) && (!normalized || Object.values(row).join(" ").toLowerCase().includes(normalized)));
@@ -80,9 +80,7 @@ export function AppsPage() {
           </>
         }
       />
-      <div className="mb-4">
-        <Notice value={notice} />
-      </div>
+      <Notice value={notice} />
       <DataTable<AppRecord>
         title="Application Registry"
         rows={filteredRows}

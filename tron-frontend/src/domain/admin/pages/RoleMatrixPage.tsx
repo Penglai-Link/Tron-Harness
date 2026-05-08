@@ -5,11 +5,9 @@ import {
   Search,
 } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
   PageHeader,
-  SegmentedTabs,
   SurfaceCard,
   TextInput,
   TronShell,
@@ -21,14 +19,9 @@ import {
 } from "@/domain/admin/hooks";
 import { cn } from "@/shared/lib/utils";
 import {
-  adminManagementTabs,
   adminPermissionCodes,
   adminPermissionLegend,
 } from "@/domain/admin/constants";
-
-function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
-}
 
 function SearchField({ placeholder, value, onChange }: { placeholder: string; value: string; onChange: (value: string) => void }) {
   return (
@@ -42,10 +35,9 @@ function SearchField({ placeholder, value, onChange }: { placeholder: string; va
 export function RoleMatrixPage() {
   const roles = useRoleList();
   const domains = usePermissionDomainList();
-  const [activeTab, setActiveTab] = useState("roles");
   const [query, setQuery] = useState("");
   const [overrides, setOverrides] = useState<Record<string, string[]>>({});
-  const [notice, setNotice] = useState("Role matrix ready.");
+  const [notice, setNotice] = useState("");
   const filteredRoles = roles.filter((role) => role.name.toLowerCase().includes(query.toLowerCase()));
 
   function togglePermission(roleId: string, domain: string, code: string) {
@@ -62,22 +54,14 @@ export function RoleMatrixPage() {
         status="Permission grid"
         actions={<Button onClick={() => setNotice("Custom role editor opened")}><Plus size={16} aria-hidden="true" />Add Custom Role</Button>}
       />
-      <SurfaceCard className="mb-4 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <SegmentedTabs value={activeTab} onValueChange={setActiveTab} items={adminManagementTabs} />
+      <p className="sr-only" aria-live="polite">{notice}</p>
+      <SurfaceCard className="overflow-hidden p-0">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] p-5">
+          <h2 className="text-xl font-semibold">Platform Permissions</h2>
           <div className="flex items-center gap-2">
             <SearchField placeholder="Search roles..." value={query} onChange={setQuery} />
             <Button size="sm" variant="secondary" onClick={() => setNotice(`Filter drawer opened for ${filteredRoles.length} roles`)}><Filter size={14} aria-hidden="true" />Filter</Button>
           </div>
-        </div>
-      </SurfaceCard>
-      <div className="mb-4">
-        <Notice value={notice} />
-      </div>
-      <SurfaceCard className="overflow-hidden p-0">
-        <div className="flex items-center justify-between border-b border-[var(--color-outline-variant)] p-5">
-          <h2 className="text-xl font-semibold">Platform Permissions</h2>
-          <Badge tone="accent">{activeTab === "roles" ? "Role Matrix" : "Related tab selected"}</Badge>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] border-collapse text-left text-sm">

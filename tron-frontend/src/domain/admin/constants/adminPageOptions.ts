@@ -1,9 +1,3 @@
-export const adminManagementTabs = [
-  { label: "User Directory", value: "users" },
-  { label: "Role Matrix", value: "roles" },
-  { label: "Audit Logs", value: "audit" },
-] as const;
-
 export const adminUserRoleFilters = ["All", "Admin", "Editor", "Viewer"] as const;
 
 export const adminUserRoleOptions = ["Admin", "Editor", "Viewer"] as const;

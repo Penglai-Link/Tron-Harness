@@ -29,7 +29,7 @@ import {
 
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 function SearchField({ placeholder, value, onChange }: { placeholder: string; value: string; onChange: (value: string) => void }) {
@@ -57,7 +57,7 @@ function CapabilityRow({ item, selected, onSelect, onToggle }: { item: Capabilit
 }
 
 function CapabilityInspector({ capability }: { capability: CapabilityRecord }) {
-  const [notice, setNotice] = useState("Schema ready");
+  const [notice, setNotice] = useState("");
   return (
     <SurfaceCard>
       <div className="flex items-start justify-between gap-3">
@@ -93,7 +93,7 @@ export function SkillsPage() {
   const [query, setQuery] = useState("");
   const initialCapabilities = useCapabilityList();
   const [capabilities, setCapabilities] = useState(initialCapabilities);
-  const [notice, setNotice] = useState("Capability directory ready.");
+  const [notice, setNotice] = useState("");
   const filtered = capabilities.filter((item) => item.mode === mode && item.name.toLowerCase().includes(query.toLowerCase()));
   const [selectedId, setSelectedId] = useState(filtered[0]?.id ?? "python");
   const selected = capabilities.find((item) => item.id === selectedId) ?? filtered[0] ?? capabilities[0];
@@ -114,9 +114,7 @@ export function SkillsPage() {
           </>
         }
       />
-      <div className="mb-4">
-        <Notice value={notice} />
-      </div>
+      <Notice value={notice} />
       <div className="grid min-h-[760px] gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
         <SurfaceCard className="p-0">
           <div className="border-b border-[var(--color-outline-variant)] p-4">

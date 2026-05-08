@@ -77,7 +77,7 @@ export function ResourcesPage() {
   const [statusFilter, setStatusFilter] = useState("Active");
   const [page, setPage] = useState(1);
   const [rowMenu, setRowMenu] = useState<string | null>(null);
-  const [notice, setNotice] = useState("Resource inventory ready");
+  const [notice, setNotice] = useState("");
   const filtered = resources.filter((resource) => {
     const matchesSearch = resource.name.toLowerCase().includes(query.toLowerCase()) || resource.type.toLowerCase().includes(query.toLowerCase()) || resource.location.toLowerCase().includes(query.toLowerCase());
     const matchesType = typeFilter === "All" || resource.type === typeFilter;

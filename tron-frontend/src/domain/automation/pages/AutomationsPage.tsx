@@ -36,7 +36,7 @@ function IconButton({ label, children, onClick }: { label: string; children: Rea
 }
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 function KeyValue({ label, value }: { label: string; value: string }) {
@@ -53,7 +53,7 @@ export function AutomationsPage() {
   const [selectedId, setSelectedId] = useState(rows[0]?.id ?? "");
   const [tab, setTab] = useState("details");
   const [query, setQuery] = useState("");
-  const [notice, setNotice] = useState("Automation inspector ready.");
+  const [notice, setNotice] = useState("");
   const selected = rows.find((row) => row.id === selectedId) ?? rows[0];
   const filteredRows = rows.filter((row) => row.name.toLowerCase().includes(query.trim().toLowerCase()));
 
@@ -107,9 +107,7 @@ export function AutomationsPage() {
           </Button>
         }
       />
-      <div className="mb-4">
-        <Notice value={notice} />
-      </div>
+      <Notice value={notice} />
       <DataTable<AutomationRecord>
         rows={filteredRows}
         rowKey={(row) => row.id}

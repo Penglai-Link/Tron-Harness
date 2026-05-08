@@ -32,7 +32,7 @@ function ImportApplicationPage({ initialSource }: { initialSource: ImportApplica
   const [source, setSource] = useState(defaults.source);
   const [form, setForm] = useState(defaults);
   const [tags, setTags] = useState(defaults.tags);
-  const [feedback, setFeedback] = useState("Ready to import");
+  const [feedback, setFeedback] = useState("");
 
   function update(field: keyof ImportApplicationDefaults, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -116,8 +116,8 @@ function ImportApplicationPage({ initialSource }: { initialSource: ImportApplica
               </Field>
             ) : null}
           </div>
-          <div className="flex items-center justify-between border-t border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-8 py-5">
-            <span className="text-[13px] text-[var(--color-on-surface-variant)]">{feedback}</span>
+          <div className="flex items-center justify-end border-t border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-8 py-5">
+            {feedback ? <span className="sr-only" aria-live="polite">{feedback}</span> : null}
             <div className="flex gap-2">
               <Button variant="ghost" onClick={() => setFeedback("Import canceled")}>Cancel</Button>
               <Button onClick={() => setFeedback(`Import queued for ${form.appName || "new app"}`)}>

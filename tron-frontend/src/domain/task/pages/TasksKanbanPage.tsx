@@ -21,7 +21,7 @@ import type { KanbanTask } from "@/domain/task/model";
 import { cn } from "@/shared/lib/utils";
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 function SearchField({ placeholder, value, onChange }: { placeholder: string; value: string; onChange: (value: string) => void }) {
@@ -62,7 +62,7 @@ export function TasksKanbanPage() {
   const columns = useTaskKanbanColumns();
   const [query, setQuery] = useState("");
   const [selectedTask, setSelectedTask] = useState<KanbanTask | null>(null);
-  const [notice, setNotice] = useState("Kanban board ready.");
+  const [notice, setNotice] = useState("");
   const navigate = useNavigate();
   const visibleColumns = columns.map((column) => ({ ...column, tasks: column.tasks.filter((task) => task.title.toLowerCase().includes(query.toLowerCase()) || task.id.toLowerCase().includes(query.toLowerCase())) }));
 
@@ -79,9 +79,7 @@ export function TasksKanbanPage() {
           </>
         }
       />
-      <div className="mb-4">
-        <Notice value={notice} />
-      </div>
+      <Notice value={notice} />
       <SurfaceCard className="mb-4 p-4">
         <SearchField placeholder="Filter kanban cards..." value={query} onChange={setQuery} />
       </SurfaceCard>

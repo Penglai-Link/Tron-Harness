@@ -37,7 +37,7 @@ function IconButton({ label, children, onClick }: { label: string; children: Rea
 }
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 function KeyValue({ label, value }: { label: string; value: string }) {
@@ -55,7 +55,7 @@ function ChatSessionPage({ variant }: { variant: "reasoning" | "execution" }) {
   const [activeSession, setActiveSession] = useState("primary");
   const [inspectorTab, setInspectorTab] = useState("info");
   const [composer, setComposer] = useState("");
-  const [notice, setNotice] = useState("Composer ready.");
+  const [notice, setNotice] = useState("");
 
   return (
     <TronShell

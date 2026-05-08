@@ -23,12 +23,12 @@ import {
 import { taskImportPreviewSteps } from "@/domain/task/constants";
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 export function TasksImportPage() {
   const [source, setSource] = useState("gitlab");
-  const [status, setStatus] = useState("Select a source and start the import.");
+  const [status, setStatus] = useState("");
   const navigate = useNavigate();
 
   return (

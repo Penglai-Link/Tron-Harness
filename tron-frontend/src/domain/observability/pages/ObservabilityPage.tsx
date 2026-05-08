@@ -26,7 +26,7 @@ import {
 
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 function SimpleBarChart({ data }: { data: { label: string; value: number }[] }) {
@@ -67,7 +67,7 @@ export function ObservabilityPage() {
   const data = useObservabilityOverview();
   const [inspectorTab, setInspectorTab] = useState("Details");
   const [inspectorOpen, setInspectorOpen] = useState(true);
-  const [notice, setNotice] = useState("Live trace stream active");
+  const [notice, setNotice] = useState("");
 
   const rightPanel = inspectorOpen ? (
     <InspectorPanel title="Inspector">

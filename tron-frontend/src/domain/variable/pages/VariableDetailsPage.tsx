@@ -26,7 +26,7 @@ import type { VariableRecord } from "@/domain/variable/model";
 import { getStatusTone } from "@/domain/variable/constants";
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 function SearchField({ placeholder, value, onChange }: { placeholder: string; value: string; onChange: (value: string) => void }) {
@@ -43,16 +43,14 @@ function VariablesBasePage({ variant }: { variant: "standard" | "details" }) {
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(variables[0]?.id ?? "");
   const [revealed, setRevealed] = useState(false);
-  const [notice, setNotice] = useState("Variable inspector ready.");
+  const [notice, setNotice] = useState("");
   const selected = variables.find((variable) => variable.id === selectedId) ?? variables[0];
   const filtered = variables.filter((variable) => variable.key.toLowerCase().includes(query.toLowerCase()));
 
   return (
     <TronShell activeItem="Variables" searchPlaceholder="Search variables...">
       {variant === "details" ? <PageHeader title="Variable Management" status="Details" actions={<Button onClick={() => setNotice("New variable editor opened")}><Plus size={16} aria-hidden="true" />New Variable</Button>} /> : null}
-      <div className="mb-4">
-        <Notice value={notice} />
-      </div>
+      <Notice value={notice} />
       <div className="grid min-h-[760px] gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <SurfaceCard className="p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] p-4">

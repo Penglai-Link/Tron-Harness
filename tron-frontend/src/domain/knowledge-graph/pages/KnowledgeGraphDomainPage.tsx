@@ -29,7 +29,7 @@ function RoutePageShell({ activeItem, children }: { activeItem: string; children
 }
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 function GraphPage({ domainFiltering = false }: { domainFiltering?: boolean }) {
@@ -127,7 +127,7 @@ function GraphCanvas({ entities, selected, setInspectorOpen, setSelectedId, setZ
 }
 
 function GraphInspector({ onClose, selected }: { onClose: () => void; selected: GraphEntity }) {
-  const [notice, setNotice] = useState("Entity properties ready.");
+  const [notice, setNotice] = useState("");
 
   return (
     <aside className="border-l border-[var(--color-outline-variant)] bg-white">

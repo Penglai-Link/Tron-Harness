@@ -28,7 +28,7 @@ function IconButton({ label, children, onClick }: { label: string; children: Rea
 }
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 function SectionTitle({ icon, title }: { icon?: React.ReactNode; title: string }) {
@@ -44,7 +44,7 @@ export function CreateAutomationPage() {
   const [triggerType, setTriggerType] = useState("Scheduled");
   const [cron, setCron] = useState("0 0 * * *");
   const [prereqs, setPrereqs] = useState<string[]>([...defaultAutomationPrerequisites]);
-  const [notice, setNotice] = useState("Parsed as CRON: 0 0 * * *");
+  const [notice, setNotice] = useState("");
 
   return (
     <TronShell activeItem="Automations" searchPlaceholder="Search automations...">
@@ -143,7 +143,7 @@ export function CreateAutomationPage() {
               <Plus size={14} />
               Add Action
             </Button>
-            <Notice value={`${triggerType}. ${notice}`} />
+            <Notice value={notice ? `${triggerType}. ${notice}` : ""} />
           </div>
         </SurfaceCard>
       </div>

@@ -38,7 +38,7 @@ function IconButton({ label, children, onClick }: { label: string; children: Rea
 }
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 function SectionTitle({ icon, title }: { icon?: React.ReactNode; title: string }) {
@@ -67,7 +67,7 @@ export function CreatePromptPage() {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [visibility, setVisibility] = useState("Workspace");
   const [temperature, setTemperature] = useState(0.7);
-  const [notice, setNotice] = useState("2 Detected variables.");
+  const [notice, setNotice] = useState("");
   const toggleNotifications = () => {
     const nextOpen = !notificationsOpen;
     setNotificationsOpen(nextOpen);
@@ -196,7 +196,7 @@ export function CreatePromptPage() {
                 ))}
               </div>
               <div className="mt-4">
-                <Notice value={`${notice} Visibility: ${visibility}. Top tab: ${tab}.`} />
+                <Notice value={notice ? `${notice} Visibility: ${visibility}. Top tab: ${tab}.` : ""} />
               </div>
             </SurfaceCard>
           </div>

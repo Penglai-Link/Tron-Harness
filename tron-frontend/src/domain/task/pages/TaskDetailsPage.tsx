@@ -19,7 +19,7 @@ import {
 
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 function ProgressBar({ value }: { value: number }) {
@@ -34,7 +34,7 @@ export function TaskDetailsPage() {
   const task = useTaskDetail();
   const [status, setStatus] = useState(task.status);
   const [subtasks, setSubtasks] = useState(task.subtasks);
-  const [notice, setNotice] = useState("Task execution context ready.");
+  const [notice, setNotice] = useState("");
   const completed = subtasks.filter((item) => item.done).length;
 
   return (
@@ -47,9 +47,7 @@ export function TaskDetailsPage() {
           setNotice("Task execution queued");
         }}>Execute Task</Button>}
       />
-      <div className="mb-4">
-        <Notice value={notice} />
-      </div>
+      <Notice value={notice} />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
           <SurfaceCard>

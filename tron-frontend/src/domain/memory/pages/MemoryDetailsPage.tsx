@@ -38,7 +38,7 @@ function SmallStatus({ children, tone = "neutral" }: { children: React.ReactNode
 }
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 function MemoryRepository({ details = false }: { details?: boolean }) {
@@ -47,7 +47,7 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<string[]>([...defaultMemoryFilters]);
   const [selectedId, setSelectedId] = useState("mem-1");
-  const [notice, setNotice] = useState("Memory search studio ready.");
+  const [notice, setNotice] = useState("");
   const visible = fragments.filter((fragment) => fragment.content.toLowerCase().includes(query.toLowerCase()) || fragment.namespace.toLowerCase().includes(query.toLowerCase()));
   const selected = fragments.find((fragment) => fragment.id === selectedId) ?? fragments[0];
 
@@ -77,9 +77,7 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
         description="Manage, query, and structure agent memory fragments."
         actions={<><Button variant="secondary" onClick={() => setNotice("Import data drawer opened")}><Upload size={16} />Import Data</Button><Button onClick={() => setNotice("Index sync queued")}><RefreshCw size={16} />Sync Indices</Button></>}
       />
-      <div className="mb-4">
-        <Notice value={notice} />
-      </div>
+      <Notice value={notice} />
       <SurfaceCard className="mb-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
           <div className="flex h-10 flex-1 items-center gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-white px-3">

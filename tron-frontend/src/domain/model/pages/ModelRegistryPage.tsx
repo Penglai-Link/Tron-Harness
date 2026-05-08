@@ -33,7 +33,7 @@ function SmallStatus({ children, tone = "neutral" }: { children: React.ReactNode
 }
 
 function Notice({ value }: { value: string }) {
-  return <p className="rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2 text-[13px] text-[var(--color-on-surface-variant)]">{value}</p>;
+  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
 function Meta({ label, value }: { label: string; value: string }) {
@@ -65,7 +65,7 @@ export function ModelRegistryPage() {
   const [vendor, setVendor] = useState("All Vendors");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState("gpt-4-turbo");
-  const [notice, setNotice] = useState("Model registry ready.");
+  const [notice, setNotice] = useState("");
   const visible = models.filter((model) => (vendor === "All Vendors" || model.vendor === vendor) && model.name.toLowerCase().includes(query.toLowerCase()));
   const selected = models.find((model) => model.id === selectedId) ?? models[0];
 
@@ -74,9 +74,7 @@ export function ModelRegistryPage() {
       <div className="grid min-h-[740px] gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
         <section>
           <PageHeader title="Model Registry" description="Manage AI vendors, configurations, and inheritance rules." actions={<Button onClick={() => setNotice("Add model workflow opened")}><Plus size={16} />Add Model</Button>} />
-          <div className="mb-4">
-            <Notice value={notice} />
-          </div>
+      <Notice value={notice} />
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] pb-4">
             <div className="flex flex-wrap gap-2">
               {modelVendorFilters.map((item) => (
