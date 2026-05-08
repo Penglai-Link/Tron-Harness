@@ -14,7 +14,9 @@ import {
   MetricCard,
   PageHeader,
   SurfaceCard,
+  TablePagination,
   TronShell,
+  useTablePagination,
 } from "@/shared";
 
 import { useObservabilityOverview } from "@/domain/observability/hooks";
@@ -68,6 +70,7 @@ export function ObservabilityPage() {
   const [inspectorTab, setInspectorTab] = useState("Details");
   const [inspectorOpen, setInspectorOpen] = useState(true);
   const [notice, setNotice] = useState("");
+  const tracePagination = useTablePagination(data.traces);
 
   const rightPanel = inspectorOpen ? (
     <InspectorPanel title="Inspector">
@@ -141,9 +144,10 @@ export function ObservabilityPage() {
       </div>
       <DataTable
         title="Recent Traces"
-        rows={data.traces}
+        rows={tracePagination.visibleItems}
         rowKey={(row) => row.id}
         toolbar={<Button size="sm" variant="secondary" onClick={() => setNotice("All traces view opened")}>View All</Button>}
+        pagination={<TablePagination itemLabel="traces" {...tracePagination.paginationProps} />}
         columns={[
           { id: "id", header: "Trace", render: (row) => <span className="font-mono text-[13px]">{row.id}</span> },
           { id: "agent", header: "Agent", render: (row) => row.agent },

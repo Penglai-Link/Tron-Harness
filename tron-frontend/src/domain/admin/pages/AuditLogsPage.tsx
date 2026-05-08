@@ -2,11 +2,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import {
-  ChevronLeft,
-  ChevronRight,
-  FileText,
-} from "lucide-react";
+import { FileText } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
@@ -14,8 +10,10 @@ import {
   DataTable,
   PageHeader,
   SelectInput,
+  TablePagination,
   TextInput,
   TronShell,
+  useTablePagination,
 } from "@/shared";
 
 import { useAuditLogList } from "@/domain/admin/hooks";
@@ -29,12 +27,12 @@ export function AuditLogsPage() {
   const rows = useAuditLogList();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
-  const [page, setPage] = useState(613);
   const [notice, setNotice] = useState("");
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return rows.filter((row) => (status === "all" || row.status === status) && (!normalized || Object.values(row).join(" ").toLowerCase().includes(normalized)));
   }, [query, rows, status]);
+  const auditPagination = useTablePagination(filteredRows);
 
   return (
     <TronShell activeItem="Audit Logs" searchPlaceholder="Search users, roles, logs...">
@@ -51,7 +49,7 @@ export function AuditLogsPage() {
       <p className="sr-only" aria-live="polite">{notice}</p>
       <DataTable<AuditLogRecord>
         title="Audit Logs"
-        rows={filteredRows}
+        rows={auditPagination.visibleItems}
         rowKey={(row) => row.id}
         toolbar={
           <>
@@ -62,18 +60,7 @@ export function AuditLogsPage() {
           </>
         }
         pagination={
-          <div className="flex w-full items-center justify-between">
-            <span>Showing 1 to {filteredRows.length} of 2,451 entries</span>
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="secondary" onClick={() => setPage((value) => Math.max(1, value - 1))}>
-                <ChevronLeft size={14} />
-              </Button>
-              <span className="font-mono text-[13px]">{page}</span>
-              <Button size="sm" variant="secondary" onClick={() => setPage((value) => value + 1)}>
-                <ChevronRight size={14} />
-              </Button>
-            </div>
-          </div>
+          <TablePagination itemLabel="entries" {...auditPagination.paginationProps} />
         }
         columns={[
           { id: "timestamp", header: "Timestamp", render: (row) => <span className="font-mono text-[13px]">{row.timestamp}</span> },

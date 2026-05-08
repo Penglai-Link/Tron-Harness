@@ -14,8 +14,10 @@ import {
   PageHeader,
   SegmentedTabs,
   SurfaceCard,
+  TablePagination,
   TextInput,
   TronShell,
+  useTablePagination,
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
@@ -56,6 +58,7 @@ export function AutomationsPage() {
   const [notice, setNotice] = useState("");
   const selected = rows.find((row) => row.id === selectedId) ?? rows[0];
   const filteredRows = rows.filter((row) => row.name.toLowerCase().includes(query.trim().toLowerCase()));
+  const automationPagination = useTablePagination(filteredRows);
 
   return (
     <TronShell
@@ -109,7 +112,7 @@ export function AutomationsPage() {
       />
       <Notice value={notice} />
       <DataTable<AutomationRecord>
-        rows={filteredRows}
+        rows={automationPagination.visibleItems}
         rowKey={(row) => row.id}
         toolbar={
           <>
@@ -120,6 +123,7 @@ export function AutomationsPage() {
             </Button>
           </>
         }
+        pagination={<TablePagination itemLabel="automations" {...automationPagination.paginationProps} />}
         columns={[
           {
             id: "name",

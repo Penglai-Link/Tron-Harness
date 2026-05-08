@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Button } from "@/shared/ui/Button";
+import { TablePagination } from "@/shared/ui/TablePagination";
 import { cn } from "@/shared/lib/utils";
 
 export interface DataTableColumn<T> {
@@ -63,17 +63,14 @@ export function DataTable<T>({ columns, emptyState, pagination, rowKey, rows, ti
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-outline-variant)] px-5 py-3 text-[13px] text-[var(--color-on-surface-variant)]">
         {pagination ?? (
-          <>
-            <span>{rows.length} visible records</span>
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="secondary" disabled>
-                Previous
-              </Button>
-              <Button size="sm" variant="secondary" disabled>
-                Next
-              </Button>
-            </div>
-          </>
+          <TablePagination
+            endItem={rows.length}
+            page={1}
+            pageCount={1}
+            pageSize={15}
+            startItem={rows.length ? 1 : 0}
+            totalItems={rows.length}
+          />
         )}
       </div>
     </section>

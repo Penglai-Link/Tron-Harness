@@ -5,8 +5,6 @@ import {
 import {
   AlertCircle,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Database,
   FileArchive,
   Filter,
@@ -23,18 +21,18 @@ import {
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
+  TablePagination,
   TextInput,
   TronShell,
+  useTablePagination,
 } from "@/shared";
 
 import { useResourceList } from "@/domain/resource/hooks";
 import type { ResourceRecord } from "@/domain/resource/model";
-import { cn } from "@/shared/lib/utils";
 import {
   getStatusTone,
   resourceStatusFilters,
   resourceTypeFilters,
-  resourcePaginationPages,
 } from "@/domain/resource/constants";
 
 
@@ -75,7 +73,6 @@ export function ResourcesPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [typeFilter, setTypeFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("Active");
-  const [page, setPage] = useState(1);
   const [rowMenu, setRowMenu] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const filtered = resources.filter((resource) => {
@@ -83,10 +80,12 @@ export function ResourcesPage() {
     const matchesType = typeFilter === "All" || resource.type === typeFilter;
     return matchesSearch && matchesType;
   });
-  const allSelected = filtered.length > 0 && filtered.every((resource) => selected.includes(resource.id));
+  const resourcePagination = useTablePagination(filtered);
+  const visibleResources = resourcePagination.visibleItems;
+  const allSelected = visibleResources.length > 0 && visibleResources.every((resource) => selected.includes(resource.id));
   const toggleSelected = (id: string) => setSelected((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
   const toggleAllSelected = () => {
-    setSelected((current) => (allSelected ? current.filter((id) => !filtered.some((resource) => resource.id === id)) : Array.from(new Set([...current, ...filtered.map((resource) => resource.id)]))));
+    setSelected((current) => (allSelected ? current.filter((id) => !visibleResources.some((resource) => resource.id === id)) : Array.from(new Set([...current, ...visibleResources.map((resource) => resource.id)]))));
     setNotice(allSelected ? "Visible resources cleared" : "Visible resources selected");
   };
   const cycleStatusFilter = () => {
@@ -169,7 +168,7 @@ export function ResourcesPage() {
                   </tr>
                 </thead>
                 <tbody className="text-[15px]">
-                  {filtered.map((resource) => (
+                  {visibleResources.map((resource) => (
                     <tr className="group border-b border-[var(--color-outline-variant)] last:border-0 hover:bg-[var(--color-surface-container-low)]" key={resource.id}>
                       <td className="px-5 py-4">
                         <input className="size-4 rounded border-[var(--color-outline-variant)]" checked={selected.includes(resource.id)} aria-label={`Select ${resource.name}`} type="checkbox" onChange={() => toggleSelected(resource.id)} />
@@ -202,27 +201,7 @@ export function ResourcesPage() {
             </div>
 
             <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-outline-variant)] bg-[var(--color-surface-bright)] px-5 py-3 text-sm text-[var(--color-on-surface-variant)]">
-              <span>Showing 1 to {filtered.length} of 1,516 resources</span>
-              <div className="flex items-center gap-1">
-                <Button size="icon" variant="ghost" disabled={page === 1} aria-label="Previous resources page" onClick={() => setPage((current) => Math.max(1, current - 1))}><ChevronLeft size={18} aria-hidden="true" /></Button>
-                {resourcePaginationPages.map((item) => (
-                  <button
-                    className={cn("flex size-8 items-center justify-center rounded-lg text-sm", page === item ? "bg-[var(--color-surface-container-high)] text-[var(--color-on-surface)]" : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-surface-container)]")}
-                    type="button"
-                    key={item}
-                    onClick={() => {
-                      setPage(item);
-                      setNotice(`Resources page ${item} selected`);
-                    }}
-                  >
-                    {item}
-                  </button>
-                ))}
-                <Button size="icon" variant="ghost" aria-label="Next resources page" onClick={() => {
-                  setPage((current) => Math.min(3, current + 1));
-                  setNotice("Next resources page selected");
-                }}><ChevronRight size={18} aria-hidden="true" /></Button>
-              </div>
+              <TablePagination itemLabel="resources" {...resourcePagination.paginationProps} />
             </div>
           </section>
 

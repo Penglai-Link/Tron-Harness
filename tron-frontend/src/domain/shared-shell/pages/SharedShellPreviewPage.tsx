@@ -4,8 +4,6 @@ import {
 } from "react";
 import {
   Activity,
-  ChevronLeft,
-  ChevronRight,
   Filter,
   Plus,
   ShieldCheck,
@@ -22,10 +20,12 @@ import {
   SegmentedTabs,
   SelectInput,
   SurfaceCard,
+  TablePagination,
   TextArea,
   TextInput,
   ToggleSwitch,
   TronShell,
+  useTablePagination,
 } from "@/shared";
 import { sharedShellPreviewRows } from "@/domain/shared-shell/constants";
 
@@ -34,7 +34,6 @@ export function SharedShellPreviewPage() {
   const [tab, setTab] = useState("resources");
   const [enabled, setEnabled] = useState(true);
   const [query, setQuery] = useState("");
-  const [page, setPage] = useState(1);
   const [notice, setNotice] = useState("Ready");
 
   const filteredRows = useMemo(() => {
@@ -45,6 +44,7 @@ export function SharedShellPreviewPage() {
     }
     return scopedRows.filter((row) => Object.values(row).some((value) => value.toLowerCase().includes(normalizedQuery)));
   }, [query, tab]);
+  const resourcePagination = useTablePagination(filteredRows);
 
   return (
     <TronShell
@@ -115,7 +115,7 @@ export function SharedShellPreviewPage() {
                 value={tab}
                 onValueChange={(value) => {
                   setTab(value);
-                  setPage(1);
+                  resourcePagination.paginationProps.onPageChange(1);
                   setNotice(`${value === "resources" ? "Resources" : "Overrides"} tab selected`);
                 }}
                 items={[
@@ -128,7 +128,7 @@ export function SharedShellPreviewPage() {
 
           <DataTable
             title="Resource governance table"
-            rows={filteredRows}
+            rows={resourcePagination.visibleItems}
             rowKey={(row) => row.name}
             toolbar={
               <>
@@ -139,21 +139,7 @@ export function SharedShellPreviewPage() {
               </>
             }
             pagination={
-              <div className="flex w-full flex-wrap items-center justify-between gap-3">
-                <span>
-                  Page {page} of 2 · {filteredRows.length} matching records
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button size="sm" variant="secondary" disabled={page === 1} onClick={() => setPage(1)}>
-                    <ChevronLeft size={14} aria-hidden="true" />
-                    Previous
-                  </Button>
-                  <Button size="sm" variant="secondary" disabled={page === 2} onClick={() => setPage(2)}>
-                    Next
-                    <ChevronRight size={14} aria-hidden="true" />
-                  </Button>
-                </div>
-              </div>
+              <TablePagination {...resourcePagination.paginationProps} />
             }
             columns={[
               { id: "name", header: "Name", render: (row) => <span className="font-medium">{row.name}</span> },

@@ -3,8 +3,6 @@ import {
   useState,
 } from "react";
 import {
-  ChevronLeft,
-  ChevronRight,
   Database,
   Filter,
   Plus,
@@ -19,8 +17,10 @@ import {
   DataTable,
   PageHeader,
   SelectInput,
+  TablePagination,
   TextInput,
   TronShell,
+  useTablePagination,
 } from "@/shared";
 
 import { useAppList } from "@/domain/app/hooks";
@@ -54,12 +54,12 @@ export function AppsPage() {
   const rows = useAppList();
   const [query, setQuery] = useState("");
   const [source, setSource] = useState("all");
-  const [page, setPage] = useState(1);
   const [notice, setNotice] = useState("");
   const filteredRows = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return rows.filter((row) => (source === "all" || row.source === source) && (!normalized || Object.values(row).join(" ").toLowerCase().includes(normalized)));
   }, [query, rows, source]);
+  const appPagination = useTablePagination(filteredRows);
 
   return (
     <TronShell activeItem="Apps" searchPlaceholder="Search apps, paths, worktrees...">
@@ -83,7 +83,7 @@ export function AppsPage() {
       <Notice value={notice} />
       <DataTable<AppRecord>
         title="Application Registry"
-        rows={filteredRows}
+        rows={appPagination.visibleItems}
         rowKey={(row) => row.id}
         toolbar={
           <>
@@ -101,21 +101,7 @@ export function AppsPage() {
           </>
         }
         pagination={
-          <div className="flex w-full items-center justify-between">
-            <span>
-              Page {page} of 2 · {filteredRows.length} matching apps
-            </span>
-            <div className="flex gap-2">
-              <Button size="sm" variant="secondary" disabled={page === 1} onClick={() => setPage(1)}>
-                <ChevronLeft size={14} />
-                Previous
-              </Button>
-              <Button size="sm" variant="secondary" disabled={page === 2} onClick={() => setPage(2)}>
-                Next
-                <ChevronRight size={14} />
-              </Button>
-            </div>
-          </div>
+          <TablePagination itemLabel="apps" {...appPagination.paginationProps} />
         }
         columns={[
           { id: "name", header: "App Name", render: (row) => <span className="font-medium">{row.name}</span> },

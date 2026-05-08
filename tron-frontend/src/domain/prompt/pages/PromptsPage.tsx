@@ -15,9 +15,11 @@ import {
   Field,
   PageHeader,
   SurfaceCard,
+  TablePagination,
   TextArea,
   TextInput,
   TronShell,
+  useTablePagination,
 } from "@/shared";
 
 import { usePromptList } from "@/domain/prompt/hooks";
@@ -81,6 +83,7 @@ export function PromptsPage() {
   const [notice, setNotice] = useState("");
   const selected = prompts.find((prompt) => prompt.id === selectedId) ?? prompts[0];
   const filtered = prompts.filter((prompt) => (category === "All" || prompt.category === category) && prompt.name.toLowerCase().includes(query.toLowerCase()));
+  const promptPagination = useTablePagination(filtered);
 
   return (
     <TronShell activeItem="Prompts" searchPlaceholder="Search anything...">
@@ -110,9 +113,9 @@ export function PromptsPage() {
             </div>
           </div>
           <DataTable
-            rows={filtered}
+            rows={promptPagination.visibleItems}
             rowKey={(row) => row.id}
-            pagination={<span>{filtered.length} prompts visible</span>}
+            pagination={<TablePagination itemLabel="prompts" {...promptPagination.paginationProps} />}
             columns={[
               { id: "name", header: "Name", render: (row) => <button className="font-medium text-[var(--color-primary)]" type="button" onClick={() => setSelectedId(row.id)}>{row.name}</button> },
               { id: "category", header: "Category", render: (row) => <Badge>{row.category}</Badge> },

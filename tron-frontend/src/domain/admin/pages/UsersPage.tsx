@@ -18,8 +18,10 @@ import {
   MetricCard,
   PageHeader,
   SelectInput,
+  TablePagination,
   TextInput,
   TronShell,
+  useTablePagination,
 } from "@/shared";
 
 import { useUserList } from "@/domain/admin/hooks";
@@ -57,6 +59,7 @@ export function UsersPage() {
       searchable.includes(query.trim().toLowerCase())
     );
   });
+  const userPagination = useTablePagination(filtered);
   const roleAssignmentCount = users.reduce((total, user) => total + user.roles.length, 0);
   const workspaceLinkCount = users.reduce((total, user) => total + user.workspaces.length, 0);
 
@@ -72,18 +75,24 @@ export function UsersPage() {
       </div>
       <DataTable<UserRecord>
         title="User Directory"
-        rows={filtered}
+        rows={userPagination.visibleItems}
         rowKey={(row) => row.id}
         toolbar={
           <>
-            <SearchField placeholder="Filter users..." value={query} onChange={setQuery} />
-            <SelectInput className="h-9 min-w-32" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <SearchField placeholder="Filter users..." value={query} onChange={(value) => {
+              setQuery(value);
+              userPagination.paginationProps.onPageChange(1);
+            }} />
+            <SelectInput className="h-9 min-w-32" aria-label="Filter by status" value={statusFilter} onChange={(event) => {
+              setStatusFilter(event.target.value);
+              userPagination.paginationProps.onPageChange(1);
+            }}>
               <option value={ALL_FILTER}>All Status</option>
               {statusOptions.map((item) => <option key={item}>{item}</option>)}
             </SelectInput>
           </>
         }
-        pagination={<span>{filtered.length} users visible · page 1 of 3</span>}
+        pagination={<TablePagination itemLabel="users" {...userPagination.paginationProps} />}
         columns={[
           { id: "name", header: "User", render: (row) => <div><Link className="font-medium hover:underline" to={`/admin/users/detail?user=${row.id}`}>{row.name}</Link><div className="text-[13px] text-[var(--color-on-surface-variant)]">{row.email}</div></div> },
           { id: "status", header: "Status", render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },

@@ -15,8 +15,10 @@ import {
   DataTable,
   PageHeader,
   SurfaceCard,
+  TablePagination,
   TextInput,
   TronShell,
+  useTablePagination,
 } from "@/shared";
 
 import { useVariableList } from "@/domain/variable/hooks";
@@ -46,6 +48,7 @@ function VariablesBasePage({ variant }: { variant: "standard" | "details" }) {
   const [notice, setNotice] = useState("");
   const selected = variables.find((variable) => variable.id === selectedId) ?? variables[0];
   const filtered = variables.filter((variable) => variable.key.toLowerCase().includes(query.toLowerCase()));
+  const variablePagination = useTablePagination(filtered);
 
   return (
     <TronShell activeItem="Variables" searchPlaceholder="Search variables...">
@@ -58,9 +61,9 @@ function VariablesBasePage({ variant }: { variant: "standard" | "details" }) {
             {variant === "standard" ? <Button onClick={() => setNotice("New variable editor opened")}><Plus size={16} aria-hidden="true" />New Variable</Button> : null}
           </div>
           <DataTable<VariableRecord>
-            rows={filtered}
+            rows={variablePagination.visibleItems}
             rowKey={(row) => row.id}
-            pagination={<span>Page 1 of 3 · {filtered.length} variables visible</span>}
+            pagination={<TablePagination itemLabel="variables" {...variablePagination.paginationProps} />}
             columns={[
               { id: "key", header: "Key", render: (row) => <button className="font-mono text-[13px] font-medium" type="button" onClick={() => setSelectedId(row.id)}>{row.key}</button> },
               { id: "scope", header: "Scope", render: (row) => <Badge>{row.scope}</Badge> },

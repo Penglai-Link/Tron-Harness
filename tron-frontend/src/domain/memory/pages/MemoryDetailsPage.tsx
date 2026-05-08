@@ -15,7 +15,9 @@ import {
   PageHeader,
   SegmentedTabs,
   SurfaceCard,
+  TablePagination,
   TronShell,
+  useTablePagination,
 } from "@/shared";
 
 import { useMemoryFragmentList } from "@/domain/memory/hooks";
@@ -49,14 +51,15 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
   const [selectedId, setSelectedId] = useState("mem-1");
   const [notice, setNotice] = useState("");
   const visible = fragments.filter((fragment) => fragment.content.toLowerCase().includes(query.toLowerCase()) || fragment.namespace.toLowerCase().includes(query.toLowerCase()));
+  const memoryPagination = useTablePagination(visible);
   const selected = fragments.find((fragment) => fragment.id === selectedId) ?? fragments[0];
 
   const table = (
     <DataTable
       title="Memory Fragments"
-      rows={visible}
+      rows={memoryPagination.visibleItems}
       rowKey={(row) => row.id}
-      toolbar={<span className="text-[13px] text-[var(--color-on-surface-variant)]">Showing 1-5 of 2,491 fragments</span>}
+      toolbar={<span className="text-[13px] text-[var(--color-on-surface-variant)]">{visible.length} matching fragments</span>}
       columns={[
         { id: "content", header: "Content Snippet", render: (row) => <button className="max-w-[380px] truncate text-left" type="button" onClick={() => setSelectedId(row.id)}>{row.content}</button> },
         { id: "namespace", header: "Namespace", render: (row) => row.namespace },
@@ -66,7 +69,7 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
         { id: "created", header: "Created", render: (row) => row.created },
         { id: "inheritance", header: "Inheritance", render: (row) => <SmallStatus tone={row.inheritance === "Override" ? "accent" : "neutral"}>{row.inheritance}</SmallStatus> },
       ]}
-      pagination={<span>{visible.length} visible fragments</span>}
+      pagination={<TablePagination itemLabel="fragments" {...memoryPagination.paginationProps} />}
     />
   );
 
