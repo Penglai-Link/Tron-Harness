@@ -204,6 +204,7 @@ Large radius values are reserved for the primary containers of the workspace, cr
 Components focus on utility and "quiet" interaction.
 
 - **Buttons:** Primary buttons are solid dark gray/black with white text. Secondary buttons use a light gray ghost style with no border, becoming visible only on hover.
+- **Breadcrumbs:** Breadcrumb navigation is conditionally displayed only on child-level pages within a primary module. Top-level module pages must not show breadcrumbs. Nested pages such as create, edit, detail, or settings views should show a breadcrumb above the page heading to indicate the relationship between the parent module and the current page. Parent breadcrumb items are interactive links, while the current page item is rendered as non-interactive text.
 - **Cards:** Rounded cards are the primary container. They use a subtle 1px border (#E5E5E5) and a soft level-1 shadow.
 - **Input Fields:** Minimalist design with a 1px light gray border. Focus states use a subtle 2px blue "glow" or a thicker 2px black border.
 - **Chips/Badges:** Small, pill-shaped, and low-contrast. Backgrounds are very light tints of the semantic color with dark text.
