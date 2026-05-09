@@ -6,7 +6,7 @@
 
 ## Skill Constraints
 
-- Git Spec follows `$eliteforge-git-feature-oriented-lite-spec` , ensure one feature one git worktree
+- Git Spec follows `$eliteforge-git-feature-oriented-lite-spec`
 
 
 ## What's more
