@@ -2,7 +2,7 @@
 
 ## Summary
 
-Backend GREEN is integrated into base. Focused backend tests and `rtk make be-test` pass after merge.
+Backend GREEN and VERIFY are integrated into base. Focused backend tests, schema contract tests, and `rtk make be-test` pass after merge.
 
 ## Task Results
 
@@ -12,7 +12,7 @@ Backend GREEN is integrated into base. Focused backend tests and `rtk make be-te
 | BE-GREEN-02 | role/space assignment replacement behavior merged via `48504fb` | @ref:orchestration/integration-log.md#EVT-005 | done |
 | BE-GREEN-03 | password reset behavior merged via `48504fb` with `passwordHash` removed from detail API | @ref:orchestration/integration-log.md#EVT-005 | done |
 | BE-GREEN-04 | stable-code/authorization-boundary behavior merged via `48504fb` | @ref:orchestration/integration-log.md#EVT-005 | done |
-| BE-VERIFY-01 | pending | @ref:tasks/backend-task.md#BE-VERIFY-01 | ready |
+| BE-VERIFY-01 | backend regression verified via `rtk make be-test` after verify merge | @ref:orchestration/integration-log.md#EVT-007 | done |
 
 ## TDD Evidence
 
@@ -47,19 +47,19 @@ Backend GREEN is integrated into base. Focused backend tests and `rtk make be-te
 
 | command ref | result | evidence link |
 | --- | --- | --- |
-| @ref:spec/test-plan.md#command-matrix | focused backend tests and `rtk make be-test` passed after merge | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/test-plan.md#command-matrix | focused backend tests, schema contract tests, and `rtk make be-test` passed after merge | @ref:orchestration/integration-log.md#validation-after-integration |
 
 ## Acceptance Mapping
 
 | acceptance ref | result | evidence link |
 | --- | --- | --- |
-| @ref:spec/acceptance.md#AC-UM-01 | backend API GREEN integrated; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-02 | backend lifecycle GREEN integrated; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-03 | backend role assignment GREEN integrated; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-04 | backend space assignment GREEN integrated; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-05 | backend password reset GREEN integrated; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-06 | backend stable-code GREEN integrated; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-07 | backend authorization-boundary GREEN integrated; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/acceptance.md#AC-UM-01 | backend API verified | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-02 | backend lifecycle verified | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-03 | backend role assignment verified | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-04 | backend space assignment verified | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-05 | backend password reset verified | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-06 | backend stable-code contract verified | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-07 | backend authorization-boundary verified | @ref:orchestration/integration-log.md#EVT-007 |
 
 ## Blockers
 

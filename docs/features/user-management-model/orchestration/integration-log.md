@@ -2,7 +2,7 @@
 
 ## Summary
 
-Feature workspace resumed through Workflow B evolution. Complete spec and executable task/worktree plan are prepared, Lite Spec worker worktrees are provisioned, RED suite `TEST-RED-01..08` is merged into base with expected failure evidence, and database/backend/frontend GREEN branches are integrated with passing focused verification.
+Feature workspace resumed through Workflow B evolution. Complete spec and executable task/worktree plan are prepared, Lite Spec worker worktrees are provisioned, RED suite `TEST-RED-01..08` is merged into base with expected failure evidence, database/backend/frontend GREEN branches are integrated, and VERIFY is integrated with focused schema-contract coverage.
 
 ## Integration Events
 
@@ -14,6 +14,7 @@ Feature workspace resumed through Workflow B evolution. Complete spec and execut
 | EVT-004 | database | DB-GREEN-01 | feature/clouds3n/user-management-model/database/schema-migrations | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/database/schema-migrations -m "merge: integrate DB-GREEN-01"` | success | Integrated merge commit `c1a24a1` after worker commits `5d7e3fe` and `56d5fe0`; follow-up fixed `user_code` constraints for hyphenated stable codes. |
 | EVT-005 | backend | BE-GREEN-01, BE-GREEN-02, BE-GREEN-03, BE-GREEN-04 | feature/clouds3n/user-management-model/backend/green-user-api | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/backend/green-user-api -m "merge: integrate BE-GREEN-01..04"` | success | Integrated merge commit `48504fb` after worker commits `0c6dff4` and `b16a889`; follow-up removed `passwordHash` from API detail DTOs. |
 | EVT-006 | frontend | FE-GREEN-01 | feature/clouds3n/user-management-model/frontend/green-admin-users | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/frontend/green-admin-users -m "merge: integrate FE-GREEN-01"` | success | Integrated merge commit `db43432` after worker commit `2bf0659`; frontend now uses user-only `userCode`/`roleCodes`/`spaceCodes` boundary and `Active`/`Archived` statuses. |
+| EVT-007 | test | DB-VERIFY-01, BE-VERIFY-01, FE-VERIFY-01, TEST-VERIFY-01 | feature/clouds3n/user-management-model/test/verify-regression | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/test/verify-regression -m "merge: integrate VERIFY-01"` | success | Integrated merge commit `9932a65` after worker commits `8c6422e` and `2a378de`; schema-contract filter now runs 5 tests instead of 0. |
 
 ## Conflict Log
 
@@ -44,6 +45,8 @@ Feature workspace resumed through Workflow B evolution. Complete spec and execut
 | `rtk make fe-check` | GREEN frontend typecheck/build after FE merge. | pass | TypeScript and production build pass with user-only frontend model. |
 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | GREEN frontend source-level smoke after FE merge. | pass | 3 smoke tests pass for stable model fields, MVP statuses, and `userCode` detail route. |
 | `rtk proxy zsh -lc 'cd tron-frontend && node --input-type=module <<...Playwright runtime check...'` | Runtime browser check against local Vite dev server. | pass | Opened `/admin/users`, navigated to `/admin/users/detail?userCode=USER_ALEX_JOHNSON`, and confirmed reset-password result dialog. |
+| `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_schema_contracts` | VERIFY schema contract check after verify merge. | pass | 5 focused schema contract tests pass; DB-VERIFY-01 no longer has a zero-test filter gap. |
+| `rtk make be-test` | VERIFY backend regression after verify merge. | pass | Full backend regression passes with schema contract tests included. |
 
 ## Blockers
 

@@ -2,22 +2,22 @@
 
 ## Summary
 
-Frontend GREEN is integrated into base. `rtk make fe-check`, source smoke tests, and a local runtime browser check pass after merge.
+Frontend GREEN and VERIFY are integrated into base. `rtk make fe-check`, source smoke tests, and local runtime browser checks pass after merge.
 
 ## Task Results
 
 | task id | result | evidence link | status |
 | --- | --- | --- | --- |
 | FE-GREEN-01 | frontend user-management model and pages aligned to user-only API boundary via `db43432` | @ref:orchestration/integration-log.md#EVT-006 | done |
-| FE-VERIFY-01 | pending | @ref:tasks/frontend-task.md#FE-VERIFY-01 | ready |
+| FE-VERIFY-01 | frontend typecheck/build, smoke, and runtime journey verified | @ref:orchestration/integration-log.md#EVT-007 | done |
 
 ## TDD Evidence
 
 | cycle id or ref | result | evidence link | status |
 | --- | --- | --- | --- |
-| TDD-UM-08 | GREEN frontend model/status/route smoke passes | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
-| TDD-UM-01 | GREEN runtime check confirms user directory and stable-code detail navigation | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
-| TDD-UM-05 | GREEN runtime check confirms reset-password confirmation/result UI | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
+| TDD-UM-08 | frontend model/status/route smoke and runtime journey verified | @ref:orchestration/integration-log.md#EVT-007 | verified |
+| TDD-UM-01 | runtime user directory and stable-code detail navigation verified | @ref:orchestration/integration-log.md#EVT-007 | verified |
+| TDD-UM-05 | runtime reset-password confirmation/result UI verified | @ref:orchestration/integration-log.md#EVT-007 | verified |
 
 ## Worktree Evidence
 
@@ -40,18 +40,18 @@ Frontend GREEN is integrated into base. `rtk make fe-check`, source smoke tests,
 
 | command ref | result | evidence link |
 | --- | --- | --- |
-| @ref:spec/test-plan.md#command-matrix | `rtk make fe-check`, smoke tests, and local runtime browser check passed | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/test-plan.md#command-matrix | `rtk make fe-check`, smoke tests, and local runtime browser checks passed | @ref:orchestration/integration-log.md#validation-after-integration |
 
 ## Acceptance Mapping
 
 | acceptance ref | result | evidence link |
 | --- | --- | --- |
-| @ref:spec/acceptance.md#AC-UM-01 | frontend directory/detail GREEN integrated; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-02 | frontend lifecycle UI GREEN integrated; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-03 | frontend role-code assignment UI GREEN integrated; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-04 | frontend space-code assignment UI GREEN integrated; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-05 | frontend reset-password UI GREEN integrated; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-08 | frontend model/API boundary GREEN integrated; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/acceptance.md#AC-UM-01 | frontend directory/detail verified | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-02 | frontend lifecycle UI verified | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-03 | frontend role-code assignment UI verified | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-04 | frontend space-code assignment UI verified | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-05 | frontend reset-password UI verified | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-08 | frontend model/API boundary verified | @ref:orchestration/integration-log.md#EVT-007 |
 
 ## Blockers
 

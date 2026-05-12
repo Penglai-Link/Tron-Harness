@@ -2,7 +2,7 @@
 
 ## Summary
 
-`TEST-RED-01..08` is completed and merged from `feature/clouds3n/user-management-model/test/red-suite` into base. All RED failures were expected behavior gaps, and GREEN evidence now passes after database, backend, and frontend branch integration.
+`TEST-RED-01..08` is completed and merged from `feature/clouds3n/user-management-model/test/red-suite` into base. All RED failures were expected behavior gaps, GREEN evidence passes after database/backend/frontend integration, and VERIFY evidence is integrated.
 
 ## Test Task Evidence
 
@@ -16,7 +16,7 @@
 | TEST-RED-06 | fail_expected_red | @ref:tasks/test-task.md#TEST-RED-06 | done |
 | TEST-RED-07 | fail_expected_red | @ref:tasks/test-task.md#TEST-RED-07 | done |
 | TEST-RED-08 | fail_expected_red | @ref:tasks/test-task.md#TEST-RED-08 | done |
-| TEST-VERIFY-01 | pending | @ref:tasks/test-task.md#TEST-VERIFY-01 | ready |
+| TEST-VERIFY-01 | pass | @ref:orchestration/integration-log.md#EVT-007 | done |
 
 ## Cycle Evidence
 
@@ -61,7 +61,7 @@
 
 | command or cycle ref | result | evidence link |
 | --- | --- | --- |
-| @ref:spec/test-plan.md#command-matrix | GREEN backend/frontend checks pass; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/test-plan.md#command-matrix | GREEN and VERIFY backend/frontend/docs checks pass | @ref:orchestration/integration-log.md#validation-after-integration |
 
 ## Changed Test Assets
 
@@ -80,20 +80,20 @@
 
 | worktree ref | result | evidence link | status |
 | --- | --- | --- | --- |
-| @ref:orchestration/worktree-plan.md#agent-worktrees | RED and GREEN worker branches integrated | @ref:orchestration/integration-log.md#integration-events | green_integrated |
+| @ref:orchestration/worktree-plan.md#agent-worktrees | RED, GREEN, and VERIFY worker branches integrated | @ref:orchestration/integration-log.md#integration-events | verified |
 
 ## Acceptance Mapping
 
 | acceptance ref | result | evidence link |
 | --- | --- | --- |
-| @ref:spec/acceptance.md#AC-UM-01 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-02 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-03 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-04 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-05 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-06 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-07 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
-| @ref:spec/acceptance.md#AC-UM-08 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/acceptance.md#AC-UM-01 | RED, GREEN, and VERIFY coverage complete | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-02 | RED, GREEN, and VERIFY coverage complete | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-03 | RED, GREEN, and VERIFY coverage complete | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-04 | RED, GREEN, and VERIFY coverage complete | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-05 | RED, GREEN, and VERIFY coverage complete | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-06 | RED, GREEN, and VERIFY coverage complete | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-07 | RED, GREEN, and VERIFY coverage complete | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-08 | RED, GREEN, and VERIFY coverage complete | @ref:orchestration/integration-log.md#EVT-007 |
 
 ## Blockers
 
