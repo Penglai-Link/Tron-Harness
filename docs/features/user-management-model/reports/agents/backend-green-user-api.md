@@ -1,22 +1,54 @@
-# Backend GREEN Worker Report: user-management-model
+# Agent Report: backend/green-user-api
 
-## Worker Scope
+## Agent Identity
 
-- branch: `feature/clouds3n/user-management-model/backend/green-user-api`
-- worktree: `/Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/backend/green-user-api`
-- task ids: `BE-GREEN-01`, `BE-GREEN-02`, `BE-GREEN-03`, `BE-GREEN-04`
-- acceptance refs: `AC-UM-01` through `AC-UM-07`
-- TDD refs: `TDD-UM-01` through `TDD-UM-07`
+- agent_id: backend
+- codex_runtime_agent_id: 019e1c38-c29d-7913-be7e-bfe92ed51299
+- codex_runtime_agent_name: Nietzsche
+- branch: feature/clouds3n/user-management-model/backend/green-user-api
+- worktree: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/backend/green-user-api
+- role: backend-green-worker
 
-## Implementation Summary
+## Scope
 
-- Added a minimal in-process User Management repository/service boundary under `tron-backend/src/domain/user/`.
-- Added admin user API routes under `/api/v1/admin/users` for list/detail, create/update, archive/restore, role replacement, space replacement, and password reset.
-- Preserved uniform response envelopes via `ApiResponse`, including stable user-management error codes for invalid role and space replacements.
-- Used stable `userCode`, `roleCodes`, `spaceCodes`, `Active`/`Archived`, and decimal string Snowflake IDs at the API boundary.
-- Added bcrypt hashing for initial/reset passwords and one-time temporary password reset responses.
+- tasks: BE-GREEN-01, BE-GREEN-02, BE-GREEN-03, BE-GREEN-04
+- acceptance refs: AC-UM-01, AC-UM-02, AC-UM-03, AC-UM-04, AC-UM-05, AC-UM-06, AC-UM-07
+- TDD refs: TDD-UM-01, TDD-UM-02, TDD-UM-03, TDD-UM-04, TDD-UM-05, TDD-UM-06, TDD-UM-07
 
-## Verification
+## Task Results
+
+| task id | result | notes |
+| --- | --- | --- |
+| BE-GREEN-01 | pass | Added list/detail and lifecycle API behavior. |
+| BE-GREEN-02 | pass | Added role-code and space-code replacement behavior. |
+| BE-GREEN-03 | pass | Added password reset behavior; follow-up removed API `passwordHash` exposure. |
+| BE-GREEN-04 | pass | Added stable-code and MVP no-permission-gate boundary behavior. |
+
+## TDD Evidence
+
+- @ref:spec/test-plan.md#TDD-UM-01
+- @ref:spec/test-plan.md#TDD-UM-02
+- @ref:spec/test-plan.md#TDD-UM-03
+- @ref:spec/test-plan.md#TDD-UM-04
+- @ref:spec/test-plan.md#TDD-UM-05
+- @ref:spec/test-plan.md#TDD-UM-06
+- @ref:spec/test-plan.md#TDD-UM-07
+
+## Changed Paths
+
+- tron-backend/Cargo.toml
+- tron-backend/Cargo.lock
+- tron-backend/src/app.rs
+- tron-backend/src/lib.rs
+- tron-backend/src/response.rs
+- tron-backend/src/domain/mod.rs
+- tron-backend/src/domain/user/mod.rs
+- tron-backend/src/http/mod.rs
+- tron-backend/src/http/admin/mod.rs
+- tron-backend/src/http/admin/users/mod.rs
+- tron-backend/tests/password_reset.rs
+
+## Commands
 
 | command | status |
 | --- | --- |
@@ -31,7 +63,6 @@
 | `rtk make be-test` | passed |
 | `rtk git diff --check` | passed |
 
-## Integration Notes
+## Blockers
 
-- No migration files were edited. The in-process repository is intentionally isolated so the database worker can replace persistence without changing HTTP contract tests.
-- Resolved integration review finding: user detail/list/reset DTOs no longer expose `passwordHash`; password reset still returns one-time `temporaryPassword`, and detail exposes only safe password state such as `password.resetRequired` / `passwordResetRequired`.
+- None.

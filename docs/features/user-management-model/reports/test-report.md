@@ -2,7 +2,7 @@
 
 ## Summary
 
-`TEST-RED-01..08` is completed and merged from `feature/clouds3n/user-management-model/test/red-suite` into base. All RED failures are expected behavior gaps (missing user-management API/domain/frontend boundary), not setup failures.
+`TEST-RED-01..08` is completed and merged from `feature/clouds3n/user-management-model/test/red-suite` into base. All RED failures were expected behavior gaps, and GREEN evidence now passes after database, backend, and frontend branch integration.
 
 ## Test Task Evidence
 
@@ -48,20 +48,20 @@
 
 | cycle id or ref | result | evidence link | status |
 | --- | --- | --- | --- |
-| TDD-UM-01 | pending | @ref:spec/test-plan.md#TDD-UM-01 | pending |
-| TDD-UM-02 | pending | @ref:spec/test-plan.md#TDD-UM-02 | pending |
-| TDD-UM-03 | pending | @ref:spec/test-plan.md#TDD-UM-03 | pending |
-| TDD-UM-04 | pending | @ref:spec/test-plan.md#TDD-UM-04 | pending |
-| TDD-UM-05 | pending | @ref:spec/test-plan.md#TDD-UM-05 | pending |
-| TDD-UM-06 | pending | @ref:spec/test-plan.md#TDD-UM-06 | pending |
-| TDD-UM-07 | pending | @ref:spec/test-plan.md#TDD-UM-07 | pending |
-| TDD-UM-08 | pending | @ref:spec/test-plan.md#TDD-UM-08 | pending |
+| TDD-UM-01 | list/detail API and frontend directory/detail runtime checks pass | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
+| TDD-UM-02 | create/archive/restore lifecycle tests pass | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
+| TDD-UM-03 | fixed role-code assignment tests pass | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
+| TDD-UM-04 | space-code assignment rejection/preservation tests pass | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
+| TDD-UM-05 | password reset backend tests and frontend reset runtime check pass | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
+| TDD-UM-06 | stable-code and decimal-string ID tests pass | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
+| TDD-UM-07 | no-permission-gate boundary tests pass | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
+| TDD-UM-08 | frontend model/status/route smoke tests pass | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
 
 ## Refactor And Regression Evidence
 
 | command or cycle ref | result | evidence link |
 | --- | --- | --- |
-| @ref:spec/test-plan.md#command-matrix | in_progress | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/test-plan.md#command-matrix | GREEN backend/frontend checks pass; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
 
 ## Changed Test Assets
 
@@ -80,20 +80,20 @@
 
 | worktree ref | result | evidence link | status |
 | --- | --- | --- | --- |
-| @ref:orchestration/worktree-plan.md#agent-worktrees | red suite integrated | @ref:orchestration/integration-log.md#integration-events | in_progress |
+| @ref:orchestration/worktree-plan.md#agent-worktrees | RED and GREEN worker branches integrated | @ref:orchestration/integration-log.md#integration-events | green_integrated |
 
 ## Acceptance Mapping
 
 | acceptance ref | result | evidence link |
 | --- | --- | --- |
-| @ref:spec/acceptance.md#AC-UM-01 | RED coverage complete | @ref:tasks/test-task.md#TEST-RED-01 |
-| @ref:spec/acceptance.md#AC-UM-02 | RED coverage complete | @ref:tasks/test-task.md#TEST-RED-02 |
-| @ref:spec/acceptance.md#AC-UM-03 | RED coverage complete | @ref:tasks/test-task.md#TEST-RED-03 |
-| @ref:spec/acceptance.md#AC-UM-04 | RED coverage complete | @ref:tasks/test-task.md#TEST-RED-04 |
-| @ref:spec/acceptance.md#AC-UM-05 | RED coverage complete | @ref:tasks/test-task.md#TEST-RED-05 |
-| @ref:spec/acceptance.md#AC-UM-06 | RED coverage complete | @ref:tasks/test-task.md#TEST-RED-06 |
-| @ref:spec/acceptance.md#AC-UM-07 | RED coverage complete | @ref:tasks/test-task.md#TEST-RED-07 |
-| @ref:spec/acceptance.md#AC-UM-08 | RED coverage complete | @ref:tasks/test-task.md#TEST-RED-08 |
+| @ref:spec/acceptance.md#AC-UM-01 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/acceptance.md#AC-UM-02 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/acceptance.md#AC-UM-03 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/acceptance.md#AC-UM-04 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/acceptance.md#AC-UM-05 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/acceptance.md#AC-UM-06 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/acceptance.md#AC-UM-07 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/acceptance.md#AC-UM-08 | RED and GREEN coverage complete; final verify pending | @ref:orchestration/integration-log.md#validation-after-integration |
 
 ## Blockers
 

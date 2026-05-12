@@ -2,7 +2,7 @@
 
 ## Summary
 
-Feature workspace resumed through Workflow B evolution. Complete spec and executable task/worktree plan are prepared, Lite Spec worker worktrees are provisioned, RED suite `TEST-RED-01..08` is merged into base with expected failure evidence, and database/backend GREEN branches are integrated with passing backend verification.
+Feature workspace resumed through Workflow B evolution. Complete spec and executable task/worktree plan are prepared, Lite Spec worker worktrees are provisioned, RED suite `TEST-RED-01..08` is merged into base with expected failure evidence, and database/backend/frontend GREEN branches are integrated with passing focused verification.
 
 ## Integration Events
 
@@ -13,6 +13,7 @@ Feature workspace resumed through Workflow B evolution. Complete spec and execut
 | EVT-003 | test | TEST-RED-01, TEST-RED-02, TEST-RED-03, TEST-RED-04, TEST-RED-05, TEST-RED-06, TEST-RED-07, TEST-RED-08 | feature/clouds3n/user-management-model/test/red-suite | feature/clouds3n/user-management-model/base | merge | `git merge --no-ff feature/clouds3n/user-management-model/test/red-suite -m "merge: integrate TEST-RED-01..08"` | success | Integrated merge commit `3ecccdb` after worker commit `20a49d4`; RED failures reproduce missing user-management behavior and frontend boundary mismatch. |
 | EVT-004 | database | DB-GREEN-01 | feature/clouds3n/user-management-model/database/schema-migrations | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/database/schema-migrations -m "merge: integrate DB-GREEN-01"` | success | Integrated merge commit `c1a24a1` after worker commits `5d7e3fe` and `56d5fe0`; follow-up fixed `user_code` constraints for hyphenated stable codes. |
 | EVT-005 | backend | BE-GREEN-01, BE-GREEN-02, BE-GREEN-03, BE-GREEN-04 | feature/clouds3n/user-management-model/backend/green-user-api | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/backend/green-user-api -m "merge: integrate BE-GREEN-01..04"` | success | Integrated merge commit `48504fb` after worker commits `0c6dff4` and `b16a889`; follow-up removed `passwordHash` from API detail DTOs. |
+| EVT-006 | frontend | FE-GREEN-01 | feature/clouds3n/user-management-model/frontend/green-admin-users | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/frontend/green-admin-users -m "merge: integrate FE-GREEN-01"` | success | Integrated merge commit `db43432` after worker commit `2bf0659`; frontend now uses user-only `userCode`/`roleCodes`/`spaceCodes` boundary and `Active`/`Archived` statuses. |
 
 ## Conflict Log
 
@@ -40,6 +41,9 @@ Feature workspace resumed through Workflow B evolution. Complete spec and execut
 | `rtk make fe-install` | Prepare frontend dependencies for RED smoke checks. | pass | Installed frontend workspace dependencies in base worktree. |
 | `rtk make fe-check` | Frontend compile/typecheck precondition for smoke RED. | pass | Frontend compiles, so RED smoke failures are behavior-level evidence. |
 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | RED validation for frontend user boundary alignment. | fail_expected_red | Smoke assertions fail on missing `userCode` model, invalid `Invited` status, and detail route query key mismatch. |
+| `rtk make fe-check` | GREEN frontend typecheck/build after FE merge. | pass | TypeScript and production build pass with user-only frontend model. |
+| `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | GREEN frontend source-level smoke after FE merge. | pass | 3 smoke tests pass for stable model fields, MVP statuses, and `userCode` detail route. |
+| `rtk proxy zsh -lc 'cd tron-frontend && node --input-type=module <<...Playwright runtime check...'` | Runtime browser check against local Vite dev server. | pass | Opened `/admin/users`, navigated to `/admin/users/detail?userCode=USER_ALEX_JOHNSON`, and confirmed reset-password result dialog. |
 
 ## Blockers
 
