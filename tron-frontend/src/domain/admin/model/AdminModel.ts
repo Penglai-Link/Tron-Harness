@@ -44,15 +44,40 @@ export interface RoleRecord {
   permissions: Record<string, string[]>;
 }
 
+export type UserStatus = "Active" | "Archived";
+
+export type UserRoleCode =
+  | "ADMIN"
+  | "WORKSPACE_ADMIN"
+  | "DEVELOPER"
+  | "VIEWER";
+
+export interface UserPhone {
+  countryCode: string;
+  number: string;
+}
+
 /**
- * Represents a user within the system, including role assignments, workspace memberships, status, and last active time.
+ * Represents the User Management API boundary. Role and space values are external stable codes only.
  */
 export interface UserRecord {
   id: string;
-  name: string;
+  userCode: string;
+  username: string;
+  firstName: string;
+  lastName: string;
+  displayName: string;
   email: string;
-  roles: string[];
-  workspaces: string[];
-  status: string;
-  lastActive: string;
+  phone: UserPhone | null;
+  avatarUrl: string | null;
+  locale: string;
+  timezone: string;
+  roleCodes: UserRoleCode[];
+  spaceCodes: string[];
+  status: UserStatus;
+  passwordResetRequired: boolean;
+  lastActiveAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
 }
