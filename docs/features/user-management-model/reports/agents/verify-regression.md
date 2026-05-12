@@ -14,17 +14,18 @@
 - tasks: DB-VERIFY-01, BE-VERIFY-01, FE-VERIFY-01, TEST-VERIFY-01
 - acceptance refs: AC-UM-01, AC-UM-02, AC-UM-03, AC-UM-04, AC-UM-05, AC-UM-06, AC-UM-07, AC-UM-08
 - TDD refs: TDD-UM-01, TDD-UM-02, TDD-UM-03, TDD-UM-04, TDD-UM-05, TDD-UM-06, TDD-UM-07, TDD-UM-08
-- write_scope: docs/features/user-management-model/reports/agents/verify-regression.md
+- write_scope: tron-backend/tests/user_management_schema_contracts.rs; docs/features/user-management-model/reports/agents/verify-regression.md
 
 ## Changed Paths
 
 - docs/features/user-management-model/reports/agents/verify-regression.md
+- tron-backend/tests/user_management_schema_contracts.rs
 
 ## Task Results
 
 | task id | result | notes |
 | --- | --- | --- |
-| DB-VERIFY-01 | pass_with_gap | `rtk make be-test` covered schema-backed lifecycle/stable-code tests. The row-specific filter `user_management_schema_contracts` exited 0 but matched 0 tests, so it is not effective focused evidence. |
+| DB-VERIFY-01 | pass | Added focused migration SQL contract tests. `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_schema_contracts` now runs 5 tests and passes. |
 | BE-VERIFY-01 | pass | `rtk make be-test` passed for backend unit, integration, and doc tests. |
 | FE-VERIFY-01 | pass | `rtk make fe-check`, Playwright smoke, and runtime UI checks passed after frontend dependencies were installed in this worktree. |
 | TEST-VERIFY-01 | pass | Backend, frontend, smoke, docs validators, and whitespace checks passed. |
@@ -65,12 +66,13 @@
 | `rtk make fe-install` | passed | Installed frontend dependencies in the verify worktree. |
 | `rtk make fe-check` | passed | Typecheck and production build passed after dependency install. |
 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | passed | 3 user-management smoke tests passed. |
-| `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_schema_contracts` | pass_with_gap | Exit 0, but `0 passed, 33 filtered out`; no focused DB test matched this filter. |
+| `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_schema_contracts` | passed | 5 focused schema contract tests passed, 33 filtered out; the DB-VERIFY-01 filter now has non-zero effective coverage. |
 | `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/user-management-model --phase spec --complete-spec` | passed | Feature docs spec gate passed. |
 | `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/user-management-model --phase tasks` | passed | Task gate passed. |
 | `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/user-management-model --phase worktrees` | passed | Worktree gate passed. |
 | `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/user-management-model --phase reports` | passed | Report gate passed. |
-| `rtk git diff --check` | passed | No whitespace errors before writing this report. |
+| `rtk git diff --check` | passed | No whitespace errors after adding the focused schema contract test and report update. |
+| `rtk git diff --cached --check` | passed | No staged whitespace errors after staging the verification-gap fix. |
 | `rtk npm --prefix tron-frontend run dev -- --host 127.0.0.1 --port 5174` | passed | Local Vite runtime responded on `127.0.0.1:5174`; stopped after verification. |
 | `rtk curl -I http://127.0.0.1:5174/admin/users` | passed | Confirmed the runtime served `/admin/users` before Playwright UI verification. |
 | `rtk proxy node --input-type=module <<'NODE' ... NODE` | failed_harness | Two early runtime scripts hit Playwright strict-selector collisions on duplicate Alex/user-code/UI data selectors. |
@@ -96,7 +98,7 @@ Covered route and UI assertions:
 
 ## Residual Risks
 
-- `DB-VERIFY-01` names `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_schema_contracts`, but no test matches `user_management_schema_contracts`. The broader backend regression still passes, but the lead should either add a focused schema contract test or update the task validation filter.
+- Resolved: `DB-VERIFY-01` now has focused schema contract coverage through `tron-backend/tests/user_management_schema_contracts.rs`; the named filter runs 5 tests instead of matching 0 tests.
 - Frontend dependency installation was required in this worker worktree before `fe-check`; no tracked files changed from install/build outputs.
 
 ## Blockers
