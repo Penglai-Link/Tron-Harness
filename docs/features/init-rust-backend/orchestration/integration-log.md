@@ -8,7 +8,7 @@ Integration has started. RED and GREEN worker branches are planned and will merg
 
 | event id | source branch | target branch | commit | result | evidence |
 | --- | --- | --- | --- | --- | --- |
-| INT-01 | feature/clouds3n/init-rust-backend/test/backend-contract | feature/clouds3n/init-rust-backend/base | pending | pending | RED worker not merged yet |
+| INT-01 | feature/clouds3n/init-rust-backend/test/backend-contract | feature/clouds3n/init-rust-backend/base | 575abb2 | merged | `rtk cargo test --manifest-path tron-backend/Cargo.toml` fails with unresolved `tron_backend::app` and `tron_backend::config`, proving missing backend implementation. |
 | INT-02 | feature/clouds3n/init-rust-backend/backend/rust-service | feature/clouds3n/init-rust-backend/base | pending | pending | GREEN worker not merged yet |
 
 ## Conflict Log
