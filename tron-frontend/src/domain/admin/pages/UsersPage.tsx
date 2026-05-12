@@ -1,5 +1,4 @@
 import {
-  useMemo,
   useState,
 } from "react";
 import {
@@ -27,8 +26,9 @@ import {
 import { useUserList } from "@/domain/admin/hooks";
 import type { UserRecord } from "@/domain/admin/model";
 
-
 import {
+  adminUserStatusOptions,
+  getAdminUserRoleLabel,
   getStatusTone,
 } from "@/domain/admin/constants";
 
@@ -43,40 +43,60 @@ function SearchField({ placeholder, value, onChange }: { placeholder: string; va
   );
 }
 
+function formatTimestamp(value: string | null) {
+  if (!value) return "Never";
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function userDetailPath(userCode: string) {
+  return `/admin/users/detail?userCode=${encodeURIComponent(userCode)}`;
+}
+
 export function UsersPage() {
   const users = useUserList();
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState(ALL_FILTER);
+  const [statusFilter, setStatusFilter] = useState("Active");
   const [notice, setNotice] = useState("");
-  const statusOptions = useMemo(
-    () => Array.from(new Set(users.map((user) => user.status))).sort(),
-    [users],
-  );
+  const statusOptions = adminUserStatusOptions;
   const filtered = users.filter((user) => {
-    const searchable = `${user.name} ${user.email} ${user.status} ${user.lastActive}`.toLowerCase();
+    const searchable = [
+      user.userCode,
+      user.username,
+      user.displayName,
+      user.firstName,
+      user.lastName,
+      user.email,
+      user.status,
+      ...user.roleCodes,
+      ...user.spaceCodes,
+    ].join(" ").toLowerCase();
+
     return (
       (statusFilter === ALL_FILTER || user.status === statusFilter) &&
       searchable.includes(query.trim().toLowerCase())
     );
   });
   const userPagination = useTablePagination(filtered);
-  const roleAssignmentCount = users.reduce((total, user) => total + user.roles.length, 0);
-  const workspaceLinkCount = users.reduce((total, user) => total + user.workspaces.length, 0);
+  const roleAssignmentCount = users.reduce((total, user) => total + user.roleCodes.length, 0);
+  const spaceLinkCount = users.reduce((total, user) => total + user.spaceCodes.length, 0);
 
   return (
     <TronShell activeItem="Users" searchPlaceholder="Search users...">
       <PageHeader title="Users" actions={<><Button variant="secondary" onClick={() => setNotice(`${filtered.length} users exported`)}>Export</Button><Button onClick={() => setNotice("Add user drawer opened")}><UserPlus size={16} aria-hidden="true" />Add User</Button></>} />
       <p className="sr-only" aria-live="polite">{notice}</p>
       <div className="mb-5 grid gap-4 lg:grid-cols-2 2xl:grid-cols-4">
-        <MetricCard label="Users" value={String(users.length)} trend="Across enterprise workspace" icon={<ShieldCheck size={18} aria-hidden="true" />} />
-        <MetricCard label="Active" value={String(users.filter((u) => u.status === "Active").length)} trend="Signed in recently" />
+        <MetricCard label="Users" value={String(users.length)} trend="Stable user-code records" icon={<ShieldCheck size={18} aria-hidden="true" />} />
+        <MetricCard label="Active" value={String(users.filter((user) => user.status === "Active").length)} trend="Default directory view" />
         <MetricCard label="Role Assignments" value={String(roleAssignmentCount)} trend="Managed on user detail pages" />
-        <MetricCard label="Workspace Links" value={String(workspaceLinkCount)} trend="Managed on user detail pages" />
+        <MetricCard label="Space Links" value={String(spaceLinkCount)} trend="External space-code references" />
       </div>
       <DataTable<UserRecord>
         title="User Directory"
         rows={userPagination.visibleItems}
-        rowKey={(row) => row.id}
+        rowKey={(row) => row.userCode}
         toolbar={
           <>
             <SearchField placeholder="Filter users..." value={query} onChange={(value) => {
@@ -94,10 +114,11 @@ export function UsersPage() {
         }
         pagination={<TablePagination itemLabel="users" {...userPagination.paginationProps} />}
         columns={[
-          { id: "name", header: "User", render: (row) => <div><Link className="font-medium hover:underline" to={`/admin/users/detail?user=${row.id}`}>{row.name}</Link><div className="text-[13px] text-[var(--color-on-surface-variant)]">{row.email}</div></div> },
+          { id: "name", header: "User", render: (row) => <div><Link className="font-medium hover:underline" to={userDetailPath(row.userCode)}>{row.displayName}</Link><div className="text-[13px] text-[var(--color-on-surface-variant)]">{row.username} · {row.email}</div></div> },
+          { id: "codes", header: "Codes", render: (row) => <div className="max-w-64 text-[13px] text-[var(--color-on-surface-variant)]"><div className="font-medium text-[var(--color-on-surface)]">{row.userCode}</div><div>{row.roleCodes.map(getAdminUserRoleLabel).join(", ")}</div><div>{row.spaceCodes.join(", ")}</div></div> },
           { id: "status", header: "Status", render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },
-          { id: "last", header: "Last Active", render: (row) => row.lastActive },
-          { id: "details", header: "", align: "right", render: (row) => <div className="flex justify-end gap-1"><Button asChild size="icon" variant="ghost" aria-label={`View ${row.name} details`}><Link to={`/admin/users/detail?user=${row.id}`}><Eye size={16} aria-hidden="true" /></Link></Button><Button size="icon" variant="ghost" aria-label={`Open actions for ${row.name}`} onClick={() => setNotice(`${row.name} action menu opened`)}><MoreHorizontal size={16} aria-hidden="true" /></Button></div> },
+          { id: "last", header: "Last Active", render: (row) => formatTimestamp(row.lastActiveAt) },
+          { id: "details", header: "", align: "right", render: (row) => <div className="flex justify-end gap-1"><Button asChild size="icon" variant="ghost" aria-label={`View ${row.displayName} details`}><Link to={userDetailPath(row.userCode)}><Eye size={16} aria-hidden="true" /></Link></Button><Button size="icon" variant="ghost" aria-label={`Open actions for ${row.displayName}`} onClick={() => setNotice(`${row.displayName} action menu opened`)}><MoreHorizontal size={16} aria-hidden="true" /></Button></div> },
         ]}
       />
     </TronShell>

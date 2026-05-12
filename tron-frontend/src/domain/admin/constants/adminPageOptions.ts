@@ -1,6 +1,29 @@
-export const adminUserRoleFilters = ["All", "Admin", "Editor", "Viewer"] as const;
+import type {
+  UserRoleCode,
+  UserStatus,
+} from "@/domain/admin/model";
 
-export const adminUserRoleOptions = ["Admin", "Editor", "Viewer"] as const;
+export const adminUserStatusOptions: UserStatus[] = ["Active", "Archived"];
+
+export const adminUserRoleOptions: UserRoleCode[] = [
+  "ADMIN",
+  "WORKSPACE_ADMIN",
+  "DEVELOPER",
+  "VIEWER",
+];
+
+export const adminUserRoleFilters = ["All", ...adminUserRoleOptions] as const;
+
+export const adminUserRoleLabels: Record<UserRoleCode, string> = {
+  ADMIN: "Admin",
+  WORKSPACE_ADMIN: "Workspace Admin",
+  DEVELOPER: "Developer",
+  VIEWER: "Viewer",
+};
+
+export function getAdminUserRoleLabel(roleCode: string) {
+  return adminUserRoleLabels[roleCode as UserRoleCode] ?? roleCode;
+}
 
 export const adminAuditStatusOptions = [
   { label: "All status", value: "all" },
