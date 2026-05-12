@@ -63,6 +63,9 @@ impl UserService {
         let email = required_profile_field(command.email)?;
         let explicit_user_code = optional_trimmed(command.user_code);
 
+        if let Some(user_code) = explicit_user_code.as_deref() {
+            validate_user_code(user_code)?;
+        }
         validate_role_codes(&command.role_codes)?;
         validate_space_codes(&command.space_codes)?;
         if let Some(initial_password) = command.initial_password.as_deref() {
@@ -160,6 +163,7 @@ impl UserService {
             user.timezone = timezone;
         }
         if let Some(status) = command.status {
+            let status = parse_user_status(&status)?;
             user.status = status;
             user.archived_at = match status {
                 UserStatus::Active => None,
@@ -530,7 +534,7 @@ pub struct UpdateUserCommand {
     pub avatar_url: Option<Option<String>>,
     pub locale: Option<String>,
     pub timezone: Option<String>,
-    pub status: Option<UserStatus>,
+    pub status: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -564,11 +568,13 @@ pub struct PasswordResetResult {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UserError {
     NotFound,
+    InvalidUserCode,
     DuplicateUserCode,
     DuplicateUsername,
     DuplicateEmail,
     RequiredProfileField,
     WeakInitialPassword,
+    InvalidStatus,
     InvalidRoleCode,
     InvalidSpaceCode,
     PasswordHashFailed,
@@ -638,6 +644,26 @@ fn validate_space_codes(space_codes: &[String]) -> Result<(), UserError> {
         Ok(())
     } else {
         Err(UserError::InvalidSpaceCode)
+    }
+}
+
+fn validate_user_code(user_code: &str) -> Result<(), UserError> {
+    if !user_code.is_empty()
+        && user_code
+            .chars()
+            .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_' || ch == '-')
+    {
+        Ok(())
+    } else {
+        Err(UserError::InvalidUserCode)
+    }
+}
+
+fn parse_user_status(value: &str) -> Result<UserStatus, UserError> {
+    match value {
+        "Active" => Ok(UserStatus::Active),
+        "Archived" => Ok(UserStatus::Archived),
+        _ => Err(UserError::InvalidStatus),
     }
 }
 

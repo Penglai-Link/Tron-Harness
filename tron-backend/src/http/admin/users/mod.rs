@@ -351,6 +351,11 @@ fn user_error_response(error: UserError) -> Response {
             "ADMIN_USER_NOT_FOUND",
             "user was not found",
         ),
+        UserError::InvalidUserCode => (
+            StatusCode::BAD_REQUEST,
+            "ADMIN_USER_CODE_INVALID",
+            "userCode must contain uppercase letters, digits, underscore, or hyphen only",
+        ),
         UserError::DuplicateUserCode => (
             StatusCode::CONFLICT,
             "ADMIN_USER_CODE_DUPLICATE",
@@ -375,6 +380,11 @@ fn user_error_response(error: UserError) -> Response {
             StatusCode::BAD_REQUEST,
             "ADMIN_USER_PASSWORD_WEAK",
             "initialPassword does not satisfy the MVP password policy",
+        ),
+        UserError::InvalidStatus => (
+            StatusCode::BAD_REQUEST,
+            "ADMIN_USER_STATUS_INVALID",
+            "status must be Active or Archived",
         ),
         UserError::InvalidRoleCode => (
             StatusCode::BAD_REQUEST,

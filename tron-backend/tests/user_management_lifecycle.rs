@@ -218,6 +218,121 @@ async fn create_user_accepts_strong_provided_initial_password() {
 }
 
 #[tokio::test]
+async fn create_user_rejects_malformed_explicit_user_code_before_persistence() {
+    for (index, user_code) in ["user lowercase", "USR SPACE"].into_iter().enumerate() {
+        let response = request(
+            Method::POST,
+            "/api/v1/admin/users",
+            Some(valid_create_payload(
+                Some(user_code),
+                &format!("invalid.usercode.{index}"),
+                &format!("invalid.usercode.{index}@tron.ai"),
+            )),
+        )
+        .await;
+
+        assert_eq!(
+            response.status(),
+            StatusCode::BAD_REQUEST,
+            "TDD-UM-02 RED: malformed explicit userCode `{user_code}` must be rejected",
+        );
+        let json = response_json(response).await;
+        assert_eq!(json["code"], "ADMIN_USER_CODE_INVALID");
+    }
+}
+
+#[tokio::test]
+async fn create_user_accepts_uppercase_hyphenated_and_underscored_explicit_user_code() {
+    let response = request(
+        Method::POST,
+        "/api/v1/admin/users",
+        Some(valid_create_payload(
+            Some("USR_VALID-CODE_01"),
+            "valid.usercode",
+            "valid.usercode@tron.ai",
+        )),
+    )
+    .await;
+
+    assert_eq!(
+        response.status(),
+        StatusCode::CREATED,
+        "TDD-UM-02 RED: explicit userCode may contain uppercase letters, digits, hyphen, and underscore",
+    );
+    let json = response_json(response).await;
+    assert_eq!(json["code"], "SUCCESS");
+    assert_eq!(json["data"]["userCode"], "USR_VALID-CODE_01");
+}
+
+#[tokio::test]
+async fn patch_user_rejects_invalid_status_with_uniform_envelope() {
+    let response = request(
+        Method::PATCH,
+        "/api/v1/admin/users/USR-0001",
+        Some(json!({ "status": "Suspended" })),
+    )
+    .await;
+
+    assert_eq!(
+        response.status(),
+        StatusCode::BAD_REQUEST,
+        "TDD-UM-02 RED: invalid PATCH status must be a uniform admin-user contract error",
+    );
+    let json = response_json(response).await;
+    assert_eq!(json["code"], "ADMIN_USER_STATUS_INVALID");
+}
+
+#[tokio::test]
+async fn patch_user_accepts_active_and_archived_status_values() {
+    let create_response = request(
+        Method::POST,
+        "/api/v1/admin/users",
+        Some(valid_create_payload(
+            Some("USR-STATUS-PATCH"),
+            "status.patch",
+            "status.patch@tron.ai",
+        )),
+    )
+    .await;
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+
+    let archived_response = request(
+        Method::PATCH,
+        "/api/v1/admin/users/USR-STATUS-PATCH",
+        Some(json!({ "status": "Archived" })),
+    )
+    .await;
+    assert_eq!(
+        archived_response.status(),
+        StatusCode::OK,
+        "TDD-UM-02 RED: Archived remains a valid PATCH status",
+    );
+    let archived_json = response_json(archived_response).await;
+    assert_eq!(archived_json["code"], "SUCCESS");
+    assert_eq!(archived_json["data"]["status"], "Archived");
+    assert!(
+        archived_json["data"]["archivedAt"].is_string(),
+        "archiving through PATCH must set archivedAt",
+    );
+
+    let active_response = request(
+        Method::PATCH,
+        "/api/v1/admin/users/USR-STATUS-PATCH",
+        Some(json!({ "status": "Active" })),
+    )
+    .await;
+    assert_eq!(
+        active_response.status(),
+        StatusCode::OK,
+        "TDD-UM-02 RED: Active remains a valid PATCH status",
+    );
+    let active_json = response_json(active_response).await;
+    assert_eq!(active_json["code"], "SUCCESS");
+    assert_eq!(active_json["data"]["status"], "Active");
+    assert!(active_json["data"]["archivedAt"].is_null());
+}
+
+#[tokio::test]
 async fn archive_then_restore_transitions_user_status() {
     let archive_response =
         request(Method::POST, "/api/v1/admin/users/USR-0009/archive", None).await;
