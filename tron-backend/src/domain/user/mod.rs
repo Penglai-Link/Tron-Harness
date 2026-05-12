@@ -56,18 +56,34 @@ impl UserService {
             .repository
             .lock()
             .expect("user repository mutex poisoned");
-        let id = repository.next_id();
-        let username = required_or_default(command.username, format!("user.{id}"));
-        let display_name = required_or_default(command.display_name, username.clone());
-        let email = required_or_default(command.email, format!("{username}@tron.local"));
-        let user_code = command
-            .user_code
-            .filter(|value| !value.trim().is_empty())
-            .unwrap_or_else(|| repository.next_user_code(&username));
+        let username = required_profile_field(command.username)?;
+        let first_name = required_profile_field(command.first_name)?;
+        let last_name = required_profile_field(command.last_name)?;
+        let display_name = required_profile_field(command.display_name)?;
+        let email = required_profile_field(command.email)?;
+        let explicit_user_code = optional_trimmed(command.user_code);
 
         validate_role_codes(&command.role_codes)?;
         validate_space_codes(&command.space_codes)?;
+        if let Some(initial_password) = command.initial_password.as_deref() {
+            validate_initial_password(initial_password)?;
+        }
 
+        if explicit_user_code
+            .as_ref()
+            .is_some_and(|user_code| repository.users.contains_key(user_code))
+        {
+            return Err(UserError::DuplicateUserCode);
+        }
+        if repository.username_exists(&username) {
+            return Err(UserError::DuplicateUsername);
+        }
+        if repository.email_exists(&email) {
+            return Err(UserError::DuplicateEmail);
+        }
+
+        let id = repository.next_id();
+        let user_code = explicit_user_code.unwrap_or_else(|| repository.next_user_code(&username));
         let initial_password = command
             .initial_password
             .unwrap_or_else(|| format!("TronInitial{id}!"));
@@ -77,8 +93,8 @@ impl UserService {
             id: SnowflakeId::new(id),
             user_code: user_code.clone(),
             username,
-            first_name: command.first_name.unwrap_or_else(|| "New".into()),
-            last_name: command.last_name.unwrap_or_else(|| "User".into()),
+            first_name,
+            last_name,
             display_name,
             email,
             phone: command.phone,
@@ -377,6 +393,18 @@ impl InMemoryUserRepository {
         }
     }
 
+    fn username_exists(&self, username: &str) -> bool {
+        self.users
+            .values()
+            .any(|user| user.username.eq_ignore_ascii_case(username))
+    }
+
+    fn email_exists(&self, email: &str) -> bool {
+        self.users
+            .values()
+            .any(|user| user.email.eq_ignore_ascii_case(email))
+    }
+
     fn list_users(&self, query: ListUsersQuery) -> PagedUsers {
         let current = query.current.or(query.page).unwrap_or(1).max(1);
         let size = query.size.unwrap_or(20).clamp(1, 100);
@@ -536,6 +564,11 @@ pub struct PasswordResetResult {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UserError {
     NotFound,
+    DuplicateUserCode,
+    DuplicateUsername,
+    DuplicateEmail,
+    RequiredProfileField,
+    WeakInitialPassword,
     InvalidRoleCode,
     InvalidSpaceCode,
     PasswordHashFailed,
@@ -617,10 +650,35 @@ fn unique_preserving_order(values: Vec<String>) -> Vec<String> {
     })
 }
 
-fn required_or_default(value: Option<String>, default: String) -> String {
-    value
-        .filter(|candidate| !candidate.trim().is_empty())
-        .unwrap_or(default)
+fn required_profile_field(value: Option<String>) -> Result<String, UserError> {
+    let value = value.ok_or(UserError::RequiredProfileField)?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        Err(UserError::RequiredProfileField)
+    } else {
+        Ok(trimmed.to_owned())
+    }
+}
+
+fn optional_trimmed(value: Option<String>) -> Option<String> {
+    value.and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_owned())
+    })
+}
+
+fn validate_initial_password(value: &str) -> Result<(), UserError> {
+    let has_min_length = value.chars().count() >= 8;
+    let has_uppercase = value.chars().any(|ch| ch.is_ascii_uppercase());
+    let has_lowercase = value.chars().any(|ch| ch.is_ascii_lowercase());
+    let has_digit = value.chars().any(|ch| ch.is_ascii_digit());
+    let has_symbol = value.chars().any(|ch| !ch.is_ascii_alphanumeric());
+
+    if has_min_length && has_uppercase && has_lowercase && has_digit && has_symbol {
+        Ok(())
+    } else {
+        Err(UserError::WeakInitialPassword)
+    }
 }
 
 fn normalize_code_segment(value: &str) -> String {

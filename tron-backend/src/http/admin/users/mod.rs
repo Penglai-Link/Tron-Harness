@@ -351,6 +351,31 @@ fn user_error_response(error: UserError) -> Response {
             "ADMIN_USER_NOT_FOUND",
             "user was not found",
         ),
+        UserError::DuplicateUserCode => (
+            StatusCode::CONFLICT,
+            "ADMIN_USER_CODE_DUPLICATE",
+            "userCode already exists",
+        ),
+        UserError::DuplicateUsername => (
+            StatusCode::CONFLICT,
+            "ADMIN_USER_USERNAME_DUPLICATE",
+            "username already exists",
+        ),
+        UserError::DuplicateEmail => (
+            StatusCode::CONFLICT,
+            "ADMIN_USER_EMAIL_DUPLICATE",
+            "email already exists",
+        ),
+        UserError::RequiredProfileField => (
+            StatusCode::BAD_REQUEST,
+            "ADMIN_USER_PROFILE_FIELD_REQUIRED",
+            "username, firstName, lastName, displayName, and email are required",
+        ),
+        UserError::WeakInitialPassword => (
+            StatusCode::BAD_REQUEST,
+            "ADMIN_USER_PASSWORD_WEAK",
+            "initialPassword does not satisfy the MVP password policy",
+        ),
         UserError::InvalidRoleCode => (
             StatusCode::BAD_REQUEST,
             "ADMIN_USER_ROLE_CODE_INVALID",
