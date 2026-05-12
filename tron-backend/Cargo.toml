@@ -4,13 +4,11 @@ version = "0.1.0"
 edition = "2024"
 publish = false
 
-[lib]
-# RED-only placeholder; the GREEN implementation should replace this with src/lib.rs.
-path = "tests/support/contract_lib_anchor.rs"
-doctest = false
+[dependencies]
+axum = "0.8"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
 
 [dev-dependencies]
-axum = "0.8"
 serde_json = "1"
-tokio = { version = "1", features = ["macros", "rt"] }
 tower = { version = "0.5", features = ["util"] }
