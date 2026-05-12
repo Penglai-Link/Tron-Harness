@@ -4,45 +4,49 @@
 
 - feature_slug: common-snowflake-id
 - main_agent: Codex lead agent
-- status: waiting_human_decision
+- git_skill: eliteforge-git-feature-oriented-lite-spec
+- main_branch: feature/clouds3n/common-snowflake-id/base
+- main_worktree_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/common-snowflake-id/base
+- status: in_progress
 
 ## Repository State
 
-- main_repo_path: /Users/clouds3n/Coding/open-source/ai/Tron
-- base_branch: feature/clouds3n/common-snowflake-id
-- base_commit: efd1557
-- working_tree_status: dirty; existing uncommitted docs and skill files are present in the main worktree
+- main_repo_path: /Users/clouds3n/.codex/worktrees/fc53/Tron
+- default_branch: master
+- base_commit: 9629b36
+- working_tree_status: clean before execution start
 
-## Integration Branch
+## Multi-Agent Base Branch
 
-- branch: eliteforge/integration/common-snowflake-id
-- base_ref: feature/clouds3n/common-snowflake-id
+- branch: feature/clouds3n/common-snowflake-id/base
+- base_ref: master
 - merge_strategy: merge
 - conflict_owner: Main Agent
 
 ## Agent Worktrees
 
-| agent id | task ids | tdd phase | branch | worktree path | base ref | status |
-| --- | --- | --- | --- | --- | --- | --- |
-| backend-harness | BE-SUPPORT-01 | support | eliteforge/backend-harness/common-snowflake-id | ../.eliteforge-worktrees/Tron/eliteforge/backend-harness/common-snowflake-id | eliteforge/integration/common-snowflake-id | waiting_human_decision |
-| red-snowflake | TEST-RED-01, TEST-RED-02, TEST-RED-03, TEST-RED-04, TEST-RED-05, TEST-RED-06, TEST-RED-07, TEST-RED-08, TEST-RED-09, TEST-RED-10, TEST-RED-11, TEST-RED-12, TEST-RED-13 | red | eliteforge/red-snowflake/common-snowflake-id | ../.eliteforge-worktrees/Tron/eliteforge/red-snowflake/common-snowflake-id | eliteforge/integration/common-snowflake-id | waiting_human_decision |
-| green-snowflake | BE-GREEN-01, BE-GREEN-02, BE-GREEN-03, BE-GREEN-04, BE-GREEN-05 | green | eliteforge/green-snowflake/common-snowflake-id | ../.eliteforge-worktrees/Tron/eliteforge/green-snowflake/common-snowflake-id | eliteforge/integration/common-snowflake-id | waiting_human_decision |
-| verify-snowflake | BE-VERIFY-01 | verify | eliteforge/verify-snowflake/common-snowflake-id | ../.eliteforge-worktrees/Tron/eliteforge/verify-snowflake/common-snowflake-id | eliteforge/integration/common-snowflake-id | waiting_human_decision |
-| review-snowflake | REVIEW-01 | review | eliteforge/review-snowflake/common-snowflake-id | ../.eliteforge-worktrees/Tron/eliteforge/review-snowflake/common-snowflake-id | eliteforge/integration/common-snowflake-id | waiting_human_decision |
+One row is one actual git worktree checkout. Resolve `agent id`, `subtask name`, `branch`, and `worktree path` from the selected `eliteforge-git-feature-oriented-*` skill. Do not duplicate `branch` or `worktree path` across rows.
+
+| agent id | subtask name | task ids | tdd phase | branch | worktree path | base ref | status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| backend | bootstrap-harness | BE-SUPPORT-01 | support | feature/clouds3n/common-snowflake-id/backend/bootstrap-harness | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/common-snowflake-id/backend/bootstrap-harness | feature/clouds3n/common-snowflake-id/base | ready |
+| test | red-suite | TEST-RED-01, TEST-RED-02, TEST-RED-03, TEST-RED-04, TEST-RED-05, TEST-RED-06, TEST-RED-07, TEST-RED-08, TEST-RED-09, TEST-RED-10, TEST-RED-11, TEST-RED-12, TEST-RED-13 | red | feature/clouds3n/common-snowflake-id/test/red-suite | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/common-snowflake-id/test/red-suite | feature/clouds3n/common-snowflake-id/base | ready |
+| backend | green-implementation | BE-GREEN-01, BE-GREEN-02, BE-GREEN-03, BE-GREEN-04, BE-GREEN-05 | green | feature/clouds3n/common-snowflake-id/backend/green-implementation | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/common-snowflake-id/backend/green-implementation | feature/clouds3n/common-snowflake-id/base | ready |
+| test | verify-regression | BE-VERIFY-01 | verify | feature/clouds3n/common-snowflake-id/test/verify-regression | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/common-snowflake-id/test/verify-regression | feature/clouds3n/common-snowflake-id/base | ready |
+| review | final-review | REVIEW-01 | review | feature/clouds3n/common-snowflake-id/review/final-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/common-snowflake-id/review/final-review | feature/clouds3n/common-snowflake-id/base | ready |
 
 ## Branch And Path Rules
 
-- Every subagent receives exactly one worktree path and one branch.
-- Worker branch format: `eliteforge/<agent-id>/<feature-slug>`.
-- Worker worktree path format: `../.eliteforge-worktrees/<repo-name>/eliteforge/<agent-id>/<feature-slug>/`.
-- The `<agent-id>` segment must come before `<feature-slug>`.
+- Branch, worktree, main-agent, and subagent naming is owned by `git_skill`; do not define another naming scheme in this feature workspace.
+- Every subagent receives exactly one worktree path and one branch; every worker branch may be checked out by only one worktree.
+- Worktree paths must mirror the selected-git-skill branch tree under the selected-git-skill worktree root.
 - No two subagents share a worktree or branch.
 - Subagents must not edit the main worktree.
 - Workers write report fragments under `reports/agents/`; the Main Agent updates canonical reports.
 
 ## Merge Strategy
 
-The lead creates or verifies `eliteforge/integration/common-snowflake-id`, provisions worker worktrees from that branch, then integrates in strict order: support harness, RED tests, GREEN implementation, verify, review. After each integration, the lead runs the relevant validation command from the task row and records the event in `orchestration/integration-log.md`.
+The lead provisions worker worktrees from `feature/clouds3n/common-snowflake-id/base`, then integrates in strict order: support harness, RED tests, GREEN implementation, verify, review. After each integration, the lead runs the relevant validation command from the task row and records the event in `orchestration/integration-log.md`.
 
 ## Conflict Rules
 

@@ -249,6 +249,12 @@ Candidate common capabilities:
   - `snowflake-gen` 1.0.2 is configurable but very new and low-download as of the package check.
   - `sonyflake` is mature but implements Sonyflake-inspired semantics rather than a direct Snowflake ID package.
 
+## Feature Dependencies
+
+| dependency feature name | feature slug | evidence from feature-spec.md | required contract or artifact | impact on current feature | decision/status |
+| --- | --- | --- | --- | --- | --- |
+| Init Rust Backend | init-rust-backend | `docs/features/init-rust-backend/spec/feature-spec.md` confirms backend Cargo workspace, shared module layout, and root Makefile backend commands owned by that feature. | Rust backend workspace (`tron-backend`), `Makefile` backend targets, shared module boundary where `src/shared/id` is created. | `common-snowflake-id` implementation tasks are blocked without backend workspace structure and backend command rails established by Init Rust Backend. | dependency_confirmed |
+
 ## Open Decisions
 
 | decision id | candidate common capability | reuse signal | affected modules | proposed shared module | recommendation | user decision |
