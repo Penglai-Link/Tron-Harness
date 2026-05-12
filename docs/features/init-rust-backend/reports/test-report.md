@@ -42,7 +42,7 @@ RED tests were added first on the `test/backend-contract` worker branch and merg
 
 - `tron-backend/tests/backend_contract.rs`
 - `tron-backend/tests/makefile_contract.rs`
-- `tron-backend/tests/support/contract_lib_anchor.rs`
+- RED-only temporary lib anchor was used before production `src/lib.rs` existed and removed after GREEN implementation.
 
 ## Worktree Evidence
 
