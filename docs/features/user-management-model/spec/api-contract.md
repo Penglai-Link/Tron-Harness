@@ -596,10 +596,8 @@ Response body:
   "message": "ok",
   "data": {
     "userCode": "USER_MAYA_SINGH",
-    "resetCode": "RESET_20260511_0001",
-    "temporaryPassword": "g3N8-qP2v-zK9m",
-    "passwordResetRequired": true,
-    "message": "Temporary password is shown once. Copy it before closing this dialog."
+    "temporaryPassword": "TronTmp734103002743185409!",
+    "passwordResetRequired": true
   }
 }
 ```

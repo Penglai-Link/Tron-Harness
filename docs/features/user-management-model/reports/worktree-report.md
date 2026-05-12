@@ -17,7 +17,7 @@ Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend G
 | backend | BE-FIX-01 | backend-fix-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/backend/fix-create-validation | feature/clouds3n/user-management-model/backend/fix-create-validation | feature/clouds3n/user-management-model/base | integrated |
 | frontend | FE-FIX-01 | frontend-fix-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/fix-detail-not-found | feature/clouds3n/user-management-model/frontend/fix-detail-not-found | feature/clouds3n/user-management-model/base | integrated |
 | backend | BE-FIX-02 | backend-contract-fix-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/backend/fix-status-contract | feature/clouds3n/user-management-model/backend/fix-status-contract | feature/clouds3n/user-management-model/base | integrated |
-| review | REVIEW-02 | post-fix-final-review-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/post-fix-final-review | feature/clouds3n/user-management-model/review/post-fix-final-review | feature/clouds3n/user-management-model/base | ready |
+| review | REVIEW-02 | post-fix-final-review-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/post-fix-final-review | feature/clouds3n/user-management-model/review/post-fix-final-review | feature/clouds3n/user-management-model/base | in_progress |
 
 ## Branch Registry
 
@@ -32,7 +32,7 @@ Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend G
 | feature/clouds3n/user-management-model/backend/fix-create-validation | backend | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | backend create validation fix merged via `076e5fa`. |
 | feature/clouds3n/user-management-model/frontend/fix-detail-not-found | frontend | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | frontend detail not-found fix merged via `3aee08e`. |
 | feature/clouds3n/user-management-model/backend/fix-status-contract | backend | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | backend status/userCode contract fix merged via `d7abc7e`. |
-| feature/clouds3n/user-management-model/review/post-fix-final-review | review | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | ready | post-fix final review worker branch |
+| feature/clouds3n/user-management-model/review/post-fix-final-review | review | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | in_progress | post-fix final review worker branch |
 
 ## Integration Evidence
 
