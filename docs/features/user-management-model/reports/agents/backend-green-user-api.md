@@ -34,4 +34,4 @@
 ## Integration Notes
 
 - No migration files were edited. The in-process repository is intentionally isolated so the database worker can replace persistence without changing HTTP contract tests.
-- The RED password reset test inspects `passwordHash` through detail response to prove hash-only persistence. This is useful for the current test assertion but differs from the feature spec statement that API DTOs should not expose password hashes; lead should decide whether later VERIFY should move that assertion behind a repository-level test before production hardening.
+- Resolved integration review finding: user detail/list/reset DTOs no longer expose `passwordHash`; password reset still returns one-time `temporaryPassword`, and detail exposes only safe password state such as `password.resetRequired` / `passwordResetRequired`.
