@@ -3,7 +3,7 @@
 ## Execution Contract
 
 - feature_slug: common-snowflake-id
-- status: ready
+- status: in_progress
 - canonical_report_target: reports/test-report.md
 - main_agent_owned: false
 
