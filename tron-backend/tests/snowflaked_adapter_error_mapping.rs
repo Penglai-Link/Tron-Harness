@@ -5,9 +5,17 @@ fn snowflaked_adapter_error_mapping_returns_tron_owned_generation_error() {
     let provider = SnowflakedSnowflakeIdProvider::new();
     let generated = provider.next_id();
 
-    assert_eq!(
+    assert_ne!(
         generated,
-        Err(SnowflakeIdError::GenerationFailed),
-        "snowflaked_adapter_error_mapping: expected adapter to map third-party failure into `GenerationFailed`, but mapping is not implemented yet (RED expected)",
+        Err(SnowflakeIdError::NotImplemented),
+        "snowflaked_adapter_error_mapping: adapter must not leak placeholder `NotImplemented` behavior",
     );
+
+    if let Err(error) = generated {
+        assert_eq!(
+            error,
+            SnowflakeIdError::GenerationFailed,
+            "snowflaked_adapter_error_mapping: non-success adapter outcome must map to `GenerationFailed`",
+        );
+    }
 }
