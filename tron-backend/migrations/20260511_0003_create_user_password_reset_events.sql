@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS user_password_reset_events (
     CONSTRAINT ck_user_password_reset_events_user_code_format CHECK (
         length(trim(user_code)) > 0
         AND user_code = upper(user_code)
-        AND user_code NOT GLOB '*[^A-Z0-9_]*'
+        AND user_code NOT GLOB '*[^A-Z0-9_-]*'
     ),
     CONSTRAINT ck_user_password_reset_events_hash_algorithm CHECK (
         password_hash_algorithm = 'bcrypt'

@@ -19,7 +19,8 @@
 
 ## Constraint Coverage
 
-- `users.user_code` is stable, uppercase snake-case constrained, and unique.
+- `users.user_code` is stable, uppercase, allows `_` and `-`, rejects blanks/malformed characters, and is unique.
+- Assignment and password-reset `user_code` constraints use the same uppercase `_`/`-` compatible format.
 - `users.username` and `users.email` have case-insensitive unique indexes; `email` is constrained to normalized lowercase.
 - User lifecycle status is constrained to `active` or `archived`; archived users require `archived_at`.
 - User-management owned IDs use SQLite `INTEGER` with positive-ID checks.
@@ -40,6 +41,8 @@
 | `rtk cargo test --manifest-path tron-backend/Cargo.toml stable_code_contracts` | pass | Cargo test-name filter executed 0 tests; kept for task-command parity. |
 | `rtk cargo test --manifest-path tron-backend/Cargo.toml --test user_management_lifecycle` | fail | Expected cross-worker RED remains: user API lifecycle routes return 404 until backend handler worker implements them. |
 | `rtk cargo test --manifest-path tron-backend/Cargo.toml --test stable_code_contracts` | fail | Expected cross-worker RED remains: user list/detail routes return 404 until backend handler worker implements them. |
+| `rtk sqlite3 :memory: "SELECT 'USR-0001' NOT GLOB '*[^A-Z0-9_-]*', ..."` | pass | Confirmed the relaxed character class accepts hyphenated uppercase stable codes and rejects lowercase/space values. |
+| `rtk sqlite3 :memory: ".read ...0001..." ".read ...0002..." ".read ...0003..." ...` with `USR-0001` | pass | Re-loaded all migrations, inserted one hyphenated-code user, role assignment, space assignment, and reset event; `PRAGMA foreign_key_check` returned no rows. |
 
 ## Integration Notes
 

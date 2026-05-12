@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS user_role_assignments (
     CONSTRAINT ck_user_role_assignments_user_code_format CHECK (
         length(trim(user_code)) > 0
         AND user_code = upper(user_code)
-        AND user_code NOT GLOB '*[^A-Z0-9_]*'
+        AND user_code NOT GLOB '*[^A-Z0-9_-]*'
     ),
     CONSTRAINT ck_user_role_assignments_role_code CHECK (
         role_code IN ('ADMIN', 'WORKSPACE_ADMIN', 'DEVELOPER', 'VIEWER')
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS user_space_assignments (
     CONSTRAINT ck_user_space_assignments_user_code_format CHECK (
         length(trim(user_code)) > 0
         AND user_code = upper(user_code)
-        AND user_code NOT GLOB '*[^A-Z0-9_]*'
+        AND user_code NOT GLOB '*[^A-Z0-9_-]*'
     ),
     CONSTRAINT ck_user_space_assignments_space_code CHECK (
         length(trim(space_code)) BETWEEN 1 AND 128
