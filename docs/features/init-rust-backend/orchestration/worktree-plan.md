@@ -27,7 +27,7 @@
 | agent id | subtask name | task ids | tdd phase | worker branch | worktree path | base ref | status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | test | backend-contract | TEST-RED-01 | red | feature/clouds3n/init-rust-backend/test/backend-contract | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/init-rust-backend/test/backend-contract | feature/clouds3n/init-rust-backend/base | merged |
-| backend | rust-service | BE-GREEN-01, BE-REFACTOR-01 | green/refactor | feature/clouds3n/init-rust-backend/backend/rust-service | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/init-rust-backend/backend/rust-service | feature/clouds3n/init-rust-backend/base | planned |
+| backend | rust-service | BE-GREEN-01, BE-REFACTOR-01 | green/refactor | feature/clouds3n/init-rust-backend/backend/rust-service | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/init-rust-backend/backend/rust-service | feature/clouds3n/init-rust-backend/base | created |
 | review | final-review | REVIEW-01 | review | feature/clouds3n/init-rust-backend/review/final-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/init-rust-backend/review/final-review | feature/clouds3n/init-rust-backend/base | planned |
 
 ## Branch And Path Rules
