@@ -16,3 +16,16 @@ impl<T> ApiResponse<T> {
         }
     }
 }
+
+#[derive(Debug, Serialize)]
+pub struct EmptyData {}
+
+impl ApiResponse<EmptyData> {
+    pub fn error(code: &'static str, message: &'static str) -> Self {
+        Self {
+            code,
+            message,
+            data: EmptyData {},
+        }
+    }
+}

@@ -35,12 +35,32 @@ async fn reset_password_returns_temporary_password_once_without_persisting_plain
     assert_eq!(detail_response.status(), StatusCode::OK);
     let detail_json = response_json(detail_response).await;
     assert!(
-        detail_json["data"]["passwordHash"].as_str().is_some(),
-        "server-side persisted password must be hash-only",
-    );
-    assert!(
         detail_json["data"].get("temporaryPassword").is_none(),
         "temporary password must not be re-readable from user detail",
+    );
+    assert!(
+        detail_json["data"].get("passwordHash").is_none(),
+        "password hash must never be exposed by user detail DTO",
+    );
+    assert!(
+        detail_json["data"]["password"]["resetRequired"]
+            .as_bool()
+            .unwrap_or(false)
+            || detail_json["data"]["passwordResetRequired"]
+                .as_bool()
+                .unwrap_or(false),
+        "safe password reset-required state should remain visible",
+    );
+}
+
+#[tokio::test]
+async fn user_detail_never_exposes_password_hash() {
+    let detail_response = request(Method::GET, "/api/v1/admin/users/USR-1001", None).await;
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail_json = response_json(detail_response).await;
+    assert!(
+        detail_json["data"].get("passwordHash").is_none(),
+        "password hash must never be returned by API DTOs",
     );
 }
 
