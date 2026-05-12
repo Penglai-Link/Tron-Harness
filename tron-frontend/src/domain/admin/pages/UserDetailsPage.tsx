@@ -117,7 +117,9 @@ export function UserDetailsPage() {
   const users = useUserList();
   const { search } = useLocation();
   const requestedUserCode = new URLSearchParams(search).get("userCode");
-  const user = users.find((candidate) => candidate.userCode === requestedUserCode) ?? users[0];
+  const user = requestedUserCode === null
+    ? undefined
+    : users.find((candidate) => candidate.userCode === requestedUserCode);
   const [roleAssignments, setRoleAssignments] = useState<Record<string, string[]>>({});
   const [spaceAssignments, setSpaceAssignments] = useState<Record<string, string[]>>({});
   const [statusOverrides, setStatusOverrides] = useState<Record<string, UserStatus>>({});
@@ -130,13 +132,20 @@ export function UserDetailsPage() {
   );
 
   if (!user) {
+    const notFoundMessage = requestedUserCode
+      ? `No user record matches ${requestedUserCode}.`
+      : "No user record was requested.";
+
     return (
       <TronShell activeItem="Users" searchPlaceholder="Search users...">
         <PageHeader
           title="User Detail"
           actions={<Button asChild variant="secondary"><Link to="/admin/users"><ArrowLeft size={16} aria-hidden="true" />Back to Users</Link></Button>}
         />
-        <SurfaceCard>No user record found.</SurfaceCard>
+        <SurfaceCard>
+          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">User not found</h2>
+          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{notFoundMessage}</p>
+        </SurfaceCard>
       </TronShell>
     );
   }
