@@ -4,13 +4,13 @@ Use this reference when task files exist and the user has approved execution.
 
 ## Main Agent
 
-The Main Agent is the first agent that activated the skill. It owns user communication, feature documents, confirmation gates, TDD ordering, worktree setup, dispatch, integration, final validation, and completion claims.
+The Main Agent is the first agent that activated the skill. It owns user communication, feature documents, confirmation gates, TDD ordering, selected git-spec resolution, worktree setup, dispatch, integration, final validation, and completion claims.
 
 Main Agent responsibilities:
 
 - read all feature docs before assigning work
 - group ready task rows by dependency, TDD phase, acceptance IDs, and write scope
-- create one dedicated git worktree and branch for each subagent using `eliteforge/<agent-id>/<feature-slug>` order
+- create one dedicated git worktree and one branch for each subagent using the selected `eliteforge-git-feature-oriented-*` skill
 - run RED tasks before dependent GREEN tasks
 - avoid parallel workers that may edit the same files or tightly coupled modules
 - keep DTOs, API boundaries, migrations, fixtures, route contracts, and acceptance evidence consistent
@@ -25,8 +25,9 @@ Prompt shape:
 
 ```text
 You are an explorer subagent for feature <feature-slug>.
-Use only this worktree: <worktree-path>. The path must use `eliteforge/<agent-id>/<feature-slug>` order.
+Use only this worktree: <worktree-path>. The path was resolved by the Main Agent from the selected EliteForge git skill.
 Branch: <branch>.
+Agent id: <agentId>. Subtask name: <subtaskName>. These names must match the selected EliteForge git skill.
 Read <specific files or directories>. Answer only these questions: <questions>.
 Do not edit files.
 Return facts, paths, line references when useful, database/test conventions, commands, and risks.
@@ -40,8 +41,9 @@ Prompt shape:
 
 ```text
 You are a RED test subagent for feature <feature-slug>.
-Use only this worktree: <worktree-path>. The path must use `eliteforge/<agent-id>/<feature-slug>` order.
+Use only this worktree: <worktree-path>. The path was resolved by the Main Agent from the selected EliteForge git skill.
 Branch: <branch>.
+Agent id: <agentId>. Subtask name: <subtaskName>. These names must match the selected EliteForge git skill.
 Implement RED task rows <ids>.
 
 Read:
@@ -68,8 +70,9 @@ Prompt shape:
 
 ```text
 You are a database subagent for feature <feature-slug>.
-Use only this worktree: <worktree-path>. The path must use `eliteforge/<agent-id>/<feature-slug>` order.
+Use only this worktree: <worktree-path>. The path was resolved by the Main Agent from the selected EliteForge git skill.
 Branch: <branch>.
+Agent id: <agentId>. Subtask name: <subtaskName>. These names must match the selected EliteForge git skill.
 Implement task rows <ids>.
 Read the feature docs and current migration/data-access conventions.
 Stay within these write scopes: <paths/modules>.
@@ -84,8 +87,9 @@ Prompt shape:
 
 ```text
 You are a GREEN implementation subagent for feature <feature-slug>.
-Use only this worktree: <worktree-path>. The path must use `eliteforge/<agent-id>/<feature-slug>` order.
+Use only this worktree: <worktree-path>. The path was resolved by the Main Agent from the selected EliteForge git skill.
 Branch: <branch>.
+Agent id: <agentId>. Subtask name: <subtaskName>. These names must match the selected EliteForge git skill.
 Implement GREEN task rows <ids>.
 
 Read:

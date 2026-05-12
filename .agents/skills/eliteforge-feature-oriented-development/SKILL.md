@@ -1,28 +1,38 @@
 ---
 name: eliteforge-feature-oriented-development
-description: Orchestrate EliteForge feature-oriented development for new feature delivery or existing feature evolution. Use only when the user explicitly asks for this skill, or when the current project explicitly follows 璀璨工坊规范 / eliteforge specification and the user wants requirements-to-development-to-testing workflow, TDD-first implementation, database/schema design, API contracts, acceptance criteria, multi-agent execution, git worktree isolation, or review evidence.
+description: Multi-agent workflow for EliteForge feature-oriented development, from requirements through design gates, TDD task breakdown, subagent execution, integration, validation, and review. Use only when the user explicitly asks for this skill, or when the current project explicitly follows 璀璨工坊规范 / eliteforge specification and the user wants a lead-agent plus subagent delivery workflow for new feature delivery, existing feature evolution, TDD-first implementation, database/schema design, API contracts, acceptance criteria, git worktree isolation, or review evidence. Delegates all branch, worktree, main-agent branch/worktree, subagent branch/worktree, and subagent naming rules to eliteforge-git-feature-oriented-spec or eliteforge-git-feature-oriented-lite-spec.
 ---
 
-# EliteForge Feature-Oriented Development
+# EliteForge Multi-Agent Feature-Oriented Workflow
 
 ## Activation Gate
 
 Use this skill only when one condition is true:
 
 - the user explicitly asks to use `eliteforge-feature-oriented-development`
-- the current project or user request explicitly states `璀璨工坊规范` or `eliteforge specification`, and the user asks for feature-oriented requirements-to-delivery workflow, TDD-first implementation, multi-agent delivery, database/API design, isolated worktrees, or evolution of an existing feature
+- the current project or user request explicitly states `璀璨工坊规范` or `eliteforge specification`, and the user asks for a multi-agent feature-oriented workflow, requirements-to-delivery workflow, TDD-first implementation, database/API design, isolated worktrees, or evolution of an existing feature
 
 If neither condition is true, do not activate this skill; handle the request with general capabilities instead.
 
+## Workflow Nature
+
+This is a **multi-agent workflow skill**, not a solo coding checklist. The default operating model is:
+
+```text
+lead agent -> progressive feature docs -> approved TDD tasks -> git-spec worktrees -> RED/GREEN subagents -> integration -> verify/review subagents -> final evidence
+```
+
+The lead agent may draft docs, make user-facing decisions explicit, create task rows, and integrate results. Behavior-changing RED tests, GREEN implementation, verification, and review should be delegated to subagents in selected-git-spec worktrees. If subagents or worktrees are unavailable, record the blocker and ask for a user decision instead of silently downgrading the workflow to solo implementation.
+
 ## Lead Agent Identity
 
-The agent that first activates this skill is the **lead agent**. The lead agent owns planning, decision gates, feature workspace files, task decomposition, worker assignment, worktree isolation, integration, validation, review synthesis, and user communication. For behavior-changing work, RED tests and GREEN implementation belong to worker subagents in their own git worktrees unless the user explicitly disables multi-agent execution.
+The agent that first activates this skill is the **lead agent**. The lead agent owns planning, decision gates, feature workspace files, task decomposition, worker assignment, git-spec selection, worktree isolation, integration, validation, review synthesis, and user communication. For behavior-changing work, RED tests, GREEN implementation, verification, and review belong to worker subagents in git-spec-compliant worktrees unless the user explicitly disables multi-agent execution.
 
 ## Goal
 
-Maintain an auditable `docs/features/<feature-slug>/` workspace for either 0-1 delivery or later feature evolution.
+Maintain an auditable `docs/features/<feature-slug>/` workspace for multi-agent 0-1 delivery or later feature evolution.
 
-Required chain: request -> selected workflow -> confirmed specs/test boundary/test plan -> tasks and worktrees -> RED/GREEN/refactor/review evidence. Completion requires every current acceptance criterion to map to design decisions, fine-grained TDD cycles, implementation evidence, test evidence, integration evidence, and review status. Evolution must preserve old decisions, tasks, and evidence as retained, superseded, replaced, or not applicable.
+Required chain: request -> selected workflow -> confirmed specs/test boundary/test plan -> tasks and selected-git-spec worktrees -> RED/GREEN/refactor/review evidence. Completion requires every current acceptance criterion to map to design decisions, fine-grained TDD cycles, implementation evidence, test evidence, integration evidence, and review status. Evolution must preserve old decisions, tasks, and evidence as retained, superseded, replaced, or not applicable.
 
 For both new feature creation and feature evolution, `spec/feature-spec.md` must include strong feature dependencies found by scanning existing `feature-spec.md` files under the feature root, normally `docs/features/*/spec/feature-spec.md`. If a strong dependency exists, carry the dependency feature name into the current feature spec, downstream impact notes, task context, and worker prompts.
 
@@ -32,13 +42,19 @@ Use **Workflow A: 0-1 Feature Delivery** when there is no existing feature works
 
 Use **Workflow B: Feature Evolution** when the user changes, refactors, extends, narrows, or reopens an existing `docs/features/<feature-slug>/` workspace. If multiple existing feature folders could match, inspect them and ask the user to choose.
 
-Both workflows share the same workspace, templates, validators, TDD rules, and worktree constraints. Evolution re-enters the 0-1 gates from the earliest affected design point instead of editing downstream files opportunistically.
+Both workflows share the same workspace, templates, validators, TDD rules, and selected git-spec worktree constraints. Evolution re-enters the 0-1 gates from the earliest affected design point instead of editing downstream files opportunistically.
 
 ## Workspace Contract
 
 Use `docs/features/<feature-slug>/` unless the user provides an existing feature directory. The canonical workspace contains `spec/`, `tasks/`, `orchestration/`, and `reports/`; use `assets/` templates for new files and validators for phase completeness.
 
-Derive `<feature-slug>` from the real product feature name in lowercase kebab-case. Worker worktrees and branches are agent-first: `../.eliteforge-worktrees/<repo-name>/eliteforge/<agent-id>/<feature-slug>/`, `eliteforge/<agent-id>/<feature-slug>`, and `eliteforge/integration/<feature-slug>`.
+Derive `<feature-slug>` from the real product feature name in lowercase kebab-case for feature documents only. Do not derive branch names, worktree paths, main-agent names, or subagent names from this skill. Before any branch/worktree operation, select the active git skill:
+
+- use `eliteforge-git-feature-oriented-spec` when the project declares the full EliteForge Git Feature-Oriented Spec
+- use `eliteforge-git-feature-oriented-lite-spec` when the project declares the Lite spec
+- if the project does not declare which git spec applies, stop before provisioning worktrees and ask the user to choose
+
+After selection, use the chosen git skill as the only source for the main agent branch, main worktree path, multi-agent base branch, subagent branch, subagent worktree path, `agentId`, and subtask naming. This skill may record resolved names in `orchestration/worktree-plan.md` and reports, but must not introduce another naming scheme.
 
 If files already exist, preserve their decisions and update in place instead of overwriting history.
 
@@ -55,9 +71,9 @@ Resolve `assets/`, `references/`, and `scripts/` relative to this `SKILL.md`, no
 3. **Scan feature dependencies.** For creation and evolution, inspect existing sibling `feature-spec.md` files under the feature root. If strong dependencies exist, record the dependency feature names in `spec/feature-spec.md` and carry them into downstream impact notes and worker context.
 4. **Keep workflow gates.** Follow the selected workflow reference for phase boundaries. Do not move downstream artifacts into earlier gates.
 5. **Separate ACs from TDD cycles.** Acceptance criteria are stable验收口径; TDD cycles are smaller executable slices covering core business logic, boundaries, errors, permissions, integration, and regression risks.
-6. **Keep lead and worker roles separate.** The lead plans, delegates, integrates, validates, and reviews. Workers write tests or implementation in dedicated git worktrees.
-7. **Enforce worktree isolation.** No worker edits the lead/root worktree, no two workers share a worktree or branch, and worker names must use `eliteforge/<agent-id>/<feature-slug>`.
-8. **RED before GREEN.** GREEN implementation may start only after matching RED failure evidence exists and has been merged or replayed into the integration branch.
+6. **Keep lead and worker roles separate.** The lead plans, delegates, integrates, validates, and reviews. Workers write tests or implementation in dedicated git worktrees that comply with the selected git skill.
+7. **Enforce selected git-spec isolation.** No worker edits the lead/root worktree. Every worker worktree maps to exactly one selected-git-spec subagent branch, no branch may appear in more than one worktree row, and every subagent branch must merge back to the selected-git-spec multi-agent base branch. Do not create `eliteforge/integration/*`, `eliteforge/<unique-agent-id>/*`, or any feature-skill-defined branch/path shape.
+8. **RED before GREEN.** GREEN implementation may start only after matching RED failure evidence exists and has been merged or replayed into the selected-git-spec multi-agent base branch.
 9. **Do not hide execution gaps.** If subagents/worktrees are unavailable, shared-file races appear, or evolution invalidates prior artifacts, record the blocker/status and stop for user decision.
 
 ## Reference Index
@@ -73,7 +89,7 @@ Load references only when the selected workflow or phase needs them:
 | Test scope gate | `references/test-scope-gate.md` |
 | RED/GREEN workflow rules | `references/tdd-workflow.md` |
 | Subagent role prompts and batching | `references/subagent-orchestration.md` |
-| Worktree setup and integration | `references/multi-agent-worktree-orchestration.md`, `references/git-worktree-orchestration.md` |
+| Worktree setup and integration | selected `eliteforge-git-feature-oriented-*` skill, then `references/multi-agent-worktree-orchestration.md`, `references/git-worktree-orchestration.md` |
 
 ## Workflow A: 0-1 Feature Delivery
 

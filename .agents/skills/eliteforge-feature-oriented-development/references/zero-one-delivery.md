@@ -44,8 +44,10 @@ Stop for user confirmation after complete spec validation. Do not begin task bre
 Start only after `spec/test-plan.md` has `Test Plan Decision` status `approved` or `approved_with_defaults`. Create or update all task files in `tasks/`. Each task row must include:
 
 ```text
-id | tdd phase | owner | agent role | dependencies | worktree | write scope | validation | acceptance ids | report target | status
+id | phase | owner | depends on | scope | acceptance ids | status
 ```
+
+Keep `xxx-task.md` rows as a lightweight execution index. Do not put worker branch names, worktree paths, validation commands, agent roles, or report targets in the task table. Those belong in `orchestration/worktree-plan.md`, `spec/test-plan.md`, and the matching `reports/*` files.
 
 Task sequencing must enforce TDD:
 
@@ -54,7 +56,7 @@ Task sequencing must enforce TDD:
 - GREEN rows depend on matching RED rows
 - REFACTOR rows depend on GREEN rows
 - VERIFY and REVIEW rows run after reports or integration evidence exists
-- every non-lead task row names a dedicated worker worktree path using `eliteforge/<agent-id>/<feature-slug>` order
+- every non-lead task row has a scope clear enough for `orchestration/worktree-plan.md` to assign a dedicated worker branch and worktree
 
 Run:
 
@@ -66,17 +68,17 @@ Set task status to `waiting_human_decision` and stop before implementation unles
 
 ## Phase 4: Worktree Provisioning
 
-Read `references/multi-agent-worktree-orchestration.md` before delegating.
+Read `references/multi-agent-worktree-orchestration.md`, `references/git-worktree-orchestration.md`, and the selected `eliteforge-git-feature-oriented-*` skill before delegating.
 
-The lead agent creates or verifies an integration branch and per-worker worktrees. Recommended commands:
+The lead agent creates or verifies the selected-git-skill multi-agent base branch and per-worker worktrees. Do not use feature-skill-defined branch or path names. Resolve the main branch, main worktree path, subagent branch, subagent worktree path, `agentId`, and subtask names from the selected git skill, then create worktrees:
 
 ```bash
 git status --short
-git switch -c eliteforge/integration/<feature-slug>  # only when no integration branch exists
-"$skill_dir/scripts/create_agent_worktree.sh" <feature-slug> <agent-id> eliteforge/integration/<feature-slug>
+git switch -c "<selected-git-skill-multi-agent-base-branch>"  # only when no base branch exists
+"$skill_dir/scripts/create_agent_worktree.sh" "<selected-git-skill-subagent-branch>" "<selected-git-skill-subagent-worktree-path>" "<selected-git-skill-multi-agent-base-branch>"
 ```
 
-Record every worktree, branch, base branch, task ID, and status in `reports/worktree-report.md` and `orchestration/worktree-plan.md`.
+Record the selected git skill, main branch, main worktree path, every subagent worktree, every subagent branch, base branch, task ID, and status in `reports/worktree-report.md` and `orchestration/worktree-plan.md`.
 
 Run:
 
@@ -90,15 +92,15 @@ Assign RED rows first. RED workers may edit only tests, fixtures, test utilities
 
 A valid RED report must include task IDs, acceptance IDs, changed test paths, command run, expected failure summary, why the failure proves missing behavior rather than environment breakage, and worktree path.
 
-The lead agent verifies RED evidence and merges or replays RED changes into the integration branch before assigning dependent GREEN rows.
+The lead agent verifies RED evidence and merges or replays RED changes into the selected-git-skill multi-agent base branch before assigning dependent GREEN rows.
 
 ## Phase 6: GREEN Multi-Agent Implementation
 
-Assign GREEN rows only after matching RED evidence is present in the integration branch or an explicit legacy-coverage exception is recorded.
+Assign GREEN rows only after matching RED evidence is present in the selected-git-skill multi-agent base branch or an explicit legacy-coverage exception is recorded.
 
 GREEN workers implement the smallest production change needed to pass. They must not weaken tests. They update their assigned report and return changed paths, commands, acceptance mapping, blockers, and worktree path.
 
-The lead agent merges GREEN branches into the integration branch, resolves conflicts only within lead-owned integration scope, and reruns affected validation.
+The lead agent merges GREEN branches into the selected-git-skill multi-agent base branch, resolves conflicts only within lead-owned integration scope, and reruns affected validation.
 
 ## Phase 7: REFACTOR, Regression, And Review
 

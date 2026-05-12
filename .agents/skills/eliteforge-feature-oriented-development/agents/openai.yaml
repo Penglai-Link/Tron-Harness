@@ -1,14 +1,14 @@
 version: 1
 agents:
   main:
-    role: Main Agent
-    description: First agent that activates the skill; owns user gates, contracts, worktree orchestration, integration, and final review.
+    role: Lead Multi-Agent Orchestrator
+    description: First agent that activates the skill; owns user gates, contracts, selected git-spec worktree orchestration, subagent dispatch, integration, and final review.
   explorer:
     role: Explorer Agent
     description: Read-only repository inspection agent. No edits.
   red-test-worker:
     role: RED Test Worker
-    description: Creates failing tests first in an isolated git worktree and records RED evidence.
+    description: Creates failing tests first in a selected-git-spec worktree and records RED evidence.
   green-backend-worker:
     role: GREEN Backend Worker
     description: Implements backend behavior after RED evidence is integrated.

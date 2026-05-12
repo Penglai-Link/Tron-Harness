@@ -123,7 +123,7 @@ ORCHESTRATION_FILES = {
     "orchestration/worktree-plan.md": [
         "Main Agent",
         "Repository State",
-        "Integration Branch",
+        "Multi-Agent Base Branch",
         "Agent Worktrees",
         "Branch And Path Rules",
         "Merge Strategy",
@@ -229,6 +229,7 @@ FINAL_MARKERS = re.compile(
 AC_ID_RE = re.compile(r"\bAC-[A-Z0-9]+-\d{2,}\b")
 TDD_ID_RE = re.compile(r"\bTDD-[A-Z0-9]+-\d{2,}\b")
 PLACEHOLDER_VALUES = {"", "-", "none", "n/a", "tbd", "todo", "unknown", "not discovered"}
+GIT_SKILLS = {"eliteforge-git-feature-oriented-spec", "eliteforge-git-feature-oriented-lite-spec"}
 
 
 def read_text(path: Path) -> str:
@@ -329,6 +330,27 @@ def table_body_rows(text: str, title: str) -> list[list[str]]:
     return rows
 
 
+def branch_segments(value: str) -> list[str]:
+    branch = value.strip().strip("`").strip("/")
+    return [part for part in branch.split("/") if part]
+
+
+def worktree_path_segments(value: str) -> list[str]:
+    path = value.strip().strip("`").strip("/")
+    return [part for part in path.split("/") if part]
+
+
+def is_obsolete_feature_skill_branch(value: str) -> bool:
+    branch = value.strip().strip("`")
+    return branch.startswith("eliteforge/")
+
+
+def worktree_mirrors_branch(worktree_path: str, branch: str) -> bool:
+    path_parts = worktree_path_segments(worktree_path)
+    branch_parts = branch_segments(branch)
+    return bool(branch_parts) and len(path_parts) >= len(branch_parts) and path_parts[-len(branch_parts) :] == branch_parts
+
+
 def acceptance_ids_from_acceptance(text: str) -> set[str]:
     return set(AC_ID_RE.findall(section(text, "Acceptance Criteria Matrix") or text))
 
@@ -398,25 +420,36 @@ def parse_task_rows(text: str, rel: str) -> list[dict[str, str]]:
     for cells in table_body_rows(text, "Task Table"):
         if not cells:
             continue
-        if len(cells) < 11:
-            rows.append({"id": cells[0] if cells else "", "_invalid": f"expected 11 columns, found {len(cells)}", "_file": rel})
+        if len(cells) == 7:
+            rows.append(
+                {
+                    "id": cells[0],
+                    "tdd_phase": cells[1].lower(),
+                    "owner": cells[2],
+                    "dependencies": cells[3],
+                    "write_scope": cells[4],
+                    "acceptance_ids": cells[5],
+                    "status": cells[6].lower(),
+                    "_file": rel,
+                }
+            )
             continue
-        rows.append(
-            {
-                "id": cells[0],
-                "tdd_phase": cells[1].lower(),
-                "owner": cells[2],
-                "agent_role": cells[3],
-                "dependencies": cells[4],
-                "worktree": cells[5],
-                "write_scope": cells[6],
-                "validation": cells[7],
-                "acceptance_ids": cells[8],
-                "report_target": cells[9],
-                "status": cells[10].lower(),
-                "_file": rel,
-            }
-        )
+        if len(cells) >= 11:
+            rows.append(
+                {
+                    "id": cells[0],
+                    "tdd_phase": cells[1].lower(),
+                    "owner": cells[2],
+                    "dependencies": cells[4],
+                    "write_scope": cells[6],
+                    "acceptance_ids": cells[8],
+                    "status": cells[10].lower(),
+                    "_file": rel,
+                    "_legacy": "11-column task table",
+                }
+            )
+            continue
+        rows.append({"id": cells[0] if cells else "", "_invalid": f"expected 7 columns, found {len(cells)}", "_file": rel})
     return rows
 
 
@@ -443,6 +476,95 @@ def check_decision_statuses(root: Path, errors: list[str], require_approved: boo
         test_plan_status = normalized(key_value(section(test_plan_text, "Test Plan Decision"), "status"))
         if require_approved and test_plan_status not in {"approved", "approved_with_defaults"}:
             errors.append("spec/test-plan.md: Test Plan Decision status must be approved or approved_with_defaults before task breakdown")
+
+
+def check_agent_worktree_rows(
+    rows: list[list[str]],
+    base_branch: str,
+    errors: list[str],
+) -> None:
+    seen_identities: dict[tuple[str, str], int] = {}
+    seen_branches: dict[str, int] = {}
+    seen_worktrees: dict[str, int] = {}
+
+    for index, cells in enumerate(rows, start=1):
+        if len(cells) < 8:
+            errors.append(f"orchestration/worktree-plan.md: Agent Worktrees row {index} expected 8 columns, found {len(cells)}")
+            continue
+
+        agent_id, subtask_name, _task_ids, _tdd_phase, worker_branch, worktree_path, _base_ref, _status = cells[:8]
+        if is_template_placeholder(agent_id):
+            errors.append(f"orchestration/worktree-plan.md: Agent Worktrees row {index} missing selected-git-skill agent id")
+            continue
+
+        if is_template_placeholder(subtask_name):
+            errors.append(f"orchestration/worktree-plan.md: Agent Worktrees row {index} missing selected-git-skill subtask name")
+            continue
+
+        identity = (agent_id, subtask_name)
+        previous_identity = seen_identities.get(identity)
+        if previous_identity:
+            errors.append(
+                f"orchestration/worktree-plan.md: Agent Worktrees rows {previous_identity} and {index} reuse agent id/subtask '{agent_id}/{subtask_name}'"
+            )
+        else:
+            seen_identities[identity] = index
+
+        if is_template_placeholder(worker_branch):
+            errors.append(f"orchestration/worktree-plan.md: Agent Worktrees row {index} missing worker branch")
+        else:
+            if worker_branch == base_branch:
+                errors.append(f"orchestration/worktree-plan.md: Agent Worktrees row {index} must not use the multi-agent base branch as a worker branch")
+            if is_obsolete_feature_skill_branch(worker_branch):
+                errors.append(
+                    f"orchestration/worktree-plan.md: Agent Worktrees row {index} uses obsolete feature-skill branch '{worker_branch}'; resolve branch from the selected eliteforge-git skill"
+                )
+            previous_branch = seen_branches.get(worker_branch)
+            if previous_branch:
+                errors.append(
+                    f"orchestration/worktree-plan.md: Agent Worktrees rows {previous_branch} and {index} reuse branch '{worker_branch}'; one branch can only be checked out by one worktree"
+                )
+            else:
+                seen_branches[worker_branch] = index
+
+            branch_parts = branch_segments(worker_branch)
+            if len(branch_parts) < 2:
+                errors.append(
+                    f"orchestration/worktree-plan.md: Agent Worktrees row {index} worker branch must include selected-git-skill agent id and subtask name"
+                )
+            else:
+                if branch_parts[-2] != agent_id:
+                    errors.append(
+                        f"orchestration/worktree-plan.md: Agent Worktrees row {index} branch agent id '{branch_parts[-2]}' must match row agent id '{agent_id}'"
+                    )
+                if branch_parts[-1] != subtask_name:
+                    errors.append(
+                        f"orchestration/worktree-plan.md: Agent Worktrees row {index} branch subtask name '{branch_parts[-1]}' must match row subtask name '{subtask_name}'"
+                    )
+
+        if is_template_placeholder(worktree_path):
+            errors.append(f"orchestration/worktree-plan.md: Agent Worktrees row {index} missing worktree path")
+        else:
+            previous_worktree = seen_worktrees.get(worktree_path)
+            if previous_worktree:
+                errors.append(
+                    f"orchestration/worktree-plan.md: Agent Worktrees rows {previous_worktree} and {index} reuse worktree path '{worktree_path}'"
+                )
+            else:
+                seen_worktrees[worktree_path] = index
+
+            if not is_template_placeholder(worker_branch) and not worktree_mirrors_branch(worktree_path, worker_branch):
+                errors.append(
+                    f"orchestration/worktree-plan.md: Agent Worktrees row {index} worktree path must mirror the selected-git-skill branch tree"
+                )
+
+        if not is_template_placeholder(worker_branch) and not is_template_placeholder(worktree_path):
+            branch_parts = branch_segments(worker_branch)
+            worktree_parts = worktree_path_segments(worktree_path)
+            if len(branch_parts) >= 2 and len(worktree_parts) >= 2 and worktree_parts[-2:] != branch_parts[-2:]:
+                errors.append(
+                    f"orchestration/worktree-plan.md: Agent Worktrees row {index} branch and worktree path must reference the same selected-git-skill agent id/subtask"
+                )
 
 
 def check_specs(root: Path, errors: list[str], complete: bool, require_approved: bool, spec_stage: str) -> tuple[set[str], set[str]]:
@@ -494,11 +616,35 @@ def check_orchestration(root: Path, errors: list[str], final: bool) -> None:
         agent_rows = table_body_rows(worktree_plan, "Agent Worktrees")
         if not agent_rows:
             errors.append("orchestration/worktree-plan.md: Agent Worktrees must contain at least one worker worktree row")
-        integration = section(worktree_plan, "Integration Branch")
-        branch = key_value(integration, "branch")
-        if not branch or "eliteforge/integration/" not in branch:
-            errors.append("orchestration/worktree-plan.md: Integration Branch must use eliteforge/integration/<feature-slug>")
+        base = section(worktree_plan, "Multi-Agent Base Branch")
+        branch = key_value(base, "branch")
+        if not branch or is_template_placeholder(branch):
+            errors.append("orchestration/worktree-plan.md: Multi-Agent Base Branch branch must be resolved from the selected eliteforge-git skill")
+        elif is_obsolete_feature_skill_branch(branch):
+            errors.append("orchestration/worktree-plan.md: Multi-Agent Base Branch must not use obsolete feature-skill branch naming")
         main = section(worktree_plan, "Main Agent")
+        feature_slug = key_value(main, "feature_slug")
+        if not feature_slug or is_template_placeholder(feature_slug):
+            errors.append("orchestration/worktree-plan.md: Main Agent feature_slug must be set before worktree validation")
+        git_skill = key_value(main, "git_skill")
+        if git_skill not in GIT_SKILLS:
+            errors.append(
+                "orchestration/worktree-plan.md: Main Agent git_skill must be eliteforge-git-feature-oriented-spec or eliteforge-git-feature-oriented-lite-spec"
+            )
+        main_branch = key_value(main, "main_branch")
+        if not main_branch or is_template_placeholder(main_branch):
+            errors.append("orchestration/worktree-plan.md: Main Agent main_branch must be resolved from the selected eliteforge-git skill")
+        elif is_obsolete_feature_skill_branch(main_branch):
+            errors.append("orchestration/worktree-plan.md: Main Agent main_branch must not use obsolete feature-skill branch naming")
+        elif branch and not is_template_placeholder(branch) and main_branch != branch:
+            errors.append("orchestration/worktree-plan.md: Main Agent main_branch must match the selected-git-skill multi-agent base branch")
+        main_worktree_path = key_value(main, "main_worktree_path")
+        if not main_worktree_path or is_template_placeholder(main_worktree_path):
+            errors.append("orchestration/worktree-plan.md: Main Agent main_worktree_path must be resolved from the selected eliteforge-git skill")
+        elif main_branch and not is_template_placeholder(main_branch) and not worktree_mirrors_branch(main_worktree_path, main_branch):
+            errors.append("orchestration/worktree-plan.md: Main Agent main_worktree_path must mirror the selected-git-skill main branch tree")
+        if agent_rows:
+            check_agent_worktree_rows(agent_rows, branch, errors)
         status = normalized(key_value(main, "status"))
         if final and status not in {"done", "approved", "complete"}:
             errors.append("orchestration/worktree-plan.md: Main Agent status must be done/approved/complete for final validation")
@@ -542,26 +688,12 @@ def check_tasks(root: Path, errors: list[str], ac_ids: set[str], final: bool) ->
             errors.append(f"{rel}: duplicate task id '{task_id}'")
         seen_ids.add(task_id)
 
-        report_target = TASK_FILES.get(rel)
-        for field in ("id", "tdd_phase", "owner", "agent_role", "worktree", "write_scope", "validation", "report_target", "status"):
+        for field in ("id", "tdd_phase", "owner", "write_scope", "status"):
             if is_placeholder(row.get(field, "")):
                 errors.append(f"{rel}: task row '{task_id}' missing {field.replace('_', ' ')}")
-        worktree_value = row.get("worktree", "")
-        agent_role_value = normalized(row.get("agent_role", ""))
-        if agent_role_value != "lead" and worktree_value and "eliteforge/" not in worktree_value:
-            errors.append(f"{rel}: task row '{task_id}' worktree must use eliteforge/<agent-id>/<feature-slug> order")
-        if "eliteforge/" in worktree_value:
-            after = worktree_value.split("eliteforge/", 1)[1].strip("/")
-            parts = [part for part in after.split("/") if part]
-            if len(parts) < 2:
-                errors.append(f"{rel}: task row '{task_id}' worktree must include both <agent-id> and <feature-slug> after eliteforge/")
-            elif parts[0] in {"integration", "<feature-slug>", row.get("acceptance_ids", "")}:
-                errors.append(f"{rel}: task row '{task_id}' worktree must put <agent-id> before <feature-slug>")
 
         if row.get("tdd_phase") and row["tdd_phase"] not in TASK_PHASES:
             errors.append(f"{rel}: task row '{task_id}' tdd phase must be one of {', '.join(sorted(TASK_PHASES))}")
-        if row.get("report_target") and row["report_target"] != report_target:
-            errors.append(f"{rel}: task row '{task_id}' report target must be {report_target}")
         if row.get("tdd_phase") == "red" and rel != "tasks/test-task.md":
             errors.append(f"{rel}: RED task row '{task_id}' must be placed in tasks/test-task.md")
         if row.get("tdd_phase") == "green":

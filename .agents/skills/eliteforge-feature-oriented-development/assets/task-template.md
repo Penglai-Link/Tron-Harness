@@ -4,8 +4,6 @@
 
 - feature_slug: {{FEATURE_SLUG}}
 - status: draft
-- canonical_report_target: {{REPORT_TARGET}}
-- main_agent_owned: false
 
 ## TDD Contract
 
@@ -13,12 +11,14 @@ Every behavior-changing task must be split into RED, GREEN, and optional REFACTO
 
 ## Task Table
 
-| id | tdd phase | owner | agent role | dependencies | worktree | write scope | validation | acceptance ids | report target | status |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+Keep this table small. Worktree paths, branches, validation commands, and report targets belong in `orchestration/worktree-plan.md`, `spec/test-plan.md`, and the matching report file.
+
+| id | phase | owner | depends on | scope | acceptance ids | status |
+| --- | --- | --- | --- | --- | --- | --- |
 
 ## Worktree Notes
 
-List required worktree branch, base ref, generated files, shared artifacts, and merge constraints for the rows in this task file. Worker paths must use `eliteforge/<agent-id>/<feature-slug>` order.
+List only execution notes that are not obvious from the table: suggested worker role, generated files, shared artifacts, merge constraints, or sequencing caveats. Actual worker branches and paths are assigned in `orchestration/worktree-plan.md`; do not duplicate them in every task row.
 
 ## Integration Notes
 
