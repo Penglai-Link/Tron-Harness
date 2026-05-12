@@ -12,7 +12,7 @@ No frontend RED/GREEN cycle is required because the feature has no UI scope.
 
 | id | phase | owner | depends on | scope | acceptance ids | status |
 | --- | --- | --- | --- | --- | --- | --- |
-| FE-VERIFY-01 | verify | lead | BE-GREEN-01 | Confirm existing frontend Makefile targets remain visible and no frontend source files are required. | AC-BACKEND-03 | ready |
+| FE-VERIFY-01 | verify | lead | BE-GREEN-01 | Confirm existing frontend Makefile targets remain visible and no frontend source files are required. | AC-BACKEND-03 | done |
 
 ## Worktree Notes
 

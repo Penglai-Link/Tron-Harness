@@ -12,7 +12,7 @@ RED rows may edit only tests, fixtures, test utilities, and explicitly assigned 
 
 | id | phase | owner | depends on | scope | acceptance ids | status |
 | --- | --- | --- | --- | --- | --- | --- |
-| TEST-RED-01 | red | test | none | Add Rust tests for backend router, health response, config defaults, and safe health payload. | AC-BACKEND-01, AC-BACKEND-02, AC-BACKEND-03 | ready |
+| TEST-RED-01 | red | test | none | Add Rust tests for backend router, health response, config defaults, and safe health payload. | AC-BACKEND-01, AC-BACKEND-02, AC-BACKEND-03 | done |
 
 ## Worktree Notes
 

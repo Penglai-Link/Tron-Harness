@@ -12,7 +12,7 @@ Review starts after RED and GREEN evidence exists.
 
 | id | phase | owner | depends on | scope | acceptance ids | status |
 | --- | --- | --- | --- | --- | --- | --- |
-| REVIEW-01 | review | review | TEST-RED-01, BE-GREEN-01, BE-REFACTOR-01, FE-VERIFY-01 | Review feature docs, backend implementation, commands, and acceptance traceability. | AC-BACKEND-01, AC-BACKEND-02, AC-BACKEND-03 | ready |
+| REVIEW-01 | review | review | TEST-RED-01, BE-GREEN-01, BE-REFACTOR-01, FE-VERIFY-01 | Review feature docs, backend implementation, commands, and acceptance traceability. | AC-BACKEND-01, AC-BACKEND-02, AC-BACKEND-03 | done |
 
 ## Worktree Notes
 
