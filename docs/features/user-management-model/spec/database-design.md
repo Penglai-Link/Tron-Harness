@@ -5,22 +5,22 @@
 - drafted_from_requirement: yes
 - drafted_from_repository_findings: yes
 - best_practice_defaults_applied: yes
-- user_confirmation_status: waiting_human_decision
+- user_confirmation_status: approved_with_defaults
 
 The database design is revised to own only User Management persistence. Role, Space, and Permission modules are external and referenced by stable codes. This feature creates no role table, no workspace table, no permission table, and no audit-log table.
 
 ## Database Decision
 
-- status: draft_revised
+- status: approved
 - impact: yes
-- approved_by: none
-- approved_at: none
+- approved_by: clouds3n
+- approved_at: 2026-05-12
 
 SQLite remains the recommended MVP database based on current backend tech-stack docs. All user-management-owned `id` fields use 64-bit integer Snowflake IDs stored as SQLite `INTEGER`; API JSON serializes those IDs as decimal strings to avoid JavaScript precision loss.
 
 ## Existing Schema Impact
 
-No backend schema, migrations, ORM entities, repositories, or caches were found.
+No user-management schema, migrations, entities, repositories, or caches were found yet. Current backend code only contains platform bootstrap and shared Snowflake capability.
 
 Expected downstream consumers:
 
@@ -251,10 +251,10 @@ Factories should support:
 
 | command | purpose | expected evidence |
 | --- | --- | --- |
-| `cargo test --manifest-path tron-backend/Cargo.toml user_management` | Rust user model, repository, assignment, archive, and password reset behavior once backend exists. | Passing backend tests. |
-| `make fe-check` | Existing Makefile quality gate for frontend compatibility. | Typecheck and build success. |
-| `.agents/skills/eliteforge-feature-oriented-development/scripts/validate_feature_docs.py docs/features/user-management-model --phase spec` | Feature documentation validation. | Validation passes. |
+| `rtk make be-test` | Backend regression for user model, repository, assignment, archive, and password reset behavior once implemented. | Passing backend tests. |
+| `rtk make fe-check` | Frontend typecheck/build gate after user-model API adapter changes. | Typecheck and build success. |
+| `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/user-management-model --phase spec --spec-stage database` | Validate Phase 1B database design gate. | Validation passes. |
 
 ## Open Decisions
 
-- Confirm the adjusted custom TDD scope in `spec/test-scope.md`.
+- None.

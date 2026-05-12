@@ -5,7 +5,7 @@
 - drafted_from_requirement: yes
 - drafted_from_repository_findings: yes
 - best_practice_defaults_applied: yes
-- user_confirmation_status: waiting_human_decision
+- user_confirmation_status: approved_with_defaults
 
 Acceptance has been revised for a standalone User Management MVP. Role Management, Space Management, Permission Management, invitation email delivery, API permission enforcement, and audit-log pages are outside this feature.
 

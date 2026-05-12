@@ -5,7 +5,7 @@
 - drafted_from_requirement: yes
 - drafted_from_repository_findings: yes
 - best_practice_defaults_applied: yes
-- user_confirmation_status: waiting_human_decision
+- user_confirmation_status: approved_with_defaults
 
 The TDD scope is revised to match the user-only MVP and the updated testing documentation template. Role Management, Space Management, Permission Management, API authorization, invitation email delivery, and audit-log pages are excluded. Password management uses bcrypt and a simplified backend-generated temporary password flow; it does not introduce RBAC or email verification.
 
@@ -20,10 +20,10 @@ Evolution alignment:
 
 ## Scope Decision
 
-- status: waiting_human_decision
+- status: approved_with_defaults
 - selected_profile: custom
-- approved_by: none
-- approved_at: none
+- approved_by: clouds3n
+- approved_at: 2026-05-12
 
 Valid profiles: `minimal`, `standard`, `strict`, `custom`.
 
@@ -86,6 +86,19 @@ Minimum recommended TDD boundary:
 - Test data must include 64-bit Snowflake IDs, first/last/display names, usernames, active users, archived users, restored users, fixed role-code assignments, space-code assignments, bcrypt password hashes, normal password state, and reset-required password state.
 - Password reset test fixtures must never store plaintext temporary passwords after the one-time response assertion.
 
+## Test Boundary Matrix
+
+| acceptance ids | required layers | risk or boundary | included | evidence expectation | command candidate | notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| AC-UM-01 | integration/api-contract/browser-runtime | Stable-code reads, default archived filter, and user journey continuity. | yes | RED proves missing list/detail or filter behavior; GREEN proves API + browser path. | `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_list_detail`; `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | Browser run is required after API adapter integration. |
+| AC-UM-02 | unit/integration/database/browser-runtime | Lifecycle correctness: create/update/archive/restore and JSON-safe Snowflake serialization. | yes | RED proves lifecycle gaps; GREEN proves persistence/API/browser recovery journey. | `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_lifecycle` | Includes logical deletion and restore path. |
+| AC-UM-03 | unit/integration/api-contract | Fixed role-code assignment and invalid-code rejection. | yes | RED proves assignment validation is missing; GREEN proves replace semantics and constraints. | `rtk cargo test --manifest-path tron-backend/Cargo.toml user_role_assignments` | Role definitions remain external. |
+| AC-UM-04 | unit/integration/api-contract | External space-code reference replacement and invalid-space rejection. | yes | RED proves external reference boundary is missing; GREEN proves stable `spaceCode` assignment behavior. | `rtk cargo test --manifest-path tron-backend/Cargo.toml user_space_assignments` | Space hierarchy remains out of scope. |
+| AC-UM-05 | unit/integration/security/browser-runtime | bcrypt hash-only persistence and one-time temporary password response. | yes | RED proves reset policy is missing; GREEN proves secure reset flow and one-time UI display. | `rtk cargo test --manifest-path tron-backend/Cargo.toml password_reset`; `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | No email verification and no API permission check in MVP. |
+| AC-UM-06 | api-contract/database | Stable public code fields and decimal-string ID contract. | yes | RED proves contract drift; GREEN proves DTO/schema stability. | `rtk cargo test --manifest-path tron-backend/Cargo.toml stable_code_contracts` | Includes future `permissionCode` contract note boundary. |
+| AC-UM-07 | integration/review | API authorization boundary must stay decoupled from role/permission data. | yes | RED or review check proves accidental coupling is detectable; GREEN confirms no permission gate in MVP. | `rtk cargo test --manifest-path tron-backend/Cargo.toml user_api_authorization_boundary` | Security-hardening phase may later supersede this rule. |
+| AC-UM-08 | frontend-component/browser-runtime/review | Frontend user-only model alignment and route continuity. | yes | RED proves old mixed model remains; GREEN proves adapted model + runtime journey. | `rtk make fe-check`; `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | Role/space pages stay independent modules. |
+
 ## TDD Cycle Matrix
 
 Define the intended TDD cycles before task breakdown. Phase 1 does not need final test file paths, but it must define what RED test should be written first, what failure proves the behavior is missing, the command candidate, and what GREEN evidence is required after implementation.
@@ -105,11 +118,11 @@ Define the intended TDD cycles before task breakdown. Phase 1 does not need fina
 
 | command | purpose | required for final | status |
 | --- | --- | --- | --- |
-| `make fe-check` | Frontend typecheck and production build. | yes | available |
-| `cargo test --manifest-path tron-backend/Cargo.toml` | Backend regression once backend exists. | yes if backend is implemented | blocked_backend_missing |
-| `npm --prefix tron-frontend exec playwright -- test user-management-smoke` | Browser runtime verification for the user-facing admin workflow. | yes after smoke spec exists | blocked_until_tests_created |
-| `skill_dir="/Users/clouds3n/Coding/open-source/ai/Tron/.agents/skills/eliteforge-feature-oriented-development"; "$skill_dir/scripts/validate_feature_docs.py" docs/features/user-management-model --phase spec --spec-stage acceptance` | Validate Phase 1D acceptance and test-scope docs. | yes for current phase | available |
-| `skill_dir="/Users/clouds3n/Coding/open-source/ai/Tron/.agents/skills/eliteforge-feature-oriented-development"; "$skill_dir/scripts/validate_feature_docs.py" docs/features/user-management-model --phase final` | Final feature evidence validation. | yes after implementation | blocked_until_later_phases |
+| `rtk make fe-check` | Frontend typecheck and production build. | yes | available |
+| `rtk make be-test` | Backend regression gate after user-management backend implementation. | yes | pending_implementation |
+| `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | Browser runtime verification for user directory/detail/reset journeys. | yes after smoke spec exists | blocked_until_tests_created |
+| `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/user-management-model --phase spec --spec-stage acceptance` | Validate Phase 1D acceptance and test-scope docs. | yes for current phase | available |
+| `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/user-management-model --phase final` | Final feature evidence validation. | yes after implementation | blocked_until_later_phases |
 
 ## Evidence Required For Completion
 
@@ -126,4 +139,4 @@ Define the intended TDD cycles before task breakdown. Phase 1 does not need fina
 
 ## Open Decisions
 
-- Approve this `custom` MVP TDD scope or replace it with a narrower/larger custom scope.
+- None.

@@ -5,7 +5,7 @@
 - drafted_from_requirement: yes
 - drafted_from_repository_findings: yes
 - best_practice_defaults_applied: yes
-- user_confirmation_status: waiting_human_decision
+- user_confirmation_status: approved_with_defaults
 
 The API contract is revised around a standalone User Management module. Role, Space, and Permission management APIs are out of scope. User APIs may reference `roleCode` and `spaceCode`, but they do not own those external records.
 

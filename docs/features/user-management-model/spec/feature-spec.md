@@ -5,14 +5,14 @@
 - drafted_from_requirement: yes
 - drafted_from_repository_findings: yes
 - best_practice_defaults_applied: yes
-- user_confirmation_status: waiting_human_decision
+- user_confirmation_status: approved_with_defaults
 
 This Phase 1 draft was revised from the user's confirmation items. The feature is now scoped to the User Management module only. Role Management and Space Management are separate admin modules and are referenced by stable codes, not designed here. The frontend API boundary may be redesigned to match that module split. Confirmed MVP decisions include backend-generated temporary passwords, bcrypt password hashing, `Archived -> Active` restore support, and the `/api/v1/admin/users` API namespace.
 
 ## Feature Identity
 
 - feature_slug: user-management-model
-- status: draft_revised
+- status: approved_with_defaults
 - owner: clouds3n
 - source_request: Finish user management model design based on the pages in the frontend-tron.
 - main_agent: Codex lead agent
@@ -258,8 +258,16 @@ Shared boundary:
 - Current frontend mock `UserRecord` uses `id`, `name`, `email`, `roles`, `workspaces`, `status`, and `lastActive`.
 - The current frontend mixes user, role, permission, and audit concerns under one admin domain. The revised model splits User Management, Role Management, and Space Management into independent modules.
 - `docs/tech-stack.md` describes a Rust + React monorepo and backend-served production runtime.
-- `tron-backend/docs/tech-stack.md` says the backend is Rust with SQLite by default, but `tron-backend` currently contains only docs and `.gitignore`.
+- `tron-backend/docs/tech-stack.md` says the backend is Rust with SQLite by default.
+- `tron-backend` now has initialized Rust backend scaffolding and shared Snowflake capability, but no user-management domain module, migrations, or user API handlers yet.
+
+## Feature Dependencies
+
+| dependency feature name | feature slug | evidence from feature-spec.md | required contract or artifact | impact on current feature | decision/status |
+| --- | --- | --- | --- | --- | --- |
+| Common Snowflake ID Generation | common-snowflake-id | `docs/features/common-snowflake-id/spec/feature-spec.md` confirms shared `SnowflakeIdProvider`, YAML config policy, and decimal-string ID serialization contract. | `tron-backend/src/shared/id/*` provider + serialization policy + test adapter boundary. | User, assignment, and password-reset records must consume this provider for all internal 64-bit IDs and keep JSON-safe serialization. | dependency_confirmed |
+| Init Rust Backend | init-rust-backend | `docs/features/init-rust-backend/spec/feature-spec.md` confirms backend runtime skeleton, `ApiResponse<T>`, and Makefile backend command rails. | `tron-backend` app/runtime scaffolding, root `Makefile` `be-*` targets, shared response envelope. | User management handlers, repository wiring, and regression commands depend on the initialized backend runtime baseline. | dependency_confirmed |
 
 ## Open Decisions
 
-- Confirm the adjusted custom TDD scope in `spec/test-scope.md`.
+- None.
