@@ -112,7 +112,7 @@ User directory:
 
 User detail:
 
-- Route: `/admin/users/detail?user=<userCode>`
+- Route: `/admin/users/detail?userCode=<userCode>`
 - Data source: redesigned `GET /api/v1/admin/users/{userCode}`
 - Primary data: user profile fields, status, password state, role assignments, space assignments.
 - Interactions: update profile, replace role assignments, replace space assignments, archive/reactivate user, reset password.

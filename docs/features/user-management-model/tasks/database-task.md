@@ -3,7 +3,7 @@
 ## Execution Contract
 
 - feature_slug: user-management-model
-- status: ready
+- status: done
 - canonical_report_target: reports/database-result.md
 - main_agent_owned: false
 
@@ -15,8 +15,8 @@ Every behavior-changing task must be split into RED, GREEN, and optional REFACTO
 
 | id | tdd phase | owner | agent role | dependencies | worktree | write scope | validation | acceptance ids | report target | status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| DB-GREEN-01 | green | database | database-worker | TEST-RED-02, TEST-RED-06 | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/database/schema-migrations | tron-backend/migrations/*; tron-backend/src/domain/user/repository/*; tron-backend/src/domain/user/schema/* | rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_lifecycle | AC-UM-02, AC-UM-06 | reports/database-result.md | ready |
-| DB-VERIFY-01 | verify | test | verify-worker | DB-GREEN-01 | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/verify-regression | read-only validation over migration files and repository schema assertions | rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_schema_contracts | AC-UM-02, AC-UM-06 | reports/database-result.md | ready |
+| DB-GREEN-01 | green | database | database-worker | TEST-RED-02, TEST-RED-06 | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/database/schema-migrations | tron-backend/migrations/*; tron-backend/src/domain/user/repository/*; tron-backend/src/domain/user/schema/* | rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_lifecycle | AC-UM-02, AC-UM-06 | reports/database-result.md | done |
+| DB-VERIFY-01 | verify | test | verify-worker | DB-GREEN-01 | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/verify-regression | read-only validation over migration files and repository schema assertions | rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_schema_contracts | AC-UM-02, AC-UM-06 | reports/database-result.md | done |
 
 ## Worktree Notes
 

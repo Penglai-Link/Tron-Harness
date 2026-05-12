@@ -2,7 +2,7 @@
 
 ## Summary
 
-Backend GREEN and VERIFY are integrated into base. Focused backend tests, schema contract tests, and `rtk make be-test` pass after merge.
+Backend GREEN, VERIFY, and post-review backend fix branches are integrated into base. Focused backend tests, schema contract tests, create-user validation tests, status-contract tests, and `rtk make be-test` pass after merge.
 
 ## Task Results
 
@@ -13,6 +13,8 @@ Backend GREEN and VERIFY are integrated into base. Focused backend tests, schema
 | BE-GREEN-03 | password reset behavior merged via `48504fb` with `passwordHash` removed from detail API | @ref:orchestration/integration-log.md#EVT-005 | done |
 | BE-GREEN-04 | stable-code/authorization-boundary behavior merged via `48504fb` | @ref:orchestration/integration-log.md#EVT-005 | done |
 | BE-VERIFY-01 | backend regression verified via `rtk make be-test` after verify merge | @ref:orchestration/integration-log.md#EVT-007 | done |
+| BE-FIX-01 | create-user validation and duplicate checks merged via `076e5fa` | @ref:orchestration/integration-log.md#EVT-009 | done |
+| BE-FIX-02 | invalid status and malformed explicit userCode contract checks merged via `d7abc7e` | @ref:orchestration/integration-log.md#EVT-011 | done |
 
 ## TDD Evidence
 
@@ -25,12 +27,15 @@ Backend GREEN and VERIFY are integrated into base. Focused backend tests, schema
 | TDD-UM-05 | GREEN password reset tests pass without exposing password hashes | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
 | TDD-UM-06 | GREEN stable-code/decimal-string ID tests pass | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
 | TDD-UM-07 | GREEN no-permission-gate tests pass | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
+| TDD-UM-02 | post-review duplicate/profile/status validation fixes pass | @ref:orchestration/integration-log.md#EVT-009 | verified |
+| TDD-UM-06 | post-review malformed explicit userCode rejection passes | @ref:orchestration/integration-log.md#EVT-011 | verified |
 
 ## Worktree Evidence
 
 | worktree ref | result | evidence link | status |
 | --- | --- | --- | --- |
 | @ref:orchestration/worktree-plan.md#agent-worktrees | backend branch merged to base | @ref:orchestration/integration-log.md#EVT-005 | integrated |
+| @ref:orchestration/worktree-plan.md#agent-worktrees | backend fix branches merged to base | @ref:orchestration/integration-log.md#EVT-009 | integrated |
 
 ## Changed Paths
 
@@ -42,12 +47,16 @@ Backend GREEN and VERIFY are integrated into base. Focused backend tests, schema
 | `tron-backend/src/response.rs` | added error response helper data shape | @ref:orchestration/integration-log.md#EVT-005 |
 | `tron-backend/tests/password_reset.rs` | corrected security assertion to reject API password hash exposure | @ref:orchestration/integration-log.md#EVT-005 |
 | `docs/features/user-management-model/reports/agents/backend-green-user-api.md` | added worker evidence report | @ref:orchestration/integration-log.md#EVT-005 |
+| `tron-backend/tests/user_management_lifecycle.rs` | added post-review validation and status/userCode contract coverage | @ref:orchestration/integration-log.md#EVT-011 |
+| `docs/features/user-management-model/reports/agents/backend-fix-create-validation.md` | added backend validation fix evidence report | @ref:orchestration/integration-log.md#EVT-009 |
+| `docs/features/user-management-model/reports/agents/backend-fix-status-contract.md` | added backend status-contract fix evidence report | @ref:orchestration/integration-log.md#EVT-011 |
 
 ## Commands
 
 | command ref | result | evidence link |
 | --- | --- | --- |
 | @ref:spec/test-plan.md#command-matrix | focused backend tests, schema contract tests, and `rtk make be-test` passed after merge | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/test-plan.md#command-matrix | post-review backend fix branches reran lifecycle tests and `rtk make be-test` | @ref:orchestration/integration-log.md#EVT-011 |
 
 ## Acceptance Mapping
 

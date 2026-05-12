@@ -3,7 +3,7 @@
 ## Execution Contract
 
 - feature_slug: user-management-model
-- status: in_progress
+- status: done
 - canonical_report_target: reports/test-report.md
 - main_agent_owned: false
 
@@ -23,7 +23,7 @@ Every behavior-changing task must be split into RED, GREEN, and optional REFACTO
 | TEST-RED-06 | red | test | red-test-worker | none | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/red-suite | tron-backend/tests/stable_code_contracts.rs | rtk cargo test --manifest-path tron-backend/Cargo.toml stable_code_contracts | AC-UM-06 | reports/test-report.md | done |
 | TEST-RED-07 | red | test | red-test-worker | none | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/red-suite | tron-backend/tests/user_api_authorization_boundary.rs | rtk cargo test --manifest-path tron-backend/Cargo.toml user_api_authorization_boundary | AC-UM-07 | reports/test-report.md | done |
 | TEST-RED-08 | red | test | red-test-worker | none | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/red-suite | tron-frontend/tests/user-management-smoke.spec.ts; tron-frontend/src/domain/admin/mock/data.ts | rtk make fe-check && rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke | AC-UM-08 | reports/test-report.md | done |
-| TEST-VERIFY-01 | verify | test | verify-worker | DB-GREEN-01, BE-GREEN-01, BE-GREEN-02, BE-GREEN-03, BE-GREEN-04, FE-GREEN-01 | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/verify-regression | consolidated regression verification for backend and frontend suites | rtk make be-test && rtk make fe-check | AC-UM-01, AC-UM-02, AC-UM-03, AC-UM-04, AC-UM-05, AC-UM-06, AC-UM-07, AC-UM-08 | reports/test-report.md | ready |
+| TEST-VERIFY-01 | verify | test | verify-worker | DB-GREEN-01, BE-GREEN-01, BE-GREEN-02, BE-GREEN-03, BE-GREEN-04, FE-GREEN-01 | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/verify-regression | consolidated regression verification for backend and frontend suites | rtk make be-test && rtk make fe-check | AC-UM-01, AC-UM-02, AC-UM-03, AC-UM-04, AC-UM-05, AC-UM-06, AC-UM-07, AC-UM-08 | reports/test-report.md | done |
 
 ## Worktree Notes
 

@@ -3,7 +3,7 @@
 ## Execution Contract
 
 - feature_slug: user-management-model
-- status: ready
+- status: done
 - canonical_report_target: reports/frontend-result.md
 - main_agent_owned: false
 
@@ -15,8 +15,9 @@ Every behavior-changing task must be split into RED, GREEN, and optional REFACTO
 
 | id | tdd phase | owner | agent role | dependencies | worktree | write scope | validation | acceptance ids | report target | status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| FE-GREEN-01 | green | frontend | frontend-worker | TEST-RED-08, BE-GREEN-01, BE-GREEN-02, BE-GREEN-03 | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/green-admin-users | tron-frontend/src/domain/admin/model/*; tron-frontend/src/domain/admin/api/*; tron-frontend/src/domain/admin/pages/UsersPage.tsx; tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx; tron-frontend/src/domain/admin/mock/data.ts | rtk make fe-check | AC-UM-01, AC-UM-02, AC-UM-03, AC-UM-04, AC-UM-05, AC-UM-08 | reports/frontend-result.md | ready |
-| FE-VERIFY-01 | verify | test | verify-worker | FE-GREEN-01, BE-VERIFY-01 | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/verify-regression | tron-frontend read-only verification and smoke evidence collection | rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke | AC-UM-01, AC-UM-02, AC-UM-03, AC-UM-04, AC-UM-05, AC-UM-08 | reports/frontend-result.md | ready |
+| FE-GREEN-01 | green | frontend | frontend-worker | TEST-RED-08, BE-GREEN-01, BE-GREEN-02, BE-GREEN-03 | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/green-admin-users | tron-frontend/src/domain/admin/model/*; tron-frontend/src/domain/admin/api/*; tron-frontend/src/domain/admin/pages/UsersPage.tsx; tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx; tron-frontend/src/domain/admin/mock/data.ts | rtk make fe-check | AC-UM-01, AC-UM-02, AC-UM-03, AC-UM-04, AC-UM-05, AC-UM-08 | reports/frontend-result.md | done |
+| FE-VERIFY-01 | verify | test | verify-worker | FE-GREEN-01, BE-VERIFY-01 | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/verify-regression | tron-frontend read-only verification and smoke evidence collection | rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke | AC-UM-01, AC-UM-02, AC-UM-03, AC-UM-04, AC-UM-05, AC-UM-08 | reports/frontend-result.md | done |
+| FE-FIX-01 | green | frontend | frontend-fix-worker | TEST-RED-08, REVIEW-01 | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/fix-detail-not-found | tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx; tron-frontend/tests/user-management-smoke.spec.ts | rtk make fe-check | AC-UM-01, AC-UM-08 | reports/frontend-result.md | done |
 
 ## Worktree Notes
 

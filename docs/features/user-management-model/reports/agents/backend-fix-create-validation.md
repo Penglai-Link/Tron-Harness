@@ -18,6 +18,12 @@
   - tron-backend/tests/user_management_lifecycle.rs
   - docs/features/user-management-model/reports/agents/backend-fix-create-validation.md
 
+## Task Results
+
+| task id | result | notes |
+| --- | --- | --- |
+| BE-FIX-01 | pass | Create-user validation is enforced before mutation and full backend regression passes. |
+
 ## Fix Summary
 
 - Added create-user validation before mutation for duplicate explicit `userCode`, duplicate username, duplicate email, missing or blank required profile fields, and weak provided `initialPassword`.
@@ -31,7 +37,21 @@
   - `ADMIN_USER_PASSWORD_WEAK`
 - Kept existing role and space validation codes unchanged.
 
-## Test Evidence
+## TDD Evidence
+
+| cycle id | result | evidence |
+| --- | --- | --- |
+| TDD-UM-02 | pass | Duplicate user identity and required profile field validation fails RED before implementation and passes after the fix. |
+| TDD-UM-05 | pass | Weak provided `initialPassword` validation fails RED before implementation and passes after the fix. |
+
+## Changed Paths
+
+- tron-backend/src/domain/user/mod.rs
+- tron-backend/src/http/admin/users/mod.rs
+- tron-backend/tests/user_management_lifecycle.rs
+- docs/features/user-management-model/reports/agents/backend-fix-create-validation.md
+
+## Commands
 
 | command | status | notes |
 | --- | --- | --- |
@@ -44,3 +64,7 @@
 
 - High finding status: resolved in backend fix branch.
 - Remaining scope: frontend invalid-detail fallback is owned by the separate frontend worker.
+
+## Blockers
+
+- None.

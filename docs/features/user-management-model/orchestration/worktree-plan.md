@@ -14,7 +14,7 @@
 - main_repo_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/base
 - default_branch: master
 - base_commit: 74d87fe
-- working_tree_status: dirty (feature workspace continuation in progress)
+- working_tree_status: final evidence consolidation in progress
 
 ## Multi-Agent Base Branch
 
@@ -34,7 +34,11 @@ One row is one actual git worktree checkout. Resolve `agent id`, `subtask name`,
 | backend | green-user-api | 019e1c38-c29d-7913-be7e-bfe92ed51299 | Nietzsche | BE-GREEN-01, BE-GREEN-02, BE-GREEN-03, BE-GREEN-04 | green | feature/clouds3n/user-management-model/backend/green-user-api | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/backend/green-user-api | feature/clouds3n/user-management-model/base | integrated |
 | frontend | green-admin-users | 019e1c57-af36-7503-932e-c28b88f211cc | Sartre | FE-GREEN-01 | green | feature/clouds3n/user-management-model/frontend/green-admin-users | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/green-admin-users | feature/clouds3n/user-management-model/base | integrated |
 | test | verify-regression | 019e1c74-a4ff-7862-a062-f87a93bcafad; 019e1c84-e822-7313-8205-8f533fe2331f | Singer; Parfit | DB-VERIFY-01, BE-VERIFY-01, FE-VERIFY-01, TEST-VERIFY-01 | verify | feature/clouds3n/user-management-model/test/verify-regression | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/verify-regression | feature/clouds3n/user-management-model/base | integrated |
-| review | final-review | pending-spawn | pending-spawn | REVIEW-01 | review | feature/clouds3n/user-management-model/review/final-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/final-review | feature/clouds3n/user-management-model/base | ready |
+| review | final-review | prior-session-final-review | final-review-worker | REVIEW-01 | review | feature/clouds3n/user-management-model/review/final-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/final-review | feature/clouds3n/user-management-model/base | integrated |
+| backend | fix-create-validation | prior-session-backend-fix-create-validation | backend-fix-worker | BE-FIX-01 | green | feature/clouds3n/user-management-model/backend/fix-create-validation | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/backend/fix-create-validation | feature/clouds3n/user-management-model/base | integrated |
+| frontend | fix-detail-not-found | prior-session-frontend-fix-detail-not-found | frontend-fix-worker | FE-FIX-01 | green | feature/clouds3n/user-management-model/frontend/fix-detail-not-found | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/fix-detail-not-found | feature/clouds3n/user-management-model/base | integrated |
+| backend | fix-status-contract | prior-session-backend-fix-status-contract | backend-contract-fix-worker | BE-FIX-02 | green | feature/clouds3n/user-management-model/backend/fix-status-contract | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/backend/fix-status-contract | feature/clouds3n/user-management-model/base | integrated |
+| review | post-fix-final-review | pending-spawn | pending-spawn | REVIEW-02 | review | feature/clouds3n/user-management-model/review/post-fix-final-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/post-fix-final-review | feature/clouds3n/user-management-model/base | ready |
 
 ## Branch And Path Rules
 
@@ -47,7 +51,7 @@ One row is one actual git worktree checkout. Resolve `agent id`, `subtask name`,
 
 ## Merge Strategy
 
-Execution order is `test/red-suite` -> `database/schema-migrations` + `backend/green-user-api` + `frontend/green-admin-users` -> `test/verify-regression` -> `review/final-review`. The lead agent merges each worker branch into `feature/clouds3n/user-management-model/base` and records events in `orchestration/integration-log.md`.
+Execution order is `test/red-suite` -> `database/schema-migrations` + `backend/green-user-api` + `frontend/green-admin-users` -> `test/verify-regression` -> `review/final-review` -> targeted fix workers for final-review findings -> `review/post-fix-final-review`. The lead agent merges each worker branch into `feature/clouds3n/user-management-model/base` and records events in `orchestration/integration-log.md`.
 
 ## Conflict Rules
 

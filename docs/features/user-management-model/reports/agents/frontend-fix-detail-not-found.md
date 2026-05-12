@@ -58,3 +58,7 @@
 - status: resolved
 - finding_resolved: yes
 - notes: The page no longer falls back to `users[0]`; detail-only mutation controls are unreachable for absent or unmatched `userCode` values.
+
+## Blockers
+
+- None.

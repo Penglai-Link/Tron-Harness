@@ -43,8 +43,8 @@ Follow `AGENTS.md` response body format for every endpoint:
 
 ```json
 {
-  "code": "200",
-  "message": "success",
+  "code": "SUCCESS",
+  "message": "ok",
   "data": {}
 }
 ```
@@ -55,8 +55,8 @@ Pagination responses use:
 
 ```json
 {
-  "code": "200",
-  "message": "success",
+  "code": "SUCCESS",
+  "message": "ok",
   "data": {
     "current": 1,
     "size": 20,
@@ -105,8 +105,8 @@ Response body:
 
 ```json
 {
-  "code": "200",
-  "message": "success",
+  "code": "SUCCESS",
+  "message": "ok",
   "data": {
     "current": 1,
     "size": 20,
@@ -187,8 +187,8 @@ Response body:
 
 ```json
 {
-  "code": "200",
-  "message": "success",
+  "code": "SUCCESS",
+  "message": "ok",
   "data": {
     "id": "734103002743185408",
     "userCode": "USER_MAYA_SINGH",
@@ -262,8 +262,8 @@ Response body:
 
 ```json
 {
-  "code": "200",
-  "message": "success",
+  "code": "SUCCESS",
+  "message": "ok",
   "data": {
     "id": "734103002743185408",
     "userCode": "USER_MAYA_SINGH",
@@ -357,8 +357,8 @@ Response body:
 
 ```json
 {
-  "code": "200",
-  "message": "success",
+  "code": "SUCCESS",
+  "message": "ok",
   "data": {
     "userCode": "USER_MAYA_SINGH",
     "updatedAt": "2026-05-11T08:45:00Z"
@@ -397,8 +397,8 @@ Response body:
 
 ```json
 {
-  "code": "200",
-  "message": "success",
+  "code": "SUCCESS",
+  "message": "ok",
   "data": {
     "userCode": "USER_MAYA_SINGH",
     "status": "Archived",
@@ -438,8 +438,8 @@ Response body:
 
 ```json
 {
-  "code": "200",
-  "message": "success",
+  "code": "SUCCESS",
+  "message": "ok",
   "data": {
     "userCode": "USER_MAYA_SINGH",
     "status": "Active",
@@ -488,8 +488,8 @@ Response body:
 
 ```json
 {
-  "code": "200",
-  "message": "success",
+  "code": "SUCCESS",
+  "message": "ok",
   "data": {
     "userCode": "USER_MAYA_SINGH",
     "roleAssignments": [
@@ -544,8 +544,8 @@ Response body:
 
 ```json
 {
-  "code": "200",
-  "message": "success",
+  "code": "SUCCESS",
+  "message": "ok",
   "data": {
     "userCode": "USER_MAYA_SINGH",
     "spaceAssignments": [
@@ -592,8 +592,8 @@ Response body:
 
 ```json
 {
-  "code": "200",
-  "message": "success",
+  "code": "SUCCESS",
+  "message": "ok",
   "data": {
     "userCode": "USER_MAYA_SINGH",
     "resetCode": "RESET_20260511_0001",
@@ -624,17 +624,17 @@ All errors follow the same uniform response body. HTTP status is carried by the 
 
 | condition | status/code | response shape | acceptance ids |
 | --- | --- | --- | --- |
-| User not found by `userCode`. | 404 `USER_NOT_FOUND` | `{ "code": "USER_NOT_FOUND", "message": "User not found.", "data": { "userCode": "USER_MISSING" } }` | AC-UM-01 |
-| Duplicate user code. | 409 `USER_CODE_ALREADY_EXISTS` | `{ "code": "USER_CODE_ALREADY_EXISTS", "message": "User code already exists.", "data": { "userCode": "USER_MAYA_SINGH" } }` | AC-UM-02, AC-UM-06 |
-| Duplicate username. | 409 `USERNAME_ALREADY_EXISTS` | `{ "code": "USERNAME_ALREADY_EXISTS", "message": "Username already exists.", "data": { "username": "maya.singh" } }` | AC-UM-02 |
-| Duplicate email. | 409 `EMAIL_ALREADY_EXISTS` | `{ "code": "EMAIL_ALREADY_EXISTS", "message": "Email already exists.", "data": { "email": "maya@tron.ai" } }` | AC-UM-02 |
-| Required profile field missing. | 422 `INVALID_USER_PROFILE` | `{ "code": "INVALID_USER_PROFILE", "message": "Required profile field is missing.", "data": { "field": "firstName" } }` | AC-UM-02 |
-| Invalid user status. | 422 `INVALID_USER_STATUS` | `{ "code": "INVALID_USER_STATUS", "message": "Invalid user status.", "data": { "status": "Suspended" } }` | AC-UM-02 |
-| Invalid fixed role code. | 422 `INVALID_ROLE_CODE` | `{ "code": "INVALID_ROLE_CODE", "message": "Invalid fixed role code.", "data": { "roleCode": "OWNER" } }` | AC-UM-03 |
-| Invalid or blank space code. | 422 `INVALID_SPACE_CODE` | `{ "code": "INVALID_SPACE_CODE", "message": "Invalid space code.", "data": { "spaceCode": "" } }` | AC-UM-04 |
-| Password does not satisfy policy. | 422 `WEAK_PASSWORD` | `{ "code": "WEAK_PASSWORD", "message": "Password does not satisfy policy.", "data": {} }` | AC-UM-05 |
-| Archived user cannot perform requested operation. | 409 `USER_ARCHIVED` | `{ "code": "USER_ARCHIVED", "message": "Archived user cannot perform requested operation.", "data": { "userCode": "USER_MAYA_SINGH" } }` | AC-UM-02 |
-| Temporary password generation fails. | 500 `PASSWORD_RESET_GENERATION_FAILED` | `{ "code": "PASSWORD_RESET_GENERATION_FAILED", "message": "Temporary password generation failed.", "data": {} }` | AC-UM-05 |
+| User not found by `userCode`. | 404 `ADMIN_USER_NOT_FOUND` | `{ "code": "ADMIN_USER_NOT_FOUND", "message": "user was not found", "data": {} }` | AC-UM-01 |
+| Duplicate user code. | 409 `ADMIN_USER_CODE_DUPLICATE` | `{ "code": "ADMIN_USER_CODE_DUPLICATE", "message": "userCode already exists", "data": {} }` | AC-UM-02, AC-UM-06 |
+| Duplicate username. | 409 `ADMIN_USER_USERNAME_DUPLICATE` | `{ "code": "ADMIN_USER_USERNAME_DUPLICATE", "message": "username already exists", "data": {} }` | AC-UM-02 |
+| Duplicate email. | 409 `ADMIN_USER_EMAIL_DUPLICATE` | `{ "code": "ADMIN_USER_EMAIL_DUPLICATE", "message": "email already exists", "data": {} }` | AC-UM-02 |
+| Invalid explicit user code. | 400 `ADMIN_USER_CODE_INVALID` | `{ "code": "ADMIN_USER_CODE_INVALID", "message": "userCode must contain uppercase letters, digits, underscore, or hyphen only", "data": {} }` | AC-UM-02, AC-UM-06 |
+| Required profile field missing. | 400 `ADMIN_USER_PROFILE_FIELD_REQUIRED` | `{ "code": "ADMIN_USER_PROFILE_FIELD_REQUIRED", "message": "username, firstName, lastName, displayName, and email are required", "data": {} }` | AC-UM-02 |
+| Invalid user status. | 400 `ADMIN_USER_STATUS_INVALID` | `{ "code": "ADMIN_USER_STATUS_INVALID", "message": "status must be Active or Archived", "data": {} }` | AC-UM-02 |
+| Invalid fixed role code. | 400 `ADMIN_USER_ROLE_CODE_INVALID` | `{ "code": "ADMIN_USER_ROLE_CODE_INVALID", "message": "roleCodes must contain fixed MVP role codes only", "data": {} }` | AC-UM-03 |
+| Invalid or blank space code. | 400 `ADMIN_USER_SPACE_CODE_INVALID` | `{ "code": "ADMIN_USER_SPACE_CODE_INVALID", "message": "spaceCodes must be non-empty uppercase stable codes", "data": {} }` | AC-UM-04 |
+| Password does not satisfy policy. | 400 `ADMIN_USER_PASSWORD_WEAK` | `{ "code": "ADMIN_USER_PASSWORD_WEAK", "message": "initialPassword does not satisfy the MVP password policy", "data": {} }` | AC-UM-05 |
+| Temporary password generation fails. | 500 `ADMIN_USER_PASSWORD_HASH_FAILED` | `{ "code": "ADMIN_USER_PASSWORD_HASH_FAILED", "message": "password hash could not be generated", "data": {} }` | AC-UM-05 |
 
 ## Frontend Backend Boundary
 

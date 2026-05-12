@@ -2,13 +2,14 @@
 
 ## Summary
 
-Final review checklist is prepared. Review evidence will be appended after RED/GREEN/VERIFY integration finishes.
+Initial final review findings are integrated and targeted fix branches are merged. Post-fix final review is ready to confirm the current base before completion.
 
 ## Task Results
 
 | task id | result | evidence link |
 | --- | --- | --- |
-| REVIEW-01 | pending | @ref:tasks/review-task.md#REVIEW-01 |
+| REVIEW-01 | findings_recorded | @ref:orchestration/integration-log.md#EVT-008 |
+| REVIEW-02 | pending | @ref:tasks/review-task.md#REVIEW-02 |
 
 ## Feature Docs Validation
 
@@ -84,9 +85,9 @@ Final review checklist is prepared. Review evidence will be appended after RED/G
 
 ## Remaining Risks
 
-- Pending implementation and runtime evidence for user-management backend/frontend/database tasks.
+- Post-fix final review is pending before final acceptance.
 
 ## Final Status
 
 - status: in_progress
-- conclusion: review_pending_execution
+- conclusion: post_fix_review_pending

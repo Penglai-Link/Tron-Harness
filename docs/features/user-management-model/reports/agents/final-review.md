@@ -16,6 +16,16 @@
 - TDD refs: TDD-UM-01, TDD-UM-02, TDD-UM-03, TDD-UM-04, TDD-UM-05, TDD-UM-06, TDD-UM-07, TDD-UM-08
 - write_scope: docs/features/user-management-model/reports/agents/final-review.md
 
+## Task Results
+
+| task id | result | notes |
+| --- | --- | --- |
+| REVIEW-01 | findings_recorded | Review found two high-severity product gaps, API contract drift, final documentation gaps, and stale acceptance route text. |
+
+## Changed Paths
+
+- docs/features/user-management-model/reports/agents/final-review.md
+
 ## Findings
 
 | severity | finding | evidence | recommended fix |
@@ -63,11 +73,28 @@
 | AC-UM-07 / TDD-UM-07 | Authorization-boundary test passes for MVP no-permission-gate behavior. |
 | AC-UM-08 / TDD-UM-08 | Frontend typecheck/build and smoke test pass; acceptance query-key text is stale. |
 
+## TDD Evidence
+
+| cycle id | result | evidence |
+| --- | --- | --- |
+| TDD-UM-01 | review_gap_found | Frontend invalid `userCode` fallback gap found and assigned to FE-FIX-01. |
+| TDD-UM-02 | review_gap_found | Create-user validation and duplicate-handling gap found and assigned to BE-FIX-01/BE-FIX-02. |
+| TDD-UM-03 | review_pass_with_contract_note | Role assignment tests pass; contract docs needed alignment to implementation. |
+| TDD-UM-04 | review_pass_with_contract_note | Space assignment tests pass; contract docs needed alignment to implementation. |
+| TDD-UM-05 | review_pass | Password reset safety evidence passes. |
+| TDD-UM-06 | review_gap_found | Malformed explicit userCode contract gap assigned to BE-FIX-02. |
+| TDD-UM-07 | review_pass | Authorization-boundary evidence passes. |
+| TDD-UM-08 | review_gap_found | Detail route stale acceptance/query fallback gap assigned to FE-FIX-01. |
+
 ## Residual Risks For Lead
 
 - Lead should not mark final acceptance complete until the high-severity create-user validation and invalid-detail fallback findings are either fixed or explicitly accepted as MVP limitations.
 - Lead needs to reconcile API contract wording with implementation/tests before generated clients or external consumers depend on these endpoints.
 - Lead needs to update canonical final docs after merging this report, then rerun the final validator.
+
+## Blockers
+
+- Two high-severity findings blocked completion until BE-FIX-01 and FE-FIX-01 were integrated.
 
 ## Final Status
 

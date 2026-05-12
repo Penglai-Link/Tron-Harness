@@ -2,7 +2,7 @@
 
 ## Summary
 
-Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend GREEN, frontend GREEN, and VERIFY branches are integrated into base; REVIEW remains ready.
+Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend GREEN, frontend GREEN, VERIFY, REVIEW, and targeted post-review fix branches are integrated into base; post-fix final review is ready.
 
 ## Worktree Registry
 
@@ -13,7 +13,11 @@ Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend G
 | backend | BE-GREEN-01..04 | backend-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/backend/green-user-api | feature/clouds3n/user-management-model/backend/green-user-api | feature/clouds3n/user-management-model/base | integrated |
 | frontend | FE-GREEN-01 | frontend-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/green-admin-users | feature/clouds3n/user-management-model/frontend/green-admin-users | feature/clouds3n/user-management-model/base | integrated |
 | test | DB-VERIFY-01, BE-VERIFY-01, FE-VERIFY-01, TEST-VERIFY-01 | verify-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/verify-regression | feature/clouds3n/user-management-model/test/verify-regression | feature/clouds3n/user-management-model/base | integrated |
-| review | REVIEW-01 | review-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/final-review | feature/clouds3n/user-management-model/review/final-review | feature/clouds3n/user-management-model/base | ready |
+| review | REVIEW-01 | review-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/final-review | feature/clouds3n/user-management-model/review/final-review | feature/clouds3n/user-management-model/base | integrated |
+| backend | BE-FIX-01 | backend-fix-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/backend/fix-create-validation | feature/clouds3n/user-management-model/backend/fix-create-validation | feature/clouds3n/user-management-model/base | integrated |
+| frontend | FE-FIX-01 | frontend-fix-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/fix-detail-not-found | feature/clouds3n/user-management-model/frontend/fix-detail-not-found | feature/clouds3n/user-management-model/base | integrated |
+| backend | BE-FIX-02 | backend-contract-fix-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/backend/fix-status-contract | feature/clouds3n/user-management-model/backend/fix-status-contract | feature/clouds3n/user-management-model/base | integrated |
+| review | REVIEW-02 | post-fix-final-review-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/post-fix-final-review | feature/clouds3n/user-management-model/review/post-fix-final-review | feature/clouds3n/user-management-model/base | ready |
 
 ## Branch Registry
 
@@ -24,7 +28,11 @@ Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend G
 | feature/clouds3n/user-management-model/backend/green-user-api | backend | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | backend GREEN merged via `48504fb`. |
 | feature/clouds3n/user-management-model/frontend/green-admin-users | frontend | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | frontend GREEN merged via `db43432`. |
 | feature/clouds3n/user-management-model/test/verify-regression | test | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | verify branch merged via `9932a65`. |
-| feature/clouds3n/user-management-model/review/final-review | review | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | ready | review worker branch |
+| feature/clouds3n/user-management-model/review/final-review | review | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | review findings merged via `79eb17c`. |
+| feature/clouds3n/user-management-model/backend/fix-create-validation | backend | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | backend create validation fix merged via `076e5fa`. |
+| feature/clouds3n/user-management-model/frontend/fix-detail-not-found | frontend | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | frontend detail not-found fix merged via `3aee08e`. |
+| feature/clouds3n/user-management-model/backend/fix-status-contract | backend | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | backend status/userCode contract fix merged via `d7abc7e`. |
+| feature/clouds3n/user-management-model/review/post-fix-final-review | review | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | ready | post-fix final review worker branch |
 
 ## Integration Evidence
 
@@ -37,6 +45,10 @@ Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend G
 | EVT-005 | backend | BE-GREEN-01..04 | @ref:orchestration/integration-log.md#integration-events | pass | backend GREEN committed on worker branch and merged into base |
 | EVT-006 | frontend | FE-GREEN-01 | @ref:orchestration/integration-log.md#integration-events | pass | frontend GREEN committed on worker branch and merged into base |
 | EVT-007 | test | DB-VERIFY-01, BE-VERIFY-01, FE-VERIFY-01, TEST-VERIFY-01 | @ref:orchestration/integration-log.md#integration-events | pass | verify branch committed report/schema contract test and merged into base |
+| EVT-008 | review | REVIEW-01 | @ref:orchestration/integration-log.md#integration-events | pass | final review findings recorded and merged into base |
+| EVT-009 | backend | BE-FIX-01 | @ref:orchestration/integration-log.md#integration-events | pass | backend create validation fix committed and merged into base |
+| EVT-010 | frontend | FE-FIX-01 | @ref:orchestration/integration-log.md#integration-events | pass | frontend detail not-found fix committed and merged into base |
+| EVT-011 | backend | BE-FIX-02 | @ref:orchestration/integration-log.md#integration-events | pass | backend status/userCode contract fix committed and merged into base |
 
 ## Validation Evidence
 
@@ -51,6 +63,8 @@ Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend G
 | `rtk make fe-check` | Frontend typecheck/build after frontend GREEN merge. | pass | @ref:orchestration/integration-log.md#validation-after-integration |
 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | Frontend model/status/route smoke after frontend GREEN merge. | pass | @ref:orchestration/integration-log.md#validation-after-integration |
 | `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_schema_contracts` | Focused DB schema contract verification. | pass | @ref:orchestration/integration-log.md#validation-after-integration |
+| `rtk make be-test` | Backend regression after review fixes. | pass | @ref:orchestration/integration-log.md#validation-after-integration |
+| `rtk make fe-check` | Frontend typecheck/build after review fixes. | pass | @ref:orchestration/integration-log.md#validation-after-integration |
 
 ## Blockers
 

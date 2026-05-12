@@ -2,7 +2,7 @@
 
 ## Summary
 
-Feature workspace resumed through Workflow B evolution. Complete spec and executable task/worktree plan are prepared, Lite Spec worker worktrees are provisioned, RED suite `TEST-RED-01..08` is merged into base with expected failure evidence, database/backend/frontend GREEN branches are integrated, and VERIFY is integrated with focused schema-contract coverage.
+Feature workspace resumed through Workflow B evolution. Complete spec and executable task/worktree plan are prepared, Lite Spec worker worktrees are provisioned, RED suite `TEST-RED-01..08` is merged into base with expected failure evidence, database/backend/frontend GREEN branches are integrated, VERIFY is integrated with focused schema-contract coverage, final-review findings are recorded, and targeted backend/frontend fix branches are integrated.
 
 ## Integration Events
 
@@ -15,6 +15,10 @@ Feature workspace resumed through Workflow B evolution. Complete spec and execut
 | EVT-005 | backend | BE-GREEN-01, BE-GREEN-02, BE-GREEN-03, BE-GREEN-04 | feature/clouds3n/user-management-model/backend/green-user-api | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/backend/green-user-api -m "merge: integrate BE-GREEN-01..04"` | success | Integrated merge commit `48504fb` after worker commits `0c6dff4` and `b16a889`; follow-up removed `passwordHash` from API detail DTOs. |
 | EVT-006 | frontend | FE-GREEN-01 | feature/clouds3n/user-management-model/frontend/green-admin-users | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/frontend/green-admin-users -m "merge: integrate FE-GREEN-01"` | success | Integrated merge commit `db43432` after worker commit `2bf0659`; frontend now uses user-only `userCode`/`roleCodes`/`spaceCodes` boundary and `Active`/`Archived` statuses. |
 | EVT-007 | test | DB-VERIFY-01, BE-VERIFY-01, FE-VERIFY-01, TEST-VERIFY-01 | feature/clouds3n/user-management-model/test/verify-regression | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/test/verify-regression -m "merge: integrate VERIFY-01"` | success | Integrated merge commit `9932a65` after worker commits `8c6422e` and `2a378de`; schema-contract filter now runs 5 tests instead of 0. |
+| EVT-008 | review | REVIEW-01 | feature/clouds3n/user-management-model/review/final-review | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/review/final-review -m "merge: integrate REVIEW-01 findings"` | success | Integrated merge commit `79eb17c` after worker commit `6a7b85e`; review identified create-user validation, detail not-found fallback, API contract drift, and final documentation gaps. |
+| EVT-009 | backend | BE-FIX-01 | feature/clouds3n/user-management-model/backend/fix-create-validation | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/backend/fix-create-validation -m "merge: integrate backend validation fix"` | success | Integrated merge commit `076e5fa` after worker commit `8058838`; duplicate userCode/username/email, missing required profile fields, and weak initial passwords are rejected before mutation. |
+| EVT-010 | frontend | FE-FIX-01 | feature/clouds3n/user-management-model/frontend/fix-detail-not-found | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/frontend/fix-detail-not-found -m "merge: integrate frontend detail fallback fix"` | success | Integrated merge commit `3aee08e` after worker commit `559f81f`; detail routes require exact `userCode` and render not-found without mutation controls for missing/unknown codes. |
+| EVT-011 | backend | BE-FIX-02 | feature/clouds3n/user-management-model/backend/fix-status-contract | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/backend/fix-status-contract -m "merge: integrate backend status contract fix"` | success | Integrated merge commit `d7abc7e` after worker commit `fd6f792`; invalid PATCH status and malformed explicit userCode now return stable admin-user error envelopes. |
 
 ## Conflict Log
 
@@ -47,6 +51,11 @@ Feature workspace resumed through Workflow B evolution. Complete spec and execut
 | `rtk proxy zsh -lc 'cd tron-frontend && node --input-type=module <<...Playwright runtime check...'` | Runtime browser check against local Vite dev server. | pass | Opened `/admin/users`, navigated to `/admin/users/detail?userCode=USER_ALEX_JOHNSON`, and confirmed reset-password result dialog. |
 | `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_schema_contracts` | VERIFY schema contract check after verify merge. | pass | 5 focused schema contract tests pass; DB-VERIFY-01 no longer has a zero-test filter gap. |
 | `rtk make be-test` | VERIFY backend regression after verify merge. | pass | Full backend regression passes with schema contract tests included. |
+| `rtk cargo test --manifest-path tron-backend/Cargo.toml --test user_management_lifecycle` | RED/GREEN validation for create-user validation fix. | pass | BE-FIX-01 report records RED failures before implementation and 7 lifecycle tests passing after implementation. |
+| `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | RED/GREEN validation for missing/unknown detail `userCode` fallback. | pass | FE-FIX-01 report records 5 smoke tests passing after detail not-found fix. |
+| `rtk cargo test --manifest-path tron-backend/Cargo.toml --test user_management_lifecycle` | RED/GREEN validation for invalid status and malformed userCode contract fix. | pass | BE-FIX-02 report records RED failures before implementation and 11 lifecycle tests passing after implementation. |
+| `rtk make be-test` | Backend regression after final-review backend fixes. | pass | BE-FIX-01 and BE-FIX-02 worker reports record full backend regression passing. |
+| `rtk make fe-check` | Frontend regression after detail not-found fix. | pass | FE-FIX-01 worker report records frontend typecheck and production build passing. |
 
 ## Blockers
 

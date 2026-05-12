@@ -18,6 +18,12 @@
   - tron-backend/tests/user_management_lifecycle.rs
   - docs/features/user-management-model/reports/agents/backend-fix-status-contract.md
 
+## Task Results
+
+| task id | result | notes |
+| --- | --- | --- |
+| BE-FIX-02 | pass | Invalid status and malformed explicit `userCode` now return stable admin-user error envelopes. |
+
 ## Fix Summary
 
 - Added RED coverage for invalid PATCH status returning a uniform admin-user envelope.
@@ -28,7 +34,21 @@
   - `ADMIN_USER_STATUS_INVALID`
   - `ADMIN_USER_CODE_INVALID`
 
-## Test Evidence
+## TDD Evidence
+
+| cycle id | result | evidence |
+| --- | --- | --- |
+| TDD-UM-02 | pass | Invalid PATCH status fails RED before implementation and returns `ADMIN_USER_STATUS_INVALID` after the fix. |
+| TDD-UM-06 | pass | Malformed explicit `userCode` fails RED before implementation and returns `ADMIN_USER_CODE_INVALID` after the fix. |
+
+## Changed Paths
+
+- tron-backend/src/domain/user/mod.rs
+- tron-backend/src/http/admin/users/mod.rs
+- tron-backend/tests/user_management_lifecycle.rs
+- docs/features/user-management-model/reports/agents/backend-fix-status-contract.md
+
+## Commands
 
 | command | status | notes |
 | --- | --- | --- |
@@ -44,3 +64,7 @@
 - Remaining backend validation contract gap: resolved in this worker branch.
 - Invalid PATCH status now returns HTTP 400 with `ADMIN_USER_STATUS_INVALID`.
 - Malformed explicit create `userCode` now returns HTTP 400 with `ADMIN_USER_CODE_INVALID`.
+
+## Blockers
+
+- None.

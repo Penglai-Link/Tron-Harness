@@ -42,7 +42,7 @@ Evolution alignment:
 ## UI Acceptance
 
 - [ ] AC-UM-01 `/admin/users` shows user records with `Active` and `Archived` status support and excludes archived users by default.
-- [ ] AC-UM-01 `/admin/users/detail?user=<userCode>` loads detail by stable `userCode`.
+- [ ] AC-UM-01 `/admin/users/detail?userCode=<userCode>` loads detail by stable `userCode`.
 - [ ] AC-UM-02 User detail can edit profile fields and restore archived users to active.
 - [ ] AC-UM-03 User detail can replace fixed role-code assignments without embedding role permission matrix behavior.
 - [ ] AC-UM-04 User detail can replace space-code assignments without embedding space hierarchy or space-detail management behavior.
