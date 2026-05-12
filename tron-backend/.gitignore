@@ -2,3 +2,37 @@
 target/
 **/*.rs.bk
 *.pdb
+
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Local configuration overrides
+config/local.*
+config/*.local.*
+*.local.yaml
+*.local.yml
+*.local.toml
+
+# Runtime data
+data/
+runtime/
+tmp/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite3-*
+
+# Test and coverage output
+coverage/
+tarpaulin-report.html
+cobertura.xml
+lcov.info
+*.profraw
+
+# Generated diagnostics
+flamegraph.svg
+perf.data
+perf.data.old
