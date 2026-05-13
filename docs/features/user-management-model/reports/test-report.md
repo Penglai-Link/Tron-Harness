@@ -93,6 +93,9 @@
 | TDD-UM-13 | detail mutation endpoint tests pass after FE-GREEN-02 and FE-VERIFY-02 | @ref:orchestration/integration-log.md#EVT-020 | verified |
 | TDD-UM-14 | statistic endpoints return persisted `data.count` envelopes after BE-GREEN-05 | @ref:orchestration/integration-log.md#EVT-033 | green_integrated |
 | TDD-UM-15 | list/search and deterministic seed consistency pass after BE-GREEN-05 | @ref:orchestration/integration-log.md#EVT-033 | green_integrated |
+| TDD-UM-16 | statistic-card browser tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
+| TDD-UM-17 | directory User/Contact/Space Assignments layout tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
+| TDD-UM-18 | `/admin/users/new` create-page navigation and submit tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
 
 ## Refactor And Regression Evidence
 
