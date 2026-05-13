@@ -3,9 +3,9 @@
 ## Summary
 
 - feature_slug: user-management-model
-- total_changes: 2
+- total_changes: 3
 - first_evolution: EV-04
-- last_evolution: EV-05
+- last_evolution: EV-06
 
 ## Change History
 
@@ -41,12 +41,28 @@ Record every evolution event. `spec/feature-spec.md` remains the current authori
 - old_evidence_status: retained for existing statistics/create/layout behavior, superseded only for All Status frontend query evidence
 - user_approval: approved_with_defaults from 2026-05-13 continue after REVIEW-04 finding
 
+### EV-06
+
+- change_id: EV-06
+- timestamp: 2026-05-13
+- trigger: user_request
+- change_type: requirement_expansion, acceptance_change, test_scope_change, task_execution_change
+- gate_reopened: Phase 1A paused before downstream user-management edits
+- diff_summary: |
+    What changed vs before:
+    - User-management interaction feedback and long-running Export/Save loading behavior were not part of the closed EV-05 scope.
+    + User requested long-running Export/Save loading animation and required all user interaction feedback to use a UI-framework Toast/Snackbar bubble floating top-right with auto-dismiss. Repository scan found no unified wrapper, so user-management is paused and new feature `shared-ui-feedback` is opened first.
+- downstream_impact: user-management spec/test/task changes are deferred until `docs/features/shared-ui-feedback` delivers the shared feedback primitive
+- old_evidence_status: retained; no user-management production code or tests changed for EV-06
+- user_approval: approved_with_defaults from 2026-05-13 user instruction to pause current feature and create a new feature when no unified wrapper exists
+
 ## Downstream Artifact Migration
 
 - EV-04 adds replacement RED rows `TEST-RED-15` and `TEST-RED-16`, GREEN rows `BE-GREEN-05` and `FE-GREEN-03`, VERIFY row `TEST-VERIFY-02`, and REVIEW row `REVIEW-04`.
 - EV-05 adds follow-up RED row `TEST-RED-17`, GREEN row `FE-FIX-03`, VERIFY row `TEST-VERIFY-03`, and REVIEW row `REVIEW-05` for the `All Status` include-archived contract.
+- EV-06 creates the separate prerequisite feature workspace `docs/features/shared-ui-feedback` and intentionally adds no user-management task rows until that prerequisite is completed.
 - Prior evidence for `TDD-UM-01..13` remains retained unless the changed behavior explicitly supersedes current-page-derived statistics or inline create ownership.
 
 ## Residual Risks
 
-- Browser evidence for EV-05 is pending until the RED/GREEN/VERIFY worker sequence completes.
+- User-management loading animation and Toast/Snackbar migration remain paused until `shared-ui-feedback` is delivered.
