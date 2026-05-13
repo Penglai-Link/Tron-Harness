@@ -804,7 +804,7 @@ test("TDD-UM-12: reset response contract rejects missing temporary password with
 });
 
 test("TDD-UM-12: reset password copy feedback is visible and close removes the temporary password", async ({ page }) => {
-  await routeAdminUsers(page, [alexUserRecord]);
+  await routeResetPasswordApi(page, []);
 
   await page.goto(`${frontendBaseUrl}/admin/users/detail?userCode=USER_ALEX_JOHNSON`);
 
@@ -812,6 +812,7 @@ test("TDD-UM-12: reset password copy feedback is visible and close removes the t
   await page.getByRole("button", { name: "Confirm Reset" }).click();
   const temporaryPassword = page.locator("code").first();
   await expect(temporaryPassword).toBeVisible();
+  await expect(temporaryPassword).toHaveText(backendTemporaryPassword);
 
   await page.getByRole("button", { name: "Copy" }).click();
   const copyFeedback = page.getByText("Temporary password copied", { exact: true });
