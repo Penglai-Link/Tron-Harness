@@ -24,8 +24,10 @@
 | TEST-RED-14 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-024 | done |
 | TEST-RED-15 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-031 | done |
 | TEST-RED-16 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-030 | done |
+| TEST-RED-17 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-041 | done |
 | TEST-VERIFY-01 | pass | @ref:orchestration/integration-log.md#EVT-007 | done |
-| TEST-VERIFY-02 | pass | @ref:reports/agents/verify-consistency-refactor.md | done |
+| TEST-VERIFY-02 | pass | @ref:reports/agents/verify-consistency-refactor.md#agent-report-testverify-consistency-refactor | done |
+| TEST-VERIFY-03 | ready | @ref:tasks/test-task.md#task-table | ready |
 
 ## Cycle Evidence
 
@@ -50,6 +52,8 @@
 | TDD-UM-16 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-030 | done |
 | TDD-UM-17 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-030 | done |
 | TDD-UM-18 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-030 | done |
+| TDD-UM-09 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-041 | done |
+| TDD-UM-15 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-041 | done |
 
 ## RED Failure Evidence
 
@@ -74,6 +78,7 @@
 | TDD-UM-16 | Focused Playwright test fails because statistic cards do not call the four statistic endpoints and still derive visible values from directory records. | @ref:orchestration/integration-log.md#EVT-030 |
 | TDD-UM-17 | Focused Playwright test fails because `Contact` is absent, `User` still contains username/email, and `Space Links` remains visible. | @ref:orchestration/integration-log.md#EVT-030 |
 | TDD-UM-18 | Focused Playwright test fails because Add User remains on `/admin/users` instead of navigating to `/admin/users/new`. | @ref:orchestration/integration-log.md#EVT-030 |
+| TDD-UM-09/TDD-UM-15 | Focused Playwright test fails because All Status sends `status=""`, omits `includeArchived=true`, and does not render the archived row from the include-archived response. | @ref:orchestration/integration-log.md#EVT-041 |
 
 ## GREEN Pass Evidence
 
