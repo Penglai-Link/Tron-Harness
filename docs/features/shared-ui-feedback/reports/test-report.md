@@ -7,7 +7,7 @@ Generated framework. Fill only TDD result deltas, evidence links, blockers, and 
 ## Test Task Evidence
 
 - @ref:tasks/test-task.md#TEST-RED-01: integrated RED result; evidence: @ref:reports/agents/test-red-feedback-runtime.md#red-evidence and @ref:orchestration/integration-log.md#EVT-003; status: red_failed_as_expected.
-- @ref:tasks/test-task.md#TEST-VERIFY-01: pending result; evidence: pending; status: ready.
+- @ref:tasks/test-task.md#TEST-VERIFY-01: VERIFY integrated; evidence: @ref:reports/agents/test-verify-feedback-runtime.md#verify-evidence and @ref:orchestration/integration-log.md#EVT-005; status: verify_passed.
 
 ## Cycle Evidence
 
@@ -32,17 +32,17 @@ Generated framework. Fill only TDD result deltas, evidence links, blockers, and 
 
 ## Refactor And Regression Evidence
 
-- @ref:spec/test-plan.md#command-index: pending evidence.
+- @ref:spec/test-plan.md#command-index: `rtk make fe-check` and focused `shared-ui-feedback.spec.ts` passed during VERIFY; see @ref:reports/agents/test-verify-feedback-runtime.md#commands.
 
 ## Command Cost Evidence
 
 - fast commands: pending.
-- medium commands: pending.
-- slow/browser commands: pending evidence or explicit not-applicable rationale.
+- medium commands: `rtk make fe-check` passed in GREEN and VERIFY.
+- slow/browser commands: focused Playwright VERIFY passed once after integrated GREEN; review should reuse @ref:reports/agents/test-verify-feedback-runtime.md#browser-verify-evidence unless stale.
 
 ## Browser Verify Evidence
 
-- BVE-MODULE-01 | tdd: TDD-MODULE-01 | ia: IA-MODULE-01 | command: pending | clicks: pending | inputs: pending | network_assertions: pending | visible_feedback_assertions: pending | artifacts: pending | status: pending.
+- BVE-FEEDBACK-01 | tdd: @ref:spec/test-plan.md#TDD-FEEDBACK-02 and @ref:spec/test-plan.md#TDD-FEEDBACK-03 | ia: @ref:spec/acceptance.md#interaction-acceptance-checklist | command: `rtk npm --prefix tron-frontend exec playwright -- test shared-ui-feedback.spec.ts --reporter=line` | clicks: `Export Scan`, `Export Scan`, `Dismiss toast` | inputs: none, button-only path | network_assertions: no backend/API request expected for frontend-only local React state | visible_feedback_assertions: `/shared-shell-preview` heading, `role="status"` toast text, top-right placement, auto-dismiss, and manual dismiss | artifacts: Playwright line reporter `3 passed (6.0s)` | status: verify_passed.
 
 ## Changed Test Assets
 
@@ -50,13 +50,13 @@ Generated framework. Fill only TDD result deltas, evidence links, blockers, and 
 
 ## Worktree Evidence
 
-- @ref:orchestration/worktree-plan.md#agent-worktrees: RED worker `test/red-feedback-runtime` merged through @ref:orchestration/integration-log.md#EVT-003.
+- @ref:orchestration/worktree-plan.md#agent-worktrees: RED worker `test/red-feedback-runtime` merged through @ref:orchestration/integration-log.md#EVT-003; VERIFY worker `test/verify-feedback-runtime` merged through @ref:orchestration/integration-log.md#EVT-005.
 
 ## Acceptance Mapping
 
-- @ref:spec/acceptance.md#AC-FEEDBACK-01: pending evidence.
-- @ref:spec/acceptance.md#AC-FEEDBACK-02: pending evidence.
-- @ref:spec/acceptance.md#AC-FEEDBACK-03: pending evidence.
+- @ref:spec/acceptance.md#AC-FEEDBACK-01: verify_passed through provider/hook/export/root mount source assertions and `rtk make fe-check`.
+- @ref:spec/acceptance.md#AC-FEEDBACK-02: verify_passed through browser click and top-right `role="status"` toast evidence.
+- @ref:spec/acceptance.md#AC-FEEDBACK-03: verify_passed through browser auto-dismiss and manual `Dismiss toast` evidence.
 
 ## Blockers
 
