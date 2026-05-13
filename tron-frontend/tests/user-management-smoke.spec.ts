@@ -323,7 +323,15 @@ async function routeCreateUserApi(page: Page, requests: CapturedAdminRequest[]) 
   });
 }
 
-async function routeResetPasswordApi(page: Page, requests: CapturedAdminRequest[]) {
+async function routeResetPasswordApi(
+  page: Page,
+  requests: CapturedAdminRequest[],
+  resetData: unknown = {
+    userCode: "USER_ALEX_JOHNSON",
+    temporaryPassword: backendTemporaryPassword,
+    passwordResetRequired: true,
+  },
+) {
   await page.route("**/api/v1/admin/users**", async (route) => {
     const captured = captureAdminRequest(route);
     requests.push(captured);
@@ -334,11 +342,7 @@ async function routeResetPasswordApi(page: Page, requests: CapturedAdminRequest[
     }
 
     if (captured.method === "POST" && captured.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON/password/reset") {
-      await fulfillJson(route, successEnvelope({
-        userCode: "USER_ALEX_JOHNSON",
-        temporaryPassword: backendTemporaryPassword,
-        passwordResetRequired: true,
-      }));
+      await fulfillJson(route, successEnvelope(resetData));
       return;
     }
 
@@ -766,6 +770,37 @@ test("TDD-UM-12: reset password calls backend reset endpoint and renders returne
     { after: resetStart },
   );
   await expect(page.getByText(backendTemporaryPassword)).toBeVisible();
+});
+
+test("TDD-UM-12: reset response contract rejects missing temporary password without client fallback", async ({ page }) => {
+  const requests: CapturedAdminRequest[] = [];
+  await routeResetPasswordApi(page, requests, {
+    userCode: "USER_ALEX_JOHNSON",
+    passwordResetRequired: true,
+  });
+
+  await page.goto(`${frontendBaseUrl}/admin/users/detail?userCode=USER_ALEX_JOHNSON`);
+
+  await expect(page.getByRole("heading", { name: "Alex Johnson" })).toBeVisible();
+  await page.getByRole("button", { name: "Reset Password" }).click();
+  const resetStart = requests.length;
+  await page.getByRole("button", { name: "Confirm Reset" }).click();
+  await expectCapturedAdminRequest(
+    requests,
+    "POST /api/v1/admin/users/USER_ALEX_JOHNSON/password/reset",
+    (request) => request.method === "POST" &&
+      request.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON/password/reset",
+    { after: resetStart },
+  );
+
+  await expect.soft(
+    page.getByText(/temporary password.*not returned|reset response/i),
+    "Malformed reset success envelopes should produce a visible contract error.",
+  ).toBeVisible({ timeout: redExpectationTimeout });
+  await expect.soft(
+    page.locator("body"),
+    "Malformed reset success envelopes must not display a client-generated TRON fallback password.",
+  ).not.toContainText(/TRON-/);
 });
 
 test("TDD-UM-12: reset password copy feedback is visible and close removes the temporary password", async ({ page }) => {
