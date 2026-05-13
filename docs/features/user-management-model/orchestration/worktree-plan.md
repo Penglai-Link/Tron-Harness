@@ -7,14 +7,14 @@
 - git_skill: eliteforge-git-feature-oriented-lite-spec
 - main_branch: feature/clouds3n/user-management-model/base
 - main_worktree_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/base
-- status: complete
+- status: in_progress
 
 ## Repository State
 
 - main_repo_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/base
 - default_branch: master
 - base_commit: 74d87fe
-- working_tree_status: Workflow B user-management refactor complete; reset-response contract fix integrated and final validation recorded
+- working_tree_status: Workflow B consistency refactor reopened for statistic APIs, list/search consistency, seed data, directory layout, and create sub-page routing
 
 ## Multi-Agent Base Branch
 
@@ -45,6 +45,12 @@ One row is one actual git worktree checkout. Resolve `agent id`, `subtask name`,
 | review | interaction-gap-review | 019e1f7a-b170-75d3-ac54-74b03968f440 | Popper | REVIEW-03 | review | feature/clouds3n/user-management-model/review/interaction-gap-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/interaction-gap-review | feature/clouds3n/user-management-model/base | integrated |
 | test | reset-contract-red | 019e1f82-2e38-7bf3-bce5-1e731fa2b375 | Socrates | TEST-RED-14 | red | feature/clouds3n/user-management-model/test/reset-contract-red | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/reset-contract-red | feature/clouds3n/user-management-model/base | integrated |
 | frontend | fix-reset-contract | 019e1f88-6504-7a21-a360-20ba75ebf5db | Gibbs | FE-FIX-02 | green | feature/clouds3n/user-management-model/frontend/fix-reset-contract | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/fix-reset-contract | feature/clouds3n/user-management-model/base | integrated |
+| test | red-statistics-consistency | pending-spawn | pending-spawn | TEST-RED-15 | red | feature/clouds3n/user-management-model/test/red-statistics-consistency | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/red-statistics-consistency | feature/clouds3n/user-management-model/base | planned |
+| test | red-frontend-consistency | pending-spawn | pending-spawn | TEST-RED-16 | red | feature/clouds3n/user-management-model/test/red-frontend-consistency | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/red-frontend-consistency | feature/clouds3n/user-management-model/base | planned |
+| backend | statistics-consistency | pending-spawn | pending-spawn | BE-GREEN-05 | green | feature/clouds3n/user-management-model/backend/statistics-consistency | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/backend/statistics-consistency | feature/clouds3n/user-management-model/base | planned |
+| frontend | user-consistency-refactor | pending-spawn | pending-spawn | FE-GREEN-03 | green | feature/clouds3n/user-management-model/frontend/user-consistency-refactor | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/user-consistency-refactor | feature/clouds3n/user-management-model/base | planned |
+| test | verify-consistency-refactor | pending-spawn | pending-spawn | TEST-VERIFY-02 | verify | feature/clouds3n/user-management-model/test/verify-consistency-refactor | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/verify-consistency-refactor | feature/clouds3n/user-management-model/base | planned |
+| review | consistency-refactor-review | pending-spawn | pending-spawn | REVIEW-04 | review | feature/clouds3n/user-management-model/review/consistency-refactor-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/consistency-refactor-review | feature/clouds3n/user-management-model/base | planned |
 
 ## Branch And Path Rules
 
@@ -57,7 +63,7 @@ One row is one actual git worktree checkout. Resolve `agent id`, `subtask name`,
 
 ## Merge Strategy
 
-Retained execution order is `test/red-suite` -> `database/schema-migrations` + `backend/green-user-api` + `frontend/green-admin-users` -> `test/verify-regression` -> `review/final-review` -> targeted fix workers for final-review findings -> `review/post-fix-final-review`. Workflow B evolution resumed with `test/red-interaction-gaps` -> `frontend/green-interaction-gaps` -> `test/verify-interaction-gaps` -> `review/interaction-gap-review` -> `test/reset-contract-red` -> `frontend/fix-reset-contract`. The lead agent merged each worker branch into `feature/clouds3n/user-management-model/base` and recorded events in `orchestration/integration-log.md`.
+Retained execution order is `test/red-suite` -> `database/schema-migrations` + `backend/green-user-api` + `frontend/green-admin-users` -> `test/verify-regression` -> `review/final-review` -> targeted fix workers for final-review findings -> `review/post-fix-final-review`. Prior Workflow B evolution resumed with `test/red-interaction-gaps` -> `frontend/green-interaction-gaps` -> `test/verify-interaction-gaps` -> `review/interaction-gap-review` -> `test/reset-contract-red` -> `frontend/fix-reset-contract`. Current consistency refactor resumes with `test/red-statistics-consistency` + `test/red-frontend-consistency` -> `backend/statistics-consistency` -> `frontend/user-consistency-refactor` -> `test/verify-consistency-refactor` -> `review/consistency-refactor-review`. The lead agent merges each worker branch into `feature/clouds3n/user-management-model/base` and records events in `orchestration/integration-log.md`.
 
 ## Conflict Rules
 

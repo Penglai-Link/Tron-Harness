@@ -28,6 +28,10 @@ MVP permission boundary:
 | method | path | purpose | auth | acceptance ids |
 | --- | --- | --- | --- | --- |
 | GET | `/api/v1/admin/users` | List users with status, role-code, space-code, search, sort, and pagination filters. | MVP: no permission enforcement | AC-UM-01 |
+| GET | `/api/v1/admin/users/statistics/total-users` | Count all persisted users across all statuses. | MVP: no permission enforcement | AC-UM-09 |
+| GET | `/api/v1/admin/users/statistics/active-users` | Count persisted users with `Active` status only. | MVP: no permission enforcement | AC-UM-09 |
+| GET | `/api/v1/admin/users/statistics/role-assignments` | Count persisted user-role assignment rows. | MVP: no permission enforcement | AC-UM-09 |
+| GET | `/api/v1/admin/users/statistics/space-assignments` | Count persisted user-space assignment rows. | MVP: no permission enforcement | AC-UM-09 |
 | POST | `/api/v1/admin/users` | Create user with password state, fixed role-code assignments, and space-code assignments. | MVP: no permission enforcement | AC-UM-02, AC-UM-03, AC-UM-04, AC-UM-05 |
 | GET | `/api/v1/admin/users/{userCode}` | Read user detail by stable user code. | MVP: no permission enforcement | AC-UM-01 |
 | PATCH | `/api/v1/admin/users/{userCode}` | Update user profile fields and status. | MVP: no permission enforcement | AC-UM-02 |
@@ -101,6 +105,14 @@ Query parameters:
 }
 ```
 
+Query semantics:
+
+- Default list excludes `Archived` users.
+- `status=Archived` returns only real archived users.
+- `includeArchived=true` returns all statuses unless a `status` filter is also provided.
+- `data.total` is the filtered database count before pagination, not the current page length.
+- Statistics endpoints use the same persisted repository state as list/search, so counts do not derive from frontend current-page records.
+
 Response body:
 
 ```json
@@ -136,6 +148,31 @@ Response body:
         "updatedAt": "2026-05-11T08:00:00Z"
       }
     ]
+  }
+}
+```
+
+### GET /api/v1/admin/users/statistics/{statisticName}
+
+Statistic endpoints are intentionally split one endpoint per dashboard card. Each endpoint returns the uniform response envelope, and `data.count` is the canonical frontend value.
+
+Supported paths:
+
+```text
+/api/v1/admin/users/statistics/total-users
+/api/v1/admin/users/statistics/active-users
+/api/v1/admin/users/statistics/role-assignments
+/api/v1/admin/users/statistics/space-assignments
+```
+
+Response body:
+
+```json
+{
+  "code": "SUCCESS",
+  "message": "ok",
+  "data": {
+    "count": 7
   }
 }
 ```
@@ -639,8 +676,11 @@ All errors follow the same uniform response body. HTTP status is carried by the 
 Frontend responsibilities:
 
 - Render User Management pages only.
+- Read dashboard statistic card values from the four statistic APIs through dedicated client methods/hooks.
 - Stop treating Role Matrix, Permission Matrix, Space Management, or Audit Logs as part of this feature.
 - Use `userCode`, `roleCodes`, and `spaceCodes` in page state and fixtures.
+- Navigate from `/admin/users` Add User to `/admin/users/new`; create form submission belongs to `CreateUserPage`.
+- Render directory columns with display name only in `User` and email/phone in `Contact`.
 - Display password reset state without exposing password hash or generated temporary password after the one-time result dialog closes.
 - Keep mock fixtures deterministic.
 
@@ -653,7 +693,8 @@ Backend responsibilities:
 - Return generated temporary passwords once and never persist plaintext temporary passwords.
 - Persist user-role and user-space many-to-many assignments.
 - Archive users logically.
-- Return stable pagination envelopes and uniform response bodies.
+- Return stable pagination envelopes, statistic count envelopes, and uniform response bodies.
+- Keep list totals and statistic counts backed by filtered database counts.
 - Avoid using role or permission data as API authorization gates in the MVP.
 
 Shared type expectation:
@@ -674,6 +715,7 @@ Shared type expectation:
 ## Mock Or Adapter Expectations
 
 - Update `tron-frontend/src/domain/admin/mock/data.ts` user fixtures to `Active` and `Archived` only.
+- Expand mock and backend seed fixtures enough to prove pagination and count consistency across active users, archived users, role assignments, and space assignments.
 - Update fixed role fixtures to `Admin`, `Workspace Admin`, `Developer`, and `Viewer` labels with stable role codes.
 - Keep space assignments as `spaceCode` references, with labels supplied by future Space module fixtures if needed.
 - Remove user-management dependencies on role matrix and permission-domain mocks.
@@ -681,4 +723,4 @@ Shared type expectation:
 
 ## Open Decisions
 
-- Confirm the adjusted custom TDD scope in `spec/test-scope.md`.
+- None.

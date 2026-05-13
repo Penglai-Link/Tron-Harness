@@ -9,6 +9,8 @@
 
 This Phase 1 draft was revised from the user's confirmation items. The feature is now scoped to the User Management module only. Role Management and Space Management are separate admin modules and are referenced by stable codes, not designed here. The frontend API boundary may be redesigned to match that module split. Confirmed MVP decisions include backend-generated temporary passwords, bcrypt password hashing, `Archived -> Active` restore support, and the `/api/v1/admin/users` API namespace.
 
+Workflow B update on 2026-05-13 reopens the requirement/API/test-plan gate for the user-management consistency refactor. The change adds dedicated backend statistic APIs, aligns list/search query semantics with statistics, expands deterministic seed data, moves create behavior to `/admin/users/new`, and tightens directory table layout.
+
 ## Feature Identity
 
 - feature_slug: user-management-model
@@ -24,6 +26,7 @@ Design the backend-ready model and API boundary for the Tron User Management mod
 The user management page owns:
 
 - User directory listing, filtering, pagination, export, and navigation to user detail.
+- Dashboard statistic cards backed by dedicated count APIs instead of the current page of directory records.
 - User creation and profile maintenance.
 - User logical deletion through `Archived` status.
 - User password management and password reset.
@@ -44,6 +47,9 @@ Goals:
 - Manage user password hashes and simplified MVP password reset.
 - Support many-to-many user-role assignments by `role_code`.
 - Support many-to-many user-space assignments by `space_code`.
+- Return dedicated statistic counts for total users, active users, role assignment rows, and space assignment rows through one endpoint per card.
+- Keep list/search totals and statistics based on the same repository query semantics: default list excludes archived users, `status=Archived` returns real archived users only, and `includeArchived=true` returns all statuses.
+- Keep deterministic seed data large enough to verify active/archived pagination, role-assignment counts, and space-assignment counts.
 - Support the fixed MVP role set: `Admin`, `Workspace Admin`, `Developer`, and `Viewer`.
 - Keep permission and role definitions outside this feature while requiring Role and Permission modules to expose stable code fields.
 - Redesign frontend admin user interfaces or DTOs if the current frontend shape mixes user, role, and space responsibilities.
@@ -105,10 +111,27 @@ User directory:
 
 - Route: `/admin/users`
 - Data source: redesigned `GET /api/v1/admin/users`
+- Statistic data sources:
+  - `GET /api/v1/admin/users/statistics/total-users`
+  - `GET /api/v1/admin/users/statistics/active-users`
+  - `GET /api/v1/admin/users/statistics/role-assignments`
+  - `GET /api/v1/admin/users/statistics/space-assignments`
 - Primary data: user id, user code, username, first name, last name, display name, email, phone, status, role codes, space codes, password state, last active time, created/updated timestamps.
 - Interactions: search, status filter, pagination, export, create user, open user detail, archive user.
 - Default filter: show `Active` users unless status is explicitly requested.
+- Directory table layout:
+  - `User` column shows only the full name/display name linked to detail.
+  - `Contact` column shows email and phone number.
+  - Assignment card label is `Space Assignments`, not `Space Links`.
+- Add User button navigates to `/admin/users/new`; the directory page no longer owns the create form.
 - Empty state: no matching users after filters.
+
+Create user:
+
+- Route: `/admin/users/new`
+- Data source: `POST /api/v1/admin/users`
+- Primary data: user code, username, first name, last name, display name, email, optional phone, role codes, and space codes.
+- Interactions: enter create form fields, submit create request, show visible success/error feedback, and navigate back to `/admin/users` after a successful create.
 
 User detail:
 
@@ -136,7 +159,7 @@ Out-of-scope admin pages:
 - IA-UM-02: `/admin/users` status filter sends `status` or explicit archive inclusion intent to `GET /api/v1/admin/users`.
 - IA-UM-03: `/admin/users` pagination sends `current` and `size` to `GET /api/v1/admin/users` and renders the paged response envelope.
 - IA-UM-04: `/admin/users` Export creates a CSV/download artifact for the current directory result set.
-- IA-UM-05: `/admin/users` Add User opens a form and submits `POST /api/v1/admin/users`.
+- IA-UM-05: `/admin/users` Add User navigates to `/admin/users/new`.
 - IA-UM-06: `/admin/users` opens `/admin/users/detail?userCode=<userCode>` using a stable user code.
 - IA-UM-07: user archive from directory or detail calls the archive endpoint and refreshes visible state.
 - IA-UM-08: user detail profile update calls `PATCH /api/v1/admin/users/{userCode}`.
@@ -145,6 +168,9 @@ Out-of-scope admin pages:
 - IA-UM-11: user detail restore/reactivate calls the restore endpoint and refreshes visible state.
 - IA-UM-12: user detail reset-password confirmation calls `POST /api/v1/admin/users/{userCode}/password/reset`.
 - IA-UM-13: reset result Copy writes the one-time temporary password and renders visible operator feedback.
+- IA-UM-14: `/admin/users` statistic cards call their four dedicated statistic APIs and render `data.count` values.
+- IA-UM-15: `/admin/users` directory renders display name only in `User`, email/phone in `Contact`, and `Space Assignments` copy.
+- IA-UM-16: `/admin/users/new` submits `POST /api/v1/admin/users`, handles the uniform response body, and returns visible success feedback.
 
 ## Domain Model
 
@@ -185,6 +211,7 @@ Domain services and policies:
 - `CommonSnowflakeIdProvider`: dependency on `docs/features/common-snowflake-id` for generating 64-bit IDs for users, assignments, and reset events. User Management does not own the generator implementation.
 - `UserUniquenessPolicy`: enforces unique `userCode`, `username`, and email through repository/database checks.
 - `UserProfilePolicy`: validates required profile fields and normalizes username/email where applicable.
+- `UserStatisticsPolicy`: counts total users, active users, role assignment rows, and space assignment rows from persisted repository state.
 - `FixedRoleCodePolicy`: validates MVP role codes without owning role definitions.
 - `SpaceCodePolicy`: validates only the shape and non-empty value of `spaceCode`; canonical space existence belongs to the future Space module.
 - `PasswordHashingService`: hashes initial and reset passwords with bcrypt.
@@ -240,6 +267,7 @@ State transitions:
 Frontend modules currently involved:
 
 - `tron-frontend/src/domain/admin/pages/UsersPage.tsx`
+- `tron-frontend/src/domain/admin/pages/CreateUserPage.tsx`
 - `tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx`
 - `tron-frontend/src/domain/admin/model/AdminModel.ts`
 - `tron-frontend/src/domain/admin/api/adminApi.ts`
@@ -258,6 +286,7 @@ Backend modules to be created in later phases:
 
 - Rust user domain models, repositories, HTTP handlers, validation services, password hashing/reset service, and SQLite migrations.
 - Integration adapters for external Role and Space modules through `role_code` and `space_code`.
+- Repository statistics methods and HTTP routes for count-only dashboard cards.
 
 Shared boundary:
 

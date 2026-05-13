@@ -16,6 +16,7 @@ Evolution alignment:
 - affected_files: `spec/acceptance.md`, `spec/test-scope.md`, `spec/test-plan.md`, `tasks/test-task.md`, `tasks/frontend-task.md`, `orchestration/worktree-plan.md`, `orchestration/integration-log.md`, `reports/test-report.md`, `reports/frontend-result.md`, `reports/review-report.md`
 - retained_decisions: selected custom MVP scope, AC-UM-01 through AC-UM-08, no API permission enforcement, no invitation email delivery, backend-generated temporary password reset
 - superseded_shape: the broad `TDD-UM-08` browser smoke is retained for model/route alignment but superseded for search/pagination backend requests, Export download, Add User submit, Reset API call, and visible Copy feedback
+- consistency_refactor_shape: `TDD-UM-14..18` add backend statistic/list consistency and frontend statistic/create-layout evidence.
 - pause_resume_decision: prior worker branches are integrated; new dispatch must use new Lite Spec worktrees and preserve existing evidence as retained but incomplete for evolved interactions
 
 ## Scope Decision
@@ -54,6 +55,11 @@ Minimum recommended TDD boundary:
 - TDD-UM-11: frontend Export creates a real CSV/download artifact for the current directory result set.
 - TDD-UM-12: frontend reset confirmation calls the backend reset API, displays the backend-generated temporary password once, and Copy produces visible feedback.
 - TDD-UM-13: frontend detail profile, assignment, archive, and restore interactions call backend mutation endpoints and refresh visible state from responses.
+- TDD-UM-14: backend statistic endpoints return uniform envelopes with `data.count` for total users, active users, role assignments, and space assignments.
+- TDD-UM-15: backend list/search semantics and deterministic seed data prove default archived exclusion, archived-only search, include-archived all-status behavior, and filtered database totals before pagination.
+- TDD-UM-16: frontend statistic cards call the four statistic APIs and render `data.count`, not `users.records` aggregates.
+- TDD-UM-17: frontend User Directory shows display name only in `User`, email/phone in `Contact`, and `Space Assignments` copy.
+- TDD-UM-18: frontend Add User navigates to `/admin/users/new`, where `CreateUserPage` owns `POST /api/v1/admin/users` submit behavior.
 
 ## Included Test Layers
 
@@ -103,6 +109,9 @@ Minimum recommended TDD boundary:
 | AC-UM-06 | api-contract/database | Stable public code fields and decimal-string ID contract. | yes | RED proves contract drift; GREEN proves DTO/schema stability. | `rtk cargo test --manifest-path tron-backend/Cargo.toml stable_code_contracts` | Includes future `permissionCode` contract note boundary. |
 | AC-UM-07 | integration/review | API authorization boundary must stay decoupled from role/permission data. | yes | RED or review check proves accidental coupling is detectable; GREEN confirms no permission gate in MVP. | `rtk cargo test --manifest-path tron-backend/Cargo.toml user_api_authorization_boundary` | Security-hardening phase may later supersede this rule. |
 | AC-UM-08 | frontend-component/browser-runtime/review | Frontend user-only model alignment and route continuity. | yes | RED proves old mixed model remains; GREEN proves adapted model + runtime journey. | `rtk make fe-check`; `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | Role/space pages stay independent modules. |
+| AC-UM-09 | integration/api-contract/browser-runtime | Dedicated statistics API counts and frontend card rendering must be database-backed. | yes | RED proves missing statistic endpoints or current-page-derived card values; GREEN proves backend counts and browser network/card assertions. | `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_statistics`; `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | One endpoint per card; `data.count` is canonical. |
+| AC-UM-10 | frontend-component/browser-runtime | Directory table layout and create sub-page routing are visible admin workflows. | yes | RED proves missing Contact column or missing `/admin/users/new`; GREEN proves route, submit, and visible feedback. | `rtk make fe-check`; `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | Add User does not open an inline form on the directory page. |
+| AC-UM-11 | integration/database/api-contract | List/search totals and seed data must be truthful database counts. | yes | RED proves archived/search/includeArchived totals or fixture counts are wrong; GREEN proves filtered totals before pagination. | `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_statistics`; `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_list_detail` | Shared repository semantics drive list and statistics. |
 
 ## TDD Cycle Matrix
 
@@ -123,6 +132,11 @@ Define the intended TDD cycles before task breakdown. Phase 1 does not need fina
 | TDD-UM-11 | AC-UM-01, AC-UM-08 | browser-runtime/frontend-component | Add browser tests that click Export, wait for a download, and inspect CSV headers/content. | Failure proves Export only emits a notice and does not produce an artifact. | `npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "export users"` | Same focused smoke passes with filename and CSV content evidence. | blocked_until_tests_created |
 | TDD-UM-12 | AC-UM-05, AC-UM-08 | browser-runtime/api-adapter | Add browser tests that confirm reset, assert the reset API request, show the backend temporary password, Copy it, see visible feedback, close the result, and verify no re-reveal. | Failure proves reset is client-generated or Copy feedback is not visible to operators. | `npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "reset password"` | Same focused smoke passes with network, result-dialog, copy-feedback, and no-reveal evidence. | blocked_until_tests_created |
 | TDD-UM-13 | AC-UM-02, AC-UM-03, AC-UM-04, AC-UM-08 | browser-runtime/api-adapter | Add browser tests that edit profile fields, toggle role/space assignments, archive, restore, and assert backend mutation requests plus response-driven UI updates. | Failure proves detail interactions only mutate local state or lack profile edit capability. | `npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "detail mutations"` | Same focused smoke passes with PATCH/PUT/archive/restore request and visible-state evidence. | blocked_until_tests_created |
+| TDD-UM-14 | AC-UM-09 | integration/api-contract | Add backend tests for four statistic endpoints and `data.count` response shape. | Failure proves statistic routes or count DTOs are missing. | `cargo test --manifest-path tron-backend/Cargo.toml user_management_statistics` | Same command passes with total, active, role-assignment, and space-assignment counts. | blocked_until_tests_created |
+| TDD-UM-15 | AC-UM-11, AC-UM-01 | integration/database | Add backend tests for default active-only list, archived-only search, includeArchived all-status list, pagination total, and deterministic seed size. | Failure proves list/search semantics or fixture counts drift from statistics. | `cargo test --manifest-path tron-backend/Cargo.toml user_management_statistics user_management_list_detail` | Same command passes with filtered database totals and deterministic seed evidence. | blocked_until_tests_created |
+| TDD-UM-16 | AC-UM-09 | browser-runtime/api-adapter | Add browser tests that intercept the four statistic APIs and prove each card renders `data.count` independent of current page records. | Failure proves dashboard cards still derive from `users.records`. | `npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "statistics cards"` | Same focused smoke passes with four GET requests and card assertions. | blocked_until_tests_created |
+| TDD-UM-17 | AC-UM-10 | browser-runtime/frontend-component | Add browser tests for User fullname-only rendering, Contact email/phone rendering, and `Space Assignments` label. | Failure proves directory table layout or card copy still uses the old shape. | `npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "directory columns"` | Same focused smoke passes with visible column/copy assertions. | blocked_until_tests_created |
+| TDD-UM-18 | AC-UM-10, AC-UM-02 | browser-runtime/api-adapter | Add browser tests for Add User navigation to `/admin/users/new`, create submit, uniform response handling, and visible success feedback. | Failure proves create behavior remains inline or route/page registration is missing. | `npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "create user page"` | Same focused smoke passes with route, POST payload, and visible feedback assertions. | blocked_until_tests_created |
 
 ## Regression Command Candidates
 
@@ -150,6 +164,9 @@ Define the intended TDD cycles before task breakdown. Phase 1 does not need fina
 | AC-UM-02 | TDD-UM-10 | Failing browser test for missing Add User form/API submit. | Passing browser evidence for create request and visible directory update. |
 | AC-UM-05 | TDD-UM-12 | Failing browser test for client-generated reset or invisible Copy feedback. | Passing browser evidence for reset API call, visible result/copy feedback, and no re-reveal after close. |
 | AC-UM-02, AC-UM-03, AC-UM-04 | TDD-UM-13 | Failing browser test for local-only detail profile, assignment, archive, or restore mutations. | Passing browser evidence for backend mutation requests and response-driven detail state. |
+| AC-UM-09 | TDD-UM-14, TDD-UM-16 | Failing backend/API or browser tests for missing statistic endpoints and current-page-derived cards. | Passing backend count tests and browser statistic-card network/render evidence. |
+| AC-UM-10 | TDD-UM-17, TDD-UM-18 | Failing browser tests for old directory columns or missing create sub-page route. | Passing browser evidence for directory layout, Add User navigation, and create submit. |
+| AC-UM-11 | TDD-UM-15 | Failing backend tests for archived/list/includeArchived totals or insufficient deterministic fixtures. | Passing backend evidence for filtered database totals and expanded seed data. |
 
 ## Open Decisions
 
