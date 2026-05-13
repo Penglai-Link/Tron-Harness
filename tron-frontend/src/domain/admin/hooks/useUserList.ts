@@ -73,7 +73,7 @@ export function useUserList(options: UseUserListOptions = {}): UserListResult {
   const current = options.current ?? 1;
   const search = options.search ?? "";
   const size = options.size ?? 15;
-  const status = options.status;
+  const status = options.status === "All" ? "All" : options.status || "Active";
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const mockPage = useMemo(

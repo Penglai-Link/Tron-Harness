@@ -185,12 +185,15 @@ export async function requestAdminApi<T>(endpoint: string, options: AdminRequest
 }
 
 export async function fetchAdminUserPage(query: UserListQuery, signal?: AbortSignal): Promise<AdminPage<UserRecord>> {
+  const statusQueryParams: AdminEndpointParams = query.status === "All"
+    ? { includeArchived: true }
+    : { status: query.status || "Active" };
   const payload = await requestAdminApi<unknown>(adminApiEndpoints.listUsers, {
     queryParams: {
       current: query.current,
       search: query.search ?? "",
       size: query.size,
-      status: query.status === "All" ? "" : query.status,
+      ...statusQueryParams,
     },
     signal,
   });
