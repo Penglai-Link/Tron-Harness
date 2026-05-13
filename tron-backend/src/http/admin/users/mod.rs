@@ -11,7 +11,7 @@ use crate::{
     app::AppState,
     domain::user::{
         CreateUserCommand, ListUsersQuery, PagedUsers, PasswordResetResult, UpdateUserCommand,
-        User, UserError, UserService,
+        User, UserError, UserService, UserStatistics,
     },
     response::ApiResponse,
 };
@@ -19,6 +19,22 @@ use crate::{
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/admin/users", get(list_users).post(create_user))
+        .route(
+            "/api/v1/admin/users/statistics/total-users",
+            get(total_users),
+        )
+        .route(
+            "/api/v1/admin/users/statistics/active-users",
+            get(active_users),
+        )
+        .route(
+            "/api/v1/admin/users/statistics/role-assignments",
+            get(role_assignments),
+        )
+        .route(
+            "/api/v1/admin/users/statistics/space-assignments",
+            get(space_assignments),
+        )
         .route(
             "/api/v1/admin/users/{user_code}",
             get(get_user).patch(patch_user),
@@ -48,6 +64,35 @@ async fn list_users(
 ) -> Response {
     match users.list_users(query) {
         Ok(page) => Json(ApiResponse::success(PagedUsersDto::from(page))).into_response(),
+        Err(error) => user_error_response(error),
+    }
+}
+
+async fn total_users(State(users): State<UserService>) -> Response {
+    statistic_response(users, |statistics| statistics.total_users)
+}
+
+async fn active_users(State(users): State<UserService>) -> Response {
+    statistic_response(users, |statistics| statistics.active_users)
+}
+
+async fn role_assignments(State(users): State<UserService>) -> Response {
+    statistic_response(users, |statistics| statistics.role_assignments)
+}
+
+async fn space_assignments(State(users): State<UserService>) -> Response {
+    statistic_response(users, |statistics| statistics.space_assignments)
+}
+
+fn statistic_response(
+    users: UserService,
+    select_count: impl FnOnce(UserStatistics) -> usize,
+) -> Response {
+    match users.statistics() {
+        Ok(statistics) => Json(ApiResponse::success(CountDto {
+            count: select_count(statistics),
+        }))
+        .into_response(),
         Err(error) => user_error_response(error),
     }
 }
@@ -151,6 +196,12 @@ struct PagedUsersDto {
     size: usize,
     total: usize,
     records: Vec<UserListItemDto>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CountDto {
+    count: usize,
 }
 
 impl From<PagedUsers> for PagedUsersDto {
