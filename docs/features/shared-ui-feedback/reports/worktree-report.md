@@ -6,7 +6,7 @@ Generated framework. Fill only worktree deltas, integration result, blockers, an
 
 ## Worktree Registry
 
-- @ref:orchestration/worktree-plan.md#agent-worktrees: `test/red-feedback-runtime` completed and merged; `frontend/green-toast-provider`, `test/verify-feedback-runtime`, and `review/final-review` remain ready.
+- @ref:orchestration/worktree-plan.md#agent-worktrees: `test/red-feedback-runtime` completed and merged; `frontend/green-toast-provider` completed and merged; `test/verify-feedback-runtime` and `review/final-review` remain ready.
 
 ## Branch Registry
 
@@ -17,6 +17,7 @@ Generated framework. Fill only worktree deltas, integration result, blockers, an
 - @ref:orchestration/integration-log.md#EVT-001: spec planning validation passed.
 - @ref:orchestration/integration-log.md#EVT-002: Lite Spec base worktree provisioned.
 - @ref:orchestration/integration-log.md#EVT-003: RED worker branch merged into base.
+- @ref:orchestration/integration-log.md#EVT-004: GREEN frontend branch merged into base.
 
 ## Validation Evidence
 

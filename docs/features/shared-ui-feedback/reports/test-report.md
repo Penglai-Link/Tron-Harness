@@ -25,10 +25,10 @@ Generated framework. Fill only TDD result deltas, evidence links, blockers, and 
 
 ## GREEN Pass Evidence
 
-- @ref:spec/test-plan.md#TDD-FEEDBACK-01: pending GREEN evidence.
-- @ref:spec/test-plan.md#TDD-FEEDBACK-02: pending GREEN evidence.
-- @ref:spec/test-plan.md#TDD-FEEDBACK-03: pending GREEN evidence.
-- @ref:spec/test-plan.md#TDD-FEEDBACK-04: pending GREEN evidence.
+- @ref:spec/test-plan.md#TDD-FEEDBACK-01: `rtk make fe-check` passed after shared Toast provider, hook, export, and app root provider mount; see @ref:reports/agents/frontend-green-toast-provider.md#tdd-evidence.
+- @ref:spec/test-plan.md#TDD-FEEDBACK-02: focused Playwright passed after `Export Scan` rendered the required top-right status toast; see @ref:reports/agents/frontend-green-toast-provider.md#tdd-evidence.
+- @ref:spec/test-plan.md#TDD-FEEDBACK-03: focused Playwright passed after auto-dismiss and manual dismissal behavior; see @ref:reports/agents/frontend-green-toast-provider.md#tdd-evidence.
+- @ref:spec/test-plan.md#TDD-FEEDBACK-04: changed-path review stayed frontend-only plus report fragments; see @ref:reports/agents/frontend-green-toast-provider.md#tdd-evidence.
 
 ## Refactor And Regression Evidence
 
