@@ -18,11 +18,11 @@ Workflow B evolution reopened the frontend interaction evidence boundary. Prior 
 | TEST-RED-06 | fail_expected_red | @ref:tasks/test-task.md#TEST-RED-06 | done |
 | TEST-RED-07 | fail_expected_red | @ref:tasks/test-task.md#TEST-RED-07 | done |
 | TEST-RED-08 | fail_expected_red | @ref:tasks/test-task.md#TEST-RED-08 | done |
-| TEST-RED-09 | pending | @ref:tasks/test-task.md#TEST-RED-09 | ready |
-| TEST-RED-10 | pending | @ref:tasks/test-task.md#TEST-RED-10 | ready |
-| TEST-RED-11 | pending | @ref:tasks/test-task.md#TEST-RED-11 | ready |
-| TEST-RED-12 | pending | @ref:tasks/test-task.md#TEST-RED-12 | ready |
-| TEST-RED-13 | pending | @ref:tasks/test-task.md#TEST-RED-13 | ready |
+| TEST-RED-09 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
+| TEST-RED-10 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
+| TEST-RED-11 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
+| TEST-RED-12 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
+| TEST-RED-13 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
 | TEST-VERIFY-01 | pass | @ref:orchestration/integration-log.md#EVT-007 | done |
 
 ## Cycle Evidence
@@ -37,11 +37,11 @@ Workflow B evolution reopened the frontend interaction evidence boundary. Prior 
 | TDD-UM-06 | fail_expected_red | @ref:orchestration/integration-log.md#validation-after-integration | done |
 | TDD-UM-07 | fail_expected_red | @ref:orchestration/integration-log.md#validation-after-integration | done |
 | TDD-UM-08 | fail_expected_red | @ref:orchestration/integration-log.md#validation-after-integration | done |
-| TDD-UM-09 | pending_red | @ref:spec/test-plan.md#TDD-UM-09 | ready |
-| TDD-UM-10 | pending_red | @ref:spec/test-plan.md#TDD-UM-10 | ready |
-| TDD-UM-11 | pending_red | @ref:spec/test-plan.md#TDD-UM-11 | ready |
-| TDD-UM-12 | pending_red | @ref:spec/test-plan.md#TDD-UM-12 | ready |
-| TDD-UM-13 | pending_red | @ref:spec/test-plan.md#TDD-UM-13 | ready |
+| TDD-UM-09 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
+| TDD-UM-10 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
+| TDD-UM-11 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
+| TDD-UM-12 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
+| TDD-UM-13 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
 
 ## RED Failure Evidence
 
@@ -55,6 +55,11 @@ Workflow B evolution reopened the frontend interaction evidence boundary. Prior 
 | TDD-UM-06 | `stable_code_contracts` cannot verify stable-code contracts because list/detail routes are absent (404). | @ref:orchestration/integration-log.md#validation-after-integration |
 | TDD-UM-07 | `user_api_authorization_boundary` fails on missing endpoints (404) before auth-boundary assertions can pass. | @ref:orchestration/integration-log.md#validation-after-integration |
 | TDD-UM-08 | Playwright smoke fails on model/route/status mismatches (`userCode`, status set, detail query key). | @ref:orchestration/integration-log.md#validation-after-integration |
+| TDD-UM-09 | Focused Playwright test fails because directory search/status/pagination do not issue parameterized list requests. | @ref:orchestration/integration-log.md#EVT-016 |
+| TDD-UM-10 | Focused Playwright test fails because Add User does not open a create form or submit `POST /api/v1/admin/users`. | @ref:orchestration/integration-log.md#EVT-016 |
+| TDD-UM-11 | Focused Playwright test fails because Export does not produce a CSV download. | @ref:orchestration/integration-log.md#EVT-016 |
+| TDD-UM-12 | Focused Playwright tests fail because reset does not call the backend endpoint and Copy feedback is `sr-only`. | @ref:orchestration/integration-log.md#EVT-016 |
+| TDD-UM-13 | Focused Playwright tests fail because profile edit is missing and role/space/archive/restore requests are not sent. | @ref:orchestration/integration-log.md#EVT-016 |
 
 ## GREEN Pass Evidence
 
@@ -87,6 +92,8 @@ Workflow B evolution reopened the frontend interaction evidence boundary. Prior 
 | tron-backend/tests/stable_code_contracts.rs | added | @ref:orchestration/integration-log.md#integration-events |
 | tron-backend/tests/user_api_authorization_boundary.rs | added | @ref:orchestration/integration-log.md#integration-events |
 | tron-frontend/tests/user-management-smoke.spec.ts | added | @ref:orchestration/integration-log.md#integration-events |
+| tron-frontend/tests/user-management-smoke.spec.ts | evolved with interaction-gap RED tests | @ref:orchestration/integration-log.md#EVT-016 |
+| docs/features/user-management-model/reports/agents/red-interaction-gaps.md | added RED worker report | @ref:orchestration/integration-log.md#EVT-016 |
 
 ## Worktree Evidence
 
