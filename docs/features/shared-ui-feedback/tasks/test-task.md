@@ -3,7 +3,7 @@
 ## Execution Contract
 
 - feature_slug: shared-ui-feedback
-- status: ready
+- status: done
 - canonical_report_target: reports/test-report.md
 - main_agent_owned: false
 
@@ -15,8 +15,8 @@ RED rows create tests before production behavior. GREEN rows depend on matching 
 
 | id | phase | owner | depends | scope | ac | status |
 | --- | --- | --- | --- | --- | --- | --- |
-| TEST-RED-01 | red | test | none | tron-frontend/tests/shared-ui-feedback.spec.ts | AC-FEEDBACK-01, AC-FEEDBACK-02, AC-FEEDBACK-03 | ready |
-| TEST-VERIFY-01 | verify | test | FE-GREEN-01 | tron-frontend/tests/shared-ui-feedback.spec.ts; docs/features/shared-ui-feedback/reports/test-report.md | AC-FEEDBACK-01, AC-FEEDBACK-02, AC-FEEDBACK-03 | ready |
+| TEST-RED-01 | red | test | none | tron-frontend/tests/shared-ui-feedback.spec.ts | AC-FEEDBACK-01, AC-FEEDBACK-02, AC-FEEDBACK-03 | done |
+| TEST-VERIFY-01 | verify | test | FE-GREEN-01 | tron-frontend/tests/shared-ui-feedback.spec.ts; docs/features/shared-ui-feedback/reports/test-report.md | AC-FEEDBACK-01, AC-FEEDBACK-02, AC-FEEDBACK-03 | done |
 
 ## Worktree Notes
 

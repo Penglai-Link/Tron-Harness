@@ -3,7 +3,7 @@
 ## Execution Contract
 
 - feature_slug: shared-ui-feedback
-- status: ready
+- status: done
 - canonical_report_target: reports/frontend-result.md
 - main_agent_owned: false
 
@@ -15,7 +15,7 @@ Frontend GREEN implementation starts only after `TEST-RED-01` is integrated into
 
 | id | phase | owner | depends | scope | ac | status |
 | --- | --- | --- | --- | --- | --- | --- |
-| FE-GREEN-01 | green | frontend | TEST-RED-01 | tron-frontend/src/shared/ui/Toast.tsx; tron-frontend/src/shared/index.ts; tron-frontend/src/app/App.tsx; tron-frontend/src/domain/shared-shell/pages/SharedShellPreviewPage.tsx | AC-FEEDBACK-01, AC-FEEDBACK-02, AC-FEEDBACK-03 | ready |
+| FE-GREEN-01 | green | frontend | TEST-RED-01 | tron-frontend/src/shared/ui/Toast.tsx; tron-frontend/src/shared/index.ts; tron-frontend/src/app/App.tsx; tron-frontend/src/domain/shared-shell/pages/SharedShellPreviewPage.tsx | AC-FEEDBACK-01, AC-FEEDBACK-02, AC-FEEDBACK-03 | done |
 
 ## Worktree Notes
 

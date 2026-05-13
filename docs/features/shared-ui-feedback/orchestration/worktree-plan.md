@@ -7,7 +7,7 @@
 - git_skill: eliteforge-git-feature-oriented-lite-spec
 - main_branch: feature/clouds3n/shared-ui-feedback/base
 - main_worktree_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/base
-- status: ready
+- status: complete
 
 ## Repository State
 
@@ -31,7 +31,7 @@
 | test | red-feedback-runtime | 019e2214-4586-7610-bec7-2dc094890798 | Gibbs | TEST-RED-01 | red | feature/clouds3n/shared-ui-feedback/test/red-feedback-runtime | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/test/red-feedback-runtime | feature/clouds3n/shared-ui-feedback/base | merged_red |
 | frontend | green-toast-provider | 019e221c-9607-7732-9b77-f94acf2db265 | Cicero | FE-GREEN-01 | green | feature/clouds3n/shared-ui-feedback/frontend/green-toast-provider | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/frontend/green-toast-provider | feature/clouds3n/shared-ui-feedback/base | merged_green |
 | test | verify-feedback-runtime | 019e2225-8f0c-76c0-a25a-2f8b898b56f9 | Ampere | TEST-VERIFY-01 | verify | feature/clouds3n/shared-ui-feedback/test/verify-feedback-runtime | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/test/verify-feedback-runtime | feature/clouds3n/shared-ui-feedback/base | merged_verify |
-| review | final-review | pending-spawn | pending-spawn | REVIEW-01 | review | feature/clouds3n/shared-ui-feedback/review/final-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/review/final-review | feature/clouds3n/shared-ui-feedback/base | ready |
+| review | final-review | 019e222b-5f7f-7233-8a00-84a88def76a1 | Harvey | REVIEW-01 | review | feature/clouds3n/shared-ui-feedback/review/final-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/review/final-review | feature/clouds3n/shared-ui-feedback/base | merged_review |
 
 ## Branch And Path Rules
 

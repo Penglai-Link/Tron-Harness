@@ -41,7 +41,7 @@ No persisted data. Toast messages must avoid exposing secrets, password values, 
 
 Playwright tests use a visible shared-shell action and static toast message text.
 
-## Database Validation Commands
+## Validation Commands
 
 Not applicable.
 

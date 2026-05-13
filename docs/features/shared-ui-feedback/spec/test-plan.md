@@ -55,6 +55,12 @@ Use frontend-first TDD. RED introduces Playwright/source assertions proving ther
 - GREEN/VERIFY evidence: changed-path review confirms frontend-only scope.
 - Status: ready
 
+## Test Layers
+
+- Frontend compile/typecheck/build: `rtk make fe-check`.
+- Browser runtime interaction: focused `shared-ui-feedback.spec.ts` Playwright test.
+- Backend/database layers: not applicable for this frontend-only feature.
+
 ## Unit Test Plan
 
 Not applicable.
