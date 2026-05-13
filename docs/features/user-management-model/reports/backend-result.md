@@ -15,6 +15,7 @@ Backend GREEN, VERIFY, post-review backend fix branches, and the SQLite runtime 
 | BE-VERIFY-01 | backend regression verified via `rtk make be-test` after verify merge | @ref:orchestration/integration-log.md#EVT-007 | done |
 | BE-FIX-01 | create-user validation and duplicate checks merged via `076e5fa` | @ref:orchestration/integration-log.md#EVT-009 | done |
 | BE-FIX-02 | invalid status and malformed explicit userCode contract checks merged via `d7abc7e` | @ref:orchestration/integration-log.md#EVT-011 | done |
+| BE-GREEN-05 | persisted statistic endpoints, list/search count consistency, and expanded deterministic seed data merged via `ccfde52` | @ref:orchestration/integration-log.md#EVT-033 | done |
 
 ## TDD Evidence
 
@@ -30,6 +31,8 @@ Backend GREEN, VERIFY, post-review backend fix branches, and the SQLite runtime 
 | TDD-UM-02 | post-review duplicate/profile/status validation fixes pass | @ref:orchestration/integration-log.md#EVT-009 | verified |
 | TDD-UM-06 | post-review malformed explicit userCode rejection passes | @ref:orchestration/integration-log.md#EVT-011 | verified |
 | TDD-UM-02 | configured SQLite runtime persistence passes | @ref:orchestration/integration-log.md#validation-after-integration | verified |
+| TDD-UM-14 | statistic endpoints return uniform `data.count` envelopes | @ref:orchestration/integration-log.md#EVT-033 | green_integrated |
+| TDD-UM-15 | list/search/archive/includeArchived totals and deterministic seed counts pass | @ref:orchestration/integration-log.md#EVT-033 | green_integrated |
 
 ## Worktree Evidence
 
@@ -54,6 +57,9 @@ Backend GREEN, VERIFY, post-review backend fix branches, and the SQLite runtime 
 | `tron-backend/tests/user_management_lifecycle.rs` | added configured SQLite persistence regression coverage | @ref:orchestration/integration-log.md#validation-after-integration |
 | `docs/features/user-management-model/reports/agents/backend-fix-create-validation.md` | added backend validation fix evidence report | @ref:orchestration/integration-log.md#EVT-009 |
 | `docs/features/user-management-model/reports/agents/backend-fix-status-contract.md` | added backend status-contract fix evidence report | @ref:orchestration/integration-log.md#EVT-011 |
+| `tron-backend/src/domain/user/mod.rs` | added repository-backed statistic counts and expanded deterministic assignment seeds | @ref:orchestration/integration-log.md#EVT-033 |
+| `tron-backend/src/http/admin/users/mod.rs` | added four statistic routes returning uniform `data.count` envelopes | @ref:orchestration/integration-log.md#EVT-033 |
+| `docs/features/user-management-model/reports/agents/backend-statistics-consistency.md` | added backend statistics consistency worker evidence report | @ref:reports/agents/backend-statistics-consistency.md#agent-report-backendstatistics-consistency |
 
 ## Commands
 
@@ -62,6 +68,7 @@ Backend GREEN, VERIFY, post-review backend fix branches, and the SQLite runtime 
 | @ref:spec/test-plan.md#command-matrix | focused backend tests, schema contract tests, and `rtk make be-test` passed after merge | @ref:orchestration/integration-log.md#validation-after-integration |
 | @ref:spec/test-plan.md#command-matrix | post-review backend fix branches reran lifecycle tests and `rtk make be-test` | @ref:orchestration/integration-log.md#EVT-011 |
 | @ref:spec/test-plan.md#command-matrix | `rtk cargo test --manifest-path tron-backend/Cargo.toml --test user_management_lifecycle create_user_persists_to_configured_sqlite_database` passed | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/test-plan.md#command-matrix | `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_statistics` and `rtk make be-test` passed after BE-GREEN-05 | @ref:orchestration/integration-log.md#EVT-033 |
 
 ## Acceptance Mapping
 
@@ -74,6 +81,8 @@ Backend GREEN, VERIFY, post-review backend fix branches, and the SQLite runtime 
 | @ref:spec/acceptance.md#AC-UM-05 | backend password reset verified | @ref:orchestration/integration-log.md#EVT-007 |
 | @ref:spec/acceptance.md#AC-UM-06 | backend stable-code contract verified | @ref:orchestration/integration-log.md#EVT-007 |
 | @ref:spec/acceptance.md#AC-UM-07 | backend authorization-boundary verified | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-09 | backend statistic API counts verified | @ref:orchestration/integration-log.md#EVT-033 |
+| @ref:spec/acceptance.md#AC-UM-11 | backend list/search and seed consistency verified | @ref:orchestration/integration-log.md#EVT-033 |
 
 ## Blockers
 

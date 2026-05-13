@@ -11,6 +11,8 @@ Final review, post-fix final review, interaction-gap review, reset-contract RED,
 | REVIEW-01 | findings_recorded | @ref:orchestration/integration-log.md#EVT-008 |
 | REVIEW-02 | pass | @ref:orchestration/integration-log.md#EVT-012 |
 | REVIEW-03 | pass | @ref:orchestration/integration-log.md#EVT-022 |
+| REVIEW-04 | findings_recorded | @ref:reports/agents/consistency-refactor-review.md#findings |
+| REVIEW-05 | ready | @ref:tasks/review-task.md#task-table |
 
 ## Feature Docs Validation
 
@@ -110,10 +112,10 @@ Final review, post-fix final review, interaction-gap review, reset-contract RED,
 ## REVIEW-04 Consistency Refactor Review
 
 - status: findings_recorded
-- evidence: @ref:reports/agents/consistency-refactor-review.md
+- evidence: @ref:reports/agents/consistency-refactor-review.md#findings
 - scope: statistic API/count envelopes, list/search consistency, frontend statistic cards, directory layout, create sub-page routing, TDD traceability, worktree/report consistency, and residual risks.
 - findings:
   - Medium: `All Status` currently maps to `status=` and does not send `includeArchived=true`, so the frontend does not exercise the approved all-status list contract.
   - Low: canonical `backend-result.md` and `frontend-result.md` underclaim BE-GREEN-05 and FE-GREEN-03 even though task, integration, test, and worker evidence exists.
-- slow_browser_reuse: reused @ref:reports/agents/verify-consistency-refactor.md because full `user-management-smoke` evidence passed after the integrated consistency refactor, includes concrete browser/network assertions, and no implementation paths changed after that VERIFY evidence.
+- slow_browser_reuse: reused @ref:reports/agents/verify-consistency-refactor.md#browser-verify-evidence because full `user-management-smoke` evidence passed after the integrated consistency refactor, includes concrete browser/network assertions, and no implementation paths changed after that VERIFY evidence.
 - validation_blocker: `validate_feature_docs.py --phase reports` failed inside the installed helper with `NameError: name 'TASK_FILES' is not defined` before project validation.

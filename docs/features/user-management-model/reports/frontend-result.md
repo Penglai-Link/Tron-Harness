@@ -14,6 +14,8 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | FE-GREEN-02 | frontend implementation for directory query parameters, Export download, Add User create flow, detail mutation API calls, backend reset API, and visible Copy feedback integrated via `65b2339` | @ref:orchestration/integration-log.md#EVT-018 | done |
 | FE-VERIFY-02 | independent browser/runtime verification for evolved interaction evidence integrated via `72fbc95` | @ref:orchestration/integration-log.md#EVT-020 | done |
 | FE-FIX-02 | reset-response contract error handling integrated via `02eefac` after worker commit `42eecb4` | @ref:orchestration/integration-log.md#EVT-026 | done |
+| FE-GREEN-03 | statistic cards, directory Contact layout, Space Assignments copy, and `/admin/users/new` create page integrated via `2d67ba4` | @ref:orchestration/integration-log.md#EVT-035 | done |
+| FE-FIX-03 | All Status include-archived frontend follow-up is in progress | @ref:orchestration/integration-log.md#EVT-042 | in_progress |
 
 ## TDD Evidence
 
@@ -29,6 +31,10 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | TDD-UM-12 | reset API/copy feedback RED tests pass after FE-GREEN-02 | @ref:orchestration/integration-log.md#EVT-018 | green_integrated |
 | TDD-UM-13 | detail mutation RED tests pass after FE-GREEN-02 | @ref:orchestration/integration-log.md#EVT-018 | green_integrated |
 | TDD-UM-12 | reset-response contract RED test passes after FE-FIX-02 and no client-generated fallback password is shown for malformed success envelopes | @ref:orchestration/integration-log.md#EVT-026 | green_integrated |
+| TDD-UM-16 | statistic-card tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
+| TDD-UM-17 | directory User/Contact/Space Assignments layout tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
+| TDD-UM-18 | create-page navigation and submit tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
+| TDD-UM-09 | All Status include-archived fix is in progress after TEST-RED-17 | @ref:orchestration/integration-log.md#EVT-042 | in_progress |
 
 ## Worktree Evidence
 
@@ -37,6 +43,7 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | @ref:orchestration/worktree-plan.md#agent-worktrees | frontend branch merged to base | @ref:orchestration/integration-log.md#EVT-006 | integrated |
 | @ref:orchestration/worktree-plan.md#agent-worktrees | frontend detail fallback fix branch merged to base | @ref:orchestration/integration-log.md#EVT-010 | integrated |
 | @ref:orchestration/worktree-plan.md#agent-worktrees | frontend reset contract fix branch merged to base | @ref:orchestration/integration-log.md#EVT-026 | integrated |
+| @ref:orchestration/worktree-plan.md#agent-worktrees | frontend consistency refactor branch merged to base | @ref:orchestration/integration-log.md#EVT-035 | integrated |
 
 ## Changed Paths
 
@@ -58,6 +65,11 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | `tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx` | added visible API-mode reset-response contract error when backend omits `temporaryPassword` | @ref:orchestration/integration-log.md#EVT-026 |
 | `tron-frontend/tests/user-management-smoke.spec.ts` | strengthened reset copy-feedback happy path and reset-response contract coverage | @ref:orchestration/integration-log.md#EVT-026 |
 | `docs/features/user-management-model/reports/agents/frontend-fix-reset-contract.md` | added FE-FIX-02 worker evidence report | @ref:orchestration/integration-log.md#EVT-026 |
+| `tron-frontend/src/domain/admin/api/adminApi.ts` | added statistic API client methods and create-page API boundary | @ref:orchestration/integration-log.md#EVT-035 |
+| `tron-frontend/src/domain/admin/hooks/useUserStatistics.ts` | added statistic-card hook reading `data.count` | @ref:orchestration/integration-log.md#EVT-035 |
+| `tron-frontend/src/domain/admin/pages/CreateUserPage.tsx` | moved create form behavior to `/admin/users/new` | @ref:orchestration/integration-log.md#EVT-035 |
+| `tron-frontend/src/domain/admin/pages/UsersPage.tsx` | rendered display-name-only User column, Contact column, Space Assignments copy, and Add User navigation | @ref:orchestration/integration-log.md#EVT-035 |
+| `docs/features/user-management-model/reports/agents/frontend-user-consistency-refactor.md` | added FE-GREEN-03 worker evidence report | @ref:reports/agents/frontend-user-consistency-refactor.md#agent-report-frontenduser-consistency-refactor |
 
 ## Commands
 
@@ -68,6 +80,7 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | @ref:spec/test-plan.md#command-index | FE-GREEN-02 reran focused and full user-management browser smoke | @ref:orchestration/integration-log.md#EVT-018 |
 | @ref:spec/test-plan.md#command-index | FE-VERIFY-02 independently reran `rtk make fe-check` and full user-management browser smoke | @ref:orchestration/integration-log.md#EVT-020 |
 | @ref:spec/test-plan.md#command-index | FE-FIX-02 reran `rtk make fe-check`, focused reset-response contract smoke, and full user-management browser smoke | @ref:orchestration/integration-log.md#EVT-026 |
+| @ref:spec/test-plan.md#command-index | FE-GREEN-03 reran `rtk make fe-check` and focused consistency refactor browser checks | @ref:orchestration/integration-log.md#EVT-035 |
 
 ## Acceptance Mapping
 
@@ -81,6 +94,9 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | @ref:spec/acceptance.md#AC-UM-08 | frontend model/API boundary verified | @ref:orchestration/integration-log.md#EVT-007 |
 | @ref:spec/acceptance.md#AC-UM-05 | malformed reset success envelopes no longer reveal a generated fallback password | @ref:orchestration/integration-log.md#EVT-026 |
 | @ref:spec/acceptance.md#AC-UM-08 | reset contract UI error is visible to operators | @ref:orchestration/integration-log.md#EVT-026 |
+| @ref:spec/acceptance.md#AC-UM-09 | frontend statistic cards verified | @ref:orchestration/integration-log.md#EVT-035 |
+| @ref:spec/acceptance.md#AC-UM-10 | frontend directory layout and create page verified | @ref:orchestration/integration-log.md#EVT-035 |
+| @ref:spec/acceptance.md#AC-UM-11 | All Status include-archived follow-up in progress | @ref:orchestration/integration-log.md#EVT-042 |
 
 ## Blockers
 

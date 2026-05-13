@@ -108,7 +108,7 @@
 | command or cycle ref | result | evidence link |
 | --- | --- | --- |
 | @ref:spec/test-plan.md#command-matrix | GREEN and VERIFY backend/frontend/docs checks pass | @ref:orchestration/integration-log.md#validation-after-integration |
-| TEST-VERIFY-02 | `rtk make be-test`, `rtk make fe-check`, full `user-management-smoke`, task validator, and `rtk git diff --check` pass for consistency refactor verification. | @ref:reports/agents/verify-consistency-refactor.md |
+| TEST-VERIFY-02 | `rtk make be-test`, `rtk make fe-check`, full `user-management-smoke`, task validator, and `rtk git diff --check` pass for consistency refactor verification. | @ref:reports/agents/verify-consistency-refactor.md#commands |
 
 ## Browser Verify Evidence
 
@@ -122,7 +122,7 @@
 ## Consistency Refactor Browser Verify Evidence
 
 - status: passed
-- evidence: @ref:reports/agents/verify-consistency-refactor.md
+- evidence: @ref:reports/agents/verify-consistency-refactor.md#browser-verify-evidence
 - clicks: Next page; Add User; Create User/Save User; Export; Reset Password; Confirm Reset; Copy; Close; Edit Profile; Save Profile/Update Profile; Viewer role chip; DATA space chip; Archive User; Restore User.
 - inputs: search `server-search`; status filter `Archived`; create fields for `USER_MAYA_SINGH`; profile edit values `Alex Backend Updated` and `alex.backend.updated@example.com`.
 - network_assertions: verified list search/status/pagination queries, `POST /api/v1/admin/users`, four `/api/v1/admin/users/statistics/*` requests, reset POST, profile PATCH, role/space PUT, archive POST, and restore POST.
@@ -148,7 +148,7 @@
 | tron-backend/tests/user_management_statistics.rs | added backend statistics/list consistency RED tests | @ref:orchestration/integration-log.md#EVT-031 |
 | docs/features/user-management-model/reports/agents/red-frontend-consistency.md | added frontend consistency RED worker report | @ref:orchestration/integration-log.md#EVT-030 |
 | tron-frontend/tests/user-management-smoke.spec.ts | evolved with frontend consistency RED tests | @ref:orchestration/integration-log.md#EVT-030 |
-| docs/features/user-management-model/reports/agents/verify-consistency-refactor.md | added consistency refactor VERIFY worker report | @ref:reports/agents/verify-consistency-refactor.md |
+| docs/features/user-management-model/reports/agents/verify-consistency-refactor.md | added consistency refactor VERIFY worker report | @ref:reports/agents/verify-consistency-refactor.md#agent-report-testverify-consistency-refactor |
 
 ## Worktree Evidence
 
@@ -168,9 +168,9 @@
 | @ref:spec/acceptance.md#AC-UM-06 | RED, GREEN, and VERIFY coverage complete | @ref:orchestration/integration-log.md#EVT-007 |
 | @ref:spec/acceptance.md#AC-UM-07 | RED, GREEN, and VERIFY coverage complete | @ref:orchestration/integration-log.md#EVT-007 |
 | @ref:spec/acceptance.md#AC-UM-08 | RED, GREEN, and VERIFY coverage complete | @ref:orchestration/integration-log.md#EVT-007 |
-| @ref:spec/acceptance.md#AC-UM-09 | RED, GREEN, and VERIFY coverage complete | @ref:reports/agents/verify-consistency-refactor.md |
-| @ref:spec/acceptance.md#AC-UM-10 | RED, GREEN, and VERIFY coverage complete | @ref:reports/agents/verify-consistency-refactor.md |
-| @ref:spec/acceptance.md#AC-UM-11 | RED, GREEN, and VERIFY coverage complete | @ref:reports/agents/verify-consistency-refactor.md |
+| @ref:spec/acceptance.md#AC-UM-09 | RED, GREEN, and VERIFY coverage complete | @ref:reports/agents/verify-consistency-refactor.md#acceptance-evidence |
+| @ref:spec/acceptance.md#AC-UM-10 | RED, GREEN, and VERIFY coverage complete | @ref:reports/agents/verify-consistency-refactor.md#acceptance-evidence |
+| @ref:spec/acceptance.md#AC-UM-11 | RED, GREEN, and VERIFY coverage complete | @ref:reports/agents/verify-consistency-refactor.md#acceptance-evidence |
 
 ## Blockers
 
