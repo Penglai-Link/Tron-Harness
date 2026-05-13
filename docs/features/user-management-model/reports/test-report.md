@@ -23,6 +23,7 @@ Workflow B evolution reopened the frontend interaction evidence boundary. Prior 
 | TEST-RED-11 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
 | TEST-RED-12 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
 | TEST-RED-13 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
+| TEST-RED-14 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-024 | done |
 | TEST-VERIFY-01 | pass | @ref:orchestration/integration-log.md#EVT-007 | done |
 
 ## Cycle Evidence
@@ -42,6 +43,7 @@ Workflow B evolution reopened the frontend interaction evidence boundary. Prior 
 | TDD-UM-11 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
 | TDD-UM-12 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
 | TDD-UM-13 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
+| TDD-UM-12 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-024 | done |
 
 ## RED Failure Evidence
 
@@ -60,6 +62,7 @@ Workflow B evolution reopened the frontend interaction evidence boundary. Prior 
 | TDD-UM-11 | Focused Playwright test fails because Export does not produce a CSV download. | @ref:orchestration/integration-log.md#EVT-016 |
 | TDD-UM-12 | Focused Playwright tests fail because reset does not call the backend endpoint and Copy feedback is `sr-only`. | @ref:orchestration/integration-log.md#EVT-016 |
 | TDD-UM-13 | Focused Playwright tests fail because profile edit is missing and role/space/archive/restore requests are not sent. | @ref:orchestration/integration-log.md#EVT-016 |
+| TDD-UM-12 | Reset response contract test fails because missing `temporaryPassword` displays a client-generated fallback instead of a visible contract error. | @ref:orchestration/integration-log.md#EVT-024 |
 
 ## GREEN Pass Evidence
 
@@ -94,6 +97,7 @@ Workflow B evolution reopened the frontend interaction evidence boundary. Prior 
 | tron-frontend/tests/user-management-smoke.spec.ts | added | @ref:orchestration/integration-log.md#integration-events |
 | tron-frontend/tests/user-management-smoke.spec.ts | evolved with interaction-gap RED tests | @ref:orchestration/integration-log.md#EVT-016 |
 | docs/features/user-management-model/reports/agents/red-interaction-gaps.md | added RED worker report | @ref:orchestration/integration-log.md#EVT-016 |
+| docs/features/user-management-model/reports/agents/reset-contract-red.md | added reset contract RED worker report | @ref:orchestration/integration-log.md#EVT-024 |
 
 ## Worktree Evidence
 
