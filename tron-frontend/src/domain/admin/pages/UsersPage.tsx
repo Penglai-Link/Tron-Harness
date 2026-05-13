@@ -116,7 +116,7 @@ export function UsersPage() {
     current: currentPage,
     search: query,
     size: pageSize,
-    status: statusFilter === ALL_FILTER ? "" : statusFilter,
+    status: statusFilter,
   });
   const statistics = useUserStatistics();
   const statusOptions = adminUserStatusOptions;
