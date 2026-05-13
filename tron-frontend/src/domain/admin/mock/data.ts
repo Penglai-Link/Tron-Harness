@@ -3,6 +3,7 @@ import type {
   AuditLogRecord,
   RoleRecord,
   UserRecord,
+  UserStatistics,
 } from "@/domain/admin/model/AdminModel";
 
 const auditLogs: AuditLogRecord[] = [
@@ -155,4 +156,13 @@ export function listRoles() {
 
 export function listUsers() {
   return users;
+}
+
+export function getUserStatistics(): UserStatistics {
+  return {
+    activeUsers: users.filter((user) => user.status === "Active").length,
+    roleAssignments: users.reduce((total, user) => total + user.roleCodes.length, 0),
+    spaceAssignments: users.reduce((total, user) => total + user.spaceCodes.length, 0),
+    totalUsers: users.length,
+  };
 }

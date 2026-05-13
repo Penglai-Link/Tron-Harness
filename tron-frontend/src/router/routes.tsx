@@ -46,6 +46,7 @@ export const appRoutes: AppRoute[] = [
   { pageId: "resources.index", route: "/resources", activeNav: "Resources", title: "Resources", archetype: "data-table" },
   { pageId: "admin.roles", route: "/admin/roles", activeNav: "Roles", title: "Role Matrix", archetype: "permission-grid" },
   { pageId: "admin.userDetails", route: "/admin/users/detail", activeNav: "Users", title: "User Detail", archetype: "detail" },
+  { pageId: "admin.usersNew", route: "/admin/users/new", activeNav: "Users", title: "Create User", archetype: "form" },
   { pageId: "skills.index", route: "/skills", activeNav: "Skills", title: "Skills and MCP", archetype: "split-pane" },
   { pageId: "tasks.detail", route: "/tasks/detail", activeNav: "Tasks", title: "Task Details", archetype: "detail" },
   { pageId: "tasks.index", route: "/tasks", activeNav: "Tasks", title: "Task Management", archetype: "kanban" },

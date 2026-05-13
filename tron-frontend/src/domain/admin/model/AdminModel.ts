@@ -81,3 +81,10 @@ export interface UserRecord {
   updatedAt: string;
   archivedAt: string | null;
 }
+
+export interface UserStatistics {
+  activeUsers: number;
+  roleAssignments: number;
+  spaceAssignments: number;
+  totalUsers: number;
+}
