@@ -12,7 +12,7 @@ Final review, post-fix final review, interaction-gap review, reset-contract RED,
 | REVIEW-02 | pass | @ref:orchestration/integration-log.md#EVT-012 |
 | REVIEW-03 | pass | @ref:orchestration/integration-log.md#EVT-022 |
 | REVIEW-04 | findings_recorded | @ref:reports/agents/consistency-refactor-review.md#findings |
-| REVIEW-05 | ready | @ref:tasks/review-task.md#task-table |
+| REVIEW-05 | pass | @ref:reports/agents/all-status-include-archived-review.md#findings |
 
 ## Feature Docs Validation
 
@@ -119,3 +119,13 @@ Final review, post-fix final review, interaction-gap review, reset-contract RED,
   - Low: canonical `backend-result.md` and `frontend-result.md` underclaim BE-GREEN-05 and FE-GREEN-03 even though task, integration, test, and worker evidence exists.
 - slow_browser_reuse: reused @ref:reports/agents/verify-consistency-refactor.md#browser-verify-evidence because full `user-management-smoke` evidence passed after the integrated consistency refactor, includes concrete browser/network assertions, and no implementation paths changed after that VERIFY evidence.
 - validation_blocker: `validate_feature_docs.py --phase reports` failed inside the installed helper with `NameError: name 'TASK_FILES' is not defined` before project validation.
+
+## REVIEW-05 All Status Include Archived Review
+
+- status: pass
+- evidence: @ref:reports/agents/all-status-include-archived-review.md#findings
+- scope: EV-05 All Status include-archived follow-up after TEST-RED-17, FE-FIX-03, and TEST-VERIFY-03.
+- findings: no blocking findings.
+- traceability: AC-UM-11, AC-UM-01, AC-UM-08, TDD-UM-09, and TDD-UM-15 are covered by RED failure evidence, FE-FIX-03 implementation evidence, TEST-VERIFY-03 focused/full browser evidence, and REVIEW-05 review evidence.
+- slow_browser_reuse: reused @ref:reports/agents/verify-all-status-include-archived.md#browser-verify-evidence because the evidence is passing, concrete, and no reviewed frontend/API paths changed after TEST-VERIFY-03.
+- commands: `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/user-management-model --phase reports` passed; `rtk git diff --check` passed.
