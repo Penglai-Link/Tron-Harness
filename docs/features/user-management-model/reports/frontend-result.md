@@ -14,7 +14,7 @@ Workflow B evolution reopened frontend interaction evidence. The retained fronte
 | FE-VERIFY-01 | frontend typecheck/build, smoke, and runtime journey verified | @ref:orchestration/integration-log.md#EVT-007 | done |
 | FE-FIX-01 | missing/unknown detail `userCode` renders not-found without mutation controls via `3aee08e` | @ref:orchestration/integration-log.md#EVT-010 | done |
 | FE-GREEN-02 | frontend implementation for directory query parameters, Export download, Add User create flow, detail mutation API calls, backend reset API, and visible Copy feedback integrated via `65b2339` | @ref:orchestration/integration-log.md#EVT-018 | done |
-| FE-VERIFY-02 | pending browser/runtime verification for evolved interaction evidence | @ref:tasks/frontend-task.md#FE-VERIFY-02 | ready |
+| FE-VERIFY-02 | independent browser/runtime verification for evolved interaction evidence integrated via `72fbc95` | @ref:orchestration/integration-log.md#EVT-020 | done |
 
 ## TDD Evidence
 
@@ -62,6 +62,7 @@ Workflow B evolution reopened frontend interaction evidence. The retained fronte
 | @ref:spec/test-plan.md#command-matrix | `rtk make fe-check`, smoke tests, and local runtime browser checks passed | @ref:orchestration/integration-log.md#validation-after-integration |
 | @ref:spec/test-plan.md#command-matrix | post-review frontend fix reran smoke tests and `rtk make fe-check` | @ref:orchestration/integration-log.md#EVT-010 |
 | @ref:spec/test-plan.md#command-index | FE-GREEN-02 reran focused and full user-management browser smoke | @ref:orchestration/integration-log.md#EVT-018 |
+| @ref:spec/test-plan.md#command-index | FE-VERIFY-02 independently reran `rtk make fe-check` and full user-management browser smoke | @ref:orchestration/integration-log.md#EVT-020 |
 
 ## Acceptance Mapping
 
