@@ -323,6 +323,73 @@ async function routeCreateUserApi(page: Page, requests: CapturedAdminRequest[]) 
   });
 }
 
+async function routeConsistencyRefactorApi(page: Page, requests: CapturedAdminRequest[]) {
+  const directoryUser = makeUserRecord({
+    id: "734103002743185501",
+    userCode: "USER_SAM_DIRECTORY",
+    username: "sam.directory",
+    firstName: "Sam",
+    lastName: "Directory",
+    displayName: "Sam Directory",
+    email: "sam.directory@tron.ai",
+    phone: { countryCode: "+1", number: "5550199" },
+    roleCodes: ["DEVELOPER"],
+    spaceCodes: ["PLATFORM", "DATA"],
+    status: "Active",
+  });
+  const createdUser = makeUserRecord({
+    id: "734103002743185408",
+    userCode: "USER_MAYA_SINGH",
+    username: "maya.singh",
+    firstName: "Maya",
+    lastName: "Singh",
+    displayName: "Maya Singh",
+    email: "maya@tron.ai",
+    phone: { countryCode: "+1", number: "5550101" },
+    roleCodes: ["DEVELOPER"],
+    spaceCodes: ["PLATFORM", "DATA"],
+    status: "Active",
+    passwordResetRequired: true,
+  });
+  const statisticCounts: Record<string, number> = {
+    "/api/v1/admin/users/statistics/active-users": 17,
+    "/api/v1/admin/users/statistics/role-assignments": 29,
+    "/api/v1/admin/users/statistics/space-assignments": 31,
+    "/api/v1/admin/users/statistics/total-users": 42,
+  };
+  let created = false;
+
+  await page.route("**/api/v1/admin/users**", async (route) => {
+    const captured = captureAdminRequest(route);
+    requests.push(captured);
+
+    if (captured.method === "GET" && captured.pathname in statisticCounts) {
+      await fulfillJson(route, successEnvelope({ count: statisticCounts[captured.pathname] }));
+      return;
+    }
+
+    if (captured.method === "GET" && captured.pathname === "/api/v1/admin/users") {
+      const records = created ? [directoryUser, createdUser] : [directoryUser];
+      await fulfillJson(route, pagedEnvelope(records, 1, 15, records.length));
+      return;
+    }
+
+    if (captured.method === "POST" && captured.pathname === "/api/v1/admin/users") {
+      created = true;
+      await fulfillJson(route, successEnvelope(createdUser), 201);
+      return;
+    }
+
+    await fulfillJson(route, { code: "TEST_ROUTE_NOT_FOUND", message: `${captured.method} ${captured.pathname}`, data: {} }, 404);
+  });
+
+  return {
+    createdUser,
+    directoryUser,
+    statisticCounts,
+  };
+}
+
 async function routeResetPasswordApi(
   page: Page,
   requests: CapturedAdminRequest[],
@@ -905,4 +972,91 @@ test("TDD-UM-13: detail mutations submit role space archive and restore backend 
     { after: restoreStart, soft: true },
   );
   await expect(page.getByText("Active", { exact: true })).toBeVisible();
+});
+
+test("consistency refactor TDD-UM-16: statistic cards call four APIs and render data.count", async ({ page }) => {
+  const requests: CapturedAdminRequest[] = [];
+  const { statisticCounts } = await routeConsistencyRefactorApi(page, requests);
+
+  await page.goto(`${frontendBaseUrl}/admin/users`);
+
+  await expect(page.getByText("Sam Directory")).toBeVisible();
+  for (const pathname of Object.keys(statisticCounts)) {
+    await expectCapturedAdminRequest(
+      requests,
+      `GET ${pathname}`,
+      (request) => request.method === "GET" && request.pathname === pathname,
+    );
+  }
+
+  await expect(page.getByText("Users", { exact: true }).locator("xpath=ancestor::div[contains(@class, 'rounded-2xl')][1]")).toContainText("42");
+  await expect(page.getByText("Active", { exact: true }).locator("xpath=ancestor::div[contains(@class, 'rounded-2xl')][1]")).toContainText("17");
+  await expect(page.getByText("Role Assignments", { exact: true }).locator("xpath=ancestor::div[contains(@class, 'rounded-2xl')][1]")).toContainText("29");
+  await expect(page.getByText("Space Assignments", { exact: true }).locator("xpath=ancestor::div[contains(@class, 'rounded-2xl')][1]")).toContainText("31");
+});
+
+test("consistency refactor TDD-UM-17: directory renders User Contact columns and Space Assignments copy", async ({ page }) => {
+  const requests: CapturedAdminRequest[] = [];
+  const layoutRedTimeout = 1000;
+  await routeConsistencyRefactorApi(page, requests);
+
+  await page.goto(`${frontendBaseUrl}/admin/users`);
+
+  await expect(page.getByRole("columnheader", { name: "User" })).toBeVisible();
+  await expect.soft(page.getByRole("columnheader", { name: "Contact" }), "Directory must expose a Contact column for email and phone.").toBeVisible({ timeout: layoutRedTimeout });
+  await expect.soft(page.getByText("Space Assignments", { exact: true }), "Assignment card label must use Space Assignments copy.").toBeVisible({ timeout: layoutRedTimeout });
+  await expect.soft(page.getByText("Space Links", { exact: true }), "Old Space Links copy must be removed.").toHaveCount(0, { timeout: layoutRedTimeout });
+
+  const samRow = page.getByRole("row").filter({ hasText: "Sam Directory" });
+  await expect(samRow).toBeVisible();
+  const userCell = samRow.getByRole("cell").nth(0);
+  await expect(userCell).toContainText("Sam Directory");
+  await expect.soft(userCell, "User column should not include username.").not.toContainText("sam.directory", { timeout: layoutRedTimeout });
+  await expect.soft(userCell, "User column should not include email.").not.toContainText("sam.directory@tron.ai", { timeout: layoutRedTimeout });
+
+  const contactCell = samRow.getByRole("cell").nth(1);
+  await expect.soft(contactCell, "Contact column should include email.").toContainText("sam.directory@tron.ai", { timeout: layoutRedTimeout });
+  await expect.soft(contactCell, "Contact column should include phone country code.").toContainText("+1", { timeout: layoutRedTimeout });
+  await expect.soft(contactCell, "Contact column should include phone number.").toContainText("5550199", { timeout: layoutRedTimeout });
+});
+
+test("consistency refactor TDD-UM-18: Add User navigates to create page and submits from page owner", async ({ page }) => {
+  const requests: CapturedAdminRequest[] = [];
+  await routeConsistencyRefactorApi(page, requests);
+
+  await page.goto(`${frontendBaseUrl}/admin/users`);
+
+  await expect(page.getByText("Sam Directory")).toBeVisible();
+  await page.getByRole("button", { name: "Add User" }).click();
+  await expect(page, "Add User must navigate to the dedicated create route.").toHaveURL(/\/admin\/users\/new$/);
+  await expect(page.getByRole("heading", { name: /add user|create user/i })).toBeVisible();
+
+  await page.getByLabel(/user code/i).fill("USER_MAYA_SINGH");
+  await page.getByLabel(/^username$/i).fill("maya.singh");
+  await page.getByLabel(/first name/i).fill("Maya");
+  await page.getByLabel(/last name/i).fill("Singh");
+  await page.getByLabel(/display name/i).fill("Maya Singh");
+  await page.getByLabel(/^email$/i).fill("maya@tron.ai");
+
+  const createStart = requests.length;
+  await page.getByRole("button", { name: /create user|save user/i }).click();
+  await expectCapturedAdminRequest(
+    requests,
+    "POST /api/v1/admin/users from CreateUserPage",
+    (request) => request.method === "POST" && request.pathname === "/api/v1/admin/users",
+    { after: createStart },
+  );
+
+  const createRequest = requests.find((request, index) => index >= createStart && request.method === "POST" && request.pathname === "/api/v1/admin/users");
+  expect(createRequest?.body).toEqual(expect.objectContaining({
+    displayName: "Maya Singh",
+    email: "maya@tron.ai",
+    firstName: "Maya",
+    lastName: "Singh",
+    userCode: "USER_MAYA_SINGH",
+    username: "maya.singh",
+  }));
+  await expect(page.getByText(/user created|created successfully|maya singh created/i)).toBeVisible({ timeout: redExpectationTimeout });
+  await expect(page, "Successful create should return to the directory.").toHaveURL(/\/admin\/users$/);
+  await expect(page.getByText("Maya Singh")).toBeVisible();
 });
