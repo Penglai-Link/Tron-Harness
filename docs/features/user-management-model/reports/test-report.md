@@ -2,7 +2,7 @@
 
 ## Summary
 
-`TEST-RED-01..08`, interaction-gap RED `TEST-RED-09..13`, reset-response RED `TEST-RED-14`, backend consistency RED `TEST-RED-15`, and frontend consistency RED `TEST-RED-16` are completed and merged into base. All completed RED failures were expected behavior gaps.
+`TEST-RED-01..08`, interaction-gap RED `TEST-RED-09..13`, reset-response RED `TEST-RED-14`, backend consistency RED `TEST-RED-15`, frontend consistency RED `TEST-RED-16`, and consistency refactor VERIFY `TEST-VERIFY-02` are completed. All completed RED failures were expected behavior gaps.
 
 ## Test Task Evidence
 
@@ -25,6 +25,7 @@
 | TEST-RED-15 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-031 | done |
 | TEST-RED-16 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-030 | done |
 | TEST-VERIFY-01 | pass | @ref:orchestration/integration-log.md#EVT-007 | done |
+| TEST-VERIFY-02 | pass | @ref:reports/agents/verify-consistency-refactor.md | done |
 
 ## Cycle Evidence
 
@@ -102,6 +103,7 @@
 | command or cycle ref | result | evidence link |
 | --- | --- | --- |
 | @ref:spec/test-plan.md#command-matrix | GREEN and VERIFY backend/frontend/docs checks pass | @ref:orchestration/integration-log.md#validation-after-integration |
+| TEST-VERIFY-02 | `rtk make be-test`, `rtk make fe-check`, full `user-management-smoke`, task validator, and `rtk git diff --check` pass for consistency refactor verification. | @ref:reports/agents/verify-consistency-refactor.md |
 
 ## Browser Verify Evidence
 
@@ -111,6 +113,15 @@
 - network_assertions: asserted `GET /api/v1/admin/users` query parameters for search/status/current/size, `POST /api/v1/admin/users`, reset `POST /api/v1/admin/users/{userCode}/password/reset`, profile `PATCH`, role `PUT`, space `PUT`, archive `POST`, and restore `POST`.
 - visible_feedback_assertions: verified paged records, created user visibility, CSV download content, backend temporary password, visible copy feedback, password removal after close, response-driven detail fields/status, and visible reset-response error without a generated `TRON-` fallback.
 - evidence: @ref:orchestration/integration-log.md#EVT-020 and @ref:orchestration/integration-log.md#EVT-026
+
+## Consistency Refactor Browser Verify Evidence
+
+- status: passed
+- evidence: @ref:reports/agents/verify-consistency-refactor.md
+- clicks: Next page; Add User; Create User/Save User; Export; Reset Password; Confirm Reset; Copy; Close; Edit Profile; Save Profile/Update Profile; Viewer role chip; DATA space chip; Archive User; Restore User.
+- inputs: search `server-search`; status filter `Archived`; create fields for `USER_MAYA_SINGH`; profile edit values `Alex Backend Updated` and `alex.backend.updated@example.com`.
+- network_assertions: verified list search/status/pagination queries, `POST /api/v1/admin/users`, four `/api/v1/admin/users/statistics/*` requests, reset POST, profile PATCH, role/space PUT, archive POST, and restore POST.
+- visible_feedback_assertions: verified paged/search/archive rows, CSV content, backend temporary password, visible copy feedback, hidden password after close, statistic card counts 42/17/29/31, Contact email/phone layout, removed `Space Links`, create success feedback, return to `/admin/users`, and visible `Maya Singh`.
 
 ## Changed Test Assets
 
@@ -132,6 +143,7 @@
 | tron-backend/tests/user_management_statistics.rs | added backend statistics/list consistency RED tests | @ref:orchestration/integration-log.md#EVT-031 |
 | docs/features/user-management-model/reports/agents/red-frontend-consistency.md | added frontend consistency RED worker report | @ref:orchestration/integration-log.md#EVT-030 |
 | tron-frontend/tests/user-management-smoke.spec.ts | evolved with frontend consistency RED tests | @ref:orchestration/integration-log.md#EVT-030 |
+| docs/features/user-management-model/reports/agents/verify-consistency-refactor.md | added consistency refactor VERIFY worker report | @ref:reports/agents/verify-consistency-refactor.md |
 
 ## Worktree Evidence
 
@@ -151,6 +163,9 @@
 | @ref:spec/acceptance.md#AC-UM-06 | RED, GREEN, and VERIFY coverage complete | @ref:orchestration/integration-log.md#EVT-007 |
 | @ref:spec/acceptance.md#AC-UM-07 | RED, GREEN, and VERIFY coverage complete | @ref:orchestration/integration-log.md#EVT-007 |
 | @ref:spec/acceptance.md#AC-UM-08 | RED, GREEN, and VERIFY coverage complete | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-09 | RED, GREEN, and VERIFY coverage complete | @ref:reports/agents/verify-consistency-refactor.md |
+| @ref:spec/acceptance.md#AC-UM-10 | RED, GREEN, and VERIFY coverage complete | @ref:reports/agents/verify-consistency-refactor.md |
+| @ref:spec/acceptance.md#AC-UM-11 | RED, GREEN, and VERIFY coverage complete | @ref:reports/agents/verify-consistency-refactor.md |
 
 ## Blockers
 
