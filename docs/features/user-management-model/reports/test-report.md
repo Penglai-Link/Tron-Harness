@@ -4,6 +4,8 @@
 
 `TEST-RED-01..08` is completed and merged from `feature/clouds3n/user-management-model/test/red-suite` into base. All RED failures were expected behavior gaps, GREEN evidence passes after database/backend/frontend integration, and VERIFY evidence is integrated.
 
+Workflow B evolution reopened the frontend interaction evidence boundary. Prior `TDD-UM-08` smoke evidence is retained for model/route alignment, but it is incomplete for directory query parameters, Export download, Add User create flow, detail mutation API calls, reset API integration, and visible Copy feedback. `TEST-RED-09..13` must produce fresh RED evidence before `FE-GREEN-02`.
+
 ## Test Task Evidence
 
 | task id | result | evidence link | status |
@@ -16,6 +18,11 @@
 | TEST-RED-06 | fail_expected_red | @ref:tasks/test-task.md#TEST-RED-06 | done |
 | TEST-RED-07 | fail_expected_red | @ref:tasks/test-task.md#TEST-RED-07 | done |
 | TEST-RED-08 | fail_expected_red | @ref:tasks/test-task.md#TEST-RED-08 | done |
+| TEST-RED-09 | pending | @ref:tasks/test-task.md#TEST-RED-09 | ready |
+| TEST-RED-10 | pending | @ref:tasks/test-task.md#TEST-RED-10 | ready |
+| TEST-RED-11 | pending | @ref:tasks/test-task.md#TEST-RED-11 | ready |
+| TEST-RED-12 | pending | @ref:tasks/test-task.md#TEST-RED-12 | ready |
+| TEST-RED-13 | pending | @ref:tasks/test-task.md#TEST-RED-13 | ready |
 | TEST-VERIFY-01 | pass | @ref:orchestration/integration-log.md#EVT-007 | done |
 
 ## Cycle Evidence
@@ -30,6 +37,11 @@
 | TDD-UM-06 | fail_expected_red | @ref:orchestration/integration-log.md#validation-after-integration | done |
 | TDD-UM-07 | fail_expected_red | @ref:orchestration/integration-log.md#validation-after-integration | done |
 | TDD-UM-08 | fail_expected_red | @ref:orchestration/integration-log.md#validation-after-integration | done |
+| TDD-UM-09 | pending_red | @ref:spec/test-plan.md#TDD-UM-09 | ready |
+| TDD-UM-10 | pending_red | @ref:spec/test-plan.md#TDD-UM-10 | ready |
+| TDD-UM-11 | pending_red | @ref:spec/test-plan.md#TDD-UM-11 | ready |
+| TDD-UM-12 | pending_red | @ref:spec/test-plan.md#TDD-UM-12 | ready |
+| TDD-UM-13 | pending_red | @ref:spec/test-plan.md#TDD-UM-13 | ready |
 
 ## RED Failure Evidence
 

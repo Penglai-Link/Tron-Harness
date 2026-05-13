@@ -130,6 +130,22 @@ Out-of-scope admin pages:
 - Space Management page: owns spaces/workspaces, hierarchy, inheritance, and space metadata.
 - Permission Management: owns permission records and `permission_code`.
 
+## Interactions
+
+- IA-UM-01: `/admin/users` search sends `search` to `GET /api/v1/admin/users` and renders the response records.
+- IA-UM-02: `/admin/users` status filter sends `status` or explicit archive inclusion intent to `GET /api/v1/admin/users`.
+- IA-UM-03: `/admin/users` pagination sends `current` and `size` to `GET /api/v1/admin/users` and renders the paged response envelope.
+- IA-UM-04: `/admin/users` Export creates a CSV/download artifact for the current directory result set.
+- IA-UM-05: `/admin/users` Add User opens a form and submits `POST /api/v1/admin/users`.
+- IA-UM-06: `/admin/users` opens `/admin/users/detail?userCode=<userCode>` using a stable user code.
+- IA-UM-07: user archive from directory or detail calls the archive endpoint and refreshes visible state.
+- IA-UM-08: user detail profile update calls `PATCH /api/v1/admin/users/{userCode}`.
+- IA-UM-09: user detail role-code replacement calls `PUT /api/v1/admin/users/{userCode}/roles`.
+- IA-UM-10: user detail space-code replacement calls `PUT /api/v1/admin/users/{userCode}/spaces`.
+- IA-UM-11: user detail restore/reactivate calls the restore endpoint and refreshes visible state.
+- IA-UM-12: user detail reset-password confirmation calls `POST /api/v1/admin/users/{userCode}/password/reset`.
+- IA-UM-13: reset result Copy writes the one-time temporary password and renders visible operator feedback.
+
 ## Domain Model
 
 Bounded context:

@@ -7,14 +7,14 @@
 - git_skill: eliteforge-git-feature-oriented-lite-spec
 - main_branch: feature/clouds3n/user-management-model/base
 - main_worktree_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/base
-- status: done
+- status: in_progress
 
 ## Repository State
 
 - main_repo_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/base
 - default_branch: master
 - base_commit: 74d87fe
-- working_tree_status: final evidence consolidation in progress
+- working_tree_status: Workflow B interaction-gap evolution in progress; prior evidence retained, new RED/GREEN/VERIFY worktrees planned
 
 ## Multi-Agent Base Branch
 
@@ -39,6 +39,10 @@ One row is one actual git worktree checkout. Resolve `agent id`, `subtask name`,
 | frontend | fix-detail-not-found | prior-session-frontend-fix-detail-not-found | frontend-fix-worker | FE-FIX-01 | green | feature/clouds3n/user-management-model/frontend/fix-detail-not-found | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/fix-detail-not-found | feature/clouds3n/user-management-model/base | integrated |
 | backend | fix-status-contract | prior-session-backend-fix-status-contract | backend-contract-fix-worker | BE-FIX-02 | green | feature/clouds3n/user-management-model/backend/fix-status-contract | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/backend/fix-status-contract | feature/clouds3n/user-management-model/base | integrated |
 | review | post-fix-final-review | 019e1cff-1099-7453-83fd-0e8ca30de639 | Herschel | REVIEW-02 | review | feature/clouds3n/user-management-model/review/post-fix-final-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/post-fix-final-review | feature/clouds3n/user-management-model/base | integrated |
+| test | red-interaction-gaps | pending_spawn | pending_spawn | TEST-RED-09, TEST-RED-10, TEST-RED-11, TEST-RED-12, TEST-RED-13 | red | feature/clouds3n/user-management-model/test/red-interaction-gaps | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/red-interaction-gaps | feature/clouds3n/user-management-model/base | ready |
+| frontend | green-interaction-gaps | pending_spawn | pending_spawn | FE-GREEN-02 | green | feature/clouds3n/user-management-model/frontend/green-interaction-gaps | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/green-interaction-gaps | feature/clouds3n/user-management-model/base | ready |
+| test | verify-interaction-gaps | pending_spawn | pending_spawn | FE-VERIFY-02 | verify | feature/clouds3n/user-management-model/test/verify-interaction-gaps | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/verify-interaction-gaps | feature/clouds3n/user-management-model/base | ready |
+| review | interaction-gap-review | pending_spawn | pending_spawn | REVIEW-03 | review | feature/clouds3n/user-management-model/review/interaction-gap-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/interaction-gap-review | feature/clouds3n/user-management-model/base | ready |
 
 ## Branch And Path Rules
 
@@ -51,7 +55,7 @@ One row is one actual git worktree checkout. Resolve `agent id`, `subtask name`,
 
 ## Merge Strategy
 
-Execution order is `test/red-suite` -> `database/schema-migrations` + `backend/green-user-api` + `frontend/green-admin-users` -> `test/verify-regression` -> `review/final-review` -> targeted fix workers for final-review findings -> `review/post-fix-final-review`. The lead agent merges each worker branch into `feature/clouds3n/user-management-model/base` and records events in `orchestration/integration-log.md`.
+Retained execution order is `test/red-suite` -> `database/schema-migrations` + `backend/green-user-api` + `frontend/green-admin-users` -> `test/verify-regression` -> `review/final-review` -> targeted fix workers for final-review findings -> `review/post-fix-final-review`. Workflow B evolution resumes with `test/red-interaction-gaps` -> `frontend/green-interaction-gaps` -> `test/verify-interaction-gaps` -> `review/interaction-gap-review`. The lead agent merges each worker branch into `feature/clouds3n/user-management-model/base` and records events in `orchestration/integration-log.md`.
 
 ## Conflict Rules
 

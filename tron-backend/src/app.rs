@@ -13,10 +13,14 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(config: AppConfig) -> Self {
-        Self {
-            config,
-            users: UserService::global(),
-        }
+        let users = if config.database_url == ":memory:" {
+            UserService::global()
+        } else {
+            UserService::from_database_url(&config.database_url)
+                .expect("user SQLite repository should initialize")
+        };
+
+        Self { config, users }
     }
 }
 

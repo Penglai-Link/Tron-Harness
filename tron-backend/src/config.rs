@@ -2,11 +2,14 @@ use std::{env, error::Error, fmt, net::SocketAddr};
 
 const DEFAULT_BIND_ADDRESS: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 8080;
+const DEFAULT_DATABASE_URL: &str = "tron-backend/target/tron.sqlite3";
+const TEST_DATABASE_URL: &str = ":memory:";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppConfig {
     pub bind_address: String,
     pub port: u16,
+    pub database_url: String,
 }
 
 impl AppConfig {
@@ -19,8 +22,14 @@ impl AppConfig {
                 .map_err(|source| ConfigError::InvalidPort { value, source })?,
             Err(_) => DEFAULT_PORT,
         };
+        let database_url =
+            env::var("TRON_BACKEND_DATABASE_URL").unwrap_or_else(|_| DEFAULT_DATABASE_URL.into());
 
-        Ok(Self { bind_address, port })
+        Ok(Self {
+            bind_address,
+            port,
+            database_url,
+        })
     }
 
     pub fn socket_addr(&self) -> Result<SocketAddr, ConfigError> {
@@ -39,6 +48,7 @@ impl Default for AppConfig {
         Self {
             bind_address: DEFAULT_BIND_ADDRESS.into(),
             port: DEFAULT_PORT,
+            database_url: TEST_DATABASE_URL.into(),
         }
     }
 }

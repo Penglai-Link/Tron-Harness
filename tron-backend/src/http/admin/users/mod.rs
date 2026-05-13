@@ -45,10 +45,11 @@ pub fn routes() -> Router<AppState> {
 async fn list_users(
     State(users): State<UserService>,
     Query(query): Query<ListUsersQuery>,
-) -> Json<ApiResponse<PagedUsersDto>> {
-    Json(ApiResponse::success(PagedUsersDto::from(
-        users.list_users(query),
-    )))
+) -> Response {
+    match users.list_users(query) {
+        Ok(page) => Json(ApiResponse::success(PagedUsersDto::from(page))).into_response(),
+        Err(error) => user_error_response(error),
+    }
 }
 
 async fn create_user(
@@ -400,6 +401,11 @@ fn user_error_response(error: UserError) -> Response {
             StatusCode::INTERNAL_SERVER_ERROR,
             "ADMIN_USER_PASSWORD_HASH_FAILED",
             "password hash could not be generated",
+        ),
+        UserError::StorageFailure => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ADMIN_USER_STORAGE_FAILED",
+            "user storage operation failed",
         ),
     };
 

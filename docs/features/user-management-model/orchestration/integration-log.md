@@ -2,7 +2,7 @@
 
 ## Summary
 
-Feature workspace resumed through Workflow B evolution. Complete spec and executable task/worktree plan are prepared, Lite Spec worker worktrees are provisioned, RED suite `TEST-RED-01..08` is merged into base with expected failure evidence, database/backend/frontend GREEN branches are integrated, VERIFY is integrated with focused schema-contract coverage, final-review findings are recorded, targeted backend/frontend fix branches are integrated, and post-fix final review is integrated.
+Feature workspace resumed through Workflow B evolution. Complete spec and executable task/worktree plan are prepared, Lite Spec worker worktrees are provisioned, RED suite `TEST-RED-01..08` is merged into base with expected failure evidence, database/backend/frontend GREEN branches are integrated, VERIFY is integrated with focused schema-contract coverage, final-review findings are recorded, targeted backend/frontend fix branches are integrated, post-fix final review is integrated, and the runtime repository gap is corrected so this version uses configured SQLite storage. A later root-cause review found frontend interaction evidence gaps; the workflow is reopened at the test-plan/task gate for `TEST-RED-09..13`, `FE-GREEN-02`, `FE-VERIFY-02`, and `REVIEW-03`.
 
 ## Integration Events
 
@@ -20,6 +20,7 @@ Feature workspace resumed through Workflow B evolution. Complete spec and execut
 | EVT-010 | frontend | FE-FIX-01 | feature/clouds3n/user-management-model/frontend/fix-detail-not-found | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/frontend/fix-detail-not-found -m "merge: integrate frontend detail fallback fix"` | success | Integrated merge commit `3aee08e` after worker commit `559f81f`; detail routes require exact `userCode` and render not-found without mutation controls for missing/unknown codes. |
 | EVT-011 | backend | BE-FIX-02 | feature/clouds3n/user-management-model/backend/fix-status-contract | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/backend/fix-status-contract -m "merge: integrate backend status contract fix"` | success | Integrated merge commit `d7abc7e` after worker commit `fd6f792`; invalid PATCH status and malformed explicit userCode now return stable admin-user error envelopes. |
 | EVT-012 | review | REVIEW-02 | feature/clouds3n/user-management-model/review/post-fix-final-review | feature/clouds3n/user-management-model/base | merge | `rtk git merge --no-ff feature/clouds3n/user-management-model/review/post-fix-final-review -m "merge: integrate post-fix final review"` | success | Integrated merge commit `724aa65` after worker commit `9325e3d`; post-fix review found no blocking findings, and the password-reset response example was aligned to implementation before final validation. |
+| EVT-013 | lead | TEST-RED-09, TEST-RED-10, TEST-RED-11, TEST-RED-12, TEST-RED-13, FE-GREEN-02, FE-VERIFY-02, REVIEW-03 | n/a | feature/clouds3n/user-management-model/base | planning_update | `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/user-management-model --phase tasks` | success | Reopened Workflow B test-plan/task gate after root-cause review proved search/pagination, Export, Add User, detail mutations, reset API, and visible Copy feedback were not covered by prior smoke evidence. |
 
 ## Conflict Log
 
@@ -61,7 +62,15 @@ Feature workspace resumed through Workflow B evolution. Complete spec and execut
 | `rtk make fe-check` | Post-fix final review frontend typecheck/build. | pass | REVIEW-02 worker report records frontend check passing after dependency install. |
 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | Post-fix final review frontend smoke. | pass | REVIEW-02 worker report records 5 smoke tests passing. |
 | `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/user-management-model --phase final` | Final feature workspace validation. | pass | Final validator passes after REVIEW-02 integration and canonical report finalization. |
+| `rtk cargo test --manifest-path tron-backend/Cargo.toml --test user_management_lifecycle create_user_persists_to_configured_sqlite_database` | RED/GREEN validation for configured SQLite runtime persistence. | pass | New lifecycle test proves API-created users are stored in the configured SQLite database and read by a new router instance. |
+| `rtk make be-test` | Backend regression after SQLite runtime persistence fix. | pass | Full backend regression passes with `rusqlite` repository wiring. |
+| `rtk proxy node --input-type=module <<'NODE' ... NODE` | Root-cause runtime probe for evolved frontend interaction gaps. | fail_expected_gap | Probe observed no new list requests after pagination/search, Export produced no download, Add User opened no form, detail mutations stayed local, reset password was client-generated, and Copy feedback was not visibly rendered. |
+| `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/user-management-model --phase spec --complete-spec` | Validate reopened spec/test-plan gate after interaction-gap evolution docs. | pass | Spec/test-plan gate is complete for `TDD-UM-09..12`. |
+| `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/user-management-model --phase tasks` | Validate reopened task/worktree planning for interaction-gap evolution. | pass | Task/worktree planning is ready for `TEST-RED-09..12`. |
+| `rtk git diff --check` | Whitespace validation before base checkpoint. | pass | No whitespace errors in current base changes. |
+| `rtk make be-test` | Backend baseline regression before worker branch dispatch. | pass | Full backend regression passes before frontend interaction evolution. |
+| `rtk make fe-check` | Frontend baseline typecheck/build before worker branch dispatch. | pass | Frontend typecheck and production build pass before frontend interaction evolution. |
 
 ## Blockers
 
-- None.
+- New interaction-gap RED/GREEN/VERIFY evidence is pending for `TDD-UM-09..13`; prior final status is retained as historical evidence but no longer represents the evolved acceptance boundary.

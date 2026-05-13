@@ -4,7 +4,7 @@
 
 This project uses a **Rust + React monorepo architecture**.containing both the frontend and backend codebases in a single repository.  
 
-The frontend focuses on component-first development and strong typing, while the backend provides a modular, high-performance Rust service with a pluggable storage layer.
+The frontend focuses on component-first development and strong typing, while the backend provides a modular, high-performance Rust service with a pluggable storage layer. Backend storage may have multiple implementations behind repository boundaries; this version uses the SQLite implementation.
 
 The final application is deployed as an integrated full-stack service: the frontend build output is bundled into the backend, and the backend serves both the API and the web UI.
 
@@ -33,6 +33,7 @@ The project is designed to produce a single backend-driven runtime artifact.
 
 - Frontend can run independently using Vite dev server
 - Backend can run independently using Cargo
+- Backend storage is selected by backend configuration. `TRON_BACKEND_DATABASE_URL` points the current SQLite implementation at a file path or SQLite URI.
 - Frontend components use mock data by default
 - API integration is isolated behind hooks
 - Frontend data source selection is environment-driven:
@@ -50,5 +51,6 @@ The project is designed to produce a single backend-driven runtime artifact.
   - REST or application APIs
   - Frontend static assets
   - Web application entry point
+- Backend persistence uses the configured SQLite repository implementation for this version.
 
 After the backend service starts, users can access the application UI directly through the backend server.

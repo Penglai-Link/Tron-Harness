@@ -4,12 +4,15 @@
 
 Final review and post-fix final review are integrated. Initial high-severity findings were resolved by targeted backend/frontend fix branches, the password-reset response example is aligned to implementation, and post-fix review records no blocking findings.
 
+Workflow B evolution reopened final status for frontend interaction evidence. Post-fix review is retained as historical evidence for the previous boundary, but `REVIEW-03` must review the new RED/GREEN/VERIFY evidence for directory query parameters, Export download, Add User create flow, detail mutation API calls, reset API integration, and visible Copy feedback.
+
 ## Task Results
 
 | task id | result | evidence link |
 | --- | --- | --- |
 | REVIEW-01 | findings_recorded | @ref:orchestration/integration-log.md#EVT-008 |
 | REVIEW-02 | pass | @ref:orchestration/integration-log.md#EVT-012 |
+| REVIEW-03 | pending | @ref:tasks/review-task.md#REVIEW-03 |
 
 ## Feature Docs Validation
 
@@ -85,9 +88,9 @@ Final review and post-fix final review are integrated. Initial high-severity fin
 
 ## Remaining Risks
 
-- None.
+- New interaction-gap evidence is pending for `TDD-UM-09..13`; do not treat the retained post-fix final review as complete for the evolved acceptance boundary.
 
 ## Final Status
 
 - status: complete
-- conclusion: post_fix_final_review_passed
+- conclusion: retained_previous_boundary_complete; evolved_interaction_gap_review_pending

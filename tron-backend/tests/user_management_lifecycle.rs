@@ -2,7 +2,13 @@ use axum::{
     body::{Body, to_bytes},
     http::{Method, Request, StatusCode},
 };
+use rusqlite::Connection;
 use serde_json::{Value, json};
+use std::{
+    fs,
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
 use tower::ServiceExt;
 use tron_backend::{app::build_router, config::AppConfig};
 
@@ -37,6 +43,57 @@ async fn create_user_returns_stringified_id_and_user_code() {
     );
     assert_eq!(json["data"]["username"], "lena.create");
     assert_eq!(json["data"]["email"], "lena.create@tron.ai");
+}
+
+#[tokio::test]
+async fn create_user_persists_to_configured_sqlite_database() {
+    let database_path = temp_database_path("user-management-create");
+    let config = AppConfig {
+        database_url: database_path.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+
+    let response = request_with_config(
+        config.clone(),
+        Method::POST,
+        "/api/v1/admin/users",
+        Some(valid_create_payload(
+            Some("USR-SQLITE-PERSISTED"),
+            "sqlite.persisted",
+            "sqlite.persisted@tron.ai",
+        )),
+    )
+    .await;
+    assert_eq!(
+        response.status(),
+        StatusCode::CREATED,
+        "TDD-UM-02 RED: API writes must use the configured SQLite implementation",
+    );
+
+    let connection = Connection::open(&database_path).expect("SQLite database should be created");
+    let stored_email: String = connection
+        .query_row(
+            "SELECT email FROM users WHERE user_code = ?1",
+            ["USR-SQLITE-PERSISTED"],
+            |row| row.get(0),
+        )
+        .expect("created user must be persisted in SQLite");
+    assert_eq!(stored_email, "sqlite.persisted@tron.ai");
+
+    let detail_response = request_with_config(
+        config,
+        Method::GET,
+        "/api/v1/admin/users/USR-SQLITE-PERSISTED",
+        None,
+    )
+    .await;
+    assert_eq!(
+        detail_response.status(),
+        StatusCode::OK,
+        "new router instances must read the same configured SQLite database",
+    );
+
+    let _ = fs::remove_file(database_path);
 }
 
 #[tokio::test]
@@ -378,7 +435,16 @@ fn valid_create_payload(user_code: Option<&str>, username: &str, email: &str) ->
 }
 
 async fn request(method: Method, uri: &str, body: Option<Value>) -> axum::response::Response {
-    let router = build_router(AppConfig::default());
+    request_with_config(AppConfig::default(), method, uri, body).await
+}
+
+async fn request_with_config(
+    config: AppConfig,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+) -> axum::response::Response {
+    let router = build_router(config);
     let mut builder = Request::builder().method(method).uri(uri);
     let request_body = if let Some(json_body) = body {
         builder = builder.header("content-type", "application/json");
@@ -395,6 +461,14 @@ async fn request(method: Method, uri: &str, body: Option<Value>) -> axum::respon
         )
         .await
         .expect("router should return a response")
+}
+
+fn temp_database_path(test_name: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time should be after Unix epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!("tron-{test_name}-{nanos}.sqlite3"))
 }
 
 async fn response_json(response: axum::response::Response) -> Value {

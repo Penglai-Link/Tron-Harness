@@ -6,5 +6,6 @@ The backend is implemented in **Rust** and follows a **domain-driven** architect
 
 - **Rust**: primary backend language
 - **Cargo**: package management, build automation, testing, and workspace management
-- **SQLite**: default lightweight storage option
+- **Storage Repository Boundary**: backend domains should depend on repository abstractions so storage can have multiple implementations over time
+- **SQLite**: current version's storage implementation; configured with `TRON_BACKEND_DATABASE_URL`
 - **Config File**: use yaml

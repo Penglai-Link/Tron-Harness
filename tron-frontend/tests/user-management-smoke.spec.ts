@@ -1,4 +1,8 @@
-import { expect, test } from "@playwright/test";
+import {
+  expect,
+  test,
+  type Page,
+} from "@playwright/test";
 import {
   spawn,
   type ChildProcessWithoutNullStreams,
@@ -13,6 +17,28 @@ const frontendRoot = resolve(thisFilePath, "..", "..");
 let frontendProcess: ChildProcessWithoutNullStreams | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
+
+const alexUserRecord = {
+  id: "9007199254740993",
+  userCode: "USER_ALEX_JOHNSON",
+  username: "alex.johnson",
+  firstName: "Alex",
+  lastName: "Johnson",
+  displayName: "Alex Johnson",
+  email: "alex.johnson@example.com",
+  phone: null,
+  avatarUrl: null,
+  locale: "en-US",
+  timezone: "UTC",
+  roleCodes: ["ADMIN", "DEVELOPER"],
+  spaceCodes: ["PLATFORM", "DATA"],
+  status: "Active",
+  passwordResetRequired: false,
+  lastActiveAt: null,
+  createdAt: "2026-05-13T00:00:00.000Z",
+  updatedAt: "2026-05-13T00:00:00.000Z",
+  archivedAt: null,
+};
 
 function source(pathFromFrontendRoot: string): string {
   return readFileSync(
@@ -70,6 +96,24 @@ async function waitForFrontend(url: string) {
   }
 
   throw new Error(`Frontend dev server did not become ready: ${String(lastError)}\n${frontendLogs}`);
+}
+
+async function routeAdminUsers(page: Page, records: unknown[]) {
+  await page.route("**/api/v1/admin/users**", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "SUCCESS",
+        message: "ok",
+        data: {
+          current: 1,
+          size: 20,
+          total: records.length,
+          records,
+        },
+      }),
+    });
+  });
 }
 
 test.beforeAll(async () => {
@@ -142,6 +186,54 @@ test("TDD-UM-08: user detail navigation is keyed by userCode query boundary", as
   expect(detailsPageSource).toContain("get(\"userCode\")");
 });
 
+test("TDD-UM-08: admin api data source calls backend list endpoint", async ({ page }) => {
+  let usersEndpointCalled = false;
+
+  await page.route("**/api/v1/admin/users**", async (route) => {
+    usersEndpointCalled = true;
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        code: "SUCCESS",
+        message: "ok",
+        data: {
+          current: 1,
+          size: 20,
+          total: 1,
+          records: [
+            {
+              id: "9007199254740993",
+              userCode: "USER_API_SOURCE",
+              username: "api.source",
+              firstName: "Api",
+              lastName: "Source",
+              displayName: "Api Source",
+              email: "api.source@example.com",
+              phone: null,
+              avatarUrl: null,
+              locale: "en-US",
+              timezone: "UTC",
+              roleCodes: ["ADMIN"],
+              spaceCodes: ["PLATFORM"],
+              status: "Active",
+              passwordResetRequired: false,
+              lastActiveAt: null,
+              createdAt: "2026-05-13T00:00:00.000Z",
+              updatedAt: "2026-05-13T00:00:00.000Z",
+              archivedAt: null,
+            },
+          ],
+        },
+      }),
+    });
+  });
+
+  await page.goto(`${frontendBaseUrl}/admin/users`);
+
+  await expect(page.getByText("Api Source")).toBeVisible();
+  expect(usersEndpointCalled).toBe(true);
+});
+
 test("TDD-UM-08: missing or unknown userCode detail route exposes only not-found recovery", async ({ page }) => {
   await page.goto(`${frontendBaseUrl}/admin/users/detail?userCode=UNKNOWN`);
 
@@ -169,6 +261,8 @@ test("TDD-UM-08: missing or unknown userCode detail route exposes only not-found
 });
 
 test("TDD-UM-08: valid userCode detail route keeps the user detail journey", async ({ page }) => {
+  await routeAdminUsers(page, [alexUserRecord]);
+
   await page.goto(`${frontendBaseUrl}/admin/users/detail?userCode=USER_ALEX_JOHNSON`);
 
   await expect(page.getByRole("heading", { name: "Alex Johnson" })).toBeVisible();

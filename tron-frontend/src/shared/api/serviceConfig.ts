@@ -32,6 +32,7 @@ interface ServiceQueryOptions<T> {
   mockData: () => T;
   params?: EndpointParams;
   deps?: DependencyList;
+  select?: (payload: unknown) => T;
 }
 
 const domainEnvKeys: Record<ServiceDomain, string> = {
@@ -62,6 +63,30 @@ function getEnvValue(key: string) {
   return (import.meta.env as Record<string, string | undefined>)[key];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function selectApiData<T>(payload: unknown): T {
+  if (!isRecord(payload) || !("code" in payload) || !("data" in payload)) {
+    return payload as T;
+  }
+
+  if (payload.code !== "SUCCESS") {
+    const message = typeof payload.message === "string" ? payload.message : "API request failed";
+    throw new Error(message);
+  }
+
+  return payload.data as T;
+}
+
+export function selectPagedRecords<T>(payload: unknown): T[] {
+  const data = selectApiData<unknown>(payload);
+  if (isRecord(data) && Array.isArray(data.records)) return data.records as T[];
+  if (Array.isArray(data)) return data as T[];
+  return [];
+}
+
 export function getServiceDataSource(domain: ServiceDomain): ServiceDataSource {
   const domainSource = normalizeDataSource(getEnvValue(`VITE_TRON_${domainEnvKeys[domain]}_DATA_SOURCE`));
   const defaultSource = normalizeDataSource(getEnvValue("VITE_TRON_DATA_SOURCE"));
@@ -82,7 +107,7 @@ function parseEndpoint(endpoint: string, params?: EndpointParams) {
   };
 }
 
-export function useServiceQuery<T>({ domain, endpoint, mockData, params, deps = [] }: ServiceQueryOptions<T>): T {
+export function useServiceQuery<T>({ domain, endpoint, mockData, params, deps = [], select = selectApiData<T> }: ServiceQueryOptions<T>): T {
   const dataSource = getServiceDataSource(domain);
   const mockValue = useMemo(mockData, deps);
   const [data, setData] = useState(mockValue);
@@ -106,7 +131,7 @@ export function useServiceQuery<T>({ domain, endpoint, mockData, params, deps = 
         return response.json() as Promise<T>;
       })
       .then((payload) => {
-        setData(payload);
+        setData(select(payload));
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
@@ -114,7 +139,7 @@ export function useServiceQuery<T>({ domain, endpoint, mockData, params, deps = 
       });
 
     return () => controller.abort();
-  }, [dataSource, domain, request.method, request.url]);
+  }, [dataSource, domain, request.method, request.url, select]);
 
   return data;
 }
