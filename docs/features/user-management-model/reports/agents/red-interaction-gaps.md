@@ -1,5 +1,12 @@
 # RED Interaction Gaps Worker Report
 
+## Agent Identity
+
+- agent_id: test
+- subtask_name: red-interaction-gaps
+- codex_runtime_agent_id: 019e1f57-d577-7c33-af7b-c8fe8238bb0f
+- codex_runtime_agent_name: Einstein
+
 ## Scope
 
 - Worker branch: `feature/clouds3n/user-management-model/test/red-interaction-gaps`
@@ -8,6 +15,31 @@
 - Changed paths:
   - `tron-frontend/tests/user-management-smoke.spec.ts`
   - `docs/features/user-management-model/reports/agents/red-interaction-gaps.md`
+
+## Task Results
+
+| task id | result | status |
+| --- | --- | --- |
+| TEST-RED-09 | expected RED failure for directory query parameters | done |
+| TEST-RED-10 | expected RED failure for Add User create flow | done |
+| TEST-RED-11 | expected RED failure for Export download | done |
+| TEST-RED-12 | expected RED failure for reset API and copy feedback | done |
+| TEST-RED-13 | expected RED failure for detail mutation endpoints | done |
+
+## TDD Evidence
+
+| cycle id | result | status |
+| --- | --- | --- |
+| TDD-UM-09 | fail_expected_red | done |
+| TDD-UM-10 | fail_expected_red | done |
+| TDD-UM-11 | fail_expected_red | done |
+| TDD-UM-12 | fail_expected_red | done |
+| TDD-UM-13 | fail_expected_red | done |
+
+## Changed Paths
+
+- `tron-frontend/tests/user-management-smoke.spec.ts`
+- `docs/features/user-management-model/reports/agents/red-interaction-gaps.md`
 
 ## RED Coverage Added
 
@@ -29,6 +61,17 @@
 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke.spec.ts -g "TDD-UM-11" --reporter=line` | fail expected, exit 1. `1 failed`; `page.waitForEvent("download")` timed out after 2500ms. |
 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke.spec.ts -g "TDD-UM-12" --reporter=line` | fail expected, exit 1. `2 failed`; reset endpoint request is missing, and copy feedback has class `sr-only`. |
 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke.spec.ts -g "TDD-UM-13" --reporter=line` | fail expected, exit 1. `2 failed`; edit profile action is missing, and role/space/archive/restore backend requests are missing with local state not matching response data. |
+
+## Commands
+
+| command | result |
+| --- | --- |
+| `rtk make fe-check` | pass |
+| `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke.spec.ts -g "TDD-UM-09" --reporter=line` | fail_expected_red |
+| `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke.spec.ts -g "TDD-UM-10" --reporter=line` | fail_expected_red |
+| `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke.spec.ts -g "TDD-UM-11" --reporter=line` | fail_expected_red |
+| `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke.spec.ts -g "TDD-UM-12" --reporter=line` | fail_expected_red |
+| `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke.spec.ts -g "TDD-UM-13" --reporter=line` | fail_expected_red |
 
 ## Blockers
 

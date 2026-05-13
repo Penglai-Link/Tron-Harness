@@ -2,9 +2,7 @@
 
 ## Summary
 
-Frontend GREEN, VERIFY, and post-review detail not-found fix are integrated into base. `rtk make fe-check`, source smoke tests, and local runtime browser checks pass after merge.
-
-Workflow B evolution reopened frontend interaction evidence. The retained frontend evidence did not assert parameterized list requests after search/pagination, a real Export download, an Add User form/API submit, backend mutation calls from detail actions, backend reset API usage, or visible Copy feedback. `FE-GREEN-02` and `FE-VERIFY-02` are pending for those evolved interactions.
+Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolution, and reset-response contract fix are integrated into base. `rtk make fe-check`, focused Playwright checks, full user-management smoke, and local runtime browser evidence pass through the recorded worker and integration evidence.
 
 ## Task Results
 
@@ -15,6 +13,7 @@ Workflow B evolution reopened frontend interaction evidence. The retained fronte
 | FE-FIX-01 | missing/unknown detail `userCode` renders not-found without mutation controls via `3aee08e` | @ref:orchestration/integration-log.md#EVT-010 | done |
 | FE-GREEN-02 | frontend implementation for directory query parameters, Export download, Add User create flow, detail mutation API calls, backend reset API, and visible Copy feedback integrated via `65b2339` | @ref:orchestration/integration-log.md#EVT-018 | done |
 | FE-VERIFY-02 | independent browser/runtime verification for evolved interaction evidence integrated via `72fbc95` | @ref:orchestration/integration-log.md#EVT-020 | done |
+| FE-FIX-02 | reset-response contract error handling integrated via `02eefac` after worker commit `42eecb4` | @ref:orchestration/integration-log.md#EVT-026 | done |
 
 ## TDD Evidence
 
@@ -29,6 +28,7 @@ Workflow B evolution reopened frontend interaction evidence. The retained fronte
 | TDD-UM-11 | Export CSV download RED test passes after FE-GREEN-02 | @ref:orchestration/integration-log.md#EVT-018 | green_integrated |
 | TDD-UM-12 | reset API/copy feedback RED tests pass after FE-GREEN-02 | @ref:orchestration/integration-log.md#EVT-018 | green_integrated |
 | TDD-UM-13 | detail mutation RED tests pass after FE-GREEN-02 | @ref:orchestration/integration-log.md#EVT-018 | green_integrated |
+| TDD-UM-12 | reset-response contract RED test passes after FE-FIX-02 and no client-generated fallback password is shown for malformed success envelopes | @ref:orchestration/integration-log.md#EVT-026 | green_integrated |
 
 ## Worktree Evidence
 
@@ -36,6 +36,7 @@ Workflow B evolution reopened frontend interaction evidence. The retained fronte
 | --- | --- | --- | --- |
 | @ref:orchestration/worktree-plan.md#agent-worktrees | frontend branch merged to base | @ref:orchestration/integration-log.md#EVT-006 | integrated |
 | @ref:orchestration/worktree-plan.md#agent-worktrees | frontend detail fallback fix branch merged to base | @ref:orchestration/integration-log.md#EVT-010 | integrated |
+| @ref:orchestration/worktree-plan.md#agent-worktrees | frontend reset contract fix branch merged to base | @ref:orchestration/integration-log.md#EVT-026 | integrated |
 
 ## Changed Paths
 
@@ -54,6 +55,9 @@ Workflow B evolution reopened frontend interaction evidence. The retained fronte
 | `tron-frontend/src/domain/admin/pages/UsersPage.tsx` | implemented API-driven search/status/pagination, CSV export, and Add User form | @ref:orchestration/integration-log.md#EVT-018 |
 | `tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx` | implemented profile, role, space, lifecycle, reset API, and visible Copy feedback interactions | @ref:orchestration/integration-log.md#EVT-018 |
 | `docs/features/user-management-model/reports/agents/frontend-interaction-gaps.md` | added GREEN worker evidence report | @ref:orchestration/integration-log.md#EVT-018 |
+| `tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx` | added visible API-mode reset-response contract error when backend omits `temporaryPassword` | @ref:orchestration/integration-log.md#EVT-026 |
+| `tron-frontend/tests/user-management-smoke.spec.ts` | strengthened reset copy-feedback happy path and reset-response contract coverage | @ref:orchestration/integration-log.md#EVT-026 |
+| `docs/features/user-management-model/reports/agents/frontend-fix-reset-contract.md` | added FE-FIX-02 worker evidence report | @ref:orchestration/integration-log.md#EVT-026 |
 
 ## Commands
 
@@ -63,6 +67,7 @@ Workflow B evolution reopened frontend interaction evidence. The retained fronte
 | @ref:spec/test-plan.md#command-matrix | post-review frontend fix reran smoke tests and `rtk make fe-check` | @ref:orchestration/integration-log.md#EVT-010 |
 | @ref:spec/test-plan.md#command-index | FE-GREEN-02 reran focused and full user-management browser smoke | @ref:orchestration/integration-log.md#EVT-018 |
 | @ref:spec/test-plan.md#command-index | FE-VERIFY-02 independently reran `rtk make fe-check` and full user-management browser smoke | @ref:orchestration/integration-log.md#EVT-020 |
+| @ref:spec/test-plan.md#command-index | FE-FIX-02 reran `rtk make fe-check`, focused reset-response contract smoke, and full user-management browser smoke | @ref:orchestration/integration-log.md#EVT-026 |
 
 ## Acceptance Mapping
 
@@ -74,6 +79,8 @@ Workflow B evolution reopened frontend interaction evidence. The retained fronte
 | @ref:spec/acceptance.md#AC-UM-04 | frontend space-code assignment UI verified | @ref:orchestration/integration-log.md#EVT-007 |
 | @ref:spec/acceptance.md#AC-UM-05 | frontend reset-password UI verified | @ref:orchestration/integration-log.md#EVT-007 |
 | @ref:spec/acceptance.md#AC-UM-08 | frontend model/API boundary verified | @ref:orchestration/integration-log.md#EVT-007 |
+| @ref:spec/acceptance.md#AC-UM-05 | malformed reset success envelopes no longer reveal a generated fallback password | @ref:orchestration/integration-log.md#EVT-026 |
+| @ref:spec/acceptance.md#AC-UM-08 | reset contract UI error is visible to operators | @ref:orchestration/integration-log.md#EVT-026 |
 
 ## Blockers
 

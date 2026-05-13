@@ -2,7 +2,7 @@
 
 ## Summary
 
-Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend GREEN, frontend GREEN, VERIFY, REVIEW, targeted post-review fix branches, and post-fix final review are integrated into base.
+Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend GREEN, frontend GREEN, VERIFY, REVIEW, targeted post-review fix branches, interaction-gap evolution branches, reset-contract RED, and reset-contract frontend fix are integrated into base.
 
 ## Worktree Registry
 
@@ -18,6 +18,12 @@ Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend G
 | frontend | FE-FIX-01 | frontend-fix-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/fix-detail-not-found | feature/clouds3n/user-management-model/frontend/fix-detail-not-found | feature/clouds3n/user-management-model/base | integrated |
 | backend | BE-FIX-02 | backend-contract-fix-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/backend/fix-status-contract | feature/clouds3n/user-management-model/backend/fix-status-contract | feature/clouds3n/user-management-model/base | integrated |
 | review | REVIEW-02 | post-fix-final-review-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/post-fix-final-review | feature/clouds3n/user-management-model/review/post-fix-final-review | feature/clouds3n/user-management-model/base | integrated |
+| test | TEST-RED-09..13 | red-interaction-gaps-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/red-interaction-gaps | feature/clouds3n/user-management-model/test/red-interaction-gaps | feature/clouds3n/user-management-model/base | integrated |
+| frontend | FE-GREEN-02 | frontend-interaction-gaps-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/green-interaction-gaps | feature/clouds3n/user-management-model/frontend/green-interaction-gaps | feature/clouds3n/user-management-model/base | integrated |
+| test | FE-VERIFY-02 | verify-interaction-gaps-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/verify-interaction-gaps | feature/clouds3n/user-management-model/test/verify-interaction-gaps | feature/clouds3n/user-management-model/base | integrated |
+| review | REVIEW-03 | review-interaction-gaps-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/interaction-gap-review | feature/clouds3n/user-management-model/review/interaction-gap-review | feature/clouds3n/user-management-model/base | integrated |
+| test | TEST-RED-14 | reset-contract-red-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/reset-contract-red | feature/clouds3n/user-management-model/test/reset-contract-red | feature/clouds3n/user-management-model/base | integrated |
+| frontend | FE-FIX-02 | frontend-reset-contract-worker | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/fix-reset-contract | feature/clouds3n/user-management-model/frontend/fix-reset-contract | feature/clouds3n/user-management-model/base | integrated |
 
 ## Branch Registry
 
@@ -33,6 +39,12 @@ Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend G
 | feature/clouds3n/user-management-model/frontend/fix-detail-not-found | frontend | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | frontend detail not-found fix merged via `3aee08e`. |
 | feature/clouds3n/user-management-model/backend/fix-status-contract | backend | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | backend status/userCode contract fix merged via `d7abc7e`. |
 | feature/clouds3n/user-management-model/review/post-fix-final-review | review | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | post-fix final review merged via `724aa65`. |
+| feature/clouds3n/user-management-model/test/red-interaction-gaps | test | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | interaction-gap RED tests merged via `39cd159`. |
+| feature/clouds3n/user-management-model/frontend/green-interaction-gaps | frontend | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | interaction-gap GREEN implementation merged via `ba7b1bb`. |
+| feature/clouds3n/user-management-model/test/verify-interaction-gaps | test | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | interaction-gap VERIFY report merged via `c554b6c`. |
+| feature/clouds3n/user-management-model/review/interaction-gap-review | review | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | interaction-gap review merged via `ed9285d`. |
+| feature/clouds3n/user-management-model/test/reset-contract-red | test | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | reset-response contract RED merged via `ffd8e46`. |
+| feature/clouds3n/user-management-model/frontend/fix-reset-contract | frontend | feature/clouds3n/user-management-model/base | feature/clouds3n/user-management-model/base | merged | reset-response contract frontend fix merged via `02eefac`. |
 
 ## Integration Evidence
 
@@ -50,6 +62,12 @@ Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend G
 | EVT-010 | frontend | FE-FIX-01 | @ref:orchestration/integration-log.md#integration-events | pass | frontend detail not-found fix committed and merged into base |
 | EVT-011 | backend | BE-FIX-02 | @ref:orchestration/integration-log.md#integration-events | pass | backend status/userCode contract fix committed and merged into base |
 | EVT-012 | review | REVIEW-02 | @ref:orchestration/integration-log.md#integration-events | pass | post-fix final review committed and merged into base |
+| EVT-016 | test | TEST-RED-09..13 | @ref:orchestration/integration-log.md#integration-events | pass | interaction-gap RED tests committed on worker branch and merged into base |
+| EVT-018 | frontend | FE-GREEN-02 | @ref:orchestration/integration-log.md#integration-events | pass | interaction-gap frontend implementation committed on worker branch and merged into base |
+| EVT-020 | test | FE-VERIFY-02 | @ref:orchestration/integration-log.md#integration-events | pass | interaction-gap VERIFY evidence committed and merged into base |
+| EVT-022 | review | REVIEW-03 | @ref:orchestration/integration-log.md#integration-events | pass | interaction-gap review committed and merged into base |
+| EVT-024 | test | TEST-RED-14 | @ref:orchestration/integration-log.md#integration-events | pass | reset-response contract RED committed and merged into base |
+| EVT-026 | frontend | FE-FIX-02 | @ref:orchestration/integration-log.md#integration-events | pass | reset-response contract frontend fix committed and merged into base |
 
 ## Validation Evidence
 

@@ -2,9 +2,7 @@
 
 ## Summary
 
-`TEST-RED-01..08` is completed and merged from `feature/clouds3n/user-management-model/test/red-suite` into base. All RED failures were expected behavior gaps, GREEN evidence passes after database/backend/frontend integration, and VERIFY evidence is integrated.
-
-Workflow B evolution reopened the frontend interaction evidence boundary. Prior `TDD-UM-08` smoke evidence is retained for model/route alignment, but it is incomplete for directory query parameters, Export download, Add User create flow, detail mutation API calls, reset API integration, and visible Copy feedback. `TEST-RED-09..13` must produce fresh RED evidence before `FE-GREEN-02`.
+`TEST-RED-01..08`, interaction-gap RED `TEST-RED-09..13`, and reset-response RED `TEST-RED-14` are completed and merged into base. All RED failures were expected behavior gaps, GREEN evidence passes after database/backend/frontend integration, VERIFY evidence is integrated, and the final reset-response contract fix passes focused and full user-management browser evidence.
 
 ## Test Task Evidence
 
@@ -76,12 +74,26 @@ Workflow B evolution reopened the frontend interaction evidence boundary. Prior 
 | TDD-UM-06 | stable-code and decimal-string ID tests pass | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
 | TDD-UM-07 | no-permission-gate boundary tests pass | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
 | TDD-UM-08 | frontend model/status/route smoke tests pass | @ref:orchestration/integration-log.md#validation-after-integration | green_integrated |
+| TDD-UM-09 | directory query parameter tests pass after FE-GREEN-02 and FE-VERIFY-02 | @ref:orchestration/integration-log.md#EVT-020 | verified |
+| TDD-UM-10 | Add User create-flow tests pass after FE-GREEN-02 and FE-VERIFY-02 | @ref:orchestration/integration-log.md#EVT-020 | verified |
+| TDD-UM-11 | Export CSV download test passes after FE-GREEN-02 and FE-VERIFY-02 | @ref:orchestration/integration-log.md#EVT-020 | verified |
+| TDD-UM-12 | reset API, copy feedback, close/no-reveal, and malformed reset-response contract tests pass after FE-FIX-02 | @ref:orchestration/integration-log.md#EVT-026 | verified |
+| TDD-UM-13 | detail mutation endpoint tests pass after FE-GREEN-02 and FE-VERIFY-02 | @ref:orchestration/integration-log.md#EVT-020 | verified |
 
 ## Refactor And Regression Evidence
 
 | command or cycle ref | result | evidence link |
 | --- | --- | --- |
 | @ref:spec/test-plan.md#command-matrix | GREEN and VERIFY backend/frontend/docs checks pass | @ref:orchestration/integration-log.md#validation-after-integration |
+
+## Browser Verify Evidence
+
+- status: passed
+- clicks: opened `/admin/users`, used status filter, pagination, Export, Add User, detail navigation, Reset Password, Confirm Reset, Copy, Close, Edit Profile, role/space toggles, Archive User, and Restore User.
+- inputs: search value, Add User profile fields for `USER_MAYA_SINGH`, profile edit values for `USER_ALEX_JOHNSON`, role and space selections, and reset-response fixture without `temporaryPassword`.
+- network_assertions: asserted `GET /api/v1/admin/users` query parameters for search/status/current/size, `POST /api/v1/admin/users`, reset `POST /api/v1/admin/users/{userCode}/password/reset`, profile `PATCH`, role `PUT`, space `PUT`, archive `POST`, and restore `POST`.
+- visible_feedback_assertions: verified paged records, created user visibility, CSV download content, backend temporary password, visible copy feedback, password removal after close, response-driven detail fields/status, and visible reset-response error without a generated `TRON-` fallback.
+- evidence: @ref:orchestration/integration-log.md#EVT-020 and @ref:orchestration/integration-log.md#EVT-026
 
 ## Changed Test Assets
 
@@ -98,6 +110,7 @@ Workflow B evolution reopened the frontend interaction evidence boundary. Prior 
 | tron-frontend/tests/user-management-smoke.spec.ts | evolved with interaction-gap RED tests | @ref:orchestration/integration-log.md#EVT-016 |
 | docs/features/user-management-model/reports/agents/red-interaction-gaps.md | added RED worker report | @ref:orchestration/integration-log.md#EVT-016 |
 | docs/features/user-management-model/reports/agents/reset-contract-red.md | added reset contract RED worker report | @ref:orchestration/integration-log.md#EVT-024 |
+| tron-frontend/tests/user-management-smoke.spec.ts | strengthened reset-response contract GREEN assertions | @ref:orchestration/integration-log.md#EVT-026 |
 
 ## Worktree Evidence
 
