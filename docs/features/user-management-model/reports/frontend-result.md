@@ -15,7 +15,7 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | FE-VERIFY-02 | independent browser/runtime verification for evolved interaction evidence integrated via `72fbc95` | @ref:orchestration/integration-log.md#EVT-020 | done |
 | FE-FIX-02 | reset-response contract error handling integrated via `02eefac` after worker commit `42eecb4` | @ref:orchestration/integration-log.md#EVT-026 | done |
 | FE-GREEN-03 | statistic cards, directory Contact layout, Space Assignments copy, and `/admin/users/new` create page integrated via `2d67ba4` | @ref:orchestration/integration-log.md#EVT-035 | done |
-| FE-FIX-03 | All Status include-archived frontend follow-up is in progress | @ref:orchestration/integration-log.md#EVT-042 | in_progress |
+| FE-FIX-03 | All Status sends `includeArchived=true` without `status` and renders Active plus Archived rows via `7e5b02b` | @ref:orchestration/integration-log.md#EVT-043 | done |
 
 ## TDD Evidence
 
@@ -34,7 +34,8 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | TDD-UM-16 | statistic-card tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
 | TDD-UM-17 | directory User/Contact/Space Assignments layout tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
 | TDD-UM-18 | create-page navigation and submit tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
-| TDD-UM-09 | All Status include-archived fix is in progress after TEST-RED-17 | @ref:orchestration/integration-log.md#EVT-042 | in_progress |
+| TDD-UM-09 | All Status include-archived focused test passes after FE-FIX-03 | @ref:orchestration/integration-log.md#EVT-043 | green_integrated |
+| TDD-UM-15 | frontend All Status now exercises backend include-archived semantics | @ref:orchestration/integration-log.md#EVT-043 | green_integrated |
 
 ## Worktree Evidence
 
@@ -44,6 +45,7 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | @ref:orchestration/worktree-plan.md#agent-worktrees | frontend detail fallback fix branch merged to base | @ref:orchestration/integration-log.md#EVT-010 | integrated |
 | @ref:orchestration/worktree-plan.md#agent-worktrees | frontend reset contract fix branch merged to base | @ref:orchestration/integration-log.md#EVT-026 | integrated |
 | @ref:orchestration/worktree-plan.md#agent-worktrees | frontend consistency refactor branch merged to base | @ref:orchestration/integration-log.md#EVT-035 | integrated |
+| @ref:orchestration/worktree-plan.md#agent-worktrees | frontend All Status include-archived fix branch merged to base | @ref:orchestration/integration-log.md#EVT-043 | integrated |
 
 ## Changed Paths
 
@@ -70,6 +72,10 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | `tron-frontend/src/domain/admin/pages/CreateUserPage.tsx` | moved create form behavior to `/admin/users/new` | @ref:orchestration/integration-log.md#EVT-035 |
 | `tron-frontend/src/domain/admin/pages/UsersPage.tsx` | rendered display-name-only User column, Contact column, Space Assignments copy, and Add User navigation | @ref:orchestration/integration-log.md#EVT-035 |
 | `docs/features/user-management-model/reports/agents/frontend-user-consistency-refactor.md` | added FE-GREEN-03 worker evidence report | @ref:reports/agents/frontend-user-consistency-refactor.md#agent-report-frontenduser-consistency-refactor |
+| `tron-frontend/src/domain/admin/api/adminApi.ts` | maps All Status to `includeArchived=true` and omits `status` | @ref:orchestration/integration-log.md#EVT-043 |
+| `tron-frontend/src/domain/admin/hooks/useUserList.ts` | preserves active default while passing All Status through to the API adapter | @ref:orchestration/integration-log.md#EVT-043 |
+| `tron-frontend/src/domain/admin/pages/UsersPage.tsx` | passes the All Status filter value instead of converting it to an empty status | @ref:orchestration/integration-log.md#EVT-043 |
+| `docs/features/user-management-model/reports/agents/frontend-fix-all-status-include-archived.md` | added FE-FIX-03 worker evidence report | @ref:reports/agents/frontend-fix-all-status-include-archived.md#agent-report-frontend-fix-all-status-include-archived |
 
 ## Commands
 
@@ -81,6 +87,7 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | @ref:spec/test-plan.md#command-index | FE-VERIFY-02 independently reran `rtk make fe-check` and full user-management browser smoke | @ref:orchestration/integration-log.md#EVT-020 |
 | @ref:spec/test-plan.md#command-index | FE-FIX-02 reran `rtk make fe-check`, focused reset-response contract smoke, and full user-management browser smoke | @ref:orchestration/integration-log.md#EVT-026 |
 | @ref:spec/test-plan.md#command-index | FE-GREEN-03 reran `rtk make fe-check` and focused consistency refactor browser checks | @ref:orchestration/integration-log.md#EVT-035 |
+| @ref:spec/test-plan.md#command-index | FE-FIX-03 reran `rtk make fe-check` and focused All Status include-archived browser check | @ref:orchestration/integration-log.md#EVT-043 |
 
 ## Acceptance Mapping
 
@@ -96,7 +103,7 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | @ref:spec/acceptance.md#AC-UM-08 | reset contract UI error is visible to operators | @ref:orchestration/integration-log.md#EVT-026 |
 | @ref:spec/acceptance.md#AC-UM-09 | frontend statistic cards verified | @ref:orchestration/integration-log.md#EVT-035 |
 | @ref:spec/acceptance.md#AC-UM-10 | frontend directory layout and create page verified | @ref:orchestration/integration-log.md#EVT-035 |
-| @ref:spec/acceptance.md#AC-UM-11 | All Status include-archived follow-up in progress | @ref:orchestration/integration-log.md#EVT-042 |
+| @ref:spec/acceptance.md#AC-UM-11 | frontend All Status include-archived query verified | @ref:orchestration/integration-log.md#EVT-043 |
 
 ## Blockers
 

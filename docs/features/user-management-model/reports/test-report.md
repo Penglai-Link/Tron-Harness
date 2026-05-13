@@ -102,6 +102,7 @@
 | TDD-UM-16 | statistic-card browser tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
 | TDD-UM-17 | directory User/Contact/Space Assignments layout tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
 | TDD-UM-18 | `/admin/users/new` create-page navigation and submit tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
+| TDD-UM-09/TDD-UM-15 | All Status include-archived focused test passes after FE-FIX-03 | @ref:orchestration/integration-log.md#EVT-043 | green_integrated |
 
 ## Refactor And Regression Evidence
 
