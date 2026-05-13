@@ -285,6 +285,52 @@ async function routeDirectoryQueryApi(page: Page, requests: CapturedAdminRequest
   });
 }
 
+async function routeAllStatusIncludeArchivedApi(page: Page, requests: CapturedAdminRequest[]) {
+  const activeRecord = makeUserRecord({
+    id: "734103000000004201",
+    userCode: "USER_ALL_STATUS_ACTIVE",
+    username: "all.status.active",
+    firstName: "All",
+    lastName: "Active",
+    displayName: "All Status Active",
+    email: "all.status.active@tron.ai",
+    roleCodes: ["ADMIN"],
+    spaceCodes: ["PLATFORM"],
+    status: "Active",
+  });
+  const archivedRecord = makeUserRecord({
+    id: "734103000000004202",
+    userCode: "USER_ALL_STATUS_ARCHIVED",
+    username: "all.status.archived",
+    firstName: "All",
+    lastName: "Archived",
+    displayName: "All Status Archived",
+    email: "all.status.archived@tron.ai",
+    roleCodes: ["VIEWER"],
+    spaceCodes: ["DATA"],
+    status: "Archived",
+    archivedAt: "2026-05-13T04:20:00.000Z",
+  });
+
+  await page.route("**/api/v1/admin/users**", async (route) => {
+    const captured = captureAdminRequest(route);
+    requests.push(captured);
+
+    if (captured.method !== "GET" || captured.pathname !== "/api/v1/admin/users") {
+      await fulfillJson(route, { code: "TEST_ROUTE_NOT_FOUND", message: `${captured.method} ${captured.pathname}`, data: {} }, 404);
+      return;
+    }
+
+    const current = Number(captured.searchParams.current ?? 1);
+    const size = Number(captured.searchParams.size ?? 15);
+    const records = captured.searchParams.includeArchived === "true"
+      ? [activeRecord, archivedRecord]
+      : [activeRecord];
+
+    await fulfillJson(route, pagedEnvelope(records, current, size, records.length));
+  });
+}
+
 async function routeCreateUserApi(page: Page, requests: CapturedAdminRequest[]) {
   const createdUser = makeUserRecord({
     id: "734103002743185408",
@@ -744,6 +790,32 @@ test("TDD-UM-09: directory query parameters drive search status and pagination r
     { after: statusStart },
   );
   await expect(page.getByText("Archived Server Result")).toBeVisible();
+});
+
+test("TDD-UM-09 TDD-UM-15: all status includeArchived request omits status and renders active plus archived rows", async ({ page }) => {
+  const requests: CapturedAdminRequest[] = [];
+  await routeAllStatusIncludeArchivedApi(page, requests);
+
+  await page.goto(`${frontendBaseUrl}/admin/users`);
+
+  await expect(page.getByText("All Status Active")).toBeVisible();
+  const allStatusStart = requests.length;
+  await page.getByLabel("Filter by status").selectOption("All");
+  const allStatusRequest = await expect.poll(
+    () => requests.slice(allStatusStart).find((request) => request.method === "GET" && request.pathname === "/api/v1/admin/users"),
+    {
+      message: "Expected All Status to request GET /api/v1/admin/users",
+      timeout: redExpectationTimeout,
+    },
+  ).toBeDefined().then(() => requests.slice(allStatusStart).find((request) => request.method === "GET" && request.pathname === "/api/v1/admin/users")) as CapturedAdminRequest;
+
+  expect.soft(allStatusRequest.searchParams.search).toBe("");
+  expect.soft(allStatusRequest.searchParams.current).toBe("1");
+  expect.soft(allStatusRequest.searchParams.size).toBe("15");
+  expect.soft(allStatusRequest.searchParams).not.toHaveProperty("status");
+  expect.soft(allStatusRequest.searchParams.includeArchived).toBe("true");
+  await expect(page.getByText("All Status Active")).toBeVisible();
+  await expect.soft(page.getByText("All Status Archived")).toBeVisible({ timeout: redExpectationTimeout });
 });
 
 test("TDD-UM-10: add user form posts uniform create request and renders created user", async ({ page }) => {
