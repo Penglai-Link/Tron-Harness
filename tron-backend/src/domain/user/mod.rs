@@ -63,6 +63,14 @@ impl UserService {
         repository.get_user(user_code)
     }
 
+    pub fn statistics(&self) -> Result<UserStatistics, UserError> {
+        let mut repository = self
+            .repository
+            .lock()
+            .expect("user repository mutex poisoned");
+        repository.statistics()
+    }
+
     pub fn create_user(&self, command: CreateUserCommand) -> Result<User, UserError> {
         let mut repository = self
             .repository
@@ -278,6 +286,7 @@ impl UserService {
 trait UserRepository: Send {
     fn list_users(&mut self, query: ListUsersQuery) -> Result<PagedUsers, UserError>;
     fn get_user(&mut self, user_code: &str) -> Result<User, UserError>;
+    fn statistics(&mut self) -> Result<UserStatistics, UserError>;
     fn next_id(&mut self) -> Result<i64, UserError>;
     fn next_user_code(&mut self, username: &str) -> Result<String, UserError>;
     fn user_code_exists(
@@ -434,6 +443,14 @@ impl SqliteUserRepository {
             .map_err(storage_error)?;
         Ok(count > 0)
     }
+
+    fn count(&self, sql: &str) -> Result<usize, UserError> {
+        let count = self
+            .connection
+            .query_row(sql, [], |row| row.get::<_, i64>(0))
+            .map_err(storage_error)?;
+        usize::try_from(count).map_err(|_| UserError::StorageFailure)
+    }
 }
 
 impl UserRepository for SqliteUserRepository {
@@ -547,6 +564,15 @@ impl UserRepository for SqliteUserRepository {
             created_at: timestamp_from_millis(row.created_at),
             updated_at: timestamp_from_millis(row.updated_at),
             archived_at: row.archived_at.map(timestamp_from_millis),
+        })
+    }
+
+    fn statistics(&mut self) -> Result<UserStatistics, UserError> {
+        Ok(UserStatistics {
+            total_users: self.count("SELECT COUNT(*) FROM users")?,
+            active_users: self.count("SELECT COUNT(*) FROM users WHERE status = 'active'")?,
+            role_assignments: self.count("SELECT COUNT(*) FROM user_role_assignments")?,
+            space_assignments: self.count("SELECT COUNT(*) FROM user_space_assignments")?,
         })
     }
 
@@ -878,6 +904,14 @@ pub struct PagedUsers {
     pub records: Vec<User>,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct UserStatistics {
+    pub total_users: usize,
+    pub active_users: usize,
+    pub role_assignments: usize,
+    pub space_assignments: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct PasswordResetResult {
     pub user_code: String,
@@ -924,8 +958,8 @@ fn seeded_users() -> Vec<User> {
             "Alex Johnson",
             "alex.johnson@tron.ai",
             UserStatus::Active,
-            vec!["DEVELOPER"],
-            vec!["PLATFORM"],
+            vec!["DEVELOPER", "VIEWER"],
+            vec!["PLATFORM", "DATA"],
         ),
         seeded_user(
             734_103_002_743_185_408,
@@ -936,8 +970,8 @@ fn seeded_users() -> Vec<User> {
             "Maya Singh",
             "maya.singh@tron.ai",
             UserStatus::Active,
-            vec!["VIEWER"],
-            vec!["ENTERPRISE"],
+            vec!["VIEWER", "DEVELOPER"],
+            vec!["ENTERPRISE", "DATA"],
         ),
         seeded_user(
             734_103_002_743_185_409,
@@ -949,7 +983,7 @@ fn seeded_users() -> Vec<User> {
             "sam.viewer@tron.ai",
             UserStatus::Active,
             vec!["VIEWER"],
-            vec!["SUPPORT"],
+            vec!["SUPPORT", "PLATFORM"],
         ),
         seeded_user(
             734_103_002_743_185_410,
@@ -960,8 +994,8 @@ fn seeded_users() -> Vec<User> {
             "Archived Restore",
             "archived.restore@tron.ai",
             UserStatus::Archived,
-            vec!["DEVELOPER"],
-            vec!["DATA"],
+            vec!["DEVELOPER", "VIEWER"],
+            vec!["DATA", "SUPPORT"],
         ),
         seeded_user(
             734_103_002_743_185_411,
@@ -972,8 +1006,8 @@ fn seeded_users() -> Vec<User> {
             "Reset Target",
             "reset.target@tron.ai",
             UserStatus::Active,
-            vec!["ADMIN"],
-            vec!["PLATFORM"],
+            vec!["ADMIN", "DEVELOPER"],
+            vec!["PLATFORM", "ENTERPRISE"],
         ),
         seeded_user(
             9_007_199_254_740_993,
@@ -984,8 +1018,8 @@ fn seeded_users() -> Vec<User> {
             "Large Identifier",
             "large.id@tron.ai",
             UserStatus::Active,
-            vec!["WORKSPACE_ADMIN"],
-            vec!["ENTERPRISE"],
+            vec!["WORKSPACE_ADMIN", "DEVELOPER"],
+            vec!["ENTERPRISE", "PLATFORM"],
         ),
         seeded_user(
             734_103_002_743_185_412,
@@ -997,7 +1031,7 @@ fn seeded_users() -> Vec<User> {
             "archived.only@tron.ai",
             UserStatus::Archived,
             vec!["VIEWER"],
-            vec!["SUPPORT"],
+            vec!["SUPPORT", "DATA"],
         ),
     ]
 }
