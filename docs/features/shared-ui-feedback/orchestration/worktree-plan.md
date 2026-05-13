@@ -28,7 +28,7 @@
 
 | agent id | subtask name | codex agent id | codex agent name | task ids | tdd phase | branch | worktree path | base ref | status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| test | red-feedback-runtime | pending-spawn | pending-spawn | TEST-RED-01 | red | feature/clouds3n/shared-ui-feedback/test/red-feedback-runtime | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/test/red-feedback-runtime | feature/clouds3n/shared-ui-feedback/base | ready |
+| test | red-feedback-runtime | 019e2214-4586-7610-bec7-2dc094890798 | Gibbs | TEST-RED-01 | red | feature/clouds3n/shared-ui-feedback/test/red-feedback-runtime | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/test/red-feedback-runtime | feature/clouds3n/shared-ui-feedback/base | merged_red |
 | frontend | green-toast-provider | pending-spawn | pending-spawn | FE-GREEN-01 | green | feature/clouds3n/shared-ui-feedback/frontend/green-toast-provider | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/frontend/green-toast-provider | feature/clouds3n/shared-ui-feedback/base | ready |
 | test | verify-feedback-runtime | pending-spawn | pending-spawn | TEST-VERIFY-01 | verify | feature/clouds3n/shared-ui-feedback/test/verify-feedback-runtime | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/test/verify-feedback-runtime | feature/clouds3n/shared-ui-feedback/base | ready |
 | review | final-review | pending-spawn | pending-spawn | REVIEW-01 | review | feature/clouds3n/shared-ui-feedback/review/final-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/review/final-review | feature/clouds3n/shared-ui-feedback/base | ready |
