@@ -8,6 +8,13 @@
 - branch: feature/clouds3n/user-management-model/test/verify-all-status-include-archived
 - worktree: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/verify-all-status-include-archived
 
+## Scope
+
+- depends_on: FE-FIX-03
+- acceptance refs: AC-UM-11, AC-UM-01, AC-UM-08
+- TDD refs: TDD-UM-09, TDD-UM-15
+- write_scope: verification reports only
+
 ## Task Results
 
 | task id | result | notes |
