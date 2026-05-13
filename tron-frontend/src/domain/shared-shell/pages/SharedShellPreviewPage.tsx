@@ -26,11 +26,13 @@ import {
   ToggleSwitch,
   TronShell,
   useTablePagination,
+  useToast,
 } from "@/shared";
 import { sharedShellPreviewRows } from "@/domain/shared-shell/constants";
 
 
 export function SharedShellPreviewPage() {
+  const toast = useToast();
   const [tab, setTab] = useState("resources");
   const [enabled, setEnabled] = useState(true);
   const [query, setQuery] = useState("");
@@ -86,7 +88,13 @@ export function SharedShellPreviewPage() {
         title="Workspace console foundation"
         actions={
           <>
-            <Button variant="secondary" onClick={() => setNotice("Scan export requested")}>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setNotice("Scan export requested");
+                toast.success("Scan export requested", { title: "Export queued" });
+              }}
+            >
               Export Scan
             </Button>
             <Button onClick={() => setNotice("New resource command triggered")}>
