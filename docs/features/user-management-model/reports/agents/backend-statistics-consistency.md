@@ -21,6 +21,13 @@
 | --- | --- | --- |
 | BE-GREEN-05 | pass | Added persisted SQLite-backed statistics endpoints and expanded deterministic assignment seed rows. |
 
+## TDD Evidence
+
+| cycle id | result | notes |
+| --- | --- | --- |
+| TDD-UM-14 | pass | Four statistic endpoints return uniform envelopes with `data.count`. |
+| TDD-UM-15 | pass | List/search/default/archive/includeArchived totals and deterministic assignment seed counts pass. |
+
 ## Implementation Notes
 
 - Added repository-backed statistics counts for total users, active users, role assignment rows, and space assignment rows.

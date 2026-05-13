@@ -28,8 +28,8 @@
 
 | dependency | result | evidence |
 | --- | --- | --- |
-| BE-GREEN-05 | pass | @ref:reports/agents/backend-statistics-consistency.md |
-| FE-GREEN-03 | pass | @ref:reports/agents/frontend-user-consistency-refactor.md |
+| BE-GREEN-05 | pass | @ref:reports/agents/backend-statistics-consistency.md#task-results |
+| FE-GREEN-03 | pass | @ref:reports/agents/frontend-user-consistency-refactor.md#task-results |
 
 ## Acceptance Evidence
 
@@ -76,6 +76,13 @@
 - inputs: search `server-search`; status filter `Archived`; create user fields `USER_MAYA_SINGH`, `maya.singh`, `Maya`, `Singh`, `Maya Singh`, `maya@tron.ai`; profile edit values `Alex Backend Updated` and `alex.backend.updated@example.com`.
 - network_assertions: verified `GET /api/v1/admin/users?search=&status=Active&current=2&size=15`, `GET /api/v1/admin/users?search=server-search&status=Active&current=1&size=15`, `GET /api/v1/admin/users?search=server-search&status=Archived&current=1&size=15`, `POST /api/v1/admin/users`, four statistic GETs under `/api/v1/admin/users/statistics/*`, reset `POST /api/v1/admin/users/USER_ALEX_JOHNSON/password/reset`, profile `PATCH /api/v1/admin/users/USER_ALEX_JOHNSON`, role `PUT /roles`, space `PUT /spaces`, archive `POST /archive`, and restore `POST /restore`.
 - visible_feedback_assertions: verified `Page Two From API`, `Server Search Match`, `Archived Server Result`, CSV filename/content with stable headers, backend temporary password, visible `Temporary password copied` feedback without `sr-only`, temporary password hidden after Close, profile update heading/email, role/space `aria-pressed` changes, `Archived` and `Active` status changes, statistic card values 42/17/29/31, `Contact` email/phone rendering, no old `Space Links` copy, create-page success feedback, return to `/admin/users`, and visible `Maya Singh`.
+
+## Changed Paths
+
+| path | result |
+| --- | --- |
+| docs/features/user-management-model/reports/agents/verify-consistency-refactor.md | added VERIFY evidence |
+| docs/features/user-management-model/reports/test-report.md | updated TEST-VERIFY-02 evidence |
 
 ## Residual Risks
 

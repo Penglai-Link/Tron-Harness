@@ -8,6 +8,13 @@
 - branch: feature/clouds3n/user-management-model/frontend/fix-all-status-include-archived
 - worktree: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/fix-all-status-include-archived
 
+## Scope
+
+- depends_on: TEST-RED-17, REVIEW-04
+- acceptance refs: AC-UM-11, AC-UM-01, AC-UM-08
+- TDD refs: TDD-UM-09, TDD-UM-15
+- write_scope: frontend list API adapter, user-list hook, users page status filter, and this report
+
 ## Task Results
 
 | task id | result | notes |

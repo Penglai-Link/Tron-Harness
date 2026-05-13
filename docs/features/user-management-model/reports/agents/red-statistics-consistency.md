@@ -1,6 +1,6 @@
 # RED Worker Report: Statistics Consistency
 
-## Identity
+## Agent Identity
 
 - agent_id: test
 - subtask_name: red-statistics-consistency
@@ -10,16 +10,22 @@
 
 ## Scope
 
-- Added backend RED coverage for `@ref:spec/test-plan.md#TDD-UM-14`.
-- Added backend RED coverage for `@ref:spec/test-plan.md#TDD-UM-15`.
+- Added backend RED coverage for @ref:spec/test-plan.md#command-matrix
+- Added backend RED coverage for @ref:spec/test-plan.md#command-matrix
 - Changed only TEST-RED-15 report/test assets.
 
-## Changed Files
+## Task Results
+
+| task id | result | notes |
+| --- | --- | --- |
+| TEST-RED-15 | fail_expected_red | Added backend statistic and list/search consistency RED coverage. |
+
+## Changed Paths
 
 - `tron-backend/tests/user_management_statistics.rs`
 - `docs/features/user-management-model/reports/agents/red-statistics-consistency.md`
 
-## RED Evidence
+## TDD Evidence
 
 | cycle id | acceptance ids | command | result | status |
 | --- | --- | --- | --- | --- |
@@ -42,6 +48,12 @@ The failure is expected RED behavior. The command compiled and executed the new 
 - `status=Archived&search=archived` returns archived persisted users only.
 - `includeArchived=true` returns both active and archived users and total equals all persisted users.
 - Pagination returns a first page smaller than `data.total`, proving total is not current page length.
+
+## Commands
+
+| command | result |
+| --- | --- |
+| `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_statistics` | fail_expected_red |
 
 ## Blockers
 

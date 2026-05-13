@@ -17,6 +17,29 @@
 - TDD refs: TDD-UM-14, TDD-UM-15, TDD-UM-16, TDD-UM-17, TDD-UM-18, TDD-UM-01, TDD-UM-02, TDD-UM-08
 - write_scope: docs/features/user-management-model/reports/agents/consistency-refactor-review.md; docs/features/user-management-model/reports/review-report.md
 
+## Task Results
+
+| task id | result | notes |
+| --- | --- | --- |
+| REVIEW-04 | findings_recorded | Medium All Status include-archived contract gap and low canonical report underclaim findings recorded. |
+
+## TDD Evidence
+
+| cycle id | result | notes |
+| --- | --- | --- |
+| TDD-UM-14 | pass | Statistic endpoint evidence retained from VERIFY. |
+| TDD-UM-15 | finding | Backend include-archived evidence passed, but frontend All Status did not exercise the same contract. |
+| TDD-UM-16 | pass | Statistic-card evidence retained from VERIFY. |
+| TDD-UM-17 | pass | Directory layout evidence retained from VERIFY. |
+| TDD-UM-18 | pass | Create-page evidence retained from VERIFY. |
+
+## Changed Paths
+
+| path | result |
+| --- | --- |
+| docs/features/user-management-model/reports/agents/consistency-refactor-review.md | added review findings |
+| docs/features/user-management-model/reports/review-report.md | recorded REVIEW-04 summary |
+
 ## Findings
 
 ### Medium: All Status does not use the approved includeArchived contract
@@ -49,7 +72,7 @@
 
 ## Slow Browser Reuse
 
-- reused evidence: @ref:reports/agents/verify-consistency-refactor.md
+- reused evidence: @ref:reports/agents/verify-consistency-refactor.md#browser-verify-evidence
 - rationale: `spec/test-plan.md#command-index` marks full and focused user-management Playwright commands as `slow/browser` with `review-if-stale` rerun policy. VERIFY evidence recorded `rtk make be-test`, `rtk make fe-check`, full `user-management-smoke` 17/17, concrete clicks, inputs, network assertions, and visible feedback assertions. Current review branch changes after VERIFY are docs-only, so the browser evidence is not stale against implementation paths.
 - rerun decision: did not rerun Playwright.
 

@@ -21,6 +21,14 @@
 | --- | --- | --- |
 | FE-GREEN-03 | pass | User directory statistics now read dedicated count APIs, directory layout uses Contact plus Space Assignments copy, and Add User navigates to the CreateUserPage route. |
 
+## TDD Evidence
+
+| cycle id | result | notes |
+| --- | --- | --- |
+| TDD-UM-16 | pass | Statistic cards call dedicated statistic APIs and render `data.count`. |
+| TDD-UM-17 | pass | Directory layout renders display-name-only User, Contact email/phone, and Space Assignments copy. |
+| TDD-UM-18 | pass | Add User navigates to `/admin/users/new`, and create submit is owned by CreateUserPage. |
+
 ## Implementation Notes
 
 - Added four statistic endpoint clients and a `useUserStatistics` hook that renders `data.count` values in API mode and deterministic mock counts in mock mode.
