@@ -13,7 +13,7 @@ Workflow B evolution reopened frontend interaction evidence. The retained fronte
 | FE-GREEN-01 | frontend user-management model and pages aligned to user-only API boundary via `db43432` | @ref:orchestration/integration-log.md#EVT-006 | done |
 | FE-VERIFY-01 | frontend typecheck/build, smoke, and runtime journey verified | @ref:orchestration/integration-log.md#EVT-007 | done |
 | FE-FIX-01 | missing/unknown detail `userCode` renders not-found without mutation controls via `3aee08e` | @ref:orchestration/integration-log.md#EVT-010 | done |
-| FE-GREEN-02 | pending frontend implementation for directory query parameters, Export download, Add User create flow, detail mutation API calls, backend reset API, and visible Copy feedback | @ref:tasks/frontend-task.md#FE-GREEN-02 | ready |
+| FE-GREEN-02 | frontend implementation for directory query parameters, Export download, Add User create flow, detail mutation API calls, backend reset API, and visible Copy feedback integrated via `65b2339` | @ref:orchestration/integration-log.md#EVT-018 | done |
 | FE-VERIFY-02 | pending browser/runtime verification for evolved interaction evidence | @ref:tasks/frontend-task.md#FE-VERIFY-02 | ready |
 
 ## TDD Evidence
@@ -24,11 +24,11 @@ Workflow B evolution reopened frontend interaction evidence. The retained fronte
 | TDD-UM-01 | runtime user directory and stable-code detail navigation verified | @ref:orchestration/integration-log.md#EVT-007 | verified |
 | TDD-UM-05 | runtime reset-password confirmation/result UI verified | @ref:orchestration/integration-log.md#EVT-007 | verified |
 | TDD-UM-08 | post-review smoke coverage verifies missing/unknown detail `userCode` not-found behavior | @ref:orchestration/integration-log.md#EVT-010 | verified |
-| TDD-UM-09 | pending | @ref:spec/test-plan.md#TDD-UM-09 | ready |
-| TDD-UM-10 | pending | @ref:spec/test-plan.md#TDD-UM-10 | ready |
-| TDD-UM-11 | pending | @ref:spec/test-plan.md#TDD-UM-11 | ready |
-| TDD-UM-12 | pending | @ref:spec/test-plan.md#TDD-UM-12 | ready |
-| TDD-UM-13 | pending | @ref:spec/test-plan.md#TDD-UM-13 | ready |
+| TDD-UM-09 | directory query parameter RED tests pass after FE-GREEN-02 | @ref:orchestration/integration-log.md#EVT-018 | green_integrated |
+| TDD-UM-10 | Add User RED tests pass after FE-GREEN-02 | @ref:orchestration/integration-log.md#EVT-018 | green_integrated |
+| TDD-UM-11 | Export CSV download RED test passes after FE-GREEN-02 | @ref:orchestration/integration-log.md#EVT-018 | green_integrated |
+| TDD-UM-12 | reset API/copy feedback RED tests pass after FE-GREEN-02 | @ref:orchestration/integration-log.md#EVT-018 | green_integrated |
+| TDD-UM-13 | detail mutation RED tests pass after FE-GREEN-02 | @ref:orchestration/integration-log.md#EVT-018 | green_integrated |
 
 ## Worktree Evidence
 
@@ -49,6 +49,11 @@ Workflow B evolution reopened frontend interaction evidence. The retained fronte
 | `docs/features/user-management-model/reports/agents/frontend-green-admin-users.md` | added worker evidence report | @ref:orchestration/integration-log.md#EVT-006 |
 | `tron-frontend/tests/user-management-smoke.spec.ts` | added missing/unknown detail `userCode` smoke coverage | @ref:orchestration/integration-log.md#EVT-010 |
 | `docs/features/user-management-model/reports/agents/frontend-fix-detail-not-found.md` | added detail not-found fix evidence report | @ref:orchestration/integration-log.md#EVT-010 |
+| `tron-frontend/src/domain/admin/api/adminApi.ts` | added admin user API request helpers and mutation functions | @ref:orchestration/integration-log.md#EVT-018 |
+| `tron-frontend/src/domain/admin/hooks/useUserList.ts` | added paged API-mode list state and mock pagination fallback | @ref:orchestration/integration-log.md#EVT-018 |
+| `tron-frontend/src/domain/admin/pages/UsersPage.tsx` | implemented API-driven search/status/pagination, CSV export, and Add User form | @ref:orchestration/integration-log.md#EVT-018 |
+| `tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx` | implemented profile, role, space, lifecycle, reset API, and visible Copy feedback interactions | @ref:orchestration/integration-log.md#EVT-018 |
+| `docs/features/user-management-model/reports/agents/frontend-interaction-gaps.md` | added GREEN worker evidence report | @ref:orchestration/integration-log.md#EVT-018 |
 
 ## Commands
 
@@ -56,6 +61,7 @@ Workflow B evolution reopened frontend interaction evidence. The retained fronte
 | --- | --- | --- |
 | @ref:spec/test-plan.md#command-matrix | `rtk make fe-check`, smoke tests, and local runtime browser checks passed | @ref:orchestration/integration-log.md#validation-after-integration |
 | @ref:spec/test-plan.md#command-matrix | post-review frontend fix reran smoke tests and `rtk make fe-check` | @ref:orchestration/integration-log.md#EVT-010 |
+| @ref:spec/test-plan.md#command-index | FE-GREEN-02 reran focused and full user-management browser smoke | @ref:orchestration/integration-log.md#EVT-018 |
 
 ## Acceptance Mapping
 
