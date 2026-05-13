@@ -91,6 +91,8 @@
 | TDD-UM-11 | Export CSV download test passes after FE-GREEN-02 and FE-VERIFY-02 | @ref:orchestration/integration-log.md#EVT-020 | verified |
 | TDD-UM-12 | reset API, copy feedback, close/no-reveal, and malformed reset-response contract tests pass after FE-FIX-02 | @ref:orchestration/integration-log.md#EVT-026 | verified |
 | TDD-UM-13 | detail mutation endpoint tests pass after FE-GREEN-02 and FE-VERIFY-02 | @ref:orchestration/integration-log.md#EVT-020 | verified |
+| TDD-UM-14 | statistic endpoints return persisted `data.count` envelopes after BE-GREEN-05 | @ref:orchestration/integration-log.md#EVT-033 | green_integrated |
+| TDD-UM-15 | list/search and deterministic seed consistency pass after BE-GREEN-05 | @ref:orchestration/integration-log.md#EVT-033 | green_integrated |
 
 ## Refactor And Regression Evidence
 
