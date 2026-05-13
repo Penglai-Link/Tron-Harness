@@ -1,6 +1,8 @@
 import type {
   UserRecord,
+  UserPhone,
   UserRoleCode,
+  UserStatistics,
   UserStatus,
 } from "@/domain/admin/model";
 
@@ -9,6 +11,10 @@ export const adminApiEndpoints = {
   listPermissionDomains: "GET /api/v1/admin/permission-domains",
   listRoles: "GET /api/v1/admin/roles",
   listUsers: "GET /api/v1/admin/users",
+  getTotalUsersStatistic: "GET /api/v1/admin/users/statistics/total-users",
+  getActiveUsersStatistic: "GET /api/v1/admin/users/statistics/active-users",
+  getRoleAssignmentsStatistic: "GET /api/v1/admin/users/statistics/role-assignments",
+  getSpaceAssignmentsStatistic: "GET /api/v1/admin/users/statistics/space-assignments",
   createUser: "POST /api/v1/admin/users",
   getUser: "GET /api/v1/admin/users/{userCode}",
   updateUserProfile: "PATCH /api/v1/admin/users/{userCode}",
@@ -42,11 +48,16 @@ export interface UserListQuery {
   status?: UserStatus | "" | "All";
 }
 
+interface UserStatisticCount {
+  count: number;
+}
+
 export interface CreateUserPayload {
   displayName: string;
   email: string;
   firstName: string;
   lastName: string;
+  phone?: UserPhone | null;
   roleCodes: UserRoleCode[];
   spaceCodes: string[];
   userCode: string;
@@ -188,6 +199,32 @@ export async function fetchAdminUserPage(query: UserListQuery, signal?: AbortSig
     current: query.current,
     size: query.size,
   });
+}
+
+async function fetchAdminUserStatisticCount(endpoint: string, signal?: AbortSignal) {
+  const payload = await requestAdminApi<UserStatisticCount>(endpoint, { signal });
+  return Number(payload.count) || 0;
+}
+
+export async function fetchAdminUserStatistics(signal?: AbortSignal): Promise<UserStatistics> {
+  const [
+    totalUsers,
+    activeUsers,
+    roleAssignments,
+    spaceAssignments,
+  ] = await Promise.all([
+    fetchAdminUserStatisticCount(adminApiEndpoints.getTotalUsersStatistic, signal),
+    fetchAdminUserStatisticCount(adminApiEndpoints.getActiveUsersStatistic, signal),
+    fetchAdminUserStatisticCount(adminApiEndpoints.getRoleAssignmentsStatistic, signal),
+    fetchAdminUserStatisticCount(adminApiEndpoints.getSpaceAssignmentsStatistic, signal),
+  ]);
+
+  return {
+    activeUsers,
+    roleAssignments,
+    spaceAssignments,
+    totalUsers,
+  };
 }
 
 export function createAdminUser(payload: CreateUserPayload) {
