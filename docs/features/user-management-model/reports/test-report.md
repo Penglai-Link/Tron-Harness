@@ -2,7 +2,7 @@
 
 ## Summary
 
-`TEST-RED-01..08`, interaction-gap RED `TEST-RED-09..13`, and reset-response RED `TEST-RED-14` are completed and merged into base. All RED failures were expected behavior gaps, GREEN evidence passes after database/backend/frontend integration, VERIFY evidence is integrated, and the final reset-response contract fix passes focused and full user-management browser evidence.
+`TEST-RED-01..08`, interaction-gap RED `TEST-RED-09..13`, reset-response RED `TEST-RED-14`, backend consistency RED `TEST-RED-15`, and frontend consistency RED `TEST-RED-16` are completed and merged into base. All completed RED failures were expected behavior gaps.
 
 ## Test Task Evidence
 
@@ -22,6 +22,8 @@
 | TEST-RED-12 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
 | TEST-RED-13 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
 | TEST-RED-14 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-024 | done |
+| TEST-RED-15 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-031 | done |
+| TEST-RED-16 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-030 | done |
 | TEST-VERIFY-01 | pass | @ref:orchestration/integration-log.md#EVT-007 | done |
 
 ## Cycle Evidence
@@ -42,6 +44,11 @@
 | TDD-UM-12 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
 | TDD-UM-13 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-016 | done |
 | TDD-UM-12 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-024 | done |
+| TDD-UM-14 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-031 | done |
+| TDD-UM-15 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-031 | done |
+| TDD-UM-16 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-030 | done |
+| TDD-UM-17 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-030 | done |
+| TDD-UM-18 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-030 | done |
 
 ## RED Failure Evidence
 
@@ -61,6 +68,11 @@
 | TDD-UM-12 | Focused Playwright tests fail because reset does not call the backend endpoint and Copy feedback is `sr-only`. | @ref:orchestration/integration-log.md#EVT-016 |
 | TDD-UM-13 | Focused Playwright tests fail because profile edit is missing and role/space/archive/restore requests are not sent. | @ref:orchestration/integration-log.md#EVT-016 |
 | TDD-UM-12 | Reset response contract test fails because missing `temporaryPassword` displays a client-generated fallback instead of a visible contract error. | @ref:orchestration/integration-log.md#EVT-024 |
+| TDD-UM-14 | Focused backend tests fail because the four statistic endpoints return 404 instead of uniform `data.count` envelopes. | @ref:orchestration/integration-log.md#EVT-031 |
+| TDD-UM-15 | Focused backend tests fail because deterministic role/space assignment seed counts are not stronger than total user count; list/archive/includeArchived/pagination assertions execute. | @ref:orchestration/integration-log.md#EVT-031 |
+| TDD-UM-16 | Focused Playwright test fails because statistic cards do not call the four statistic endpoints and still derive visible values from directory records. | @ref:orchestration/integration-log.md#EVT-030 |
+| TDD-UM-17 | Focused Playwright test fails because `Contact` is absent, `User` still contains username/email, and `Space Links` remains visible. | @ref:orchestration/integration-log.md#EVT-030 |
+| TDD-UM-18 | Focused Playwright test fails because Add User remains on `/admin/users` instead of navigating to `/admin/users/new`. | @ref:orchestration/integration-log.md#EVT-030 |
 
 ## GREEN Pass Evidence
 
@@ -111,6 +123,10 @@
 | docs/features/user-management-model/reports/agents/red-interaction-gaps.md | added RED worker report | @ref:orchestration/integration-log.md#EVT-016 |
 | docs/features/user-management-model/reports/agents/reset-contract-red.md | added reset contract RED worker report | @ref:orchestration/integration-log.md#EVT-024 |
 | tron-frontend/tests/user-management-smoke.spec.ts | strengthened reset-response contract GREEN assertions | @ref:orchestration/integration-log.md#EVT-026 |
+| docs/features/user-management-model/reports/agents/red-statistics-consistency.md | added backend statistics consistency RED worker report | @ref:orchestration/integration-log.md#EVT-031 |
+| tron-backend/tests/user_management_statistics.rs | added backend statistics/list consistency RED tests | @ref:orchestration/integration-log.md#EVT-031 |
+| docs/features/user-management-model/reports/agents/red-frontend-consistency.md | added frontend consistency RED worker report | @ref:orchestration/integration-log.md#EVT-030 |
+| tron-frontend/tests/user-management-smoke.spec.ts | evolved with frontend consistency RED tests | @ref:orchestration/integration-log.md#EVT-030 |
 
 ## Worktree Evidence
 
