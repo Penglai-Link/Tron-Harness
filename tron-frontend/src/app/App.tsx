@@ -18,6 +18,7 @@ import {
   useLocation,
 } from "react-router";
 import {
+  ToastProvider,
   TronShell,
   tronNavigation,
 } from "@/shared";
@@ -200,7 +201,9 @@ function RoutedApp() {
 export function App() {
   return (
     <BrowserRouter>
-      <RoutedApp />
+      <ToastProvider>
+        <RoutedApp />
+      </ToastProvider>
     </BrowserRouter>
   );
 }

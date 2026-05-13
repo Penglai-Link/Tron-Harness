@@ -12,3 +12,4 @@ export * from "./ui/DataTable";
 export * from "./ui/Forms";
 export * from "./ui/TablePagination";
 export * from "./ui/Tabs";
+export * from "./ui/Toast";
