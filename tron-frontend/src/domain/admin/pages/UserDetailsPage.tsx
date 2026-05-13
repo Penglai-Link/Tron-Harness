@@ -55,6 +55,7 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 type ResetPasswordState =
   | { mode: "confirm"; userCode: string }
+  | { message: string; mode: "error"; userCode: string }
   | { mode: "result"; temporaryPassword: string; userCode: string };
 
 function sortByOptions(values: string[], options: readonly string[]) {
@@ -278,9 +279,21 @@ export function UserDetailsPage() {
     const result = isApiMode
       ? await resetAdminUserPassword(record.userCode)
       : { temporaryPassword: generateTemporaryPassword(record), passwordResetRequired: true };
-    const temporaryPassword = typeof result.temporaryPassword === "string" && result.temporaryPassword
-      ? result.temporaryPassword
-      : generateTemporaryPassword(record);
+    const temporaryPassword = typeof result.temporaryPassword === "string"
+      ? result.temporaryPassword.trim()
+      : "";
+
+    if (!temporaryPassword) {
+      const message = "Reset response error: temporary password was not returned by the backend.";
+      setResetState({
+        message,
+        mode: "error",
+        userCode: record.userCode,
+      });
+      setCopyFeedback("");
+      setNotice(`Password reset failed for ${record.displayName}`);
+      return;
+    }
 
     patchUser(record, {
       passwordResetRequired: result.passwordResetRequired ?? true,
@@ -448,6 +461,13 @@ export function UserDetailsPage() {
                   <Button size="sm" variant="ghost" onClick={closeTemporaryPassword}>Close</Button>
                 </div>
                 {copyFeedback ? <p className="mt-2 text-sm font-medium text-[var(--color-primary)]">{copyFeedback}</p> : null}
+              </div>
+            ) : null}
+
+            {currentResetState?.mode === "error" ? (
+              <div className="rounded-lg border border-[var(--color-error)] bg-[var(--color-error-container)] p-4" role="alert">
+                <p className="text-sm font-medium text-[var(--color-on-error-container)]">{currentResetState.message}</p>
+                <Button className="mt-3" size="sm" variant="secondary" onClick={() => setResetState(null)}>Close</Button>
               </div>
             ) : null}
           </SurfaceCard>
