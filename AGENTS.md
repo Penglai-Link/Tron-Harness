@@ -44,3 +44,4 @@ If you encounter anything counterintuitive, surprising or confusing in this proj
 <!-- Surprising: Vite does not load tron-frontend/.env.example by default; frontend runtime values must come from real Vite env files such as .env.local or shell variables. -->
 <!-- Surprising: rtk find does not preserve standard find flags such as -path or -print; use rtk proxy find ... when exact find predicates are required. -->
 <!-- Surprising: installed eliteforge-codex-superpower validator briefly failed from helper-script regressions (`acceptance_ids_from_acceptance` missing `C.` and `WorktreeNotes` typo); the project docs were valid after patching the installed helper. -->
+<!-- Surprising: feature/clouds3n/shared-ui-feedback/base was forked from feature/clouds3n/user-management-model/base, so fast-forwarding shared-ui-feedback into master also brings the completed user-management-model feature history, not only shared Toast files. -->
