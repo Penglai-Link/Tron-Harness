@@ -1,4 +1,5 @@
 import {
+  type FormEvent,
   useMemo,
   useState,
 } from "react";
@@ -8,6 +9,7 @@ import {
   BriefcaseBusiness,
   Copy,
   KeyRound,
+  Pencil,
   RotateCcw,
   ShieldCheck,
 } from "lucide-react";
@@ -20,14 +22,28 @@ import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import { cn } from "@/shared/lib/utils";
 import {
+  Field,
   PageHeader,
   SurfaceCard,
+  TextInput,
   TronShell,
 } from "@/shared";
 
+import {
+  archiveAdminUser,
+  replaceAdminUserRoles,
+  replaceAdminUserSpaces,
+  resetAdminUserPassword,
+  restoreAdminUser,
+  updateAdminUserProfile,
+  type ReplaceRolesResult,
+  type ReplaceSpacesResult,
+  type UpdateUserProfilePayload,
+} from "@/domain/admin/api";
 import { useUserList } from "@/domain/admin/hooks";
 import type {
   UserRecord,
+  UserRoleCode,
   UserStatus,
 } from "@/domain/admin/model";
 import {
@@ -35,6 +51,7 @@ import {
   getAdminUserRoleLabel,
   getStatusTone,
 } from "@/domain/admin/constants";
+import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 type ResetPasswordState =
   | { mode: "confirm"; userCode: string }
@@ -113,23 +130,53 @@ function AssignmentChips({
   );
 }
 
+function roleCodesFromResult(result: ReplaceRolesResult, fallback: string[]) {
+  if (Array.isArray(result.roleCodes)) return result.roleCodes;
+  if (Array.isArray(result.roleAssignments)) {
+    return result.roleAssignments
+      .map((assignment) => assignment.roleCode)
+      .filter((roleCode): roleCode is UserRoleCode => Boolean(roleCode));
+  }
+  return fallback as UserRoleCode[];
+}
+
+function spaceCodesFromResult(result: ReplaceSpacesResult, fallback: string[]) {
+  if (Array.isArray(result.spaceCodes)) return result.spaceCodes;
+  if (Array.isArray(result.spaceAssignments)) {
+    return result.spaceAssignments
+      .map((assignment) => assignment.spaceCode)
+      .filter((spaceCode): spaceCode is string => Boolean(spaceCode));
+  }
+  return fallback;
+}
+
 export function UserDetailsPage() {
-  const users = useUserList();
+  const users = useUserList({ current: 1, size: 100 });
   const { search } = useLocation();
   const requestedUserCode = new URLSearchParams(search).get("userCode");
-  const user = requestedUserCode === null
+  const baseUser = requestedUserCode === null
     ? undefined
-    : users.find((candidate) => candidate.userCode === requestedUserCode);
-  const [roleAssignments, setRoleAssignments] = useState<Record<string, string[]>>({});
-  const [spaceAssignments, setSpaceAssignments] = useState<Record<string, string[]>>({});
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, UserStatus>>({});
+    : users.records.find((candidate) => candidate.userCode === requestedUserCode);
+  const [userOverrides, setUserOverrides] = useState<Record<string, UserRecord>>({});
+  const [profileForm, setProfileForm] = useState<UpdateUserProfilePayload | null>(null);
   const [resetState, setResetState] = useState<ResetPasswordState | null>(null);
+  const [copyFeedback, setCopyFeedback] = useState("");
   const [notice, setNotice] = useState("");
+  const user = baseUser ? userOverrides[baseUser.userCode] ?? baseUser : undefined;
   const roleOptions = adminUserRoleOptions;
   const spaceOptions = useMemo(
-    () => Array.from(new Set(users.flatMap((item) => item.spaceCodes))).sort(),
-    [users],
+    () => Array.from(new Set(users.records.flatMap((item) => item.spaceCodes))).sort(),
+    [users.records],
   );
+  const isApiMode = getServiceDataSource("admin") === "api";
+
+  function replaceUser(nextUser: UserRecord) {
+    setUserOverrides((current) => ({ ...current, [nextUser.userCode]: nextUser }));
+  }
+
+  function patchUser(record: UserRecord, patch: Partial<UserRecord>) {
+    replaceUser({ ...record, ...patch });
+  }
 
   if (!user) {
     const notFoundMessage = requestedUserCode
@@ -150,47 +197,111 @@ export function UserDetailsPage() {
     );
   }
 
-  const assignedRoles = roleAssignments[user.userCode] ?? user.roleCodes;
-  const assignedSpaces = spaceAssignments[user.userCode] ?? user.spaceCodes;
-  const currentStatus = statusOverrides[user.userCode] ?? user.status;
+  const assignedRoles = user.roleCodes;
+  const assignedSpaces = user.spaceCodes;
+  const currentStatus = user.status;
   const currentResetState = resetState?.userCode === user.userCode ? resetState : null;
 
-  function toggleRoleAssignment(record: UserRecord, value: string) {
-    const active = assignedRoles.includes(value);
+  async function saveProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!profileForm || !user) return;
+
+    const updatedUser = isApiMode
+      ? await updateAdminUserProfile(user.userCode, profileForm)
+      : {
+        ...user,
+        ...profileForm,
+        updatedAt: new Date().toISOString(),
+      };
+
+    replaceUser(updatedUser);
+    setProfileForm(null);
+    setNotice(`${updatedUser.displayName} profile updated`);
+  }
+
+  async function toggleRoleAssignment(record: UserRecord, value: string) {
+    const active = assignedRoles.includes(value as UserRoleCode);
     const nextRoles = active
       ? assignedRoles.filter((item) => item !== value)
       : sortByOptions([...assignedRoles, value], roleOptions);
-    setRoleAssignments((current) => ({ ...current, [record.userCode]: nextRoles }));
+    const result = isApiMode
+      ? await replaceAdminUserRoles(record.userCode, nextRoles)
+      : { roleCodes: nextRoles as UserRoleCode[], updatedAt: new Date().toISOString() };
+    const roleCodes = roleCodesFromResult(result, nextRoles);
+
+    patchUser(record, {
+      roleCodes,
+      updatedAt: result.updatedAt ?? record.updatedAt,
+    });
     setNotice(`${getAdminUserRoleLabel(value)} role code ${active ? "removed from" : "assigned to"} ${record.displayName}`);
   }
 
-  function toggleSpaceAssignment(record: UserRecord, value: string) {
+  async function toggleSpaceAssignment(record: UserRecord, value: string) {
     const active = assignedSpaces.includes(value);
     const nextSpaces = active
       ? assignedSpaces.filter((item) => item !== value)
       : sortByOptions([...assignedSpaces, value], spaceOptions);
-    setSpaceAssignments((current) => ({ ...current, [record.userCode]: nextSpaces }));
+    const result = isApiMode
+      ? await replaceAdminUserSpaces(record.userCode, nextSpaces)
+      : { spaceCodes: nextSpaces, updatedAt: new Date().toISOString() };
+    const spaceCodes = spaceCodesFromResult(result, nextSpaces);
+
+    patchUser(record, {
+      spaceCodes,
+      updatedAt: result.updatedAt ?? record.updatedAt,
+    });
     setNotice(`${value} space code ${active ? "removed from" : "assigned to"} ${record.displayName}`);
   }
 
-  function toggleLifecycle(record: UserRecord) {
-    const nextStatus: UserStatus = currentStatus === "Archived" ? "Active" : "Archived";
-    setStatusOverrides((current) => ({ ...current, [record.userCode]: nextStatus }));
+  async function toggleLifecycle(record: UserRecord) {
+    const archiving = currentStatus !== "Archived";
+    const result = isApiMode
+      ? archiving
+        ? await archiveAdminUser(record.userCode)
+        : await restoreAdminUser(record.userCode)
+      : {
+        archivedAt: archiving ? new Date().toISOString() : null,
+        status: archiving ? "Archived" as UserStatus : "Active" as UserStatus,
+        updatedAt: new Date().toISOString(),
+      };
+    const nextStatus = result.status ?? (archiving ? "Archived" : "Active");
+
+    patchUser(record, {
+      archivedAt: result.archivedAt ?? (nextStatus === "Archived" ? record.archivedAt ?? new Date().toISOString() : null),
+      status: nextStatus,
+      updatedAt: result.updatedAt ?? record.updatedAt,
+    });
     setNotice(`${record.displayName} ${nextStatus === "Archived" ? "archived" : "restored"}`);
   }
 
-  function confirmPasswordReset(record: UserRecord) {
+  async function confirmPasswordReset(record: UserRecord) {
+    const result = isApiMode
+      ? await resetAdminUserPassword(record.userCode)
+      : { temporaryPassword: generateTemporaryPassword(record), passwordResetRequired: true };
+    const temporaryPassword = typeof result.temporaryPassword === "string" && result.temporaryPassword
+      ? result.temporaryPassword
+      : generateTemporaryPassword(record);
+
+    patchUser(record, {
+      passwordResetRequired: result.passwordResetRequired ?? true,
+    });
     setResetState({
       mode: "result",
-      temporaryPassword: generateTemporaryPassword(record),
+      temporaryPassword,
       userCode: record.userCode,
     });
+    setCopyFeedback("");
     setNotice(`Temporary password generated for ${record.displayName}`);
   }
 
   function copyTemporaryPassword(password: string) {
     void navigator.clipboard?.writeText(password);
-    setNotice("Temporary password copied");
+    setCopyFeedback("Temporary password copied");
+  }
+
+  function closeTemporaryPassword() {
+    setResetState(null);
+    setCopyFeedback("");
   }
 
   return (
@@ -206,7 +317,7 @@ export function UserDetailsPage() {
           <div className="mb-5 flex items-start justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold">Basic Information</h2>
-              <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{user.username} · {user.email}</p>
+              <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{user.username}</p>
             </div>
             <div className="flex items-center gap-2">
               <Badge tone={getStatusTone(currentStatus)}>{currentStatus}</Badge>
@@ -229,12 +340,43 @@ export function UserDetailsPage() {
             <DetailField label="Created" value={formatTimestamp(user.createdAt)} />
             <DetailField label="Updated" value={formatTimestamp(user.updatedAt)} />
           </div>
-          <div className="mt-5 border-t border-[var(--color-outline-variant)] pt-4">
+          <div className="mt-5 flex flex-wrap gap-2 border-t border-[var(--color-outline-variant)] pt-4">
+            <Button variant="secondary" onClick={() => setProfileForm({
+              displayName: user.displayName,
+              email: user.email,
+              firstName: user.firstName,
+              lastName: user.lastName,
+            })}>
+              <Pencil size={16} aria-hidden="true" />
+              Edit Profile
+            </Button>
             <Button variant="secondary" onClick={() => toggleLifecycle(user)}>
               {currentStatus === "Archived" ? <RotateCcw size={16} aria-hidden="true" /> : <Archive size={16} aria-hidden="true" />}
               {currentStatus === "Archived" ? "Restore User" : "Archive User"}
             </Button>
           </div>
+          {profileForm ? (
+            <form className="mt-5 grid gap-4 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4" onSubmit={saveProfile}>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="First Name">
+                  <TextInput value={profileForm.firstName} onChange={(event) => setProfileForm((current) => current ? { ...current, firstName: event.target.value } : current)} />
+                </Field>
+                <Field label="Last Name">
+                  <TextInput value={profileForm.lastName} onChange={(event) => setProfileForm((current) => current ? { ...current, lastName: event.target.value } : current)} />
+                </Field>
+                <Field label="Display Name">
+                  <TextInput value={profileForm.displayName} onChange={(event) => setProfileForm((current) => current ? { ...current, displayName: event.target.value } : current)} />
+                </Field>
+                <Field label="Email">
+                  <TextInput type="email" value={profileForm.email} onChange={(event) => setProfileForm((current) => current ? { ...current, email: event.target.value } : current)} />
+                </Field>
+              </div>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button type="button" variant="ghost" onClick={() => setProfileForm(null)}>Cancel</Button>
+                <Button type="submit">Save Profile</Button>
+              </div>
+            </form>
+          ) : null}
         </SurfaceCard>
 
         <div className="grid gap-4">
@@ -249,7 +391,7 @@ export function UserDetailsPage() {
                 options={roleOptions}
                 selected={assignedRoles}
                 formatValue={getAdminUserRoleLabel}
-                onToggle={(value) => toggleRoleAssignment(user, value)}
+                onToggle={(value) => void toggleRoleAssignment(user, value)}
               />
             </section>
             <section className="border-t border-[var(--color-outline-variant)] pt-5">
@@ -261,7 +403,7 @@ export function UserDetailsPage() {
                 label={`Space codes for ${user.displayName}`}
                 options={spaceOptions}
                 selected={assignedSpaces}
-                onToggle={(value) => toggleSpaceAssignment(user, value)}
+                onToggle={(value) => void toggleSpaceAssignment(user, value)}
               />
             </section>
           </SurfaceCard>
@@ -286,7 +428,7 @@ export function UserDetailsPage() {
                   The backend will generate a temporary password and no email verification will be sent.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button size="sm" onClick={() => confirmPasswordReset(user)}>Confirm Reset</Button>
+                  <Button size="sm" onClick={() => void confirmPasswordReset(user)}>Confirm Reset</Button>
                   <Button size="sm" variant="ghost" onClick={() => setResetState(null)}>Cancel</Button>
                 </div>
               </div>
@@ -303,8 +445,9 @@ export function UserDetailsPage() {
                     <Copy size={14} aria-hidden="true" />
                     Copy
                   </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setResetState(null)}>Close</Button>
+                  <Button size="sm" variant="ghost" onClick={closeTemporaryPassword}>Close</Button>
                 </div>
+                {copyFeedback ? <p className="mt-2 text-sm font-medium text-[var(--color-primary)]">{copyFeedback}</p> : null}
               </div>
             ) : null}
           </SurfaceCard>
