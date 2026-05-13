@@ -2,7 +2,7 @@
 
 ## Summary
 
-`TEST-RED-01..08`, interaction-gap RED `TEST-RED-09..13`, reset-response RED `TEST-RED-14`, backend consistency RED `TEST-RED-15`, frontend consistency RED `TEST-RED-16`, and consistency refactor VERIFY `TEST-VERIFY-02` are completed. All completed RED failures were expected behavior gaps.
+`TEST-RED-01..08`, interaction-gap RED `TEST-RED-09..13`, reset-response RED `TEST-RED-14`, backend consistency RED `TEST-RED-15`, frontend consistency RED `TEST-RED-16`, consistency refactor VERIFY `TEST-VERIFY-02`, and All Status include-archived VERIFY `TEST-VERIFY-03` are completed. All completed RED failures were expected behavior gaps.
 
 ## Test Task Evidence
 
@@ -27,7 +27,7 @@
 | TEST-RED-17 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-041 | done |
 | TEST-VERIFY-01 | pass | @ref:orchestration/integration-log.md#EVT-007 | done |
 | TEST-VERIFY-02 | pass | @ref:reports/agents/verify-consistency-refactor.md#agent-report-testverify-consistency-refactor | done |
-| TEST-VERIFY-03 | ready | @ref:tasks/test-task.md#task-table | ready |
+| TEST-VERIFY-03 | pass | @ref:reports/agents/verify-all-status-include-archived.md#agent-report-verify-all-status-include-archived | done |
 
 ## Cycle Evidence
 
@@ -110,6 +110,7 @@
 | --- | --- | --- |
 | @ref:spec/test-plan.md#command-matrix | GREEN and VERIFY backend/frontend/docs checks pass | @ref:orchestration/integration-log.md#validation-after-integration |
 | TEST-VERIFY-02 | `rtk make be-test`, `rtk make fe-check`, full `user-management-smoke`, task validator, and `rtk git diff --check` pass for consistency refactor verification. | @ref:reports/agents/verify-consistency-refactor.md#commands |
+| TEST-VERIFY-03 | `rtk make fe-check`, focused All Status include-archived Playwright test, full `user-management-smoke`, task validator, and `rtk git diff --check` pass for FE-FIX-03 verification. | @ref:reports/agents/verify-all-status-include-archived.md#commands |
 
 ## Browser Verify Evidence
 
@@ -128,6 +129,15 @@
 - inputs: search `server-search`; status filter `Archived`; create fields for `USER_MAYA_SINGH`; profile edit values `Alex Backend Updated` and `alex.backend.updated@example.com`.
 - network_assertions: verified list search/status/pagination queries, `POST /api/v1/admin/users`, four `/api/v1/admin/users/statistics/*` requests, reset POST, profile PATCH, role/space PUT, archive POST, and restore POST.
 - visible_feedback_assertions: verified paged/search/archive rows, CSV content, backend temporary password, visible copy feedback, hidden password after close, statistic card counts 42/17/29/31, Contact email/phone layout, removed `Space Links`, create success feedback, return to `/admin/users`, and visible `Maya Singh`.
+
+## All Status Include Archived Browser Verify Evidence
+
+- status: passed
+- evidence: @ref:reports/agents/verify-all-status-include-archived.md#browser-verify-evidence
+- clicks: opened `/admin/users`; selected `All` from `Filter by status`.
+- inputs: no text input; search intentionally remained empty for the All Status contract assertion.
+- network_assertions: verified `GET /api/v1/admin/users` with `includeArchived=true`, no `status`, `search=""`, `current=1`, and `size=15`.
+- visible_feedback_assertions: verified `All Status Active` remains visible and `All Status Archived` appears from the include-archived response.
 
 ## Changed Test Assets
 
