@@ -868,9 +868,9 @@ test("TDD-UM-10: add user form posts uniform create request and renders created 
 
   await expect(page.getByText("Alex Johnson")).toBeVisible();
   await page.getByRole("button", { name: "Add User" }).click();
-  const userCodeInput = page.getByLabel(/user code/i);
-  await expect(userCodeInput, "Add User should open a create-user form").toBeVisible({ timeout: redExpectationTimeout });
-  await userCodeInput.fill("USER_MAYA_SINGH");
+  await expect(page, "Add User should open dedicated Create User route").toHaveURL(/\/admin\/users\/new$/);
+  await expect(page.getByRole("heading", { name: /add user|create user/i })).toBeVisible();
+  await expect(page.getByLabel(/user code/i), "Create User page should not expose manual userCode input").toHaveCount(0);
   await page.getByLabel(/^username$/i).fill("maya.singh");
   await page.getByLabel(/first name/i).fill("Maya");
   await page.getByLabel(/last name/i).fill("Singh");
@@ -888,16 +888,17 @@ test("TDD-UM-10: add user form posts uniform create request and renders created 
 
   const createRequest = requests.find((request) => request.method === "POST" && request.pathname === "/api/v1/admin/users");
   expect(createRequest?.body).toEqual(expect.objectContaining({
-    userCode: "USER_MAYA_SINGH",
     username: "maya.singh",
     firstName: "Maya",
     lastName: "Singh",
     displayName: "Maya Singh",
     email: "maya@tron.ai",
   }));
+  expect((createRequest?.body as Record<string, unknown>)?.userCode).toBeUndefined();
   expect(isRecord(createRequest?.body) && Array.isArray(createRequest.body.roleCodes)).toBe(true);
   expect(isRecord(createRequest?.body) && Array.isArray(createRequest.body.spaceCodes)).toBe(true);
   await expect(userDirectoryLink(page, "Maya Singh")).toBeVisible();
+  await expect(page.getByText("USER_MAYA_SINGH")).toBeVisible({ timeout: redExpectationTimeout });
 });
 
 test("TDD-UM-11: export users produces CSV download with stable headers and content", async ({ page }) => {
@@ -1144,8 +1145,8 @@ test("consistency refactor TDD-UM-18: Add User navigates to create page and subm
   await page.getByRole("button", { name: "Add User" }).click();
   await expect(page, "Add User must navigate to the dedicated create route.").toHaveURL(/\/admin\/users\/new$/);
   await expect(page.getByRole("heading", { name: /add user|create user/i })).toBeVisible();
+  await expect(page.getByLabel(/user code/i), "Create User page should not expose manual userCode input").toHaveCount(0);
 
-  await page.getByLabel(/user code/i).fill("USER_MAYA_SINGH");
   await page.getByLabel(/^username$/i).fill("maya.singh");
   await page.getByLabel(/first name/i).fill("Maya");
   await page.getByLabel(/last name/i).fill("Singh");
@@ -1167,12 +1168,13 @@ test("consistency refactor TDD-UM-18: Add User navigates to create page and subm
     email: "maya@tron.ai",
     firstName: "Maya",
     lastName: "Singh",
-    userCode: "USER_MAYA_SINGH",
     username: "maya.singh",
   }));
+  expect((createRequest?.body as Record<string, unknown>)?.userCode).toBeUndefined();
   await expect(page.getByText(/user created|created successfully|maya singh created/i)).toBeVisible({ timeout: redExpectationTimeout });
   await expect(page, "Successful create should return to the directory.").toHaveURL(/\/admin\/users$/);
   await expect(userDirectoryLink(page, "Maya Singh")).toBeVisible();
+  await expect(page.getByText("USER_MAYA_SINGH")).toBeVisible({ timeout: redExpectationTimeout });
 });
 
 test("toast feedback TDD-UM-19: user-management pages use shared toast source contract", async () => {
@@ -1251,7 +1253,7 @@ test("toast feedback TDD-UM-19: Create User success renders shared top-right toa
 
   await page.goto(`${frontendBaseUrl}/admin/users/new`);
 
-  await page.getByLabel(/user code/i).fill("USER_MAYA_SINGH");
+  await expect(page.getByLabel(/user code/i), "Create User page should not expose manual userCode input").toHaveCount(0);
   await page.getByLabel(/^username$/i).fill("maya.singh");
   await page.getByLabel(/first name/i).fill("Maya");
   await page.getByLabel(/last name/i).fill("Singh");
@@ -1264,8 +1266,11 @@ test("toast feedback TDD-UM-19: Create User success renders shared top-right toa
     "POST /api/v1/admin/users for shared toast create feedback",
     (request) => request.method === "POST" && request.pathname === "/api/v1/admin/users",
   );
+  const createRequest = requests.find((request) => request.method === "POST" && request.pathname === "/api/v1/admin/users");
+  expect((createRequest?.body as Record<string, unknown>)?.userCode).toBeUndefined();
   await expect(page, "Create success should still return to the directory before toast assertion.").toHaveURL(/\/admin\/users$/);
   await expectSharedTopRightToast(page, /Maya Singh created successfully/i, "Create User success feedback");
+  await expect(page.getByText("USER_MAYA_SINGH")).toBeVisible({ timeout: redExpectationTimeout });
 });
 
 test("toast feedback TDD-UM-19: User Detail reset copy renders shared top-right toast", async ({ page }) => {
@@ -1315,7 +1320,7 @@ test("loading feedback TDD-UM-20: Create User submit disables locally while pend
 
   await page.goto(`${frontendBaseUrl}/admin/users/new`);
 
-  await page.getByLabel(/user code/i).fill("USER_MAYA_SINGH");
+  await expect(page.getByLabel(/user code/i), "Create User page should not expose manual userCode input").toHaveCount(0);
   await page.getByLabel(/^username$/i).fill("maya.singh");
   await page.getByLabel(/first name/i).fill("Maya");
   await page.getByLabel(/last name/i).fill("Singh");
@@ -1329,10 +1334,13 @@ test("loading feedback TDD-UM-20: Create User submit disables locally while pend
     "delayed POST /api/v1/admin/users create request",
     (request) => request.method === "POST" && request.pathname === "/api/v1/admin/users",
   );
+  const createRequest = requests.find((request) => request.method === "POST" && request.pathname === "/api/v1/admin/users");
+  expect((createRequest?.body as Record<string, unknown>)?.userCode).toBeUndefined();
   await expect.soft(submitButton, "Create User submit should be disabled while the create request is pending.").toBeDisabled({ timeout: redExpectationTimeout });
   await expect.soft(submitButton, "Create User submit should show local loading copy while pending.").toContainText(/creating|loading|saving/i, { timeout: redExpectationTimeout });
   await expect(page, "Create success should return to the directory before toast assertion.").toHaveURL(/\/admin\/users$/);
   await expectSharedTopRightToast(page, /Maya Singh created successfully/i, "Create User completion feedback");
+  await expect(page.getByText("USER_MAYA_SINGH")).toBeVisible({ timeout: redExpectationTimeout });
 });
 
 test("loading feedback TDD-UM-20: Save Profile disables locally while pending and resolves through toast", async ({ page }) => {
