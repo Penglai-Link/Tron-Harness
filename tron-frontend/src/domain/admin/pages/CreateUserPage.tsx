@@ -8,7 +8,6 @@ import { UserPlus } from "lucide-react";
 import {
   Field,
   PageHeader,
-  SelectInput,
   SurfaceCard,
   TextInput,
   TronShell,
@@ -19,14 +18,7 @@ import {
   createAdminUser,
   type CreateUserPayload,
 } from "@/domain/admin/api";
-import {
-  adminUserRoleOptions,
-  getAdminUserRoleLabel,
-} from "@/domain/admin/constants";
-import type {
-  UserRecord,
-  UserRoleCode,
-} from "@/domain/admin/model";
+import type { UserRecord } from "@/domain/admin/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 const defaultCreateForm = {
@@ -34,17 +26,17 @@ const defaultCreateForm = {
   email: "",
   firstName: "",
   lastName: "",
+  locale: "en-US",
   phoneCountryCode: "+1",
   phoneNumber: "",
-  roleCode: "VIEWER" as UserRoleCode,
-  spaceCodes: "PLATFORM",
+  timezone: "America/Los_Angeles",
   username: "",
 };
 
 type CreateUserForm = typeof defaultCreateForm;
 
-function splitCodes(value: string) {
-  return value.split(",").map((item) => item.trim()).filter(Boolean);
+function buildDisplayName(firstName: string, lastName: string) {
+  return [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
 }
 
 function makeMockId(userCode: string) {
@@ -65,8 +57,8 @@ function makeMockCreatedUser(payload: CreateUserPayload): UserRecord {
     userCode: generatedCode,
     avatarUrl: null,
     phone: payload.phone ?? null,
-    locale: "en-US",
-    timezone: "UTC",
+    locale: payload.locale,
+    timezone: payload.timezone,
     status: "Active",
     passwordResetRequired: true,
     lastActiveAt: null,
@@ -86,6 +78,21 @@ export function CreateUserPage() {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function updateNameField(key: "firstName" | "lastName", value: string) {
+    setForm((current) => {
+      const nextFirstName = key === "firstName" ? value : current.firstName;
+      const nextLastName = key === "lastName" ? value : current.lastName;
+      const currentAutoDisplayName = buildDisplayName(current.firstName, current.lastName);
+      const shouldSyncDisplayName = current.displayName.trim() === "" || current.displayName === currentAutoDisplayName;
+
+      return {
+        ...current,
+        [key]: value,
+        displayName: shouldSyncDisplayName ? buildDisplayName(nextFirstName, nextLastName) : current.displayName,
+      };
+    });
+  }
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
@@ -96,9 +103,11 @@ export function CreateUserPage() {
       email: form.email,
       firstName: form.firstName,
       lastName: form.lastName,
+      locale: form.locale.trim() || "en-US",
       phone: phoneNumber ? { countryCode: form.phoneCountryCode.trim() || "+1", number: phoneNumber } : null,
-      roleCodes: [form.roleCode],
-      spaceCodes: splitCodes(form.spaceCodes),
+      roleCodes: [],
+      spaceCodes: [],
+      timezone: form.timezone.trim() || "America/Los_Angeles",
       username: form.username,
     };
 
@@ -131,31 +140,29 @@ export function CreateUserPage() {
             <Field label="Username">
               <TextInput required value={form.username} onChange={(event) => updateForm("username", event.target.value)} />
             </Field>
-            <Field label="Email">
-              <TextInput required type="email" value={form.email} onChange={(event) => updateForm("email", event.target.value)} />
-            </Field>
             <Field label="First Name">
-              <TextInput required value={form.firstName} onChange={(event) => updateForm("firstName", event.target.value)} />
+              <TextInput required value={form.firstName} onChange={(event) => updateNameField("firstName", event.target.value)} />
             </Field>
             <Field label="Last Name">
-              <TextInput required value={form.lastName} onChange={(event) => updateForm("lastName", event.target.value)} />
+              <TextInput required value={form.lastName} onChange={(event) => updateNameField("lastName", event.target.value)} />
             </Field>
             <Field label="Display Name">
               <TextInput required value={form.displayName} onChange={(event) => updateForm("displayName", event.target.value)} />
             </Field>
+            <Field label="Email">
+              <TextInput required type="email" value={form.email} onChange={(event) => updateForm("email", event.target.value)} />
+            </Field>
             <Field label="Phone Country Code">
               <TextInput value={form.phoneCountryCode} onChange={(event) => updateForm("phoneCountryCode", event.target.value)} />
             </Field>
-            <Field label="Phone Number">
+            <Field label="Phone">
               <TextInput value={form.phoneNumber} onChange={(event) => updateForm("phoneNumber", event.target.value)} />
             </Field>
-            <Field label="Role Code">
-              <SelectInput value={form.roleCode} onChange={(event) => updateForm("roleCode", event.target.value as UserRoleCode)}>
-                {adminUserRoleOptions.map((item) => <option key={item} value={item}>{getAdminUserRoleLabel(item)}</option>)}
-              </SelectInput>
+            <Field label="Locale">
+              <TextInput value={form.locale} onChange={(event) => updateForm("locale", event.target.value)} />
             </Field>
-            <Field label="Space Codes" hint="Comma separated">
-              <TextInput value={form.spaceCodes} onChange={(event) => updateForm("spaceCodes", event.target.value)} />
+            <Field label="Timezone">
+              <TextInput value={form.timezone} onChange={(event) => updateForm("timezone", event.target.value)} />
             </Field>
           </div>
           <div className="flex flex-wrap justify-end gap-2">

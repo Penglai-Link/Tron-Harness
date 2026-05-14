@@ -147,6 +147,15 @@ Worktree orchestration has no direct browser UI. Browser evidence produced by wo
 | `rtk make fe-check` | Frontend typecheck/build after review fixes. | pass | @ref:orchestration/integration-log.md#validation-after-integration |
 | `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/user-management-model --phase final` | Final feature workspace validation. | pass | @ref:orchestration/integration-log.md#validation-after-integration |
 
+## EV-09 Local Closure
+
+- status: passed
+- evidence: @ref:orchestration/integration-log.md#EVT-079
+- execution_mode: lead-local base worktree follow-up after runtime review, with no new worker worktree branch opened
+- changed_scope: `tron-frontend/src/domain/admin/api/adminApi.ts`, `tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx`, `tron-frontend/src/domain/admin/pages/CreateUserPage.tsx`, and retained/full smoke fixtures in `tron-frontend/tests/user-management-smoke.spec.ts`
+- verification: @ref:orchestration/integration-log.md#EVT-081 records focused operator refinement `5/5`, full `user-management-smoke` `30/30`, and `rtk make fe-check` passing on base
+- note: the Lite Spec worker history through REVIEW-07 remains authoritative for EV-08; EV-09 is a same-worktree runtime alignment follow-up that closes directly on `feature/clouds3n/user-management-model/base`
+
 ## Blockers
 
 - None.

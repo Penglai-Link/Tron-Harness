@@ -220,6 +220,15 @@
 | @ref:spec/acceptance.md#AC-UM-12 | retained create-success toast assertions stayed green after TEST-FIX-02 and TEST-VERIFY-07 | @ref:reports/agents/verify-operator-refinement-final.md#summary |
 | @ref:spec/acceptance.md#AC-UM-13 | retained create loading-state assertions stayed green after TEST-FIX-02 and TEST-VERIFY-07 | @ref:reports/agents/verify-operator-refinement-final.md#summary |
 
+## EV-09 Runtime Alignment Verify Evidence
+
+- status: passed
+- evidence: @ref:orchestration/integration-log.md#EVT-081
+- clicks: opened `/admin/users/detail?userCode=USER_ALEX_JOHNSON`; entered inline edit mode; saved profile changes; opened `/admin/users/detail?userCode=USER_RINA_PATEL`; restored the archived user; opened `/admin/users/new`; submitted the create flow; reran the full `user-management-smoke` suite.
+- inputs: edited `first name`, `last name`, `display name`, `email`, `phone country code`, `phone`, `locale`, and `timezone`; filled create `username`, `first name`, `last name`, `email`, `phone country code`, `phone`, `locale`, and `timezone` while relying on auto-filled `display name`.
+- network_assertions: verified direct `GET /api/v1/admin/users/{userCode}` reads for active and archived detail routes, detail PATCH payload without immutable identifiers, restore POST from an archived detail route, and create POST without `userCode`, Role, or Space fields.
+- visible_feedback_assertions: verified separate `Phone Country Code` display, visibly read-only `userCode`/`username` inputs, refreshed `Updated` after profile/lifecycle changes, archived detail rendering without not-found fallback, auto-filled `Display Name`, and final full smoke `30/30`.
+
 ## Blockers
 
 - None.

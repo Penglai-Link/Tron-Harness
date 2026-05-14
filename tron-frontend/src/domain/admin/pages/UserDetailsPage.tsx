@@ -1,5 +1,6 @@
 import {
   type FormEvent,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -32,6 +33,7 @@ import {
 
 import {
   archiveAdminUser,
+  fetchAdminUser,
   replaceAdminUserRoles,
   replaceAdminUserSpaces,
   resetAdminUserPassword,
@@ -59,6 +61,17 @@ type ResetPasswordState =
   | { message: string; mode: "error"; userCode: string }
   | { mode: "result"; temporaryPassword: string; userCode: string };
 
+interface UserProfileFormState {
+  displayName: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  locale: string;
+  phoneCountryCode: string;
+  phoneNumber: string;
+  timezone: string;
+}
+
 function sortByOptions(values: string[], options: readonly string[]) {
   const knownValues = options.filter((option) => values.includes(option));
   const customValues = values.filter((value) => !options.includes(value));
@@ -73,9 +86,12 @@ function formatTimestamp(value: string | null) {
   }).format(new Date(value));
 }
 
-function formatPhone(user: UserRecord) {
-  if (!user.phone) return "Not set";
-  return `${user.phone.countryCode} ${user.phone.number}`;
+function formatPhoneCountryCode(user: UserRecord) {
+  return user.phone?.countryCode ?? "Not set";
+}
+
+function formatPhoneNumber(user: UserRecord) {
+  return user.phone?.number ?? "Not set";
 }
 
 function generateTemporaryPassword(user: UserRecord) {
@@ -86,6 +102,19 @@ function generateTemporaryPassword(user: UserRecord) {
 
 function getActionErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function makeProfileForm(user: UserRecord): UserProfileFormState {
+  return {
+    displayName: user.displayName,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    locale: user.locale,
+    phoneCountryCode: user.phone?.countryCode ?? "+1",
+    phoneNumber: user.phone?.number ?? "",
+    timezone: user.timezone,
+  };
 }
 
 function DetailField({ label, value }: { label: string; value: string }) {
@@ -165,15 +194,13 @@ function spaceCodesFromResult(result: ReplaceSpacesResult, fallback: string[]) {
 }
 
 export function UserDetailsPage() {
-  const users = useUserList({ current: 1, size: 100 });
+  const users = useUserList({ current: 1, size: 100, status: "All" });
   const toast = useToast();
   const { search } = useLocation();
   const requestedUserCode = new URLSearchParams(search).get("userCode");
-  const baseUser = requestedUserCode === null
-    ? undefined
-    : users.records.find((candidate) => candidate.userCode === requestedUserCode);
-  const [userOverrides, setUserOverrides] = useState<Record<string, UserRecord>>({});
-  const [profileForm, setProfileForm] = useState<UpdateUserProfilePayload | null>(null);
+  const [detailUser, setDetailUser] = useState<UserRecord | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [profileForm, setProfileForm] = useState<UserProfileFormState | null>(null);
   const [resetState, setResetState] = useState<ResetPasswordState | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [pendingRoleCode, setPendingRoleCode] = useState<string | null>(null);
@@ -181,20 +208,78 @@ export function UserDetailsPage() {
   const [updatingLifecycle, setUpdatingLifecycle] = useState(false);
   const [resettingPassword, setResettingPassword] = useState(false);
   const [copyingPassword, setCopyingPassword] = useState(false);
-  const user = baseUser ? userOverrides[baseUser.userCode] ?? baseUser : undefined;
   const roleOptions = adminUserRoleOptions;
-  const spaceOptions = useMemo(
-    () => Array.from(new Set(users.records.flatMap((item) => item.spaceCodes))).sort(),
-    [users.records],
-  );
   const isApiMode = getServiceDataSource("admin") === "api";
+  const spaceOptions = useMemo(
+    () => Array.from(new Set([...(detailUser?.spaceCodes ?? []), ...users.records.flatMap((item) => item.spaceCodes)])).sort(),
+    [detailUser?.spaceCodes, users.records],
+  );
 
   function replaceUser(nextUser: UserRecord) {
-    setUserOverrides((current) => ({ ...current, [nextUser.userCode]: nextUser }));
+    setDetailUser(nextUser);
   }
 
   function patchUser(record: UserRecord, patch: Partial<UserRecord>) {
     replaceUser({ ...record, ...patch });
+  }
+
+  useEffect(() => {
+    setProfileForm(null);
+    setResetState(null);
+  }, [requestedUserCode]);
+
+  useEffect(() => {
+    if (requestedUserCode === null) {
+      setDetailLoading(false);
+      setDetailUser(null);
+      return;
+    }
+
+    if (!isApiMode) {
+      setDetailLoading(false);
+      setDetailUser(users.records.find((candidate) => candidate.userCode === requestedUserCode) ?? null);
+      return;
+    }
+
+    const controller = new AbortController();
+    setDetailUser((current) => current?.userCode === requestedUserCode ? current : null);
+    setDetailLoading(true);
+
+    void fetchAdminUser(requestedUserCode, controller.signal)
+      .then((nextUser) => {
+        if (!controller.signal.aborted) {
+          setDetailUser(nextUser);
+        }
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        console.warn("[admin] User detail request failed.", error);
+        setDetailUser(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setDetailLoading(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [isApiMode, requestedUserCode, users.records]);
+
+  const user = detailUser ?? undefined;
+
+  if (requestedUserCode !== null && detailLoading && !user) {
+    return (
+      <TronShell activeItem="Users" searchPlaceholder="Search users...">
+        <PageHeader
+          title="User Detail"
+          actions={<Button asChild variant="secondary"><Link to="/admin/users"><ArrowLeft size={16} aria-hidden="true" />Back to Users</Link></Button>}
+        />
+        <SurfaceCard>
+          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Loading user detail</h2>
+          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">Retrieving {requestedUserCode} from the user detail endpoint.</p>
+        </SurfaceCard>
+      </TronShell>
+    );
   }
 
   if (!user) {
@@ -229,11 +314,21 @@ export function UserDetailsPage() {
     setSavingProfile(true);
 
     try {
+      const phoneNumber = profileForm.phoneNumber.trim();
+      const payload: UpdateUserProfilePayload = {
+        displayName: profileForm.displayName,
+        email: profileForm.email,
+        firstName: profileForm.firstName,
+        lastName: profileForm.lastName,
+        locale: profileForm.locale.trim() || user.locale,
+        phone: phoneNumber ? { countryCode: profileForm.phoneCountryCode.trim() || "+1", number: phoneNumber } : null,
+        timezone: profileForm.timezone.trim() || user.timezone,
+      };
       const updatedUser = isApiMode
-        ? await updateAdminUserProfile(user.userCode, profileForm)
+        ? await updateAdminUserProfile(user.userCode, payload)
         : {
           ...user,
-          ...profileForm,
+          ...payload,
           updatedAt: new Date().toISOString(),
         };
 
@@ -400,6 +495,8 @@ export function UserDetailsPage() {
     setResetState(null);
   }
 
+  const readOnlyInputClass = "cursor-not-allowed bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]";
+
   return (
     <TronShell activeItem="Users" searchPlaceholder="Search users...">
       <PageHeader
@@ -429,6 +526,7 @@ export function UserDetailsPage() {
                     value={user.userCode}
                     readOnly
                     aria-readonly="true"
+                    className={readOnlyInputClass}
                   />
                 </Field>
                 <Field label="Username">
@@ -436,6 +534,7 @@ export function UserDetailsPage() {
                     value={user.username}
                     readOnly
                     aria-readonly="true"
+                    className={readOnlyInputClass}
                   />
                 </Field>
                 <Field label="First Name">
@@ -463,9 +562,30 @@ export function UserDetailsPage() {
                     onChange={(event) => setProfileForm((current) => current ? { ...current, email: event.target.value } : current)}
                   />
                 </Field>
-                <DetailField label="Phone" value={formatPhone(user)} />
-                <DetailField label="Locale" value={user.locale} />
-                <DetailField label="Timezone" value={user.timezone} />
+                <Field label="Phone Country Code">
+                  <TextInput
+                    value={profileForm.phoneCountryCode}
+                    onChange={(event) => setProfileForm((current) => current ? { ...current, phoneCountryCode: event.target.value } : current)}
+                  />
+                </Field>
+                <Field label="Phone">
+                  <TextInput
+                    value={profileForm.phoneNumber}
+                    onChange={(event) => setProfileForm((current) => current ? { ...current, phoneNumber: event.target.value } : current)}
+                  />
+                </Field>
+                <Field label="Locale">
+                  <TextInput
+                    value={profileForm.locale}
+                    onChange={(event) => setProfileForm((current) => current ? { ...current, locale: event.target.value } : current)}
+                  />
+                </Field>
+                <Field label="Timezone">
+                  <TextInput
+                    value={profileForm.timezone}
+                    onChange={(event) => setProfileForm((current) => current ? { ...current, timezone: event.target.value } : current)}
+                  />
+                </Field>
                 <DetailField label="Last Active" value={formatTimestamp(user.lastActiveAt)} />
                 <DetailField label="Created" value={formatTimestamp(user.createdAt)} />
                 <DetailField label="Updated" value={formatTimestamp(user.updatedAt)} />
@@ -478,7 +598,8 @@ export function UserDetailsPage() {
                 <DetailField label="Last Name" value={user.lastName} />
                 <DetailField label="Display Name" value={user.displayName} />
                 <DetailField label="Email" value={user.email} />
-                <DetailField label="Phone" value={formatPhone(user)} />
+                <DetailField label="Phone Country Code" value={formatPhoneCountryCode(user)} />
+                <DetailField label="Phone" value={formatPhoneNumber(user)} />
                 <DetailField label="Locale" value={user.locale} />
                 <DetailField label="Timezone" value={user.timezone} />
                 <DetailField label="Last Active" value={formatTimestamp(user.lastActiveAt)} />
@@ -489,12 +610,7 @@ export function UserDetailsPage() {
           </div>
           <div className="mt-5 flex flex-wrap gap-2 border-t border-[var(--color-outline-variant)] pt-4">
             {isEditingProfile ? null : (
-              <Button variant="secondary" onClick={() => setProfileForm({
-                displayName: user.displayName,
-                email: user.email,
-                firstName: user.firstName,
-                lastName: user.lastName,
-              })}>
+              <Button variant="secondary" onClick={() => setProfileForm(makeProfileForm(user))}>
                 <Pencil size={16} aria-hidden="true" />
                 Edit Profile
               </Button>

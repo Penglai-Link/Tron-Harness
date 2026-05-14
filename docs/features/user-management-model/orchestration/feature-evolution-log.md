@@ -86,16 +86,31 @@ Record every evolution event. `spec/feature-spec.md` remains the current authori
 - old_evidence_status: retained for EV-07 feedback/loading behavior, superseded only for eager search dispatch, placeholder row actions, detached detail editing, and manual create `userCode`
 - user_approval: approved_with_defaults from 2026-05-14 direct intent list for feature evaluation and implementation
 
+### EV-09
+
+- change_id: EV-09
+- timestamp: 2026-05-14
+- trigger: user_request
+- change_type: requirement_clarification, acceptance_change, test_scope_change, implementation_alignment
+- gate_reopened: Phase 1A
+- diff_summary: |
+    What changed vs before:
+    - EV-08 closed debounced search, row actions, inline edit, and generated-code create flow, but runtime review still found detail/create field gaps and archived-detail routing drift.
+    + User Detail must show `Phone Country Code` separately, allow editing of `Phone Country Code`, `Phone`, `Locale`, and `Timezone`, visibly emphasize read-only `userCode` and `username`, refresh `Updated` after profile/lifecycle changes, and load archived users through the direct detail endpoint. Create User must drop Role/Space inputs, align its field set to User Detail personal information, and auto-fill `Display Name` from `First Name` plus `Last Name` by default.
+- downstream_impact: `spec/acceptance.md`, `spec/test-plan.md`, `orchestration/integration-log.md`, `reports/test-report.md`, `reports/frontend-result.md`, `reports/review-report.md`, `reports/worktree-report.md`
+- old_evidence_status: retained for EV-08 search/row-action/generated-code behavior, superseded only for detail field parity, read-only styling emphasis, archived-detail routing, and create-form field parity
+- user_approval: approved_with_defaults from 2026-05-14 runtime review checklist and direct adjustment request
+
 ## Downstream Artifact Migration
 
 - EV-04 adds replacement RED rows `TEST-RED-15` and `TEST-RED-16`, GREEN rows `BE-GREEN-05` and `FE-GREEN-03`, VERIFY row `TEST-VERIFY-02`, and REVIEW row `REVIEW-04`.
 - EV-05 adds follow-up RED row `TEST-RED-17`, GREEN row `FE-FIX-03`, VERIFY row `TEST-VERIFY-03`, and REVIEW row `REVIEW-05` for the `All Status` include-archived contract.
 - EV-06 creates the separate prerequisite feature workspace `docs/features/shared-ui-feedback` and intentionally adds no user-management task rows until that prerequisite is completed.
 - EV-07 adds TDD cycles `TDD-UM-19` and `TDD-UM-20`, then proceeds to RED/GREEN/VERIFY/REVIEW task rows after user approval.
-- EV-08 adds TDD cycles `TDD-UM-21` through `TDD-UM-24`, then stops after test-plan completion for explicit user decision before any new task/worktree rows are created.
+- EV-08 adds TDD cycles `TDD-UM-21` through `TDD-UM-24`; EV-09 keeps the same focused operator-refinement command surface while extending runtime assertions for archived-detail routing, detail/create field parity, and `Updated` refresh behavior on base.
 - Prior evidence for `TDD-UM-01..13` remains retained unless the changed behavior explicitly supersedes current-page-derived statistics or inline create ownership.
 
 ## Residual Risks
 
 - EV-07 shared Toast/Snackbar migration and action-local loading evidence is complete through RED, GREEN, TEST-FIX, VERIFY, and REVIEW worker rows. Secondary role/space/lifecycle/reset/copy pending states were source-reviewed; focused delayed runtime loading evidence covers Export, Create User, and Save Profile.
-- EV-08 directory/detail/create refinement is reopened and intentionally paused after test-plan completion; no RED/GREEN evidence exists yet for the new scope.
+- EV-08 directory/detail/create refinement is no longer paused; focused operator-refinement evidence was extended on base to cover archived-detail routing plus detail/create field parity, and full `user-management-smoke` now passes `30/30`.

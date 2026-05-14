@@ -171,6 +171,7 @@ Final review, post-fix final review, interaction-gap review, reset-contract foll
 | browser verify evidence detail | pass | @ref:reports/test-report.md#browser-verify-evidence |
 | interaction-gap VERIFY evidence | pass | @ref:orchestration/integration-log.md#EVT-020 |
 | reset-response contract evidence | pass | @ref:orchestration/integration-log.md#EVT-026 |
+| EV-09 direct-detail/detail-create parity evidence | pass | @ref:orchestration/integration-log.md#EVT-081 |
 
 ## TDD Evidence Review
 
@@ -189,6 +190,8 @@ Final review, post-fix final review, interaction-gap review, reset-contract foll
 | TDD-UM-11 | pass | @ref:orchestration/integration-log.md#EVT-020 |
 | TDD-UM-12 | pass | @ref:orchestration/integration-log.md#EVT-026 |
 | TDD-UM-13 | pass | @ref:orchestration/integration-log.md#EVT-020 |
+| TDD-UM-21..24 | pass | @ref:orchestration/integration-log.md#EVT-076 |
+| EV-09 archived-detail and field-parity follow-up | pass | @ref:orchestration/integration-log.md#EVT-081 |
 
 ## Remaining Risks
 
@@ -219,3 +222,13 @@ Final review, post-fix final review, interaction-gap review, reset-contract foll
 - traceability: AC-UM-11, AC-UM-01, AC-UM-08, TDD-UM-09, and TDD-UM-15 are covered by RED failure evidence, FE-FIX-03 implementation evidence, TEST-VERIFY-03 focused/full browser evidence, and REVIEW-05 review evidence.
 - slow_browser_reuse: reused @ref:reports/agents/verify-all-status-include-archived.md#browser-verify-evidence because the evidence is passing, concrete, and no reviewed frontend/API paths changed after TEST-VERIFY-03.
 - commands: `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/user-management-model --phase reports` passed; `rtk git diff --check` passed.
+
+## REVIEW-08 Runtime Alignment Review
+
+- status: pass
+- evidence: @ref:orchestration/integration-log.md#EVT-081
+- scope: EV-09 runtime review follow-up for archived-detail routing, detail/create field parity, visually read-only identity inputs, refreshed `Updated`, and retained regression coverage.
+- findings: no blocking findings.
+- traceability: AC-UM-01, AC-UM-02, AC-UM-10, AC-UM-12, and AC-UM-13 remain covered after the direct-detail/detail-create parity follow-up.
+- slow_browser_reuse: reused the fresh focused/full browser evidence recorded in @ref:orchestration/integration-log.md#EVT-081 because the implementation and verification were performed in the same base worktree closure pass.
+- commands: `rtk make fe-check` passed; `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "operator refinement"` passed `5/5`; `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` passed `30/30`.

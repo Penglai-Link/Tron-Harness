@@ -100,6 +100,10 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | `tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx` | keeps `userCode` and `username` visible but read-only during inline profile edit | @ref:orchestration/integration-log.md#EVT-069 |
 | `docs/features/user-management-model/reports/agents/frontend-list-operator-refinement.md` | added FE-GREEN-05 worker evidence report | @ref:reports/agents/frontend-list-operator-refinement.md#scope |
 | `docs/features/user-management-model/reports/agents/frontend-detail-create-refinement.md` | added FE-GREEN-06 worker evidence report | @ref:reports/agents/frontend-detail-create-refinement.md#task-results |
+| `tron-frontend/src/domain/admin/api/adminApi.ts` | adds direct detail fetch support for archived/userCode-specific reads and extends detail/create profile payload fields | @ref:orchestration/integration-log.md#EVT-080 |
+| `tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx` | fetches detail by direct endpoint, separates `Phone Country Code`, edits phone/locale/timezone inline, refreshes `Updated`, and preserves visibly read-only identity inputs | @ref:orchestration/integration-log.md#EVT-080 |
+| `tron-frontend/src/domain/admin/pages/CreateUserPage.tsx` | aligns Create User fields to User Detail personal information, auto-fills `Display Name`, and removes Role/Space inputs | @ref:orchestration/integration-log.md#EVT-080 |
+| `tron-frontend/tests/user-management-smoke.spec.ts` | extends focused/full runtime coverage for archived-detail routing and detail/create field parity | @ref:orchestration/integration-log.md#EVT-081 |
 
 ## Commands
 
@@ -115,6 +119,7 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | @ref:spec/test-plan.md#command-index | FE-GREEN-04 and TEST-VERIFY-05 reran `rtk make fe-check`, focused toast feedback, focused loading feedback, and full user-management smoke | @ref:orchestration/integration-log.md#EVT-060 |
 | @ref:spec/test-plan.md#command-index | FE-GREEN-05 reran focused EV-08 TDD-UM-21, TDD-UM-22, and TDD-UM-24 checks before merge | @ref:orchestration/integration-log.md#EVT-068 |
 | @ref:spec/test-plan.md#command-index | TEST-FIX-02 realigned retained create assertions and TEST-VERIFY-07 reran focused EV-08 plus full `29/29` smoke | @ref:orchestration/integration-log.md#EVT-076 |
+| @ref:spec/test-plan.md#command-index | EV-09 reran `rtk make fe-check`, focused operator refinement, and full `user-management-smoke` after direct-detail and detail/create parity updates | @ref:orchestration/integration-log.md#EVT-081 |
 
 ## Browser Verify Evidence
 
@@ -133,6 +138,15 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 - inputs: typed `a -> al -> alp -> alpha` and `stale -> alpha` into directory search; edited `first name`, `last name`, `display name`, `email`; filled create `username`, `first name`, `last name`, `display name`, `email` without any manual `userCode`.
 - network_assertions: verified debounced `GET /api/v1/admin/users?search=alpha`, archive/restore POSTs, detail PATCH without `userCode` or `username`, and create POST without `userCode`.
 - visible_feedback_assertions: verified stale result suppression, row status transitions `Archived -> Active`, inline detail update success, and backend-generated `USER_GENERATED_ALEX` visible after create success.
+
+## EV-09 Browser Verify Evidence
+
+- status: passed
+- evidence: @ref:orchestration/integration-log.md#EVT-081
+- clicks: opened active and archived detail routes by `userCode`; entered `Edit Profile`; restored the archived user; opened `/admin/users/new`; submitted the aligned create flow.
+- inputs: edited `phone country code`, `phone`, `locale`, and `timezone` inline on detail; filled create `username`, `first name`, `last name`, `email`, `phone country code`, `phone`, `locale`, and `timezone` while relying on auto-filled `display name`.
+- network_assertions: verified direct detail GET reads, detail PATCH without immutable identifiers, restore POST from the archived detail page, and create POST without `userCode`, Role, or Space inputs.
+- visible_feedback_assertions: verified separate `Phone Country Code`, visibly read-only `userCode`/`username`, refreshed `Updated`, archived detail rendering without not-found fallback, and final full smoke `30/30`.
 
 ## Acceptance Mapping
 
@@ -156,6 +170,9 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | @ref:spec/acceptance.md#AC-UM-10 | EV-08 row action menu, detail hierarchy, and generated-code create flow verified on final branch tip | @ref:orchestration/integration-log.md#EVT-076 |
 | @ref:spec/acceptance.md#AC-UM-12 | retained create-success toast assertions stayed green after TEST-FIX-02 and TEST-VERIFY-07 | @ref:reports/agents/verify-operator-refinement-final.md#summary |
 | @ref:spec/acceptance.md#AC-UM-13 | retained create loading-state assertions stayed green after TEST-FIX-02 and TEST-VERIFY-07 | @ref:reports/agents/verify-operator-refinement-final.md#summary |
+| @ref:spec/acceptance.md#AC-UM-01 | direct active/archived detail reads stay aligned after EV-09 runtime review | @ref:orchestration/integration-log.md#EVT-081 |
+| @ref:spec/acceptance.md#AC-UM-02 | detail/create field parity, `Updated` refresh, and archived restore remain aligned after EV-09 runtime review | @ref:orchestration/integration-log.md#EVT-081 |
+| @ref:spec/acceptance.md#AC-UM-10 | separate `Phone Country Code`, visibly read-only identity inputs, and create-form parity are verified on base after EV-09 | @ref:orchestration/integration-log.md#EVT-081 |
 
 ## Blockers
 

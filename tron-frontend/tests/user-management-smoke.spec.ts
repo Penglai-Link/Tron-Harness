@@ -64,6 +64,14 @@ function delay(ms: number) {
   });
 }
 
+function formatUiTimestamp(value: string | null) {
+  if (!value) return "Never";
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
 function appendFrontendLog(chunk: Buffer) {
   frontendLogs = `${frontendLogs}${chunk.toString()}`.slice(-4000);
 }
@@ -373,8 +381,10 @@ async function routeCreateUserApi(
     displayName: "Maya Singh",
     email: "maya@tron.ai",
     phone: { countryCode: "+1", number: "5550101" },
-    roleCodes: ["DEVELOPER"],
-    spaceCodes: ["PLATFORM", "DATA"],
+    locale: "en-US",
+    timezone: "America/Los_Angeles",
+    roleCodes: [],
+    spaceCodes: [],
     status: "Active",
     passwordResetRequired: true,
     createdAt: "2026-05-13T02:00:00.000Z",
@@ -487,6 +497,11 @@ async function routeResetPasswordApi(
       return;
     }
 
+    if (captured.method === "GET" && captured.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON") {
+      await fulfillJson(route, successEnvelope(alexUserRecord));
+      return;
+    }
+
     if (captured.method === "POST" && captured.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON/password/reset") {
       await fulfillJson(route, successEnvelope(resetData));
       return;
@@ -509,6 +524,9 @@ async function routeDetailMutationApi(
     lastName: "Johnson",
     displayName: "Alex Johnson",
     email: "alex.johnson@example.com",
+    phone: { countryCode: "+1", number: "5550100" },
+    locale: "en-US",
+    timezone: "America/Los_Angeles",
     roleCodes: ["ADMIN", "DEVELOPER"],
     spaceCodes: ["PLATFORM"],
     status: "Active",
@@ -542,10 +560,39 @@ async function routeDetailMutationApi(
 
     if (captured.method === "PATCH" && captured.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON") {
       await delay(options.profileDelayMs ?? 0);
+      const nextPhone = isRecord(captured.body) && "phone" in captured.body
+        ? (captured.body.phone === null
+          ? null
+          : (isRecord(captured.body.phone) &&
+              typeof captured.body.phone.countryCode === "string" &&
+              typeof captured.body.phone.number === "string"
+            ? {
+                countryCode: captured.body.phone.countryCode,
+                number: captured.body.phone.number,
+              }
+            : user.phone))
+        : user.phone;
       user = makeUserRecord({
         ...user,
-        displayName: "Alex Backend Updated",
-        email: "alex.backend.updated@example.com",
+        displayName: isRecord(captured.body) && typeof captured.body.displayName === "string"
+          ? captured.body.displayName
+          : "Alex Backend Updated",
+        email: isRecord(captured.body) && typeof captured.body.email === "string"
+          ? captured.body.email
+          : "alex.backend.updated@example.com",
+        firstName: isRecord(captured.body) && typeof captured.body.firstName === "string"
+          ? captured.body.firstName
+          : user.firstName,
+        lastName: isRecord(captured.body) && typeof captured.body.lastName === "string"
+          ? captured.body.lastName
+          : user.lastName,
+        phone: nextPhone,
+        locale: isRecord(captured.body) && typeof captured.body.locale === "string"
+          ? captured.body.locale
+          : user.locale,
+        timezone: isRecord(captured.body) && typeof captured.body.timezone === "string"
+          ? captured.body.timezone
+          : user.timezone,
         updatedAt: "2026-05-13T03:00:00.000Z",
       });
       await fulfillJson(route, successEnvelope(user));
@@ -594,6 +641,7 @@ async function routeDetailMutationApi(
         userCode: user.userCode,
         status: user.status,
         archivedAt: user.archivedAt,
+        updatedAt: user.updatedAt,
       }));
       return;
     }
@@ -874,7 +922,7 @@ test("TDD-UM-10: add user form posts uniform create request and renders created 
   await page.getByLabel(/^username$/i).fill("maya.singh");
   await page.getByLabel(/first name/i).fill("Maya");
   await page.getByLabel(/last name/i).fill("Singh");
-  await page.getByLabel(/display name/i).fill("Maya Singh");
+  await expect(page.getByLabel(/display name/i)).toHaveValue("Maya Singh");
   await page.getByLabel(/^email$/i).fill("maya@tron.ai");
 
   const createStart = requests.length;
@@ -895,8 +943,8 @@ test("TDD-UM-10: add user form posts uniform create request and renders created 
     email: "maya@tron.ai",
   }));
   expect((createRequest?.body as Record<string, unknown>)?.userCode).toBeUndefined();
-  expect(isRecord(createRequest?.body) && Array.isArray(createRequest.body.roleCodes)).toBe(true);
-  expect(isRecord(createRequest?.body) && Array.isArray(createRequest.body.spaceCodes)).toBe(true);
+  expect((createRequest?.body as Record<string, unknown>)?.roleCodes).toEqual([]);
+  expect((createRequest?.body as Record<string, unknown>)?.spaceCodes).toEqual([]);
   await expect(userDirectoryLink(page, "Maya Singh")).toBeVisible();
   await expect(page.getByText("USER_MAYA_SINGH")).toBeVisible({ timeout: redExpectationTimeout });
 });
@@ -1150,7 +1198,7 @@ test("consistency refactor TDD-UM-18: Add User navigates to create page and subm
   await page.getByLabel(/^username$/i).fill("maya.singh");
   await page.getByLabel(/first name/i).fill("Maya");
   await page.getByLabel(/last name/i).fill("Singh");
-  await page.getByLabel(/display name/i).fill("Maya Singh");
+  await expect(page.getByLabel(/display name/i)).toHaveValue("Maya Singh");
   await page.getByLabel(/^email$/i).fill("maya@tron.ai");
 
   const createStart = requests.length;
@@ -1169,6 +1217,8 @@ test("consistency refactor TDD-UM-18: Add User navigates to create page and subm
     firstName: "Maya",
     lastName: "Singh",
     username: "maya.singh",
+    roleCodes: [],
+    spaceCodes: [],
   }));
   expect((createRequest?.body as Record<string, unknown>)?.userCode).toBeUndefined();
   await expect(page.getByText(/user created|created successfully|maya singh created/i)).toBeVisible({ timeout: redExpectationTimeout });
@@ -1257,7 +1307,7 @@ test("toast feedback TDD-UM-19: Create User success renders shared top-right toa
   await page.getByLabel(/^username$/i).fill("maya.singh");
   await page.getByLabel(/first name/i).fill("Maya");
   await page.getByLabel(/last name/i).fill("Singh");
-  await page.getByLabel(/display name/i).fill("Maya Singh");
+  await expect(page.getByLabel(/display name/i)).toHaveValue("Maya Singh");
   await page.getByLabel(/^email$/i).fill("maya@tron.ai");
 
   await page.getByRole("button", { name: /create user|save user/i }).click();
@@ -1324,7 +1374,7 @@ test("loading feedback TDD-UM-20: Create User submit disables locally while pend
   await page.getByLabel(/^username$/i).fill("maya.singh");
   await page.getByLabel(/first name/i).fill("Maya");
   await page.getByLabel(/last name/i).fill("Singh");
-  await page.getByLabel(/display name/i).fill("Maya Singh");
+  await expect(page.getByLabel(/display name/i)).toHaveValue("Maya Singh");
   await page.getByLabel(/^email$/i).fill("maya@tron.ai");
 
   const submitButton = page.getByRole("button", { name: /create user|creating|save user/i });
@@ -1563,22 +1613,66 @@ test("operator refinement TDD-UM-22: directory exposes archive and restore actio
 
 test("operator refinement TDD-UM-23: detail inline save should keep userCode and username read-only controls while editing mutable fields", async ({ page }) => {
   const requests: CapturedAdminRequest[] = [];
+  let detailUser = makeUserRecord({
+    ...alexUserRecord,
+    phone: { countryCode: "+1", number: "5550100" },
+    locale: "en-US",
+    timezone: "America/Los_Angeles",
+    updatedAt: "2026-05-13T00:00:00.000Z",
+  });
 
   await page.route("**/api/v1/admin/users**", async (route) => {
     const captured = captureAdminRequest(route);
     requests.push(captured);
 
+    if (captured.method === "GET" && captured.pathname === "/api/v1/admin/users") {
+      await fulfillJson(route, pagedEnvelope([detailUser], 1, 100, 1));
+      return;
+    }
+
     if (captured.method === "GET" && captured.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON") {
-      await fulfillJson(route, successEnvelope(alexUserRecord));
+      await fulfillJson(route, successEnvelope(detailUser));
       return;
     }
 
     if (captured.method === "PATCH" && captured.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON") {
-      const patched = {
-        ...alexUserRecord,
-        ...(isRecord(captured.body) ? captured.body : {}),
-      };
-      await fulfillJson(route, successEnvelope(patched));
+      const nextPhone = isRecord(captured.body) && "phone" in captured.body
+        ? (captured.body.phone === null
+          ? null
+          : (isRecord(captured.body.phone) &&
+              typeof captured.body.phone.countryCode === "string" &&
+              typeof captured.body.phone.number === "string"
+            ? {
+                countryCode: captured.body.phone.countryCode,
+                number: captured.body.phone.number,
+              }
+            : detailUser.phone))
+        : detailUser.phone;
+
+      detailUser = makeUserRecord({
+        ...detailUser,
+        displayName: isRecord(captured.body) && typeof captured.body.displayName === "string"
+          ? captured.body.displayName
+          : detailUser.displayName,
+        email: isRecord(captured.body) && typeof captured.body.email === "string"
+          ? captured.body.email
+          : detailUser.email,
+        firstName: isRecord(captured.body) && typeof captured.body.firstName === "string"
+          ? captured.body.firstName
+          : detailUser.firstName,
+        lastName: isRecord(captured.body) && typeof captured.body.lastName === "string"
+          ? captured.body.lastName
+          : detailUser.lastName,
+        phone: nextPhone,
+        locale: isRecord(captured.body) && typeof captured.body.locale === "string"
+          ? captured.body.locale
+          : detailUser.locale,
+        timezone: isRecord(captured.body) && typeof captured.body.timezone === "string"
+          ? captured.body.timezone
+          : detailUser.timezone,
+        updatedAt: "2026-05-13T03:00:00.000Z",
+      });
+      await fulfillJson(route, successEnvelope(detailUser));
       return;
     }
 
@@ -1588,6 +1682,10 @@ test("operator refinement TDD-UM-23: detail inline save should keep userCode and
   await page.goto(`${frontendBaseUrl}/admin/users/detail?userCode=USER_ALEX_JOHNSON`);
 
   await expect(page.getByRole("heading", { name: "Alex Johnson" })).toBeVisible();
+  await expect(page.getByText("Phone Country Code", { exact: true })).toBeVisible();
+  await expect(page.getByText("Phone", { exact: true })).toBeVisible();
+  await expect(page.getByText("Locale", { exact: true })).toBeVisible();
+  await expect(page.getByText("Timezone", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: /edit profile/i }).click();
   const userCodeInput = page.getByRole("textbox", { name: /user code/i });
@@ -1596,19 +1694,33 @@ test("operator refinement TDD-UM-23: detail inline save should keep userCode and
   await expect(usernameInput, "username should remain visible in edit mode as a read-only control").toBeVisible();
   await expect.soft(userCodeInput, "userCode should not be editable in inline detail editing").not.toBeEditable({ timeout: redExpectationTimeout });
   await expect.soft(usernameInput, "username should not be editable in inline detail editing").not.toBeEditable({ timeout: redExpectationTimeout });
+  await expect.soft(userCodeInput, "userCode should be visually emphasized as non-editable.").toHaveClass(/bg-\[var\(--color-surface-container\)\]/);
+  await expect.soft(usernameInput, "username should be visually emphasized as non-editable.").toHaveClass(/bg-\[var\(--color-surface-container\)\]/);
 
   const firstNameInput = page.getByLabel(/first name/i);
   const lastNameInput = page.getByLabel(/last name/i);
+  const phoneCountryCodeInput = page.getByRole("textbox", { name: /phone country code/i });
+  const phoneInput = page.getByRole("textbox", { name: /^phone$/i });
+  const localeInput = page.getByRole("textbox", { name: /locale/i });
+  const timezoneInput = page.getByRole("textbox", { name: /timezone/i });
   await expect(firstNameInput, "first name should be an inline editable field in detail profile mode").toBeVisible();
   await expect(firstNameInput, "first name should remain editable in detail profile mode").toBeEditable();
   await expect(lastNameInput, "last name should be an inline editable field in detail profile mode").toBeVisible();
   await expect(lastNameInput, "last name should remain editable in detail profile mode").toBeEditable();
   await expect(page.getByLabel(/display name/i), "display name should remain editable in detail profile mode").toBeEditable();
   await expect(page.getByLabel(/^email$/i), "email should remain editable in detail profile mode").toBeEditable();
+  await expect(phoneCountryCodeInput, "phone country code should be editable in detail profile mode").toBeEditable();
+  await expect(phoneInput, "phone should be editable in detail profile mode").toBeEditable();
+  await expect(localeInput, "locale should be editable in detail profile mode").toBeEditable();
+  await expect(timezoneInput, "timezone should be editable in detail profile mode").toBeEditable();
   await firstNameInput.fill("Alex Inline");
   await lastNameInput.fill("Johnson Inline");
   await page.getByLabel(/display name/i).fill("Alex Inline Updated");
   await page.getByLabel(/^email$/i).fill("alex.inline.updated@example.com");
+  await phoneCountryCodeInput.fill("+86");
+  await phoneInput.fill("13800138000");
+  await localeInput.fill("zh-CN");
+  await timezoneInput.fill("Asia/Shanghai");
 
   const patchStart = requests.length;
   await page.getByRole("button", { name: /save profile|saving profile/i }).click();
@@ -1629,7 +1741,20 @@ test("operator refinement TDD-UM-23: detail inline save should keep userCode and
     lastName: "Johnson Inline",
     displayName: "Alex Inline Updated",
     email: "alex.inline.updated@example.com",
+    phone: {
+      countryCode: "+86",
+      number: "13800138000",
+    },
+    locale: "zh-CN",
+    timezone: "Asia/Shanghai",
   }));
+  await expect(page.getByRole("heading", { name: "Alex Inline Updated" })).toBeVisible();
+  await expect(page.getByText("alex.inline.updated@example.com")).toBeVisible();
+  await expect(page.getByText("+86", { exact: true })).toBeVisible();
+  await expect(page.getByText("13800138000", { exact: true })).toBeVisible();
+  await expect(page.getByText("zh-CN", { exact: true })).toBeVisible();
+  await expect(page.getByText("Asia/Shanghai", { exact: true })).toBeVisible();
+  await expect(page.getByText(formatUiTimestamp("2026-05-13T03:00:00.000Z"), { exact: true })).toBeVisible();
 });
 
 test("operator refinement TDD-UM-24: create flow should omit userCode input/payload and render backend-generated userCode", async ({ page }) => {
@@ -1642,8 +1767,11 @@ test("operator refinement TDD-UM-24: create flow should omit userCode input/payl
     lastName: "Alex",
     displayName: "Generated Alex",
     email: "generated.alex@tron.ai",
-    roleCodes: ["DEVELOPER"],
-    spaceCodes: ["PLATFORM", "DATA"],
+    phone: { countryCode: "+86", number: "13800138000" },
+    locale: "zh-CN",
+    timezone: "Asia/Shanghai",
+    roleCodes: [],
+    spaceCodes: [],
     status: "Active",
   });
   let createdBody: unknown = {};
@@ -1670,11 +1798,18 @@ test("operator refinement TDD-UM-24: create flow should omit userCode input/payl
 
   await expect(page.getByRole("heading", { name: "Create User" })).toBeVisible();
   await expect(page.getByLabel(/user code/i)).toHaveCount(0);
+  await expect(page.getByLabel(/role code/i)).toHaveCount(0);
+  await expect(page.getByLabel(/space codes/i)).toHaveCount(0);
   await page.getByLabel(/^username$/i).fill("generated.alex");
   await page.getByLabel(/first name/i).fill("Generated");
+  await expect(page.getByLabel(/display name/i)).toHaveValue("Generated");
   await page.getByLabel(/last name/i).fill("Alex");
-  await page.getByLabel(/display name/i).fill("Generated Alex");
+  await expect(page.getByLabel(/display name/i)).toHaveValue("Generated Alex");
   await page.getByLabel(/^email$/i).fill("generated.alex@tron.ai");
+  await page.getByLabel(/phone country code/i).fill("+86");
+  await page.getByLabel(/^phone$/i).fill("13800138000");
+  await page.getByLabel(/locale/i).fill("zh-CN");
+  await page.getByLabel(/timezone/i).fill("Asia/Shanghai");
 
   const createStart = requests.length;
   await page.getByRole("button", { name: /create user|save user/i }).click();
@@ -1687,6 +1822,91 @@ test("operator refinement TDD-UM-24: create flow should omit userCode input/payl
 
   expect(isRecord(createdBody)).toBe(true);
   expect((createdBody as Record<string, unknown>)).not.toHaveProperty("userCode");
+  expect((createdBody as Record<string, unknown>)).toEqual(expect.objectContaining({
+    username: "generated.alex",
+    firstName: "Generated",
+    lastName: "Alex",
+    displayName: "Generated Alex",
+    email: "generated.alex@tron.ai",
+    phone: {
+      countryCode: "+86",
+      number: "13800138000",
+    },
+    locale: "zh-CN",
+    timezone: "Asia/Shanghai",
+    roleCodes: [],
+    spaceCodes: [],
+  }));
   await expect(page, "Create success should return to the directory and display generated code.").toHaveURL(/\/admin\/users$/);
   await expect(page.getByText("USER_GENERATED_ALEX")).toBeVisible({ timeout: redExpectationTimeout });
+});
+
+test("operator refinement TDD-UM-25: archived user detail loads through the direct detail endpoint and keeps restore state visible", async ({ page }) => {
+  const requests: CapturedAdminRequest[] = [];
+  let archivedUser = makeUserRecord({
+    id: "734103112812822528",
+    userCode: "USER_RINA_PATEL",
+    username: "rina.patel",
+    firstName: "Rina",
+    lastName: "Patel",
+    displayName: "Rina Patel",
+    email: "rina@tron.ai",
+    phone: { countryCode: "+1", number: "5550102" },
+    locale: "en-US",
+    timezone: "America/Los_Angeles",
+    roleCodes: ["WORKSPACE_ADMIN", "VIEWER"],
+    spaceCodes: ["SUPPORT", "PLATFORM"],
+    status: "Archived",
+    archivedAt: "2026-05-13T03:15:00.000Z",
+    updatedAt: "2026-05-13T03:15:00.000Z",
+  });
+
+  await page.route("**/api/v1/admin/users**", async (route) => {
+    const captured = captureAdminRequest(route);
+    requests.push(captured);
+
+    if (captured.method === "GET" && captured.pathname === "/api/v1/admin/users") {
+      await fulfillJson(route, pagedEnvelope([alexUserRecord, archivedUser], 1, 100, 2));
+      return;
+    }
+
+    if (captured.method === "GET" && captured.pathname === "/api/v1/admin/users/USER_RINA_PATEL") {
+      await fulfillJson(route, successEnvelope(archivedUser));
+      return;
+    }
+
+    if (captured.method === "POST" && captured.pathname === "/api/v1/admin/users/USER_RINA_PATEL/restore") {
+      archivedUser = makeUserRecord({
+        ...archivedUser,
+        status: "Active",
+        archivedAt: null,
+        updatedAt: "2026-05-13T03:20:00.000Z",
+      });
+      await fulfillJson(route, successEnvelope(archivedUser));
+      return;
+    }
+
+    await fulfillJson(route, { code: "TEST_ROUTE_NOT_FOUND", message: `${captured.method} ${captured.pathname}`, data: {} }, 404);
+  });
+
+  await page.goto(`${frontendBaseUrl}/admin/users/detail?userCode=USER_RINA_PATEL`);
+
+  await expect(page.getByRole("heading", { name: "Rina Patel" })).toBeVisible();
+  await expect(page.getByText("User not found")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Restore User" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Archive User" })).toHaveCount(0);
+  await expect(page.getByText("Archived", { exact: true })).toBeVisible();
+  await expect(page.getByText(formatUiTimestamp("2026-05-13T03:15:00.000Z"), { exact: true })).toBeVisible();
+
+  const restoreStart = requests.length;
+  await page.getByRole("button", { name: "Restore User" }).click();
+  await expectCapturedAdminRequest(
+    requests,
+    "archived detail restore should call restore endpoint",
+    (request) => request.method === "POST" && request.pathname === "/api/v1/admin/users/USER_RINA_PATEL/restore",
+    { after: restoreStart },
+  );
+  await expect(page.getByText("Active", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Archive User" })).toBeVisible();
+  await expect(page.getByText(formatUiTimestamp("2026-05-13T03:20:00.000Z"), { exact: true })).toBeVisible();
 });

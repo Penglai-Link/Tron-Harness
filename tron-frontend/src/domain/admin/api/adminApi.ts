@@ -57,9 +57,11 @@ export interface CreateUserPayload {
   email: string;
   firstName: string;
   lastName: string;
+  locale: string;
   phone?: UserPhone | null;
   roleCodes: UserRoleCode[];
   spaceCodes: string[];
+  timezone: string;
   userCode?: string;
   username: string;
 }
@@ -69,6 +71,9 @@ export interface UpdateUserProfilePayload {
   email: string;
   firstName: string;
   lastName: string;
+  locale: string;
+  phone?: UserPhone | null;
+  timezone: string;
 }
 
 export interface ResetPasswordResult {
@@ -232,6 +237,13 @@ export async function fetchAdminUserStatistics(signal?: AbortSignal): Promise<Us
 
 export function createAdminUser(payload: CreateUserPayload) {
   return requestAdminApi<UserRecord>(adminApiEndpoints.createUser, { body: payload });
+}
+
+export function fetchAdminUser(userCode: string, signal?: AbortSignal) {
+  return requestAdminApi<UserRecord>(adminApiEndpoints.getUser, {
+    pathParams: { userCode },
+    signal,
+  });
 }
 
 export function updateAdminUserProfile(userCode: string, payload: UpdateUserProfilePayload) {
