@@ -12,6 +12,7 @@ import {
   SurfaceCard,
   TextInput,
   TronShell,
+  useToast,
 } from "@/shared";
 import { Button } from "@/shared/ui/Button";
 import {
@@ -76,8 +77,8 @@ function makeMockCreatedUser(payload: CreateUserPayload): UserRecord {
 
 export function CreateUserPage() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [form, setForm] = useState<CreateUserForm>(defaultCreateForm);
-  const [feedback, setFeedback] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   function updateForm<K extends keyof CreateUserForm>(key: K, value: CreateUserForm[K]) {
@@ -87,7 +88,6 @@ export function CreateUserPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
-    setFeedback("");
 
     const phoneNumber = form.phoneNumber.trim();
     const payload: CreateUserPayload = {
@@ -108,16 +108,15 @@ export function CreateUserPage() {
         : makeMockCreatedUser(payload);
       const notice = `${createdUser.displayName} created successfully`;
 
-      setFeedback(notice);
+      toast.success(notice);
       navigate("/admin/users", {
         state: {
           createdUser,
-          notice,
         },
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "User could not be created";
-      setFeedback(message);
+      toast.error(message);
     } finally {
       setSubmitting(false);
     }
@@ -126,7 +125,6 @@ export function CreateUserPage() {
   return (
     <TronShell activeItem="Users" searchPlaceholder="Search users...">
       <PageHeader breadcrumbs={[{ label: "Users", href: "/admin/users" }, { label: "New" }]} title="Create User" />
-      {feedback ? <p className="mb-4 rounded-lg border border-[var(--color-outline-variant)] bg-white px-4 py-3 text-sm text-[var(--color-on-surface)]" role="status">{feedback}</p> : null}
       <SurfaceCard>
         <form className="grid gap-5" onSubmit={handleSubmit}>
           <div className="grid gap-4 md:grid-cols-3">
