@@ -1553,7 +1553,7 @@ test("operator refinement TDD-UM-22: directory exposes archive and restore actio
   await expect(userRow.getByText("Active")).toBeVisible({ timeout: redExpectationTimeout });
 });
 
-test("operator refinement TDD-UM-23: detail inline save should keep User Code and Username read-only and send mutable-only payload", async ({ page }) => {
+test("operator refinement TDD-UM-23: detail inline save should keep userCode and username read-only controls while editing mutable fields", async ({ page }) => {
   const requests: CapturedAdminRequest[] = [];
 
   await page.route("**/api/v1/admin/users**", async (route) => {
@@ -1580,10 +1580,25 @@ test("operator refinement TDD-UM-23: detail inline save should keep User Code an
   await page.goto(`${frontendBaseUrl}/admin/users/detail?userCode=USER_ALEX_JOHNSON`);
 
   await expect(page.getByRole("heading", { name: "Alex Johnson" })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: /user code/i })).toHaveCount(0);
-  await expect(page.getByRole("textbox", { name: /^username$/i })).toHaveCount(0);
 
   await page.getByRole("button", { name: /edit profile/i }).click();
+  const userCodeInput = page.getByRole("textbox", { name: /user code/i });
+  const usernameInput = page.getByRole("textbox", { name: /^username$/i });
+  await expect(userCodeInput, "userCode should remain visible in edit mode as a read-only control").toBeVisible();
+  await expect(usernameInput, "username should remain visible in edit mode as a read-only control").toBeVisible();
+  await expect.soft(userCodeInput, "userCode should not be editable in inline detail editing").not.toBeEditable({ timeout: redExpectationTimeout });
+  await expect.soft(usernameInput, "username should not be editable in inline detail editing").not.toBeEditable({ timeout: redExpectationTimeout });
+
+  const firstNameInput = page.getByLabel(/first name/i);
+  const lastNameInput = page.getByLabel(/last name/i);
+  await expect(firstNameInput, "first name should be an inline editable field in detail profile mode").toBeVisible();
+  await expect(firstNameInput, "first name should remain editable in detail profile mode").toBeEditable();
+  await expect(lastNameInput, "last name should be an inline editable field in detail profile mode").toBeVisible();
+  await expect(lastNameInput, "last name should remain editable in detail profile mode").toBeEditable();
+  await expect(page.getByLabel(/display name/i), "display name should remain editable in detail profile mode").toBeEditable();
+  await expect(page.getByLabel(/^email$/i), "email should remain editable in detail profile mode").toBeEditable();
+  await firstNameInput.fill("Alex Inline");
+  await lastNameInput.fill("Johnson Inline");
   await page.getByLabel(/display name/i).fill("Alex Inline Updated");
   await page.getByLabel(/^email$/i).fill("alex.inline.updated@example.com");
 
@@ -1602,10 +1617,10 @@ test("operator refinement TDD-UM-23: detail inline save should keep User Code an
   expect((patchRequest!.body as Record<string, unknown>)).not.toHaveProperty("userCode");
   expect((patchRequest!.body as Record<string, unknown>)).not.toHaveProperty("username");
   expect((patchRequest!.body as Record<string, unknown>)).toEqual(expect.objectContaining({
+    firstName: "Alex Inline",
+    lastName: "Johnson Inline",
     displayName: "Alex Inline Updated",
     email: "alex.inline.updated@example.com",
-    firstName: "Alex",
-    lastName: "Johnson",
   }));
 });
 
