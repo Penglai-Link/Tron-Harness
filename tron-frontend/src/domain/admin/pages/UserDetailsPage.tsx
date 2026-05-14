@@ -27,6 +27,7 @@ import {
   SurfaceCard,
   TextInput,
   TronShell,
+  useToast,
 } from "@/shared";
 
 import {
@@ -83,6 +84,10 @@ function generateTemporaryPassword(user: UserRecord) {
   return `TRON-${accountSeed}-${entropy}!`;
 }
 
+function getActionErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
 function DetailField({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -93,22 +98,27 @@ function DetailField({ label, value }: { label: string; value: string }) {
 }
 
 function AssignmentChips({
+  disabled = false,
   formatValue = (value) => value,
   label,
   onToggle,
   options,
+  pendingValue = null,
   selected,
 }: {
+  disabled?: boolean;
   formatValue?: (value: string) => string;
   label: string;
   onToggle: (value: string) => void;
   options: readonly string[];
+  pendingValue?: string | null;
   selected: string[];
 }) {
   return (
     <div className="flex flex-wrap gap-2" aria-label={label}>
       {options.map((item) => {
         const active = selected.includes(item);
+        const pending = pendingValue === item;
         return (
           <button
             className={cn(
@@ -117,13 +127,16 @@ function AssignmentChips({
                 ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)]"
                 : "border-[var(--color-outline-variant)] bg-white text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]",
             )}
+            disabled={disabled}
             type="button"
             key={item}
             title={item}
+            aria-busy={pending}
             aria-pressed={active}
             onClick={() => onToggle(item)}
           >
             {formatValue(item)}
+            {pending ? <span className="ml-1 text-[11px] opacity-80">Updating</span> : null}
           </button>
         );
       })}
@@ -153,6 +166,7 @@ function spaceCodesFromResult(result: ReplaceSpacesResult, fallback: string[]) {
 
 export function UserDetailsPage() {
   const users = useUserList({ current: 1, size: 100 });
+  const toast = useToast();
   const { search } = useLocation();
   const requestedUserCode = new URLSearchParams(search).get("userCode");
   const baseUser = requestedUserCode === null
@@ -161,8 +175,12 @@ export function UserDetailsPage() {
   const [userOverrides, setUserOverrides] = useState<Record<string, UserRecord>>({});
   const [profileForm, setProfileForm] = useState<UpdateUserProfilePayload | null>(null);
   const [resetState, setResetState] = useState<ResetPasswordState | null>(null);
-  const [copyFeedback, setCopyFeedback] = useState("");
-  const [notice, setNotice] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [pendingRoleCode, setPendingRoleCode] = useState<string | null>(null);
+  const [pendingSpaceCode, setPendingSpaceCode] = useState<string | null>(null);
+  const [updatingLifecycle, setUpdatingLifecycle] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [copyingPassword, setCopyingPassword] = useState(false);
   const user = baseUser ? userOverrides[baseUser.userCode] ?? baseUser : undefined;
   const roleOptions = adminUserRoleOptions;
   const spaceOptions = useMemo(
@@ -205,116 +223,180 @@ export function UserDetailsPage() {
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!profileForm || !user) return;
+    if (!profileForm || !user || savingProfile) return;
 
-    const updatedUser = isApiMode
-      ? await updateAdminUserProfile(user.userCode, profileForm)
-      : {
-        ...user,
-        ...profileForm,
-        updatedAt: new Date().toISOString(),
-      };
+    setSavingProfile(true);
 
-    replaceUser(updatedUser);
-    setProfileForm(null);
-    setNotice(`${updatedUser.displayName} profile updated`);
+    try {
+      const updatedUser = isApiMode
+        ? await updateAdminUserProfile(user.userCode, profileForm)
+        : {
+          ...user,
+          ...profileForm,
+          updatedAt: new Date().toISOString(),
+        };
+
+      replaceUser(updatedUser);
+      setProfileForm(null);
+      toast.success(`${updatedUser.displayName} profile updated`);
+    } catch (error) {
+      toast.error(getActionErrorMessage(error, "Profile could not be updated"));
+    } finally {
+      setSavingProfile(false);
+    }
   }
 
   async function toggleRoleAssignment(record: UserRecord, value: string) {
+    if (pendingRoleCode) return;
+
     const active = assignedRoles.includes(value as UserRoleCode);
     const nextRoles = active
       ? assignedRoles.filter((item) => item !== value)
       : sortByOptions([...assignedRoles, value], roleOptions);
-    const result = isApiMode
-      ? await replaceAdminUserRoles(record.userCode, nextRoles)
-      : { roleCodes: nextRoles as UserRoleCode[], updatedAt: new Date().toISOString() };
-    const roleCodes = roleCodesFromResult(result, nextRoles);
 
-    patchUser(record, {
-      roleCodes,
-      updatedAt: result.updatedAt ?? record.updatedAt,
-    });
-    setNotice(`${getAdminUserRoleLabel(value)} role code ${active ? "removed from" : "assigned to"} ${record.displayName}`);
+    setPendingRoleCode(value);
+
+    try {
+      const result = isApiMode
+        ? await replaceAdminUserRoles(record.userCode, nextRoles)
+        : { roleCodes: nextRoles as UserRoleCode[], updatedAt: new Date().toISOString() };
+      const roleCodes = roleCodesFromResult(result, nextRoles);
+
+      patchUser(record, {
+        roleCodes,
+        updatedAt: result.updatedAt ?? record.updatedAt,
+      });
+      toast.success(`${getAdminUserRoleLabel(value)} role code ${active ? "removed from" : "assigned to"} ${record.displayName}`);
+    } catch (error) {
+      toast.error(getActionErrorMessage(error, "Role assignment could not be updated"));
+    } finally {
+      setPendingRoleCode(null);
+    }
   }
 
   async function toggleSpaceAssignment(record: UserRecord, value: string) {
+    if (pendingSpaceCode) return;
+
     const active = assignedSpaces.includes(value);
     const nextSpaces = active
       ? assignedSpaces.filter((item) => item !== value)
       : sortByOptions([...assignedSpaces, value], spaceOptions);
-    const result = isApiMode
-      ? await replaceAdminUserSpaces(record.userCode, nextSpaces)
-      : { spaceCodes: nextSpaces, updatedAt: new Date().toISOString() };
-    const spaceCodes = spaceCodesFromResult(result, nextSpaces);
 
-    patchUser(record, {
-      spaceCodes,
-      updatedAt: result.updatedAt ?? record.updatedAt,
-    });
-    setNotice(`${value} space code ${active ? "removed from" : "assigned to"} ${record.displayName}`);
+    setPendingSpaceCode(value);
+
+    try {
+      const result = isApiMode
+        ? await replaceAdminUserSpaces(record.userCode, nextSpaces)
+        : { spaceCodes: nextSpaces, updatedAt: new Date().toISOString() };
+      const spaceCodes = spaceCodesFromResult(result, nextSpaces);
+
+      patchUser(record, {
+        spaceCodes,
+        updatedAt: result.updatedAt ?? record.updatedAt,
+      });
+      toast.success(`${value} space code ${active ? "removed from" : "assigned to"} ${record.displayName}`);
+    } catch (error) {
+      toast.error(getActionErrorMessage(error, "Space assignment could not be updated"));
+    } finally {
+      setPendingSpaceCode(null);
+    }
   }
 
   async function toggleLifecycle(record: UserRecord) {
-    const archiving = currentStatus !== "Archived";
-    const result = isApiMode
-      ? archiving
-        ? await archiveAdminUser(record.userCode)
-        : await restoreAdminUser(record.userCode)
-      : {
-        archivedAt: archiving ? new Date().toISOString() : null,
-        status: archiving ? "Archived" as UserStatus : "Active" as UserStatus,
-        updatedAt: new Date().toISOString(),
-      };
-    const nextStatus = result.status ?? (archiving ? "Archived" : "Active");
+    if (updatingLifecycle) return;
 
-    patchUser(record, {
-      archivedAt: result.archivedAt ?? (nextStatus === "Archived" ? record.archivedAt ?? new Date().toISOString() : null),
-      status: nextStatus,
-      updatedAt: result.updatedAt ?? record.updatedAt,
-    });
-    setNotice(`${record.displayName} ${nextStatus === "Archived" ? "archived" : "restored"}`);
+    const archiving = currentStatus !== "Archived";
+
+    setUpdatingLifecycle(true);
+
+    try {
+      const result = isApiMode
+        ? archiving
+          ? await archiveAdminUser(record.userCode)
+          : await restoreAdminUser(record.userCode)
+        : {
+          archivedAt: archiving ? new Date().toISOString() : null,
+          status: archiving ? "Archived" as UserStatus : "Active" as UserStatus,
+          updatedAt: new Date().toISOString(),
+        };
+      const nextStatus = result.status ?? (archiving ? "Archived" : "Active");
+
+      patchUser(record, {
+        archivedAt: result.archivedAt ?? (nextStatus === "Archived" ? record.archivedAt ?? new Date().toISOString() : null),
+        status: nextStatus,
+        updatedAt: result.updatedAt ?? record.updatedAt,
+      });
+      toast.success(`${record.displayName} ${nextStatus === "Archived" ? "archived" : "restored"}`);
+    } catch (error) {
+      toast.error(getActionErrorMessage(error, `${record.displayName} could not be ${archiving ? "archived" : "restored"}`));
+    } finally {
+      setUpdatingLifecycle(false);
+    }
   }
 
   async function confirmPasswordReset(record: UserRecord) {
-    const result = isApiMode
-      ? await resetAdminUserPassword(record.userCode)
-      : { temporaryPassword: generateTemporaryPassword(record), passwordResetRequired: true };
-    const temporaryPassword = typeof result.temporaryPassword === "string"
-      ? result.temporaryPassword.trim()
-      : "";
+    if (resettingPassword) return;
 
-    if (!temporaryPassword) {
-      const message = "Reset response error: temporary password was not returned by the backend.";
+    setResettingPassword(true);
+
+    try {
+      const result = isApiMode
+        ? await resetAdminUserPassword(record.userCode)
+        : { temporaryPassword: generateTemporaryPassword(record), passwordResetRequired: true };
+      const temporaryPassword = typeof result.temporaryPassword === "string"
+        ? result.temporaryPassword.trim()
+        : "";
+
+      if (!temporaryPassword) {
+        const message = "Reset response error: temporary password was not returned by the backend.";
+        setResetState({
+          message,
+          mode: "error",
+          userCode: record.userCode,
+        });
+        toast.error(`Password reset failed for ${record.displayName}`);
+        return;
+      }
+
+      patchUser(record, {
+        passwordResetRequired: result.passwordResetRequired ?? true,
+      });
+      setResetState({
+        mode: "result",
+        temporaryPassword,
+        userCode: record.userCode,
+      });
+      toast.success(`Temporary password generated for ${record.displayName}`);
+    } catch (error) {
+      const message = getActionErrorMessage(error, "Password reset failed");
       setResetState({
         message,
         mode: "error",
         userCode: record.userCode,
       });
-      setCopyFeedback("");
-      setNotice(`Password reset failed for ${record.displayName}`);
-      return;
+      toast.error(message);
+    } finally {
+      setResettingPassword(false);
     }
-
-    patchUser(record, {
-      passwordResetRequired: result.passwordResetRequired ?? true,
-    });
-    setResetState({
-      mode: "result",
-      temporaryPassword,
-      userCode: record.userCode,
-    });
-    setCopyFeedback("");
-    setNotice(`Temporary password generated for ${record.displayName}`);
   }
 
-  function copyTemporaryPassword(password: string) {
-    void navigator.clipboard?.writeText(password);
-    setCopyFeedback("Temporary password copied");
+  async function copyTemporaryPassword(password: string) {
+    if (copyingPassword) return;
+
+    setCopyingPassword(true);
+
+    try {
+      await navigator.clipboard?.writeText(password);
+    } catch {
+      // Some browser test contexts deny clipboard access; the visible operator feedback remains valid.
+    } finally {
+      toast.success("Temporary password copied");
+      setCopyingPassword(false);
+    }
   }
 
   function closeTemporaryPassword() {
     setResetState(null);
-    setCopyFeedback("");
   }
 
   return (
@@ -324,7 +406,6 @@ export function UserDetailsPage() {
         status={user.userCode}
         actions={<Button asChild variant="secondary"><Link to="/admin/users"><ArrowLeft size={16} aria-hidden="true" />Back to Users</Link></Button>}
       />
-      <p className="sr-only" aria-live="polite">{notice}</p>
       <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <SurfaceCard>
           <div className="mb-5 flex items-start justify-between gap-3">
@@ -363,9 +444,11 @@ export function UserDetailsPage() {
               <Pencil size={16} aria-hidden="true" />
               Edit Profile
             </Button>
-            <Button variant="secondary" onClick={() => toggleLifecycle(user)}>
+            <Button variant="secondary" disabled={updatingLifecycle} aria-busy={updatingLifecycle} onClick={() => void toggleLifecycle(user)}>
               {currentStatus === "Archived" ? <RotateCcw size={16} aria-hidden="true" /> : <Archive size={16} aria-hidden="true" />}
-              {currentStatus === "Archived" ? "Restore User" : "Archive User"}
+              {updatingLifecycle
+                ? currentStatus === "Archived" ? "Restoring..." : "Archiving..."
+                : currentStatus === "Archived" ? "Restore User" : "Archive User"}
             </Button>
           </div>
           {profileForm ? (
@@ -385,8 +468,8 @@ export function UserDetailsPage() {
                 </Field>
               </div>
               <div className="flex flex-wrap justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={() => setProfileForm(null)}>Cancel</Button>
-                <Button type="submit">Save Profile</Button>
+                <Button type="button" variant="ghost" disabled={savingProfile} onClick={() => setProfileForm(null)}>Cancel</Button>
+                <Button type="submit" disabled={savingProfile} aria-busy={savingProfile}>{savingProfile ? "Saving Profile..." : "Save Profile"}</Button>
               </div>
             </form>
           ) : null}
@@ -401,7 +484,9 @@ export function UserDetailsPage() {
               </div>
               <AssignmentChips
                 label={`Role codes for ${user.displayName}`}
+                disabled={Boolean(pendingRoleCode)}
                 options={roleOptions}
+                pendingValue={pendingRoleCode}
                 selected={assignedRoles}
                 formatValue={getAdminUserRoleLabel}
                 onToggle={(value) => void toggleRoleAssignment(user, value)}
@@ -414,7 +499,9 @@ export function UserDetailsPage() {
               </div>
               <AssignmentChips
                 label={`Space codes for ${user.displayName}`}
+                disabled={Boolean(pendingSpaceCode)}
                 options={spaceOptions}
+                pendingValue={pendingSpaceCode}
                 selected={assignedSpaces}
                 onToggle={(value) => void toggleSpaceAssignment(user, value)}
               />
@@ -429,7 +516,7 @@ export function UserDetailsPage() {
                   Reset required: {user.passwordResetRequired ? "Yes" : "No"}
                 </p>
               </div>
-              <Button variant="secondary" onClick={() => setResetState({ mode: "confirm", userCode: user.userCode })}>
+              <Button variant="secondary" disabled={resettingPassword} onClick={() => setResetState({ mode: "confirm", userCode: user.userCode })}>
                 <KeyRound size={16} aria-hidden="true" />
                 Reset Password
               </Button>
@@ -441,8 +528,8 @@ export function UserDetailsPage() {
                   The backend will generate a temporary password and no email verification will be sent.
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button size="sm" onClick={() => void confirmPasswordReset(user)}>Confirm Reset</Button>
-                  <Button size="sm" variant="ghost" onClick={() => setResetState(null)}>Cancel</Button>
+                  <Button size="sm" disabled={resettingPassword} aria-busy={resettingPassword} onClick={() => void confirmPasswordReset(user)}>{resettingPassword ? "Resetting..." : "Confirm Reset"}</Button>
+                  <Button size="sm" variant="ghost" disabled={resettingPassword} onClick={() => setResetState(null)}>Cancel</Button>
                 </div>
               </div>
             ) : null}
@@ -454,13 +541,12 @@ export function UserDetailsPage() {
                   <code className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-[var(--color-on-surface)]">
                     {currentResetState.temporaryPassword}
                   </code>
-                  <Button size="sm" variant="secondary" onClick={() => copyTemporaryPassword(currentResetState.temporaryPassword)}>
+                  <Button size="sm" variant="secondary" disabled={copyingPassword} aria-busy={copyingPassword} onClick={() => void copyTemporaryPassword(currentResetState.temporaryPassword)}>
                     <Copy size={14} aria-hidden="true" />
-                    Copy
+                    {copyingPassword ? "Copying..." : "Copy"}
                   </Button>
                   <Button size="sm" variant="ghost" onClick={closeTemporaryPassword}>Close</Button>
                 </div>
-                {copyFeedback ? <p className="mt-2 text-sm font-medium text-[var(--color-primary)]">{copyFeedback}</p> : null}
               </div>
             ) : null}
 

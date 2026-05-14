@@ -26,6 +26,7 @@ import {
   TablePagination,
   TextInput,
   TronShell,
+  useToast,
 } from "@/shared";
 
 import {
@@ -106,12 +107,13 @@ function downloadUsersCsv(records: UserRecord[]) {
 export function UsersPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const toast = useToast();
   const routeState = location.state as UsersRouteState | null;
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<UserStatus | typeof ALL_FILTER>("Active");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
-  const [notice, setNotice] = useState(routeState?.notice ?? "");
+  const [exporting, setExporting] = useState(false);
   const users = useUserList({
     current: currentPage,
     search: query,
@@ -126,18 +128,29 @@ export function UsersPage() {
 
   useEffect(() => {
     if (routeState?.createdUser) users.upsertUser(routeState.createdUser);
-    if (routeState?.notice) setNotice(routeState.notice);
-  }, [routeState?.createdUser, routeState?.notice, users.upsertUser]);
+    if (routeState?.notice) toast.success(routeState.notice);
+  }, [routeState?.createdUser, routeState?.notice, toast, users.upsertUser]);
 
-  function handleExport() {
-    downloadUsersCsv(users.records);
-    setNotice(`${users.records.length} users exported`);
+  async function handleExport() {
+    if (exporting) return;
+
+    setExporting(true);
+
+    try {
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+      downloadUsersCsv(users.records);
+      toast.success(`${users.records.length} users exported`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Users export failed";
+      toast.error(message);
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
     <TronShell activeItem="Users" searchPlaceholder="Search users...">
-      <PageHeader title="Users" actions={<><Button variant="secondary" onClick={handleExport}><Download size={16} aria-hidden="true" />Export</Button><Button onClick={() => navigate("/admin/users/new")}><UserPlus size={16} aria-hidden="true" />Add User</Button></>} />
-      {notice ? <p className="mb-4 rounded-lg border border-[var(--color-outline-variant)] bg-white px-4 py-3 text-sm text-[var(--color-on-surface)]" role="status">{notice}</p> : null}
+      <PageHeader title="Users" actions={<><Button variant="secondary" disabled={exporting} aria-busy={exporting} onClick={() => void handleExport()}><Download size={16} aria-hidden="true" />{exporting ? "Exporting..." : "Export"}</Button><Button onClick={() => navigate("/admin/users/new")}><UserPlus size={16} aria-hidden="true" />Add User</Button></>} />
       <div className="mb-5 grid gap-4 lg:grid-cols-2 2xl:grid-cols-4">
         <MetricCard label="Users" value={String(statistics.totalUsers)} trend="Persisted user records" icon={<ShieldCheck size={18} aria-hidden="true" />} />
         <MetricCard label="Active" value={String(statistics.activeUsers)} trend="Active status count" />
@@ -183,7 +196,7 @@ export function UsersPage() {
           { id: "codes", header: "Codes", render: (row) => <div className="max-w-64 text-[13px] text-[var(--color-on-surface-variant)]"><div className="font-medium text-[var(--color-on-surface)]">{row.userCode}</div><div>{row.roleCodes.map(getAdminUserRoleLabel).join(", ")}</div><div>{row.spaceCodes.join(", ")}</div></div> },
           { id: "status", header: "Status", render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },
           { id: "last", header: "Last Active", render: (row) => formatTimestamp(row.lastActiveAt) },
-          { id: "details", header: "", align: "right", render: (row) => <div className="flex justify-end gap-1"><Button asChild size="icon" variant="ghost" aria-label={`View ${row.displayName} details`}><Link to={userDetailPath(row.userCode)}><Eye size={16} aria-hidden="true" /></Link></Button><Button size="icon" variant="ghost" aria-label={`Open actions for ${row.displayName}`} onClick={() => setNotice(`${row.displayName} action menu opened`)}><MoreHorizontal size={16} aria-hidden="true" /></Button></div> },
+          { id: "details", header: "", align: "right", render: (row) => <div className="flex justify-end gap-1"><Button asChild size="icon" variant="ghost" aria-label={`View ${row.displayName} details`}><Link to={userDetailPath(row.userCode)}><Eye size={16} aria-hidden="true" /></Link></Button><Button size="icon" variant="ghost" aria-label={`Open actions for ${row.displayName}`} onClick={() => toast.info(`${row.displayName} action menu opened`)}><MoreHorizontal size={16} aria-hidden="true" /></Button></div> },
         ]}
       />
     </TronShell>
