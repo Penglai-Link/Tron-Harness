@@ -70,6 +70,10 @@ Backend GREEN, VERIFY, post-review backend fix branches, and the SQLite runtime 
 | @ref:spec/test-plan.md#command-matrix | `rtk cargo test --manifest-path tron-backend/Cargo.toml --test user_management_lifecycle create_user_persists_to_configured_sqlite_database` passed | @ref:orchestration/integration-log.md#validation-after-integration |
 | @ref:spec/test-plan.md#command-matrix | `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_statistics` and `rtk make be-test` passed after BE-GREEN-05 | @ref:orchestration/integration-log.md#EVT-033 |
 
+## Browser Verify Evidence
+
+Backend endpoints are exercised through browser tests for directory queries, statistic-card requests, create, reset, profile, role, space, archive, restore, and All Status include-archived behavior. Canonical browser evidence is in @ref:reports/test-report.md#browser-verify-evidence, @ref:reports/test-report.md#consistency-refactor-browser-verify-evidence, and @ref:reports/test-report.md#all-status-include-archived-browser-verify-evidence.
+
 ## Acceptance Mapping
 
 | acceptance ref | result | evidence link |

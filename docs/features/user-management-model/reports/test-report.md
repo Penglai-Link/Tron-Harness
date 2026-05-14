@@ -4,7 +4,7 @@
 
 `TEST-RED-01..08`, interaction-gap RED `TEST-RED-09..13`, reset-response RED `TEST-RED-14`, backend consistency RED `TEST-RED-15`, frontend consistency RED `TEST-RED-16`, consistency refactor VERIFY `TEST-VERIFY-02`, and All Status include-archived VERIFY `TEST-VERIFY-03` are completed. All completed RED failures were expected behavior gaps.
 
-## Test Task Evidence
+## Task Results
 
 | task id | result | evidence link | status |
 | --- | --- | --- | --- |
@@ -29,7 +29,7 @@
 | TEST-VERIFY-02 | pass | @ref:reports/agents/verify-consistency-refactor.md#agent-report-testverify-consistency-refactor | done |
 | TEST-VERIFY-03 | pass | @ref:reports/agents/verify-all-status-include-archived.md#agent-report-verify-all-status-include-archived | done |
 
-## Cycle Evidence
+## TDD Evidence
 
 | cycle id or ref | result | evidence link | status |
 | --- | --- | --- | --- |
@@ -112,6 +112,14 @@
 | TEST-VERIFY-02 | `rtk make be-test`, `rtk make fe-check`, full `user-management-smoke`, task validator, and `rtk git diff --check` pass for consistency refactor verification. | @ref:reports/agents/verify-consistency-refactor.md#commands |
 | TEST-VERIFY-03 | `rtk make fe-check`, focused All Status include-archived Playwright test, full `user-management-smoke`, task validator, and `rtk git diff --check` pass for FE-FIX-03 verification. | @ref:reports/agents/verify-all-status-include-archived.md#commands |
 
+## Commands
+
+| command ref | result | evidence link |
+| --- | --- | --- |
+| @ref:spec/test-plan.md#command-index | backend RED/GREEN/VERIFY commands completed through `rtk make be-test` and focused cargo tests | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/test-plan.md#command-index | frontend RED/GREEN/VERIFY commands completed through `rtk make fe-check` and user-management Playwright smoke | @ref:orchestration/integration-log.md#validation-after-integration |
+| @ref:spec/test-plan.md#command-index | interaction-gap, consistency, All Status, and EV-07 focused browser commands completed with expected RED failures then GREEN/VERIFY passes | @ref:orchestration/integration-log.md#EVT-060 |
+
 ## Browser Verify Evidence
 
 - status: passed
@@ -139,7 +147,7 @@
 - network_assertions: verified `GET /api/v1/admin/users` with `includeArchived=true`, no `status`, `search=""`, `current=1`, and `size=15`.
 - visible_feedback_assertions: verified `All Status Active` remains visible and `All Status Archived` appears from the include-archived response.
 
-## Changed Test Assets
+## Changed Paths
 
 | path | result | evidence link |
 | --- | --- | --- |

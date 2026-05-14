@@ -43,6 +43,10 @@ Database GREEN, VERIFY, and runtime SQLite wiring are integrated into base. Focu
 | --- | --- | --- |
 | @ref:spec/test-plan.md#command-matrix | worker migration smoke, `rtk make be-check`, `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_schema_contracts`, and `rtk make be-test` passed | @ref:orchestration/integration-log.md#validation-after-integration |
 
+## Browser Verify Evidence
+
+Database changes do not have direct browser steps. Browser-visible persistence and lifecycle behavior is covered by the user-management frontend/test evidence in @ref:reports/test-report.md#browser-verify-evidence.
+
 ## Acceptance Mapping
 
 | acceptance ref | result | evidence link |

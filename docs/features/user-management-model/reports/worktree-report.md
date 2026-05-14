@@ -2,7 +2,66 @@
 
 ## Summary
 
-Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend GREEN, frontend GREEN, VERIFY, REVIEW, targeted post-review fix branches, interaction-gap evolution branches, reset-contract RED, and reset-contract frontend fix are integrated into base.
+Lite Spec worker worktrees are provisioned. RED suite, database GREEN, backend GREEN, frontend GREEN, VERIFY, REVIEW, targeted post-review fix branches, interaction-gap evolution branches, reset-contract RED/fix, consistency refactor, All Status follow-up, and EV-07 feedback/loading branches are integrated into base.
+
+## Task Results
+
+| task group | result | evidence link |
+| --- | --- | --- |
+| initial user-management delivery | RED, GREEN, VERIFY, REVIEW, and post-review fixes integrated | @ref:orchestration/integration-log.md#EVT-012 |
+| interaction-gap evolution | RED, frontend GREEN, VERIFY, REVIEW, and reset-contract follow-up integrated | @ref:orchestration/integration-log.md#EVT-026 |
+| consistency refactor | RED, backend GREEN, frontend GREEN, VERIFY, and REVIEW integrated | @ref:orchestration/integration-log.md#EVT-040 |
+| All Status include-archived follow-up | RED, frontend fix, VERIFY, and REVIEW integrated | @ref:orchestration/integration-log.md#EVT-048 |
+| EV-07 feedback/loading evolution | RED, frontend GREEN, locator fix, final VERIFY, and REVIEW integrated | @ref:orchestration/integration-log.md#EVT-062 |
+
+## TDD Evidence
+
+| cycle id | result | evidence link |
+| --- | --- | --- |
+| TDD-UM-01 through TDD-UM-08 | integrated through initial RED/GREEN/VERIFY/REVIEW worktrees | @ref:orchestration/integration-log.md#EVT-012 |
+| TDD-UM-09 through TDD-UM-13 | integrated through interaction-gap RED/GREEN/VERIFY/REVIEW worktrees | @ref:orchestration/integration-log.md#EVT-026 |
+| TDD-UM-14 through TDD-UM-18 | integrated through consistency refactor worktrees and All Status follow-up | @ref:orchestration/integration-log.md#EVT-048 |
+| TDD-UM-19 through TDD-UM-20 | integrated through EV-07 feedback/loading worktrees | @ref:orchestration/integration-log.md#EVT-062 |
+
+## Changed Paths
+
+| path | result | evidence link |
+| --- | --- | --- |
+| `orchestration/worktree-plan.md` | tracks all Lite Spec branch/worktree rows and final integrated status | @ref:orchestration/worktree-plan.md#agent-worktrees |
+| `orchestration/integration-log.md` | records dispatch and merge events through EVT-062 | @ref:orchestration/integration-log.md#integration-events |
+| `tasks/test-task.md` | records RED/VERIFY and test-maintenance rows through TEST-VERIFY-05 | @ref:tasks/test-task.md#task-table |
+| `tasks/frontend-task.md` | records frontend GREEN/fix rows through FE-GREEN-04 | @ref:tasks/frontend-task.md#task-table |
+| `tasks/backend-task.md` | records backend GREEN/fix rows through BE-GREEN-05 | @ref:tasks/backend-task.md#task-table |
+| `tasks/review-task.md` | records review rows through REVIEW-06 | @ref:tasks/review-task.md#task-table |
+
+## Commands
+
+| command ref | result | evidence link |
+| --- | --- | --- |
+| @ref:spec/test-plan.md#command-index | worker creation used selected Lite Spec mirrored branch/worktree paths | @ref:orchestration/worktree-plan.md#branch-and-path-rules |
+| @ref:orchestration/integration-log.md#validation-after-integration | worker branch merges and post-integration validation are recorded through EVT-062 | @ref:orchestration/integration-log.md#integration-events |
+
+## Browser Verify Evidence
+
+Worktree orchestration has no direct browser UI. Browser evidence produced by worker worktrees is retained in @ref:reports/test-report.md#browser-verify-evidence and @ref:reports/agents/test-verify-feedback-loading-final.md#browser-verify-evidence.
+
+## Acceptance Mapping
+
+| acceptance ref | result | evidence link |
+| --- | --- | --- |
+| @ref:spec/acceptance.md#AC-UM-01 | integrated | @ref:orchestration/worktree-plan.md#agent-worktrees |
+| @ref:spec/acceptance.md#AC-UM-02 | integrated | @ref:orchestration/worktree-plan.md#agent-worktrees |
+| @ref:spec/acceptance.md#AC-UM-03 | integrated | @ref:orchestration/worktree-plan.md#agent-worktrees |
+| @ref:spec/acceptance.md#AC-UM-04 | integrated | @ref:orchestration/worktree-plan.md#agent-worktrees |
+| @ref:spec/acceptance.md#AC-UM-05 | integrated | @ref:orchestration/worktree-plan.md#agent-worktrees |
+| @ref:spec/acceptance.md#AC-UM-06 | integrated | @ref:orchestration/worktree-plan.md#agent-worktrees |
+| @ref:spec/acceptance.md#AC-UM-07 | integrated | @ref:orchestration/worktree-plan.md#agent-worktrees |
+| @ref:spec/acceptance.md#AC-UM-08 | integrated | @ref:orchestration/worktree-plan.md#agent-worktrees |
+| @ref:spec/acceptance.md#AC-UM-09 | integrated | @ref:orchestration/worktree-plan.md#agent-worktrees |
+| @ref:spec/acceptance.md#AC-UM-10 | integrated | @ref:orchestration/worktree-plan.md#agent-worktrees |
+| @ref:spec/acceptance.md#AC-UM-11 | integrated | @ref:orchestration/worktree-plan.md#agent-worktrees |
+| @ref:spec/acceptance.md#AC-UM-12 | integrated | @ref:orchestration/worktree-plan.md#agent-worktrees |
+| @ref:spec/acceptance.md#AC-UM-13 | integrated | @ref:orchestration/worktree-plan.md#agent-worktrees |
 
 ## Worktree Registry
 

@@ -13,6 +13,78 @@ Final review, post-fix final review, interaction-gap review, reset-contract RED,
 | REVIEW-03 | pass | @ref:orchestration/integration-log.md#EVT-022 |
 | REVIEW-04 | findings_recorded | @ref:reports/agents/consistency-refactor-review.md#findings |
 | REVIEW-05 | pass | @ref:reports/agents/all-status-include-archived-review.md#findings |
+| REVIEW-06 | pass | @ref:reports/agents/review-feedback-loading.md#summary |
+
+## TDD Evidence
+
+| cycle id | result | evidence link |
+| --- | --- | --- |
+| TDD-UM-01 | pass | @ref:reports/agents/post-fix-final-review.md#tdd-evidence |
+| TDD-UM-02 | pass | @ref:reports/agents/post-fix-final-review.md#tdd-evidence |
+| TDD-UM-03 | pass | @ref:reports/agents/post-fix-final-review.md#tdd-evidence |
+| TDD-UM-04 | pass | @ref:reports/agents/post-fix-final-review.md#tdd-evidence |
+| TDD-UM-05 | pass | @ref:reports/agents/post-fix-final-review.md#tdd-evidence |
+| TDD-UM-06 | pass | @ref:reports/agents/post-fix-final-review.md#tdd-evidence |
+| TDD-UM-07 | pass | @ref:reports/agents/post-fix-final-review.md#tdd-evidence |
+| TDD-UM-08 | pass | @ref:reports/agents/post-fix-final-review.md#tdd-evidence |
+| TDD-UM-09 | pass | @ref:orchestration/integration-log.md#EVT-043 |
+| TDD-UM-10 | pass | @ref:orchestration/integration-log.md#EVT-035 |
+| TDD-UM-11 | pass | @ref:orchestration/integration-log.md#EVT-020 |
+| TDD-UM-12 | pass | @ref:orchestration/integration-log.md#EVT-026 |
+| TDD-UM-13 | pass | @ref:orchestration/integration-log.md#EVT-020 |
+| TDD-UM-14 | pass | @ref:orchestration/integration-log.md#EVT-033 |
+| TDD-UM-15 | pass | @ref:orchestration/integration-log.md#EVT-043 |
+| TDD-UM-16 | pass | @ref:orchestration/integration-log.md#EVT-035 |
+| TDD-UM-17 | pass | @ref:orchestration/integration-log.md#EVT-035 |
+| TDD-UM-18 | pass | @ref:orchestration/integration-log.md#EVT-035 |
+| TDD-UM-19 | pass | @ref:reports/agents/review-feedback-loading.md#tdd-evidence |
+| TDD-UM-20 | pass | @ref:reports/agents/review-feedback-loading.md#tdd-evidence |
+
+## Changed Paths
+
+| path | result | evidence link |
+| --- | --- | --- |
+| `reports/database-result.md` | canonical database report reviewed | @ref:reports/database-result.md#summary |
+| `reports/backend-result.md` | canonical backend report reviewed | @ref:reports/backend-result.md#summary |
+| `reports/frontend-result.md` | canonical frontend report reviewed | @ref:reports/frontend-result.md#summary |
+| `reports/test-report.md` | canonical RED/GREEN/VERIFY evidence reviewed | @ref:reports/test-report.md#summary |
+| `reports/worktree-report.md` | canonical worktree and merge evidence reviewed | @ref:reports/worktree-report.md#summary |
+| `reports/agents/review-feedback-loading.md` | EV-07 final review evidence integrated | @ref:reports/agents/review-feedback-loading.md#summary |
+
+## Commands
+
+| command ref | result | evidence link |
+| --- | --- | --- |
+| @ref:spec/test-plan.md#command-index | review reused fresh TEST-VERIFY-05 slow/browser evidence according to rerun policy | @ref:reports/agents/review-feedback-loading.md#browser-verify-evidence |
+| @ref:orchestration/integration-log.md#validation-after-integration | feature-doc validation and diff checks passed in reviewed worker evidence | @ref:reports/agents/review-feedback-loading.md#commands |
+
+## Browser Verify Evidence
+
+- status: passed
+- evidence: @ref:reports/agents/review-feedback-loading.md#browser-verify-evidence
+- slow_browser_rerun: skipped by REVIEW-06 because TEST-VERIFY-05 was fresh, passed focused toast/loading checks plus full 25/25 smoke, and no reviewed frontend/test source changed after it.
+
+## Acceptance Mapping
+
+| acceptance ref | result | evidence link |
+| --- | --- | --- |
+| @ref:spec/acceptance.md#AC-UM-01 | pass | @ref:reports/test-report.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-02 | pass | @ref:reports/test-report.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-03 | pass | @ref:reports/test-report.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-04 | pass | @ref:reports/test-report.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-05 | pass | @ref:reports/test-report.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-06 | pass | @ref:reports/test-report.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-07 | pass | @ref:reports/test-report.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-08 | pass | @ref:reports/agents/review-feedback-loading.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-09 | pass | @ref:reports/test-report.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-10 | pass | @ref:reports/test-report.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-11 | pass | @ref:reports/test-report.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-12 | pass | @ref:reports/agents/review-feedback-loading.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-13 | pass | @ref:reports/agents/review-feedback-loading.md#acceptance-mapping |
+
+## Blockers
+
+- None.
 
 ## Feature Docs Validation
 
@@ -30,7 +102,7 @@ Final review, post-fix final review, interaction-gap review, reset-contract RED,
 
 | object | result | evidence link |
 | --- | --- | --- |
-| test scope alignment | pass | @ref:reports/test-report.md#cycle-evidence |
+| test scope alignment | pass | @ref:reports/test-report.md#tdd-evidence |
 
 ## Requirement-To-Test Traceability
 

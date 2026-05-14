@@ -81,4 +81,4 @@ Record every evolution event. `spec/feature-spec.md` remains the current authori
 
 ## Residual Risks
 
-- User-management loading animation and Toast/Snackbar migration remain unevaluated in worker evidence until EV-07 RED/GREEN/VERIFY rows are approved and executed.
+- EV-07 shared Toast/Snackbar migration and action-local loading evidence is complete through RED, GREEN, TEST-FIX, VERIFY, and REVIEW worker rows. Secondary role/space/lifecycle/reset/copy pending states were source-reviewed; focused delayed runtime loading evidence covers Export, Create User, and Save Profile.

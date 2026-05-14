@@ -16,6 +16,7 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | FE-FIX-02 | reset-response contract error handling integrated via `02eefac` after worker commit `42eecb4` | @ref:orchestration/integration-log.md#EVT-026 | done |
 | FE-GREEN-03 | statistic cards, directory Contact layout, Space Assignments copy, and `/admin/users/new` create page integrated via `2d67ba4` | @ref:orchestration/integration-log.md#EVT-035 | done |
 | FE-FIX-03 | All Status sends `includeArchived=true` without `status` and renders Active plus Archived rows via `7e5b02b` | @ref:orchestration/integration-log.md#EVT-043 | done |
+| FE-GREEN-04 | user-management pages use shared `useToast` feedback and action-local loading states via `7b27916` | @ref:orchestration/integration-log.md#EVT-053 | done |
 
 ## TDD Evidence
 
@@ -36,6 +37,8 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | TDD-UM-18 | create-page navigation and submit tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
 | TDD-UM-09 | All Status include-archived focused test passes after FE-FIX-03 | @ref:orchestration/integration-log.md#EVT-043 | green_integrated |
 | TDD-UM-15 | frontend All Status now exercises backend include-archived semantics | @ref:orchestration/integration-log.md#EVT-043 | green_integrated |
+| TDD-UM-19 | shared toast feedback tests pass after FE-GREEN-04 and final VERIFY | @ref:orchestration/integration-log.md#EVT-060 | verified |
+| TDD-UM-20 | action-local loading feedback tests pass after FE-GREEN-04 and final VERIFY | @ref:orchestration/integration-log.md#EVT-060 | verified |
 
 ## Worktree Evidence
 
@@ -46,6 +49,7 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | @ref:orchestration/worktree-plan.md#agent-worktrees | frontend reset contract fix branch merged to base | @ref:orchestration/integration-log.md#EVT-026 | integrated |
 | @ref:orchestration/worktree-plan.md#agent-worktrees | frontend consistency refactor branch merged to base | @ref:orchestration/integration-log.md#EVT-035 | integrated |
 | @ref:orchestration/worktree-plan.md#agent-worktrees | frontend All Status include-archived fix branch merged to base | @ref:orchestration/integration-log.md#EVT-043 | integrated |
+| @ref:orchestration/worktree-plan.md#agent-worktrees | frontend feedback/loading branch merged to base | @ref:orchestration/integration-log.md#EVT-053 | integrated |
 
 ## Changed Paths
 
@@ -76,6 +80,10 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | `tron-frontend/src/domain/admin/hooks/useUserList.ts` | preserves active default while passing All Status through to the API adapter | @ref:orchestration/integration-log.md#EVT-043 |
 | `tron-frontend/src/domain/admin/pages/UsersPage.tsx` | passes the All Status filter value instead of converting it to an empty status | @ref:orchestration/integration-log.md#EVT-043 |
 | `docs/features/user-management-model/reports/agents/frontend-fix-all-status-include-archived.md` | added FE-FIX-03 worker evidence report | @ref:reports/agents/frontend-fix-all-status-include-archived.md#agent-report-frontend-fix-all-status-include-archived |
+| `tron-frontend/src/domain/admin/pages/UsersPage.tsx` | migrated export/list feedback to shared toast and action-local pending state | @ref:orchestration/integration-log.md#EVT-053 |
+| `tron-frontend/src/domain/admin/pages/CreateUserPage.tsx` | migrated create success/error feedback and submit loading to shared toast | @ref:orchestration/integration-log.md#EVT-053 |
+| `tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx` | migrated detail/reset/copy feedback to shared toast and pending states | @ref:orchestration/integration-log.md#EVT-053 |
+| `docs/features/user-management-model/reports/agents/frontend-feedback-loading.md` | added FE-GREEN-04 worker evidence report | @ref:reports/agents/frontend-feedback-loading.md#summary |
 
 ## Commands
 
@@ -88,6 +96,16 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | @ref:spec/test-plan.md#command-index | FE-FIX-02 reran `rtk make fe-check`, focused reset-response contract smoke, and full user-management browser smoke | @ref:orchestration/integration-log.md#EVT-026 |
 | @ref:spec/test-plan.md#command-index | FE-GREEN-03 reran `rtk make fe-check` and focused consistency refactor browser checks | @ref:orchestration/integration-log.md#EVT-035 |
 | @ref:spec/test-plan.md#command-index | FE-FIX-03 reran `rtk make fe-check` and focused All Status include-archived browser check | @ref:orchestration/integration-log.md#EVT-043 |
+| @ref:spec/test-plan.md#command-index | FE-GREEN-04 and TEST-VERIFY-05 reran `rtk make fe-check`, focused toast feedback, focused loading feedback, and full user-management smoke | @ref:orchestration/integration-log.md#EVT-060 |
+
+## Browser Verify Evidence
+
+- status: passed
+- evidence: @ref:reports/agents/test-verify-feedback-loading-final.md#browser-verify-evidence
+- clicks: Export, Add User/Create User, Reset Password, Confirm Reset, Copy, Save Profile, and retained full-smoke user-management interactions.
+- inputs: create-user form data, delayed create/profile routes, backend reset response, and retained profile/user-management fields.
+- network_assertions: verified create `POST`, profile `PATCH`, reset `POST`, CSV export path, and retained user-management API traffic in the 25/25 full smoke.
+- visible_feedback_assertions: verified shared top-right toast feedback for export, create success, reset copy, action-local pending labels for Export/Create/Save Profile, and retained directory/detail visibility.
 
 ## Acceptance Mapping
 
@@ -104,6 +122,8 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | @ref:spec/acceptance.md#AC-UM-09 | frontend statistic cards verified | @ref:orchestration/integration-log.md#EVT-035 |
 | @ref:spec/acceptance.md#AC-UM-10 | frontend directory layout and create page verified | @ref:orchestration/integration-log.md#EVT-035 |
 | @ref:spec/acceptance.md#AC-UM-11 | frontend All Status include-archived query verified | @ref:orchestration/integration-log.md#EVT-043 |
+| @ref:spec/acceptance.md#AC-UM-12 | frontend shared toast feedback verified | @ref:orchestration/integration-log.md#EVT-060 |
+| @ref:spec/acceptance.md#AC-UM-13 | frontend action-local loading feedback verified | @ref:orchestration/integration-log.md#EVT-060 |
 
 ## Blockers
 
