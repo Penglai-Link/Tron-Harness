@@ -2,7 +2,7 @@
 
 ## Summary
 
-Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolution, and reset-response contract fix are integrated into base. `rtk make fe-check`, focused Playwright checks, full user-management smoke, and local runtime browser evidence pass through the recorded worker and integration evidence.
+Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolution, reset-response contract fix, EV-07 feedback/loading work, and EV-08 operator refinement are integrated into base. Final EV-08 verification closes both focused operator flows and the retained full smoke at `29/29`.
 
 ## Task Results
 
@@ -17,6 +17,8 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | FE-GREEN-03 | statistic cards, directory Contact layout, Space Assignments copy, and `/admin/users/new` create page integrated via `2d67ba4` | @ref:orchestration/integration-log.md#EVT-035 | done |
 | FE-FIX-03 | All Status sends `includeArchived=true` without `status` and renders Active plus Archived rows via `7e5b02b` | @ref:orchestration/integration-log.md#EVT-043 | done |
 | FE-GREEN-04 | user-management pages use shared `useToast` feedback and action-local loading states via `7b27916` | @ref:orchestration/integration-log.md#EVT-053 | done |
+| FE-GREEN-05 | debounced/stale-safe directory search, row-action lifecycle, and backend-generated create-code flow integrated via worker commit `7531ea2` and lead merge event `EVT-068` | @ref:orchestration/integration-log.md#EVT-068 | done |
+| FE-GREEN-06 | inline detail edit keeps `userCode`/`username` read-only while mutable fields edit inline; runtime closure is backed by lineage audit `EVT-069` plus final verify `EVT-076` | @ref:orchestration/integration-log.md#EVT-069 | done |
 
 ## TDD Evidence
 
@@ -39,6 +41,11 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | TDD-UM-15 | frontend All Status now exercises backend include-archived semantics | @ref:orchestration/integration-log.md#EVT-043 | green_integrated |
 | TDD-UM-19 | shared toast feedback tests pass after FE-GREEN-04 and final VERIFY | @ref:orchestration/integration-log.md#EVT-060 | verified |
 | TDD-UM-20 | action-local loading feedback tests pass after FE-GREEN-04 and final VERIFY | @ref:orchestration/integration-log.md#EVT-060 | verified |
+| TDD-UM-10/TDD-UM-18/TDD-UM-19/TDD-UM-20 | retained create-flow, toast, and loading assertions were realigned to backend-generated `userCode`, then final full smoke passed `29/29` | @ref:reports/agents/verify-operator-refinement-final.md#browser-verify-evidence | verified |
+| TDD-UM-21 | debounced search, empty-query suppression, and stale-response handling pass after FE-GREEN-05 and final VERIFY | @ref:orchestration/integration-log.md#EVT-076 | verified |
+| TDD-UM-22 | row action archive/restore lifecycle passes after FE-GREEN-05 and final VERIFY | @ref:orchestration/integration-log.md#EVT-076 | verified |
+| TDD-UM-23 | inline detail editing with read-only identity controls passes after FE-GREEN-06 and final VERIFY | @ref:orchestration/integration-log.md#EVT-076 | verified |
+| TDD-UM-24 | create flow omits manual `userCode`, omits it from payload, and shows backend-generated code after FE-GREEN-05 and final VERIFY | @ref:orchestration/integration-log.md#EVT-076 | verified |
 
 ## Worktree Evidence
 
@@ -50,6 +57,8 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | @ref:orchestration/worktree-plan.md#agent-worktrees | frontend consistency refactor branch merged to base | @ref:orchestration/integration-log.md#EVT-035 | integrated |
 | @ref:orchestration/worktree-plan.md#agent-worktrees | frontend All Status include-archived fix branch merged to base | @ref:orchestration/integration-log.md#EVT-043 | integrated |
 | @ref:orchestration/worktree-plan.md#agent-worktrees | frontend feedback/loading branch merged to base | @ref:orchestration/integration-log.md#EVT-053 | integrated |
+| @ref:orchestration/worktree-plan.md#agent-worktrees | EV-08 list/create refinement branch merged cleanly to base | @ref:orchestration/integration-log.md#EVT-068 | integrated |
+| @ref:orchestration/worktree-plan.md#agent-worktrees | EV-08 detail refinement branch closed by lineage audit plus final verify evidence | @ref:orchestration/integration-log.md#EVT-069 | integrated |
 
 ## Changed Paths
 
@@ -84,6 +93,13 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | `tron-frontend/src/domain/admin/pages/CreateUserPage.tsx` | migrated create success/error feedback and submit loading to shared toast | @ref:orchestration/integration-log.md#EVT-053 |
 | `tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx` | migrated detail/reset/copy feedback to shared toast and pending states | @ref:orchestration/integration-log.md#EVT-053 |
 | `docs/features/user-management-model/reports/agents/frontend-feedback-loading.md` | added FE-GREEN-04 worker evidence report | @ref:reports/agents/frontend-feedback-loading.md#summary |
+| `tron-frontend/src/domain/admin/api/adminApi.ts` | aligned EV-08 create/list API helpers to backend-generated `userCode` flow and row lifecycle actions | @ref:orchestration/integration-log.md#EVT-068 |
+| `tron-frontend/src/domain/admin/hooks/useUserList.ts` | added debounced/stale-safe search behavior for EV-08 operator refinement | @ref:orchestration/integration-log.md#EVT-068 |
+| `tron-frontend/src/domain/admin/pages/UsersPage.tsx` | exposes row action lifecycle controls and debounced directory search | @ref:orchestration/integration-log.md#EVT-068 |
+| `tron-frontend/src/domain/admin/pages/CreateUserPage.tsx` | removes manual `userCode` input and shows backend-generated code after create success | @ref:orchestration/integration-log.md#EVT-068 |
+| `tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx` | keeps `userCode` and `username` visible but read-only during inline profile edit | @ref:orchestration/integration-log.md#EVT-069 |
+| `docs/features/user-management-model/reports/agents/frontend-list-operator-refinement.md` | added FE-GREEN-05 worker evidence report | @ref:reports/agents/frontend-list-operator-refinement.md#scope |
+| `docs/features/user-management-model/reports/agents/frontend-detail-create-refinement.md` | added FE-GREEN-06 worker evidence report | @ref:reports/agents/frontend-detail-create-refinement.md#task-results |
 
 ## Commands
 
@@ -97,6 +113,8 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | @ref:spec/test-plan.md#command-index | FE-GREEN-03 reran `rtk make fe-check` and focused consistency refactor browser checks | @ref:orchestration/integration-log.md#EVT-035 |
 | @ref:spec/test-plan.md#command-index | FE-FIX-03 reran `rtk make fe-check` and focused All Status include-archived browser check | @ref:orchestration/integration-log.md#EVT-043 |
 | @ref:spec/test-plan.md#command-index | FE-GREEN-04 and TEST-VERIFY-05 reran `rtk make fe-check`, focused toast feedback, focused loading feedback, and full user-management smoke | @ref:orchestration/integration-log.md#EVT-060 |
+| @ref:spec/test-plan.md#command-index | FE-GREEN-05 reran focused EV-08 TDD-UM-21, TDD-UM-22, and TDD-UM-24 checks before merge | @ref:orchestration/integration-log.md#EVT-068 |
+| @ref:spec/test-plan.md#command-index | TEST-FIX-02 realigned retained create assertions and TEST-VERIFY-07 reran focused EV-08 plus full `29/29` smoke | @ref:orchestration/integration-log.md#EVT-076 |
 
 ## Browser Verify Evidence
 
@@ -106,6 +124,15 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 - inputs: create-user form data, delayed create/profile routes, backend reset response, and retained profile/user-management fields.
 - network_assertions: verified create `POST`, profile `PATCH`, reset `POST`, CSV export path, and retained user-management API traffic in the 25/25 full smoke.
 - visible_feedback_assertions: verified shared top-right toast feedback for export, create success, reset copy, action-local pending labels for Export/Create/Save Profile, and retained directory/detail visibility.
+
+## Final EV-08 Browser Verify Evidence
+
+- status: passed
+- evidence: @ref:reports/agents/verify-operator-refinement-final.md#browser-verify-evidence
+- clicks: opened `/admin/users`; triggered row-menu `Archive` and `Restore`; opened `/admin/users/detail?userCode=USER_ALEX_JOHNSON`; entered `Edit Profile`; saved inline edits; opened `/admin/users/new`; submitted create flow.
+- inputs: typed `a -> al -> alp -> alpha` and `stale -> alpha` into directory search; edited `first name`, `last name`, `display name`, `email`; filled create `username`, `first name`, `last name`, `display name`, `email` without any manual `userCode`.
+- network_assertions: verified debounced `GET /api/v1/admin/users?search=alpha`, archive/restore POSTs, detail PATCH without `userCode` or `username`, and create POST without `userCode`.
+- visible_feedback_assertions: verified stale result suppression, row status transitions `Archived -> Active`, inline detail update success, and backend-generated `USER_GENERATED_ALEX` visible after create success.
 
 ## Acceptance Mapping
 
@@ -124,6 +151,11 @@ Frontend GREEN, VERIFY, post-review detail not-found fix, interaction-gap evolut
 | @ref:spec/acceptance.md#AC-UM-11 | frontend All Status include-archived query verified | @ref:orchestration/integration-log.md#EVT-043 |
 | @ref:spec/acceptance.md#AC-UM-12 | frontend shared toast feedback verified | @ref:orchestration/integration-log.md#EVT-060 |
 | @ref:spec/acceptance.md#AC-UM-13 | frontend action-local loading feedback verified | @ref:orchestration/integration-log.md#EVT-060 |
+| @ref:spec/acceptance.md#AC-UM-01 | EV-08 debounced search and row lifecycle behavior verified on final branch tip | @ref:orchestration/integration-log.md#EVT-076 |
+| @ref:spec/acceptance.md#AC-UM-02 | EV-08 inline detail edit and backend-generated create-code flow verified on final branch tip | @ref:orchestration/integration-log.md#EVT-076 |
+| @ref:spec/acceptance.md#AC-UM-10 | EV-08 row action menu, detail hierarchy, and generated-code create flow verified on final branch tip | @ref:orchestration/integration-log.md#EVT-076 |
+| @ref:spec/acceptance.md#AC-UM-12 | retained create-success toast assertions stayed green after TEST-FIX-02 and TEST-VERIFY-07 | @ref:reports/agents/verify-operator-refinement-final.md#summary |
+| @ref:spec/acceptance.md#AC-UM-13 | retained create loading-state assertions stayed green after TEST-FIX-02 and TEST-VERIFY-07 | @ref:reports/agents/verify-operator-refinement-final.md#summary |
 
 ## Blockers
 

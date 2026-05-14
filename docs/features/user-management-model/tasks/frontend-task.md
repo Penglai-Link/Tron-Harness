@@ -3,7 +3,7 @@
 ## Execution Contract
 
 - feature_slug: user-management-model
-- status: in_progress
+- status: complete
 - canonical_report_target: reports/frontend-result.md
 - main_agent_owned: false
 

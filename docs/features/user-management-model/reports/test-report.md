@@ -2,7 +2,7 @@
 
 ## Summary
 
-`TEST-RED-01..08`, interaction-gap RED `TEST-RED-09..13`, reset-response RED `TEST-RED-14`, backend consistency RED `TEST-RED-15`, frontend consistency RED `TEST-RED-16`, consistency refactor VERIFY `TEST-VERIFY-02`, and All Status include-archived VERIFY `TEST-VERIFY-03` are completed. All completed RED failures were expected behavior gaps.
+`TEST-RED-01..08`, interaction-gap RED `TEST-RED-09..13`, reset-response RED `TEST-RED-14`, backend consistency RED `TEST-RED-15`, frontend consistency RED `TEST-RED-16`, EV-08 RED `TEST-RED-20`, EV-08 focused VERIFY `TEST-VERIFY-06`, retained-assertion maintenance `TEST-FIX-02`, and final EV-08 VERIFY `TEST-VERIFY-07` are integrated. All completed RED failures were expected behavior gaps, and final EV-08 runtime closure passed focused checks plus full smoke `29/29`.
 
 ## Task Results
 
@@ -25,9 +25,13 @@
 | TEST-RED-15 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-031 | done |
 | TEST-RED-16 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-030 | done |
 | TEST-RED-17 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-041 | done |
+| TEST-RED-20 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-065 | done |
 | TEST-VERIFY-01 | pass | @ref:orchestration/integration-log.md#EVT-007 | done |
 | TEST-VERIFY-02 | pass | @ref:reports/agents/verify-consistency-refactor.md#agent-report-testverify-consistency-refactor | done |
 | TEST-VERIFY-03 | pass | @ref:reports/agents/verify-all-status-include-archived.md#agent-report-verify-all-status-include-archived | done |
+| TEST-VERIFY-06 | pass_with_residual_findings | @ref:reports/agents/verify-operator-refinement.md#summary | done |
+| TEST-FIX-02 | pass | @ref:reports/agents/test-fix-operator-refinement-create-assertions.md#scope-and-result | done |
+| TEST-VERIFY-07 | pass | @ref:reports/agents/verify-operator-refinement-final.md#summary | done |
 
 ## TDD Evidence
 
@@ -54,6 +58,10 @@
 | TDD-UM-18 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-030 | done |
 | TDD-UM-09 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-041 | done |
 | TDD-UM-15 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-041 | done |
+| TDD-UM-21 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-065 | done |
+| TDD-UM-22 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-065 | done |
+| TDD-UM-23 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-065 | done |
+| TDD-UM-24 | fail_expected_red | @ref:orchestration/integration-log.md#EVT-065 | done |
 
 ## RED Failure Evidence
 
@@ -103,6 +111,11 @@
 | TDD-UM-17 | directory User/Contact/Space Assignments layout tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
 | TDD-UM-18 | `/admin/users/new` create-page navigation and submit tests pass after FE-GREEN-03 | @ref:orchestration/integration-log.md#EVT-035 | green_integrated |
 | TDD-UM-09/TDD-UM-15 | All Status include-archived focused test passes after FE-FIX-03 | @ref:orchestration/integration-log.md#EVT-043 | green_integrated |
+| TDD-UM-10/TDD-UM-18/TDD-UM-19/TDD-UM-20 | retained create-flow, toast, and loading assertions were aligned to backend-generated `userCode` by TEST-FIX-02 and then passed inside TEST-VERIFY-07 full smoke `29/29` | @ref:orchestration/integration-log.md#EVT-076 | verified |
+| TDD-UM-21 | final EV-08 focused verify passed debounced search, empty-query suppression, and stale-response handling | @ref:orchestration/integration-log.md#EVT-076 | verified |
+| TDD-UM-22 | final EV-08 focused verify passed row action archive/restore lifecycle behavior | @ref:orchestration/integration-log.md#EVT-076 | verified |
+| TDD-UM-23 | final EV-08 focused verify passed inline detail editing with read-only identity controls | @ref:orchestration/integration-log.md#EVT-076 | verified |
+| TDD-UM-24 | final EV-08 focused verify passed create payload omission and backend-generated code visibility | @ref:orchestration/integration-log.md#EVT-076 | verified |
 
 ## Refactor And Regression Evidence
 
@@ -111,6 +124,9 @@
 | @ref:spec/test-plan.md#command-matrix | GREEN and VERIFY backend/frontend/docs checks pass | @ref:orchestration/integration-log.md#validation-after-integration |
 | TEST-VERIFY-02 | `rtk make be-test`, `rtk make fe-check`, full `user-management-smoke`, task validator, and `rtk git diff --check` pass for consistency refactor verification. | @ref:reports/agents/verify-consistency-refactor.md#commands |
 | TEST-VERIFY-03 | `rtk make fe-check`, focused All Status include-archived Playwright test, full `user-management-smoke`, task validator, and `rtk git diff --check` pass for FE-FIX-03 verification. | @ref:reports/agents/verify-all-status-include-archived.md#commands |
+| TEST-VERIFY-06 | focused EV-08 checks passed 4/4, but full smoke still failed `25 passed, 4 failed`, isolating stale manual-`userCode` assertions for follow-up. | @ref:reports/agents/verify-operator-refinement.md#residual-risks-blockers |
+| TEST-FIX-02 | retained create-flow smoke assertions were aligned to backend-generated `userCode` without weakening TDD-UM-24. | @ref:reports/agents/test-fix-operator-refinement-create-assertions.md#ev-08-alignment-note |
+| TEST-VERIFY-07 | `rtk make fe-check`, focused EV-08 verify, full `user-management-smoke --reporter=line`, and `rtk git diff --check` all passed after TEST-FIX-02. | @ref:reports/agents/verify-operator-refinement-final.md#commands |
 
 ## Commands
 
@@ -119,6 +135,7 @@
 | @ref:spec/test-plan.md#command-index | backend RED/GREEN/VERIFY commands completed through `rtk make be-test` and focused cargo tests | @ref:orchestration/integration-log.md#validation-after-integration |
 | @ref:spec/test-plan.md#command-index | frontend RED/GREEN/VERIFY commands completed through `rtk make fe-check` and user-management Playwright smoke | @ref:orchestration/integration-log.md#validation-after-integration |
 | @ref:spec/test-plan.md#command-index | interaction-gap, consistency, All Status, and EV-07 focused browser commands completed with expected RED failures then GREEN/VERIFY passes | @ref:orchestration/integration-log.md#EVT-060 |
+| @ref:spec/test-plan.md#command-index | EV-08 follow-up commands completed through TEST-RED-20, TEST-VERIFY-06, TEST-FIX-02, and TEST-VERIFY-07 final `29/29` smoke | @ref:orchestration/integration-log.md#EVT-076 |
 
 ## Browser Verify Evidence
 
@@ -128,6 +145,15 @@
 - network_assertions: asserted `GET /api/v1/admin/users` query parameters for search/status/current/size, `POST /api/v1/admin/users`, reset `POST /api/v1/admin/users/{userCode}/password/reset`, profile `PATCH`, role `PUT`, space `PUT`, archive `POST`, and restore `POST`.
 - visible_feedback_assertions: verified paged records, created user visibility, CSV download content, backend temporary password, visible copy feedback, password removal after close, response-driven detail fields/status, and visible reset-response error without a generated `TRON-` fallback.
 - evidence: @ref:orchestration/integration-log.md#EVT-020 and @ref:orchestration/integration-log.md#EVT-026
+
+## Final EV-08 Browser Verify Evidence
+
+- status: passed
+- evidence: @ref:reports/agents/verify-operator-refinement-final.md#browser-verify-evidence
+- clicks: opened `/admin/users`; used row-menu archive/restore; opened `/admin/users/detail?userCode=USER_ALEX_JOHNSON`; edited profile inline; opened `/admin/users/new`; submitted create flow; retained full-smoke create/toast/loading flows also ran.
+- inputs: search `a -> al -> alp -> alpha` and `stale -> alpha`; edited `first name`, `last name`, `display name`, `email`; filled create `username`, `first name`, `last name`, `display name`, `email` without manual `userCode`.
+- network_assertions: verified debounced list GET, archive/restore POSTs, detail PATCH without immutable identifiers, create POST without `userCode`, and full smoke `29/29` after retained assertion alignment.
+- visible_feedback_assertions: verified stale result suppression, status transitions `Archived -> Active`, inline detail success, shared create success feedback, loading state, and backend-generated `USER_GENERATED_ALEX` visible after create success.
 
 ## Consistency Refactor Browser Verify Evidence
 
@@ -190,6 +216,9 @@
 | @ref:spec/acceptance.md#AC-UM-09 | RED, GREEN, and VERIFY coverage complete | @ref:reports/agents/verify-consistency-refactor.md#acceptance-evidence |
 | @ref:spec/acceptance.md#AC-UM-10 | RED, GREEN, and VERIFY coverage complete | @ref:reports/agents/verify-consistency-refactor.md#acceptance-evidence |
 | @ref:spec/acceptance.md#AC-UM-11 | RED, GREEN, and VERIFY coverage complete | @ref:reports/agents/verify-consistency-refactor.md#acceptance-evidence |
+| @ref:spec/acceptance.md#AC-UM-10 | EV-08 row action menu, detail edit hierarchy, and generated-code create flow are covered by TEST-RED-20, FE-GREEN-05/06, TEST-VERIFY-06, TEST-FIX-02, and TEST-VERIFY-07 | @ref:reports/agents/verify-operator-refinement-final.md#summary |
+| @ref:spec/acceptance.md#AC-UM-12 | retained create-success toast assertions stayed green after TEST-FIX-02 and TEST-VERIFY-07 | @ref:reports/agents/verify-operator-refinement-final.md#summary |
+| @ref:spec/acceptance.md#AC-UM-13 | retained create loading-state assertions stayed green after TEST-FIX-02 and TEST-VERIFY-07 | @ref:reports/agents/verify-operator-refinement-final.md#summary |
 
 ## Blockers
 

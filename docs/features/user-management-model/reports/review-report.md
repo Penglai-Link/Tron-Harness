@@ -2,7 +2,7 @@
 
 ## Summary
 
-Final review, post-fix final review, interaction-gap review, reset-contract RED, and reset-contract frontend fix are integrated. Initial high-severity findings were resolved by targeted backend/frontend fix branches, interaction evidence was expanded through RED/GREEN/VERIFY, REVIEW-03 found no blocking findings, and FE-FIX-02 closes the reset-response fallback risk.
+Final review, post-fix final review, interaction-gap review, reset-contract follow-up, EV-07 feedback/loading review, and EV-08 operator-refinement review are integrated. REVIEW-07 found no blocking product defects; the remaining FE-GREEN-06 and TEST-FIX-02 anomalies were closed as audited workflow/provenance issues rather than product regressions.
 
 ## Task Results
 
@@ -14,6 +14,7 @@ Final review, post-fix final review, interaction-gap review, reset-contract RED,
 | REVIEW-04 | findings_recorded | @ref:reports/agents/consistency-refactor-review.md#findings |
 | REVIEW-05 | pass | @ref:reports/agents/all-status-include-archived-review.md#findings |
 | REVIEW-06 | pass | @ref:reports/agents/review-feedback-loading.md#summary |
+| REVIEW-07 | pass | @ref:reports/agents/review-operator-refinement.md#findings |
 
 ## TDD Evidence
 
@@ -39,6 +40,14 @@ Final review, post-fix final review, interaction-gap review, reset-contract RED,
 | TDD-UM-18 | pass | @ref:orchestration/integration-log.md#EVT-035 |
 | TDD-UM-19 | pass | @ref:reports/agents/review-feedback-loading.md#tdd-evidence |
 | TDD-UM-20 | pass | @ref:reports/agents/review-feedback-loading.md#tdd-evidence |
+| TDD-UM-10 | pass | @ref:reports/agents/review-operator-refinement.md#tdd-evidence |
+| TDD-UM-18 | pass | @ref:reports/agents/review-operator-refinement.md#tdd-evidence |
+| TDD-UM-19 | pass | @ref:reports/agents/review-operator-refinement.md#tdd-evidence |
+| TDD-UM-20 | pass | @ref:reports/agents/review-operator-refinement.md#tdd-evidence |
+| TDD-UM-21 | pass | @ref:reports/agents/review-operator-refinement.md#tdd-evidence |
+| TDD-UM-22 | pass | @ref:reports/agents/review-operator-refinement.md#tdd-evidence |
+| TDD-UM-23 | pass | @ref:reports/agents/review-operator-refinement.md#tdd-evidence |
+| TDD-UM-24 | pass | @ref:reports/agents/review-operator-refinement.md#tdd-evidence |
 
 ## Changed Paths
 
@@ -50,6 +59,7 @@ Final review, post-fix final review, interaction-gap review, reset-contract RED,
 | `reports/test-report.md` | canonical RED/GREEN/VERIFY evidence reviewed | @ref:reports/test-report.md#summary |
 | `reports/worktree-report.md` | canonical worktree and merge evidence reviewed | @ref:reports/worktree-report.md#summary |
 | `reports/agents/review-feedback-loading.md` | EV-07 final review evidence integrated | @ref:reports/agents/review-feedback-loading.md#summary |
+| `reports/agents/review-operator-refinement.md` | EV-08 final review evidence integrated | @ref:reports/agents/review-operator-refinement.md#findings |
 
 ## Commands
 
@@ -57,12 +67,14 @@ Final review, post-fix final review, interaction-gap review, reset-contract RED,
 | --- | --- | --- |
 | @ref:spec/test-plan.md#command-index | review reused fresh TEST-VERIFY-05 slow/browser evidence according to rerun policy | @ref:reports/agents/review-feedback-loading.md#browser-verify-evidence |
 | @ref:orchestration/integration-log.md#validation-after-integration | feature-doc validation and diff checks passed in reviewed worker evidence | @ref:reports/agents/review-feedback-loading.md#commands |
+| @ref:spec/test-plan.md#command-index | REVIEW-07 reused fresh TEST-VERIFY-07 focused/full-smoke evidence instead of rerunning slow browser commands | @ref:reports/agents/review-operator-refinement.md#browser-evidence-review-reuse-no-rerun |
+| @ref:orchestration/integration-log.md#validation-after-integration | final metadata closure and EV-08 report alignment passed in lead-side validation after REVIEW-07 | @ref:orchestration/integration-log.md#validation-after-integration |
 
 ## Browser Verify Evidence
 
 - status: passed
-- evidence: @ref:reports/agents/review-feedback-loading.md#browser-verify-evidence
-- slow_browser_rerun: skipped by REVIEW-06 because TEST-VERIFY-05 was fresh, passed focused toast/loading checks plus full 25/25 smoke, and no reviewed frontend/test source changed after it.
+- evidence: @ref:reports/agents/review-operator-refinement.md#browser-evidence-review-reuse-no-rerun
+- slow_browser_rerun: skipped by REVIEW-07 because TEST-VERIFY-07 was the freshest runtime source, passed focused EV-08 checks plus full `29/29` smoke, and no reviewed EV-08 source/test files changed after it.
 
 ## Acceptance Mapping
 
@@ -81,6 +93,12 @@ Final review, post-fix final review, interaction-gap review, reset-contract RED,
 | @ref:spec/acceptance.md#AC-UM-11 | pass | @ref:reports/test-report.md#acceptance-mapping |
 | @ref:spec/acceptance.md#AC-UM-12 | pass | @ref:reports/agents/review-feedback-loading.md#acceptance-mapping |
 | @ref:spec/acceptance.md#AC-UM-13 | pass | @ref:reports/agents/review-feedback-loading.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-01 | pass | @ref:reports/agents/review-operator-refinement.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-02 | pass | @ref:reports/agents/review-operator-refinement.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-08 | pass | @ref:reports/agents/review-operator-refinement.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-10 | pass | @ref:reports/agents/review-operator-refinement.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-12 | pass | @ref:reports/agents/review-operator-refinement.md#acceptance-mapping |
+| @ref:spec/acceptance.md#AC-UM-13 | pass | @ref:reports/agents/review-operator-refinement.md#acceptance-mapping |
 
 ## Blockers
 
@@ -179,7 +197,7 @@ Final review, post-fix final review, interaction-gap review, reset-contract RED,
 ## Final Status
 
 - status: complete
-- conclusion: user_management_refactor_complete_with_reset_contract_fix
+- conclusion: user_management_refactor_complete_with_ev08_operator_refinement
 
 ## REVIEW-04 Consistency Refactor Review
 
