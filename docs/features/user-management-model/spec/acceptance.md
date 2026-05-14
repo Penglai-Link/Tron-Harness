@@ -18,14 +18,15 @@ Evolution alignment:
 - superseded_shape: `TDD-UM-08` remains retained for frontend model/route alignment but does not satisfy evolved interaction evidence for search/pagination API requests, Export download, Add User submit, Reset API call, or visible Copy feedback
 - consistency_refactor_shape: `TDD-UM-14..18` supersede current-page-derived statistics, inline directory create form ownership, and loose directory table copy for the affected behaviors only.
 - feedback_loading_shape: `TDD-UM-19..20` add shared-toast feedback and long-running Export/Save loading evidence after `shared-ui-feedback` was delivered on `master`.
-- pause_resume_decision: prior worktrees are integrated; EV-07 acceptance and test-plan rows are approved for autonomous task breakdown and worker dispatch
+- operator_refinement_shape: `TDD-UM-21..24` add debounced search/cancelation, directory row lifecycle actions, readable inline detail editing, and backend-generated `userCode` create behavior.
+- pause_resume_decision: prior worktrees are integrated; EV-08 acceptance and test-plan rows are approved for autonomous task breakdown and worker dispatch
 
 ## Acceptance Criteria Matrix
 
 | id | criterion | evidence type | expected evidence | priority |
 | --- | --- | --- | --- | --- |
-| AC-UM-01 | User directory and user detail can read users by stable `userCode`, list/filter/paginate users through backend query parameters, export a real current-result CSV, and exclude archived users by default. | automated | TDD-UM-01, TDD-UM-09, TDD-UM-11, plus retained TDD-UM-08: RED proves stable-code reads, archived filtering, parameterized directory requests, or export download behavior is missing; GREEN passes list/detail API and browser network/download evidence. | must |
-| AC-UM-02 | User lifecycle supports 64-bit Snowflake IDs, JSON-safe ID serialization, rich profile fields, create, profile update, `Active`, `Archived`, logical deletion, restore to active, and a frontend Add User flow that calls the create API. | automated | TDD-UM-02 plus TDD-UM-10: RED proves lifecycle/model or frontend create-submit behavior is missing; GREEN passes domain, repository, API, DTO, and browser create evidence. | must |
+| AC-UM-01 | User directory and user detail can read users by stable `userCode`, list/filter/paginate users through backend query parameters, debounce keyword search for 300ms to 500ms, avoid empty-keyword search requests, cancel stale search requests, export a real current-result CSV, and exclude archived users by default. | automated | TDD-UM-01, TDD-UM-09, TDD-UM-11, TDD-UM-21, plus retained TDD-UM-08: RED proves stable-code reads, archived filtering, debounced/cancelled requests, parameterized directory requests, or export download behavior is missing; GREEN passes list/detail API and browser network/download evidence. | must |
+| AC-UM-02 | User lifecycle supports 64-bit Snowflake IDs, JSON-safe ID serialization, rich profile fields, create, profile update, inline detail editing for mutable fields, backend-generated `userCode` during create, `Active`, `Archived`, logical deletion, restore to active, and a frontend Add User flow that calls the create API without manual `userCode` entry. | automated | TDD-UM-02 plus TDD-UM-10, TDD-UM-23, and TDD-UM-24: RED proves lifecycle/model, inline-edit, generated-code, or frontend create-submit behavior is missing; GREEN passes domain, repository, API, DTO, and browser create/edit evidence. | must |
 | AC-UM-03 | User-role assignment is many-to-many and uses only fixed role codes `ADMIN`, `WORKSPACE_ADMIN`, `DEVELOPER`, and `VIEWER`. | automated | TDD-UM-03: RED proves role-code assignment behavior is missing; GREEN passes fixed role-code assignment and invalid-code rejection evidence. | must |
 | AC-UM-04 | User-space assignment is many-to-many and references external spaces by stable `spaceCode`. | automated | TDD-UM-04: RED proves space-code assignment behavior is missing; GREEN passes external space-code assignment evidence. | must |
 | AC-UM-05 | User password management uses bcrypt hashes and supports MVP password reset by calling the backend reset API, generating a temporary password without email or permission checks, showing it once, and giving visible Copy feedback. | automated | TDD-UM-05 plus TDD-UM-12 and retained TDD-UM-08: RED proves password reset/security/API/UI feedback behavior is missing; GREEN passes bcrypt, one-time temporary-password, reset API, visible Copy feedback, and no-reveal evidence. | must |
@@ -33,7 +34,7 @@ Evolution alignment:
 | AC-UM-07 | MVP APIs do not use role or permission data for API authorization. | review + automated | TDD-UM-07: RED proves any accidental role/permission gate is detectable; GREEN passes boundary evidence that role assignments are managed data only. | must |
 | AC-UM-08 | Existing frontend user-management flow is adjusted to the revised user-only boundary. | automated | TDD-UM-08: RED proves the frontend model or browser flow is still misaligned; GREEN passes `make fe-check` and browser smoke evidence. | should |
 | AC-UM-09 | User dashboard statistic cards use dedicated backend statistic APIs, one endpoint per card, and each response returns `data.count` from persisted database state. | automated | TDD-UM-14 and TDD-UM-16: RED proves missing statistic endpoints or frontend current-page-derived cards; GREEN passes backend API count tests and browser network/card assertions. | must |
-| AC-UM-10 | User Directory renders display name only in `User`, renders email and phone in new `Contact`, renames `Space Links` to `Space Assignments`, and moves creation to `/admin/users/new`. | automated | TDD-UM-17 and TDD-UM-18: RED proves column/copy drift or missing create sub-page; GREEN passes browser route, column, and create-submit evidence. | must |
+| AC-UM-10 | User Directory renders display name only in `User`, renders email and phone in new `Contact`, renames `Space Links` to `Space Assignments`, exposes a status-aware row action menu for archive or restore, moves creation to `/admin/users/new`, and presents User Detail personal information with clearer key/value hierarchy. | automated | TDD-UM-17, TDD-UM-18, TDD-UM-22, and TDD-UM-23: RED proves column/copy drift, missing row actions, weak detail readability, or missing create sub-page; GREEN passes browser route, column, row-action, inline-edit, and create-submit evidence. | must |
 | AC-UM-11 | List/search and seed data are consistent with statistic semantics: default list excludes archived users, `status=Archived` returns archived users, `includeArchived=true` returns all statuses, and pagination `total` is the filtered database count. | automated | TDD-UM-15: RED proves query totals or deterministic fixtures are inconsistent; GREEN passes backend list/search/seed tests. | must |
 | AC-UM-12 | User-management operator feedback uses the shared top-right Toast/Snackbar API from `shared-ui-feedback` instead of page-local inline notices or `sr-only` only status messages. | automated | TDD-UM-19: RED proves user-management feedback still uses local notice state or lacks top-right toast evidence; GREEN passes source and browser assertions for shared `useToast` feedback. | must |
 | AC-UM-13 | Long-running Export and Save-style user-management actions expose action-local loading state while pending and resolve with shared toast success or error feedback. | automated | TDD-UM-20: RED proves Export/Create/Save/Profile mutation actions do not expose pending state or toast completion; GREEN passes browser loading and feedback evidence. | must |
@@ -42,9 +43,11 @@ Evolution alignment:
 
 - [ ] AC-UM-01 User management reads and displays users through stable user codes.
 - [ ] AC-UM-01 User directory search, status filter, and pagination issue backend list requests with query parameters instead of only filtering local state.
+- [ ] AC-UM-01 User directory keyword search waits 300ms to 500ms before requesting, does not issue a keyword search request for an empty value, and ignores stale in-flight responses.
 - [ ] AC-UM-01 User directory Export produces a real CSV/download artifact for the current result set.
 - [ ] AC-UM-02 Admins can create, update, archive, and restore users with first name, last name, display name, username, email, and optional contact/profile fields.
-- [ ] AC-UM-02 Add User opens a usable form, submits the create API, and makes the created user visible.
+- [ ] AC-UM-02 Add User opens a usable form, submits the create API without a manual `userCode` field, and makes the created user with backend-generated `userCode` visible.
+- [ ] AC-UM-02 User detail edits happen inline in the personal information area, and `userCode` plus `username` stay read-only.
 - [ ] AC-UM-09 User statistic cards are independent backend counts and do not derive from the current page of `users.records`.
 - [ ] AC-UM-10 Add User navigates to `/admin/users/new`, where create form behavior lives.
 - [ ] AC-UM-11 Search, status, include-archived, and pagination totals are truthful database counts.
@@ -58,14 +61,17 @@ Evolution alignment:
 
 - [ ] AC-UM-01 `/admin/users` shows user records with `Active` and `Archived` status support and excludes archived users by default.
 - [ ] AC-UM-01 `/admin/users` sends `search`, `status`, `current`, and `size` to `GET /api/v1/admin/users` when the operator searches, filters, or paginates.
+- [ ] AC-UM-01 `/admin/users` delays keyword search requests by 300ms to 500ms, skips empty-keyword search requests, and prevents stale responses from overwriting newer search results.
 - [ ] AC-UM-01 `/admin/users` Export produces a CSV/download with stable user-management headers.
 - [ ] AC-UM-09 `/admin/users` requests the four statistic endpoints and renders `data.count`.
 - [ ] AC-UM-10 `/admin/users` shows only fullname/display name in `User`, email and phone in `Contact`, and `Space Assignments` card copy.
-- [ ] AC-UM-10 `/admin/users/new` renders create fields, submits `POST /api/v1/admin/users`, shows visible submit feedback, and returns to the directory.
+- [ ] AC-UM-10 `/admin/users` row actions open a real menu and expose `Archive User` for active rows or `Restore User` for archived rows.
+- [ ] AC-UM-10 `/admin/users/new` renders create fields, omits editable `userCode`, submits `POST /api/v1/admin/users`, shows visible submit feedback, and returns to the directory.
 - [ ] AC-UM-12 `/admin/users`, `/admin/users/new`, and `/admin/users/detail` use `useToast` for success/error/info feedback.
 - [ ] AC-UM-13 Export, Create User, Save Profile, role/space changes, archive/restore, and reset confirmation expose a loading state while pending.
 - [ ] AC-UM-01 `/admin/users/detail?userCode=<userCode>` loads detail by stable `userCode`.
-- [ ] AC-UM-02 User detail can edit profile fields and restore archived users to active.
+- [ ] AC-UM-02 User detail can edit profile fields inline and restore archived users to active.
+- [ ] AC-UM-10 User detail personal information visibly distinguishes labels from values and keeps `userCode` plus `username` non-editable.
 - [ ] AC-UM-03 User detail can replace fixed role-code assignments without embedding role permission matrix behavior.
 - [ ] AC-UM-04 User detail can replace space-code assignments without embedding space hierarchy or space-detail management behavior.
 - [ ] AC-UM-05 Password reset uses a confirmation dialog, calls the backend reset API, shows a one-time generated temporary-password result dialog, and Copy produces visible feedback.
@@ -93,6 +99,10 @@ Evolution alignment:
 - IA-UM-18 | source: `/admin/users` Export loading and completion feedback | acceptance: AC-UM-13, AC-UM-12 | red: TDD-UM-20 | status: ready
 - IA-UM-19 | source: `/admin/users/new` Create User loading and completion feedback | acceptance: AC-UM-13, AC-UM-12 | red: TDD-UM-20 | status: ready
 - IA-UM-20 | source: user detail Save Profile, role/space, archive/restore, reset, and Copy feedback | acceptance: AC-UM-13, AC-UM-12 | red: TDD-UM-20 | status: ready
+- IA-UM-21 | source: `/admin/users` debounced keyword search | acceptance: AC-UM-01, AC-UM-08 | red: TDD-UM-21 | status: ready
+- IA-UM-22 | source: `/admin/users` row action menu archive or restore | acceptance: AC-UM-02, AC-UM-10, AC-UM-08 | red: TDD-UM-22 | status: ready
+- IA-UM-23 | source: `/admin/users/detail` inline personal information editing | acceptance: AC-UM-02, AC-UM-10, AC-UM-08 | red: TDD-UM-23 | status: ready
+- IA-UM-24 | source: `/admin/users/new` backend-generated `userCode` create flow | acceptance: AC-UM-02, AC-UM-10, AC-UM-08 | red: TDD-UM-24 | status: ready
 
 ## Backend Acceptance
 
@@ -101,6 +111,7 @@ Evolution alignment:
 - [ ] AC-UM-11 List/search repository totals match filtered database counts before pagination.
 - [ ] AC-UM-11 `status=Archived` returns only archived records, while `includeArchived=true` returns all statuses.
 - [ ] AC-UM-02 Validation rejects duplicate user codes, duplicate usernames, duplicate emails, missing required profile fields, invalid statuses, and weak passwords.
+- [ ] AC-UM-02 `POST /api/v1/admin/users` may omit `userCode` and returns a backend-generated stable `userCode` in the success body.
 - [ ] AC-UM-02 Archive is logical deletion and archived users can be restored to `Active`.
 - [ ] AC-UM-03 User-role assignments are many-to-many and invalid fixed role codes are rejected.
 - [ ] AC-UM-04 User-space assignments are many-to-many and invalid or blank space codes are rejected.
@@ -162,13 +173,13 @@ Evolution alignment:
 | Stable code and JSON-safe ID contract tests. | AC-UM-06 | TDD-UM-06 | RED failure proving code contracts are missing; GREEN passing DTO/schema/repository evidence. |
 | Authorization-boundary review/test proving no role/permission gate. | AC-UM-07 | TDD-UM-07 | RED or review check proving accidental authorization coupling is detectable; GREEN boundary evidence. |
 | Retained browser smoke for `/admin/users`, detail navigation, archive/restore, assignment editing, and password reset dialog. | AC-UM-01, AC-UM-02, AC-UM-03, AC-UM-04, AC-UM-05, AC-UM-08 | TDD-UM-08 | Retained evidence for model/route alignment only; not sufficient for evolved interaction evidence. |
-| Browser runtime network/download evidence for directory search, status filter, pagination, and Export. | AC-UM-01, AC-UM-08 | TDD-UM-09, TDD-UM-11 | RED failure proving missing parameterized requests or download; GREEN passing network and CSV artifact evidence. |
-| Browser runtime create-flow evidence for Add User. | AC-UM-02, AC-UM-08 | TDD-UM-10 | RED failure proving missing form/API submit; GREEN passing create request and visible-state evidence. |
+| Browser runtime network/download evidence for directory search, status filter, pagination, and Export. | AC-UM-01, AC-UM-08 | TDD-UM-09, TDD-UM-11, TDD-UM-21 | RED failure proving missing parameterized requests, debounce/cancel behavior, or download; GREEN passing network and CSV artifact evidence. |
+| Browser runtime create-flow evidence for Add User. | AC-UM-02, AC-UM-08 | TDD-UM-10, TDD-UM-24 | RED failure proving missing form/API submit or manual `userCode` dependency; GREEN passing create request and visible-state evidence. |
 | Browser runtime reset/copy evidence for backend reset integration. | AC-UM-05, AC-UM-08 | TDD-UM-12 | RED failure proving client-generated reset or invisible Copy feedback; GREEN passing reset API, result, copy-feedback, and no-reveal evidence. |
-| Browser runtime detail-mutation evidence for profile, role, space, archive, and restore actions. | AC-UM-02, AC-UM-03, AC-UM-04, AC-UM-08 | TDD-UM-13 | RED failure proving local-only mutation behavior; GREEN passing backend mutation request and response-driven UI evidence. |
+| Browser runtime detail-mutation evidence for profile, role, space, archive, and restore actions. | AC-UM-02, AC-UM-03, AC-UM-04, AC-UM-08, AC-UM-10 | TDD-UM-13, TDD-UM-22, TDD-UM-23 | RED failure proving local-only mutation behavior, missing directory row actions, or separate/non-inline detail editing; GREEN passing backend mutation request and response-driven UI evidence. |
 | Backend statistic API and list/search consistency evidence. | AC-UM-09, AC-UM-11 | TDD-UM-14, TDD-UM-15 | RED failure proving missing statistic routes or inconsistent filtered totals; GREEN passing count and list/search tests. |
 | Frontend statistic-card network evidence. | AC-UM-09 | TDD-UM-16 | RED failure proving cards derive from `users.records`; GREEN browser evidence for four statistic API requests and `data.count` rendering. |
-| Directory layout and create sub-page browser evidence. | AC-UM-10 | TDD-UM-17, TDD-UM-18 | RED failure proving User/Contact columns or `/admin/users/new` are missing; GREEN browser evidence for route, create submit, and visible feedback. |
+| Directory layout and create sub-page browser evidence. | AC-UM-10 | TDD-UM-17, TDD-UM-18, TDD-UM-22, TDD-UM-23, TDD-UM-24 | RED failure proving User/Contact columns, row actions, detail readability, or `/admin/users/new` generated-code behavior is missing; GREEN browser evidence for route, create submit, inline edit, and visible feedback. |
 | Shared user-management toast feedback evidence. | AC-UM-12 | TDD-UM-19 | RED failure proving local notice state or non-toast feedback remains; GREEN source and browser evidence for shared top-right toast feedback. |
 | User-management loading state evidence. | AC-UM-13 | TDD-UM-20 | RED failure proving Export or Save-style actions lack pending state; GREEN browser evidence for loading state and toast completion. |
-| Final review mapping each AC ID to changed paths, commands, worker worktrees, and residual risks. | AC-UM-01 through AC-UM-13 | TDD-UM-01 through TDD-UM-20 | GREEN regression evidence and final review evidence. |
+| Final review mapping each AC ID to changed paths, commands, worker worktrees, and residual risks. | AC-UM-01 through AC-UM-13 | TDD-UM-01 through TDD-UM-24 | GREEN regression evidence and final review evidence. |

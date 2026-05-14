@@ -3,9 +3,9 @@
 ## Summary
 
 - feature_slug: user-management-model
-- total_changes: 4
+- total_changes: 5
 - first_evolution: EV-04
-- last_evolution: EV-07
+- last_evolution: EV-08
 
 ## Change History
 
@@ -71,14 +71,31 @@ Record every evolution event. `spec/feature-spec.md` remains the current authori
 - old_evidence_status: retained for EV-05 user-management behavior; superseded only for feedback surface and async loading evidence
 - user_approval: approved_with_defaults on 2026-05-14; user authorized autonomous continuation until completion
 
+### EV-08
+
+- change_id: EV-08
+- timestamp: 2026-05-14
+- trigger: user_request
+- change_type: requirement_expansion, acceptance_change, test_scope_change, task_execution_change
+- gate_reopened: Phase 1A
+- diff_summary: |
+    What changed vs before:
+    - Directory search still dispatched per keystroke, the row action button was placeholder-only, detail editing lived in a detached edit form, and Add User still required manual `userCode` entry.
+    + Directory search must debounce 300ms to 500ms, skip empty-keyword search requests, and ignore stale responses; the directory row action menu must expose Archive or Restore by status; User Detail personal information must be easier to scan and edit inline while `userCode` and `username` stay read-only; Add User must rely on backend-generated `userCode`.
+- downstream_impact: spec/feature-spec.md, spec/api-contract.md, spec/acceptance.md, spec/test-scope.md, spec/test-plan.md, tasks/test-task.md, tasks/frontend-task.md, tasks/review-task.md, orchestration/worktree-plan.md, orchestration/integration-log.md, reports/test-report.md, reports/frontend-result.md, reports/review-report.md
+- old_evidence_status: retained for EV-07 feedback/loading behavior, superseded only for eager search dispatch, placeholder row actions, detached detail editing, and manual create `userCode`
+- user_approval: approved_with_defaults from 2026-05-14 direct intent list for feature evaluation and implementation
+
 ## Downstream Artifact Migration
 
 - EV-04 adds replacement RED rows `TEST-RED-15` and `TEST-RED-16`, GREEN rows `BE-GREEN-05` and `FE-GREEN-03`, VERIFY row `TEST-VERIFY-02`, and REVIEW row `REVIEW-04`.
 - EV-05 adds follow-up RED row `TEST-RED-17`, GREEN row `FE-FIX-03`, VERIFY row `TEST-VERIFY-03`, and REVIEW row `REVIEW-05` for the `All Status` include-archived contract.
 - EV-06 creates the separate prerequisite feature workspace `docs/features/shared-ui-feedback` and intentionally adds no user-management task rows until that prerequisite is completed.
 - EV-07 adds TDD cycles `TDD-UM-19` and `TDD-UM-20`, then proceeds to RED/GREEN/VERIFY/REVIEW task rows after user approval.
+- EV-08 adds TDD cycles `TDD-UM-21` through `TDD-UM-24`, then stops after test-plan completion for explicit user decision before any new task/worktree rows are created.
 - Prior evidence for `TDD-UM-01..13` remains retained unless the changed behavior explicitly supersedes current-page-derived statistics or inline create ownership.
 
 ## Residual Risks
 
 - EV-07 shared Toast/Snackbar migration and action-local loading evidence is complete through RED, GREEN, TEST-FIX, VERIFY, and REVIEW worker rows. Secondary role/space/lifecycle/reset/copy pending states were source-reviewed; focused delayed runtime loading evidence covers Export, Create User, and Save Profile.
+- EV-08 directory/detail/create refinement is reopened and intentionally paused after test-plan completion; no RED/GREEN evidence exists yet for the new scope.

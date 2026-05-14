@@ -200,7 +200,6 @@ Body parameters:
 
 ```json
 {
-  "userCode": "USER_MAYA_SINGH",
   "username": "maya.singh",
   "firstName": "Maya",
   "lastName": "Singh",
@@ -219,6 +218,11 @@ Body parameters:
   "spaceCodes": ["PLATFORM", "DATA"]
 }
 ```
+
+Notes:
+
+- `userCode` is optional on create. The User Management UI must omit it and rely on backend generation.
+- When `userCode` is omitted, the backend returns a generated stable code in the success body. Explicit `userCode` is reserved for non-UI callers or migrations that need to preserve an existing code.
 
 Response body:
 

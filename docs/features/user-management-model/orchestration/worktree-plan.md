@@ -7,14 +7,14 @@
 - git_skill: eliteforge-git-feature-oriented-lite-spec
 - main_branch: feature/clouds3n/user-management-model/base
 - main_worktree_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/base
-- status: complete
+- status: in_progress
 
 ## Repository State
 
 - main_repo_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/base
 - default_branch: master
 - base_commit: 74d87fe
-- working_tree_status: EV-07 feedback/loading evolution integrated and reviewed after shared-ui-feedback landed on master
+- working_tree_status: EV-08 operator refinement planning is open on top of the integrated EV-07 feedback/loading baseline
 
 ## Multi-Agent Base Branch
 
@@ -61,6 +61,11 @@ One row is one actual git worktree checkout. Resolve `agent id`, `subtask name`,
 | test | fix-feedback-loading-smoke-locator | 019e247d-96ec-7de0-9098-56fd63926f2a | Godel | TEST-FIX-01 | refactor | feature/clouds3n/user-management-model/test/fix-feedback-loading-smoke-locator | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/fix-feedback-loading-smoke-locator | feature/clouds3n/user-management-model/base | integrated |
 | test | verify-feedback-loading-final | 019e2484-2201-7193-9a84-9dc543b7f170 | McClintock | TEST-VERIFY-05 | verify | feature/clouds3n/user-management-model/test/verify-feedback-loading-final | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/verify-feedback-loading-final | feature/clouds3n/user-management-model/base | integrated |
 | review | feedback-loading-review | 019e2489-db59-7e21-9d0c-4c392f4cbaa3 | Schrodinger | REVIEW-06 | review | feature/clouds3n/user-management-model/review/feedback-loading-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/feedback-loading-review | feature/clouds3n/user-management-model/base | integrated |
+| test | red-operator-refinement | pending-spawn | pending-spawn | TEST-RED-20 | red | feature/clouds3n/user-management-model/test/red-operator-refinement | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/red-operator-refinement | feature/clouds3n/user-management-model/base | ready |
+| frontend | list-operator-refinement | pending-spawn | pending-spawn | FE-GREEN-05 | green | feature/clouds3n/user-management-model/frontend/list-operator-refinement | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/list-operator-refinement | feature/clouds3n/user-management-model/base | ready |
+| frontend | detail-create-refinement | pending-spawn | pending-spawn | FE-GREEN-06 | green | feature/clouds3n/user-management-model/frontend/detail-create-refinement | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/frontend/detail-create-refinement | feature/clouds3n/user-management-model/base | ready |
+| test | verify-operator-refinement | pending-spawn | pending-spawn | TEST-VERIFY-06 | verify | feature/clouds3n/user-management-model/test/verify-operator-refinement | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/verify-operator-refinement | feature/clouds3n/user-management-model/base | ready |
+| review | operator-refinement-review | pending-spawn | pending-spawn | REVIEW-07 | review | feature/clouds3n/user-management-model/review/operator-refinement-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/review/operator-refinement-review | feature/clouds3n/user-management-model/base | ready |
 
 ## Branch And Path Rules
 
@@ -73,7 +78,7 @@ One row is one actual git worktree checkout. Resolve `agent id`, `subtask name`,
 
 ## Merge Strategy
 
-Retained execution order is `test/red-suite` -> `database/schema-migrations` + `backend/green-user-api` + `frontend/green-admin-users` -> `test/verify-regression` -> `review/final-review` -> targeted fix workers for final-review findings -> `review/post-fix-final-review`. Prior Workflow B evolution resumed with `test/red-interaction-gaps` -> `frontend/green-interaction-gaps` -> `test/verify-interaction-gaps` -> `review/interaction-gap-review` -> `test/reset-contract-red` -> `frontend/fix-reset-contract`. Current consistency refactor resumed with `test/red-statistics-consistency` + `test/red-frontend-consistency` -> `backend/statistics-consistency` -> `frontend/user-consistency-refactor` -> `test/verify-consistency-refactor` -> `review/consistency-refactor-review`, then EV-05 resumes with `test/red-all-status-include-archived` -> `frontend/fix-all-status-include-archived` -> `test/verify-all-status-include-archived` -> `review/all-status-include-archived-review`. EV-07 resumes with `test/red-feedback-loading` -> `frontend/feedback-loading` -> `test/verify-feedback-loading` -> `test/fix-feedback-loading-smoke-locator` -> `test/verify-feedback-loading-final` -> `review/feedback-loading-review`. The lead agent merges each worker branch into `feature/clouds3n/user-management-model/base` and records events in `orchestration/integration-log.md`.
+Retained execution order is `test/red-suite` -> `database/schema-migrations` + `backend/green-user-api` + `frontend/green-admin-users` -> `test/verify-regression` -> `review/final-review` -> targeted fix workers for final-review findings -> `review/post-fix-final-review`. Prior Workflow B evolution resumed with `test/red-interaction-gaps` -> `frontend/green-interaction-gaps` -> `test/verify-interaction-gaps` -> `review/interaction-gap-review` -> `test/reset-contract-red` -> `frontend/fix-reset-contract`. Current consistency refactor resumed with `test/red-statistics-consistency` + `test/red-frontend-consistency` -> `backend/statistics-consistency` -> `frontend/user-consistency-refactor` -> `test/verify-consistency-refactor` -> `review/consistency-refactor-review`, then EV-05 resumes with `test/red-all-status-include-archived` -> `frontend/fix-all-status-include-archived` -> `test/verify-all-status-include-archived` -> `review/all-status-include-archived-review`. EV-07 resumes with `test/red-feedback-loading` -> `frontend/feedback-loading` -> `test/verify-feedback-loading` -> `test/fix-feedback-loading-smoke-locator` -> `test/verify-feedback-loading-final` -> `review/feedback-loading-review`. EV-08 resumes with `test/red-operator-refinement` -> `frontend/list-operator-refinement` + `frontend/detail-create-refinement` -> `test/verify-operator-refinement` -> `review/operator-refinement-review`. The lead agent merges each worker branch into `feature/clouds3n/user-management-model/base` and records events in `orchestration/integration-log.md`.
 
 ## Conflict Rules
 

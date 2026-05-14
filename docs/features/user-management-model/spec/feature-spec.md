@@ -13,6 +13,8 @@ Workflow B update on 2026-05-13 reopens the requirement/API/test-plan gate for t
 
 EV-07 update on 2026-05-14 resumes feedback/loading evaluation after `master` delivered `shared-ui-feedback`. User Management must consume the completed shared `useToast`/`ToastProvider` contract from `docs/features/shared-ui-feedback` and must no longer rely on page-local inline or screen-reader-only notices for operator feedback.
 
+EV-08 update on 2026-05-14 reopens the directory/detail/create interaction gate for operator-efficiency refinements. User Directory must expose a real row action menu with status-aware Archive and Restore actions, keyword search must debounce for 300ms to 500ms and cancel stale requests while skipping empty-keyword search calls, User Detail personal information must become easier to scan and edit inline while `userCode` and `username` remain read-only, and Add User must rely on backend-generated `userCode` instead of a manual input.
+
 ## Feature Identity
 
 - feature_slug: user-management-model
@@ -27,11 +29,11 @@ Design the backend-ready model and API boundary for the Tron User Management mod
 
 The user management page owns:
 
-- User directory listing, filtering, pagination, export, and navigation to user detail.
+- User directory listing, filtering, pagination, export, debounced search, row actions, and navigation to user detail.
 - Shared top-right Toast/Snackbar feedback for every user-management interaction that produces operator feedback.
 - Loading state for long-running Export and Save-style actions while their download or mutation is in progress.
 - Dashboard statistic cards backed by dedicated count APIs instead of the current page of directory records.
-- User creation and profile maintenance.
+- User creation and profile maintenance, with backend-generated `userCode` and inline detail editing for mutable fields.
 - User logical deletion through `Archived` status.
 - User password management and password reset.
 - User-to-role assignments through fixed role codes owned by the future Role Management module.
@@ -57,6 +59,10 @@ Goals:
 - Support the fixed MVP role set: `Admin`, `Workspace Admin`, `Developer`, and `Viewer`.
 - Keep permission and role definitions outside this feature while requiring Role and Permission modules to expose stable code fields.
 - Redesign frontend admin user interfaces or DTOs if the current frontend shape mixes user, role, and space responsibilities.
+- Support row-level directory actions for archive and restore without requiring a detail-page round trip.
+- Debounce directory keyword search by 300ms to 500ms, suppress empty-keyword search requests, and cancel stale in-flight requests so later results cannot be overwritten by earlier responses.
+- Keep `userCode` system-generated during the Add User flow while returning the generated stable code in the create response.
+- Present personal information with stronger label/value contrast and allow inline editing for mutable fields while keeping `userCode` and `username` immutable in the detail view.
 
 Non-goals:
 
