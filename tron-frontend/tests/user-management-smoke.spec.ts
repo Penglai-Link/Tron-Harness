@@ -1360,3 +1360,299 @@ test("loading feedback TDD-UM-20: Save Profile disables locally while pending an
   await expect(page.getByRole("heading", { name: "Alex Backend Updated" })).toBeVisible();
   await expectSharedTopRightToast(page, /profile updated/i, "Save Profile completion feedback");
 });
+
+test("operator refinement TDD-UM-21: debounced search with empty and stale request handling", async ({ page }) => {
+  const requests: CapturedAdminRequest[] = [];
+  const baselineRecord = makeUserRecord({
+    id: "734103002743185700",
+    userCode: "USER_DIRECTORY_01",
+    username: "directory.01",
+    firstName: "Directory",
+    lastName: "User",
+    displayName: "Directory User 01",
+    email: "directory.01@tron.ai",
+    roleCodes: ["VIEWER"],
+    spaceCodes: ["PLATFORM"],
+    status: "Active",
+  });
+  const staleRecord = makeUserRecord({
+    id: "734103002743185701",
+    userCode: "USER_ALPHA_MATCH",
+    username: "search.alpha",
+    firstName: "Server",
+    lastName: "Match",
+    displayName: "Alpha Search Match",
+    email: "search.alpha@tron.ai",
+    roleCodes: ["ADMIN"],
+    spaceCodes: ["PLATFORM"],
+    status: "Active",
+  });
+
+  await page.route("**/api/v1/admin/users**", async (route) => {
+    const captured = captureAdminRequest(route);
+    requests.push(captured);
+
+    if (captured.method !== "GET" || captured.pathname !== "/api/v1/admin/users") {
+      await fulfillJson(route, { code: "TEST_ROUTE_NOT_FOUND", message: `${captured.method} ${captured.pathname}`, data: {} }, 404);
+      return;
+    }
+
+    const search = captured.searchParams.search ?? "";
+    if (search === "alpha") {
+      await delay(500);
+      await fulfillJson(route, pagedEnvelope([staleRecord], 1, 15, 1));
+      return;
+    }
+
+    if (search === "") {
+      await delay(20);
+      await fulfillJson(route, pagedEnvelope([baselineRecord], 1, 15, 1));
+      return;
+    }
+
+    await delay(20);
+    await fulfillJson(route, pagedEnvelope([baselineRecord], 1, 15, 1));
+  });
+
+  await page.goto(`${frontendBaseUrl}/admin/users`);
+  await expect(page.getByText("Directory User 01")).toBeVisible();
+
+  const searchInput = page.getByPlaceholder("Filter users...");
+  await searchInput.fill("");
+  const requestBaseline = requests.length;
+
+  await searchInput.type("a", { delay: 20 });
+  await searchInput.type("l", { delay: 20 });
+  await searchInput.type("p", { delay: 20 });
+  await searchInput.type("h", { delay: 20 });
+  await searchInput.type("a", { delay: 20 });
+
+  await delay(700);
+  const nonEmptySearchTerms = requests
+    .slice(requestBaseline)
+    .filter((request) => request.method === "GET" && request.pathname === "/api/v1/admin/users" && request.searchParams.search)
+    .map((request) => request.searchParams.search);
+
+  expect(nonEmptySearchTerms.length).toBeGreaterThan(0);
+  expect(new Set(nonEmptySearchTerms).size).toBeLessThanOrEqual(1);
+
+  const searchRequestCount = requests.length;
+  await searchInput.fill("alpha");
+  await expectCapturedAdminRequest(
+    requests,
+    "explicit alpha search request from directory",
+    (request) => request.pathname === "/api/v1/admin/users" && request.searchParams.search === "alpha",
+    { after: searchRequestCount },
+  );
+
+  await searchInput.fill("");
+  await expectCapturedAdminRequest(
+    requests,
+    "empty search should send request and return baseline list",
+    (request) => request.pathname === "/api/v1/admin/users" && request.searchParams.search === "",
+    { after: searchRequestCount },
+  );
+
+  await expect(page.getByText("Directory User 01")).toBeVisible({ timeout: redExpectationTimeout });
+  await delay(650);
+  await expect(page.getByText("Directory User 01")).toBeVisible({ timeout: redExpectationTimeout });
+  await expect(page.getByText("Alpha Search Match")).toHaveCount(0);
+});
+
+test("operator refinement TDD-UM-22: directory supports archive/restore row actions", async ({ page }) => {
+  const requests: CapturedAdminRequest[] = [];
+  let isArchived = false;
+  const directoryUser = makeUserRecord({
+    id: "734103002743185800",
+    userCode: "USER_DIRECTORY_OPERATOR",
+    username: "operator.directory",
+    firstName: "Operator",
+    lastName: "Directory",
+    displayName: "Operator Directory",
+    email: "operator.directory@tron.ai",
+    roleCodes: ["DEVELOPER"],
+    spaceCodes: ["PLATFORM"],
+    status: "Active",
+  });
+
+  await page.route("**/api/v1/admin/users**", async (route) => {
+    const captured = captureAdminRequest(route);
+    requests.push(captured);
+
+    if (captured.method !== "GET" && captured.method !== "POST") {
+      await fulfillJson(route, { code: "TEST_ROUTE_NOT_FOUND", message: `${captured.method} ${captured.pathname}`, data: {} }, 404);
+      return;
+    }
+
+    if (captured.method === "GET" && captured.pathname === "/api/v1/admin/users") {
+      const record = makeUserRecord({
+        ...directoryUser,
+        status: isArchived ? "Archived" : "Active",
+        archivedAt: isArchived ? "2026-05-13T10:10:10.000Z" : null,
+      });
+      await fulfillJson(route, pagedEnvelope([record], 1, 15, 1));
+      return;
+    }
+
+    if (captured.method === "POST" && captured.pathname === "/api/v1/admin/users/USER_DIRECTORY_OPERATOR/archive") {
+      isArchived = true;
+      await fulfillJson(route, successEnvelope({ userCode: directoryUser.userCode, status: "Archived", archivedAt: "2026-05-13T10:10:10.000Z" }));
+      return;
+    }
+
+    if (captured.method === "POST" && captured.pathname === "/api/v1/admin/users/USER_DIRECTORY_OPERATOR/restore") {
+      isArchived = false;
+      await fulfillJson(route, successEnvelope({ userCode: directoryUser.userCode, status: "Active", archivedAt: null }));
+      return;
+    }
+
+    await fulfillJson(route, { code: "TEST_ROUTE_NOT_FOUND", message: `${captured.method} ${captured.pathname}`, data: {} }, 404);
+  });
+
+  await page.goto(`${frontendBaseUrl}/admin/users`);
+  await expect(page.getByText("Operator Directory")).toBeVisible();
+  const userRow = page.getByRole("row").filter({ hasText: "Operator Directory" });
+
+  await expect(userRow.getByRole("button", { name: /archive/i })).toBeVisible({ timeout: redExpectationTimeout });
+  const archiveStart = requests.length;
+  await userRow.getByRole("button", { name: /archive/i }).click();
+  await expectCapturedAdminRequest(
+    requests,
+    "row archive action should call archive endpoint from directory",
+    (request) => request.method === "POST" && request.pathname === "/api/v1/admin/users/USER_DIRECTORY_OPERATOR/archive",
+    { after: archiveStart },
+  );
+
+  await expect(userRow.getByRole("button", { name: /restore/i })).toBeVisible({ timeout: redExpectationTimeout });
+  await expect(page.getByRole("row").filter({ hasText: "Operator Directory" }).getByText("Archived")).toBeVisible({ timeout: redExpectationTimeout });
+
+  const restoreStart = requests.length;
+  await userRow.getByRole("button", { name: /restore/i }).click();
+  await expectCapturedAdminRequest(
+    requests,
+    "row restore action should call restore endpoint from directory",
+    (request) => request.method === "POST" && request.pathname === "/api/v1/admin/users/USER_DIRECTORY_OPERATOR/restore",
+    { after: restoreStart },
+  );
+
+  await expect(userRow.getByRole("button", { name: /archive/i })).toBeVisible({ timeout: redExpectationTimeout });
+  await expect(page.getByRole("row").filter({ hasText: "Operator Directory" }).getByText("Active")).toBeVisible({ timeout: redExpectationTimeout });
+});
+
+test("operator refinement TDD-UM-23: detail inline save should treat userCode and username as read-only and emit mutable-only payload", async ({ page }) => {
+  const requests: CapturedAdminRequest[] = [];
+
+  await page.route("**/api/v1/admin/users**", async (route) => {
+    const captured = captureAdminRequest(route);
+    requests.push(captured);
+
+    if (captured.method === "GET" && captured.pathname === "/api/v1/admin/users") {
+      await fulfillJson(route, pagedEnvelope([alexUserRecord]));
+      return;
+    }
+
+    if (captured.method === "GET" && captured.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON") {
+      await fulfillJson(route, successEnvelope(alexUserRecord));
+      return;
+    }
+
+    if (captured.method === "PATCH" && captured.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON") {
+      const patched = {
+        ...alexUserRecord,
+        ...(isRecord(captured.body) ? captured.body : {}),
+      };
+      await fulfillJson(route, successEnvelope(patched));
+      return;
+    }
+
+    await fulfillJson(route, { code: "TEST_ROUTE_NOT_FOUND", message: `${captured.method} ${captured.pathname}`, data: {} }, 404);
+  });
+
+  await page.goto(`${frontendBaseUrl}/admin/users/detail?userCode=USER_ALEX_JOHNSON`);
+
+  await expect(page.getByLabel(/user code/i)).not.toBeEditable();
+  await expect(page.getByLabel(/^username$/i)).not.toBeEditable();
+
+  await page.getByRole("button", { name: /edit profile/i }).click();
+  await page.getByLabel(/display name/i).fill("Alex Inline Updated");
+  await page.getByLabel(/^email$/i).fill("alex.inline.updated@example.com");
+
+  const patchStart = requests.length;
+  await page.getByRole("button", { name: /save profile|saving profile|loading/i }).click();
+  await expectCapturedAdminRequest(
+    requests,
+    "PATCH /api/v1/admin/users/USER_ALEX_JOHNSON should only include mutable fields",
+    (request) => request.method === "PATCH" && request.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON",
+    { after: patchStart },
+  );
+
+  const patchRequest = requests.find((request, index) => index >= patchStart && request.method === "PATCH" && request.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON");
+  expect(patchRequest).toBeDefined();
+  expect(isRecord(patchRequest!.body)).toBe(true);
+  expect((patchRequest!.body as Record<string, unknown>)).not.toHaveProperty("userCode");
+  expect((patchRequest!.body as Record<string, unknown>)).not.toHaveProperty("username");
+  expect((patchRequest!.body as Record<string, unknown>)).toEqual(expect.objectContaining({
+    displayName: "Alex Inline Updated",
+    email: "alex.inline.updated@example.com",
+  }));
+});
+
+test("operator refinement TDD-UM-24: create flow should omit userCode input/payload and surface backend-generated userCode", async ({ page }) => {
+  const requests: CapturedAdminRequest[] = [];
+  const generatedUser = makeUserRecord({
+    id: "734103002743185901",
+    userCode: "USER_GENERATED_ALEX",
+    username: "generated.alex",
+    firstName: "Generated",
+    lastName: "Alex",
+    displayName: "Generated Alex",
+    email: "generated.alex@tron.ai",
+    roleCodes: ["DEVELOPER"],
+    spaceCodes: ["PLATFORM", "DATA"],
+    status: "Active",
+  });
+  let createdBody: unknown = {};
+
+  await page.route("**/api/v1/admin/users**", async (route) => {
+    const captured = captureAdminRequest(route);
+    requests.push(captured);
+
+    if (captured.method === "GET" && captured.pathname === "/api/v1/admin/users") {
+      await fulfillJson(route, pagedEnvelope([alexUserRecord, generatedUser], 1, 15, 2));
+      return;
+    }
+
+    if (captured.method === "POST" && captured.pathname === "/api/v1/admin/users") {
+      createdBody = captured.body;
+      await delay(80);
+      await fulfillJson(route, successEnvelope(generatedUser), 201);
+      return;
+    }
+
+    await fulfillJson(route, { code: "TEST_ROUTE_NOT_FOUND", message: `${captured.method} ${captured.pathname}`, data: {} }, 404);
+  });
+
+  await page.goto(`${frontendBaseUrl}/admin/users/new`);
+
+  await expect(page.getByLabel(/user code/i)).toHaveCount(0);
+
+  await page.getByLabel(/^username$/i).fill("generated.alex");
+  await page.getByLabel(/first name/i).fill("Generated");
+  await page.getByLabel(/last name/i).fill("Alex");
+  await page.getByLabel(/display name/i).fill("Generated Alex");
+  await page.getByLabel(/^email$/i).fill("generated.alex@tron.ai");
+
+  const createStart = requests.length;
+  await page.getByRole("button", { name: /create user|save user/i }).click();
+  await expectCapturedAdminRequest(
+    requests,
+    "POST create request should not include userCode in payload",
+    (request) => request.method === "POST" && request.pathname === "/api/v1/admin/users",
+    { after: createStart },
+  );
+
+  expect(isRecord(createdBody)).toBe(true);
+  expect((createdBody as Record<string, unknown>)).not.toHaveProperty("userCode");
+  await expect(page, "Create success should return to directory and display generated code.").toHaveURL(/\/admin\/users$/);
+  await expect(page.getByText("USER_GENERATED_ALEX")).toBeVisible({ timeout: redExpectationTimeout });
+});
