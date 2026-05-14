@@ -136,6 +136,10 @@ function sharedToastMessage(page: Page, message: string | RegExp) {
   return sharedToastViewport(page).getByRole("status").filter({ hasText: message }).first();
 }
 
+function userDirectoryLink(page: Page, displayName: string) {
+  return page.getByRole("table").getByRole("link", { name: displayName, exact: true });
+}
+
 async function expectSharedTopRightToast(page: Page, message: string | RegExp, description: string) {
   const toast = sharedToastMessage(page, message);
   await expect(
@@ -893,7 +897,7 @@ test("TDD-UM-10: add user form posts uniform create request and renders created 
   }));
   expect(isRecord(createRequest?.body) && Array.isArray(createRequest.body.roleCodes)).toBe(true);
   expect(isRecord(createRequest?.body) && Array.isArray(createRequest.body.spaceCodes)).toBe(true);
-  await expect(page.getByText("Maya Singh")).toBeVisible();
+  await expect(userDirectoryLink(page, "Maya Singh")).toBeVisible();
 });
 
 test("TDD-UM-11: export users produces CSV download with stable headers and content", async ({ page }) => {
@@ -1168,7 +1172,7 @@ test("consistency refactor TDD-UM-18: Add User navigates to create page and subm
   }));
   await expect(page.getByText(/user created|created successfully|maya singh created/i)).toBeVisible({ timeout: redExpectationTimeout });
   await expect(page, "Successful create should return to the directory.").toHaveURL(/\/admin\/users$/);
-  await expect(page.getByText("Maya Singh")).toBeVisible();
+  await expect(userDirectoryLink(page, "Maya Singh")).toBeVisible();
 });
 
 test("toast feedback TDD-UM-19: user-management pages use shared toast source contract", async () => {
