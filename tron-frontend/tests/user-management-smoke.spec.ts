@@ -128,6 +128,30 @@ function pagedEnvelope(records: unknown[], current = 1, size = 20, total = recor
   });
 }
 
+function sharedToastViewport(page: Page) {
+  return page.locator('[aria-label="Notifications"]').first();
+}
+
+function sharedToastMessage(page: Page, message: string | RegExp) {
+  return sharedToastViewport(page).getByRole("status").filter({ hasText: message }).first();
+}
+
+async function expectSharedTopRightToast(page: Page, message: string | RegExp, description: string) {
+  const toast = sharedToastMessage(page, message);
+  await expect(
+    toast,
+    `${description} should render through the shared top-right Toast viewport, not page-local status text.`,
+  ).toBeVisible({ timeout: redExpectationTimeout });
+
+  const viewportBox = await sharedToastViewport(page).boundingBox();
+  const viewportSize = page.viewportSize();
+  expect.soft(viewportBox, `${description} should have a measurable shared toast viewport.`).not.toBeNull();
+  if (viewportBox && viewportSize) {
+    expect.soft(viewportBox.x, `${description} toast viewport should be aligned on the right half of the viewport.`).toBeGreaterThan(viewportSize.width / 2);
+    expect.soft(viewportBox.y, `${description} toast viewport should be near the top of the viewport.`).toBeLessThan(80);
+  }
+}
+
 async function expectCapturedAdminRequest(
   requests: CapturedAdminRequest[],
   description: string,
@@ -331,7 +355,11 @@ async function routeAllStatusIncludeArchivedApi(page: Page, requests: CapturedAd
   });
 }
 
-async function routeCreateUserApi(page: Page, requests: CapturedAdminRequest[]) {
+async function routeCreateUserApi(
+  page: Page,
+  requests: CapturedAdminRequest[],
+  options: { createDelayMs?: number } = {},
+) {
   const createdUser = makeUserRecord({
     id: "734103002743185408",
     userCode: "USER_MAYA_SINGH",
@@ -361,6 +389,7 @@ async function routeCreateUserApi(page: Page, requests: CapturedAdminRequest[]) 
 
     if (captured.method === "POST" && captured.pathname === "/api/v1/admin/users") {
       created = true;
+      await delay(options.createDelayMs ?? 0);
       await fulfillJson(route, successEnvelope(createdUser), 201);
       return;
     }
@@ -463,7 +492,11 @@ async function routeResetPasswordApi(
   });
 }
 
-async function routeDetailMutationApi(page: Page, requests: CapturedAdminRequest[]) {
+async function routeDetailMutationApi(
+  page: Page,
+  requests: CapturedAdminRequest[],
+  options: { profileDelayMs?: number; rolesDelayMs?: number; spacesDelayMs?: number; lifecycleDelayMs?: number } = {},
+) {
   let user = makeUserRecord({
     id: "9007199254740993",
     userCode: "USER_ALEX_JOHNSON",
@@ -504,6 +537,7 @@ async function routeDetailMutationApi(page: Page, requests: CapturedAdminRequest
     }
 
     if (captured.method === "PATCH" && captured.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON") {
+      await delay(options.profileDelayMs ?? 0);
       user = makeUserRecord({
         ...user,
         displayName: "Alex Backend Updated",
@@ -515,6 +549,7 @@ async function routeDetailMutationApi(page: Page, requests: CapturedAdminRequest
     }
 
     if (captured.method === "PUT" && captured.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON/roles") {
+      await delay(options.rolesDelayMs ?? 0);
       user = makeUserRecord({
         ...user,
         roleCodes: ["VIEWER"],
@@ -529,6 +564,7 @@ async function routeDetailMutationApi(page: Page, requests: CapturedAdminRequest
     }
 
     if (captured.method === "PUT" && captured.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON/spaces") {
+      await delay(options.spacesDelayMs ?? 0);
       user = makeUserRecord({
         ...user,
         spaceCodes: ["DATA"],
@@ -543,6 +579,7 @@ async function routeDetailMutationApi(page: Page, requests: CapturedAdminRequest
     }
 
     if (captured.method === "POST" && captured.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON/archive") {
+      await delay(options.lifecycleDelayMs ?? 0);
       user = makeUserRecord({
         ...user,
         status: "Archived",
@@ -558,6 +595,7 @@ async function routeDetailMutationApi(page: Page, requests: CapturedAdminRequest
     }
 
     if (captured.method === "POST" && captured.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON/restore") {
+      await delay(options.lifecycleDelayMs ?? 0);
       user = makeUserRecord({
         ...user,
         status: "Active",
@@ -1131,4 +1169,190 @@ test("consistency refactor TDD-UM-18: Add User navigates to create page and subm
   await expect(page.getByText(/user created|created successfully|maya singh created/i)).toBeVisible({ timeout: redExpectationTimeout });
   await expect(page, "Successful create should return to the directory.").toHaveURL(/\/admin\/users$/);
   await expect(page.getByText("Maya Singh")).toBeVisible();
+});
+
+test("toast feedback TDD-UM-19: user-management pages use shared toast source contract", async () => {
+  const sourceContracts = [
+    {
+      label: "UsersPage",
+      path: "src/domain/admin/pages/UsersPage.tsx",
+      forbiddenLocalState: [
+        "const [notice, setNotice]",
+        "setNotice(",
+      ],
+    },
+    {
+      label: "CreateUserPage",
+      path: "src/domain/admin/pages/CreateUserPage.tsx",
+      forbiddenLocalState: [
+        "const [feedback, setFeedback]",
+        "setFeedback(",
+      ],
+    },
+    {
+      label: "UserDetailsPage",
+      path: "src/domain/admin/pages/UserDetailsPage.tsx",
+      forbiddenLocalState: [
+        "const [notice, setNotice]",
+        "const [copyFeedback, setCopyFeedback]",
+        "setNotice(",
+        "setCopyFeedback(",
+      ],
+    },
+  ];
+
+  for (const contract of sourceContracts) {
+    const pageSource = source(contract.path);
+    expect.soft(pageSource.includes("useToast"), `${contract.label} must import or call the shared useToast hook.`).toBe(true);
+    expect.soft(/\buseToast\(\)/.test(pageSource), `${contract.label} must call useToast() for operator feedback.`).toBe(true);
+    expect.soft(pageSource.includes("ToastProvider"), `${contract.label} must not mount its own ToastProvider wrapper.`).toBe(false);
+
+    for (const localState of contract.forbiddenLocalState) {
+      expect.soft(
+        pageSource.includes(localState),
+        `${contract.label} must not keep page-local feedback state: ${localState}`,
+      ).toBe(false);
+    }
+  }
+});
+
+test("toast feedback TDD-UM-19: Users export renders shared top-right toast", async ({ page }) => {
+  await routeAdminUsers(page, [
+    makeUserRecord({
+      id: "734103000000006701",
+      userCode: "USER_TOAST_EXPORT",
+      username: "toast.export",
+      firstName: "Toast",
+      lastName: "Export",
+      displayName: "Toast Export",
+      email: "toast.export@tron.ai",
+      roleCodes: ["DEVELOPER"],
+      spaceCodes: ["DATA"],
+      status: "Active",
+    }),
+  ]);
+
+  await page.goto(`${frontendBaseUrl}/admin/users`);
+
+  await expect(page.getByText("Toast Export")).toBeVisible();
+  const downloadPromise = page.waitForEvent("download", { timeout: redExpectationTimeout });
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await downloadPromise;
+  await expectSharedTopRightToast(page, /users exported/i, "Users export feedback");
+});
+
+test("toast feedback TDD-UM-19: Create User success renders shared top-right toast", async ({ page }) => {
+  const requests: CapturedAdminRequest[] = [];
+  await routeCreateUserApi(page, requests);
+
+  await page.goto(`${frontendBaseUrl}/admin/users/new`);
+
+  await page.getByLabel(/user code/i).fill("USER_MAYA_SINGH");
+  await page.getByLabel(/^username$/i).fill("maya.singh");
+  await page.getByLabel(/first name/i).fill("Maya");
+  await page.getByLabel(/last name/i).fill("Singh");
+  await page.getByLabel(/display name/i).fill("Maya Singh");
+  await page.getByLabel(/^email$/i).fill("maya@tron.ai");
+
+  await page.getByRole("button", { name: /create user|save user/i }).click();
+  await expectCapturedAdminRequest(
+    requests,
+    "POST /api/v1/admin/users for shared toast create feedback",
+    (request) => request.method === "POST" && request.pathname === "/api/v1/admin/users",
+  );
+  await expect(page, "Create success should still return to the directory before toast assertion.").toHaveURL(/\/admin\/users$/);
+  await expectSharedTopRightToast(page, /Maya Singh created successfully/i, "Create User success feedback");
+});
+
+test("toast feedback TDD-UM-19: User Detail reset copy renders shared top-right toast", async ({ page }) => {
+  await routeResetPasswordApi(page, []);
+
+  await page.goto(`${frontendBaseUrl}/admin/users/detail?userCode=USER_ALEX_JOHNSON`);
+
+  await page.getByRole("button", { name: "Reset Password" }).click();
+  await page.getByRole("button", { name: "Confirm Reset" }).click();
+  await expect(page.locator("code").first()).toHaveText(backendTemporaryPassword);
+
+  await page.getByRole("button", { name: "Copy" }).click();
+  await expectSharedTopRightToast(page, /Temporary password copied/i, "User Detail reset copy feedback");
+});
+
+test("loading feedback TDD-UM-20: Export exposes action-local pending state and toast completion", async ({ page }) => {
+  await routeAdminUsers(page, [
+    makeUserRecord({
+      id: "734103000000006702",
+      userCode: "USER_LOADING_EXPORT",
+      username: "loading.export",
+      firstName: "Loading",
+      lastName: "Export",
+      displayName: "Loading Export",
+      email: "loading.export@tron.ai",
+      roleCodes: ["DEVELOPER"],
+      spaceCodes: ["DATA"],
+      status: "Active",
+    }),
+  ]);
+
+  await page.goto(`${frontendBaseUrl}/admin/users`);
+
+  const exportButton = page.getByRole("button", { name: /export|exporting/i }).first();
+  await expect(page.getByText("Loading Export")).toBeVisible();
+  const downloadPromise = page.waitForEvent("download", { timeout: redExpectationTimeout });
+  await exportButton.click();
+  await expect.soft(exportButton, "Export should be disabled while the CSV action is pending.").toBeDisabled({ timeout: 300 });
+  await expect.soft(exportButton, "Export should expose action-local loading copy while pending.").toContainText(/exporting|loading|working/i, { timeout: 300 });
+  await downloadPromise;
+  await expectSharedTopRightToast(page, /users exported/i, "Export completion feedback");
+});
+
+test("loading feedback TDD-UM-20: Create User submit disables locally while pending and resolves through toast", async ({ page }) => {
+  const requests: CapturedAdminRequest[] = [];
+  await routeCreateUserApi(page, requests, { createDelayMs: 700 });
+
+  await page.goto(`${frontendBaseUrl}/admin/users/new`);
+
+  await page.getByLabel(/user code/i).fill("USER_MAYA_SINGH");
+  await page.getByLabel(/^username$/i).fill("maya.singh");
+  await page.getByLabel(/first name/i).fill("Maya");
+  await page.getByLabel(/last name/i).fill("Singh");
+  await page.getByLabel(/display name/i).fill("Maya Singh");
+  await page.getByLabel(/^email$/i).fill("maya@tron.ai");
+
+  const submitButton = page.getByRole("button", { name: /create user|creating|save user/i });
+  await submitButton.click();
+  await expectCapturedAdminRequest(
+    requests,
+    "delayed POST /api/v1/admin/users create request",
+    (request) => request.method === "POST" && request.pathname === "/api/v1/admin/users",
+  );
+  await expect.soft(submitButton, "Create User submit should be disabled while the create request is pending.").toBeDisabled({ timeout: redExpectationTimeout });
+  await expect.soft(submitButton, "Create User submit should show local loading copy while pending.").toContainText(/creating|loading|saving/i, { timeout: redExpectationTimeout });
+  await expect(page, "Create success should return to the directory before toast assertion.").toHaveURL(/\/admin\/users$/);
+  await expectSharedTopRightToast(page, /Maya Singh created successfully/i, "Create User completion feedback");
+});
+
+test("loading feedback TDD-UM-20: Save Profile disables locally while pending and resolves through toast", async ({ page }) => {
+  const requests: CapturedAdminRequest[] = [];
+  await routeDetailMutationApi(page, requests, { profileDelayMs: 700 });
+
+  await page.goto(`${frontendBaseUrl}/admin/users/detail?userCode=USER_ALEX_JOHNSON`);
+
+  await page.getByRole("button", { name: /edit profile/i }).click();
+  await page.getByLabel(/display name/i).fill("Alex Backend Updated");
+  await page.getByLabel(/^email$/i).fill("alex.backend.updated@example.com");
+
+  const saveButton = page.getByRole("button", { name: /save profile|saving profile|loading/i });
+  const patchStart = requests.length;
+  await saveButton.click();
+  await expectCapturedAdminRequest(
+    requests,
+    "delayed PATCH /api/v1/admin/users/USER_ALEX_JOHNSON profile update",
+    (request) => request.method === "PATCH" &&
+      request.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON",
+    { after: patchStart },
+  );
+  await expect.soft(saveButton, "Save Profile should be disabled while the profile request is pending.").toBeDisabled({ timeout: 300 });
+  await expect.soft(saveButton, "Save Profile should show action-local loading copy while pending.").toContainText(/saving|loading|updating/i, { timeout: 300 });
+  await expect(page.getByRole("heading", { name: "Alex Backend Updated" })).toBeVisible();
+  await expectSharedTopRightToast(page, /profile updated/i, "Save Profile completion feedback");
 });
