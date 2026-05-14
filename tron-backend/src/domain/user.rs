@@ -1,0 +1,20 @@
+mod aggregate;
+mod assignment;
+mod error;
+mod identity;
+mod lifecycle;
+mod password;
+mod profile;
+mod query;
+
+pub use aggregate::User;
+pub(crate) use assignment::{unique_preserving_order, validate_role_codes, validate_space_codes};
+pub use error::UserError;
+pub(crate) use identity::{normalize_code_segment, validate_user_code};
+pub use lifecycle::UserStatus;
+pub(crate) use lifecycle::parse_user_status;
+pub use password::PasswordResetResult;
+pub(crate) use password::validate_initial_password;
+pub use profile::PhoneNumber;
+pub(crate) use profile::{optional_trimmed, required_profile_field};
+pub use query::{ListUsersQuery, PagedUsers, UserStatistics};

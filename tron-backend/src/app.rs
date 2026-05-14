@@ -1,9 +1,18 @@
+use std::sync::OnceLock;
+
 use axum::{Router, extract::FromRef, routing::get};
 
 use crate::{
-    config::AppConfig, domain::user::UserService, health::health,
-    http::admin::users::routes as user_routes,
+    adapters::{
+        inbound::http::admin::users::routes as user_routes,
+        outbound::{crypto::BcryptPasswordHasher, persistence::SqliteUserRepository},
+    },
+    application::user::UserService,
+    config::AppConfig,
+    health::health,
 };
+
+static GLOBAL_USER_SERVICE: OnceLock<UserService> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct AppState {
@@ -14,10 +23,11 @@ pub struct AppState {
 impl AppState {
     pub fn new(config: AppConfig) -> Self {
         let users = if config.database_url == ":memory:" {
-            UserService::global()
+            GLOBAL_USER_SERVICE
+                .get_or_init(|| build_user_service(":memory:"))
+                .clone()
         } else {
-            UserService::from_database_url(&config.database_url)
-                .expect("user SQLite repository should initialize")
+            build_user_service(&config.database_url)
         };
 
         Self { config, users }
@@ -43,4 +53,10 @@ pub fn build_router(config: AppConfig) -> Router {
         .route("/api/v1/health", get(health))
         .merge(user_routes())
         .with_state(state)
+}
+
+fn build_user_service(database_url: &str) -> UserService {
+    let repository = SqliteUserRepository::connect(database_url)
+        .expect("user SQLite repository should initialize");
+    UserService::new(repository, BcryptPasswordHasher)
 }
