@@ -220,6 +220,7 @@ export function UserDetailsPage() {
   const assignedSpaces = user.spaceCodes;
   const currentStatus = user.status;
   const currentResetState = resetState?.userCode === user.userCode ? resetState : null;
+  const isEditingProfile = profileForm !== null;
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -421,29 +422,83 @@ export function UserDetailsPage() {
             </div>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <DetailField label="User Code" value={user.userCode} />
-            <DetailField label="Username" value={user.username} />
-            <DetailField label="First Name" value={user.firstName} />
-            <DetailField label="Last Name" value={user.lastName} />
-            <DetailField label="Display Name" value={user.displayName} />
-            <DetailField label="Email" value={user.email} />
-            <DetailField label="Phone" value={formatPhone(user)} />
-            <DetailField label="Locale" value={user.locale} />
-            <DetailField label="Timezone" value={user.timezone} />
-            <DetailField label="Last Active" value={formatTimestamp(user.lastActiveAt)} />
-            <DetailField label="Created" value={formatTimestamp(user.createdAt)} />
-            <DetailField label="Updated" value={formatTimestamp(user.updatedAt)} />
+            {isEditingProfile ? (
+              <>
+                <Field label="User Code">
+                  <TextInput
+                    value={user.userCode}
+                    readOnly
+                    aria-readonly="true"
+                  />
+                </Field>
+                <Field label="Username">
+                  <TextInput
+                    value={user.username}
+                    readOnly
+                    aria-readonly="true"
+                  />
+                </Field>
+                <Field label="First Name">
+                  <TextInput
+                    value={profileForm.firstName}
+                    onChange={(event) => setProfileForm((current) => current ? { ...current, firstName: event.target.value } : current)}
+                  />
+                </Field>
+                <Field label="Last Name">
+                  <TextInput
+                    value={profileForm.lastName}
+                    onChange={(event) => setProfileForm((current) => current ? { ...current, lastName: event.target.value } : current)}
+                  />
+                </Field>
+                <Field label="Display Name">
+                  <TextInput
+                    value={profileForm.displayName}
+                    onChange={(event) => setProfileForm((current) => current ? { ...current, displayName: event.target.value } : current)}
+                  />
+                </Field>
+                <Field label="Email">
+                  <TextInput
+                    type="email"
+                    value={profileForm.email}
+                    onChange={(event) => setProfileForm((current) => current ? { ...current, email: event.target.value } : current)}
+                  />
+                </Field>
+                <DetailField label="Phone" value={formatPhone(user)} />
+                <DetailField label="Locale" value={user.locale} />
+                <DetailField label="Timezone" value={user.timezone} />
+                <DetailField label="Last Active" value={formatTimestamp(user.lastActiveAt)} />
+                <DetailField label="Created" value={formatTimestamp(user.createdAt)} />
+                <DetailField label="Updated" value={formatTimestamp(user.updatedAt)} />
+              </>
+            ) : (
+              <>
+                <DetailField label="User Code" value={user.userCode} />
+                <DetailField label="Username" value={user.username} />
+                <DetailField label="First Name" value={user.firstName} />
+                <DetailField label="Last Name" value={user.lastName} />
+                <DetailField label="Display Name" value={user.displayName} />
+                <DetailField label="Email" value={user.email} />
+                <DetailField label="Phone" value={formatPhone(user)} />
+                <DetailField label="Locale" value={user.locale} />
+                <DetailField label="Timezone" value={user.timezone} />
+                <DetailField label="Last Active" value={formatTimestamp(user.lastActiveAt)} />
+                <DetailField label="Created" value={formatTimestamp(user.createdAt)} />
+                <DetailField label="Updated" value={formatTimestamp(user.updatedAt)} />
+              </>
+            )}
           </div>
           <div className="mt-5 flex flex-wrap gap-2 border-t border-[var(--color-outline-variant)] pt-4">
-            <Button variant="secondary" onClick={() => setProfileForm({
-              displayName: user.displayName,
-              email: user.email,
-              firstName: user.firstName,
-              lastName: user.lastName,
-            })}>
-              <Pencil size={16} aria-hidden="true" />
-              Edit Profile
-            </Button>
+            {isEditingProfile ? null : (
+              <Button variant="secondary" onClick={() => setProfileForm({
+                displayName: user.displayName,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+              })}>
+                <Pencil size={16} aria-hidden="true" />
+                Edit Profile
+              </Button>
+            )}
             <Button variant="secondary" disabled={updatingLifecycle} aria-busy={updatingLifecycle} onClick={() => void toggleLifecycle(user)}>
               {currentStatus === "Archived" ? <RotateCcw size={16} aria-hidden="true" /> : <Archive size={16} aria-hidden="true" />}
               {updatingLifecycle
@@ -451,26 +506,10 @@ export function UserDetailsPage() {
                 : currentStatus === "Archived" ? "Restore User" : "Archive User"}
             </Button>
           </div>
-          {profileForm ? (
-            <form className="mt-5 grid gap-4 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4" onSubmit={saveProfile}>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="First Name">
-                  <TextInput value={profileForm.firstName} onChange={(event) => setProfileForm((current) => current ? { ...current, firstName: event.target.value } : current)} />
-                </Field>
-                <Field label="Last Name">
-                  <TextInput value={profileForm.lastName} onChange={(event) => setProfileForm((current) => current ? { ...current, lastName: event.target.value } : current)} />
-                </Field>
-                <Field label="Display Name">
-                  <TextInput value={profileForm.displayName} onChange={(event) => setProfileForm((current) => current ? { ...current, displayName: event.target.value } : current)} />
-                </Field>
-                <Field label="Email">
-                  <TextInput type="email" value={profileForm.email} onChange={(event) => setProfileForm((current) => current ? { ...current, email: event.target.value } : current)} />
-                </Field>
-              </div>
-              <div className="flex flex-wrap justify-end gap-2">
-                <Button type="button" variant="ghost" disabled={savingProfile} onClick={() => setProfileForm(null)}>Cancel</Button>
-                <Button type="submit" disabled={savingProfile} aria-busy={savingProfile}>{savingProfile ? "Saving Profile..." : "Save Profile"}</Button>
-              </div>
+          {isEditingProfile ? (
+            <form className="mt-5 flex flex-wrap justify-end gap-2" onSubmit={saveProfile}>
+              <Button type="button" variant="ghost" disabled={savingProfile} onClick={() => setProfileForm(null)}>Cancel</Button>
+              <Button type="submit" disabled={savingProfile} aria-busy={savingProfile}>{savingProfile ? "Saving Profile..." : "Save Profile"}</Button>
             </form>
           ) : null}
         </SurfaceCard>
