@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -76,9 +77,26 @@ export function useUserList(options: UseUserListOptions = {}): UserListResult {
   const status = options.status === "All" ? "All" : options.status || "Active";
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  const [searchVersion, setSearchVersion] = useState(0);
+  const lastSearchRef = useRef(search);
+  const skipNextEmptySearchRef = useRef(false);
+  const requestSequenceRef = useRef(0);
+
+  const listOptions = useMemo(
+    () => ({
+      current,
+      search: debouncedSearch,
+      size,
+      status,
+    }),
+    [current, debouncedSearch, size, status],
+  );
+  const queryTrimmed = listOptions.search.trim();
+
   const mockPage = useMemo(
-    () => makeMockPage(listUsers(), { current, search, size, status }),
-    [current, search, size, status],
+    () => makeMockPage(listUsers(), { current, search: queryTrimmed, size, status }),
+    [current, queryTrimmed, size, status],
   );
   const [page, setPage] = useState<AdminPage<UserRecord>>(mockPage);
 
@@ -88,26 +106,66 @@ export function useUserList(options: UseUserListOptions = {}): UserListResult {
   }, [dataSource, mockPage]);
 
   useEffect(() => {
-    if (dataSource !== "api") return;
+    const trimmedSearch = search.trim();
+    const previousSearch = lastSearchRef.current.trim();
 
+    if (trimmedSearch === "" && previousSearch !== "") {
+      skipNextEmptySearchRef.current = true;
+    } else if (trimmedSearch !== "") {
+      skipNextEmptySearchRef.current = false;
+    }
+
+    lastSearchRef.current = trimmedSearch;
+
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(trimmedSearch);
+      if (!(trimmedSearch === "" && debouncedSearch === "")) {
+        setSearchVersion((currentVersion) => currentVersion + 1);
+      }
+    }, 320);
+
+    return () => window.clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    const nonSearchChange = dataSource === "api";
+    if (nonSearchChange) {
+      skipNextEmptySearchRef.current = false;
+    }
+  }, [current, dataSource, reloadKey, size, status]);
+
+  useEffect(() => {
+    if (dataSource !== "api") return;
+    if (queryTrimmed === "" && skipNextEmptySearchRef.current) {
+      return;
+    }
+
+    const requestId = requestSequenceRef.current + 1;
+    requestSequenceRef.current = requestId;
     const controller = new AbortController();
     setLoading(true);
 
-    fetchAdminUserPage({ current, search, size, status }, controller.signal)
+    fetchAdminUserPage({
+      current,
+      search: queryTrimmed,
+      size,
+      status,
+    }, controller.signal)
       .then((nextPage) => {
+        if (requestId !== requestSequenceRef.current || controller.signal.aborted) return;
         setPage(nextPage);
       })
       .catch((error: unknown) => {
-        if (controller.signal.aborted) return;
+        if (requestId !== requestSequenceRef.current || controller.signal.aborted) return;
         console.warn("[admin] Falling back to mock user data.", error);
         setPage(mockPage);
       })
       .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted && requestId === requestSequenceRef.current) setLoading(false);
       });
 
     return () => controller.abort();
-  }, [current, dataSource, mockPage, reloadKey, search, size, status]);
+  }, [current, dataSource, mockPage, queryTrimmed, reloadKey, searchVersion, size, status]);
 
   const refresh = useCallback(() => {
     setReloadKey((value) => value + 1);

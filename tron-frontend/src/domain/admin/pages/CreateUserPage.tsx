@@ -38,7 +38,6 @@ const defaultCreateForm = {
   phoneNumber: "",
   roleCode: "VIEWER" as UserRoleCode,
   spaceCodes: "PLATFORM",
-  userCode: "",
   username: "",
 };
 
@@ -58,10 +57,12 @@ function makeMockId(userCode: string) {
 }
 
 function makeMockCreatedUser(payload: CreateUserPayload): UserRecord {
+  const generatedCode = payload.userCode?.trim() || `USER_${payload.username.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
   const timestamp = "2026-05-13T00:00:00.000Z";
   return {
     ...payload,
-    id: makeMockId(payload.userCode),
+    id: makeMockId(generatedCode),
+    userCode: generatedCode,
     avatarUrl: null,
     phone: payload.phone ?? null,
     locale: "en-US",
@@ -98,7 +99,6 @@ export function CreateUserPage() {
       phone: phoneNumber ? { countryCode: form.phoneCountryCode.trim() || "+1", number: phoneNumber } : null,
       roleCodes: [form.roleCode],
       spaceCodes: splitCodes(form.spaceCodes),
-      userCode: form.userCode,
       username: form.username,
     };
 
@@ -128,9 +128,6 @@ export function CreateUserPage() {
       <SurfaceCard>
         <form className="grid gap-5" onSubmit={handleSubmit}>
           <div className="grid gap-4 md:grid-cols-3">
-            <Field label="User Code">
-              <TextInput required value={form.userCode} onChange={(event) => updateForm("userCode", event.target.value)} />
-            </Field>
             <Field label="Username">
               <TextInput required value={form.username} onChange={(event) => updateForm("username", event.target.value)} />
             </Field>

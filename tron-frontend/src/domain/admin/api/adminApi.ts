@@ -60,7 +60,7 @@ export interface CreateUserPayload {
   phone?: UserPhone | null;
   roleCodes: UserRoleCode[];
   spaceCodes: string[];
-  userCode: string;
+  userCode?: string;
   username: string;
 }
 

@@ -43,6 +43,12 @@ import {
   getAdminUserRoleLabel,
   getStatusTone,
 } from "@/domain/admin/constants";
+import {
+  type UserLifecycleResult,
+  archiveAdminUser,
+  restoreAdminUser,
+} from "@/domain/admin/api";
+import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 const ALL_FILTER = "All";
 
@@ -114,6 +120,9 @@ export function UsersPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(15);
   const [exporting, setExporting] = useState(false);
+  const [openRowMenu, setOpenRowMenu] = useState<string | null>(null);
+  const [processingRow, setProcessingRow] = useState<string | null>(null);
+  const dataSource = getServiceDataSource("admin");
   const users = useUserList({
     current: currentPage,
     search: query,
@@ -145,6 +154,35 @@ export function UsersPage() {
       toast.error(message);
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleRowLifecycleAction(row: UserRecord) {
+    const action: "archive" | "restore" = row.status === "Active" ? "archive" : "restore";
+    const actionFn = action === "archive" ? archiveAdminUser : restoreAdminUser;
+    setProcessingRow(row.userCode);
+    setOpenRowMenu(null);
+
+    const fallbackResult: UserLifecycleResult = {
+      status: action === "archive" ? "Archived" : "Active",
+      archivedAt: action === "archive" ? new Date().toISOString() : null,
+    };
+
+    try {
+      const endpointResult: UserLifecycleResult = dataSource === "api" ? await actionFn(row.userCode) : fallbackResult;
+
+      users.upsertUser({
+        ...row,
+        status: endpointResult.status ?? row.status,
+        archivedAt: endpointResult.archivedAt ?? row.archivedAt,
+        updatedAt: endpointResult.updatedAt ?? row.updatedAt,
+      });
+      toast.success(`User ${action}d`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Failed to ${action} user`;
+      toast.error(message);
+    } finally {
+      setProcessingRow(null);
     }
   }
 
@@ -196,7 +234,31 @@ export function UsersPage() {
           { id: "codes", header: "Codes", render: (row) => <div className="max-w-64 text-[13px] text-[var(--color-on-surface-variant)]"><div className="font-medium text-[var(--color-on-surface)]">{row.userCode}</div><div>{row.roleCodes.map(getAdminUserRoleLabel).join(", ")}</div><div>{row.spaceCodes.join(", ")}</div></div> },
           { id: "status", header: "Status", render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },
           { id: "last", header: "Last Active", render: (row) => formatTimestamp(row.lastActiveAt) },
-          { id: "details", header: "", align: "right", render: (row) => <div className="flex justify-end gap-1"><Button asChild size="icon" variant="ghost" aria-label={`View ${row.displayName} details`}><Link to={userDetailPath(row.userCode)}><Eye size={16} aria-hidden="true" /></Link></Button><Button size="icon" variant="ghost" aria-label={`Open actions for ${row.displayName}`} onClick={() => toast.info(`${row.displayName} action menu opened`)}><MoreHorizontal size={16} aria-hidden="true" /></Button></div> },
+          {
+            id: "details",
+            header: "",
+            align: "right",
+            render: (row) => {
+              const isMenuOpen = openRowMenu === row.userCode;
+              const isProcessing = processingRow === row.userCode;
+              const showArchive = row.status === "Active";
+              const showRestore = row.status === "Archived";
+              return (
+                <div className="relative flex justify-end gap-1">
+                  <Button asChild size="icon" variant="ghost" aria-label={`View ${row.displayName} details`}><Link to={userDetailPath(row.userCode)}><Eye size={16} aria-hidden="true" /></Link></Button>
+                  <Button size="icon" variant="ghost" aria-label={`Open actions for ${row.displayName}`} disabled={isProcessing} onClick={() => setOpenRowMenu((current) => (current === row.userCode ? null : row.userCode))}>
+                    <MoreHorizontal size={16} aria-hidden="true" />
+                  </Button>
+                  {isMenuOpen ? (
+                    <div className="absolute right-4 top-12 z-20 w-40 rounded-lg border border-[var(--color-outline-variant)] bg-white p-2 text-left text-sm shadow-[0_12px_28px_rgba(0,0,0,0.12)]" role="menu" aria-label={`Actions for ${row.displayName}`}>
+                      {showArchive ? <button type="button" role="menuitem" className="block w-full rounded-md px-3 py-2 text-left hover:bg-[var(--color-surface-container-low)] disabled:cursor-not-allowed disabled:opacity-60" disabled={isProcessing} onClick={() => void handleRowLifecycleAction(row)}>Archive User</button> : null}
+                      {showRestore ? <button type="button" role="menuitem" className="block w-full rounded-md px-3 py-2 text-left hover:bg-[var(--color-surface-container-low)] disabled:cursor-not-allowed disabled:opacity-60" disabled={isProcessing} onClick={() => void handleRowLifecycleAction(row)}>Restore User</button> : null}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            },
+          },
         ]}
       />
     </TronShell>
