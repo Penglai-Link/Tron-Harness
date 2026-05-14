@@ -7,25 +7,22 @@
 - branch: feature/clouds3n/user-management-model/test/red-operator-refinement
 - worktree: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/user-management-model/test/red-operator-refinement
 - scope: TEST-RED-20 and operator refinement TDD-UM-21 through TDD-UM-24
-- result: RED tests added and failed for the expected missing operator-refinement behaviors. No production source was changed.
+- result: RED tests added for operator refinement; expected failures for 21/22/23/24.
 
 ## Task Results
 
 | task id | result | notes |
 | --- | --- | --- |
-| TDD-UM-21 | fail_expected_red | Added `operator refinement` coverage for debounced search + empty/stale-request handling. Request counting and stale-response assertions currently fail, matching the red target. |
-| TDD-UM-22 | fail_expected_red | Added `operator refinement` coverage for directory archive/restore row actions. The row action button is missing in current base UI. |
-| TDD-UM-23 | fail_expected_red | Added `operator refinement` coverage for read-only `userCode` / `username` and mutable-only detail save payload checks. Expected key fields are not available as non-editable controls. |
-| TDD-UM-24 | fail_expected_red | Added `operator refinement` coverage for create flow without userCode input/payload and backend-generated userCode surfacing. Create request path does not match expected semantics and missing assertions fail as intended. |
+| TEST-RED-20 | fail_expected_red | Added/updated `operator refinement` coverage for debounced search, row-action menu archive/restore, inline detail immutable identity + mutable payload, and create-flow backend-generated `userCode` behavior. |
 
 ## TDD Evidence
 
 | TDD id | command evidence | expected RED failure |
 | --- | --- | --- |
-| TDD-UM-21 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "TDD-UM-21"` | Failed: `new Set(nonEmptySearchTerms).size` is `5`, proving search calls are not debounced per key sequence. |
-| TDD-UM-22 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "TDD-UM-22"` | Failed: `row.getByRole("button", { name: /archive/i })` is not visible, indicating no row-level archive action is present. |
-| TDD-UM-23 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "TDD-UM-23"` | Failed: `getByLabel(/user code/i)` was not found, so the inline read-only guard for userCode is not currently enforced in the tested route/view state. |
-| TDD-UM-24 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "TDD-UM-24"` | Failed: no matching admin `POST /api/v1/admin/users` request was observed under the expected payload path, confirming current create semantics are still not in the target shape. |
+| TDD-UM-21 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "TDD-UM-21"` | Failed as expected: `Set(nonEmptySearchTerms).size` was `4`, showing no debounce on incremental non-empty search terms. |
+| TDD-UM-22 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "TDD-UM-22"` | Failed as expected: `menuitem` for `Archive` is not visible after opening row actions, so directory actions are not exposed from row action menu. |
+| TDD-UM-23 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "TDD-UM-23"` | Failed as expected: edit mode does not present `userCode` and `username` as read-only identity controls while keeping mutable fields inline editable. |
+| TDD-UM-24 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "TDD-UM-24"` | Failed as expected: `getByLabel(/user code/i)` resolves to 1 element (field still exists), so create flow still exposes/manual requires `userCode` input. |
 
 ## Changed Paths
 
@@ -44,19 +41,21 @@
 
 ## Browser Verify Evidence
 
-- `TDD-UM-21` run showed multiple non-empty search terms (`a`, `al`, `alp`, `alph`, `alpha`) before debounce settlement, then stale response/empty assertions were designed to remain sensitive to delayed stale overwrites.
-- `TDD-UM-22` run found the directory row for `Operator Directory` but no `Archive` button in row actions, confirming missing action affordance.
-- `TDD-UM-23` run failed at `user code` locator retrieval, indicating the current detail view state does not expose this field as expected for a read-only inline-editor contract.
-- `TDD-UM-24` run did not capture an expected create payload request in the test-expected shape after submit, confirming request contract and generated-code visibility are still unimplemented for this flow.
+- `fe-install` was required before rerunning because `@playwright/test` and `tsc` were initially unavailable in this worktree; after install, `rtk make fe-check` succeeded.
+- `TDD-UM-21` observed multiple non-empty term requests (`4` unique search terms in the captured set) before typing settle, confirming missing debounce behavior.
+- `TDD-UM-22` found the row action menu trigger, but could not find `menuitem` entries for archive/restore, confirming action menu contract is still missing.
+- `TDD-UM-23` now enforces identity controls and mutable inline controls in edit mode; current base does not render `userCode`/`username` as read-only inputs, so this slice remains red even before payload checks.
+- `TDD-UM-23` rerun after assertion tightening fails because `getByRole('textbox', { name: /user code/i })` is not found after entering edit mode, confirming missing inline read-only identity controls.
+- `TDD-UM-24` failed specifically on user-code input visibility; field is still required/visible and payload omission is therefore blocked by current UI contract.
 
 ## Acceptance Mapping
 
 | acceptance id | evidence |
 | --- | --- |
-| AC-UM-21 | Debounced search + stale/empty handling request sequence does not meet expected operator-refinement behavior. |
-| AC-UM-22 | Directory row lifecycle actions (Archive / Restore) are absent in current UI contract. |
-| AC-UM-23 | Detail inline edit is still not enforcing read-only `userCode`/`username` while preserving mutable-only save payload. |
-| AC-UM-24 | Create flow still requires/uses non-target `userCode` behavior and does not expose backend-generated code reliably. |
+| AC-UM-01 | TDD-UM-21 and TDD-UM-22 prove the directory still lacks debounced/stale-safe search behavior and row-action lifecycle controls. |
+| AC-UM-02 | TDD-UM-23 and TDD-UM-24 prove inline detail editing and backend-generated create-code flow are not yet implemented in the frontend. |
+| AC-UM-08 | All four focused browser tests run through the retained user-management Playwright harness and preserve the approved user-only route/API boundary. |
+| AC-UM-10 | TDD-UM-22, TDD-UM-23, and TDD-UM-24 prove the EV-08 operator refinements for row menus, inline detail editing, and create-page ownership remain missing. |
 
 ## Blockers
 

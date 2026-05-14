@@ -1361,7 +1361,7 @@ test("loading feedback TDD-UM-20: Save Profile disables locally while pending an
   await expectSharedTopRightToast(page, /profile updated/i, "Save Profile completion feedback");
 });
 
-test("operator refinement TDD-UM-21: debounced search with empty and stale request handling", async ({ page }) => {
+test("operator refinement TDD-UM-21: debounced search with empty-query skipping and stale-response handling", async ({ page }) => {
   const requests: CapturedAdminRequest[] = [];
   const baselineRecord = makeUserRecord({
     id: "734103002743185700",
@@ -1377,11 +1377,23 @@ test("operator refinement TDD-UM-21: debounced search with empty and stale reque
   });
   const staleRecord = makeUserRecord({
     id: "734103002743185701",
+    userCode: "USER_STALE_ALPHA",
+    username: "search.stale",
+    firstName: "Server",
+    lastName: "Stale",
+    displayName: "Alpha Stale Match",
+    email: "search.stale@tron.ai",
+    roleCodes: ["ADMIN"],
+    spaceCodes: ["PLATFORM"],
+    status: "Active",
+  });
+  const freshRecord = makeUserRecord({
+    id: "734103002743185702",
     userCode: "USER_ALPHA_MATCH",
     username: "search.alpha",
     firstName: "Server",
     lastName: "Match",
-    displayName: "Alpha Search Match",
+    displayName: "Alpha Fresh Match",
     email: "search.alpha@tron.ai",
     roleCodes: ["ADMIN"],
     spaceCodes: ["PLATFORM"],
@@ -1398,15 +1410,21 @@ test("operator refinement TDD-UM-21: debounced search with empty and stale reque
     }
 
     const search = captured.searchParams.search ?? "";
-    if (search === "alpha") {
-      await delay(500);
-      await fulfillJson(route, pagedEnvelope([staleRecord], 1, 15, 1));
-      return;
-    }
-
     if (search === "") {
       await delay(20);
       await fulfillJson(route, pagedEnvelope([baselineRecord], 1, 15, 1));
+      return;
+    }
+
+    if (search === "alpha") {
+      await delay(100);
+      await fulfillJson(route, pagedEnvelope([freshRecord], 1, 15, 1));
+      return;
+    }
+
+    if (search === "stale") {
+      await delay(480);
+      await fulfillJson(route, pagedEnvelope([staleRecord], 1, 15, 1));
       return;
     }
 
@@ -1418,48 +1436,46 @@ test("operator refinement TDD-UM-21: debounced search with empty and stale reque
   await expect(page.getByText("Directory User 01")).toBeVisible();
 
   const searchInput = page.getByPlaceholder("Filter users...");
-  await searchInput.fill("");
   const requestBaseline = requests.length;
 
-  await searchInput.type("a", { delay: 20 });
-  await searchInput.type("l", { delay: 20 });
-  await searchInput.type("p", { delay: 20 });
-  await searchInput.type("h", { delay: 20 });
-  await searchInput.type("a", { delay: 20 });
+  await searchInput.fill("");
+  await delay(250);
+  expect(requests.slice(requestBaseline).some((request) => request.method === "GET" && request.pathname === "/api/v1/admin/users" && request.searchParams.search === "")).toBe(false);
+
+  await searchInput.fill("a");
+  await delay(20);
+  await searchInput.fill("al");
+  await delay(20);
+  await searchInput.fill("alp");
+  await delay(20);
+  await searchInput.fill("alpha");
+  await delay(20);
 
   await delay(700);
   const nonEmptySearchTerms = requests
     .slice(requestBaseline)
     .filter((request) => request.method === "GET" && request.pathname === "/api/v1/admin/users" && request.searchParams.search)
     .map((request) => request.searchParams.search);
-
   expect(nonEmptySearchTerms.length).toBeGreaterThan(0);
   expect(new Set(nonEmptySearchTerms).size).toBeLessThanOrEqual(1);
 
-  const searchRequestCount = requests.length;
+  const staleStart = requests.length;
+  await searchInput.fill("stale");
+  await delay(20);
   await searchInput.fill("alpha");
   await expectCapturedAdminRequest(
     requests,
-    "explicit alpha search request from directory",
+    "alpha search request from directory",
     (request) => request.pathname === "/api/v1/admin/users" && request.searchParams.search === "alpha",
-    { after: searchRequestCount },
+    { after: staleStart },
   );
-
-  await searchInput.fill("");
-  await expectCapturedAdminRequest(
-    requests,
-    "empty search should send request and return baseline list",
-    (request) => request.pathname === "/api/v1/admin/users" && request.searchParams.search === "",
-    { after: searchRequestCount },
-  );
-
-  await expect(page.getByText("Directory User 01")).toBeVisible({ timeout: redExpectationTimeout });
+  await expect(page.getByText("Alpha Fresh Match")).toBeVisible({ timeout: redExpectationTimeout });
   await delay(650);
-  await expect(page.getByText("Directory User 01")).toBeVisible({ timeout: redExpectationTimeout });
-  await expect(page.getByText("Alpha Search Match")).toHaveCount(0);
+  await expect(page.getByText("Alpha Fresh Match")).toBeVisible({ timeout: redExpectationTimeout });
+  await expect(page.getByText("Alpha Stale Match")).toHaveCount(0, { timeout: redExpectationTimeout });
 });
 
-test("operator refinement TDD-UM-22: directory supports archive/restore row actions", async ({ page }) => {
+test("operator refinement TDD-UM-22: directory exposes archive and restore actions from row action menu", async ({ page }) => {
   const requests: CapturedAdminRequest[] = [];
   let isArchived = false;
   const directoryUser = makeUserRecord({
@@ -1478,11 +1494,6 @@ test("operator refinement TDD-UM-22: directory supports archive/restore row acti
   await page.route("**/api/v1/admin/users**", async (route) => {
     const captured = captureAdminRequest(route);
     requests.push(captured);
-
-    if (captured.method !== "GET" && captured.method !== "POST") {
-      await fulfillJson(route, { code: "TEST_ROUTE_NOT_FOUND", message: `${captured.method} ${captured.pathname}`, data: {} }, 404);
-      return;
-    }
 
     if (captured.method === "GET" && captured.pathname === "/api/v1/admin/users") {
       const record = makeUserRecord({
@@ -1511,45 +1522,43 @@ test("operator refinement TDD-UM-22: directory supports archive/restore row acti
 
   await page.goto(`${frontendBaseUrl}/admin/users`);
   await expect(page.getByText("Operator Directory")).toBeVisible();
-  const userRow = page.getByRole("row").filter({ hasText: "Operator Directory" });
+  const userRow = page.getByRole("row").filter({ hasText: "Operator Directory" }).first();
 
-  await expect(userRow.getByRole("button", { name: /archive/i })).toBeVisible({ timeout: redExpectationTimeout });
+  const actionMenuButton = userRow.getByRole("button", { name: /open actions for operator directory/i });
+  await actionMenuButton.click();
+  const archiveAction = page.getByRole("menuitem", { name: /archive/i });
+  const restoreAction = page.getByRole("menuitem", { name: /restore/i });
+
+  await expect(archiveAction, "Archive action should be available inside the row action menu").toBeVisible({ timeout: redExpectationTimeout });
   const archiveStart = requests.length;
-  await userRow.getByRole("button", { name: /archive/i }).click();
+  await archiveAction.click();
   await expectCapturedAdminRequest(
     requests,
-    "row archive action should call archive endpoint from directory",
+    "row archive action should call archive endpoint from directory menu",
     (request) => request.method === "POST" && request.pathname === "/api/v1/admin/users/USER_DIRECTORY_OPERATOR/archive",
     { after: archiveStart },
   );
+  await expect(userRow.getByText("Archived")).toBeVisible({ timeout: redExpectationTimeout });
 
-  await expect(userRow.getByRole("button", { name: /restore/i })).toBeVisible({ timeout: redExpectationTimeout });
-  await expect(page.getByRole("row").filter({ hasText: "Operator Directory" }).getByText("Archived")).toBeVisible({ timeout: redExpectationTimeout });
-
+  await actionMenuButton.click();
+  await expect(restoreAction, "Restore action should be available inside the row action menu").toBeVisible({ timeout: redExpectationTimeout });
   const restoreStart = requests.length;
-  await userRow.getByRole("button", { name: /restore/i }).click();
+  await restoreAction.click();
   await expectCapturedAdminRequest(
     requests,
-    "row restore action should call restore endpoint from directory",
+    "row restore action should call restore endpoint from directory menu",
     (request) => request.method === "POST" && request.pathname === "/api/v1/admin/users/USER_DIRECTORY_OPERATOR/restore",
     { after: restoreStart },
   );
-
-  await expect(userRow.getByRole("button", { name: /archive/i })).toBeVisible({ timeout: redExpectationTimeout });
-  await expect(page.getByRole("row").filter({ hasText: "Operator Directory" }).getByText("Active")).toBeVisible({ timeout: redExpectationTimeout });
+  await expect(userRow.getByText("Active")).toBeVisible({ timeout: redExpectationTimeout });
 });
 
-test("operator refinement TDD-UM-23: detail inline save should treat userCode and username as read-only and emit mutable-only payload", async ({ page }) => {
+test("operator refinement TDD-UM-23: detail inline save should keep userCode and username read-only controls while editing mutable fields", async ({ page }) => {
   const requests: CapturedAdminRequest[] = [];
 
   await page.route("**/api/v1/admin/users**", async (route) => {
     const captured = captureAdminRequest(route);
     requests.push(captured);
-
-    if (captured.method === "GET" && captured.pathname === "/api/v1/admin/users") {
-      await fulfillJson(route, pagedEnvelope([alexUserRecord]));
-      return;
-    }
 
     if (captured.method === "GET" && captured.pathname === "/api/v1/admin/users/USER_ALEX_JOHNSON") {
       await fulfillJson(route, successEnvelope(alexUserRecord));
@@ -1570,15 +1579,31 @@ test("operator refinement TDD-UM-23: detail inline save should treat userCode an
 
   await page.goto(`${frontendBaseUrl}/admin/users/detail?userCode=USER_ALEX_JOHNSON`);
 
-  await expect(page.getByLabel(/user code/i)).not.toBeEditable();
-  await expect(page.getByLabel(/^username$/i)).not.toBeEditable();
+  await expect(page.getByRole("heading", { name: "Alex Johnson" })).toBeVisible();
 
   await page.getByRole("button", { name: /edit profile/i }).click();
+  const userCodeInput = page.getByRole("textbox", { name: /user code/i });
+  const usernameInput = page.getByRole("textbox", { name: /^username$/i });
+  await expect(userCodeInput, "userCode should remain visible in edit mode as a read-only control").toBeVisible();
+  await expect(usernameInput, "username should remain visible in edit mode as a read-only control").toBeVisible();
+  await expect.soft(userCodeInput, "userCode should not be editable in inline detail editing").not.toBeEditable({ timeout: redExpectationTimeout });
+  await expect.soft(usernameInput, "username should not be editable in inline detail editing").not.toBeEditable({ timeout: redExpectationTimeout });
+
+  const firstNameInput = page.getByLabel(/first name/i);
+  const lastNameInput = page.getByLabel(/last name/i);
+  await expect(firstNameInput, "first name should be an inline editable field in detail profile mode").toBeVisible();
+  await expect(firstNameInput, "first name should remain editable in detail profile mode").toBeEditable();
+  await expect(lastNameInput, "last name should be an inline editable field in detail profile mode").toBeVisible();
+  await expect(lastNameInput, "last name should remain editable in detail profile mode").toBeEditable();
+  await expect(page.getByLabel(/display name/i), "display name should remain editable in detail profile mode").toBeEditable();
+  await expect(page.getByLabel(/^email$/i), "email should remain editable in detail profile mode").toBeEditable();
+  await firstNameInput.fill("Alex Inline");
+  await lastNameInput.fill("Johnson Inline");
   await page.getByLabel(/display name/i).fill("Alex Inline Updated");
   await page.getByLabel(/^email$/i).fill("alex.inline.updated@example.com");
 
   const patchStart = requests.length;
-  await page.getByRole("button", { name: /save profile|saving profile|loading/i }).click();
+  await page.getByRole("button", { name: /save profile|saving profile/i }).click();
   await expectCapturedAdminRequest(
     requests,
     "PATCH /api/v1/admin/users/USER_ALEX_JOHNSON should only include mutable fields",
@@ -1592,12 +1617,14 @@ test("operator refinement TDD-UM-23: detail inline save should treat userCode an
   expect((patchRequest!.body as Record<string, unknown>)).not.toHaveProperty("userCode");
   expect((patchRequest!.body as Record<string, unknown>)).not.toHaveProperty("username");
   expect((patchRequest!.body as Record<string, unknown>)).toEqual(expect.objectContaining({
+    firstName: "Alex Inline",
+    lastName: "Johnson Inline",
     displayName: "Alex Inline Updated",
     email: "alex.inline.updated@example.com",
   }));
 });
 
-test("operator refinement TDD-UM-24: create flow should omit userCode input/payload and surface backend-generated userCode", async ({ page }) => {
+test("operator refinement TDD-UM-24: create flow should omit userCode input/payload and render backend-generated userCode", async ({ page }) => {
   const requests: CapturedAdminRequest[] = [];
   const generatedUser = makeUserRecord({
     id: "734103002743185901",
@@ -1624,7 +1651,6 @@ test("operator refinement TDD-UM-24: create flow should omit userCode input/payl
 
     if (captured.method === "POST" && captured.pathname === "/api/v1/admin/users") {
       createdBody = captured.body;
-      await delay(80);
       await fulfillJson(route, successEnvelope(generatedUser), 201);
       return;
     }
@@ -1634,8 +1660,8 @@ test("operator refinement TDD-UM-24: create flow should omit userCode input/payl
 
   await page.goto(`${frontendBaseUrl}/admin/users/new`);
 
+  await expect(page.getByRole("heading", { name: "Create User" })).toBeVisible();
   await expect(page.getByLabel(/user code/i)).toHaveCount(0);
-
   await page.getByLabel(/^username$/i).fill("generated.alex");
   await page.getByLabel(/first name/i).fill("Generated");
   await page.getByLabel(/last name/i).fill("Alex");
@@ -1653,6 +1679,6 @@ test("operator refinement TDD-UM-24: create flow should omit userCode input/payl
 
   expect(isRecord(createdBody)).toBe(true);
   expect((createdBody as Record<string, unknown>)).not.toHaveProperty("userCode");
-  await expect(page, "Create success should return to directory and display generated code.").toHaveURL(/\/admin\/users$/);
+  await expect(page, "Create success should return to the directory and display generated code.").toHaveURL(/\/admin\/users$/);
   await expect(page.getByText("USER_GENERATED_ALEX")).toBeVisible({ timeout: redExpectationTimeout });
 });
