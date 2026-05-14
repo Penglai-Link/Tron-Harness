@@ -17,7 +17,8 @@ Evolution alignment:
 - retained_decisions: selected custom MVP scope, AC-UM-01 through AC-UM-08, no API permission enforcement, no invitation email delivery, backend-generated temporary password reset
 - superseded_shape: the broad `TDD-UM-08` browser smoke is retained for model/route alignment but superseded for search/pagination backend requests, Export download, Add User submit, Reset API call, and visible Copy feedback
 - consistency_refactor_shape: `TDD-UM-14..18` add backend statistic/list consistency and frontend statistic/create-layout evidence.
-- pause_resume_decision: prior worker branches are integrated; new dispatch must use new Lite Spec worktrees and preserve existing evidence as retained but incomplete for evolved interactions
+- feedback_loading_shape: `TDD-UM-19..20` evaluate user-management migration to the shared top-right toast primitive and pending loading states for Export/Save-style actions.
+- pause_resume_decision: prior worker branches are integrated; EV-07 dispatch is approved for autonomous RED/GREEN/VERIFY/REVIEW execution
 
 ## Scope Decision
 
@@ -60,6 +61,8 @@ Minimum recommended TDD boundary:
 - TDD-UM-16: frontend statistic cards call the four statistic APIs and render `data.count`, not `users.records` aggregates.
 - TDD-UM-17: frontend User Directory shows display name only in `User`, email/phone in `Contact`, and `Space Assignments` copy.
 - TDD-UM-18: frontend Add User navigates to `/admin/users/new`, where `CreateUserPage` owns `POST /api/v1/admin/users` submit behavior.
+- TDD-UM-19: frontend user-management feedback uses the shared `useToast` API and top-right Toast/Snackbar surface.
+- TDD-UM-20: frontend Export and Save-style actions expose loading state while pending and resolve through shared toast success/error feedback.
 
 ## Included Test Layers
 
@@ -112,6 +115,8 @@ Minimum recommended TDD boundary:
 | AC-UM-09 | integration/api-contract/browser-runtime | Dedicated statistics API counts and frontend card rendering must be database-backed. | yes | RED proves missing statistic endpoints or current-page-derived card values; GREEN proves backend counts and browser network/card assertions. | `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_statistics`; `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | One endpoint per card; `data.count` is canonical. |
 | AC-UM-10 | frontend-component/browser-runtime | Directory table layout and create sub-page routing are visible admin workflows. | yes | RED proves missing Contact column or missing `/admin/users/new`; GREEN proves route, submit, and visible feedback. | `rtk make fe-check`; `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | Add User does not open an inline form on the directory page. |
 | AC-UM-11 | integration/database/api-contract | List/search totals and seed data must be truthful database counts. | yes | RED proves archived/search/includeArchived totals or fixture counts are wrong; GREEN proves filtered totals before pagination. | `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_statistics`; `rtk cargo test --manifest-path tron-backend/Cargo.toml user_management_list_detail` | Shared repository semantics drive list and statistics. |
+| AC-UM-12 | frontend-component/browser-runtime | Feedback must use the master-delivered shared `useToast` primitive instead of local notice state. | yes | RED proves local notices or non-toast feedback remain; GREEN proves shared top-right toast feedback for user-management actions. | `rtk make fe-check`; `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "toast feedback"` | Do not modify `shared-ui-feedback`; consume it. |
+| AC-UM-13 | browser-runtime/frontend-component | Export and Save-style actions must communicate pending work before completion. | yes | RED proves no pending state for Export/Create/Save/Profile mutations; GREEN proves loading state plus toast completion. | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "loading feedback"` | Loading scope is action-local, not a page-blocking spinner requirement. |
 
 ## TDD Cycle Matrix
 
@@ -137,6 +142,8 @@ Define the intended TDD cycles before task breakdown. Phase 1 does not need fina
 | TDD-UM-16 | AC-UM-09 | browser-runtime/api-adapter | Add browser tests that intercept the four statistic APIs and prove each card renders `data.count` independent of current page records. | Failure proves dashboard cards still derive from `users.records`. | `npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "statistics cards"` | Same focused smoke passes with four GET requests and card assertions. | blocked_until_tests_created |
 | TDD-UM-17 | AC-UM-10 | browser-runtime/frontend-component | Add browser tests for User fullname-only rendering, Contact email/phone rendering, and `Space Assignments` label. | Failure proves directory table layout or card copy still uses the old shape. | `npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "directory columns"` | Same focused smoke passes with visible column/copy assertions. | blocked_until_tests_created |
 | TDD-UM-18 | AC-UM-10, AC-UM-02 | browser-runtime/api-adapter | Add browser tests for Add User navigation to `/admin/users/new`, create submit, uniform response handling, and visible success feedback. | Failure proves create behavior remains inline or route/page registration is missing. | `npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "create user page"` | Same focused smoke passes with route, POST payload, and visible feedback assertions. | blocked_until_tests_created |
+| TDD-UM-19 | AC-UM-12 | frontend-component/browser-runtime | Add source/browser tests proving Users, Create User, and User Details feedback paths call shared `useToast` and render top-right toast feedback. | Failure proves local `setNotice`, inline status boxes, or `sr-only` only feedback remain as the operator-facing feedback path. | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "toast feedback"` | Same focused smoke passes with shared toast role/status, top-right placement, and auto-dismiss evidence. | ready |
+| TDD-UM-20 | AC-UM-13, AC-UM-12 | browser-runtime/frontend-component | Add browser tests for Export, Create User, Save Profile, role/space mutation, archive/restore, reset confirmation, and Copy loading/completion feedback. | Failure proves long-running actions can be clicked without visible pending state or complete without shared toast feedback. | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "loading feedback"` | Same focused smoke passes with disabled/loading buttons and shared toast success/error assertions. | ready |
 
 ## Regression Command Candidates
 
@@ -167,6 +174,8 @@ Define the intended TDD cycles before task breakdown. Phase 1 does not need fina
 | AC-UM-09 | TDD-UM-14, TDD-UM-16 | Failing backend/API or browser tests for missing statistic endpoints and current-page-derived cards. | Passing backend count tests and browser statistic-card network/render evidence. |
 | AC-UM-10 | TDD-UM-17, TDD-UM-18 | Failing browser tests for old directory columns or missing create sub-page route. | Passing browser evidence for directory layout, Add User navigation, and create submit. |
 | AC-UM-11 | TDD-UM-15 | Failing backend tests for archived/list/includeArchived totals or insufficient deterministic fixtures. | Passing backend evidence for filtered database totals and expanded seed data. |
+| AC-UM-12 | TDD-UM-19 | Failing source/browser tests for local notice state or non-toast feedback. | Passing source/browser evidence that user-management actions use shared top-right toast feedback. |
+| AC-UM-13 | TDD-UM-20 | Failing browser tests for missing pending state on Export or Save-style actions. | Passing browser evidence for action-local loading state and shared toast completion. |
 
 ## Open Decisions
 

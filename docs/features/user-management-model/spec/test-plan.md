@@ -4,8 +4,10 @@
 
 - status: approved_with_defaults
 - approved_by: clouds3n
-- approved_at: 2026-05-13
-- evolution_reason: user supplied Workflow B consistency refactor plan covering backend statistics, list/search semantics, seed data, frontend cards, directory layout, and create sub-page routing.
+- approved_at: 2026-05-14
+- previous_approval: approved_with_defaults by clouds3n on 2026-05-13 for EV-04/EV-05 consistency refactor scope.
+- evolution_reason: EV-07 reopens the test plan after `shared-ui-feedback` landed on `master`; user-management now must evaluate shared toast feedback and action-local loading behavior before task breakdown.
+- approval_note: user approved continuing autonomously until completion on 2026-05-14.
 
 Valid statuses: `waiting_human_decision`, `approved`, `approved_with_defaults`.
 
@@ -15,7 +17,7 @@ Use `approved` or `approved_with_defaults` only after the user reviews this exac
 
 This plan continues the approved custom scope from `spec/test-scope.md` and maps each acceptance criterion to executable TDD cycles. The backend already has runtime/bootstrap, shared Snowflake capability, and initial user-management APIs, so evolution RED cycles start from frontend interaction gaps that escaped the first browser smoke.
 
-Execution order is strict: RED tests first in worker test scope, then GREEN implementation in backend/frontend scopes, then verify/review. Password-security and boundary cycles are isolated to prevent mixed failure causes. Evolution cycles `TDD-UM-09..12` supersede the broad frontend part of `TDD-UM-08` for the affected interactions only; consistency refactor cycles `TDD-UM-14..18` supersede current-page-derived dashboard counts, inline create ownership, and loose directory layout. Earlier backend/domain evidence remains retained.
+Execution order is strict: RED tests first in worker test scope, then GREEN implementation in backend/frontend scopes, then verify/review. Password-security and boundary cycles are isolated to prevent mixed failure causes. Evolution cycles `TDD-UM-09..12` supersede the broad frontend part of `TDD-UM-08` for the affected interactions only; consistency refactor cycles `TDD-UM-14..18` supersede current-page-derived dashboard counts, inline create ownership, and loose directory layout. EV-07 cycles `TDD-UM-19..20` supersede page-local feedback and incomplete pending-state evidence only. Earlier backend/domain evidence remains retained.
 
 ## TDD Cycle Table
 
@@ -37,6 +39,8 @@ Short index only. Group cycles by scenario category. The only identifier in thes
 | TDD-UM-16 | AC-UM-09 | AC-UM-08 | frontend-integration | Statistic cards call the four statistic APIs and render `data.count`, not aggregates from `users.records`. | browser-runtime/api-adapter | Runtime assertions observe four statistic GETs and independent card values. | draft |
 | TDD-UM-17 | AC-UM-10 | AC-UM-08 | frontend-integration | Directory table renders display name only in `User`, email/phone in `Contact`, and `Space Assignments` card copy. | browser-runtime/frontend-component | Runtime assertions observe the revised visible table/card layout. | draft |
 | TDD-UM-18 | AC-UM-10 | AC-UM-02, AC-UM-08 | frontend-integration | Add User navigates to `/admin/users/new`; CreateUserPage owns form submit to `POST /api/v1/admin/users`. | browser-runtime/api-adapter | Runtime assertions observe route transition, create request payload, and visible success feedback. | draft |
+| TDD-UM-19 | AC-UM-12 | AC-UM-08 | frontend-integration | User-management feedback paths consume shared `useToast` and render top-right toast feedback instead of page-local notices. | frontend-component/browser-runtime | Source/runtime assertions observe shared toast calls and visible top-right feedback on Users, Create User, and User Detail actions. | ready |
+| TDD-UM-20 | AC-UM-13 | AC-UM-12, AC-UM-08 | frontend-integration | Export and Save-style actions expose action-local pending state and resolve through shared toast success/error feedback. | browser-runtime/frontend-component | Runtime assertions observe disabled/loading controls while pending and shared toast completion feedback. | ready |
 
 ### Exception Scenarios
 
@@ -201,6 +205,29 @@ Short index only. Group cycles by scenario category. The only identifier in thes
 - GREEN/VERIFY evidence: same command passes with route, request payload, response handling, and visible feedback assertions.
 - Status: draft
 
+### TDD-UM-19 Details
+
+- Assertions: `/admin/users`, `/admin/users/new`, and `/admin/users/detail` import and call shared `useToast`; success/error/info feedback appears in the top-right shared toast viewport with accessible status semantics and auto-dismiss behavior inherited from `shared-ui-feedback`.
+- Test data: action responses for export, create, save, assignment replacement, archive/restore, reset, and copy feedback with distinct messages that cannot be satisfied by hidden live-region text alone.
+- RED proof: `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "toast feedback"` fails because user-management still relies on local notice state, inline status boxes, or `sr-only` only feedback.
+- GREEN/VERIFY evidence: same focused smoke passes with source/runtime evidence for shared `useToast`, visible top-right toast feedback, and no second toast wrapper in user-management.
+- Status: ready
+
+### TDD-UM-20 Details
+
+- Assertions: Export, Create User submit, Save Profile, role replacement, space replacement, archive/restore, reset confirmation, and Copy expose action-local loading or disabled state while pending and complete through shared toast success/error feedback.
+- Test data: delayed intercepted API/download responses so the test can observe the pending state before resolution and then assert the completion toast.
+- RED proof: `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "loading feedback"` fails because long-running actions can be clicked without visible pending state or complete without shared toast feedback.
+- GREEN/VERIFY evidence: same focused smoke passes with disabled/loading button assertions, shared toast completion assertions, and no page-blocking spinner requirement.
+- Status: ready
+
+## Test Layers
+
+- Unit/integration/database/API contract coverage remains as defined for `TDD-UM-01..07` and `TDD-UM-14..15`.
+- Frontend compile and adapter coverage remains `rtk make fe-check`.
+- Browser runtime coverage now includes focused EV-07 greps for toast feedback and loading feedback in addition to retained user-management smoke evidence.
+- Manual review verifies user-management consumes `shared-ui-feedback` without changing the shared primitive.
+
 ## Unit Test Plan
 
 Unit coverage focuses on lifecycle invariants, role/space validation, password reset policy helpers, and DTO serialization helpers for stable code fields and Snowflake ID string boundaries.
@@ -215,11 +242,11 @@ Database coverage includes migration application, schema constraints/indexes for
 
 ## Frontend Test Plan
 
-Frontend coverage includes DTO/adapters for user-only boundary, page-model updates for directory/detail flows, statistic-card hooks, status filtering behavior for `Active` and `Archived`, parameterized list requests, Add User create sub-page flow, CSV export, backend reset integration, and visible operator feedback.
+Frontend coverage includes DTO/adapters for user-only boundary, page-model updates for directory/detail flows, statistic-card hooks, status filtering behavior for `Active` and `Archived`, parameterized list requests, Add User create sub-page flow, CSV export, backend reset integration, shared `useToast` feedback, and action-local loading states.
 
 ## Browser Acceptance Plan
 
-Run smoke flow on a real app runtime: open `/admin/users`, verify statistic API calls and card counts, filter/search, paginate, export current results, navigate to `/admin/users/new`, create a user, open detail by `userCode`, trigger password reset through the backend API, copy the temporary password with visible feedback, close the result dialog, and verify the temporary password cannot be revealed again.
+Run smoke flow on a real app runtime: open `/admin/users`, verify statistic API calls and card counts, filter/search, paginate, export current results with loading and toast completion feedback, navigate to `/admin/users/new`, create a user with pending-state evidence, open detail by `userCode`, trigger password reset through the backend API, copy the temporary password with visible toast feedback, close the result dialog, and verify the temporary password cannot be revealed again.
 
 ## Security And Privacy Test Plan
 
@@ -243,8 +270,12 @@ Regression re-runs include backend focused user-management suites, frontend type
 | `rtk make be-test` | Backend Makefile-first regression gate. | After GREEN merges and before final review. | Backend tests pass through Makefile command. |
 | `rtk make fe-check` | Frontend typecheck/build regression. | After frontend adapter/page changes and before final review. | Typecheck/build pass. |
 | `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke` | Browser runtime smoke for user management journeys. | After frontend/backend integration is runnable. | Smoke journey passes with query-parameter, export, create, reset API, and visible feedback evidence. |
+| `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "toast feedback"` | Focused browser/source evidence for shared toast feedback migration. | EV-07 RED/GREEN/VERIFY. | RED proves local notice/non-toast feedback remains; GREEN proves shared top-right toast usage. |
+| `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "loading feedback"` | Focused browser evidence for Export and Save-style pending states. | EV-07 RED/GREEN/VERIFY. | RED proves missing action-local pending state; GREEN proves loading state plus shared toast completion. |
 
 ## Command Index
 
 - command: `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke`; purpose: browser runtime verification for evolved user-management interactions; cost: slow/browser; when: verify; rerun: review-if-stale or when VERIFY evidence is missing, failed, stale against changed frontend/API paths, or explicitly requested.
 - command: `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "consistency refactor"`; purpose: focused browser RED/GREEN checks for consistency refactor interactions; cost: slow/browser; when: red/green/verify; rerun: review-if-stale or when VERIFY evidence is missing, failed, stale against changed frontend/API paths, or explicitly requested.
+- command: `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "toast feedback"`; purpose: focused browser/source checks for EV-07 shared toast feedback migration; cost: slow/browser; when: red/green/verify; rerun: review-if-stale or when VERIFY evidence is missing, failed, stale against user-management feedback paths, shared toast exports, app provider wiring, or explicitly requested.
+- command: `rtk npm --prefix tron-frontend exec playwright -- test user-management-smoke --grep "loading feedback"`; purpose: focused browser checks for EV-07 action-local loading states and toast completion feedback; cost: slow/browser; when: red/green/verify; rerun: review-if-stale or when VERIFY evidence is missing, failed, stale against Export/Create/Save/detail mutation/reset/copy paths, or explicitly requested.

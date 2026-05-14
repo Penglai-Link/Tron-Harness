@@ -247,7 +247,7 @@ Factories should support:
 - Password reset event with `temporary_password_returned = 1`.
 - Archived user restored to active.
 
-## Database Validation Commands
+## Validation Commands
 
 | command | purpose | expected evidence |
 | --- | --- | --- |

@@ -11,6 +11,8 @@ This Phase 1 draft was revised from the user's confirmation items. The feature i
 
 Workflow B update on 2026-05-13 reopens the requirement/API/test-plan gate for the user-management consistency refactor. The change adds dedicated backend statistic APIs, aligns list/search query semantics with statistics, expands deterministic seed data, moves create behavior to `/admin/users/new`, and tightens directory table layout.
 
+EV-07 update on 2026-05-14 resumes feedback/loading evaluation after `master` delivered `shared-ui-feedback`. User Management must consume the completed shared `useToast`/`ToastProvider` contract from `docs/features/shared-ui-feedback` and must no longer rely on page-local inline or screen-reader-only notices for operator feedback.
+
 ## Feature Identity
 
 - feature_slug: user-management-model
@@ -26,6 +28,8 @@ Design the backend-ready model and API boundary for the Tron User Management mod
 The user management page owns:
 
 - User directory listing, filtering, pagination, export, and navigation to user detail.
+- Shared top-right Toast/Snackbar feedback for every user-management interaction that produces operator feedback.
+- Loading state for long-running Export and Save-style actions while their download or mutation is in progress.
 - Dashboard statistic cards backed by dedicated count APIs instead of the current page of directory records.
 - User creation and profile maintenance.
 - User logical deletion through `Archived` status.
@@ -124,6 +128,8 @@ User directory:
   - `Contact` column shows email and phone number.
   - Assignment card label is `Space Assignments`, not `Space Links`.
 - Add User button navigates to `/admin/users/new`; the directory page no longer owns the create form.
+- Export shows a loading state while the CSV artifact is being prepared and emits success or error feedback through the shared toast API.
+- Directory action feedback uses the shared toast API, not an inline page notice or `sr-only` only message.
 - Empty state: no matching users after filters.
 
 Create user:
@@ -132,6 +138,7 @@ Create user:
 - Data source: `POST /api/v1/admin/users`
 - Primary data: user code, username, first name, last name, display name, email, optional phone, role codes, and space codes.
 - Interactions: enter create form fields, submit create request, show visible success/error feedback, and navigate back to `/admin/users` after a successful create.
+- Create submit shows a loading state while the request is in progress and sends success/error feedback through the shared toast API.
 
 User detail:
 
@@ -139,6 +146,8 @@ User detail:
 - Data source: redesigned `GET /api/v1/admin/users/{userCode}`
 - Primary data: user profile fields, status, password state, role assignments, space assignments.
 - Interactions: update profile, replace role assignments, replace space assignments, archive/reactivate user, reset password.
+- Save Profile, role replacement, space replacement, archive/reactivate, reset confirmation, and copy feedback all send visible operator feedback through the shared toast API.
+- Save Profile, role replacement, space replacement, archive/reactivate, and reset confirmation show an action-local loading state while the backend mutation is in progress.
 - Password reset interaction:
   - The user detail page shows a reset-password action.
   - Clicking reset opens a confirmation dialog explaining that the backend will generate a temporary password and no email verification will be sent.
@@ -171,6 +180,10 @@ Out-of-scope admin pages:
 - IA-UM-14: `/admin/users` statistic cards call their four dedicated statistic APIs and render `data.count` values.
 - IA-UM-15: `/admin/users` directory renders display name only in `User`, email/phone in `Contact`, and `Space Assignments` copy.
 - IA-UM-16: `/admin/users/new` submits `POST /api/v1/admin/users`, handles the uniform response body, and returns visible success feedback.
+- IA-UM-17: user-management interaction feedback uses `useToast` from `shared-ui-feedback` and appears as a top-right auto-dismiss toast.
+- IA-UM-18: `/admin/users` Export shows a loading state until the CSV download is prepared and then emits shared toast success/error feedback.
+- IA-UM-19: `/admin/users/new` Create User shows a loading state while submitting and emits shared toast success/error feedback.
+- IA-UM-20: user detail Save Profile, role/space changes, archive/restore, reset confirmation, and Copy show action feedback through shared toast; mutation buttons expose a loading state while pending.
 
 ## Domain Model
 
@@ -269,6 +282,8 @@ Frontend modules currently involved:
 - `tron-frontend/src/domain/admin/pages/UsersPage.tsx`
 - `tron-frontend/src/domain/admin/pages/CreateUserPage.tsx`
 - `tron-frontend/src/domain/admin/pages/UserDetailsPage.tsx`
+- `tron-frontend/src/shared/ui/Toast.tsx`
+- `tron-frontend/src/shared/index.ts`
 - `tron-frontend/src/domain/admin/model/AdminModel.ts`
 - `tron-frontend/src/domain/admin/api/adminApi.ts`
 - `tron-frontend/src/domain/admin/hooks/useUserList.ts`
@@ -305,6 +320,7 @@ Shared boundary:
 - `docs/tech-stack.md` describes a Rust + React monorepo and backend-served production runtime.
 - `tron-backend/docs/tech-stack.md` says the backend is Rust with SQLite by default.
 - `tron-backend` now has initialized Rust backend scaffolding and shared Snowflake capability, but no user-management domain module, migrations, or user API handlers yet.
+- `master` contains the completed `shared-ui-feedback` feature with `ToastProvider`, `useToast`, top-right toast rendering, default auto-dismiss, and manual dismissal. User-management feedback/loading work must consume that canonical implementation.
 
 ## Feature Dependencies
 
@@ -312,6 +328,7 @@ Shared boundary:
 | --- | --- | --- | --- | --- | --- |
 | Common Snowflake ID Generation | common-snowflake-id | `docs/features/common-snowflake-id/spec/feature-spec.md` confirms shared `SnowflakeIdProvider`, YAML config policy, and decimal-string ID serialization contract. | `tron-backend/src/shared/id/*` provider + serialization policy + test adapter boundary. | User, assignment, and password-reset records must consume this provider for all internal 64-bit IDs and keep JSON-safe serialization. | dependency_confirmed |
 | Init Rust Backend | init-rust-backend | `docs/features/init-rust-backend/spec/feature-spec.md` confirms backend runtime skeleton, `ApiResponse<T>`, and Makefile backend command rails. | `tron-backend` app/runtime scaffolding, root `Makefile` `be-*` targets, shared response envelope. | User management handlers, repository wiring, and regression commands depend on the initialized backend runtime baseline. | dependency_confirmed |
+| Shared UI Feedback | shared-ui-feedback | `docs/features/shared-ui-feedback/spec/feature-spec.md` confirms a shared `ToastProvider`, `useToast` API, top-right placement, default auto-dismiss, and dismiss control. | `tron-frontend/src/shared/ui/Toast.tsx`, root provider mount, and shared export from `tron-frontend/src/shared/index.ts`. | User-management feedback and loading work must use the shared toast primitive rather than page-local notices. | dependency_confirmed_from_master |
 
 ## Open Decisions
 

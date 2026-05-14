@@ -17,7 +17,8 @@ Evolution alignment:
 - retained_decisions: AC-UM-01 through AC-UM-08, fixed MVP roles, `Active`/`Archived`, bcrypt, backend-generated temporary password, no API permission enforcement
 - superseded_shape: `TDD-UM-08` remains retained for frontend model/route alignment but does not satisfy evolved interaction evidence for search/pagination API requests, Export download, Add User submit, Reset API call, or visible Copy feedback
 - consistency_refactor_shape: `TDD-UM-14..18` supersede current-page-derived statistics, inline directory create form ownership, and loose directory table copy for the affected behaviors only.
-- pause_resume_decision: prior worktrees are integrated; new evidence must be produced by new RED/GREEN/VERIFY worktrees before final status can return to complete
+- feedback_loading_shape: `TDD-UM-19..20` add shared-toast feedback and long-running Export/Save loading evidence after `shared-ui-feedback` was delivered on `master`.
+- pause_resume_decision: prior worktrees are integrated; EV-07 acceptance and test-plan rows are approved for autonomous task breakdown and worker dispatch
 
 ## Acceptance Criteria Matrix
 
@@ -34,6 +35,8 @@ Evolution alignment:
 | AC-UM-09 | User dashboard statistic cards use dedicated backend statistic APIs, one endpoint per card, and each response returns `data.count` from persisted database state. | automated | TDD-UM-14 and TDD-UM-16: RED proves missing statistic endpoints or frontend current-page-derived cards; GREEN passes backend API count tests and browser network/card assertions. | must |
 | AC-UM-10 | User Directory renders display name only in `User`, renders email and phone in new `Contact`, renames `Space Links` to `Space Assignments`, and moves creation to `/admin/users/new`. | automated | TDD-UM-17 and TDD-UM-18: RED proves column/copy drift or missing create sub-page; GREEN passes browser route, column, and create-submit evidence. | must |
 | AC-UM-11 | List/search and seed data are consistent with statistic semantics: default list excludes archived users, `status=Archived` returns archived users, `includeArchived=true` returns all statuses, and pagination `total` is the filtered database count. | automated | TDD-UM-15: RED proves query totals or deterministic fixtures are inconsistent; GREEN passes backend list/search/seed tests. | must |
+| AC-UM-12 | User-management operator feedback uses the shared top-right Toast/Snackbar API from `shared-ui-feedback` instead of page-local inline notices or `sr-only` only status messages. | automated | TDD-UM-19: RED proves user-management feedback still uses local notice state or lacks top-right toast evidence; GREEN passes source and browser assertions for shared `useToast` feedback. | must |
+| AC-UM-13 | Long-running Export and Save-style user-management actions expose action-local loading state while pending and resolve with shared toast success or error feedback. | automated | TDD-UM-20: RED proves Export/Create/Save/Profile mutation actions do not expose pending state or toast completion; GREEN passes browser loading and feedback evidence. | must |
 
 ## Business Acceptance
 
@@ -45,6 +48,8 @@ Evolution alignment:
 - [ ] AC-UM-09 User statistic cards are independent backend counts and do not derive from the current page of `users.records`.
 - [ ] AC-UM-10 Add User navigates to `/admin/users/new`, where create form behavior lives.
 - [ ] AC-UM-11 Search, status, include-archived, and pagination totals are truthful database counts.
+- [ ] AC-UM-12 User-management interaction feedback appears through the shared top-right toast surface.
+- [ ] AC-UM-13 Export and Save-style user-management actions visibly indicate pending work and complete through toast feedback.
 - [ ] AC-UM-03 Admins can assign fixed roles to users through many-to-many role-code assignments.
 - [ ] AC-UM-04 Admins can assign spaces to users through many-to-many space-code assignments.
 - [ ] AC-UM-05 Users can be reset through backend-generated temporary passwords without email delivery or permission checks in MVP.
@@ -57,6 +62,8 @@ Evolution alignment:
 - [ ] AC-UM-09 `/admin/users` requests the four statistic endpoints and renders `data.count`.
 - [ ] AC-UM-10 `/admin/users` shows only fullname/display name in `User`, email and phone in `Contact`, and `Space Assignments` card copy.
 - [ ] AC-UM-10 `/admin/users/new` renders create fields, submits `POST /api/v1/admin/users`, shows visible submit feedback, and returns to the directory.
+- [ ] AC-UM-12 `/admin/users`, `/admin/users/new`, and `/admin/users/detail` use `useToast` for success/error/info feedback.
+- [ ] AC-UM-13 Export, Create User, Save Profile, role/space changes, archive/restore, and reset confirmation expose a loading state while pending.
 - [ ] AC-UM-01 `/admin/users/detail?userCode=<userCode>` loads detail by stable `userCode`.
 - [ ] AC-UM-02 User detail can edit profile fields and restore archived users to active.
 - [ ] AC-UM-03 User detail can replace fixed role-code assignments without embedding role permission matrix behavior.
@@ -64,7 +71,7 @@ Evolution alignment:
 - [ ] AC-UM-05 Password reset uses a confirmation dialog, calls the backend reset API, shows a one-time generated temporary-password result dialog, and Copy produces visible feedback.
 - [ ] AC-UM-08 Role Management and Space Management remain separate pages/modules.
 
-## Interaction Acceptance Checklist
+## Interaction Acceptance
 
 - IA-UM-01 | source: `/admin/users` search | acceptance: AC-UM-01, AC-UM-08 | red: TDD-UM-09 | status: ready
 - IA-UM-02 | source: `/admin/users` status filter | acceptance: AC-UM-01, AC-UM-08 | red: TDD-UM-09 | status: ready
@@ -82,6 +89,10 @@ Evolution alignment:
 - IA-UM-14 | source: `/admin/users` statistic cards | acceptance: AC-UM-09 | red: TDD-UM-16 | status: ready
 - IA-UM-15 | source: `/admin/users` directory columns and card copy | acceptance: AC-UM-10 | red: TDD-UM-17 | status: ready
 - IA-UM-16 | source: `/admin/users/new` create submit | acceptance: AC-UM-10, AC-UM-02 | red: TDD-UM-18 | status: ready
+- IA-UM-17 | source: user-management success/error/info feedback | acceptance: AC-UM-12 | red: TDD-UM-19 | status: ready
+- IA-UM-18 | source: `/admin/users` Export loading and completion feedback | acceptance: AC-UM-13, AC-UM-12 | red: TDD-UM-20 | status: ready
+- IA-UM-19 | source: `/admin/users/new` Create User loading and completion feedback | acceptance: AC-UM-13, AC-UM-12 | red: TDD-UM-20 | status: ready
+- IA-UM-20 | source: user detail Save Profile, role/space, archive/restore, reset, and Copy feedback | acceptance: AC-UM-13, AC-UM-12 | red: TDD-UM-20 | status: ready
 
 ## Backend Acceptance
 
@@ -120,6 +131,8 @@ Evolution alignment:
 - [ ] AC-UM-08 Frontend mocks and adapters use `id`, `userCode`, `username`, `firstName`, `lastName`, `displayName`, `roleCodes`, and `spaceCodes`.
 - [ ] AC-UM-08 Current invalid user statuses `Invited` and `Suspended` are removed or mapped out of MVP user mocks.
 - [ ] AC-UM-09 Frontend statistic hooks unwrap the backend uniform envelope and read `data.count`.
+- [ ] AC-UM-12 User-management pages import and call the shared `useToast` API from `tron-frontend/src/shared`.
+- [ ] AC-UM-12 User-management pages do not introduce a second Toast/Snackbar wrapper or a page-local replacement for `shared-ui-feedback`.
 
 ## Security And Privacy Acceptance
 
@@ -136,6 +149,7 @@ Evolution alignment:
 - [ ] AC-UM-08 User routes remain registered in `src/router/routes.tsx` and `src/router/pageRegistry.ts`.
 - [ ] AC-UM-08 Role and Space page routes remain independent from User Management.
 - [ ] AC-UM-01 Feature docs validation passes for the approved phase.
+- [ ] AC-UM-12 Shared UI feedback regression evidence from `docs/features/shared-ui-feedback` remains retained and is not modified by user-management work.
 
 ## Evidence Requirements
 
@@ -155,4 +169,6 @@ Evolution alignment:
 | Backend statistic API and list/search consistency evidence. | AC-UM-09, AC-UM-11 | TDD-UM-14, TDD-UM-15 | RED failure proving missing statistic routes or inconsistent filtered totals; GREEN passing count and list/search tests. |
 | Frontend statistic-card network evidence. | AC-UM-09 | TDD-UM-16 | RED failure proving cards derive from `users.records`; GREEN browser evidence for four statistic API requests and `data.count` rendering. |
 | Directory layout and create sub-page browser evidence. | AC-UM-10 | TDD-UM-17, TDD-UM-18 | RED failure proving User/Contact columns or `/admin/users/new` are missing; GREEN browser evidence for route, create submit, and visible feedback. |
-| Final review mapping each AC ID to changed paths, commands, worker worktrees, and residual risks. | AC-UM-01, AC-UM-02, AC-UM-03, AC-UM-04, AC-UM-05, AC-UM-06, AC-UM-07, AC-UM-08 | TDD-UM-01, TDD-UM-02, TDD-UM-03, TDD-UM-04, TDD-UM-05, TDD-UM-06, TDD-UM-07, TDD-UM-08 | GREEN regression evidence and final review evidence. |
+| Shared user-management toast feedback evidence. | AC-UM-12 | TDD-UM-19 | RED failure proving local notice state or non-toast feedback remains; GREEN source and browser evidence for shared top-right toast feedback. |
+| User-management loading state evidence. | AC-UM-13 | TDD-UM-20 | RED failure proving Export or Save-style actions lack pending state; GREEN browser evidence for loading state and toast completion. |
+| Final review mapping each AC ID to changed paths, commands, worker worktrees, and residual risks. | AC-UM-01 through AC-UM-13 | TDD-UM-01 through TDD-UM-20 | GREEN regression evidence and final review evidence. |
