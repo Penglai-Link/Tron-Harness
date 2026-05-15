@@ -18,6 +18,20 @@ const STORAGE_KEY = "tron.admin.role-matrix.v1";
 let frontendProcess: ChildProcessWithoutNullStreams | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
+const authenticatedSession = {
+  authMethod: "internal",
+  authenticated: true,
+  provider: null,
+  user: {
+    displayName: "Auth Operator",
+    email: "auth.operator@tron.ai",
+    roleCodes: ["ADMIN", "DEVELOPER"],
+    spaceCodes: ["PLATFORM", "DATA"],
+    status: "Active",
+    userCode: "USR-AUTH-0001",
+    username: "auth.operator",
+  },
+};
 
 const permissionDomainList = ["Workspace", "Models", "Tasks", "Memory", "Skills", "MCP"];
 type RoleCatalogRecord = {
@@ -215,6 +229,16 @@ function successEnvelope(data: unknown) {
   };
 }
 
+async function routeAuthenticatedSession(page: Page) {
+  await page.route("**/api/v1/auth/session", async (route) => {
+    await fulfillJson(route, successEnvelope(authenticatedSession));
+  });
+
+  await page.route("**/api/v1/auth/logout", async (route) => {
+    await fulfillJson(route, successEnvelope({ loggedOut: true }));
+  });
+}
+
 function pagedEnvelope(records: unknown[], current = 1, size = records.length, total = records.length) {
   return successEnvelope({
     current,
@@ -325,6 +349,8 @@ test("role matrix interactions stay real across the simplified matrix workspace"
   const roleReplacePayloads: ReplaceRolesPayload[] = [];
   let roleCatalog = createRoleCatalog();
   let nextCustomRoleId = 734300000000000100n;
+
+  await routeAuthenticatedSession(page);
 
   function persistRoleCatalog(payload: ReplaceRolesPayload) {
     roleCatalog = payload.roles.map((role) => ({

@@ -1,17 +1,18 @@
+mod common;
+
 use std::path::PathBuf;
 
-use axum::{
-    body::{Body, to_bytes},
-    http::{Method, Request, StatusCode},
-};
-use serde_json::{Value, json};
-use tower::ServiceExt;
-use tron_backend::{app::build_router, config::AppConfig};
+use axum::http::{Method, StatusCode};
+use serde_json::json;
+use tron_backend::config::AppConfig;
+
+use common::{app, app_with_config, authenticated_request, response_json};
 
 #[tokio::test]
 async fn list_permission_domains_returns_supported_matrix_headers() {
-    let response = request(
-        AppConfig::default(),
+    let router = app();
+    let response = authenticated_request(
+        &router,
         Method::GET,
         "/api/v1/admin/permission-domains",
         None,
@@ -34,13 +35,8 @@ async fn list_permission_domains_returns_supported_matrix_headers() {
 
 #[tokio::test]
 async fn list_roles_returns_seeded_catalog_with_codes_and_permissions() {
-    let response = request(
-        AppConfig::default(),
-        Method::GET,
-        "/api/v1/admin/roles",
-        None,
-    )
-    .await;
+    let router = app();
+    let response = authenticated_request(&router, Method::GET, "/api/v1/admin/roles", None).await;
 
     assert_eq!(
         response.status(),
@@ -66,6 +62,7 @@ async fn replace_roles_persists_catalog_to_configured_sqlite_database() {
         database_url: database_url.to_string_lossy().into_owned(),
         ..AppConfig::default()
     };
+    let router = app_with_config(config.clone());
 
     let payload = json!({
         "roles": [
@@ -156,8 +153,8 @@ async fn replace_roles_persists_catalog_to_configured_sqlite_database() {
         ]
     });
 
-    let replace_response = request(
-        config.clone(),
+    let replace_response = authenticated_request(
+        &router,
         Method::PUT,
         "/api/v1/admin/roles",
         Some(payload),
@@ -180,7 +177,9 @@ async fn replace_roles_persists_catalog_to_configured_sqlite_database() {
             .any(|role| role["code"] == "CUSTOM_RELEASE_MANAGER"),
     );
 
-    let reloaded_response = request(config, Method::GET, "/api/v1/admin/roles", None).await;
+    let reloaded_router = app_with_config(config);
+    let reloaded_response =
+        authenticated_request(&reloaded_router, Method::GET, "/api/v1/admin/roles", None).await;
     let reloaded_json = response_json(reloaded_response).await;
     let reloaded_roles = reloaded_json["data"]
         .as_array()
@@ -191,38 +190,6 @@ async fn replace_roles_persists_catalog_to_configured_sqlite_database() {
             .any(|role| role["code"] == "CUSTOM_RELEASE_MANAGER"),
         "AC-RM backend GREEN: saved custom role should survive a fresh router against the same SQLite database",
     );
-}
-
-async fn request(
-    config: AppConfig,
-    method: Method,
-    uri: &str,
-    body: Option<Value>,
-) -> axum::response::Response {
-    let router = build_router(config);
-    let mut builder = Request::builder().method(method).uri(uri);
-    let request_body = if let Some(json_body) = body {
-        builder = builder.header("content-type", "application/json");
-        Body::from(json_body.to_string())
-    } else {
-        Body::empty()
-    };
-
-    router
-        .oneshot(
-            builder
-                .body(request_body)
-                .expect("request should be constructible"),
-        )
-        .await
-        .expect("router should return a response")
-}
-
-async fn response_json(response: axum::response::Response) -> Value {
-    let bytes = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("response body should be readable");
-    serde_json::from_slice(&bytes).expect("response body should be valid JSON")
 }
 
 fn temp_database_url(test_name: &str) -> PathBuf {
