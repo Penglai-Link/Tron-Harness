@@ -8,3 +8,7 @@ pub(super) const AUTH_REFRESH_SESSIONS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260515_0004_create_auth_refresh_sessions.sql");
 pub(super) const AUTH_OAUTH_IDENTITIES_MIGRATION: &str =
     include_str!("../../../../../migrations/20260515_0005_create_user_oauth_identities.sql");
+pub(super) const ROLES_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260515_0004_create_role_management_roles.sql");
+pub(super) const ROLE_PERMISSIONS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260515_0005_create_role_management_permissions.sql");

@@ -39,9 +39,13 @@ export interface AuditLogRecord {
  */
 export interface RoleRecord {
   id: string;
+  code: string;
   name: string;
   description: string;
+  kind: "System" | "Custom";
+  managedBy: "Platform" | "Workspace";
   permissions: Record<string, string[]>;
+  updatedAt: string;
 }
 
 export type UserStatus = "Active" | "Archived";

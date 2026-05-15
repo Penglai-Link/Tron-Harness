@@ -1,4 +1,5 @@
 import type {
+  RoleRecord,
   UserRecord,
   UserPhone,
   UserRoleCode,
@@ -11,6 +12,7 @@ export const adminApiEndpoints = {
   listAuditLogs: "GET /api/v1/admin/audit-logs",
   listPermissionDomains: "GET /api/v1/admin/permission-domains",
   listRoles: "GET /api/v1/admin/roles",
+  replaceRoles: "PUT /api/v1/admin/roles",
   listUsers: "GET /api/v1/admin/users",
   getTotalUsersStatistic: "GET /api/v1/admin/users/statistics/total-users",
   getActiveUsersStatistic: "GET /api/v1/admin/users/statistics/active-users",
@@ -95,6 +97,10 @@ export interface ReplaceSpacesResult {
   spaceCodes?: string[];
   updatedAt?: string;
   userCode?: string;
+}
+
+export interface ReplaceRolesCatalogPayload {
+  roles: RoleRecord[];
 }
 
 export interface UserLifecycleResult {
@@ -212,6 +218,12 @@ export function replaceAdminUserRoles(userCode: string, roleCodes: readonly stri
   return requestAdminApi<ReplaceRolesResult>(adminApiEndpoints.replaceUserRoles, {
     body: { roleCodes },
     pathParams: { userCode },
+  });
+}
+
+export function replaceAdminRoles(payload: ReplaceRolesCatalogPayload) {
+  return requestAdminApi<RoleRecord[]>(adminApiEndpoints.replaceRoles, {
+    body: payload,
   });
 }
 

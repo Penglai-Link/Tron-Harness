@@ -21,14 +21,21 @@ export function getAuditLogs() {
 const roles: RoleRecord[] = [
   {
     id: "admin",
+    code: "ADMIN",
     name: "Admin",
     description: "Full System Access",
+    kind: "System",
+    managedBy: "Platform",
     permissions: Object.fromEntries(permissionDomains.map((domain) => [domain, ["R", "W", "D", "A"]])),
+    updatedAt: "2026-05-15T00:00:00Z",
   },
   {
     id: "workspace-admin",
+    code: "WORKSPACE_ADMIN",
     name: "Workspace Admin",
     description: "Workspace administration",
+    kind: "System",
+    managedBy: "Workspace",
     permissions: {
       Workspace: ["R", "W"],
       Models: ["R", "W"],
@@ -37,11 +44,15 @@ const roles: RoleRecord[] = [
       Skills: ["R", "W"],
       MCP: ["R"],
     },
+    updatedAt: "2026-05-15T00:00:00Z",
   },
   {
     id: "developer",
+    code: "DEVELOPER",
     name: "Developer",
     description: "Build and operate applications",
+    kind: "System",
+    managedBy: "Platform",
     permissions: {
       Workspace: ["R"],
       Models: ["R", "W"],
@@ -50,12 +61,17 @@ const roles: RoleRecord[] = [
       Skills: ["R", "W"],
       MCP: ["R"],
     },
+    updatedAt: "2026-05-15T00:00:00Z",
   },
   {
     id: "viewer",
+    code: "VIEWER",
     name: "Viewer",
     description: "Read-only Access",
+    kind: "System",
+    managedBy: "Platform",
     permissions: Object.fromEntries(permissionDomains.map((domain) => [domain, ["R"]])),
+    updatedAt: "2026-05-15T00:00:00Z",
   },
 ];
 
