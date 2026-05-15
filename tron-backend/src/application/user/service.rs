@@ -962,8 +962,10 @@ impl UserService {
     }
 
     fn oauth2_auto_provision_password(&self, profile: &OAuth2Profile) -> String {
+        // Keep the auto-provisioned password within the existing complexity policy
+        // even when provider identifiers contain no digits, such as the local dev OAuth2 flow.
         format!(
-            "Gh!{}:{}:{}:Aa",
+            "Gh1!{}:{}:{}:Aa",
             profile.provider_code,
             profile.subject,
             self.auth_config.jwt_secret
@@ -1211,4 +1213,43 @@ fn now_nanos() -> u128 {
 
 fn to_usize(value: i64) -> Result<usize, AuthError> {
     usize::try_from(value).map_err(|_| AuthError::TokenEncodingFailed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        adapters::outbound::{
+            crypto::BcryptPasswordHasher,
+            persistence::SqliteUserRepository,
+        },
+        config::AppConfig,
+        domain::{
+            auth::OAuth2Profile,
+            user::validate_initial_password,
+        },
+    };
+
+    #[test]
+    fn oauth2_auto_provision_password_satisfies_password_policy_without_subject_digits() {
+        let service = UserService::new(
+            SqliteUserRepository::connect(":memory:").expect("in-memory user repository should initialize"),
+            BcryptPasswordHasher,
+            AppConfig::default().auth,
+        );
+        let profile = OAuth2Profile {
+            provider_code: "dev".into(),
+            provider_name: "OAuth2".into(),
+            subject: "dev-auth-operator".into(),
+            login: "auth.operator".into(),
+            email: "auth.operator@tron.ai".into(),
+            display_name: "Auth Operator".into(),
+        };
+
+        let password = service.oauth2_auto_provision_password(&profile);
+        assert!(
+            validate_initial_password(&password).is_ok(),
+            "generated OAuth2 bootstrap password should satisfy the initial password policy",
+        );
+    }
 }

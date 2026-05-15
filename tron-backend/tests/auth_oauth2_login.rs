@@ -131,6 +131,68 @@ async fn oauth2_authorize_and_callback_auto_provision_an_authenticated_session()
 }
 
 #[tokio::test]
+async fn dev_oauth2_callback_auto_provisions_and_authenticates_session() {
+    let database_path = unique_database_path();
+    let mut config = tron_backend::config::AppConfig::default();
+    config.database_url = database_path.to_string_lossy().into_owned();
+    let app = app_with_config(config);
+
+    let authorize_response = request(
+        &app,
+        Method::GET,
+        "/api/v1/auth/oauth2/authorize/dev?redirect=%2Fdashboard",
+        None,
+        None,
+    )
+    .await;
+
+    assert_eq!(authorize_response.status(), StatusCode::SEE_OTHER);
+    let state_cookie = cookie_header_from_set_cookie(
+        &header_values(authorize_response.headers(), header::SET_COOKIE),
+        &["tron_oauth2_state"],
+    );
+    let callback_location = header_value_to_string(
+        authorize_response
+            .headers()
+            .get(header::LOCATION)
+            .expect("authorize redirect should include Location"),
+    );
+
+    let callback_response = request(
+        &app,
+        Method::GET,
+        &callback_location,
+        None,
+        Some(&state_cookie),
+    )
+    .await;
+
+    assert_eq!(callback_response.status(), StatusCode::SEE_OTHER);
+    let session_cookie_header = cookie_header_from_set_cookie(
+        &header_values(callback_response.headers(), header::SET_COOKIE),
+        &["tron_access_token", "tron_refresh_token"],
+    );
+    let session_response = request(
+        &app,
+        Method::GET,
+        "/api/v1/auth/session",
+        None,
+        Some(&session_cookie_header),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::OK);
+
+    let session_json = response_json(session_response).await;
+    assert_eq!(session_json["data"]["authMethod"], "oauth2");
+    assert_eq!(session_json["data"]["provider"]["code"], "dev");
+    assert_eq!(session_json["data"]["user"]["username"], "auth.operator");
+    assert_eq!(session_json["data"]["user"]["email"], "auth.operator@tron.ai");
+    assert_eq!(session_json["data"]["user"]["passwordResetRequired"], false);
+
+    let _ = fs::remove_file(&database_path);
+}
+
+#[tokio::test]
 async fn oauth2_callback_reuses_existing_subject_link_when_github_email_changes() {
     let database_path = unique_database_path();
     let first_github = github_mock_server_with_profile(GitHubProfileFixture {
