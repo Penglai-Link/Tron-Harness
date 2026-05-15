@@ -48,10 +48,20 @@ pub fn auth_error_response(error: AuthError) -> Response {
             "AUTH_OAUTH2_CODE_INVALID",
             "oauth2 code is invalid",
         ),
+        AuthError::OAuth2ProviderError => (
+            StatusCode::BAD_REQUEST,
+            "AUTH_OAUTH2_PROVIDER_ERROR",
+            "oauth2 provider returned an error",
+        ),
         AuthError::OAuth2ProfileInvalid => (
             StatusCode::BAD_REQUEST,
             "AUTH_OAUTH2_PROFILE_INVALID",
             "oauth2 profile payload is invalid",
+        ),
+        AuthError::OAuth2UpstreamFailed => (
+            StatusCode::BAD_GATEWAY,
+            "AUTH_OAUTH2_UPSTREAM_FAILED",
+            "oauth2 upstream request failed",
         ),
         AuthError::TokenEncodingFailed | AuthError::TokenDecodingFailed | AuthError::PasswordVerifyFailed | AuthError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,

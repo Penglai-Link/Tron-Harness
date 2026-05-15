@@ -38,8 +38,8 @@ const oauthUser = {
   ...authUser,
   authMethod: "oauth2",
   provider: {
-    code: "dev",
-    name: "Development OAuth2",
+    code: "github",
+    name: "GitHub",
   },
 };
 
@@ -118,14 +118,17 @@ function unauthorizedEnvelope(code = "AUTH_UNAUTHORIZED", message = "authenticat
   };
 }
 
-async function routeAuthApi(page: Page) {
+async function routeAuthApi(
+  page: Page,
+  options: { onOAuth2Authorize?: (url: string) => void } = {},
+) {
   let currentSession: typeof authUser | typeof oauthUser | null = null;
 
   await page.route("**/api/v1/auth/providers", async (route) => {
     await fulfillJson(route, successEnvelope({
       providers: [
         { code: "internal", name: "Internal Account", type: "internal" },
-        { code: "dev", name: "Development OAuth2", type: "oauth2" },
+        { code: "github", name: "GitHub", type: "oauth2" },
       ],
     }));
   });
@@ -164,7 +167,8 @@ async function routeAuthApi(page: Page) {
     await fulfillJson(route, successEnvelope(currentSession));
   });
 
-  await page.route("**/api/v1/auth/oauth2/authorize/dev**", async (route) => {
+  await page.route("**/api/v1/auth/oauth2/authorize/github**", async (route) => {
+    options.onOAuth2Authorize?.(route.request().url());
     currentSession = oauthUser;
     const url = new URL(route.request().url());
     const redirect = url.searchParams.get("redirect") ?? "/dashboard";
@@ -271,8 +275,14 @@ test("redirects anonymous users to login, signs in, reaches user management, and
 
   await expect(page.getByRole("heading", { name: /users/i }).first()).toBeVisible();
   await expect(page.getByRole("table")).toContainText("Auth Operator");
+  const header = page.locator("header");
+  await expect(header.getByText("auth.operator@tron.ai")).toHaveCount(0);
+  await expect(header.getByRole("button", { name: /^log out$/i })).toHaveCount(0);
 
-  await page.getByRole("button", { name: /log out/i }).click();
+  await page.getByRole("button", { name: /open user menu/i }).click();
+  await expect(header.getByText("Auth Operator")).toBeVisible();
+  await expect(header.getByText("auth.operator@tron.ai")).toBeVisible();
+  await header.getByRole("button", { name: /^log out$/i }).click();
   await expect(page).toHaveURL(/\/login/);
 
   await page.goto(`${frontendBaseUrl}/admin/users`);
@@ -280,11 +290,22 @@ test("redirects anonymous users to login, signs in, reaches user management, and
 });
 
 test("supports oauth2 entry and lands on the intended protected route", async ({ page }) => {
-  await routeAuthApi(page);
+  const localhostBaseUrl = frontendBaseUrl.replace("127.0.0.1", "localhost");
+  const frontendPort = new URL(frontendBaseUrl).port;
+  let authorizeRequestUrl = "";
 
-  await page.goto(`${frontendBaseUrl}/login?redirect=%2Fadmin%2Fusers`);
-  await page.getByRole("button", { name: /development oauth2/i }).click();
+  await routeAuthApi(page, {
+    onOAuth2Authorize(url) {
+      authorizeRequestUrl = url;
+    },
+  });
 
-  await expect(page).toHaveURL(/\/admin\/users$/);
+  await page.goto(`${localhostBaseUrl}/login?redirect=%2Fadmin%2Fusers`);
+  await page.getByRole("button", { name: /^github$/i }).click();
+
+  await expect.poll(() => authorizeRequestUrl).toBe(
+    `http://127.0.0.1:${frontendPort}/api/v1/auth/oauth2/authorize/github?redirect=%2Fadmin%2Fusers`,
+  );
+  await expect(page).toHaveURL(`http://127.0.0.1:${frontendPort}/admin/users`);
   await expect(page.getByRole("table")).toContainText("Auth Operator");
 });

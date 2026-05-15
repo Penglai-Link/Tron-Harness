@@ -29,6 +29,7 @@ import {
   useToast,
 } from "@/shared";
 import { sharedShellPreviewRows } from "@/domain/shared-shell/constants";
+import { AuthUserMenuPanel } from "@/domain/auth";
 
 
 export function SharedShellPreviewPage() {
@@ -52,6 +53,7 @@ export function SharedShellPreviewPage() {
     <TronShell
       activeItem="Tasks"
       searchPlaceholder="Search tasks, agents, traces..."
+      userMenuContent={<AuthUserMenuPanel />}
       topbarActions={
         <Button variant="secondary" size="sm" onClick={() => setNotice("Top bar filter action opened")}>
           <Filter size={15} aria-hidden="true" />

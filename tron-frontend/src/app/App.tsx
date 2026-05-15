@@ -18,7 +18,7 @@ import {
   useLocation,
 } from "react-router";
 import {
-  AuthTopbarActions,
+  AuthUserMenuPanel,
   useAuthSession,
   useBootstrapAuthSession,
 } from "@/domain/auth";
@@ -158,7 +158,7 @@ function AppRoutePage() {
   if (resolved) {
     const { Component, route } = resolved;
     return (
-      <TronShell activeItem={route.activeNav} topbarActions={<AuthTopbarActions />}>
+      <TronShell activeItem={route.activeNav} userMenuContent={<AuthUserMenuPanel />}>
         <SuspendedRoute>
           <Component />
         </SuspendedRoute>
@@ -177,7 +177,7 @@ function ConsoleFallbackRoutePage() {
   const { pathname } = useLocation();
 
   return (
-    <TronShell activeItem={resolveActiveItem(pathname)} topbarActions={<AuthTopbarActions />}>
+    <TronShell activeItem={resolveActiveItem(pathname)} userMenuContent={<AuthUserMenuPanel />}>
       <ConsoleFallbackPage />
     </TronShell>
   );

@@ -66,7 +66,7 @@
 
 - Add one active internal auth fixture with a documented known password for internal-login proof.
 - Add one archived auth fixture to prove archived-login rejection.
-- Add one deterministic development OAuth2 profile mapped to an existing active internal user email.
+- Add one deterministic development OAuth2 profile for proof, and verify that first-login GitHub profiles can auto-provision an internal user when no matching email exists.
 
 ## Validation Commands
 

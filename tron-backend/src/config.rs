@@ -7,7 +7,13 @@ const TEST_DATABASE_URL: &str = ":memory:";
 const DEFAULT_AUTH_JWT_SECRET: &str = "tron-dev-jwt-secret";
 const DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS: i64 = 900;
 const DEFAULT_AUTH_REFRESH_TOKEN_TTL_SECONDS: i64 = 604_800;
-const DEFAULT_AUTH_DEV_OAUTH2_NAME: &str = "Development OAuth2";
+const DEFAULT_AUTH_DEV_OAUTH2_NAME: &str = "OAuth2";
+const DEFAULT_AUTH_GITHUB_NAME: &str = "GitHub";
+const DEFAULT_AUTH_GITHUB_AUTHORIZE_URL: &str = "https://github.com/login/oauth/authorize";
+const DEFAULT_AUTH_GITHUB_TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
+const DEFAULT_AUTH_GITHUB_USER_API_URL: &str = "https://api.github.com/user";
+const DEFAULT_AUTH_GITHUB_EMAILS_API_URL: &str = "https://api.github.com/user/emails";
+const DEFAULT_AUTH_GITHUB_SCOPE: &str = "read:user user:email";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppConfig {
@@ -25,6 +31,20 @@ pub struct AuthConfig {
     pub cookie_secure: bool,
     pub dev_oauth2_enabled: bool,
     pub dev_oauth2_name: String,
+    pub github_oauth: Option<GitHubOAuthConfig>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GitHubOAuthConfig {
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_uri: String,
+    pub name: String,
+    pub scope: String,
+    pub authorize_url: String,
+    pub token_url: String,
+    pub user_api_url: String,
+    pub emails_api_url: String,
 }
 
 impl AppConfig {
@@ -39,6 +59,7 @@ impl AppConfig {
         };
         let database_url =
             env::var("TRON_BACKEND_DATABASE_URL").unwrap_or_else(|_| DEFAULT_DATABASE_URL.into());
+        let github_oauth_enabled = parse_bool_env("TRON_AUTH_GITHUB_ENABLED", false)?;
         let auth = AuthConfig {
             jwt_secret: env::var("TRON_AUTH_JWT_SECRET")
                 .unwrap_or_else(|_| DEFAULT_AUTH_JWT_SECRET.into()),
@@ -51,9 +72,28 @@ impl AppConfig {
                 DEFAULT_AUTH_REFRESH_TOKEN_TTL_SECONDS,
             )?,
             cookie_secure: parse_bool_env("TRON_AUTH_COOKIE_SECURE", false)?,
-            dev_oauth2_enabled: parse_bool_env("TRON_AUTH_DEV_OAUTH2_ENABLED", true)?,
+            dev_oauth2_enabled: parse_bool_env("TRON_AUTH_DEV_OAUTH2_ENABLED", false)?,
             dev_oauth2_name: env::var("TRON_AUTH_DEV_OAUTH2_NAME")
                 .unwrap_or_else(|_| DEFAULT_AUTH_DEV_OAUTH2_NAME.into()),
+            github_oauth: github_oauth_enabled.then(|| {
+                Ok(GitHubOAuthConfig {
+                    client_id: required_env("TRON_AUTH_GITHUB_CLIENT_ID")?,
+                    client_secret: required_env("TRON_AUTH_GITHUB_CLIENT_SECRET")?,
+                    redirect_uri: required_env("TRON_AUTH_GITHUB_REDIRECT_URI")?,
+                    name: env::var("TRON_AUTH_GITHUB_NAME")
+                        .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_NAME.into()),
+                    scope: env::var("TRON_AUTH_GITHUB_SCOPE")
+                        .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_SCOPE.into()),
+                    authorize_url: env::var("TRON_AUTH_GITHUB_AUTHORIZE_URL")
+                        .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_AUTHORIZE_URL.into()),
+                    token_url: env::var("TRON_AUTH_GITHUB_TOKEN_URL")
+                        .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_TOKEN_URL.into()),
+                    user_api_url: env::var("TRON_AUTH_GITHUB_USER_API_URL")
+                        .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_USER_API_URL.into()),
+                    emails_api_url: env::var("TRON_AUTH_GITHUB_EMAILS_API_URL")
+                        .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_EMAILS_API_URL.into()),
+                })
+            }).transpose()?,
         };
 
         Ok(Self {
@@ -88,6 +128,7 @@ impl Default for AppConfig {
                 cookie_secure: false,
                 dev_oauth2_enabled: true,
                 dev_oauth2_name: DEFAULT_AUTH_DEV_OAUTH2_NAME.into(),
+                github_oauth: None,
             },
         }
     }
@@ -108,6 +149,9 @@ pub enum ConfigError {
         key: String,
         value: String,
     },
+    MissingEnv {
+        key: String,
+    },
     InvalidSocketAddr {
         bind_address: String,
         port: u16,
@@ -127,6 +171,7 @@ impl fmt::Display for ConfigError {
             Self::InvalidBoolean { key, value } => {
                 write!(formatter, "invalid {key} value `{value}`")
             }
+            Self::MissingEnv { key } => write!(formatter, "missing required environment variable `{key}`"),
             Self::InvalidSocketAddr {
                 bind_address, port, ..
             } => write!(
@@ -143,8 +188,16 @@ impl Error for ConfigError {
             Self::InvalidPort { source, .. } => Some(source),
             Self::InvalidInteger { source, .. } => Some(source),
             Self::InvalidBoolean { .. } => None,
+            Self::MissingEnv { .. } => None,
             Self::InvalidSocketAddr { source, .. } => Some(source),
         }
+    }
+}
+
+fn required_env(key: &str) -> Result<String, ConfigError> {
+    match env::var(key) {
+        Ok(value) if !value.trim().is_empty() => Ok(value),
+        _ => Err(ConfigError::MissingEnv { key: key.into() }),
     }
 }
 

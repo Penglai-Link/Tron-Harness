@@ -14,6 +14,8 @@ pub struct OAuth2AuthorizeQuery {
 
 #[derive(Debug, Deserialize)]
 pub struct OAuth2CallbackQuery {
-    pub code: String,
-    pub state: String,
+    pub code: Option<String>,
+    pub state: Option<String>,
+    pub error: Option<String>,
+    pub error_description: Option<String>,
 }

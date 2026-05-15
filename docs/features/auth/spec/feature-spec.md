@@ -20,7 +20,7 @@
 
 ## Requirement
 
-Create a real authentication feature for Tron so every non-auth page requires a valid session, internal operators can sign in with existing user-management accounts, and enterprise OAuth2 sign-in can land in the same session model without inventing a second user source.
+Create a real authentication feature for Tron so every non-auth page requires a valid session, internal operators can sign in with existing user-management accounts, and enterprise OAuth2 sign-in, starting with GitHub OAuth, can land in the same session model without inventing a second user source.
 
 ## Scope Boundary
 
@@ -30,7 +30,7 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 
 - Existing user-management users are the source of truth for internal operators.
 - Local development should stay usable on plain HTTP, so cookie security flags must be configurable.
-- OAuth2 provider details can be driven by backend environment variables, with one deterministic development provider for automated proof.
+- OAuth2 provider details can be driven by backend environment variables, with GitHub as the first live provider and any deterministic dev provider reserved for automated proof only.
 - Existing role and space assignments remain managed data, not API authorization gates, in this slice.
 
 ## In Scope
@@ -38,7 +38,7 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 - Internal username-or-email plus password login against the persisted user store.
 - Short-lived access JWT plus rotating refresh JWT delivered through HttpOnly cookies.
 - Backend session bootstrap, refresh, logout, and current-session inspection endpoints.
-- OAuth2 authorize and callback endpoints with provider-subject or verified-email user resolution.
+- OAuth2 authorize and callback endpoints, with GitHub as the first live provider and provider-subject reuse, verified-email matching, or first-login internal-user auto-provision.
 - Persistent refresh-session storage and persistent OAuth2 identity links.
 - Frontend route guarding, login bootstrap, logout flow, callback completion page, and redirect preservation.
 - Backend protection for user-management APIs that now require an authenticated session.
@@ -48,7 +48,7 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 - Self-service signup, invitation acceptance, password change, MFA, or device trust.
 - Role-based API authorization, permission matrices, or tenancy isolation changes.
 - Admin configuration UI for OAuth2 providers.
-- Auto-provisioning brand-new users who do not already exist in the internal user store.
+- Invitation approval workflows, domain allowlists, or admin review gates for auto-provisioned OAuth2 accounts.
 - Non-browser clients or token exchange flows outside the existing frontend console.
 
 ## Constraints
@@ -73,6 +73,7 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
   - Archived users are rejected before a session is issued.
   - Frontend protected pages derive access from `GET /api/v1/auth/session`.
   - Internal and OAuth2 login must converge on the same session and user payload.
+  - First-time GitHub sign-in may auto-provision one internal user with minimal default assignments, and later sign-ins must reuse the durable provider subject link.
 - State transitions:
   - Anonymous -> internal login success -> authenticated.
   - Anonymous -> OAuth2 authorize -> callback success -> authenticated.
@@ -81,7 +82,7 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 
 ## Page And Module Surface
 
-- `/login`: login surface for internal credentials, OAuth2 provider actions, busy-state feedback, and visible failure feedback.
+- `/login`: login surface for internal credentials, GitHub OAuth provider actions, busy-state feedback, and visible failure feedback.
 - `/auth/callback`: transient callback route that finalizes OAuth2 login and resumes the intended protected destination.
 - Protected shell routes: every existing route except `/login` and `/auth/callback` waits for session bootstrap and redirects anonymous users.
 - Backend modules:

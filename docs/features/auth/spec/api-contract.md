@@ -2,7 +2,7 @@
 
 ## API Overview
 
-The auth feature introduces a small browser-oriented session API. Internal login and OAuth2 login converge on one authenticated session contract returned through the project uniform response envelope and HttpOnly cookies.
+The auth feature introduces a small browser-oriented session API. Internal login and GitHub OAuth2 login converge on one authenticated session contract returned through the project uniform response envelope and HttpOnly cookies.
 
 ## Endpoints
 
@@ -42,11 +42,11 @@ The auth feature introduces a small browser-oriented session API. Internal login
 ## Database And Transaction Boundary
 
 - Internal login reads the existing user store plus auth session persistence and writes a new refresh session row atomically enough for local SQLite use.
-- OAuth2 callback may read or upsert one identity-link row and then create or rotate a refresh session row.
+- OAuth2 callback may create one internal user, upsert one identity-link row, and then create or rotate a refresh session row.
 - Logout and refresh only touch auth-owned persistence, not user-management domain data.
 
 ## Mock Or Adapter Expectations
 
-- Backend tests use the deterministic development OAuth2 provider adapter instead of external network calls.
-- Frontend browser tests intercept auth API calls or development-provider redirects and assert visible redirect, feedback, and protected-route behavior.
+- Backend tests use a local GitHub OAuth mock server instead of live GitHub network calls.
+- Frontend browser tests intercept auth API calls or GitHub-provider redirects and assert visible redirect, feedback, and protected-route behavior.
 - The callback route must tolerate real backend redirects and mocked browser-test redirects through the same frontend contract.

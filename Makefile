@@ -2,6 +2,7 @@ FRONTEND_DIR := tron-frontend
 FRONTEND_NPM := cd $(FRONTEND_DIR) && npm
 BACKEND_DIR := tron-backend
 BACKEND_MANIFEST := $(BACKEND_DIR)/Cargo.toml
+BACKEND_ENV_FILE := $(BACKEND_DIR)/.env
 BE_RUN_ENV = $(if $(strip $(PORT)),TRON_BACKEND_PORT=$(PORT))
 
 .PHONY: help
@@ -19,6 +20,7 @@ help:
 	@echo "  make be-check     Compile backend"
 	@echo "  make be-test      Run backend tests"
 	@echo "  make be-run       Run backend server"
+	@echo "                    Sources $(BACKEND_ENV_FILE) when present"
 	@echo "                    Example: make be-run PORT=8081"
 
 .PHONY: fe-install
@@ -63,4 +65,4 @@ be-test:
 
 .PHONY: be-run
 be-run:
-	$(BE_RUN_ENV) cargo run --manifest-path $(BACKEND_MANIFEST)
+	@if [ -f $(BACKEND_ENV_FILE) ]; then set -a; . $(BACKEND_ENV_FILE); set +a; fi; $(BE_RUN_ENV) cargo run --manifest-path $(BACKEND_MANIFEST)

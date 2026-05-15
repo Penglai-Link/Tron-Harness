@@ -6,11 +6,13 @@ use std::{
 use jsonwebtoken::{
     Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode,
 };
+use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 use crate::{
     application::user::{CreateUserCommand, PasswordHasher, UpdateUserCommand, UserRepository},
-    config::AuthConfig,
+    config::{AuthConfig, GitHubOAuthConfig},
     domain::{
         auth::{
             AuthError, AuthMethod, AuthProviderDescriptor, AuthProviderKind,
@@ -19,9 +21,9 @@ use crate::{
         },
         user::{
             ListUsersQuery, PagedUsers, PasswordResetResult, User, UserError, UserStatistics,
-            UserStatus, optional_trimmed, parse_user_status, required_profile_field,
-            unique_preserving_order, validate_initial_password, validate_role_codes,
-            validate_space_codes, validate_user_code,
+            UserStatus, normalize_code_segment, optional_trimmed, parse_user_status,
+            required_profile_field, unique_preserving_order, validate_initial_password,
+            validate_role_codes, validate_space_codes, validate_user_code,
         },
     },
     shared::id::SnowflakeId,
@@ -30,8 +32,16 @@ use crate::{
 const DEFAULT_TIMESTAMP: &str = "2026-05-12T00:00:00Z";
 const DEV_OAUTH2_CODE: &str = "dev-oauth2-code";
 const DEV_OAUTH2_SUBJECT: &str = "dev-auth-operator";
+const DEV_OAUTH2_LOGIN: &str = "auth.operator";
 const DEV_OAUTH2_EMAIL: &str = "auth.operator@tron.ai";
 const DEV_OAUTH2_DISPLAY_NAME: &str = "Auth Operator";
+const GITHUB_PROVIDER_CODE: &str = "github";
+const GITHUB_USER_AGENT: &str = "TronAuth/0.1";
+const GITHUB_AUTO_PROVISION_DEFAULT_ROLE_CODE: &str = "VIEWER";
+const GITHUB_AUTO_PROVISION_DEFAULT_SPACE_CODE: &str = "PLATFORM";
+const GITHUB_AUTO_PROVISION_DEFAULT_LOCALE: &str = "en-US";
+const GITHUB_AUTO_PROVISION_DEFAULT_TIMEZONE: &str = "UTC";
+const GITHUB_AUTO_PROVISION_FALLBACK_LAST_NAME: &str = "GitHub";
 const OAUTH_STATE_TTL_SECONDS: i64 = 300;
 
 #[derive(Clone)]
@@ -39,6 +49,7 @@ pub struct UserService {
     repository: Arc<Mutex<Box<dyn UserRepository>>>,
     password_hasher: Arc<dyn PasswordHasher>,
     auth_config: AuthConfig,
+    oauth_client: Client,
 }
 
 #[derive(Debug, Clone)]
@@ -76,6 +87,26 @@ struct OAuthStateClaims {
     kind: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct GitHubTokenResponse {
+    access_token: Option<String>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubUserResponse {
+    id: i64,
+    login: String,
+    name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubEmailResponse {
+    email: String,
+    primary: bool,
+    verified: bool,
+}
+
 impl UserService {
     pub fn new(
         repository: impl UserRepository + 'static,
@@ -86,6 +117,7 @@ impl UserService {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             password_hasher: Arc::new(password_hasher),
             auth_config,
+            oauth_client: Client::new(),
         }
     }
 
@@ -108,6 +140,9 @@ impl UserService {
             kind: AuthProviderKind::Internal,
         }];
 
+        if let Some(provider) = self.github_provider_descriptor_if_enabled() {
+            providers.push(provider);
+        }
         if self.auth_config.dev_oauth2_enabled {
             providers.push(self.dev_provider_descriptor());
         }
@@ -150,107 +185,29 @@ impl UserService {
         provider_code: &str,
         redirect_path: Option<&str>,
     ) -> Result<OAuth2AuthorizeResult, AuthError> {
-        if provider_code != "dev" || !self.auth_config.dev_oauth2_enabled {
-            return Err(AuthError::ProviderNotFound);
+        match provider_code {
+            GITHUB_PROVIDER_CODE => self.github_oauth2_authorize(redirect_path),
+            "dev" => self.dev_oauth2_authorize(redirect_path),
+            _ => Err(AuthError::ProviderNotFound),
         }
-
-        let redirect_path = normalize_redirect_path(redirect_path);
-        let now = now_seconds();
-        let claims = OAuthStateClaims {
-            provider: provider_code.into(),
-            redirect_path: redirect_path.clone(),
-            nonce: format!("oauth-state-{}", now_nanos()),
-            exp: to_usize(now + OAUTH_STATE_TTL_SECONDS)?,
-            iat: to_usize(now)?,
-            kind: "oauth_state".into(),
-        };
-        let state_token = encode(
-            &Header::default(),
-            &claims,
-            &EncodingKey::from_secret(self.auth_config.jwt_secret.as_bytes()),
-        )
-        .map_err(|_| AuthError::TokenEncodingFailed)?;
-
-        Ok(OAuth2AuthorizeResult {
-            redirect_location: format!(
-                "/api/v1/auth/oauth2/callback/dev?code={DEV_OAUTH2_CODE}&state={state_token}"
-            ),
-            state_token,
-        })
     }
 
-    pub fn oauth2_callback(
+    pub async fn oauth2_callback(
         &self,
         provider_code: &str,
         state_cookie: Option<&str>,
-        state_query: &str,
-        code: &str,
+        state_query: Option<&str>,
+        code: Option<&str>,
+        provider_error: Option<&str>,
     ) -> Result<AuthorizedSession, AuthError> {
-        if provider_code != "dev" || !self.auth_config.dev_oauth2_enabled {
-            return Err(AuthError::ProviderNotFound);
+        match provider_code {
+            GITHUB_PROVIDER_CODE => {
+                self.github_oauth2_callback(state_cookie, state_query, code, provider_error)
+                    .await
+            }
+            "dev" => self.dev_oauth2_callback(state_cookie, state_query, code),
+            _ => Err(AuthError::ProviderNotFound),
         }
-        if code.trim() != DEV_OAUTH2_CODE {
-            return Err(AuthError::OAuth2CodeInvalid);
-        }
-        if state_cookie.is_none() || state_cookie != Some(state_query) {
-            return Err(AuthError::OAuth2StateInvalid);
-        }
-
-        let claims = decode::<OAuthStateClaims>(
-            state_query,
-            &DecodingKey::from_secret(self.auth_config.jwt_secret.as_bytes()),
-            &oauth_state_validation(),
-        )
-        .map_err(|_| AuthError::OAuth2StateInvalid)?
-        .claims;
-        if claims.kind != "oauth_state" || claims.provider != provider_code {
-            return Err(AuthError::OAuth2StateInvalid);
-        }
-
-        let profile = OAuth2Profile {
-            provider_code: "dev".into(),
-            provider_name: self.auth_config.dev_oauth2_name.clone(),
-            subject: DEV_OAUTH2_SUBJECT.into(),
-            email: DEV_OAUTH2_EMAIL.into(),
-            display_name: DEV_OAUTH2_DISPLAY_NAME.into(),
-        };
-
-        let mut repository = self
-            .repository
-            .lock()
-            .expect("user repository mutex poisoned");
-        let user = match repository.find_user_by_provider_subject(
-            &profile.provider_code,
-            &profile.subject,
-        )? {
-            Some(user) => user,
-            None => repository
-                .find_active_user_by_email(&profile.email)?
-                .ok_or(AuthError::UserNotLinked)?,
-        };
-        ensure_active_user(&user)?;
-
-        let now = now_seconds();
-        let identity = OAuth2IdentityLink {
-            id: repository.next_id().map_err(map_user_error_to_auth)?,
-            user_id: user.id.value(),
-            user_code: user.user_code.clone(),
-            provider_code: profile.provider_code.clone(),
-            provider_subject: profile.subject.clone(),
-            email: profile.email.to_ascii_lowercase(),
-            display_name: profile.display_name.clone(),
-            linked_at: now,
-            updated_at: now,
-        };
-        repository.upsert_oauth_identity(&identity)?;
-
-        self.create_session(
-            repository.as_mut(),
-            &user,
-            AuthMethod::Oauth2,
-            Some(self.dev_provider_descriptor()),
-            Some(claims.redirect_path),
-        )
     }
 
     pub fn current_session(
@@ -338,14 +295,172 @@ impl UserService {
                 auth_method: session.auth_method,
                 provider: session
                     .provider_code
-                    .as_ref()
-                    .map(|_| self.dev_provider_descriptor()),
+                    .as_deref()
+                    .and_then(|value| self.session_provider_descriptor(value)),
                 user: AuthenticatedUser::from(&user),
             },
             access_token,
             refresh_token,
             redirect_path: None,
         })
+    }
+
+    fn dev_oauth2_authorize(
+        &self,
+        redirect_path: Option<&str>,
+    ) -> Result<OAuth2AuthorizeResult, AuthError> {
+        if !self.auth_config.dev_oauth2_enabled {
+            return Err(AuthError::ProviderNotFound);
+        }
+
+        let redirect_path = normalize_redirect_path(redirect_path);
+        let state_token = self.oauth_state_token("dev", &redirect_path)?;
+
+        Ok(OAuth2AuthorizeResult {
+            redirect_location: format!(
+                "/api/v1/auth/oauth2/callback/dev?code={DEV_OAUTH2_CODE}&state={state_token}"
+            ),
+            state_token,
+        })
+    }
+
+    fn github_oauth2_authorize(
+        &self,
+        redirect_path: Option<&str>,
+    ) -> Result<OAuth2AuthorizeResult, AuthError> {
+        let github = self.github_oauth_config()?;
+        let redirect_path = normalize_redirect_path(redirect_path);
+        let state_token = self.oauth_state_token(GITHUB_PROVIDER_CODE, &redirect_path)?;
+        let mut authorize_url =
+            Url::parse(&github.authorize_url).map_err(|_| AuthError::OAuth2UpstreamFailed)?;
+        authorize_url
+            .query_pairs_mut()
+            .append_pair("client_id", &github.client_id)
+            .append_pair("redirect_uri", &github.redirect_uri)
+            .append_pair("scope", &github.scope)
+            .append_pair("state", &state_token);
+
+        Ok(OAuth2AuthorizeResult {
+            redirect_location: authorize_url.to_string(),
+            state_token,
+        })
+    }
+
+    fn dev_oauth2_callback(
+        &self,
+        state_cookie: Option<&str>,
+        state_query: Option<&str>,
+        code: Option<&str>,
+    ) -> Result<AuthorizedSession, AuthError> {
+        if !self.auth_config.dev_oauth2_enabled {
+            return Err(AuthError::ProviderNotFound);
+        }
+        let code = code.ok_or(AuthError::OAuth2CodeInvalid)?;
+        if code.trim() != DEV_OAUTH2_CODE {
+            return Err(AuthError::OAuth2CodeInvalid);
+        }
+        let claims = self.validate_oauth_state("dev", state_cookie, state_query)?;
+
+        let profile = OAuth2Profile {
+            provider_code: "dev".into(),
+            provider_name: self.auth_config.dev_oauth2_name.clone(),
+            subject: DEV_OAUTH2_SUBJECT.into(),
+            login: DEV_OAUTH2_LOGIN.into(),
+            email: DEV_OAUTH2_EMAIL.into(),
+            display_name: DEV_OAUTH2_DISPLAY_NAME.into(),
+        };
+
+        let mut repository = self
+            .repository
+            .lock()
+            .expect("user repository mutex poisoned");
+        let user = match repository.find_user_by_provider_subject(
+            &profile.provider_code,
+            &profile.subject,
+        )? {
+            Some(user) => user,
+            None => match repository.find_active_user_by_email(&profile.email)? {
+                Some(user) => user,
+                None => self.auto_provision_oauth2_user(repository.as_mut(), &profile)?,
+            },
+        };
+        ensure_active_user(&user)?;
+
+        let now = now_seconds();
+        let identity = OAuth2IdentityLink {
+            id: repository.next_id().map_err(map_user_error_to_auth)?,
+            user_id: user.id.value(),
+            user_code: user.user_code.clone(),
+            provider_code: profile.provider_code.clone(),
+            provider_subject: profile.subject.clone(),
+            email: profile.email.to_ascii_lowercase(),
+            display_name: profile.display_name.clone(),
+            linked_at: now,
+            updated_at: now,
+        };
+        repository.upsert_oauth_identity(&identity)?;
+
+        self.create_session(
+            repository.as_mut(),
+            &user,
+            AuthMethod::Oauth2,
+            Some(self.dev_provider_descriptor()),
+            Some(claims.redirect_path),
+        )
+    }
+
+    async fn github_oauth2_callback(
+        &self,
+        state_cookie: Option<&str>,
+        state_query: Option<&str>,
+        code: Option<&str>,
+        provider_error: Option<&str>,
+    ) -> Result<AuthorizedSession, AuthError> {
+        let claims = self.validate_oauth_state(GITHUB_PROVIDER_CODE, state_cookie, state_query)?;
+        if provider_error.is_some() {
+            return Err(AuthError::OAuth2ProviderError);
+        }
+
+        let code = code.ok_or(AuthError::OAuth2CodeInvalid)?;
+        let profile = self.github_profile_from_code(code).await?;
+
+        let mut repository = self
+            .repository
+            .lock()
+            .expect("user repository mutex poisoned");
+        let user = match repository.find_user_by_provider_subject(
+            &profile.provider_code,
+            &profile.subject,
+        )? {
+            Some(user) => user,
+            None => match repository.find_active_user_by_email(&profile.email)? {
+                Some(user) => user,
+                None => self.auto_provision_oauth2_user(repository.as_mut(), &profile)?,
+            },
+        };
+        ensure_active_user(&user)?;
+
+        let now = now_seconds();
+        let identity = OAuth2IdentityLink {
+            id: repository.next_id().map_err(map_user_error_to_auth)?,
+            user_id: user.id.value(),
+            user_code: user.user_code.clone(),
+            provider_code: profile.provider_code.clone(),
+            provider_subject: profile.subject.clone(),
+            email: profile.email.to_ascii_lowercase(),
+            display_name: profile.display_name.clone(),
+            linked_at: now,
+            updated_at: now,
+        };
+        repository.upsert_oauth_identity(&identity)?;
+
+        self.create_session(
+            repository.as_mut(),
+            &user,
+            AuthMethod::Oauth2,
+            Some(self.github_provider_descriptor()),
+            Some(claims.redirect_path),
+        )
     }
 
     pub fn logout_session(&self, refresh_token: Option<&str>) -> Result<(), AuthError> {
@@ -399,6 +514,14 @@ impl UserService {
             .repository
             .lock()
             .expect("user repository mutex poisoned");
+        self.create_user_in_repository(repository.as_mut(), command)
+    }
+
+    fn create_user_in_repository(
+        &self,
+        repository: &mut dyn UserRepository,
+        command: CreateUserCommand,
+    ) -> Result<User, UserError> {
         let username = required_profile_field(command.username)?;
         let first_name = required_profile_field(command.first_name)?;
         let last_name = required_profile_field(command.last_name)?;
@@ -675,7 +798,10 @@ impl UserService {
         Ok(CurrentSession {
             authenticated: true,
             auth_method: auth_method_from_claims(&claims.auth_method)?,
-            provider: claims.provider_code.map(|_| self.dev_provider_descriptor()),
+            provider: claims
+                .provider_code
+                .as_deref()
+                .and_then(|value| self.session_provider_descriptor(value)),
             user: AuthenticatedUser::from(&user),
         })
     }
@@ -736,6 +862,261 @@ impl UserService {
             name: self.auth_config.dev_oauth2_name.clone(),
             kind: AuthProviderKind::Oauth2,
         }
+    }
+
+    fn github_provider_descriptor_if_enabled(&self) -> Option<AuthProviderDescriptor> {
+        self.auth_config.github_oauth.as_ref().map(|config| AuthProviderDescriptor {
+            code: GITHUB_PROVIDER_CODE.into(),
+            name: config.name.clone(),
+            kind: AuthProviderKind::Oauth2,
+        })
+    }
+
+    fn github_provider_descriptor(&self) -> AuthProviderDescriptor {
+        self.github_provider_descriptor_if_enabled()
+            .unwrap_or(AuthProviderDescriptor {
+                code: GITHUB_PROVIDER_CODE.into(),
+                name: "GitHub".into(),
+                kind: AuthProviderKind::Oauth2,
+            })
+    }
+
+    fn session_provider_descriptor(&self, provider_code: &str) -> Option<AuthProviderDescriptor> {
+        match provider_code {
+            GITHUB_PROVIDER_CODE => Some(self.github_provider_descriptor()),
+            "dev" => Some(self.dev_provider_descriptor()),
+            _ => None,
+        }
+    }
+
+    fn github_oauth_config(&self) -> Result<&GitHubOAuthConfig, AuthError> {
+        self.auth_config
+            .github_oauth
+            .as_ref()
+            .ok_or(AuthError::ProviderNotFound)
+    }
+
+    fn auto_provision_oauth2_user(
+        &self,
+        repository: &mut dyn UserRepository,
+        profile: &OAuth2Profile,
+    ) -> Result<User, AuthError> {
+        let (first_name, last_name) = split_display_name(&profile.display_name);
+        let username = self
+            .next_available_oauth_username(repository, &profile.login, &profile.email)
+            .map_err(map_user_error_to_auth)?;
+        let command = CreateUserCommand {
+            user_code: None,
+            username: Some(username),
+            first_name: Some(first_name),
+            last_name: Some(last_name),
+            display_name: Some(profile.display_name.clone()),
+            email: Some(profile.email.clone()),
+            phone: None,
+            avatar_url: None,
+            locale: Some(GITHUB_AUTO_PROVISION_DEFAULT_LOCALE.into()),
+            timezone: Some(GITHUB_AUTO_PROVISION_DEFAULT_TIMEZONE.into()),
+            initial_password: Some(self.oauth2_auto_provision_password(profile)),
+            password_reset_required: Some(true),
+            role_codes: vec![GITHUB_AUTO_PROVISION_DEFAULT_ROLE_CODE.into()],
+            space_codes: vec![GITHUB_AUTO_PROVISION_DEFAULT_SPACE_CODE.into()],
+        };
+        self.create_user_in_repository(repository, command)
+            .map_err(map_user_error_to_auth)
+    }
+
+    fn next_available_oauth_username(
+        &self,
+        repository: &mut dyn UserRepository,
+        login_hint: &str,
+        email: &str,
+    ) -> Result<String, UserError> {
+        let email_local_part = email
+            .split('@')
+            .next()
+            .unwrap_or("github-user")
+            .trim()
+            .to_ascii_lowercase();
+        let base_candidate = optional_trimmed(Some(login_hint.to_ascii_lowercase()))
+            .or_else(|| optional_trimmed(Some(email_local_part)))
+            .unwrap_or_else(|| "github-user".into());
+        if !repository.username_exists(&base_candidate, None)? {
+            return Ok(base_candidate);
+        }
+
+        let normalized_suffix = normalize_code_segment(login_hint);
+        let suffix = if normalized_suffix.is_empty() {
+            "USER".into()
+        } else {
+            normalized_suffix.to_ascii_lowercase()
+        };
+
+        let mut counter = 2;
+        loop {
+            let candidate = format!("{base_candidate}-{suffix}-{counter}");
+            if !repository.username_exists(&candidate, None)? {
+                return Ok(candidate);
+            }
+            counter += 1;
+        }
+    }
+
+    fn oauth2_auto_provision_password(&self, profile: &OAuth2Profile) -> String {
+        format!(
+            "Gh!{}:{}:{}:Aa",
+            profile.provider_code,
+            profile.subject,
+            self.auth_config.jwt_secret
+        )
+    }
+
+    fn oauth_state_token(
+        &self,
+        provider_code: &str,
+        redirect_path: &str,
+    ) -> Result<String, AuthError> {
+        let now = now_seconds();
+        let claims = OAuthStateClaims {
+            provider: provider_code.into(),
+            redirect_path: redirect_path.into(),
+            nonce: format!("oauth-state-{}", now_nanos()),
+            exp: to_usize(now + OAUTH_STATE_TTL_SECONDS)?,
+            iat: to_usize(now)?,
+            kind: "oauth_state".into(),
+        };
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(self.auth_config.jwt_secret.as_bytes()),
+        )
+        .map_err(|_| AuthError::TokenEncodingFailed)
+    }
+
+    fn validate_oauth_state(
+        &self,
+        provider_code: &str,
+        state_cookie: Option<&str>,
+        state_query: Option<&str>,
+    ) -> Result<OAuthStateClaims, AuthError> {
+        let state_query = state_query.ok_or(AuthError::OAuth2StateInvalid)?;
+        if state_cookie.is_none() || state_cookie != Some(state_query) {
+            return Err(AuthError::OAuth2StateInvalid);
+        }
+
+        let claims = decode::<OAuthStateClaims>(
+            state_query,
+            &DecodingKey::from_secret(self.auth_config.jwt_secret.as_bytes()),
+            &oauth_state_validation(),
+        )
+        .map_err(|_| AuthError::OAuth2StateInvalid)?
+        .claims;
+        if claims.kind != "oauth_state" || claims.provider != provider_code {
+            return Err(AuthError::OAuth2StateInvalid);
+        }
+        Ok(claims)
+    }
+
+    async fn github_profile_from_code(&self, code: &str) -> Result<OAuth2Profile, AuthError> {
+        let github = self.github_oauth_config()?;
+        let token_response = self
+            .oauth_client
+            .post(&github.token_url)
+            .header("Accept", "application/json")
+            .header("User-Agent", GITHUB_USER_AGENT)
+            .form(&[
+                ("client_id", github.client_id.as_str()),
+                ("client_secret", github.client_secret.as_str()),
+                ("code", code),
+                ("redirect_uri", github.redirect_uri.as_str()),
+            ])
+            .send()
+            .await
+            .map_err(|_| AuthError::OAuth2UpstreamFailed)?;
+        if !token_response.status().is_success() {
+            return Err(AuthError::OAuth2UpstreamFailed);
+        }
+        let token_payload = token_response
+            .json::<GitHubTokenResponse>()
+            .await
+            .map_err(|_| AuthError::OAuth2UpstreamFailed)?;
+        let access_token = match (
+            token_payload.access_token,
+            token_payload.error.as_deref(),
+        ) {
+            (Some(token), _) if !token.trim().is_empty() => token,
+            (_, Some("bad_verification_code")) => return Err(AuthError::OAuth2CodeInvalid),
+            (_, Some(_)) => return Err(AuthError::OAuth2ProviderError),
+            _ => return Err(AuthError::OAuth2UpstreamFailed),
+        };
+
+        let user_response = self
+            .oauth_client
+            .get(&github.user_api_url)
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", GITHUB_USER_AGENT)
+            .bearer_auth(&access_token)
+            .send()
+            .await
+            .map_err(|_| AuthError::OAuth2UpstreamFailed)?;
+        if !user_response.status().is_success() {
+            return Err(AuthError::OAuth2UpstreamFailed);
+        }
+        let user_payload = user_response
+            .json::<GitHubUserResponse>()
+            .await
+            .map_err(|_| AuthError::OAuth2ProfileInvalid)?;
+
+        let emails_response = self
+            .oauth_client
+            .get(&github.emails_api_url)
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", GITHUB_USER_AGENT)
+            .bearer_auth(&access_token)
+            .send()
+            .await
+            .map_err(|_| AuthError::OAuth2UpstreamFailed)?;
+        if !emails_response.status().is_success() {
+            return Err(AuthError::OAuth2UpstreamFailed);
+        }
+        let email_payload = emails_response
+            .json::<Vec<GitHubEmailResponse>>()
+            .await
+            .map_err(|_| AuthError::OAuth2ProfileInvalid)?;
+        let email = select_github_verified_email(&email_payload)
+            .ok_or(AuthError::OAuth2ProfileInvalid)?;
+        let display_name = optional_trimmed(user_payload.name)
+            .unwrap_or_else(|| user_payload.login.clone());
+
+        Ok(OAuth2Profile {
+            provider_code: GITHUB_PROVIDER_CODE.into(),
+            provider_name: github.name.clone(),
+            subject: user_payload.id.to_string(),
+            login: user_payload.login.clone(),
+            email,
+            display_name,
+        })
+    }
+}
+
+fn select_github_verified_email(emails: &[GitHubEmailResponse]) -> Option<String> {
+    emails
+        .iter()
+        .find(|email| email.primary && email.verified)
+        .or_else(|| emails.iter().find(|email| email.verified))
+        .map(|email| email.email.to_ascii_lowercase())
+}
+
+fn split_display_name(display_name: &str) -> (String, String) {
+    let mut parts = display_name.split_whitespace();
+    let first_name = parts.next().unwrap_or(GITHUB_AUTO_PROVISION_FALLBACK_LAST_NAME);
+    let last_name = parts.collect::<Vec<_>>().join(" ");
+    if last_name.is_empty() {
+        (
+            first_name.to_owned(),
+            GITHUB_AUTO_PROVISION_FALLBACK_LAST_NAME.into(),
+        )
+    } else {
+        (first_name.to_owned(), last_name)
     }
 }
 

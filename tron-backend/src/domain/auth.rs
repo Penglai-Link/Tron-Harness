@@ -12,7 +12,9 @@ pub enum AuthError {
     UserNotLinked,
     OAuth2StateInvalid,
     OAuth2CodeInvalid,
+    OAuth2ProviderError,
     OAuth2ProfileInvalid,
+    OAuth2UpstreamFailed,
     TokenEncodingFailed,
     TokenDecodingFailed,
     PasswordVerifyFailed,
@@ -113,6 +115,7 @@ pub struct OAuth2Profile {
     pub provider_code: String,
     pub provider_name: String,
     pub subject: String,
+    pub login: String,
     pub email: String,
     pub display_name: String,
 }

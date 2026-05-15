@@ -41,6 +41,7 @@ interface TronShellProps {
   rightPanel?: ReactNode;
   searchPlaceholder?: string;
   topbarActions?: ReactNode;
+  userMenuContent?: ReactNode;
 }
 
 const TronShellFrameContext = createContext(false);
@@ -65,6 +66,7 @@ export function TronShell({
   rightPanel,
   searchPlaceholder,
   topbarActions,
+  userMenuContent,
 }: TronShellProps) {
   const { t } = useTranslation(["common", "shell"]);
   const { changeLocale, currentLocale, supportedLocales: locales } = useLocale();
@@ -197,23 +199,26 @@ export function TronShell({
                 )}
               </div>
             ) : utilityPanel === "user" ? (
-              <div className="mt-3">
-                <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-locale-select">
-                  {t("common:locale.label")}
-                </label>
-                <select
-                  className="h-9 w-full rounded-lg border border-[var(--color-outline-variant)] bg-white px-3 text-sm outline-none"
-                  id="tron-locale-select"
-                  value={currentLocale}
-                  onChange={(event) => void changeLocale(event.target.value as typeof currentLocale)}
-                >
-                  {locales.map((locale) => (
-                    <option key={locale.code} value={locale.code}>
-                      {t(locale.labelKey)}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-2 text-[12px] text-[var(--color-on-surface-variant)]">{t("common:locale.unavailable")}</p>
+              <div className="mt-3 space-y-4">
+                {userMenuContent}
+                <div className={cn(userMenuContent ? "border-t border-[var(--color-outline-variant)] pt-4" : "")}>
+                  <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-locale-select">
+                    {t("common:locale.label")}
+                  </label>
+                  <select
+                    className="h-9 w-full rounded-lg border border-[var(--color-outline-variant)] bg-white px-3 text-sm outline-none"
+                    id="tron-locale-select"
+                    value={currentLocale}
+                    onChange={(event) => void changeLocale(event.target.value as typeof currentLocale)}
+                  >
+                    {locales.map((locale) => (
+                      <option key={locale.code} value={locale.code}>
+                        {t(locale.labelKey)}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-2 text-[12px] text-[var(--color-on-surface-variant)]">{t("common:locale.unavailable")}</p>
+                </div>
               </div>
             ) : (
               <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">{t("shell:utilityPanel.sharedState")}</p>

@@ -41,7 +41,20 @@ export function logoutAuthSession() {
 
 export function buildOAuth2AuthorizeUrl(providerCode: string, redirectPath: string) {
   const { path } = parseEndpoint(authApiEndpoints.oauth2Authorize);
-  return buildApiUrl(path, { providerCode }, { redirect: redirectPath });
+  const authorizeUrl = new URL(
+    buildApiUrl(path, { providerCode }, { redirect: redirectPath }),
+  );
+
+  // Keep the loopback host aligned with the registered GitHub callback host so the
+  // backend-issued OAuth state cookie survives the full authorize -> callback round-trip.
+  if (
+    authorizeUrl.protocol === "http:"
+    && (authorizeUrl.hostname === "localhost" || authorizeUrl.hostname === "0.0.0.0")
+  ) {
+    authorizeUrl.hostname = "127.0.0.1";
+  }
+
+  return authorizeUrl.toString();
 }
 
 export function buildOAuth2CallbackUrl(redirectPath: string) {

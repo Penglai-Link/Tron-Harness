@@ -8,7 +8,6 @@ import {
   ArrowRight,
   LockKeyhole,
   Orbit,
-  ShieldCheck,
 } from "lucide-react";
 
 import { useTranslation } from "react-i18next";
@@ -60,7 +59,10 @@ export function LoginPage() {
         setOauthProviders(
           payload.providers
             .filter((provider) => provider.type === "oauth2")
-            .map((provider) => ({ code: provider.code, name: provider.name })),
+            .map((provider) => ({
+              code: provider.code,
+              name: provider.code === "dev" ? t("auth:providerLabels.devOAuth2") : provider.name,
+            })),
         );
       })
       .catch((error: unknown) => {
@@ -114,39 +116,11 @@ export function LoginPage() {
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(188,220,255,0.28),_transparent_42%),linear-gradient(180deg,_#f7fafc_0%,_#eef3f8_100%)] px-6 py-10 text-[var(--color-on-surface)]">
-      <section className="mx-auto grid min-h-[calc(100vh-5rem)] max-w-6xl gap-8 lg:grid-cols-[minmax(0,1.1fr)_420px] lg:items-center">
-        <div className="rounded-[28px] border border-white/70 bg-[rgba(255,255,255,0.78)] p-8 shadow-[0_28px_80px_rgba(42,71,110,0.12)] backdrop-blur lg:p-10">
-          <div className="inline-flex items-center gap-2 rounded-full border border-[var(--color-outline-variant)] bg-white px-3 py-1 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">
-            <ShieldCheck size={15} aria-hidden="true" />
-            {t("auth:eyebrow")}
-          </div>
-          <h1 className="mt-6 max-w-xl text-4xl font-semibold leading-tight text-slate-950 lg:text-5xl">
-            {t("auth:title")}
-          </h1>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600">
-            {t("auth:subtitle")}
-          </p>
-          <div className="mt-8 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-white/80 p-4">
-              <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">{t("auth:highlights.internal.label")}</p>
-              <p className="mt-2 text-sm leading-6 text-slate-700">{t("auth:highlights.internal.body")}</p>
-            </div>
-            <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-white/80 p-4">
-              <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">{t("auth:highlights.oauth.label")}</p>
-              <p className="mt-2 text-sm leading-6 text-slate-700">{t("auth:highlights.oauth.body")}</p>
-            </div>
-            <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-white/80 p-4">
-              <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">{t("auth:highlights.redirect.label")}</p>
-              <p className="mt-2 text-sm leading-6 text-slate-700">{t("auth:highlights.redirect.body")}</p>
-            </div>
-          </div>
-        </div>
-
-        <section className="rounded-[28px] border border-white/80 bg-white p-8 shadow-[0_28px_80px_rgba(42,71,110,0.14)]">
+      <section className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl items-center justify-center">
+        <section className="w-full max-w-[420px] rounded-[28px] border border-white/80 bg-white p-8 shadow-[0_28px_80px_rgba(42,71,110,0.14)]">
           <div className="mb-8 flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-[var(--color-on-surface-variant)]">{t("auth:cardTitle")}</p>
-              <h2 className="mt-2 text-2xl font-semibold text-slate-950">{t("auth:cardSubtitle")}</h2>
+              <h1 className="text-2xl font-semibold text-slate-950">{t("auth:cardSubtitle")}</h1>
             </div>
             <div className="flex size-12 items-center justify-center rounded-2xl bg-slate-950 text-white">
               <LockKeyhole size={20} aria-hidden="true" />
@@ -215,10 +189,6 @@ export function LoginPage() {
               </Button>
             ))}
           </div>
-
-          <p className="mt-6 text-sm leading-6 text-[var(--color-on-surface-variant)]">
-            {t("auth:redirectNotice", { redirect: redirectTarget })}
-          </p>
         </section>
       </section>
     </main>

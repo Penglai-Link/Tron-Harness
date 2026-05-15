@@ -124,9 +124,12 @@ pub async fn oauth2_callback(
     match users.oauth2_callback(
         &provider_code,
         state_cookie.as_deref(),
-        &query.state,
-        &query.code,
-    ) {
+        query.state.as_deref(),
+        query.code.as_deref(),
+        query.error.as_deref().or(query.error_description.as_deref()),
+    )
+    .await
+    {
         Ok(session) => {
             let redirect_target = session
                 .redirect_path

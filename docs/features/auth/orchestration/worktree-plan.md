@@ -17,7 +17,7 @@
 - default_branch: master
 - base_ref: master
 - current_branch: feature/clouds3n/auth
-- note: lead execution uses the Lite Spec mirrored worktree path directly; no worker worktrees are planned for this slice.
+- note: the interrupted auth pass first surfaced on the root repository worktree while still on `master`, then recovery moved the in-flight state back onto the mirrored `feature/clouds3n/auth` worktree before final GitHub OAuth completion; no worker worktrees are planned for this slice.
 
 ## Multi-Agent Base Branch
 

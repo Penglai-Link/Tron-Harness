@@ -12,19 +12,18 @@ use serde_json::json;
 use tron_backend::config::AppConfig;
 
 use common::{
-    AUTH_LOGIN, AUTH_PASSWORD, app_with_config, cookie_header_from_set_cookie, header_values,
-    request,
+    AUTH_LOGIN, AUTH_PASSWORD, GITHUB_TEST_CODE, app_with_config, cookie_header_from_set_cookie,
+    github_mock_server, github_oauth_config, header_values, request,
 };
 
 #[tokio::test]
 async fn refresh_sessions_and_oauth2_identity_links_persist_without_plaintext_tokens() {
     let database_path = unique_database_path();
-    let config = AppConfig {
-        bind_address: "127.0.0.1".into(),
-        port: 8080,
-        database_url: database_path.to_string_lossy().into_owned(),
-        ..AppConfig::default()
-    };
+    let github = github_mock_server().await;
+    let mut config = github_oauth_config(&github);
+    config.bind_address = "127.0.0.1".into();
+    config.port = 8080;
+    config.database_url = database_path.to_string_lossy().into_owned();
     let app = app_with_config(config);
 
     let login_response = request(
@@ -53,7 +52,7 @@ async fn refresh_sessions_and_oauth2_identity_links_persist_without_plaintext_to
     let authorize_response = request(
         &app,
         Method::GET,
-        "/api/v1/auth/oauth2/authorize/dev",
+        "/api/v1/auth/oauth2/authorize/github",
         None,
         None,
     )
@@ -63,18 +62,24 @@ async fn refresh_sessions_and_oauth2_identity_links_persist_without_plaintext_to
         &header_values(authorize_response.headers(), header::SET_COOKIE),
         &["tron_oauth2_state"],
     );
-    let callback_location = authorize_response
+    let authorize_location = authorize_response
         .headers()
         .get(header::LOCATION)
         .expect("authorize redirect should include Location")
         .to_str()
         .expect("Location should be valid text")
         .to_owned();
+    let state = url::Url::parse(&authorize_location)
+        .expect("authorize redirect should be a valid URL")
+        .query_pairs()
+        .find(|(key, _)| key == "state")
+        .map(|(_, value)| value.into_owned())
+        .expect("authorize redirect should include state");
 
     let callback_response = request(
         &app,
         Method::GET,
-        &callback_location,
+        &format!("/api/v1/auth/oauth2/callback/github?code={GITHUB_TEST_CODE}&state={state}"),
         None,
         Some(&state_cookie),
     )
@@ -100,7 +105,7 @@ async fn refresh_sessions_and_oauth2_identity_links_persist_without_plaintext_to
 
     let link_count: i64 = connection
         .query_row(
-            "SELECT COUNT(*) FROM user_oauth_identities WHERE provider_code = 'dev'",
+            "SELECT COUNT(*) FROM user_oauth_identities WHERE provider_code = 'github'",
             [],
             |row| row.get(0),
         )

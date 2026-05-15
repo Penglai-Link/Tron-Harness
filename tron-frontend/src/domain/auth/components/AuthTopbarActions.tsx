@@ -6,7 +6,7 @@ import { LOGIN_PATH } from "@/domain/auth/constants";
 import { Button } from "@/shared/ui/Button";
 import { useAuthStore } from "@/store/authStore";
 
-export function AuthTopbarActions() {
+export function AuthUserMenuPanel() {
   const navigate = useNavigate();
   const location = useLocation();
   const logout = useAuthStore((state) => state.logout);
@@ -32,12 +32,21 @@ export function AuthTopbarActions() {
   }
 
   return (
-    <>
-      <div className="hidden rounded-lg border border-[var(--color-outline-variant)] bg-white px-3 py-2 text-right lg:block">
-        <p className="text-sm font-medium text-[var(--color-on-surface)]">{session.user.displayName}</p>
+    <div className="space-y-3">
+      <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-3 py-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">
+          Signed in
+        </p>
+        <p className="mt-2 text-sm font-medium text-[var(--color-on-surface)]">{session.user.displayName}</p>
         <p className="text-[12px] text-[var(--color-on-surface-variant)]">{session.user.email}</p>
+        {session.provider ? (
+          <span className="mt-3 inline-flex rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
+            {session.provider.name}
+          </span>
+        ) : null}
       </div>
       <Button
+        className="w-full justify-center"
         disabled={submitting}
         type="button"
         variant="secondary"
@@ -46,6 +55,6 @@ export function AuthTopbarActions() {
         <LogOut size={16} aria-hidden="true" />
         {submitting ? "Logging out..." : "Log out"}
       </Button>
-    </>
+    </div>
   );
 }
