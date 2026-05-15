@@ -3,9 +3,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use jsonwebtoken::{
-    Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode,
-};
+use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -15,9 +13,8 @@ use crate::{
     config::{AuthConfig, GitHubOAuthConfig},
     domain::{
         auth::{
-            AuthError, AuthMethod, AuthProviderDescriptor, AuthProviderKind,
-            AuthenticatedUser, CurrentSession, OAuth2IdentityLink, OAuth2Profile,
-            RefreshSession,
+            AuthError, AuthMethod, AuthProviderDescriptor, AuthProviderKind, AuthenticatedUser,
+            CurrentSession, OAuth2IdentityLink, OAuth2Profile, RefreshSession,
         },
         user::{
             ListUsersQuery, PagedUsers, PasswordResetResult, User, UserError, UserStatistics,
@@ -171,13 +168,7 @@ impl UserService {
             return Err(AuthError::InvalidCredentials);
         }
 
-        self.create_session(
-            repository.as_mut(),
-            &user,
-            AuthMethod::Internal,
-            None,
-            None,
-        )
+        self.create_session(repository.as_mut(), &user, AuthMethod::Internal, None, None)
     }
 
     pub fn oauth2_authorize(
@@ -238,10 +229,7 @@ impl UserService {
         refresh_token: Option<&str>,
     ) -> Result<AuthorizedSession, AuthError> {
         let refresh_token = refresh_token.ok_or(AuthError::RefreshInvalid)?;
-        let claims = decode_refresh_token(
-            refresh_token,
-            &self.auth_config.jwt_secret,
-        )?;
+        let claims = decode_refresh_token(refresh_token, &self.auth_config.jwt_secret)?;
         let now = now_seconds();
 
         let mut repository = self
@@ -374,10 +362,9 @@ impl UserService {
             .repository
             .lock()
             .expect("user repository mutex poisoned");
-        let user = match repository.find_user_by_provider_subject(
-            &profile.provider_code,
-            &profile.subject,
-        )? {
+        let user = match repository
+            .find_user_by_provider_subject(&profile.provider_code, &profile.subject)?
+        {
             Some(user) => user,
             None => match repository.find_active_user_by_email(&profile.email)? {
                 Some(user) => user,
@@ -428,10 +415,9 @@ impl UserService {
             .repository
             .lock()
             .expect("user repository mutex poisoned");
-        let user = match repository.find_user_by_provider_subject(
-            &profile.provider_code,
-            &profile.subject,
-        )? {
+        let user = match repository
+            .find_user_by_provider_subject(&profile.provider_code, &profile.subject)?
+        {
             Some(user) => user,
             None => match repository.find_active_user_by_email(&profile.email)? {
                 Some(user) => user,
@@ -463,26 +449,41 @@ impl UserService {
         )
     }
 
-    pub fn logout_session(&self, refresh_token: Option<&str>) -> Result<(), AuthError> {
-        let Some(refresh_token) = refresh_token else {
+    pub fn logout_session(
+        &self,
+        refresh_token: Option<&str>,
+        access_token: Option<&str>,
+    ) -> Result<(), AuthError> {
+        let session_code = refresh_token
+            .and_then(|token| {
+                decode_refresh_token(token, &self.auth_config.jwt_secret)
+                    .ok()
+                    .map(|claims| claims.sid)
+            })
+            .or_else(|| {
+                access_token.and_then(|token| {
+                    decode_access_token(token, &self.auth_config.jwt_secret)
+                        .ok()
+                        .map(|claims| claims.sid)
+                })
+            });
+        let Some(session_code) = session_code else {
             return Ok(());
-        };
-
-        let claims = match decode_refresh_token(refresh_token, &self.auth_config.jwt_secret) {
-            Ok(claims) => claims,
-            Err(_) => return Ok(()),
         };
 
         let mut repository = self
             .repository
             .lock()
             .expect("user repository mutex poisoned");
-        repository.revoke_refresh_session(&claims.sid, now_seconds())
+        repository.revoke_refresh_session(&session_code, now_seconds())
     }
 
-    pub fn authorize_access_token(&self, access_token: Option<&str>) -> Result<(), AuthError> {
+    pub fn authenticate_access_token(
+        &self,
+        access_token: Option<&str>,
+    ) -> Result<CurrentSession, AuthError> {
         let access_token = access_token.ok_or(AuthError::Unauthorized)?;
-        self.session_from_access_token(access_token).map(|_| ())
+        self.session_from_access_token(access_token)
     }
 
     pub fn list_users(&self, query: ListUsersQuery) -> Result<PagedUsers, UserError> {
@@ -509,7 +510,11 @@ impl UserService {
         repository.statistics()
     }
 
-    pub fn create_user(&self, command: CreateUserCommand) -> Result<User, UserError> {
+    pub fn create_user(
+        &self,
+        _actor: &AuthenticatedUser,
+        command: CreateUserCommand,
+    ) -> Result<User, UserError> {
         let mut repository = self
             .repository
             .lock()
@@ -590,6 +595,7 @@ impl UserService {
 
     pub fn patch_user(
         &self,
+        _actor: &AuthenticatedUser,
         user_code: &str,
         command: UpdateUserCommand,
     ) -> Result<User, UserError> {
@@ -646,7 +652,11 @@ impl UserService {
         Ok(user.clone())
     }
 
-    pub fn archive_user(&self, user_code: &str) -> Result<User, UserError> {
+    pub fn archive_user(
+        &self,
+        _actor: &AuthenticatedUser,
+        user_code: &str,
+    ) -> Result<User, UserError> {
         let mut repository = self
             .repository
             .lock()
@@ -659,7 +669,11 @@ impl UserService {
         Ok(user.clone())
     }
 
-    pub fn restore_user(&self, user_code: &str) -> Result<User, UserError> {
+    pub fn restore_user(
+        &self,
+        _actor: &AuthenticatedUser,
+        user_code: &str,
+    ) -> Result<User, UserError> {
         let mut repository = self
             .repository
             .lock()
@@ -674,6 +688,7 @@ impl UserService {
 
     pub fn replace_roles(
         &self,
+        _actor: &AuthenticatedUser,
         user_code: &str,
         role_codes: Vec<String>,
     ) -> Result<User, UserError> {
@@ -691,6 +706,7 @@ impl UserService {
 
     pub fn replace_spaces(
         &self,
+        _actor: &AuthenticatedUser,
         user_code: &str,
         space_codes: Vec<String>,
     ) -> Result<User, UserError> {
@@ -706,7 +722,11 @@ impl UserService {
         Ok(user.clone())
     }
 
-    pub fn reset_password(&self, user_code: &str) -> Result<PasswordResetResult, UserError> {
+    pub fn reset_password(
+        &self,
+        _actor: &AuthenticatedUser,
+        user_code: &str,
+    ) -> Result<PasswordResetResult, UserError> {
         let mut repository = self
             .repository
             .lock()
@@ -865,11 +885,14 @@ impl UserService {
     }
 
     fn github_provider_descriptor_if_enabled(&self) -> Option<AuthProviderDescriptor> {
-        self.auth_config.github_oauth.as_ref().map(|config| AuthProviderDescriptor {
-            code: GITHUB_PROVIDER_CODE.into(),
-            name: config.name.clone(),
-            kind: AuthProviderKind::Oauth2,
-        })
+        self.auth_config
+            .github_oauth
+            .as_ref()
+            .map(|config| AuthProviderDescriptor {
+                code: GITHUB_PROVIDER_CODE.into(),
+                name: config.name.clone(),
+                kind: AuthProviderKind::Oauth2,
+            })
     }
 
     fn github_provider_descriptor(&self) -> AuthProviderDescriptor {
@@ -966,9 +989,7 @@ impl UserService {
         // even when provider identifiers contain no digits, such as the local dev OAuth2 flow.
         format!(
             "Gh1!{}:{}:{}:Aa",
-            profile.provider_code,
-            profile.subject,
-            self.auth_config.jwt_secret
+            profile.provider_code, profile.subject, self.auth_config.jwt_secret
         )
     }
 
@@ -1041,10 +1062,7 @@ impl UserService {
             .json::<GitHubTokenResponse>()
             .await
             .map_err(|_| AuthError::OAuth2UpstreamFailed)?;
-        let access_token = match (
-            token_payload.access_token,
-            token_payload.error.as_deref(),
-        ) {
+        let access_token = match (token_payload.access_token, token_payload.error.as_deref()) {
             (Some(token), _) if !token.trim().is_empty() => token,
             (_, Some("bad_verification_code")) => return Err(AuthError::OAuth2CodeInvalid),
             (_, Some(_)) => return Err(AuthError::OAuth2ProviderError),
@@ -1084,10 +1102,10 @@ impl UserService {
             .json::<Vec<GitHubEmailResponse>>()
             .await
             .map_err(|_| AuthError::OAuth2ProfileInvalid)?;
-        let email = select_github_verified_email(&email_payload)
-            .ok_or(AuthError::OAuth2ProfileInvalid)?;
-        let display_name = optional_trimmed(user_payload.name)
-            .unwrap_or_else(|| user_payload.login.clone());
+        let email =
+            select_github_verified_email(&email_payload).ok_or(AuthError::OAuth2ProfileInvalid)?;
+        let display_name =
+            optional_trimmed(user_payload.name).unwrap_or_else(|| user_payload.login.clone());
 
         Ok(OAuth2Profile {
             provider_code: GITHUB_PROVIDER_CODE.into(),
@@ -1110,7 +1128,9 @@ fn select_github_verified_email(emails: &[GitHubEmailResponse]) -> Option<String
 
 fn split_display_name(display_name: &str) -> (String, String) {
     let mut parts = display_name.split_whitespace();
-    let first_name = parts.next().unwrap_or(GITHUB_AUTO_PROVISION_FALLBACK_LAST_NAME);
+    let first_name = parts
+        .next()
+        .unwrap_or(GITHUB_AUTO_PROVISION_FALLBACK_LAST_NAME);
     let last_name = parts.collect::<Vec<_>>().join(" ");
     if last_name.is_empty() {
         (
@@ -1219,21 +1239,16 @@ fn to_usize(value: i64) -> Result<usize, AuthError> {
 mod tests {
     use super::*;
     use crate::{
-        adapters::outbound::{
-            crypto::BcryptPasswordHasher,
-            persistence::SqliteUserRepository,
-        },
+        adapters::outbound::{crypto::BcryptPasswordHasher, persistence::SqliteUserRepository},
         config::AppConfig,
-        domain::{
-            auth::OAuth2Profile,
-            user::validate_initial_password,
-        },
+        domain::{auth::OAuth2Profile, user::validate_initial_password},
     };
 
     #[test]
     fn oauth2_auto_provision_password_satisfies_password_policy_without_subject_digits() {
         let service = UserService::new(
-            SqliteUserRepository::connect(":memory:").expect("in-memory user repository should initialize"),
+            SqliteUserRepository::connect(":memory:")
+                .expect("in-memory user repository should initialize"),
             BcryptPasswordHasher,
             AppConfig::default().auth,
         );

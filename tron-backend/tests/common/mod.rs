@@ -140,9 +140,23 @@ pub async fn request(
     body: Option<Value>,
     cookie_header: Option<&str>,
 ) -> axum::response::Response {
+    request_with_headers(app, method, uri, body, cookie_header, None).await
+}
+
+pub async fn request_with_headers(
+    app: &Router,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+    cookie_header: Option<&str>,
+    authorization_header: Option<&str>,
+) -> axum::response::Response {
     let mut builder = Request::builder().method(method).uri(uri);
     if let Some(cookies) = cookie_header {
         builder = builder.header(header::COOKIE, cookies);
+    }
+    if let Some(authorization) = authorization_header {
+        builder = builder.header(header::AUTHORIZATION, authorization);
     }
     let request_body = if let Some(json_body) = body {
         builder = builder.header(header::CONTENT_TYPE, "application/json");
@@ -211,6 +225,30 @@ pub async fn authenticated_request_with_config(
     authenticated_request(&router, method, uri, body).await
 }
 
+pub async fn authenticated_bearer_token(app: &Router) -> String {
+    let login_response = request(
+        app,
+        Method::POST,
+        "/api/v1/auth/login",
+        Some(json!({
+            "login": AUTH_LOGIN,
+            "password": AUTH_PASSWORD,
+        })),
+        None,
+    )
+    .await;
+    assert_eq!(
+        login_response.status(),
+        axum::http::StatusCode::OK,
+        "test auth bootstrap should obtain a valid login session",
+    );
+
+    cookie_value_from_set_cookie(
+        &header_values(login_response.headers(), header::SET_COOKIE),
+        "tron_access_token",
+    )
+}
+
 pub fn header_values(headers: &HeaderMap, name: header::HeaderName) -> Vec<String> {
     headers
         .get_all(name)
@@ -226,21 +264,31 @@ pub fn header_value_to_string(value: &HeaderValue) -> String {
         .to_owned()
 }
 
-pub fn cookie_header_from_set_cookie(set_cookie_headers: &[String], cookie_names: &[&str]) -> String {
+pub fn cookie_header_from_set_cookie(
+    set_cookie_headers: &[String],
+    cookie_names: &[&str],
+) -> String {
     cookie_names
         .iter()
         .map(|name| {
-            set_cookie_headers
-                .iter()
-                .find_map(|cookie| {
-                    let head = cookie.split(';').next()?.trim();
-                    head.strip_prefix(&format!("{name}="))
-                        .map(|value| format!("{name}={value}"))
-                })
-                .unwrap_or_else(|| panic!("expected Set-Cookie header for {name}"))
+            format!(
+                "{name}={}",
+                cookie_value_from_set_cookie(set_cookie_headers, name)
+            )
         })
         .collect::<Vec<_>>()
         .join("; ")
+}
+
+pub fn cookie_value_from_set_cookie(set_cookie_headers: &[String], cookie_name: &str) -> String {
+    set_cookie_headers
+        .iter()
+        .find_map(|cookie| {
+            let head = cookie.split(';').next()?.trim();
+            head.strip_prefix(&format!("{cookie_name}="))
+                .map(ToOwned::to_owned)
+        })
+        .unwrap_or_else(|| panic!("expected Set-Cookie header for {cookie_name}"))
 }
 
 impl Drop for GitHubMockServer {
@@ -249,9 +297,7 @@ impl Drop for GitHubMockServer {
     }
 }
 
-async fn github_token(
-    State(state): State<Arc<GitHubMockState>>,
-) -> Json<Value> {
+async fn github_token(State(state): State<Arc<GitHubMockState>>) -> Json<Value> {
     Json(json!({
         "access_token": state.access_token,
         "token_type": "bearer",

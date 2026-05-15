@@ -5,14 +5,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use crate::{
-    application::user::UserService,
-    response::ApiResponse,
-};
+use crate::{application::user::UserService, response::ApiResponse};
 
 use super::{
     error_mapper::auth_error_response,
-    read_cookie,
+    read_access_token, read_cookie,
     request::{InternalLoginRequest, OAuth2AuthorizeQuery, OAuth2CallbackQuery},
     response::{AuthProvidersDto, LogoutDto},
 };
@@ -44,11 +41,8 @@ pub async fn login(
     }
 }
 
-pub async fn current_session(
-    State(users): State<UserService>,
-    headers: HeaderMap,
-) -> Response {
-    let access_token = read_cookie(&headers, ACCESS_COOKIE_NAME);
+pub async fn current_session(State(users): State<UserService>, headers: HeaderMap) -> Response {
+    let access_token = read_access_token(&headers);
     let refresh_token = read_cookie(&headers, REFRESH_COOKIE_NAME);
     match users.current_session(access_token.as_deref(), refresh_token.as_deref()) {
         Ok(Some(session)) if !session.refresh_token.is_empty() => response_with_auth_cookies(
@@ -80,7 +74,8 @@ pub async fn refresh(State(users): State<UserService>, headers: HeaderMap) -> Re
 
 pub async fn logout(State(users): State<UserService>, headers: HeaderMap) -> Response {
     let refresh_token = read_cookie(&headers, REFRESH_COOKIE_NAME);
-    match users.logout_session(refresh_token.as_deref()) {
+    let access_token = read_access_token(&headers);
+    match users.logout_session(refresh_token.as_deref(), access_token.as_deref()) {
         Ok(()) => response_with_clear_cookies(
             StatusCode::OK,
             Json(ApiResponse::success(LogoutDto { logged_out: true })),
@@ -121,19 +116,21 @@ pub async fn oauth2_callback(
     headers: HeaderMap,
 ) -> Response {
     let state_cookie = read_cookie(&headers, OAUTH2_STATE_COOKIE_NAME);
-    match users.oauth2_callback(
-        &provider_code,
-        state_cookie.as_deref(),
-        query.state.as_deref(),
-        query.code.as_deref(),
-        query.error.as_deref().or(query.error_description.as_deref()),
-    )
-    .await
+    match users
+        .oauth2_callback(
+            &provider_code,
+            state_cookie.as_deref(),
+            query.state.as_deref(),
+            query.code.as_deref(),
+            query
+                .error
+                .as_deref()
+                .or(query.error_description.as_deref()),
+        )
+        .await
     {
         Ok(session) => {
-            let redirect_target = session
-                .redirect_path
-                .unwrap_or_else(|| "/dashboard".into());
+            let redirect_target = session.redirect_path.unwrap_or_else(|| "/dashboard".into());
             let mut response = StatusCode::SEE_OTHER.into_response();
             response.headers_mut().insert(
                 header::LOCATION,
@@ -165,12 +162,7 @@ fn response_with_auth_cookies<T: IntoResponse>(
     refresh_token: &str,
 ) -> Response {
     let mut response = (status, body).into_response();
-    append_auth_cookies(
-        response.headers_mut(),
-        users,
-        access_token,
-        refresh_token,
-    );
+    append_auth_cookies(response.headers_mut(), users, access_token, refresh_token);
     response
 }
 
@@ -182,13 +174,19 @@ fn response_with_clear_cookies<T: IntoResponse>(
     let mut response = (status, body).into_response();
     response.headers_mut().append(
         header::SET_COOKIE,
-        HeaderValue::from_str(&clear_auth_cookie(ACCESS_COOKIE_NAME, users.cookie_secure()))
-            .expect("clear access cookie should be valid"),
+        HeaderValue::from_str(&clear_auth_cookie(
+            ACCESS_COOKIE_NAME,
+            users.cookie_secure(),
+        ))
+        .expect("clear access cookie should be valid"),
     );
     response.headers_mut().append(
         header::SET_COOKIE,
-        HeaderValue::from_str(&clear_auth_cookie(REFRESH_COOKIE_NAME, users.cookie_secure()))
-            .expect("clear refresh cookie should be valid"),
+        HeaderValue::from_str(&clear_auth_cookie(
+            REFRESH_COOKIE_NAME,
+            users.cookie_secure(),
+        ))
+        .expect("clear refresh cookie should be valid"),
     );
     response
 }

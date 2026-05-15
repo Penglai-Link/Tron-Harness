@@ -6,6 +6,7 @@ use axum::{
 };
 
 use crate::{
+    adapters::inbound::http::auth::RequestAuthContext,
     application::user::UserService,
     domain::user::{ListUsersQuery, UserStatistics},
     response::ApiResponse,
@@ -58,9 +59,10 @@ fn statistic_response(
 
 pub async fn create_user(
     State(users): State<UserService>,
+    auth: RequestAuthContext,
     Json(command): Json<CreateUserRequest>,
 ) -> Response {
-    match users.create_user(command.into()) {
+    match users.create_user(auth.user(), command.into()) {
         Ok(user) => (
             StatusCode::CREATED,
             Json(ApiResponse::success(UserDetailDto::from(user))),
@@ -79,10 +81,11 @@ pub async fn get_user(State(users): State<UserService>, Path(user_code): Path<St
 
 pub async fn patch_user(
     State(users): State<UserService>,
+    auth: RequestAuthContext,
     Path(user_code): Path<String>,
     Json(command): Json<UpdateUserRequest>,
 ) -> Response {
-    match users.patch_user(&user_code, command.into()) {
+    match users.patch_user(auth.user(), &user_code, command.into()) {
         Ok(user) => Json(ApiResponse::success(UserDetailDto::from(user))).into_response(),
         Err(error) => user_error_response(error),
     }
@@ -90,9 +93,10 @@ pub async fn patch_user(
 
 pub async fn archive_user(
     State(users): State<UserService>,
+    auth: RequestAuthContext,
     Path(user_code): Path<String>,
 ) -> Response {
-    match users.archive_user(&user_code) {
+    match users.archive_user(auth.user(), &user_code) {
         Ok(user) => Json(ApiResponse::success(UserDetailDto::from(user))).into_response(),
         Err(error) => user_error_response(error),
     }
@@ -100,9 +104,10 @@ pub async fn archive_user(
 
 pub async fn restore_user(
     State(users): State<UserService>,
+    auth: RequestAuthContext,
     Path(user_code): Path<String>,
 ) -> Response {
-    match users.restore_user(&user_code) {
+    match users.restore_user(auth.user(), &user_code) {
         Ok(user) => Json(ApiResponse::success(UserDetailDto::from(user))).into_response(),
         Err(error) => user_error_response(error),
     }
@@ -110,10 +115,11 @@ pub async fn restore_user(
 
 pub async fn replace_roles(
     State(users): State<UserService>,
+    auth: RequestAuthContext,
     Path(user_code): Path<String>,
     Json(request): Json<ReplaceRolesRequest>,
 ) -> Response {
-    match users.replace_roles(&user_code, request.role_codes) {
+    match users.replace_roles(auth.user(), &user_code, request.role_codes) {
         Ok(user) => Json(ApiResponse::success(AssignmentDto::from(user))).into_response(),
         Err(error) => user_error_response(error),
     }
@@ -121,10 +127,11 @@ pub async fn replace_roles(
 
 pub async fn replace_spaces(
     State(users): State<UserService>,
+    auth: RequestAuthContext,
     Path(user_code): Path<String>,
     Json(request): Json<ReplaceSpacesRequest>,
 ) -> Response {
-    match users.replace_spaces(&user_code, request.space_codes) {
+    match users.replace_spaces(auth.user(), &user_code, request.space_codes) {
         Ok(user) => Json(ApiResponse::success(AssignmentDto::from(user))).into_response(),
         Err(error) => user_error_response(error),
     }
@@ -132,9 +139,10 @@ pub async fn replace_spaces(
 
 pub async fn reset_password(
     State(users): State<UserService>,
+    auth: RequestAuthContext,
     Path(user_code): Path<String>,
 ) -> Response {
-    match users.reset_password(&user_code) {
+    match users.reset_password(auth.user(), &user_code) {
         Ok(result) => Json(ApiResponse::success(PasswordResetDto::from(result))).into_response(),
         Err(error) => user_error_response(error),
     }

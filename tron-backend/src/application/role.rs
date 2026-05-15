@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::{
+    domain::auth::AuthenticatedUser,
     domain::role::{
         DEFAULT_ROLE_UPDATED_AT, Role, RoleError, RoleKind, RoleManagedBy, fixed_system_role_codes,
         normalize_permissions, permission_domains, validate_role_catalog,
@@ -61,7 +62,11 @@ impl RoleService {
         repository.list_roles()
     }
 
-    pub fn replace_roles(&self, command: ReplaceRolesCommand) -> Result<Vec<Role>, RoleError> {
+    pub fn replace_roles(
+        &self,
+        _actor: &AuthenticatedUser,
+        command: ReplaceRolesCommand,
+    ) -> Result<Vec<Role>, RoleError> {
         let mut repository = self
             .repository
             .lock()
