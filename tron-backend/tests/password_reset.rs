@@ -1,3 +1,5 @@
+mod common;
+
 use axum::{
     body::{Body, to_bytes},
     http::{Method, Request, StatusCode},
@@ -5,6 +7,8 @@ use axum::{
 use serde_json::{Value, json};
 use tower::ServiceExt;
 use tron_backend::{app::build_router, config::AppConfig};
+
+use common::{app as auth_test_app, authenticated_request};
 
 #[tokio::test]
 async fn reset_password_returns_temporary_password_once_without_persisting_plaintext() {
@@ -65,23 +69,8 @@ async fn user_detail_never_exposes_password_hash() {
 }
 
 async fn request(method: Method, uri: &str, body: Option<Value>) -> axum::response::Response {
-    let router = build_router(AppConfig::default());
-    let mut builder = Request::builder().method(method).uri(uri);
-    let request_body = if let Some(json_body) = body {
-        builder = builder.header("content-type", "application/json");
-        Body::from(json_body.to_string())
-    } else {
-        Body::empty()
-    };
-
-    router
-        .oneshot(
-            builder
-                .body(request_body)
-                .expect("request should be constructible"),
-        )
-        .await
-        .expect("router should return a response")
+    let router = auth_test_app();
+    authenticated_request(&router, method, uri, body).await
 }
 
 async fn response_json(response: axum::response::Response) -> Value {

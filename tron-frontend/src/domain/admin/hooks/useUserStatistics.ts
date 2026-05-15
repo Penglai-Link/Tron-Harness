@@ -7,6 +7,7 @@ import {
 import { fetchAdminUserStatistics } from "@/domain/admin/api";
 import { getUserStatistics } from "@/domain/admin/mock/data";
 import type { UserStatistics } from "@/domain/admin/model";
+import { isUnauthorizedApiError } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 export interface UserStatisticsResult extends UserStatistics {
@@ -36,6 +37,7 @@ export function useUserStatistics(): UserStatisticsResult {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
+        if (isUnauthorizedApiError(error)) return;
         console.warn("[admin] Falling back to mock user statistics.", error);
         setStatistics(mockStatistics);
       })

@@ -1,3 +1,5 @@
+mod common;
+
 use axum::{
     body::{Body, to_bytes},
     http::{Method, Request, StatusCode},
@@ -5,6 +7,8 @@ use axum::{
 use serde_json::Value;
 use tower::ServiceExt;
 use tron_backend::{app::build_router, config::AppConfig};
+
+use common::{app as auth_test_app, authenticated_request};
 
 #[tokio::test]
 async fn list_contract_uses_stable_codes_and_decimal_string_ids() {
@@ -61,17 +65,8 @@ async fn ids_beyond_js_safe_integer_are_preserved_as_exact_strings() {
 }
 
 async fn request(method: Method, uri: &str, body: Option<Value>) -> axum::response::Response {
-    let router = build_router(AppConfig::default());
-    let request = Request::builder()
-        .method(method)
-        .uri(uri)
-        .body(body.map_or_else(Body::empty, |json_body| Body::from(json_body.to_string())))
-        .expect("request should be constructible");
-
-    router
-        .oneshot(request)
-        .await
-        .expect("router should return a response")
+    let router = auth_test_app();
+    authenticated_request(&router, method, uri, body).await
 }
 
 async fn response_json(response: axum::response::Response) -> Value {

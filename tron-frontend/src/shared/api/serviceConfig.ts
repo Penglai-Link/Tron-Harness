@@ -5,6 +5,12 @@ import {
   type DependencyList,
 } from "react";
 
+import {
+  buildApiUrl,
+  type EndpointParams,
+  parseEndpoint,
+} from "@/shared/api/httpClient";
+
 export type ServiceDataSource = "mock" | "api";
 
 export type ServiceDomain =
@@ -23,8 +29,6 @@ export type ServiceDomain =
   | "skill"
   | "task"
   | "variable";
-
-type EndpointParams = Record<string, string | number | boolean | undefined>;
 
 interface ServiceQueryOptions<T> {
   domain: ServiceDomain;
@@ -93,17 +97,11 @@ export function getServiceDataSource(domain: ServiceDomain): ServiceDataSource {
   return domainSource ?? defaultSource ?? "mock";
 }
 
-function resolveApiUrl(path: string, params: EndpointParams = {}) {
-  const baseUrl = getEnvValue("VITE_TRON_API_BASE_URL") ?? "";
-  const resolvedPath = path.replace(/\{([^}]+)\}/g, (_, key: string) => encodeURIComponent(String(params[key] ?? "")));
-  return `${baseUrl}${resolvedPath}`;
-}
-
-function parseEndpoint(endpoint: string, params?: EndpointParams) {
-  const [method = "GET", path = endpoint] = endpoint.split(/\s+/, 2);
+function resolveEndpoint(endpoint: string, params?: EndpointParams) {
+  const { method, path } = parseEndpoint(endpoint);
   return {
     method,
-    url: resolveApiUrl(path, params),
+    url: buildApiUrl(path, params),
   };
 }
 
@@ -112,7 +110,7 @@ export function useServiceQuery<T>({ domain, endpoint, mockData, params, deps = 
   const mockValue = useMemo(mockData, deps);
   const [data, setData] = useState(mockValue);
   const paramsKey = JSON.stringify(params ?? {});
-  const request = useMemo(() => parseEndpoint(endpoint, params), [endpoint, paramsKey]);
+  const request = useMemo(() => resolveEndpoint(endpoint, params), [endpoint, paramsKey]);
 
   useEffect(() => {
     setData(mockValue);
@@ -123,7 +121,11 @@ export function useServiceQuery<T>({ domain, endpoint, mockData, params, deps = 
 
     const controller = new AbortController();
 
-    fetch(request.url, { method: request.method, signal: controller.signal })
+    fetch(request.url, {
+      credentials: "include",
+      method: request.method,
+      signal: controller.signal,
+    })
       .then((response) => {
         if (!response.ok) {
           throw new Error(`${request.method} ${request.url} failed with ${response.status}`);

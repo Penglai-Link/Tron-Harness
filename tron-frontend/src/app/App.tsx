@@ -18,10 +18,20 @@ import {
   useLocation,
 } from "react-router";
 import {
+  AuthTopbarActions,
+  useAuthSession,
+  useBootstrapAuthSession,
+} from "@/domain/auth";
+import {
   ToastProvider,
   TronShell,
   tronNavigation,
 } from "@/shared";
+import { AUTH_CALLBACK_PATH } from "@/domain/auth/constants";
+import {
+  buildLoginUrl,
+  resolveAuthRedirect,
+} from "@/domain/auth/model";
 
 import { Button } from "@/shared/ui/Button";
 
@@ -147,16 +157,8 @@ function AppRoutePage() {
   const resolved = resolveAppRoute(pathname, search);
   if (resolved) {
     const { Component, route } = resolved;
-    if (route.pageId === "auth.login") {
-      return (
-        <SuspendedRoute fullScreen>
-          <Component />
-        </SuspendedRoute>
-      );
-    }
-
     return (
-      <TronShell activeItem={route.activeNav}>
+      <TronShell activeItem={route.activeNav} topbarActions={<AuthTopbarActions />}>
         <SuspendedRoute>
           <Component />
         </SuspendedRoute>
@@ -175,25 +177,105 @@ function ConsoleFallbackRoutePage() {
   const { pathname } = useLocation();
 
   return (
-    <TronShell activeItem={resolveActiveItem(pathname)}>
+    <TronShell activeItem={resolveActiveItem(pathname)} topbarActions={<AuthTopbarActions />}>
       <ConsoleFallbackPage />
     </TronShell>
   );
 }
 
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const { status } = useAuthSession();
+
+  if (status === "checking") {
+    return <RouteLoadingFallback fullScreen />;
+  }
+
+  if (status === "unauthenticated") {
+    return <Navigate replace to={buildLoginUrl(`${location.pathname}${location.search}`)} />;
+  }
+
+  return <>{children}</>;
+}
+
+function LoginRoutePage() {
+  const location = useLocation();
+  const { session, status } = useAuthSession();
+
+  if (status === "checking") {
+    return <RouteLoadingFallback fullScreen />;
+  }
+
+  if (session?.authenticated) {
+    return <Navigate replace to={resolveAuthRedirect(location.search)} />;
+  }
+
+  return <PublicRoutePage pageId="auth.login" />;
+}
+
 function RoutedApp() {
+  useBootstrapAuthSession();
+
   return (
     <Routes>
-      <Route path="/" element={<PublicRoutePage pageId="auth.login" />} />
-      <Route path="/login" element={<PublicRoutePage pageId="auth.login" />} />
-      <Route path="/home" element={<HomePage />} />
-      <Route path="/design-standard" element={<SuspendedRoute fullScreen><DesignStandardPage /></SuspendedRoute>} />
-      <Route path="/shared-shell-preview" element={<SuspendedRoute fullScreen><SharedShellPreviewPage /></SuspendedRoute>} />
-      <Route path="/chats" element={<Navigate replace to="/chats/8842-alpha" />} />
+      <Route path="/" element={<LoginRoutePage />} />
+      <Route path="/login" element={<LoginRoutePage />} />
+      <Route path={AUTH_CALLBACK_PATH} element={<PublicRoutePage pageId="auth.callback" />} />
+      <Route
+        path="/home"
+        element={(
+          <ProtectedRoute>
+            <HomePage />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/design-standard"
+        element={(
+          <ProtectedRoute>
+            <SuspendedRoute fullScreen>
+              <DesignStandardPage />
+            </SuspendedRoute>
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/shared-shell-preview"
+        element={(
+          <ProtectedRoute>
+            <SuspendedRoute fullScreen>
+              <SharedShellPreviewPage />
+            </SuspendedRoute>
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/chats"
+        element={(
+          <ProtectedRoute>
+            <Navigate replace to="/chats/8842-alpha" />
+          </ProtectedRoute>
+        )}
+      />
       {appRoutePaths.map((path) => (
-        <Route element={<AppRoutePage />} key={path} path={path} />
+        <Route
+          element={(
+            <ProtectedRoute>
+              <AppRoutePage />
+            </ProtectedRoute>
+          )}
+          key={path}
+          path={path}
+        />
       ))}
-      <Route path="*" element={<ConsoleFallbackRoutePage />} />
+      <Route
+        path="*"
+        element={(
+          <ProtectedRoute>
+            <ConsoleFallbackRoutePage />
+          </ProtectedRoute>
+        )}
+      />
     </Routes>
   );
 }

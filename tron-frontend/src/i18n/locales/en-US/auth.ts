@@ -1,18 +1,51 @@
 export const auth = {
+  alternativeDivider: "or continue with",
+  callback: {
+    backToLogin: "Back to login",
+    failed: "Single sign-on could not be completed. Return to login and try again.",
+    progress: "Completing your sign-in and restoring the requested workspace.",
+    title: "Finishing secure sign-in",
+  },
   captcha: {
     label: "Captcha",
     placeholder: "Enter code",
   },
+  cardSubtitle: "Choose an authentication method",
+  cardTitle: "Workspace access",
   copyright: "Copyright 2026 Tron Agentic. All rights reserved.",
+  eyebrow: "Authentication",
   fields: {
     operatorId: "Operator ID",
     passkey: "Passkey",
+    password: "Password",
+    usernameOrEmail: "Username or Email",
   },
   forgotPasskey: "Forgot passkey?",
+  highlights: {
+    internal: {
+      body: "Use an internal Tron account backed by short-lived JWT sessions and rotating refresh cookies.",
+      label: "Internal JWT",
+    },
+    oauth: {
+      body: "Use configured OAuth2 providers for SSO while preserving the same protected route model after sign-in.",
+      label: "OAuth2 SSO",
+    },
+    redirect: {
+      body: "Anonymous visits to protected routes return here and resume at the original destination after authentication.",
+      label: "Protected Redirect",
+    },
+  },
+  loadingProviders: "Loading available sign-in providers...",
+  noExternalProviders: "No external providers are currently enabled for this environment.",
+  passwordResetRequired: "Password reset is required for this account before broader workspace changes.",
   passkeyPlaceholder: "........",
+  providerUnavailable: "External providers are temporarily unavailable.",
   recoveryRequested: "Passkey recovery link requested",
+  redirectNotice: "After sign-in you will continue to {{redirect}}.",
+  signInFailed: "Unable to sign in with the supplied credentials.",
   signingIn: "Entering workspace...",
   status: "Enterprise access required",
   subtitle: "Sign in to the agentic operations console.",
   title: "Tron",
+  usernamePlaceholder: "auth.operator or auth.operator@tron.ai",
 } as const;

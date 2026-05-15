@@ -5,6 +5,7 @@ import type {
   UserStatistics,
   UserStatus,
 } from "@/domain/admin/model";
+import { requestApi } from "@/shared/api/httpClient";
 
 export const adminApiEndpoints = {
   listAuditLogs: "GET /api/v1/admin/audit-logs",
@@ -107,41 +108,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-function getApiBaseUrl() {
-  return (import.meta.env as Record<string, string | undefined>).VITE_TRON_API_BASE_URL ?? "";
-}
-
-function parseEndpoint(endpoint: string) {
-  const [method = "GET", path = endpoint] = endpoint.split(/\s+/, 2);
-  return { method, path };
-}
-
-function resolveAdminApiUrl(endpoint: string, pathParams: AdminEndpointParams = {}, queryParams: AdminEndpointParams = {}) {
-  const { path } = parseEndpoint(endpoint);
-  const resolvedPath = path.replace(/\{([^}]+)\}/g, (_, key: string) => encodeURIComponent(String(pathParams[key] ?? "")));
-  const url = new URL(`${getApiBaseUrl()}${resolvedPath}`, window.location.origin);
-
-  Object.entries(queryParams).forEach(([key, value]) => {
-    if (value === undefined || value === null) return;
-    url.searchParams.set(key, String(value));
-  });
-
-  return url.toString();
-}
-
-function unwrapAdminEnvelope<T>(payload: unknown): T {
-  if (!isRecord(payload) || !("code" in payload) || !("data" in payload)) {
-    return payload as T;
-  }
-
-  if (payload.code !== "SUCCESS") {
-    const message = typeof payload.message === "string" ? payload.message : "API request failed";
-    throw new Error(message);
-  }
-
-  return payload.data as T;
-}
-
 function normalizeAdminPage<T>(payload: unknown, fallback: Pick<AdminPage<T>, "current" | "size">): AdminPage<T> {
   if (isRecord(payload) && Array.isArray(payload.records)) {
     return {
@@ -170,23 +136,12 @@ function normalizeAdminPage<T>(payload: unknown, fallback: Pick<AdminPage<T>, "c
 }
 
 export async function requestAdminApi<T>(endpoint: string, options: AdminRequestOptions = {}): Promise<T> {
-  const { method } = parseEndpoint(endpoint);
-  const response = await fetch(resolveAdminApiUrl(endpoint, options.pathParams, options.queryParams), {
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    headers: options.body === undefined ? undefined : { "Content-Type": "application/json" },
-    method,
+  return requestApi<T>(endpoint, {
+    body: options.body as Record<string, unknown> | unknown[] | undefined,
+    pathParams: options.pathParams,
+    queryParams: options.queryParams,
     signal: options.signal,
   });
-  const payload = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    const message = isRecord(payload) && typeof payload.message === "string"
-      ? payload.message
-      : `${method} ${response.url} failed with ${response.status}`;
-    throw new Error(message);
-  }
-
-  return unwrapAdminEnvelope<T>(payload);
 }
 
 export async function fetchAdminUserPage(query: UserListQuery, signal?: AbortSignal): Promise<AdminPage<UserRecord>> {

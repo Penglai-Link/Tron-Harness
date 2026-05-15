@@ -16,6 +16,7 @@ import type {
   UserStatus,
 } from "@/domain/admin/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { isUnauthorizedApiError } from "@/shared/api/httpClient";
 
 interface UseUserListOptions {
   current?: number;
@@ -157,6 +158,7 @@ export function useUserList(options: UseUserListOptions = {}): UserListResult {
       })
       .catch((error: unknown) => {
         if (requestId !== requestSequenceRef.current || controller.signal.aborted) return;
+        if (isUnauthorizedApiError(error)) return;
         console.warn("[admin] Falling back to mock user data.", error);
         setPage(mockPage);
       })

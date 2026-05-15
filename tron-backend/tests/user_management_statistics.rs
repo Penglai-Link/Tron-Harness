@@ -1,6 +1,6 @@
 use axum::{
-    body::{Body, to_bytes},
-    http::{Method, Request, StatusCode},
+    body::to_bytes,
+    http::{Method, StatusCode},
 };
 use rusqlite::Connection;
 use serde_json::Value;
@@ -9,8 +9,11 @@ use std::{
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
-use tower::ServiceExt;
 use tron_backend::{app::build_router, config::AppConfig};
+
+mod common;
+
+use common::authenticated_request_with_config;
 
 #[tokio::test]
 async fn user_management_statistics_total_users_endpoint_returns_count_envelope() {
@@ -278,17 +281,7 @@ async fn assert_count_endpoint(statistic_name: &str, uri: &str, expected_sql: &s
 }
 
 async fn request(config: AppConfig, method: Method, uri: &str) -> axum::response::Response {
-    let router = build_router(config);
-    router
-        .oneshot(
-            Request::builder()
-                .method(method)
-                .uri(uri)
-                .body(Body::empty())
-                .expect("request should be constructible"),
-        )
-        .await
-        .expect("router should return a response")
+    authenticated_request_with_config(config, method, uri, None).await
 }
 
 async fn response_json(response: axum::response::Response) -> Value {

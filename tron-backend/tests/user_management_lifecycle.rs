@@ -1,6 +1,6 @@
 use axum::{
-    body::{Body, to_bytes},
-    http::{Method, Request, StatusCode},
+    body::to_bytes,
+    http::{Method, StatusCode},
 };
 use rusqlite::Connection;
 use serde_json::{Value, json};
@@ -9,8 +9,11 @@ use std::{
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
-use tower::ServiceExt;
-use tron_backend::{app::build_router, config::AppConfig};
+use tron_backend::config::AppConfig;
+
+mod common;
+
+use common::authenticated_request_with_config;
 
 #[tokio::test]
 async fn create_user_returns_stringified_id_and_user_code() {
@@ -444,23 +447,7 @@ async fn request_with_config(
     uri: &str,
     body: Option<Value>,
 ) -> axum::response::Response {
-    let router = build_router(config);
-    let mut builder = Request::builder().method(method).uri(uri);
-    let request_body = if let Some(json_body) = body {
-        builder = builder.header("content-type", "application/json");
-        Body::from(json_body.to_string())
-    } else {
-        Body::empty()
-    };
-
-    router
-        .oneshot(
-            builder
-                .body(request_body)
-                .expect("request should be constructible"),
-        )
-        .await
-        .expect("router should return a response")
+    authenticated_request_with_config(config, method, uri, body).await
 }
 
 fn temp_database_path(test_name: &str) -> PathBuf {

@@ -1,10 +1,13 @@
 use std::sync::OnceLock;
 
-use axum::{Router, extract::FromRef, routing::get};
+use axum::{Router, extract::FromRef, middleware, routing::get};
 
 use crate::{
     adapters::{
-        inbound::http::admin::users::routes as user_routes,
+        inbound::http::{
+            admin::users::routes as user_routes,
+            auth::{require_auth, routes as auth_routes},
+        },
         outbound::{crypto::BcryptPasswordHasher, persistence::SqliteUserRepository},
     },
     application::user::UserService,
@@ -24,10 +27,10 @@ impl AppState {
     pub fn new(config: AppConfig) -> Self {
         let users = if config.database_url == ":memory:" {
             GLOBAL_USER_SERVICE
-                .get_or_init(|| build_user_service(":memory:"))
+                .get_or_init(|| build_user_service(&config))
                 .clone()
         } else {
-            build_user_service(&config.database_url)
+            build_user_service(&config)
         };
 
         Self { config, users }
@@ -48,15 +51,18 @@ impl FromRef<AppState> for UserService {
 
 pub fn build_router(config: AppConfig) -> Router {
     let state = AppState::new(config);
+    let protected_user_routes =
+        user_routes().route_layer(middleware::from_fn_with_state(state.users.clone(), require_auth));
 
     Router::new()
         .route("/api/v1/health", get(health))
-        .merge(user_routes())
+        .merge(auth_routes())
+        .merge(protected_user_routes)
         .with_state(state)
 }
 
-fn build_user_service(database_url: &str) -> UserService {
-    let repository = SqliteUserRepository::connect(database_url)
+fn build_user_service(config: &AppConfig) -> UserService {
+    let repository = SqliteUserRepository::connect(&config.database_url)
         .expect("user SQLite repository should initialize");
-    UserService::new(repository, BcryptPasswordHasher)
+    UserService::new(repository, BcryptPasswordHasher, config.auth.clone())
 }

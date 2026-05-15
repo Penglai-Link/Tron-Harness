@@ -1,6 +1,7 @@
 export const common = {
   actions: {
     close: "Close",
+    logout: "Log out",
     refresh: "Refresh",
     signIn: "Sign In",
   },

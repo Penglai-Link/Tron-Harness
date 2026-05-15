@@ -2,15 +2,21 @@ use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
     application::user::UserRepository,
-    domain::user::{
-        ListUsersQuery, PagedUsers, User, UserError, UserStatistics, UserStatus,
-        normalize_code_segment,
+    domain::{
+        auth::{AuthError, AuthMethod, OAuth2IdentityLink, RefreshSession},
+        user::{
+            ListUsersQuery, PagedUsers, User, UserError, UserStatistics, UserStatus,
+            normalize_code_segment,
+        },
     },
     shared::id::SnowflakeId,
 };
 
 use super::{
-    migrations::{ASSIGNMENTS_MIGRATION, PASSWORD_RESET_MIGRATION, USERS_MIGRATION},
+    migrations::{
+        ASSIGNMENTS_MIGRATION, AUTH_OAUTH_IDENTITIES_MIGRATION,
+        AUTH_REFRESH_SESSIONS_MIGRATION, PASSWORD_RESET_MIGRATION, USERS_MIGRATION,
+    },
     seed::seeded_users,
     storage_mapping::{
         StoredUserRow, bool_to_int, ensure_database_parent, phone_from_parts, storage_error,
@@ -53,6 +59,12 @@ impl SqliteUserRepository {
             .map_err(storage_error)?;
         self.connection
             .execute_batch(PASSWORD_RESET_MIGRATION)
+            .map_err(storage_error)?;
+        self.connection
+            .execute_batch(AUTH_REFRESH_SESSIONS_MIGRATION)
+            .map_err(storage_error)?;
+        self.connection
+            .execute_batch(AUTH_OAUTH_IDENTITIES_MIGRATION)
             .map_err(storage_error)
     }
 
@@ -158,6 +170,26 @@ impl SqliteUserRepository {
             .query_row(sql, [], |row| row.get::<_, i64>(0))
             .map_err(storage_error)?;
         usize::try_from(count).map_err(|_| UserError::StorageFailure)
+    }
+
+    fn user_by_code_for_auth(&mut self, user_code: &str) -> Result<Option<User>, AuthError> {
+        self.get_user(user_code)
+            .map(Some)
+            .or_else(|error| match error {
+                UserError::NotFound => Ok(None),
+                _ => Err(AuthError::StorageFailure),
+            })
+    }
+
+    fn query_user_code(
+        &self,
+        sql: &str,
+        params: impl rusqlite::Params,
+    ) -> Result<Option<String>, AuthError> {
+        self.connection
+            .query_row(sql, params, |row| row.get::<_, String>(0))
+            .optional()
+            .map_err(|_| AuthError::StorageFailure)
     }
 }
 
@@ -293,6 +325,8 @@ impl UserRepository for SqliteUserRepository {
                     UNION ALL SELECT id FROM user_role_assignments
                     UNION ALL SELECT id FROM user_space_assignments
                     UNION ALL SELECT id FROM user_password_reset_events
+                    UNION ALL SELECT id FROM auth_refresh_sessions
+                    UNION ALL SELECT id FROM user_oauth_identities
                 )",
                 [],
                 |row| row.get::<_, Option<i64>>(0),
@@ -491,6 +525,166 @@ impl UserRepository for SqliteUserRepository {
                 ],
             )
             .map_err(storage_error)?;
+        Ok(())
+    }
+
+    fn find_user_by_login(&mut self, login: &str) -> Result<Option<User>, AuthError> {
+        let normalized = login.trim().to_ascii_lowercase();
+        let user_code = self.query_user_code(
+            "SELECT user_code FROM users WHERE username = ?1 COLLATE NOCASE OR email = ?2 COLLATE NOCASE LIMIT 1",
+            params![login.trim(), normalized],
+        )?;
+        match user_code {
+            Some(user_code) => self.user_by_code_for_auth(&user_code),
+            None => Ok(None),
+        }
+    }
+
+    fn find_active_user_by_email(&mut self, email: &str) -> Result<Option<User>, AuthError> {
+        let user_code = self.query_user_code(
+            "SELECT user_code FROM users WHERE email = lower(?1) COLLATE NOCASE AND status = 'active' LIMIT 1",
+            params![email.trim()],
+        )?;
+        match user_code {
+            Some(user_code) => self.user_by_code_for_auth(&user_code),
+            None => Ok(None),
+        }
+    }
+
+    fn find_user_by_provider_subject(
+        &mut self,
+        provider_code: &str,
+        provider_subject: &str,
+    ) -> Result<Option<User>, AuthError> {
+        let user_code = self.query_user_code(
+            "SELECT user_code FROM user_oauth_identities WHERE provider_code = ?1 AND provider_subject = ?2 LIMIT 1",
+            params![provider_code, provider_subject],
+        )?;
+        match user_code {
+            Some(user_code) => self.user_by_code_for_auth(&user_code),
+            None => Ok(None),
+        }
+    }
+
+    fn create_refresh_session(&mut self, session: &RefreshSession) -> Result<(), AuthError> {
+        self.connection
+            .execute(
+                "INSERT INTO auth_refresh_sessions (
+                    id, session_code, user_id, user_code, auth_method, provider_code,
+                    refresh_token_hash, expires_at, created_at, updated_at, last_used_at, revoked_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                params![
+                    session.id,
+                    session.session_code,
+                    session.user_id,
+                    session.user_code,
+                    match session.auth_method {
+                        AuthMethod::Internal => "internal",
+                        AuthMethod::Oauth2 => "oauth2",
+                    },
+                    session.provider_code,
+                    session.refresh_token_hash,
+                    session.expires_at,
+                    session.created_at,
+                    session.updated_at,
+                    session.last_used_at,
+                    session.revoked_at,
+                ],
+            )
+            .map_err(|_| AuthError::StorageFailure)?;
+        Ok(())
+    }
+
+    fn find_refresh_session(&mut self, session_code: &str) -> Result<Option<RefreshSession>, AuthError> {
+        self.connection
+            .query_row(
+                "SELECT id, session_code, user_id, user_code, auth_method, provider_code, refresh_token_hash, expires_at, created_at, updated_at, last_used_at, revoked_at
+                 FROM auth_refresh_sessions WHERE session_code = ?1 LIMIT 1",
+                [session_code],
+                |row| {
+                    Ok(RefreshSession {
+                        id: row.get(0)?,
+                        session_code: row.get(1)?,
+                        user_id: row.get(2)?,
+                        user_code: row.get(3)?,
+                        auth_method: match row.get::<_, String>(4)?.as_str() {
+                            "internal" => AuthMethod::Internal,
+                            _ => AuthMethod::Oauth2,
+                        },
+                        provider_code: row.get(5)?,
+                        refresh_token_hash: row.get(6)?,
+                        expires_at: row.get(7)?,
+                        created_at: row.get(8)?,
+                        updated_at: row.get(9)?,
+                        last_used_at: row.get(10)?,
+                        revoked_at: row.get(11)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|_| AuthError::StorageFailure)
+    }
+
+    fn replace_refresh_session(&mut self, session: &RefreshSession) -> Result<(), AuthError> {
+        self.connection
+            .execute(
+                "UPDATE auth_refresh_sessions SET
+                    refresh_token_hash = ?2,
+                    expires_at = ?3,
+                    updated_at = ?4,
+                    last_used_at = ?5,
+                    revoked_at = ?6
+                 WHERE session_code = ?1",
+                params![
+                    session.session_code,
+                    session.refresh_token_hash,
+                    session.expires_at,
+                    session.updated_at,
+                    session.last_used_at,
+                    session.revoked_at,
+                ],
+            )
+            .map_err(|_| AuthError::StorageFailure)?;
+        Ok(())
+    }
+
+    fn revoke_refresh_session(&mut self, session_code: &str, revoked_at: i64) -> Result<(), AuthError> {
+        self.connection
+            .execute(
+                "UPDATE auth_refresh_sessions
+                 SET revoked_at = ?2, updated_at = ?2
+                 WHERE session_code = ?1",
+                params![session_code, revoked_at],
+            )
+            .map_err(|_| AuthError::StorageFailure)?;
+        Ok(())
+    }
+
+    fn upsert_oauth_identity(&mut self, identity: &OAuth2IdentityLink) -> Result<(), AuthError> {
+        self.connection
+            .execute(
+                "INSERT INTO user_oauth_identities (
+                    id, user_id, user_code, provider_code, provider_subject, email, display_name, linked_at, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, lower(?6), ?7, ?8, ?9)
+                ON CONFLICT(provider_code, provider_subject) DO UPDATE SET
+                    user_id = excluded.user_id,
+                    user_code = excluded.user_code,
+                    email = excluded.email,
+                    display_name = excluded.display_name,
+                    updated_at = excluded.updated_at",
+                params![
+                    identity.id,
+                    identity.user_id,
+                    identity.user_code,
+                    identity.provider_code,
+                    identity.provider_subject,
+                    identity.email,
+                    identity.display_name,
+                    identity.linked_at,
+                    identity.updated_at,
+                ],
+            )
+            .map_err(|_| AuthError::StorageFailure)?;
         Ok(())
     }
 }

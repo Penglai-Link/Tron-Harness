@@ -3,8 +3,10 @@ use crate::{
     shared::id::SnowflakeId,
 };
 
+const AUTH_OPERATOR_PASSWORD: &str = "TronAuthPass123!";
+
 pub(super) fn seeded_users() -> Vec<User> {
-    vec![
+    let mut users = vec![
         seeded_user(
             734_102_998_871_252_992,
             "USR-0001",
@@ -89,7 +91,30 @@ pub(super) fn seeded_users() -> Vec<User> {
             vec!["VIEWER"],
             vec!["SUPPORT", "DATA"],
         ),
-    ]
+    ];
+
+    users.push(seeded_auth_user(
+        734_103_002_743_185_500,
+        "USR-AUTH-0001",
+        "auth.operator",
+        "Auth",
+        "Operator",
+        "Auth Operator",
+        "auth.operator@tron.ai",
+        UserStatus::Active,
+    ));
+    users.push(seeded_auth_user(
+        734_103_002_743_185_501,
+        "USR-AUTH-ARCHIVED",
+        "archived.auth",
+        "Archived",
+        "Auth",
+        "Archived Auth",
+        "archived.auth@tron.ai",
+        UserStatus::Archived,
+    ));
+
+    users
 }
 
 fn seeded_user(
@@ -129,4 +154,32 @@ fn seeded_user(
         updated_at: "2026-05-11T08:00:00Z".into(),
         archived_at: (status == UserStatus::Archived).then(|| "2026-05-11T08:00:00Z".into()),
     }
+}
+
+fn seeded_auth_user(
+    id: i64,
+    user_code: &str,
+    username: &str,
+    first_name: &str,
+    last_name: &str,
+    display_name: &str,
+    email: &str,
+    status: UserStatus,
+) -> User {
+    let mut user = seeded_user(
+        id,
+        user_code,
+        username,
+        first_name,
+        last_name,
+        display_name,
+        email,
+        status,
+        vec!["ADMIN", "DEVELOPER"],
+        vec!["PLATFORM", "DATA"],
+    );
+    user.password_hash =
+        bcrypt::hash(AUTH_OPERATOR_PASSWORD, 4).expect("auth seed password hash should be generated");
+    user.password_reset_required = false;
+    user
 }
