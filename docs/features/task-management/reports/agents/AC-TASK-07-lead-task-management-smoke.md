@@ -8,9 +8,11 @@
 - Select `High` in the board priority filter.
 - Click `Create Task`.
 - Click create submit on `/tasks/new`.
-- Click `Save Details`.
-- Click `Update Status`.
+- Click `Edit`.
+- Click `Save`.
 - Click `Add Subtask`.
+- Click the child task link.
+- Click the parent task link.
 - Click `Execute Task`.
 - Click `Archive`.
 - Click `Restore`.
@@ -38,7 +40,11 @@
 - `PATCH /api/v1/tasks/TSK-PW-0001` sends detail update with `taskType=Refactor`.
 - `PATCH /api/v1/tasks/TSK-PW-0001/status` sends `status=Testing` and `progress=55`.
 - `POST /api/v1/tasks` for subtask sends `parentTaskCode=TSK-PW-0001` and `taskType=Feature`.
-- `POST /api/v1/tasks/TSK-PW-0001/archive` is called.
+- `POST /api/v1/tasks/TSK-PW-0001/archive` first returns `TASK_ACTIVE_SUBTASK_EXISTS`.
+- `GET /api/v1/tasks/TSK-PW-0002` loads child detail with parent link.
+- `POST /api/v1/tasks/TSK-PW-0002/archive` is called before parent archive succeeds.
+- `GET /api/v1/tasks/TSK-PW-0001` after child archive omits archived subtasks.
+- `POST /api/v1/tasks/TSK-PW-0001/archive` is called after active subtasks are archived.
 - `POST /api/v1/tasks/TSK-PW-0001/restore` is called.
 
 ### Visible Feedback Assertions
@@ -51,17 +57,20 @@
 - Priority filter shows `Verify task smoke flow`.
 - Toast `Task board refreshed` is visible.
 - Create flow navigates to `/tasks/detail?taskCode=TSK-PW-0001`.
+- Task detail defaults to read-only data, has an `Edit` button, has no task detail tags, and has no `Update Status` button.
 - Toast `Task TSK-PW-0001 created` is visible.
-- Toast `Task TSK-PW-0001 updated` is visible.
-- Toast `Task TSK-PW-0001 status updated` is visible.
+- Toast `Task TSK-PW-0001 saved` is visible.
 - Toast `Subtask TSK-PW-0002 created` is visible and subtask title is visible.
+- Parent archive with active child shows `archive active subtasks before archiving the parent task`.
+- Child detail links back to parent detail, and archived child is hidden from the parent subtask list.
+- Toast `Task TSK-PW-0002 archived` is visible.
 - Toast `Task execution is not available in v1` is visible.
 - Toast `Task TSK-PW-0001 archived` is visible and `Restore` button appears.
 - Toast `Task TSK-PW-0001 restored` is visible and `Archive` button appears.
 
 ### Artifacts
 - command: `rtk npm --prefix tron-frontend exec playwright -- test tests/task-management-smoke.spec.ts --reporter=line`
-- output: 1 passed, 8.9s.
+- output: 1 passed, 15.0s.
 - screenshot: not generated for this focused smoke run.
 - trace: not generated for this focused smoke run.
 - console_log: Playwright line output captured in terminal.

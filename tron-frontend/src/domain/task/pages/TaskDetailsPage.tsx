@@ -1,13 +1,21 @@
-import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
+import {
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  Link,
+  useSearchParams,
+} from "react-router";
 import {
   Archive,
+  Edit3,
   Plus,
   RotateCcw,
   Save,
+  X,
 } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
   Field,
@@ -61,23 +69,30 @@ function statusLabel(value: string) {
   return value;
 }
 
-function taskTypeTone(taskType: TaskType) {
-  if (taskType === "BugFix") return "error";
-  if (taskType === "Refactor") return "warning";
-  return "accent";
-}
-
-function sourceTypeTone(sourceType: TaskSourceType) {
-  if (sourceType === "Internal") return "neutral";
-  return "success";
-}
-
 function toggleCode(codes: string[], code: string) {
   return codes.includes(code) ? codes.filter((item) => item !== code) : [...codes, code];
 }
 
 function splitCodes(value: string) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function progressValue(value: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.min(100, Math.max(0, parsed));
+}
+
+function taskDetailHref(taskCode: string) {
+  return `/tasks/detail?taskCode=${encodeURIComponent(taskCode)}`;
+}
+
+function ReadValue({ children }: { children: ReactNode }) {
+  return (
+    <div className="min-h-10 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm leading-6 text-[var(--color-on-surface)]">
+      {children || <span className="text-[var(--color-on-surface-variant)]">None</span>}
+    </div>
+  );
 }
 
 export function TaskDetailsPage() {
@@ -101,6 +116,7 @@ export function TaskDetailsPage() {
   const [appCodesInput, setAppCodesInput] = useState(task.appCodes.join(", "));
   const [assigneeUserCodes, setAssigneeUserCodes] = useState(task.assigneeUserCodes);
   const [childTitle, setChildTitle] = useState("Follow-up subtask");
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     setTitle(task.title);
@@ -114,7 +130,27 @@ export function TaskDetailsPage() {
     setAgentCodesInput(task.agentCodes.join(", "));
     setAppCodesInput(task.appCodes.join(", "));
     setAssigneeUserCodes(task.assigneeUserCodes);
+    setEditing(false);
   }, [task]);
+
+  const effectiveUserByCode = new Map(effectiveUsers.map((user) => [user.userCode, user]));
+  const assignedUsers = assigneeUserCodes.map((userCode) => effectiveUserByCode.get(userCode)?.displayName ?? userCode);
+  const editable = editing && !archived;
+
+  function resetForm() {
+    setTitle(task.title);
+    setDescription(task.description ?? "");
+    setTaskType(task.taskType);
+    setSourceType(task.sourceType);
+    setSourceUrl(task.sourceUrl ?? "");
+    setPriority(task.priority);
+    setStatus(task.status);
+    setProgress(String(task.progress));
+    setAgentCodesInput(task.agentCodes.join(", "));
+    setAppCodesInput(task.appCodes.join(", "));
+    setAssigneeUserCodes(task.assigneeUserCodes);
+    setEditing(false);
+  }
 
   async function saveTask() {
     if (archived) {
@@ -133,29 +169,18 @@ export function TaskDetailsPage() {
         taskType,
         title,
       };
-      const updated = dataSource === "api" ? await updateTask(task.taskCode, payload) : updateMockTask(task.taskCode, payload);
+      let updated = dataSource === "api" ? await updateTask(task.taskCode, payload) : updateMockTask(task.taskCode, payload);
+      const nextProgress = progressValue(progress);
+      if (status !== task.status || nextProgress !== task.progress) {
+        updated = dataSource === "api"
+          ? await updateTaskStatus(task.taskCode, { progress: nextProgress, status })
+          : updateMockTaskStatus(task.taskCode, { progress: nextProgress, status });
+      }
       setTask(updated);
-      toast.success(`Task ${updated.taskCode} updated`);
+      setEditing(false);
+      toast.success(`Task ${updated.taskCode} saved`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Task could not be updated");
-    }
-  }
-
-  async function saveStatus() {
-    if (archived) {
-      toast.warning("Restore archived task before changing status");
-      return;
-    }
-    try {
-      const payload = {
-        progress: Number(progress),
-        status,
-      };
-      const updated = dataSource === "api" ? await updateTaskStatus(task.taskCode, payload) : updateMockTaskStatus(task.taskCode, payload);
-      setTask(updated);
-      toast.success(`Task ${updated.taskCode} status updated`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Task status could not be updated");
     }
   }
 
@@ -208,9 +233,17 @@ export function TaskDetailsPage() {
       <PageHeader
         breadcrumbs={[{ label: "Tasks", href: "/tasks" }, { label: task.taskCode }]}
         title="Task Details"
-        status={loading ? "Loading" : archived ? "Archived" : statusLabel(task.status)}
+        description={loading ? "Loading task data..." : undefined}
         actions={
           <>
+            {editable ? (
+              <>
+                <Button onClick={saveTask}><Save size={15} />Save</Button>
+                <Button variant="secondary" onClick={resetForm}><X size={15} />Cancel</Button>
+              </>
+            ) : !archived ? (
+              <Button variant="secondary" onClick={() => setEditing(true)}><Edit3 size={15} />Edit</Button>
+            ) : null}
             <Button variant="secondary" onClick={() => {
               toast.info("Task execution is not available in v1");
             }}>Execute Task</Button>
@@ -224,98 +257,124 @@ export function TaskDetailsPage() {
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
           <SurfaceCard>
-            <div className="mb-4 flex flex-wrap items-center gap-2">
+            <div className="mb-4">
               <span className="font-mono text-sm text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
-              <Badge tone={archived ? "neutral" : "accent"}>{archived ? "Archived" : statusLabel(task.status)}</Badge>
-              <Badge tone={task.priority === "High" ? "error" : task.priority === "Medium" ? "warning" : "neutral"}>{task.priority}</Badge>
-              <Badge tone={taskTypeTone(task.taskType)}>{task.taskType}</Badge>
-              <Badge tone={sourceTypeTone(task.sourceType)}>{task.sourceType}</Badge>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Title">
-                <TextInput aria-label="Task detail title" disabled={archived} value={title} onChange={(event) => setTitle(event.target.value)} />
+                {editable ? (
+                  <TextInput aria-label="Task detail title" value={title} onChange={(event) => setTitle(event.target.value)} />
+                ) : (
+                  <ReadValue>{task.title}</ReadValue>
+                )}
+              </Field>
+              <Field label="Status">
+                {editable ? (
+                  <SelectInput aria-label="Task detail status" value={status} onChange={(event) => setStatus(event.target.value as TaskStatus)}>
+                    {options.statuses.filter((item) => item !== "Archived").map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
+                  </SelectInput>
+                ) : (
+                  <ReadValue>{archived ? "Archived" : statusLabel(task.status)}</ReadValue>
+                )}
               </Field>
               <Field label="Priority">
-                <SelectInput aria-label="Task detail priority" disabled={archived} value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)}>
-                  {options.priorities.map((item) => <option key={item}>{item}</option>)}
-                </SelectInput>
+                {editable ? (
+                  <SelectInput aria-label="Task detail priority" value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)}>
+                    {options.priorities.map((item) => <option key={item}>{item}</option>)}
+                  </SelectInput>
+                ) : (
+                  <ReadValue>{task.priority}</ReadValue>
+                )}
               </Field>
-            </div>
-            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <Field label="Progress">
+                {editable ? (
+                  <TextInput
+                    aria-label="Task detail progress"
+                    max="100"
+                    min="0"
+                    type="number"
+                    value={progress}
+                    onChange={(event) => setProgress(event.target.value)}
+                  />
+                ) : (
+                  <ReadValue>{task.progress}%</ReadValue>
+                )}
+              </Field>
               <Field label="Task Type">
-                <SelectInput aria-label="Task detail type" disabled={archived} value={taskType} onChange={(event) => setTaskType(event.target.value as TaskType)}>
-                  {options.taskTypes.map((item) => <option key={item}>{item}</option>)}
-                </SelectInput>
+                {editable ? (
+                  <SelectInput aria-label="Task detail type" value={taskType} onChange={(event) => setTaskType(event.target.value as TaskType)}>
+                    {options.taskTypes.map((item) => <option key={item}>{item}</option>)}
+                  </SelectInput>
+                ) : (
+                  <ReadValue>{task.taskType}</ReadValue>
+                )}
               </Field>
               <Field label="Source Type">
-                <SelectInput aria-label="Task detail source type" disabled={archived} value={sourceType} onChange={(event) => setSourceType(event.target.value as TaskSourceType)}>
-                  {options.sourceTypes.map((item) => <option key={item}>{item}</option>)}
-                </SelectInput>
+                {editable ? (
+                  <SelectInput aria-label="Task detail source type" value={sourceType} onChange={(event) => setSourceType(event.target.value as TaskSourceType)}>
+                    {options.sourceTypes.map((item) => <option key={item}>{item}</option>)}
+                  </SelectInput>
+                ) : (
+                  <ReadValue>{task.sourceType}</ReadValue>
+                )}
               </Field>
               <Field label="Source URL">
-                <TextInput aria-label="Task detail source URL" disabled={archived} placeholder="Optional GitHub/GitLab URL" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} />
+                {editable ? (
+                  <TextInput aria-label="Task detail source URL" placeholder="Optional GitHub/GitLab URL" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} />
+                ) : (
+                  <ReadValue>{task.sourceUrl || "None"}</ReadValue>
+                )}
               </Field>
               <Field label="Agent Codes">
-                <TextInput aria-label="Task detail agent codes" disabled={archived} placeholder="agent-reviewer, agent-builder" value={agentCodesInput} onChange={(event) => setAgentCodesInput(event.target.value)} />
+                {editable ? (
+                  <TextInput aria-label="Task detail agent codes" placeholder="agent-reviewer, agent-builder" value={agentCodesInput} onChange={(event) => setAgentCodesInput(event.target.value)} />
+                ) : (
+                  <ReadValue>{task.agentCodes.join(", ") || "None"}</ReadValue>
+                )}
               </Field>
               <Field label="App Codes">
-                <TextInput aria-label="Task detail app codes" disabled={archived} placeholder="github, notion" value={appCodesInput} onChange={(event) => setAppCodesInput(event.target.value)} />
+                {editable ? (
+                  <TextInput aria-label="Task detail app codes" placeholder="github, notion" value={appCodesInput} onChange={(event) => setAppCodesInput(event.target.value)} />
+                ) : (
+                  <ReadValue>{task.appCodes.join(", ") || "None"}</ReadValue>
+                )}
               </Field>
             </div>
+            <div className="mt-4"><ProgressBar value={editable ? progressValue(progress) : task.progress} /></div>
             <div className="mt-4">
               <Field label="Description">
-                <TextArea aria-label="Task detail description" className="min-h-36" disabled={archived} value={description} onChange={(event) => setDescription(event.target.value)} />
+                {editable ? (
+                  <TextArea aria-label="Task detail description" className="min-h-36 w-full" value={description} onChange={(event) => setDescription(event.target.value)} />
+                ) : (
+                  <ReadValue>{task.description || "None"}</ReadValue>
+                )}
               </Field>
             </div>
             <SurfaceCard className="mt-4 bg-[var(--color-surface-container-lowest)]">
               <h3 className="mb-3 text-sm font-semibold">Assigned Users</h3>
-              <div className="grid gap-2 md:grid-cols-2">
-                {effectiveUsers.map((user) => (
-                  <label className="flex items-start gap-3 rounded-lg border border-[var(--color-outline-variant)] p-3 text-sm" key={user.userCode}>
-                    <input
-                      aria-label={`Assign ${user.displayName}`}
-                      checked={assigneeUserCodes.includes(user.userCode)}
-                      className="mt-1"
-                      disabled={archived}
-                      type="checkbox"
-                      onChange={() => setAssigneeUserCodes((current) => toggleCode(current, user.userCode))}
-                    />
-                    <span>
-                      <span className="block font-medium">{user.displayName}</span>
-                      <span className="block text-xs text-[var(--color-on-surface-variant)]">{user.userCode}</span>
-                    </span>
-                  </label>
-                ))}
-                {!effectiveUsers.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">No effective users available for this workspace.</p> : null}
-              </div>
+              {editable ? (
+                <div className="grid gap-2 md:grid-cols-2">
+                  {effectiveUsers.map((user) => (
+                    <label className="flex items-start gap-3 rounded-lg border border-[var(--color-outline-variant)] p-3 text-sm" key={user.userCode}>
+                      <input
+                        aria-label={`Assign ${user.displayName}`}
+                        checked={assigneeUserCodes.includes(user.userCode)}
+                        className="mt-1"
+                        type="checkbox"
+                        onChange={() => setAssigneeUserCodes((current) => toggleCode(current, user.userCode))}
+                      />
+                      <span>
+                        <span className="block font-medium">{user.displayName}</span>
+                        <span className="block text-xs text-[var(--color-on-surface-variant)]">{user.userCode}</span>
+                      </span>
+                    </label>
+                  ))}
+                  {!effectiveUsers.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">No effective users available for this workspace.</p> : null}
+                </div>
+              ) : (
+                <ReadValue>{assignedUsers.join(", ") || "None"}</ReadValue>
+              )}
             </SurfaceCard>
-            <Button className="mt-4" disabled={archived} onClick={saveTask}><Save size={15} />Save Details</Button>
-          </SurfaceCard>
-
-          <SurfaceCard>
-            <h3 className="mb-4 border-b border-[var(--color-outline-variant)] pb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Status & Progress</h3>
-            <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-[200px_180px_160px_auto]">
-              <Field label="Status">
-                <SelectInput aria-label="Task detail status" disabled={archived} value={status} onChange={(event) => setStatus(event.target.value as TaskStatus)}>
-                  {options.statuses.filter((item) => item !== "Archived").map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
-                </SelectInput>
-              </Field>
-              <Field label="Progress">
-                <TextInput
-                  aria-label="Task detail progress"
-                  disabled={archived}
-                  max="100"
-                  min="0"
-                  type="number"
-                  value={progress}
-                  onChange={(event) => setProgress(event.target.value)}
-                />
-              </Field>
-              <div className="flex items-end">
-                <Button disabled={archived} onClick={saveStatus}>Update Status</Button>
-              </div>
-            </div>
-            <div className="mt-4"><ProgressBar value={Number(progress)} /></div>
           </SurfaceCard>
         </div>
         <aside className="space-y-5">
@@ -323,7 +382,16 @@ export function TaskDetailsPage() {
             <h3 className="mb-3 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Task Metadata</h3>
             <div className="space-y-3 text-sm">
               <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Workspace</span><span className="font-medium">{task.workspaceCode}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Parent</span><span className="font-medium">{task.parentTaskCode ?? "None"}</span></div>
+              <div className="flex justify-between gap-3">
+                <span className="text-[var(--color-on-surface-variant)]">Parent</span>
+                {task.parent ? (
+                  <Link className="text-right font-medium text-[var(--color-primary)] hover:underline" to={taskDetailHref(task.parent.taskCode)}>
+                    {task.parent.taskCode}
+                  </Link>
+                ) : (
+                  <span className="font-medium">None</span>
+                )}
+              </div>
               <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Created</span><span className="font-medium">{task.createdAt}</span></div>
               <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Updated</span><span className="font-medium">{task.updatedAt}</span></div>
               <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Archived At</span><span className="font-medium">{task.archivedAt ?? "Not archived"}</span></div>
@@ -333,23 +401,28 @@ export function TaskDetailsPage() {
             <h3 className="mb-3 border-b border-[var(--color-outline-variant)] pb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Subtasks</h3>
             <div className="space-y-2">
               {task.subtasks.map((item) => (
-                <div className="rounded-lg border border-[var(--color-outline-variant)] p-3" key={item.taskCode}>
+                <Link className="block rounded-lg border border-[var(--color-outline-variant)] p-3 hover:border-[var(--color-primary)]" key={item.taskCode} to={taskDetailHref(item.taskCode)}>
                   <div className="font-mono text-[11px] text-[var(--color-on-surface-variant)]">{item.taskCode}</div>
                   <div className="mt-1 text-sm font-medium">{item.title}</div>
                   <div className="mt-2 flex items-center justify-between gap-3">
-                    <Badge tone={item.status === "Archived" ? "neutral" : "accent"}>{item.status === "Archived" ? "Archived" : statusLabel(item.status)}</Badge>
+                    <span className="text-xs text-[var(--color-on-surface-variant)]">{statusLabel(item.status)}</span>
                     <span className="text-xs text-[var(--color-on-surface-variant)]">{item.progress}%</span>
                   </div>
                   <div className="mt-2"><ProgressBar value={item.progress} /></div>
-                </div>
+                </Link>
               ))}
+              {!task.subtasks.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">No active subtasks.</p> : null}
             </div>
-            <div className="mt-4">
-              <Field label="New Subtask Title">
-                <TextInput aria-label="New subtask title" disabled={archived} value={childTitle} onChange={(event) => setChildTitle(event.target.value)} />
-              </Field>
-            </div>
-            <Button className="mt-3 w-full" disabled={archived || !childTitle.trim()} variant="secondary" onClick={addSubtask}><Plus size={14} aria-hidden="true" />Add Subtask</Button>
+            {editable ? (
+              <>
+                <div className="mt-4">
+                  <Field label="New Subtask Title">
+                    <TextInput aria-label="New subtask title" value={childTitle} onChange={(event) => setChildTitle(event.target.value)} />
+                  </Field>
+                </div>
+                <Button className="mt-3 w-full" disabled={!childTitle.trim()} variant="secondary" onClick={addSubtask}><Plus size={14} aria-hidden="true" />Add Subtask</Button>
+              </>
+            ) : null}
           </SurfaceCard>
         </aside>
       </div>

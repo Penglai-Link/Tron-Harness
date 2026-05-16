@@ -268,6 +268,13 @@ impl TaskService {
     pub fn archive_task(&self, task_code: &str) -> Result<TaskLifecycleResult, TaskError> {
         let mut task = self.get_task_record(task_code)?;
         if task.status != TaskStatus::Archived {
+            let has_active_subtasks = self.all_tasks()?.iter().any(|candidate| {
+                candidate.parent_task_code.as_deref() == Some(&task.task_code)
+                    && candidate.status != TaskStatus::Archived
+            });
+            if has_active_subtasks {
+                return Err(TaskError::ActiveSubtaskExists);
+            }
             task.previous_status = Some(task.status);
             task.status = TaskStatus::Archived;
             task.archived_at = Some(DEFAULT_TIMESTAMP.into());
@@ -363,6 +370,7 @@ impl TaskService {
         let mut subtasks = all_tasks
             .iter()
             .filter(|candidate| candidate.parent_task_code.as_deref() == Some(&task.task_code))
+            .filter(|candidate| candidate.status != TaskStatus::Archived)
             .map(summary_from_task)
             .collect::<Vec<_>>();
         subtasks.sort_by(|left, right| left.task_code.cmp(&right.task_code));
@@ -436,6 +444,7 @@ impl TaskService {
             subtask_count: all_tasks
                 .iter()
                 .filter(|candidate| candidate.parent_task_code.as_deref() == Some(&task.task_code))
+                .filter(|candidate| candidate.status != TaskStatus::Archived)
                 .count(),
             updated_at: task.updated_at.clone(),
             archived_at: task.archived_at.clone(),

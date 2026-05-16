@@ -35,6 +35,8 @@ Task Management v1 is a minimal full-stack planning loop. It replaces mock-only 
 - `assigneeUserCodes[]` must be effective users of the selected workspace.
 - Agent and app management are not implemented in v1. `agentCodes[]` and `appCodes[]` are persisted string links without referential validation.
 - Parent and child tasks must share one workspace.
+- Parent detail only shows and counts active direct subtasks; archived subtasks are omitted from parent subtask lists and statistics.
+- A parent task cannot be archived while it has active direct subtasks.
 - `sourceUrl` is optional and may be an empty string.
 - `Completed` status forces progress to `100`.
 - `Archived` is a real task status. Archive stores the previous active status; restore returns to that previous status or `Backlog`.
@@ -47,10 +49,10 @@ Task Management v1 is a minimal full-stack planning loop. It replaces mock-only 
   - `TaskPriority`: `Low`, `Medium`, `High`
   - `TaskType`: `Feature`, `BugFix`, `Refactor`
   - `TaskSourceType`: `Internal`, `GitHub`, `GitLab`
-- Task list/search, kanban projection, create, detail, PATCH update, dedicated status/progress update, archive/restore, and child creation through `parentTaskCode`.
+- Task list/search, kanban projection, create, detail, PATCH update, status/progress persistence, archive/restore, and child creation through `parentTaskCode`.
 - Frontend workspace selector driven by workspace admin APIs.
 - Frontend assigned-user selection driven by workspace effective users.
-- Detail status/progress controls, subtask creation, task type/source editing, assigned-user display/edit, and execution placeholder Toast.
+- Read-only detail view with an explicit Edit button, unified Save for editable fields plus status/progress, subtask creation, parent-child detail navigation, task type/source editing, assigned-user display/edit, and execution placeholder Toast.
 
 ### Out Of Scope
 
@@ -69,7 +71,7 @@ Task Management v1 is a minimal full-stack planning loop. It replaces mock-only 
 
 ## Feature Model
 
-Task is a workspace-owned aggregate with optional parent, many user assignments, many agent/app string links, backend-owned status/priority/type/source, a stored progress value, and timestamps. Direct children are read with the detail response. Archived tasks are hidden from list and kanban by default unless `includeArchived=true` is used with an archived status query.
+Task is a workspace-owned aggregate with optional parent, many user assignments, many agent/app string links, backend-owned status/priority/type/source, a stored progress value, and timestamps. Active direct children are read with the detail response; archived subtasks are omitted from parent detail and subtask counts. Archived tasks are hidden from list and kanban by default unless `includeArchived=true` is used with an archived status query.
 
 ## Page And Module Surface
 

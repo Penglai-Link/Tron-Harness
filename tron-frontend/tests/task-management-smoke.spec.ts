@@ -147,7 +147,7 @@ function detail(tasks: Task[], taskCode: string): Task {
   return {
     ...selected,
     parent: parent ? summary(parent) : null,
-    subtasks: tasks.filter((item) => item.parentTaskCode === selected.taskCode).map(summary),
+    subtasks: tasks.filter((item) => item.parentTaskCode === selected.taskCode && item.status !== "Archived").map(summary),
   };
 }
 
@@ -231,6 +231,9 @@ async function routeApi(page: Page, requests: CapturedRequest[], tasks: Task[]) 
     const archiveMatch = captured.pathname.match(/^\/api\/v1\/tasks\/([^/]+)\/(archive|restore)$/);
     if (archiveMatch) {
       const selected = tasks.find((item) => item.taskCode === decodeURIComponent(archiveMatch[1]));
+      if (selected && archiveMatch[2] === "archive" && tasks.some((item) => item.parentTaskCode === selected.taskCode && item.status !== "Archived")) {
+        return fulfillJson(route, { code: "TASK_ACTIVE_SUBTASK_EXISTS", message: "archive active subtasks before archiving the parent task", data: {} }, 400);
+      }
       if (selected && archiveMatch[2] === "archive" && selected.status !== "Archived") {
         selected.previousStatus = selected.status;
         selected.status = "Archived";
@@ -373,30 +376,45 @@ test("task management supports kanban search create detail updates subtasks arch
   await page.getByRole("button", { name: /Create Task/ }).click();
   await expect(page).toHaveURL(/\/tasks\/detail\?taskCode=TSK-PW-0001/);
   await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
-  await expect(page.getByLabel("Task detail title")).toHaveValue("Playwright created task");
+  await expect(page.getByText("Playwright created task")).toBeVisible();
+  await expect(page.getByLabel("Task detail title")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Update Status" })).toHaveCount(0);
+  await expect(page.locator("span.inline-flex.h-6").filter({ hasText: "BugFix" })).toHaveCount(0);
   await expect.poll(() => {
     const body = requests.find((request) => request.method === "POST" && request.pathname === "/api/v1/tasks")?.body as Partial<Task> | undefined;
     return body?.taskType === "BugFix" && body.sourceType === "GitHub" && body.agentCodes?.includes("agent-reviewer") === true && body.appCodes?.includes("notion") === true;
   }).toBe(true);
 
+  await page.getByRole("button", { name: "Edit" }).click();
   await page.getByLabel("Task detail title").fill("Playwright created task updated");
   await page.getByLabel("Task detail type").selectOption("Refactor");
   await page.getByLabel("Task detail source type").selectOption("GitLab");
   await page.getByLabel("Task detail source URL").fill("https://gitlab.com/clouds3n/tron/-/issues/101");
-  await page.getByRole("button", { name: /Save Details/ }).click();
-  await expect(toast(page, /Task TSK-PW-0001 updated/)).toBeVisible();
-
   await page.getByLabel("Task detail status").selectOption("Testing");
   await page.getByLabel("Task detail progress").fill("55");
-  await page.getByRole("button", { name: "Update Status" }).click();
-  await expect(toast(page, /Task TSK-PW-0001 status updated/)).toBeVisible();
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(toast(page, /Task TSK-PW-0001 saved/)).toBeVisible();
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001/status" && (request.body as { progress?: number; status?: TaskStatus } | null)?.progress === 55 && (request.body as { status?: TaskStatus } | null)?.status === "Testing")).toBe(true);
 
+  await page.getByRole("button", { name: "Edit" }).click();
   await page.getByLabel("New subtask title").fill("Smoke child task");
   await page.getByRole("button", { name: /Add Subtask/ }).click();
   await expect(toast(page, /Subtask TSK-PW-0002 created/)).toBeVisible();
   await expect(page.getByText("Smoke child task")).toBeVisible();
   await expect.poll(() => requests.some((request) => request.method === "POST" && request.pathname === "/api/v1/tasks" && (request.body as { parentTaskCode?: string } | null)?.parentTaskCode === "TSK-PW-0001")).toBe(true);
+
+  await page.getByRole("button", { name: "Archive" }).click();
+  await expect(toast(page, "archive active subtasks before archiving the parent task")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Restore" })).toHaveCount(0);
+
+  await page.getByRole("link", { name: /Smoke child task/ }).click();
+  await expect(page).toHaveURL(/\/tasks\/detail\?taskCode=TSK-PW-0002/);
+  await expect(page.getByRole("link", { name: "TSK-PW-0001" })).toBeVisible();
+  await page.getByRole("button", { name: "Archive" }).click();
+  await expect(toast(page, "Task TSK-PW-0002 archived")).toBeVisible();
+  await page.getByRole("link", { name: "TSK-PW-0001" }).click();
+  await expect(page).toHaveURL(/\/tasks\/detail\?taskCode=TSK-PW-0001/);
+  await expect(page.getByText("No active subtasks.")).toBeVisible();
 
   await page.getByRole("button", { name: "Archive" }).click();
   await expect(toast(page, "Task TSK-PW-0001 archived")).toBeVisible();

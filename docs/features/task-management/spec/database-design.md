@@ -39,11 +39,11 @@ Add one migration after workspace-management migrations. Existing databases rece
 
 ## Query And Performance Plan
 
-Primary queries filter by workspace, status, search, priority, parent task, and assignee. Kanban reads derive columns from backend status enums. Detail reads assemble one task with assigned users, reserved empty integration arrays, parent summary, and direct child summaries.
+Primary queries filter by workspace, status, search, priority, parent task, and assignee. Kanban reads derive columns from backend status enums. Detail reads assemble one task with assigned users, reserved empty integration arrays, parent summary, and active direct child summaries.
 
 ## Data Governance
 
-Task APIs require authentication. Workspace and user references are stable external codes. Deletes and archives are out of scope for v1.
+Task APIs require authentication. Workspace and user references are stable external codes. Deletes are out of scope for v1; archive/restore is supported and parent archive is blocked while active direct subtasks exist.
 
 ## Test Data And Fixtures
 

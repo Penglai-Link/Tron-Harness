@@ -52,7 +52,7 @@ Protected task APIs live under `/api/v1/tasks`, require the existing authenticat
 
 ### GET /api/v1/tasks/{taskCode} - Task detail
 
-- purpose: return task detail with parent summary, direct subtasks, assignments, and string integration arrays
+- purpose: return task detail with parent summary, active direct subtasks, assignments, and string integration arrays
 - auth: authenticated
 - acceptance_ids: AC-TASK-04
 - parameter_passing: path variables
@@ -80,7 +80,7 @@ Protected task APIs live under `/api/v1/tasks`, require the existing authenticat
 - parameter_passing: path variables and request body
 - request: `status`, optional `progress`
 - response: task detail
-- client_impact: detail status/progress controls
+- client_impact: detail unified Save flow persists status/progress changes
 - compatibility: new endpoint
 
 ### POST /api/v1/tasks/{taskCode}/archive - Archive task
@@ -116,13 +116,14 @@ All task endpoints require an authenticated user through the existing backend au
 - invalid parent or cross-workspace parent -> 400 / `TASK_PARENT_INVALID`; unified error response; AC-TASK-04
 - assignee not effective in workspace -> 400 / `TASK_ASSIGNEE_INVALID`; unified error response; AC-TASK-03
 - archived task mutation -> 400 / `TASK_ARCHIVED_INVALID`; unified error response; AC-TASK-06
+- parent task has active subtasks during archive -> 400 / `TASK_ACTIVE_SUBTASK_EXISTS`; unified error response; AC-TASK-06
 - invalid enum, progress, or malformed request -> 400 / `TASK_REQUEST_INVALID`; unified error response where request extraction reaches the handler; AC-TASK-01, AC-TASK-03
 - task not found -> 404 / `TASK_NOT_FOUND`; unified error response; AC-TASK-04
 - storage failure -> 500 / `TASK_STORAGE_FAILED`; unified error response; AC-TASK-02
 
 ## Frontend Backend Boundary
 
-The backend owns enum values, validation, persistence, taskCode generation, same-workspace parent checks, effective-user assignment checks, status/progress rules, archive/restore rules, and agent/app string-link persistence. The frontend owns interaction layout, workspace/user selector UX, API-mode hooks, mock parity, and shared Toast feedback.
+The backend owns enum values, validation, persistence, taskCode generation, same-workspace parent checks, active-subtask archive guards, effective-user assignment checks, status/progress rules, archive/restore rules, and agent/app string-link persistence. The frontend owns interaction layout, workspace/user selector UX, read-only/edit detail mode, API-mode hooks, mock parity, and shared Toast feedback.
 
 ## Database And Transaction Boundary
 

@@ -106,6 +106,110 @@ async fn subtask_creation_rejects_cross_workspace_parent() {
 }
 
 #[tokio::test]
+async fn parent_detail_and_archive_rules_ignore_archived_subtasks() {
+    let router = task_app("subtask-archive-rules");
+    let parent = create_task(&router, "TRON_CORE", None, "Parent archive rule").await;
+    let parent_code = parent["data"]["taskCode"].as_str().unwrap().to_owned();
+    let active_child = create_task(&router, "TRON_CORE", Some(&parent_code), "Active child").await;
+    let active_child_code = active_child["data"]["taskCode"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let archived_child =
+        create_task(&router, "TRON_CORE", Some(&parent_code), "Archived child").await;
+    let archived_child_code = archived_child["data"]["taskCode"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let blocked = authenticated_request(
+        &router,
+        Method::POST,
+        &format!("/api/v1/tasks/{parent_code}/archive"),
+        None,
+    )
+    .await;
+    assert_eq!(blocked.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response_json(blocked).await["code"],
+        "TASK_ACTIVE_SUBTASK_EXISTS"
+    );
+
+    let archived_child_response = authenticated_request(
+        &router,
+        Method::POST,
+        &format!("/api/v1/tasks/{archived_child_code}/archive"),
+        None,
+    )
+    .await;
+    assert_eq!(archived_child_response.status(), StatusCode::OK);
+
+    let detail = authenticated_request(
+        &router,
+        Method::GET,
+        &format!("/api/v1/tasks/{parent_code}"),
+        None,
+    )
+    .await;
+    let detail_json = response_json(detail).await;
+    assert_eq!(
+        detail_json["data"]["subtasks"],
+        json!([{
+            "taskCode": active_child_code.clone(),
+            "title": "Active child",
+            "status": "Backlog",
+            "priority": "High",
+            "progress": 0,
+            "taskType": "Feature"
+        }])
+    );
+
+    let list = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/tasks?workspaceCode=TRON_CORE&parentTaskCode=__ROOT__&search=Parent%20archive%20rule",
+        None,
+    )
+    .await;
+    let list_json = response_json(list).await;
+    assert_eq!(list_json["data"]["records"][0]["subtaskCount"], 1);
+
+    let active_child_response = authenticated_request(
+        &router,
+        Method::POST,
+        &format!("/api/v1/tasks/{active_child_code}/archive"),
+        None,
+    )
+    .await;
+    assert_eq!(active_child_response.status(), StatusCode::OK);
+
+    let detail_without_active_subtasks = authenticated_request(
+        &router,
+        Method::GET,
+        &format!("/api/v1/tasks/{parent_code}"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        response_json(detail_without_active_subtasks).await["data"]["subtasks"],
+        json!([])
+    );
+
+    let parent_archived = authenticated_request(
+        &router,
+        Method::POST,
+        &format!("/api/v1/tasks/{parent_code}/archive"),
+        None,
+    )
+    .await;
+    assert_eq!(parent_archived.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(parent_archived).await["data"]["status"],
+        "Archived"
+    );
+}
+
+#[tokio::test]
 async fn update_status_archive_and_restore_task_lifecycle() {
     let router = task_app("status-archive-restore");
     let created = create_task(&router, "TRON_CORE", None, "Lifecycle task").await;

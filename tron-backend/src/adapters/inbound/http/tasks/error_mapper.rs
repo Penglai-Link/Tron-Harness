@@ -33,6 +33,11 @@ pub fn task_error_response(error: TaskError) -> Response {
             "TASK_ASSIGNEE_INVALID",
             "task assignees must be effective users in the task workspace",
         ),
+        TaskError::ActiveSubtaskExists => (
+            StatusCode::BAD_REQUEST,
+            "TASK_ACTIVE_SUBTASK_EXISTS",
+            "archive active subtasks before archiving the parent task",
+        ),
         TaskError::ArchivedMutationDenied => (
             StatusCode::BAD_REQUEST,
             "TASK_ARCHIVED_INVALID",
