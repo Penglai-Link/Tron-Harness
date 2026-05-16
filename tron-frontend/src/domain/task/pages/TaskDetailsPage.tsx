@@ -61,6 +61,17 @@ function statusLabel(value: string) {
   return value;
 }
 
+function taskTypeTone(taskType: TaskType) {
+  if (taskType === "BugFix") return "error";
+  if (taskType === "Refactor") return "warning";
+  return "accent";
+}
+
+function sourceTypeTone(sourceType: TaskSourceType) {
+  if (sourceType === "Internal") return "neutral";
+  return "success";
+}
+
 function toggleCode(codes: string[], code: string) {
   return codes.includes(code) ? codes.filter((item) => item !== code) : [...codes, code];
 }
@@ -163,7 +174,7 @@ export function TaskDetailsPage() {
         priority: "Low" as TaskPriority,
         sourceType: "Internal" as TaskSourceType,
         sourceUrl: "",
-        taskType: "Etc" as TaskType,
+        taskType: "Feature" as TaskType,
         title: childTitle,
         workspaceCode: task.workspaceCode,
       };
@@ -217,8 +228,8 @@ export function TaskDetailsPage() {
               <span className="font-mono text-sm text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
               <Badge tone={archived ? "neutral" : "accent"}>{archived ? "Archived" : statusLabel(task.status)}</Badge>
               <Badge tone={task.priority === "High" ? "error" : task.priority === "Medium" ? "warning" : "neutral"}>{task.priority}</Badge>
-              <Badge tone="neutral">{task.taskType}</Badge>
-              <Badge tone="neutral">{task.sourceType}</Badge>
+              <Badge tone={taskTypeTone(task.taskType)}>{task.taskType}</Badge>
+              <Badge tone={sourceTypeTone(task.sourceType)}>{task.sourceType}</Badge>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Title">

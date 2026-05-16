@@ -9,7 +9,7 @@ export type TaskStatus =
   | "Archived";
 
 export type TaskPriority = "Low" | "Medium" | "High";
-export type TaskType = "Feature" | "BugFix" | "Refactor" | "Etc";
+export type TaskType = "Feature" | "BugFix" | "Refactor";
 export type TaskSourceType = "Internal" | "GitHub" | "GitLab";
 
 export interface TaskOptions { priorities: TaskPriority[]; sourceTypes: TaskSourceType[]; statuses: TaskStatus[]; taskTypes: TaskType[]; }

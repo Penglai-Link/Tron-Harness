@@ -45,7 +45,7 @@ Task Management v1 is a minimal full-stack planning loop. It replaces mock-only 
 - Backend-owned enums:
   - `TaskStatus`: `Backlog`, `Todo`, `InProgress`, `Testing`, `Review`, `Reopen`, `Completed`, `Archived`
   - `TaskPriority`: `Low`, `Medium`, `High`
-  - `TaskType`: `Feature`, `BugFix`, `Refactor`, `Etc`
+  - `TaskType`: `Feature`, `BugFix`, `Refactor`
   - `TaskSourceType`: `Internal`, `GitHub`, `GitLab`
 - Task list/search, kanban projection, create, detail, PATCH update, dedicated status/progress update, archive/restore, and child creation through `parentTaskCode`.
 - Frontend workspace selector driven by workspace admin APIs.
@@ -69,7 +69,7 @@ Task Management v1 is a minimal full-stack planning loop. It replaces mock-only 
 
 ## Feature Model
 
-Task is a workspace-owned aggregate with optional parent, many user assignments, many agent/app string links, backend-owned status/priority/type/source, a stored progress value, and timestamps. Direct children are read with the detail response. Archived tasks are hidden from list and kanban by default unless `includeArchived=true` or an archived status filter is used.
+Task is a workspace-owned aggregate with optional parent, many user assignments, many agent/app string links, backend-owned status/priority/type/source, a stored progress value, and timestamps. Direct children are read with the detail response. Archived tasks are hidden from list and kanban by default unless `includeArchived=true` is used with an archived status query.
 
 ## Page And Module Surface
 

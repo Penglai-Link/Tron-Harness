@@ -30,7 +30,7 @@ async fn task_options_and_default_kanban_exclude_archived_tasks() {
     );
     assert_eq!(
         options_json["data"]["taskTypes"],
-        json!(["Feature", "BugFix", "Refactor", "Etc"])
+        json!(["Feature", "BugFix", "Refactor"])
     );
     assert_eq!(
         options_json["data"]["sourceTypes"],
@@ -100,7 +100,7 @@ async fn subtask_creation_rejects_cross_workspace_parent() {
     let child = create_task(&router, "TRON_CORE", Some(&parent_code), "Child task").await;
     assert_eq!(child["data"]["parentTaskCode"], parent_code);
     assert_eq!(child["data"]["parent"]["taskCode"], parent_code);
-    let invalid = authenticated_request(&router, Method::POST, "/api/v1/tasks", Some(json!({ "workspaceCode": "PLATFORM", "parentTaskCode": parent_code, "title": "Cross", "priority": "Medium", "taskType": "Etc", "sourceType": "Internal", "sourceUrl": "", "assigneeUserCodes": [], "agentCodes": [], "appCodes": [] }))).await;
+    let invalid = authenticated_request(&router, Method::POST, "/api/v1/tasks", Some(json!({ "workspaceCode": "PLATFORM", "parentTaskCode": parent_code, "title": "Cross", "priority": "Medium", "taskType": "Refactor", "sourceType": "Internal", "sourceUrl": "", "assigneeUserCodes": [], "agentCodes": [], "appCodes": [] }))).await;
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
     assert_eq!(response_json(invalid).await["code"], "TASK_PARENT_INVALID");
 }

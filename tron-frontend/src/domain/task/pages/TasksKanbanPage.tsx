@@ -26,7 +26,11 @@ import {
   useTaskOptions,
   useTaskWorkspaceOptions,
 } from "@/domain/task/hooks";
-import type { TaskListItem } from "@/domain/task/model";
+import type {
+  TaskListItem,
+  TaskSourceType,
+  TaskType,
+} from "@/domain/task/model";
 import { cn } from "@/shared/lib/utils";
 
 const DEFAULT_WORKSPACE_CODE = "TRON_CORE";
@@ -58,6 +62,17 @@ function statusLabel(value: string) {
   return value;
 }
 
+function taskTypeTone(taskType: TaskType) {
+  if (taskType === "BugFix") return "error";
+  if (taskType === "Refactor") return "warning";
+  return "accent";
+}
+
+function sourceTypeTone(sourceType: TaskSourceType) {
+  if (sourceType === "Internal") return "neutral";
+  return "success";
+}
+
 function KanbanCard({ task, selected, onSelect }: { task: TaskListItem; selected: boolean; onSelect: () => void }) {
   return (
     <button className={cn("w-full rounded-lg border bg-white p-3 text-left shadow-sm hover:border-[var(--color-outline)]", selected ? "border-[var(--color-primary)]" : "border-[var(--color-outline-variant)]")} type="button" onClick={onSelect}>
@@ -67,8 +82,8 @@ function KanbanCard({ task, selected, onSelect }: { task: TaskListItem; selected
       </div>
       <h3 className="mb-3 text-sm font-medium leading-5">{task.title}</h3>
       <div className="mb-3 flex flex-wrap gap-1.5">
-        <Badge tone="neutral">{task.taskType}</Badge>
-        <Badge tone="neutral">{task.sourceType}</Badge>
+        <Badge tone={taskTypeTone(task.taskType)}>{task.taskType}</Badge>
+        <Badge tone={sourceTypeTone(task.sourceType)}>{task.sourceType}</Badge>
       </div>
       <ProgressBar value={task.progress} />
       <div className="mt-3 flex items-center justify-between">
@@ -83,30 +98,29 @@ export function TasksKanbanPage() {
   const options = useTaskOptions();
   const [workspaceCode, setWorkspaceCode] = useState(DEFAULT_WORKSPACE_CODE);
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("");
+  const [priority, setPriority] = useState("");
   const [selectedTaskCode, setSelectedTaskCode] = useState<string | null>(null);
   const navigate = useNavigate();
   const toast = useToast();
   const { workspaces } = useTaskWorkspaceOptions(workspaceCode);
   const taskQuery = useMemo(() => ({
-    includeArchived: status === "Archived",
+    priority: priority || undefined,
     search: query,
-    status: status || undefined,
     workspaceCode,
-  }), [query, status, workspaceCode]);
+  }), [priority, query, workspaceCode]);
   const { columns, loading, refresh } = useTaskKanbanColumns(taskQuery);
 
   return (
     <TronShell activeItem="Tasks" searchPlaceholder="Search tasks...">
       <PageHeader
         title="Task Management"
-        status={loading ? "Loading" : selectedTaskCode ?? "Kanban"}
+        status={loading ? "Loading" : selectedTaskCode ?? undefined}
         actions={
           <>
             <Button variant="secondary" onClick={() => {
               refresh();
               toast.success("Task board refreshed");
-            }}><RefreshCcw size={16} aria-hidden="true" />Sync</Button>
+            }}><RefreshCcw size={16} aria-hidden="true" />Refresh</Button>
             <Button onClick={() => navigate("/tasks/new")}><Plus size={16} aria-hidden="true" />Create Task</Button>
           </>
         }
@@ -124,10 +138,10 @@ export function TasksKanbanPage() {
         <Field label="Search">
           <SearchField placeholder="Filter task code, title, or description..." value={query} onChange={setQuery} />
         </Field>
-        <Field label="Status">
-          <SelectInput aria-label="Task status filter" value={status} onChange={(event) => setStatus(event.target.value)}>
-            <option value="">Active board</option>
-            {options.statuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
+        <Field label="Priority">
+          <SelectInput aria-label="Task priority filter" value={priority} onChange={(event) => setPriority(event.target.value)}>
+            <option value="">All priorities</option>
+            {options.priorities.map((item) => <option key={item} value={item}>{item}</option>)}
           </SelectInput>
         </Field>
       </SurfaceCard>

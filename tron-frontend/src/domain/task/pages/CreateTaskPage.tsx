@@ -186,7 +186,7 @@ export function CreateTaskPage() {
                 Editor Tools
               </Button>
             </div>
-            <TextArea aria-label="Task description" className="min-h-[260px] rounded-none border-0 bg-white p-5" placeholder="Describe the work, expected output, context, and constraints..." value={description} onChange={(event) => setDescription(event.target.value)} />
+            <TextArea aria-label="Task description" className="min-h-[260px] w-full rounded-none border-0 bg-white p-5" placeholder="Describe the work, expected output, context, and constraints..." value={description} onChange={(event) => setDescription(event.target.value)} />
           </SurfaceCard>
         </div>
         <aside className="space-y-4">

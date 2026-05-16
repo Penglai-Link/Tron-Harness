@@ -86,7 +86,7 @@ impl SqliteTaskRepository {
                 TaskStatus::Archived,
                 Some(TaskStatus::Todo),
                 TaskPriority::Low,
-                TaskType::Etc,
+                TaskType::Refactor,
                 TaskSourceType::Internal,
                 Some(""),
                 "Archived task example",

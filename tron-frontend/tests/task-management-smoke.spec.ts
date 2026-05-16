@@ -12,7 +12,7 @@ let frontendBaseUrl = "";
 
 type TaskStatus = "Backlog" | "Todo" | "InProgress" | "Testing" | "Review" | "Reopen" | "Completed" | "Archived";
 type TaskPriority = "Low" | "Medium" | "High";
-type TaskType = "Feature" | "BugFix" | "Refactor" | "Etc";
+type TaskType = "Feature" | "BugFix" | "Refactor";
 type TaskSourceType = "Internal" | "GitHub" | "GitLab";
 type CapturedRequest = { body: unknown; method: string; pathname: string; searchParams: Record<string, string> };
 type TaskSummary = { priority: TaskPriority; progress: number; status: TaskStatus; taskCode: string; taskType: TaskType; title: string };
@@ -179,6 +179,7 @@ function filtered(tasks: Task[], query: Record<string, string>) {
     if (!includeArchived && item.status === "Archived") return false;
     if (query.workspaceCode && item.workspaceCode !== query.workspaceCode) return false;
     if (query.status && item.status !== query.status) return false;
+    if (query.priority && item.priority !== query.priority) return false;
     if (!search) return true;
     return `${item.taskCode} ${item.title} ${item.description ?? ""} ${item.sourceUrl ?? ""}`.toLowerCase().includes(search);
   });
@@ -200,7 +201,7 @@ async function routeApi(page: Page, requests: CapturedRequest[], tasks: Task[]) 
     if (captured.pathname === "/api/v1/auth/logout") return fulfillJson(route, successEnvelope({ loggedOut: true }));
     if (captured.pathname === "/api/v1/admin/workspaces") return fulfillJson(route, successEnvelope(workspaceTree));
     if (/^\/api\/v1\/admin\/workspaces\/[^/]+\/access\/effective-users$/.test(captured.pathname)) return fulfillJson(route, pageEnvelope(effectiveUsers));
-    if (captured.pathname === "/api/v1/tasks/options") return fulfillJson(route, successEnvelope({ priorities: ["Low", "Medium", "High"], sourceTypes: ["Internal", "GitHub", "GitLab"], statuses, taskTypes: ["Feature", "BugFix", "Refactor", "Etc"] }));
+    if (captured.pathname === "/api/v1/tasks/options") return fulfillJson(route, successEnvelope({ priorities: ["Low", "Medium", "High"], sourceTypes: ["Internal", "GitHub", "GitLab"], statuses, taskTypes: ["Feature", "BugFix", "Refactor"] }));
     if (captured.pathname === "/api/v1/tasks/quick-reference") return fulfillJson(route, successEnvelope({ tips: ["Task must belong to a workspace."], variables: ["workspaceCode", "taskType", "sourceType", "sourceUrl", "assigneeUserCodes"] }));
     if (captured.pathname === "/api/v1/tasks/kanban") {
       const records = filtered(tasks, captured.searchParams);
@@ -324,12 +325,20 @@ test("task management supports kanban search create detail updates subtasks arch
   const tasks: Task[] = [
     task({ description: "Seeded task for board search", priority: "Medium", taskCode: "TSK-SEED-BACKLOG", title: "Design task management v1" }),
     task({ description: "Active implementation fixture", priority: "High", progress: 65, status: "Testing", taskCode: "TSK-SEED-TESTING", taskType: "BugFix", title: "Verify task smoke flow" }),
-    task({ archivedAt: now, description: "Archived board fixture", previousStatus: "Todo", status: "Archived", taskCode: "TSK-SEED-ARCHIVED", taskType: "Etc", title: "Archived task example" }),
+    task({ archivedAt: now, description: "Archived board fixture", previousStatus: "Todo", status: "Archived", taskCode: "TSK-SEED-ARCHIVED", taskType: "Refactor", title: "Archived task example" }),
   ];
   await routeApi(page, requests, tasks);
 
   await page.goto(`${frontendBaseUrl}/tasks`);
+  const taskHeader = page.locator("header").filter({ has: page.getByRole("heading", { name: "Task Management" }) });
+  await expect(taskHeader.getByText("Kanban", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Refresh$/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Sync$/ })).toHaveCount(0);
+  await page.getByRole("button", { name: /^Refresh$/ }).click();
+  await expect(toast(page, "Task board refreshed")).toBeVisible();
   await expect(page.getByLabel("Task workspace")).toBeVisible();
+  await expect(page.getByLabel("Task priority filter")).toBeVisible();
+  await expect(page.getByLabel("Task status filter")).toHaveCount(0);
   await page.getByLabel("Task workspace").selectOption("TRON_CORE");
   await expect(page.getByRole("button", { name: /^Import$/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Export$/ })).toHaveCount(0);
@@ -338,12 +347,19 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/kanban" && request.searchParams.search === "Design")).toBe(true);
 
   await page.getByPlaceholder("Filter task code, title, or description...").fill("");
-  await page.getByLabel("Task status filter").selectOption("Archived");
-  await expect(page.getByText("Archived task example")).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/kanban" && request.searchParams.includeArchived === "true" && request.searchParams.status === "Archived")).toBe(true);
+  await page.getByLabel("Task priority filter").selectOption("High");
+  await expect(page.getByText("Verify task smoke flow")).toBeVisible();
+  const highPriorityTaskCard = page.getByRole("button", { name: /Verify task smoke flow/ });
+  await expect.poll(async () => {
+    const taskTypeClass = await highPriorityTaskCard.getByText("BugFix", { exact: true }).getAttribute("class");
+    const sourceTypeClass = await highPriorityTaskCard.getByText("Internal", { exact: true }).getAttribute("class");
+    return taskTypeClass !== null && sourceTypeClass !== null && taskTypeClass !== sourceTypeClass;
+  }).toBe(true);
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/kanban" && request.searchParams.priority === "High")).toBe(true);
 
   await page.getByRole("button", { name: /Create Task/ }).click();
   await expect(page.getByRole("heading", { name: "Create Task" })).toBeVisible();
+  await expect(page.getByLabel("Task Type").locator("option", { hasText: "Etc" })).toHaveCount(0);
   await page.getByLabel("Task title").fill("Playwright created task");
   await page.getByLabel("Priority").selectOption("High");
   await page.getByLabel("Task Type").selectOption("BugFix");
@@ -352,6 +368,7 @@ test("task management supports kanban search create detail updates subtasks arch
   await page.getByLabel("Agent Codes").fill("agent-reviewer, agent-builder");
   await page.getByLabel("App Codes").fill("github, notion");
   await page.getByLabel("Assign Auth Operator").check();
+  await expect(page.getByLabel("Task description")).toHaveClass(/w-full/);
   await page.getByLabel("Task description").fill("Created through the task-management smoke.");
   await page.getByRole("button", { name: /Create Task/ }).click();
   await expect(page).toHaveURL(/\/tasks\/detail\?taskCode=TSK-PW-0001/);

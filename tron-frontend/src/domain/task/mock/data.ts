@@ -2,12 +2,12 @@ import type { TaskListQuery } from "@/domain/task/api";
 import type { CreateTaskPayload, KanbanColumn, QuickReference, TaskDetailData, TaskLifecycleResult, TaskListItem, TaskOptions, TaskSummary, UpdateTaskPayload, UpdateTaskStatusPayload } from "@/domain/task/model";
 
 const NOW = "2026-05-16T12:00:00Z";
-const taskOptions: TaskOptions = { priorities: ["Low", "Medium", "High"], sourceTypes: ["Internal", "GitHub", "GitLab"], statuses: ["Backlog", "Todo", "InProgress", "Testing", "Review", "Reopen", "Completed", "Archived"], taskTypes: ["Feature", "BugFix", "Refactor", "Etc"] };
+const taskOptions: TaskOptions = { priorities: ["Low", "Medium", "High"], sourceTypes: ["Internal", "GitHub", "GitLab"], statuses: ["Backlog", "Todo", "InProgress", "Testing", "Review", "Reopen", "Completed", "Archived"], taskTypes: ["Feature", "BugFix", "Refactor"] };
 let nextTaskId = 1;
 let tasks: TaskDetailData[] = [
   { agentCodes: [], appCodes: [], archivedAt: null, assigneeUserCodes: ["USR-AUTH-0001"], createdAt: NOW, description: "Persist task planning flows", id: "734500000000000001", parent: null, parentTaskCode: null, previousStatus: null, priority: "Medium", progress: 0, sourceType: "Internal", sourceUrl: "", status: "Backlog", subtasks: [], taskCode: "TSK-SEED-BACKLOG", taskType: "Feature", title: "Design task management v1", updatedAt: NOW, workspaceCode: "TRON_CORE" },
   { agentCodes: ["agent-reviewer"], appCodes: ["github"], archivedAt: null, assigneeUserCodes: ["USR-AUTH-0001"], createdAt: NOW, description: "Exercise task interactions in browser", id: "734500000000000002", parent: null, parentTaskCode: null, previousStatus: null, priority: "High", progress: 65, sourceType: "GitHub", sourceUrl: "https://github.com/clouds3n/tron/issues/42", status: "Testing", subtasks: [], taskCode: "TSK-SEED-TESTING", taskType: "BugFix", title: "Verify task smoke flow", updatedAt: NOW, workspaceCode: "TRON_CORE" },
-  { agentCodes: [], appCodes: [], archivedAt: NOW, assigneeUserCodes: [], createdAt: NOW, description: "Archived example", id: "734500000000000003", parent: null, parentTaskCode: null, previousStatus: "Todo", priority: "Low", progress: 15, sourceType: "Internal", sourceUrl: "", status: "Archived", subtasks: [], taskCode: "TSK-SEED-ARCHIVED", taskType: "Etc", title: "Archived task example", updatedAt: NOW, workspaceCode: "TRON_CORE" },
+  { agentCodes: [], appCodes: [], archivedAt: NOW, assigneeUserCodes: [], createdAt: NOW, description: "Archived example", id: "734500000000000003", parent: null, parentTaskCode: null, previousStatus: "Todo", priority: "Low", progress: 15, sourceType: "Internal", sourceUrl: "", status: "Archived", subtasks: [], taskCode: "TSK-SEED-ARCHIVED", taskType: "Refactor", title: "Archived task example", updatedAt: NOW, workspaceCode: "TRON_CORE" },
 ];
 
 export function getTaskOptions() { return taskOptions; }

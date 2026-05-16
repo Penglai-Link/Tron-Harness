@@ -28,7 +28,6 @@ pub enum TaskType {
     Feature,
     BugFix,
     Refactor,
-    Etc,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -221,12 +220,7 @@ pub const TASK_STATUSES: [TaskStatus; 8] = [
 ];
 pub const TASK_PRIORITIES: [TaskPriority; 3] =
     [TaskPriority::Low, TaskPriority::Medium, TaskPriority::High];
-pub const TASK_TYPES: [TaskType; 4] = [
-    TaskType::Feature,
-    TaskType::BugFix,
-    TaskType::Refactor,
-    TaskType::Etc,
-];
+pub const TASK_TYPES: [TaskType; 3] = [TaskType::Feature, TaskType::BugFix, TaskType::Refactor];
 pub const TASK_SOURCE_TYPES: [TaskSourceType; 3] = [
     TaskSourceType::Internal,
     TaskSourceType::GitHub,
@@ -286,7 +280,6 @@ pub fn task_type_to_storage(task_type: TaskType) -> &'static str {
         TaskType::Feature => "Feature",
         TaskType::BugFix => "BugFix",
         TaskType::Refactor => "Refactor",
-        TaskType::Etc => "Etc",
     }
 }
 pub fn task_type_from_storage(value: &str) -> Result<TaskType, TaskError> {
@@ -294,7 +287,7 @@ pub fn task_type_from_storage(value: &str) -> Result<TaskType, TaskError> {
         "Feature" => Ok(TaskType::Feature),
         "BugFix" => Ok(TaskType::BugFix),
         "Refactor" => Ok(TaskType::Refactor),
-        "Etc" => Ok(TaskType::Etc),
+        "Etc" => Ok(TaskType::Refactor),
         _ => Err(TaskError::InvalidRequest),
     }
 }
