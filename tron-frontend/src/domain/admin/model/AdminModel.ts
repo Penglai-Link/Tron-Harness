@@ -92,3 +92,77 @@ export interface UserStatistics {
   spaceAssignments: number;
   totalUsers: number;
 }
+
+export type WorkspaceStatus = "Active" | "Archived";
+
+export type WorkspaceAccessSource = "Direct" | "Role" | "DirectAndRole";
+
+export interface WorkspaceTreeNodeRecord {
+  id: string;
+  workspaceCode: string;
+  name: string;
+  description: string | null;
+  parentWorkspaceCode: string | null;
+  depth: number;
+  status: WorkspaceStatus;
+  childCount: number;
+  directUserCount: number;
+  roleGrantCount: number;
+  effectiveUserCount: number;
+  children: WorkspaceTreeNodeRecord[];
+}
+
+export interface WorkspaceLineageItem {
+  workspaceCode: string;
+  name: string;
+  depth: number;
+}
+
+export interface WorkspaceDetailRecord {
+  id: string;
+  workspaceCode: string;
+  name: string;
+  description: string | null;
+  parentWorkspaceCode: string | null;
+  depth: number;
+  status: WorkspaceStatus;
+  lineage: WorkspaceLineageItem[];
+  children: WorkspaceTreeNodeRecord[];
+  directUserCount: number;
+  roleGrantCount: number;
+  effectiveUserCount: number;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+}
+
+export interface WorkspaceStatistics {
+  totalWorkspaces: number;
+  activeWorkspaces: number;
+  directUserGrants: number;
+  roleGrants: number;
+}
+
+export interface WorkspaceUserAccessRecord {
+  userCode: string;
+  displayName: string;
+  email: string;
+  isOwner: boolean;
+  grantedAt: string;
+}
+
+export interface WorkspaceRoleAccessRecord {
+  roleCode: UserRoleCode;
+  roleName: string;
+  matchedUserCount: number;
+  grantedAt: string;
+}
+
+export interface WorkspaceEffectiveUserRecord {
+  userCode: string;
+  displayName: string;
+  email: string;
+  source: WorkspaceAccessSource;
+  matchedRoleCodes: UserRoleCode[];
+  isOwner: boolean;
+}

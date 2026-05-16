@@ -1,0 +1,35 @@
+# Test Plan: Workspace Management
+
+## Test Plan Decision
+
+- status: approved_with_defaults
+- approved_by: clouds3n
+- approved_at: 2026-05-16
+
+Valid statuses: `waiting_human_decision`, `approved`, `approved_with_defaults`.
+
+## Proof Rows
+
+- AC-WS-01 | layer: browser | case: `/admin/workspace` loads the tree, selects a node, and shows workspace detail in the overview mode | red: route is missing or the page still renders only a placeholder shell target | green: browser proof shows tree rows, overview fields, and create flows backed by the page route | interaction: sign in -> open `/admin/workspace` -> select root -> select child -> verify detail changes without document reload | command_ref: CMD-WS-BROWSER.
+- AC-WS-02 | layer: backend | case: create and move operations reject self-parenting, cycles, archived-parent writes, and level-four depth | red: invalid hierarchy mutations succeed or produce unstable failures | green: backend tests prove the hierarchy guardrails with stable error contracts | interaction: not applicable | command_ref: CMD-BE-TEST.
+- AC-WS-03 | layer: browser | case: replacing direct-user access grants updates visible rows, owner flags, and toast feedback | red: page mutations stay local-only or direct-user save is missing | green: browser proof shows a persisted direct-user replacement and visible owner-state update | interaction: select workspace -> switch to `Access` -> add or remove user -> toggle owner -> save -> verify toast and refreshed rows | command_ref: CMD-WS-BROWSER.
+- AC-WS-04 | layer: browser | case: replacing role-based access grants updates visible rows, matched-user counts, and toast feedback | red: role-grant controls are placeholders or changes do not persist | green: browser proof shows role replacement, persisted rows, and refreshed matched-user counts | interaction: select workspace -> switch to `Access` -> add or remove role -> save -> verify toast and updated role rows | command_ref: CMD-WS-BROWSER.
+- AC-WS-05 | layer: backend | case: effective-user reads are the deduplicated union of direct and role-derived grants with correct source labels | red: derived users duplicate rows or lose source semantics | green: backend tests prove `DIRECT`, `ROLE`, and `DIRECT_AND_ROLE` outcomes | interaction: not applicable | command_ref: CMD-BE-TEST.
+- AC-WS-06 | layer: api | case: hierarchy, access, and archive or restore routes persist through SQLite behind the uniform admin envelope | red: endpoints 404, skip persistence, or drift from the envelope | green: focused API tests prove route availability, persistence, and envelope shape | interaction: not applicable | command_ref: CMD-BE-TEST.
+- AC-WS-07 | layer: browser | case: `/admin/workspace` keeps the shell mounted and transitions cleanly across overview, access, and create work modes | red: navigating to the page reloads the document or mode switches force a full refresh | green: browser proof shows shell persistence, in-place mode switching, and access editors opening on demand inside the same workspace studio | interaction: navigate from `/dashboard` to `/admin/workspace` -> keep shell state -> switch to `Access` -> return to overview flows without document reload | command_ref: CMD-WS-BROWSER.
+- AC-WS-08 | layer: backend | case: archiving a workspace archives its subtree and restore preserves grant rows while enforcing active-ancestor rules | red: subtree rows remain active incorrectly or restore ignores archived ancestors | green: backend tests prove subtree lifecycle and later effective-access recovery | interaction: not applicable | command_ref: CMD-BE-TEST.
+
+## Command Index
+
+- CMD-FE-CHECK | command: rtk make fe-check | cost: medium | when: green/verify/final | rerun: affected frontend changes | expect: workspace page, hooks, and route wiring compile and build.
+- CMD-BE-CHECK | command: rtk make be-check | cost: medium | when: green/verify/final | rerun: affected backend changes | expect: workspace backend compiles cleanly.
+- CMD-BE-TEST | command: rtk make be-test | cost: medium | when: green/verify/final | rerun: affected backend or schema changes | expect: workspace route, repository, hierarchy, and effective-access tests pass.
+- CMD-WS-BROWSER | command: rtk npm --prefix tron-frontend exec playwright -- test workspace-management-smoke --reporter=line | cost: slow/browser | when: verify | rerun: review-if-stale | expect: concrete browser evidence for tree navigation, overview editing, grant saves, mode switches, and shell persistence.
+- CMD-DOCS-FINAL | command: rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/workspace-management --phase final | cost: medium | when: final | rerun: after doc, task, report, or orchestration edits | expect: workspace-management feature docs validate end to end.
+
+## Evidence Rules
+
+- Every `AC-WS-*` row must have final evidence in reports.
+- Browser evidence must include clicks, inputs, network assertions, visible feedback, and artifact paths.
+- Backend evidence must include concrete hierarchy and effective-access assertions, not only route smoke.
+- Review reuses `CMD-WS-BROWSER` evidence unless it becomes stale or the user explicitly asks for rerun.

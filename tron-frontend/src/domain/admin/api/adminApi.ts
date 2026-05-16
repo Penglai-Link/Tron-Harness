@@ -5,6 +5,13 @@ import type {
   UserRoleCode,
   UserStatistics,
   UserStatus,
+  WorkspaceDetailRecord,
+  WorkspaceEffectiveUserRecord,
+  WorkspaceRoleAccessRecord,
+  WorkspaceStatistics,
+  WorkspaceTreeNodeRecord,
+  WorkspaceUserAccessRecord,
+  WorkspaceStatus,
 } from "@/domain/admin/model";
 import { requestApi } from "@/shared/api/httpClient";
 
@@ -26,6 +33,22 @@ export const adminApiEndpoints = {
   replaceUserRoles: "PUT /api/v1/admin/users/{userCode}/roles",
   replaceUserSpaces: "PUT /api/v1/admin/users/{userCode}/spaces",
   resetUserPassword: "POST /api/v1/admin/users/{userCode}/password/reset",
+  listWorkspaces: "GET /api/v1/admin/workspaces",
+  getTotalWorkspacesStatistic: "GET /api/v1/admin/workspaces/statistics/total-workspaces",
+  getActiveWorkspacesStatistic: "GET /api/v1/admin/workspaces/statistics/active-workspaces",
+  getDirectUserGrantsStatistic: "GET /api/v1/admin/workspaces/statistics/direct-user-grants",
+  getRoleGrantsStatistic: "GET /api/v1/admin/workspaces/statistics/role-grants",
+  createWorkspace: "POST /api/v1/admin/workspaces",
+  getWorkspace: "GET /api/v1/admin/workspaces/{workspaceCode}",
+  updateWorkspace: "PATCH /api/v1/admin/workspaces/{workspaceCode}",
+  moveWorkspace: "POST /api/v1/admin/workspaces/{workspaceCode}/move",
+  archiveWorkspace: "POST /api/v1/admin/workspaces/{workspaceCode}/archive",
+  restoreWorkspace: "POST /api/v1/admin/workspaces/{workspaceCode}/restore",
+  listWorkspaceUsers: "GET /api/v1/admin/workspaces/{workspaceCode}/access/users",
+  replaceWorkspaceUsers: "PUT /api/v1/admin/workspaces/{workspaceCode}/access/users",
+  listWorkspaceRoles: "GET /api/v1/admin/workspaces/{workspaceCode}/access/roles",
+  replaceWorkspaceRoles: "PUT /api/v1/admin/workspaces/{workspaceCode}/access/roles",
+  listWorkspaceEffectiveUsers: "GET /api/v1/admin/workspaces/{workspaceCode}/access/effective-users",
 } as const;
 
 type AdminEndpointParams = Record<string, string | number | boolean | null | undefined>;
@@ -108,6 +131,40 @@ export interface UserLifecycleResult {
   status?: UserStatus;
   updatedAt?: string;
   userCode?: string;
+}
+
+export interface WorkspaceLifecycleResult {
+  affectedWorkspaceCount?: number;
+  archivedAt?: string | null;
+  status?: WorkspaceStatus;
+  workspaceCode?: string;
+}
+
+export interface CreateWorkspacePayload {
+  workspaceCode: string;
+  name: string;
+  description?: string | null;
+  parentWorkspaceCode?: string | null;
+}
+
+export interface UpdateWorkspacePayload {
+  name: string;
+  description?: string | null;
+}
+
+export interface MoveWorkspacePayload {
+  parentWorkspaceCode?: string | null;
+}
+
+export interface WorkspaceListQuery {
+  search?: string;
+  status?: WorkspaceStatus;
+}
+
+export interface WorkspaceAccessQuery {
+  current?: number;
+  size?: number;
+  search?: string;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -194,6 +251,140 @@ export async function fetchAdminUserStatistics(signal?: AbortSignal): Promise<Us
     spaceAssignments,
     totalUsers,
   };
+}
+
+async function fetchWorkspaceStatisticCount(endpoint: string, signal?: AbortSignal) {
+  const payload = await requestAdminApi<UserStatisticCount>(endpoint, { signal });
+  return Number(payload.count) || 0;
+}
+
+export async function fetchWorkspaceTree(query: WorkspaceListQuery = {}, signal?: AbortSignal) {
+  return requestAdminApi<WorkspaceTreeNodeRecord[]>(adminApiEndpoints.listWorkspaces, {
+    queryParams: {
+      search: query.search ?? "",
+      status: query.status,
+    },
+    signal,
+  });
+}
+
+export async function fetchWorkspaceStatistics(signal?: AbortSignal): Promise<WorkspaceStatistics> {
+  const [
+    totalWorkspaces,
+    activeWorkspaces,
+    directUserGrants,
+    roleGrants,
+  ] = await Promise.all([
+    fetchWorkspaceStatisticCount(adminApiEndpoints.getTotalWorkspacesStatistic, signal),
+    fetchWorkspaceStatisticCount(adminApiEndpoints.getActiveWorkspacesStatistic, signal),
+    fetchWorkspaceStatisticCount(adminApiEndpoints.getDirectUserGrantsStatistic, signal),
+    fetchWorkspaceStatisticCount(adminApiEndpoints.getRoleGrantsStatistic, signal),
+  ]);
+
+  return {
+    totalWorkspaces,
+    activeWorkspaces,
+    directUserGrants,
+    roleGrants,
+  };
+}
+
+export function createWorkspace(payload: CreateWorkspacePayload) {
+  return requestAdminApi<WorkspaceDetailRecord>(adminApiEndpoints.createWorkspace, {
+    body: payload,
+  });
+}
+
+export function fetchWorkspaceDetail(workspaceCode: string, signal?: AbortSignal) {
+  return requestAdminApi<WorkspaceDetailRecord>(adminApiEndpoints.getWorkspace, {
+    pathParams: { workspaceCode },
+    signal,
+  });
+}
+
+export function updateWorkspace(workspaceCode: string, payload: UpdateWorkspacePayload) {
+  return requestAdminApi<WorkspaceDetailRecord>(adminApiEndpoints.updateWorkspace, {
+    body: payload,
+    pathParams: { workspaceCode },
+  });
+}
+
+export function moveWorkspace(workspaceCode: string, payload: MoveWorkspacePayload) {
+  return requestAdminApi<WorkspaceDetailRecord>(adminApiEndpoints.moveWorkspace, {
+    body: payload,
+    pathParams: { workspaceCode },
+  });
+}
+
+export function archiveWorkspace(workspaceCode: string) {
+  return requestAdminApi<WorkspaceLifecycleResult>(adminApiEndpoints.archiveWorkspace, {
+    pathParams: { workspaceCode },
+  });
+}
+
+export function restoreWorkspace(workspaceCode: string) {
+  return requestAdminApi<WorkspaceLifecycleResult>(adminApiEndpoints.restoreWorkspace, {
+    pathParams: { workspaceCode },
+  });
+}
+
+export function fetchWorkspaceUserAccess(
+  workspaceCode: string,
+  query: WorkspaceAccessQuery = {},
+  signal?: AbortSignal,
+) {
+  return requestAdminApi<AdminPage<WorkspaceUserAccessRecord>>(adminApiEndpoints.listWorkspaceUsers, {
+    pathParams: { workspaceCode },
+    queryParams: {
+      current: query.current ?? 1,
+      size: query.size ?? 100,
+      search: query.search ?? "",
+    },
+    signal,
+  });
+}
+
+export function replaceWorkspaceUserAccess(
+  workspaceCode: string,
+  users: Array<{ userCode: string; isOwner: boolean }>,
+) {
+  return requestAdminApi<AdminPage<WorkspaceUserAccessRecord>>(adminApiEndpoints.replaceWorkspaceUsers, {
+    body: { users },
+    pathParams: { workspaceCode },
+  });
+}
+
+export function fetchWorkspaceRoleAccess(workspaceCode: string, signal?: AbortSignal) {
+  return requestAdminApi<WorkspaceRoleAccessRecord[]>(adminApiEndpoints.listWorkspaceRoles, {
+    pathParams: { workspaceCode },
+    signal,
+  });
+}
+
+export function replaceWorkspaceRoleAccess(
+  workspaceCode: string,
+  roles: Array<{ roleCode: UserRoleCode }>,
+) {
+  return requestAdminApi<WorkspaceRoleAccessRecord[]>(adminApiEndpoints.replaceWorkspaceRoles, {
+    body: { roles },
+    pathParams: { workspaceCode },
+  });
+}
+
+export function fetchWorkspaceEffectiveUsers(
+  workspaceCode: string,
+  query: WorkspaceAccessQuery = {},
+  signal?: AbortSignal,
+) {
+  return requestAdminApi<AdminPage<WorkspaceEffectiveUserRecord>>(adminApiEndpoints.listWorkspaceEffectiveUsers, {
+    pathParams: { workspaceCode },
+    queryParams: {
+      current: query.current ?? 1,
+      size: query.size ?? 100,
+      search: query.search ?? "",
+    },
+    signal,
+  });
 }
 
 export function createAdminUser(payload: CreateUserPayload) {

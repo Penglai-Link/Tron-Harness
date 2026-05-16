@@ -5,28 +5,31 @@ use axum::{Router, extract::FromRef, middleware, routing::get};
 use crate::{
     adapters::{
         inbound::http::{
-            admin::{roles::routes as role_routes, users::routes as user_routes},
+            admin::{roles::routes as role_routes, users::routes as user_routes, workspaces::routes as workspace_routes},
             auth::{require_auth, routes as auth_routes},
         },
         outbound::{
             crypto::BcryptPasswordHasher,
-            persistence::{SqliteRoleRepository, SqliteUserRepository},
+            persistence::{SqliteRoleRepository, SqliteUserRepository, SqliteWorkspaceRepository},
         },
     },
     application::role::RoleService,
     application::user::UserService,
+    application::workspace::WorkspaceService,
     config::AppConfig,
     health::health,
 };
 
 static GLOBAL_USER_SERVICE: OnceLock<UserService> = OnceLock::new();
 static GLOBAL_ROLE_SERVICE: OnceLock<RoleService> = OnceLock::new();
+static GLOBAL_WORKSPACE_SERVICE: OnceLock<WorkspaceService> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: AppConfig,
     pub roles: RoleService,
     pub users: UserService,
+    pub workspaces: WorkspaceService,
 }
 
 impl AppState {
@@ -45,11 +48,19 @@ impl AppState {
         } else {
             build_role_service(&config.database_url)
         };
+        let workspaces = if config.database_url == ":memory:" {
+            GLOBAL_WORKSPACE_SERVICE
+                .get_or_init(|| build_workspace_service(":memory:", users.clone(), roles.clone()))
+                .clone()
+        } else {
+            build_workspace_service(&config.database_url, users.clone(), roles.clone())
+        };
 
         Self {
             config,
             roles,
             users,
+            workspaces,
         }
     }
 }
@@ -72,10 +83,17 @@ impl FromRef<AppState> for RoleService {
     }
 }
 
+impl FromRef<AppState> for WorkspaceService {
+    fn from_ref(state: &AppState) -> Self {
+        state.workspaces.clone()
+    }
+}
+
 pub fn build_router(config: AppConfig) -> Router {
     let state = AppState::new(config);
     let protected_admin_routes = user_routes()
         .merge(role_routes())
+        .merge(workspace_routes())
         .route_layer(middleware::from_fn_with_state(state.users.clone(), require_auth));
 
     Router::new()
@@ -95,4 +113,14 @@ fn build_role_service(database_url: &str) -> RoleService {
     let repository = SqliteRoleRepository::connect(database_url)
         .expect("role SQLite repository should initialize");
     RoleService::new(repository)
+}
+
+fn build_workspace_service(
+    database_url: &str,
+    users: UserService,
+    roles: RoleService,
+) -> WorkspaceService {
+    let repository = SqliteWorkspaceRepository::connect(database_url)
+        .expect("workspace SQLite repository should initialize");
+    WorkspaceService::new(repository, users, roles)
 }

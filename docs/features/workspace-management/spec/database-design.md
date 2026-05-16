@@ -1,0 +1,79 @@
+# Database Design: Workspace Management
+
+## Database Decision
+
+- status: approved
+- approved_by: clouds3n
+- approved_at: 2026-05-16
+- rationale: the feature requires durable hierarchy, grant replacement, and archive or restore state that must survive backend restarts and support focused API proof
+
+## Existing Schema Impact
+
+- Reuse the existing `users`, `roles`, and `user_role_assignments` tables as upstream identity and role-membership sources.
+- Do not duplicate user or role profile data inside workspace-owned tables.
+- Keep the existing SQLite file layout and additive migration strategy used by other Tron admin features.
+
+## Proposed Schema
+
+- Add `workspaces`.
+  - `id`: Snowflake ID.
+  - `workspace_code`: unique stable external identifier.
+  - `name`: required display name.
+  - `description`: optional description text.
+  - `parent_workspace_code`: nullable self-reference to `workspaces.workspace_code`.
+  - `status`: `active` or `archived`.
+  - `created_at`, `updated_at`, `archived_at`.
+- Add `workspace_user_access`.
+  - `id`: Snowflake ID.
+  - `workspace_code`: workspace reference.
+  - `user_code`: upstream user reference.
+  - `is_owner`: direct grant owner flag.
+  - `created_at`, `updated_at`.
+- Add `workspace_role_access`.
+  - `id`: Snowflake ID.
+  - `workspace_code`: workspace reference.
+  - `role_code`: upstream role reference.
+  - `created_at`, `updated_at`.
+
+## Relationships And Cardinality
+
+- One `workspaces` row may have zero or many child `workspaces`.
+- One `workspaces` row may have zero or many `workspace_user_access` rows.
+- One `workspaces` row may have zero or many `workspace_role_access` rows.
+- One upstream user may appear in many direct-user grants.
+- One upstream role may appear in many role-grant rows and indirectly grant many users.
+
+## Migration Plan
+
+- Add `20260516_0006_create_workspace_management_workspaces.sql` for the hierarchy table.
+- Add `20260516_0007_create_workspace_management_access_grants.sql` for direct-user and role-grant tables.
+- Register both migrations through `tron-backend/src/adapters/outbound/persistence/sqlite/migrations.rs`.
+- Keep migrations additive; no existing user, role, or auth migration is rewritten in this phase.
+
+## Query And Performance Plan
+
+- Unique index on `workspaces.workspace_code`.
+- Index on `workspaces.parent_workspace_code` for tree reads and lineage checks.
+- Index on `workspaces.status` for active or archived filtering.
+- Unique composite index on `workspace_user_access(workspace_code, user_code)`.
+- Unique composite index on `workspace_role_access(workspace_code, role_code)`.
+- Supporting indexes on `workspace_user_access.workspace_code` and `workspace_role_access.workspace_code` for direct and role-grant reads.
+
+## Data Governance
+
+- `workspaceCode`, `userCode`, and `roleCode` remain the stable external identifiers exposed through the admin APIs.
+- Effective users are derived at read time and are not persisted as a separate table.
+- Direct-user grant replacement and role-grant replacement overwrite prior rows per workspace atomically.
+- Archive and restore lifecycle preserve grant rows so restore can recover the same effective-access configuration.
+
+## Test Data And Fixtures
+
+- Seed at least two root workspaces plus one child and one grandchild to prove valid depth-three hierarchy.
+- Seed one direct-user grant example and one role-grant example.
+- Seed one overlap case where the same user is directly granted and also matched by a granted role.
+- Seed archived hierarchy coverage so restore can prove the active-ancestor rule.
+
+## Validation Commands
+
+- `rtk make be-test`
+- `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/workspace-management --phase spec --complete-spec`

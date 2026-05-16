@@ -12,3 +12,7 @@ pub(super) const ROLES_MIGRATION: &str =
     include_str!("../../../../../migrations/20260515_0004_create_role_management_roles.sql");
 pub(super) const ROLE_PERMISSIONS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260515_0005_create_role_management_permissions.sql");
+pub(super) const WORKSPACES_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260516_0006_create_workspace_management_workspaces.sql");
+pub(super) const WORKSPACE_ACCESS_GRANTS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260516_0007_create_workspace_management_access_grants.sql");

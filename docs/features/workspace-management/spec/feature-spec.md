@@ -1,0 +1,114 @@
+# Feature Spec: Workspace Management
+
+## Initial Agent Draft
+
+- drafted_from_requirement: yes
+- drafted_from_repository_findings: yes
+- best_practice_defaults_applied: yes
+- user_confirmation_status: approved_with_defaults
+
+## Feature Identity And Context
+
+- feature_slug: workspace-management
+- feature_name: Workspace Management
+- status: approved_with_defaults
+- owner: clouds3n
+- source_request: use `eliteforge-codex-superpower` to finish feature of `workspace-management`
+- main_agent: lead agent on `feature/clouds3n/workspace-management`
+- dependency_features: `auth`, `user-management-model`, `common-snowflake-id`
+- dependency_contracts: `AGENTS.md` uniform response envelope; existing `tron-frontend` admin shell and route registry; existing `tron-backend` auth middleware, SQLite persistence, Snowflake IDs, users, roles, and role-assignment data
+
+## Requirement
+
+Tron needs `/admin/workspace` to become a real admin console for a single hierarchiable workspace tree so operators can create and maintain workspaces, move them while enforcing structure rules, archive or restore subtrees, manage direct-user and role-based access grants, and inspect the effective accessible-user set produced by those grants.
+
+## Scope Boundary
+
+This slice owns the full-stack `/admin/workspace` boundary only. It adds backend workspace APIs plus persistence, frontend route and page wiring, a segmented workspace studio for overview, access, and create flows, effective-user read visibility, focused backend tests, and browser proof. It does not introduce broader authorization policy or resource-binding inheritance features outside this page.
+
+## Assumptions
+
+- `workspaceCode` is the stable external identifier for this module.
+- Users and roles remain global platform objects owned by the existing admin modules.
+- Workspace access is granted when a user is directly granted or has at least one role granted on that workspace.
+- `isOwner` applies only to direct-user access grants.
+- Max tree depth is exactly three levels: root, child, grandchild.
+- Archiving a workspace archives its subtree and preserves grant rows for later restore.
+
+## In Scope
+
+- Workspace tree reads plus root and child creation inside the existing admin boundary.
+- Workspace detail editing for `name` and `description`.
+- Workspace move validation, archive, and restore.
+- Direct-user access grant replacement.
+- Role-based access grant replacement.
+- Derived effective-user visibility with access-source labels.
+- Backend SQLite persistence, routes, DTOs, and tests.
+- Frontend page, route wiring, API bindings, mock data support, and browser coverage.
+- Dedicated workspace statistics APIs for total workspaces, active workspaces, direct-user grants, and role grants remain available for backend proof and future surfaces.
+
+## Out Of Scope
+
+- Audit log timeline or workspace-scoped audit storage.
+- Resource-level inheritance binding for models, prompts, skills, resources, or memory.
+- Workspace-local role definitions.
+- Deny lists or conflict-resolution policies between grant sources.
+- Cross-module shell workspace-switcher refactor.
+- Per-workspace strategy fields or inheritance toggles.
+
+## Constraints
+
+- Reuse the existing protected admin API namespace and current auth middleware.
+- Keep the backend response envelope aligned with `code`, `message`, and `data`.
+- Reuse the existing users, roles, and role-assignment persistence instead of introducing workspace-owned identity copies.
+- Keep workspace hierarchy validation in domain or application logic, not in UI-only checks.
+- Preserve existing admin shell mounting and shared toast or loading behavior on the frontend.
+
+## Feature Model
+
+- Actors:
+  - Authenticated workspace operator.
+  - Existing platform users referenced by direct grants.
+  - Existing platform roles referenced by role grants.
+- Core objects:
+  - `Workspace`: the canonical tree node with lineage, status, and summary counts.
+  - `WorkspaceUserAccessGrant`: direct-user workspace access with `isOwner`.
+  - `WorkspaceRoleAccessGrant`: role-based workspace access.
+  - `WorkspaceEffectiveUser`: derived read model that merges direct-user and role-derived access.
+- Rules:
+  - Every workspace is hierarchiable and may be a root, child, or grandchild.
+  - No workspace may become its own parent or move under a descendant.
+  - No create or move operation may produce depth four.
+  - Archived parents reject new child writes and child restore until ancestors are active.
+  - Direct-user grants and role grants are replaced atomically per workspace.
+  - Effective-user reads deduplicate by `userCode` and preserve `Direct`, `Role`, or `DirectAndRole` source semantics.
+- State transitions:
+  - root or child create -> active workspace.
+  - active workspace -> moved workspace with updated lineage.
+  - active workspace -> archived subtree.
+  - archived subtree -> restored subtree when all ancestors are active.
+
+## Page And Module Surface
+
+- `/admin/workspace`: single-route admin surface with a persistent left tree and a right-side workspace studio segmented into `Overview`, `Access`, and `Create` modes for detail editing, create or move operations, lifecycle actions, direct-user grants, role grants, and effective-user reads.
+- Frontend modules:
+  - route registration in `tron-frontend/src/router/routes.tsx` and `pageRegistry.ts`.
+  - page implementation in `tron-frontend/src/domain/admin/pages/WorkspaceManagementPage.tsx`.
+  - API bindings and model support in `tron-frontend/src/domain/admin/api/adminApi.ts` and `model/AdminModel.ts`.
+- Backend modules:
+  - workspace HTTP handlers under `tron-backend/src/adapters/inbound/http/admin/workspaces/`.
+  - workspace application service under `tron-backend/src/application/workspace.rs`.
+  - workspace domain rules under `tron-backend/src/domain/workspace.rs`.
+  - SQLite repository and migrations under `tron-backend/src/adapters/outbound/persistence/sqlite/` and `tron-backend/migrations/`.
+
+## Repository Findings
+
+- The shell navigation already reserved `/admin/workspace`, but `master` had no matching route or page-registry entry.
+- `master` had protected admin routes for users and roles only; it had no workspace admin HTTP boundary.
+- Existing admin modules already provide reusable toast, table, shell, user, and role data needed by this page.
+- Existing SQLite persistence and Snowflake support are already in place and can be extended without introducing a second identity source.
+- User-management already uses global `userCode`, `roleCode`, and role assignments that fit the workspace-access derivation model.
+
+## Open Decisions
+
+- None.
