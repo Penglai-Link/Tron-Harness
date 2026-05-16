@@ -35,9 +35,13 @@ function SearchField({ placeholder, value, onChange }: { placeholder: string; va
   return (
     <div className="relative">
       <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
-      <TextInput aria-label="Search tasks" className="h-9 w-full pl-9" placeholder={placeholder} type="search" value={value} onChange={(event) => onChange(event.target.value)} />
+      <TextInput aria-label="Search tasks" className="w-full pl-9" placeholder={placeholder} type="search" value={value} onChange={(event) => onChange(event.target.value)} />
     </div>
   );
+}
+
+function workspaceOptionLabel(name: string, workspaceCode: string) {
+  return name.trim() || workspaceCode;
 }
 
 function ProgressBar({ value }: { value: number }) {
@@ -112,12 +116,14 @@ export function TasksKanbanPage() {
           <SelectInput aria-label="Task workspace" value={workspaceCode} onChange={(event) => setWorkspaceCode(event.target.value)}>
             {workspaces.map((workspace) => (
               <option key={workspace.workspaceCode} value={workspace.workspaceCode}>
-                {workspace.name} ({workspace.workspaceCode})
+                {workspaceOptionLabel(workspace.name, workspace.workspaceCode)}
               </option>
             ))}
           </SelectInput>
         </Field>
-        <SearchField placeholder="Filter task code, title, or description..." value={query} onChange={setQuery} />
+        <Field label="Search">
+          <SearchField placeholder="Filter task code, title, or description..." value={query} onChange={setQuery} />
+        </Field>
         <Field label="Status">
           <SelectInput aria-label="Task status filter" value={status} onChange={(event) => setStatus(event.target.value)}>
             <option value="">Active board</option>
