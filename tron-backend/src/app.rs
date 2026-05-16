@@ -5,15 +5,23 @@ use axum::{Router, extract::FromRef, middleware, routing::get};
 use crate::{
     adapters::{
         inbound::http::{
-            admin::{roles::routes as role_routes, users::routes as user_routes, workspaces::routes as workspace_routes},
+            admin::{
+                roles::routes as role_routes, users::routes as user_routes,
+                workspaces::routes as workspace_routes,
+            },
             auth::{require_auth, routes as auth_routes},
+            tasks::routes as task_routes,
         },
         outbound::{
             crypto::BcryptPasswordHasher,
-            persistence::{SqliteRoleRepository, SqliteUserRepository, SqliteWorkspaceRepository},
+            persistence::{
+                SqliteRoleRepository, SqliteTaskRepository, SqliteUserRepository,
+                SqliteWorkspaceRepository,
+            },
         },
     },
     application::role::RoleService,
+    application::task::TaskService,
     application::user::UserService,
     application::workspace::WorkspaceService,
     config::AppConfig,
@@ -23,11 +31,13 @@ use crate::{
 static GLOBAL_USER_SERVICE: OnceLock<UserService> = OnceLock::new();
 static GLOBAL_ROLE_SERVICE: OnceLock<RoleService> = OnceLock::new();
 static GLOBAL_WORKSPACE_SERVICE: OnceLock<WorkspaceService> = OnceLock::new();
+static GLOBAL_TASK_SERVICE: OnceLock<TaskService> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: AppConfig,
     pub roles: RoleService,
+    pub tasks: TaskService,
     pub users: UserService,
     pub workspaces: WorkspaceService,
 }
@@ -55,10 +65,18 @@ impl AppState {
         } else {
             build_workspace_service(&config.database_url, users.clone(), roles.clone())
         };
+        let tasks = if config.database_url == ":memory:" {
+            GLOBAL_TASK_SERVICE
+                .get_or_init(|| build_task_service(":memory:", workspaces.clone()))
+                .clone()
+        } else {
+            build_task_service(&config.database_url, workspaces.clone())
+        };
 
         Self {
             config,
             roles,
+            tasks,
             users,
             workspaces,
         }
@@ -89,17 +107,27 @@ impl FromRef<AppState> for WorkspaceService {
     }
 }
 
+impl FromRef<AppState> for TaskService {
+    fn from_ref(state: &AppState) -> Self {
+        state.tasks.clone()
+    }
+}
+
 pub fn build_router(config: AppConfig) -> Router {
     let state = AppState::new(config);
-    let protected_admin_routes = user_routes()
+    let protected_routes = user_routes()
         .merge(role_routes())
         .merge(workspace_routes())
-        .route_layer(middleware::from_fn_with_state(state.users.clone(), require_auth));
+        .merge(task_routes())
+        .route_layer(middleware::from_fn_with_state(
+            state.users.clone(),
+            require_auth,
+        ));
 
     Router::new()
         .route("/api/v1/health", get(health))
         .merge(auth_routes())
-        .merge(protected_admin_routes)
+        .merge(protected_routes)
         .with_state(state)
 }
 
@@ -123,4 +151,10 @@ fn build_workspace_service(
     let repository = SqliteWorkspaceRepository::connect(database_url)
         .expect("workspace SQLite repository should initialize");
     WorkspaceService::new(repository, users, roles)
+}
+
+fn build_task_service(database_url: &str, workspaces: WorkspaceService) -> TaskService {
+    let repository = SqliteTaskRepository::connect(database_url)
+        .expect("task SQLite repository should initialize");
+    TaskService::new(repository, workspaces)
 }

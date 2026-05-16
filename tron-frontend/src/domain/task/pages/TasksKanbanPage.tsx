@@ -1,34 +1,41 @@
-import { useState } from "react";
+import {
+  useMemo,
+  useState,
+} from "react";
 import { useNavigate } from "react-router";
 import {
   Plus,
   RefreshCcw,
   Search,
-  Upload,
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
+  Field,
   PageHeader,
+  SelectInput,
   SurfaceCard,
   TextInput,
   TronShell,
+  useToast,
 } from "@/shared";
 
-import { useTaskKanbanColumns } from "@/domain/task/hooks";
-import type { KanbanTask } from "@/domain/task/model";
+import {
+  useTaskKanbanColumns,
+  useTaskOptions,
+  useTaskWorkspaceOptions,
+} from "@/domain/task/hooks";
+import type { TaskListItem } from "@/domain/task/model";
 import { cn } from "@/shared/lib/utils";
 
-function Notice({ value }: { value: string }) {
-  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
-}
+const DEFAULT_WORKSPACE_CODE = "TRON_CORE";
 
 function SearchField({ placeholder, value, onChange }: { placeholder: string; value: string; onChange: (value: string) => void }) {
   return (
     <div className="relative">
       <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
-      <TextInput className="h-9 w-full pl-9" placeholder={placeholder} type="search" value={value} onChange={(event) => onChange(event.target.value)} />
+      <TextInput aria-label="Search tasks" className="h-9 w-full pl-9" placeholder={placeholder} type="search" value={value} onChange={(event) => onChange(event.target.value)} />
     </div>
   );
 }
@@ -41,64 +48,99 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-function KanbanCard({ task, selected, onSelect }: { task: KanbanTask; selected: boolean; onSelect: () => void }) {
+function statusLabel(value: string) {
+  if (value === "InProgress") return "In Progress";
+  if (value === "Todo") return "To Do";
+  return value;
+}
+
+function KanbanCard({ task, selected, onSelect }: { task: TaskListItem; selected: boolean; onSelect: () => void }) {
   return (
     <button className={cn("w-full rounded-lg border bg-white p-3 text-left shadow-sm hover:border-[var(--color-outline)]", selected ? "border-[var(--color-primary)]" : "border-[var(--color-outline-variant)]")} type="button" onClick={onSelect}>
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-mono text-[11px] text-[var(--color-on-surface-variant)]">{task.id}</span>
-        <Badge tone={task.priority === "HIGH" ? "error" : task.priority === "MED" ? "warning" : "neutral"}>{task.priority}</Badge>
+        <span className="font-mono text-[11px] text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
+        <Badge tone={task.priority === "High" ? "error" : task.priority === "Medium" ? "warning" : "neutral"}>{task.priority}</Badge>
       </div>
       <h3 className="mb-3 text-sm font-medium leading-5">{task.title}</h3>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        <Badge tone="neutral">{task.taskType}</Badge>
+        <Badge tone="neutral">{task.sourceType}</Badge>
+      </div>
       <ProgressBar value={task.progress} />
       <div className="mt-3 flex items-center justify-between">
-        <span className="flex size-6 items-center justify-center rounded-full bg-[var(--color-surface-container-high)] text-[10px] font-semibold">{task.owner}</span>
-        <span className="text-[11px] text-[var(--color-on-surface-variant)]">{task.signal}</span>
+        <span className="text-[11px] text-[var(--color-on-surface-variant)]">{task.assigneeUserCodes[0] ?? "Unassigned"}</span>
+        <span className="text-[11px] text-[var(--color-on-surface-variant)]">{task.subtaskCount} subtasks</span>
       </div>
     </button>
   );
 }
 
 export function TasksKanbanPage() {
-  const columns = useTaskKanbanColumns();
+  const options = useTaskOptions();
+  const [workspaceCode, setWorkspaceCode] = useState(DEFAULT_WORKSPACE_CODE);
   const [query, setQuery] = useState("");
-  const [selectedTask, setSelectedTask] = useState<KanbanTask | null>(null);
-  const [notice, setNotice] = useState("");
+  const [status, setStatus] = useState("");
+  const [selectedTaskCode, setSelectedTaskCode] = useState<string | null>(null);
   const navigate = useNavigate();
-  const visibleColumns = columns.map((column) => ({ ...column, tasks: column.tasks.filter((task) => task.title.toLowerCase().includes(query.toLowerCase()) || task.id.toLowerCase().includes(query.toLowerCase())) }));
+  const toast = useToast();
+  const { workspaces } = useTaskWorkspaceOptions(workspaceCode);
+  const taskQuery = useMemo(() => ({
+    includeArchived: status === "Archived",
+    search: query,
+    status: status || undefined,
+    workspaceCode,
+  }), [query, status, workspaceCode]);
+  const { columns, loading, refresh } = useTaskKanbanColumns(taskQuery);
 
   return (
     <TronShell activeItem="Tasks" searchPlaceholder="Search tasks...">
       <PageHeader
         title="Task Management"
-        status={selectedTask ? selectedTask.id : "Kanban"}
+        status={loading ? "Loading" : selectedTaskCode ?? "Kanban"}
         actions={
           <>
-            <Button variant="secondary" onClick={() => setNotice("Kanban sync completed")}><RefreshCcw size={16} aria-hidden="true" />Sync</Button>
-            <Button variant="secondary" onClick={() => navigate("/tasks/import")}><Upload size={16} aria-hidden="true" />Import Task</Button>
+            <Button variant="secondary" onClick={() => {
+              refresh();
+              toast.success("Task board refreshed");
+            }}><RefreshCcw size={16} aria-hidden="true" />Sync</Button>
             <Button onClick={() => navigate("/tasks/new")}><Plus size={16} aria-hidden="true" />Create Task</Button>
           </>
         }
       />
-      <Notice value={notice} />
-      <SurfaceCard className="mb-4 p-4">
-        <SearchField placeholder="Filter kanban cards..." value={query} onChange={setQuery} />
+      <SurfaceCard className="mb-4 grid gap-3 p-4 md:grid-cols-[240px_minmax(0,1fr)_220px]">
+        <Field label="Workspace">
+          <SelectInput aria-label="Task workspace" value={workspaceCode} onChange={(event) => setWorkspaceCode(event.target.value)}>
+            {workspaces.map((workspace) => (
+              <option key={workspace.workspaceCode} value={workspace.workspaceCode}>
+                {workspace.name} ({workspace.workspaceCode})
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <SearchField placeholder="Filter task code, title, or description..." value={query} onChange={setQuery} />
+        <Field label="Status">
+          <SelectInput aria-label="Task status filter" value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="">Active board</option>
+            {options.statuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
+          </SelectInput>
+        </Field>
       </SurfaceCard>
       <div className="flex h-[720px] gap-4 overflow-x-auto pb-4">
-        {visibleColumns.map((column) => (
-          <section className="flex w-[320px] shrink-0 flex-col gap-3 rounded-lg bg-[var(--color-surface-container)] p-3" key={column.id}>
-            <div className="flex items-center justify-between border-b-2 px-1 py-1" style={{ borderColor: column.accent }}>
+        {columns.map((column) => (
+          <section className="flex w-[320px] shrink-0 flex-col gap-3 rounded-lg bg-[var(--color-surface-container)] p-3" key={column.status}>
+            <div className="flex items-center justify-between border-b-2 border-[var(--color-outline-variant)] px-1 py-1">
               <span className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{column.title}</span>
               <span className="rounded bg-[var(--color-surface-container-high)] px-2 text-[11px]">{column.tasks.length}</span>
             </div>
             <div className="space-y-3 overflow-y-auto">
               {column.tasks.map((task) => (
                 <KanbanCard
-                  key={task.id}
+                  key={task.taskCode}
                   task={task}
-                  selected={selectedTask?.id === task.id}
+                  selected={selectedTaskCode === task.taskCode}
                   onSelect={() => {
-                    setSelectedTask(task);
-                    navigate("/tasks/detail");
+                    setSelectedTaskCode(task.taskCode);
+                    navigate(`/tasks/detail?taskCode=${encodeURIComponent(task.taskCode)}`);
                   }}
                 />
               ))}

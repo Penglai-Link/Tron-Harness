@@ -1,5 +1,4 @@
-export const taskPriorityOptions = ["Low", "Med", "High"] as const;
-
-export const taskStatusOptions = ["To Do", "In Progress", "Review", "Completed"] as const;
-
-export const taskImportPreviewSteps = ["Normalize issue metadata", "Map assignee to agent", "Attach source link", "Prepare task draft"] as const;
+export const taskPriorityOptions = ["Low", "Medium", "High"] as const;
+export const taskSourceTypeOptions = ["Internal", "GitHub", "GitLab"] as const;
+export const taskStatusOptions = ["Backlog", "Todo", "InProgress", "Testing", "Review", "Reopen", "Completed", "Archived"] as const;
+export const taskTypeOptions = ["Feature", "BugFix", "Refactor", "Etc"] as const;

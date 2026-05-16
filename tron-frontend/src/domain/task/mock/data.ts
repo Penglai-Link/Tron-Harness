@@ -1,81 +1,28 @@
-import type {
-  QuickReference,
-  TaskDetailData,
-  KanbanColumn,
-} from "@/domain/task/model/TaskModel";
+import type { TaskListQuery } from "@/domain/task/api";
+import type { CreateTaskPayload, KanbanColumn, QuickReference, TaskDetailData, TaskLifecycleResult, TaskListItem, TaskOptions, TaskSummary, UpdateTaskPayload, UpdateTaskStatusPayload } from "@/domain/task/model";
 
-export function getTaskQuickReference(): QuickReference {
-  return {
-    tips: ["State the expected output explicitly.", "Attach app and agent context before execution.", "Use variables for credentials and runtime IDs."],
-    variables: ["@user_id", "@auth_token", "@api_endpoint"],
-  };
-}
-
-const taskDetail: TaskDetailData = {
-  id: "AGT-101",
-  title: "Implement new LLM routing logic for failover",
-  status: "In Progress",
-  priority: "High",
-  progress: 45,
-  agent: "Meta-Agent",
-  description:
-    "The current LLM routing mechanism is susceptible to latency spikes when the primary node experiences high load. Implement failover to secondary regional nodes if the primary does not respond within 400ms.",
-  requirements: [
-    "Implement health check polling for all registered LLM endpoints.",
-    "Develop the fallback routing controller in core/router.py.",
-    "Ensure failover events are logged structurally for audit trails.",
-    "Maintain exact state consistency during the handoff process.",
-  ],
-  resources: ["Model Config", "Customer Portal", "Main Console"],
-  timeline: [
-    { time: "10:45:02", message: "Initializing MCP connector...", tone: "accent" },
-    { time: "10:45:05", message: "Validating workspace credentials [OK]", tone: "success" },
-    { time: "10:45:15", message: "Fetching failover nodes metadata..." },
-    { time: "10:46:01", message: "Awaiting sub-task completion...", tone: "warning" },
-  ],
-  metadata: {
-    "Parent Task": "AGT-090",
-    Owner: "Alex J.",
-    "Created Date": "Oct 24, 2023",
-    "Estimated Tokens": "~4,500",
-    Branch: "feature/llm-failover",
-  },
-  subtasks: [
-    { id: "st-1", title: "Draft architectural diagram for routing", status: "Completed", progress: 100, done: true },
-    { id: "st-2", title: "Implement Ping/Health endpoint in Python", status: "In Progress", progress: 45, done: false },
-    { id: "st-3", title: "Write integration tests for timeout scenarios", status: "Pending", progress: 0, done: false },
-    { id: "st-4", title: "Deploy to staging and run shadow traffic", status: "Pending", progress: 0, done: false },
-  ],
-};
-
-const kanban: KanbanColumn[] = [
-  {
-    id: "backlog",
-    title: "Backlog",
-    accent: "var(--color-outline-variant)",
-    tasks: [
-      { id: "AGT-105", title: "Refactor MCP connector for stability", priority: "LOW", progress: 35, owner: "MS", signal: "chat" },
-      { id: "AGT-102", title: "Update memory vector store schema", priority: "MED", progress: 15, owner: "UA", signal: "attachment" },
-    ],
-  },
-  { id: "todo", title: "To Do", accent: "var(--color-secondary)", tasks: [{ id: "AGT-101", title: "Implement new LLM routing logic for failover", priority: "HIGH", progress: 60, owner: "AJ", signal: "checklist" }] },
-  {
-    id: "progress",
-    title: "In Progress",
-    accent: "var(--color-primary)",
-    tasks: [
-      { id: "AGT-098", title: "Debug variable interpolation in core system prompts", priority: "HIGH", progress: 85, owner: "EV", signal: "2h" },
-      { id: "AGT-096", title: "UI: Agent feed typography alignment", priority: "MED", progress: 45, owner: "JB", signal: "bug" },
-    ],
-  },
-  { id: "review", title: "Review", accent: "var(--color-accent)", tasks: [{ id: "AGT-095", title: "Optimize skill execution latency", priority: "MED", progress: 95, owner: "RK", signal: "code" }] },
-  { id: "done", title: "Done", accent: "var(--color-success)", tasks: [{ id: "AGT-090", title: "Add observability tracing to agent execution path", priority: "LOW", progress: 100, owner: "OK", signal: "done" }] },
+const NOW = "2026-05-16T12:00:00Z";
+const taskOptions: TaskOptions = { priorities: ["Low", "Medium", "High"], sourceTypes: ["Internal", "GitHub", "GitLab"], statuses: ["Backlog", "Todo", "InProgress", "Testing", "Review", "Reopen", "Completed", "Archived"], taskTypes: ["Feature", "BugFix", "Refactor", "Etc"] };
+let nextTaskId = 1;
+let tasks: TaskDetailData[] = [
+  { agentCodes: [], appCodes: [], archivedAt: null, assigneeUserCodes: ["USR-AUTH-0001"], createdAt: NOW, description: "Persist task planning flows", id: "734500000000000001", parent: null, parentTaskCode: null, previousStatus: null, priority: "Medium", progress: 0, sourceType: "Internal", sourceUrl: "", status: "Backlog", subtasks: [], taskCode: "TSK-SEED-BACKLOG", taskType: "Feature", title: "Design task management v1", updatedAt: NOW, workspaceCode: "TRON_CORE" },
+  { agentCodes: ["agent-reviewer"], appCodes: ["github"], archivedAt: null, assigneeUserCodes: ["USR-AUTH-0001"], createdAt: NOW, description: "Exercise task interactions in browser", id: "734500000000000002", parent: null, parentTaskCode: null, previousStatus: null, priority: "High", progress: 65, sourceType: "GitHub", sourceUrl: "https://github.com/clouds3n/tron/issues/42", status: "Testing", subtasks: [], taskCode: "TSK-SEED-TESTING", taskType: "BugFix", title: "Verify task smoke flow", updatedAt: NOW, workspaceCode: "TRON_CORE" },
+  { agentCodes: [], appCodes: [], archivedAt: NOW, assigneeUserCodes: [], createdAt: NOW, description: "Archived example", id: "734500000000000003", parent: null, parentTaskCode: null, previousStatus: "Todo", priority: "Low", progress: 15, sourceType: "Internal", sourceUrl: "", status: "Archived", subtasks: [], taskCode: "TSK-SEED-ARCHIVED", taskType: "Etc", title: "Archived task example", updatedAt: NOW, workspaceCode: "TRON_CORE" },
 ];
 
-export function getTaskDetail() {
-  return taskDetail;
-}
+export function getTaskOptions() { return taskOptions; }
+export function getTaskQuickReference(): QuickReference { return { tips: ["Task status, priority, type, and source options are backend-owned.", "A task must belong to one active workspace.", "Only effective workspace users can be assigned."], variables: ["workspaceCode", "taskType", "sourceType", "sourceUrl", "assigneeUserCodes"] }; }
+export function listKanbanColumns(query: TaskListQuery): KanbanColumn[] { const records = filterTasks(query); const includeArchived = query.includeArchived === true; return taskOptions.statuses.filter((status) => includeArchived || status !== "Archived").map((status) => ({ status, title: statusLabel(status), tasks: records.filter((task) => task.status === status).map(toListItem) })); }
+export function getTaskDetail(taskCode = "TSK-SEED-BACKLOG") { return withRelationships(tasks.find((task) => task.taskCode === taskCode) ?? tasks[0]); }
+export function createMockTask(payload: CreateTaskPayload) { const taskCode = `TSK-MOCK-${nextTaskId++}`; const task: TaskDetailData = { agentCodes: uniqueCodes(payload.agentCodes), appCodes: uniqueCodes(payload.appCodes), archivedAt: null, assigneeUserCodes: uniqueCodes(payload.assigneeUserCodes), createdAt: NOW, description: payload.description?.trim() ? payload.description : null, id: String(734500000000100000 + nextTaskId), parent: null, parentTaskCode: payload.parentTaskCode ?? null, previousStatus: null, priority: payload.priority, progress: 0, sourceType: payload.sourceType, sourceUrl: payload.sourceUrl?.trim() ?? "", status: "Backlog", subtasks: [], taskCode, taskType: payload.taskType, title: payload.title, updatedAt: NOW, workspaceCode: payload.workspaceCode }; tasks = [task, ...tasks]; return getTaskDetail(taskCode); }
+export function updateMockTask(taskCode: string, payload: UpdateTaskPayload) { tasks = tasks.map((task) => task.taskCode !== taskCode || task.status === "Archived" ? task : { ...task, ...payload, agentCodes: payload.agentCodes ? uniqueCodes(payload.agentCodes) : task.agentCodes, appCodes: payload.appCodes ? uniqueCodes(payload.appCodes) : task.appCodes, assigneeUserCodes: payload.assigneeUserCodes ? uniqueCodes(payload.assigneeUserCodes) : task.assigneeUserCodes, description: payload.description === undefined ? task.description : payload.description, sourceUrl: payload.sourceUrl === undefined ? task.sourceUrl : payload.sourceUrl, updatedAt: NOW }); return getTaskDetail(taskCode); }
+export function updateMockTaskStatus(taskCode: string, payload: UpdateTaskStatusPayload) { tasks = tasks.map((task) => task.taskCode !== taskCode || task.status === "Archived" ? task : { ...task, progress: payload.status === "Completed" ? 100 : payload.progress ?? task.progress, status: payload.status, updatedAt: NOW }); return getTaskDetail(taskCode); }
+export function archiveMockTask(taskCode: string): TaskLifecycleResult { tasks = tasks.map((task) => task.taskCode === taskCode && task.status !== "Archived" ? { ...task, archivedAt: NOW, previousStatus: task.status, status: "Archived", updatedAt: NOW } : task); const task = getTaskDetail(taskCode); return { archivedAt: task.archivedAt, previousStatus: task.previousStatus, status: task.status, taskCode }; }
+export function restoreMockTask(taskCode: string): TaskLifecycleResult { tasks = tasks.map((task) => task.taskCode === taskCode && task.status === "Archived" ? { ...task, archivedAt: null, previousStatus: null, status: task.previousStatus ?? "Backlog", updatedAt: NOW } : task); const task = getTaskDetail(taskCode); return { archivedAt: task.archivedAt, previousStatus: task.previousStatus, status: task.status, taskCode }; }
 
-export function listKanbanColumns() {
-  return kanban;
-}
+function filterTasks(query: TaskListQuery) { const includeArchived = query.includeArchived === true; const search = query.search?.trim().toLowerCase(); return tasks.filter((task) => { if (query.workspaceCode && task.workspaceCode !== query.workspaceCode) return false; if (!includeArchived && task.status === "Archived") return false; if (query.status && task.status !== query.status) return false; if (query.priority && task.priority !== query.priority) return false; if (query.taskType && task.taskType !== query.taskType) return false; if (query.sourceType && task.sourceType !== query.sourceType) return false; if (query.assigneeUserCode && !task.assigneeUserCodes.includes(query.assigneeUserCode)) return false; if (!search) return true; return [task.taskCode, task.title, task.description ?? "", task.workspaceCode, task.sourceUrl ?? ""].join(" ").toLowerCase().includes(search); }); }
+function toListItem(task: TaskDetailData): TaskListItem { return { agentCodes: task.agentCodes, appCodes: task.appCodes, archivedAt: task.archivedAt, assigneeUserCodes: task.assigneeUserCodes, parentTaskCode: task.parentTaskCode, priority: task.priority, progress: task.progress, sourceType: task.sourceType, sourceUrl: task.sourceUrl, status: task.status, subtaskCount: tasks.filter((candidate) => candidate.parentTaskCode === task.taskCode && candidate.status !== "Archived").length, taskCode: task.taskCode, taskType: task.taskType, title: task.title, updatedAt: task.updatedAt, workspaceCode: task.workspaceCode }; }
+function summary(task: TaskDetailData): TaskSummary { return { priority: task.priority, progress: task.progress, status: task.status, taskCode: task.taskCode, taskType: task.taskType, title: task.title }; }
+function withRelationships(task: TaskDetailData): TaskDetailData { const parent = task.parentTaskCode ? tasks.find((candidate) => candidate.taskCode === task.parentTaskCode) : undefined; const subtasks = tasks.filter((candidate) => candidate.parentTaskCode === task.taskCode); return { ...task, parent: parent ? summary(parent) : null, subtasks: subtasks.map(summary) }; }
+function statusLabel(value: string) { if (value === "InProgress") return "In Progress"; if (value === "Todo") return "To Do"; return value; }
+function uniqueCodes(codes: string[]) { return Array.from(new Set(codes.map((code) => code.trim()).filter(Boolean))); }

@@ -1,26 +1,51 @@
-import { useState } from "react";
-import { Plus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router";
+import {
+  Archive,
+  Plus,
+  RotateCcw,
+  Save,
+} from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
+  Field,
   PageHeader,
   SelectInput,
   SurfaceCard,
+  TextArea,
+  TextInput,
   TronShell,
+  useToast,
 } from "@/shared";
 
-import { useTaskDetail } from "@/domain/task/hooks";
-import { cn } from "@/shared/lib/utils";
 import {
-  getStatusTone,
-  taskStatusOptions,
-} from "@/domain/task/constants";
-
-
-function Notice({ value }: { value: string }) {
-  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
-}
+  archiveTask,
+  createTask,
+  restoreTask,
+  updateTask,
+  updateTaskStatus,
+} from "@/domain/task/api";
+import {
+  archiveMockTask,
+  createMockTask,
+  restoreMockTask,
+  updateMockTask,
+  updateMockTaskStatus,
+} from "@/domain/task/mock/data";
+import {
+  useTaskDetail,
+  useTaskOptions,
+  useTaskWorkspaceOptions,
+} from "@/domain/task/hooks";
+import type {
+  TaskPriority,
+  TaskSourceType,
+  TaskStatus,
+  TaskType,
+} from "@/domain/task/model";
+import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 function ProgressBar({ value }: { value: number }) {
   return (
@@ -30,93 +55,290 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
+function statusLabel(value: string) {
+  if (value === "InProgress") return "In Progress";
+  if (value === "Todo") return "To Do";
+  return value;
+}
+
+function toggleCode(codes: string[], code: string) {
+  return codes.includes(code) ? codes.filter((item) => item !== code) : [...codes, code];
+}
+
+function splitCodes(value: string) {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
 export function TaskDetailsPage() {
-  const task = useTaskDetail();
-  const [status, setStatus] = useState(task.status);
-  const [subtasks, setSubtasks] = useState(task.subtasks);
-  const [notice, setNotice] = useState("");
-  const completed = subtasks.filter((item) => item.done).length;
+  const [searchParams] = useSearchParams();
+  const taskCode = searchParams.get("taskCode") || "TSK-SEED-BACKLOG";
+  const { task, setTask, refresh, loading } = useTaskDetail(taskCode);
+  const options = useTaskOptions();
+  const toast = useToast();
+  const dataSource = getServiceDataSource("task");
+  const archived = task.status === "Archived" || Boolean(task.archivedAt);
+  const { effectiveUsers } = useTaskWorkspaceOptions(task.workspaceCode);
+  const [title, setTitle] = useState(task.title);
+  const [description, setDescription] = useState(task.description ?? "");
+  const [taskType, setTaskType] = useState<TaskType>(task.taskType);
+  const [sourceType, setSourceType] = useState<TaskSourceType>(task.sourceType);
+  const [sourceUrl, setSourceUrl] = useState(task.sourceUrl ?? "");
+  const [priority, setPriority] = useState<TaskPriority>(task.priority);
+  const [status, setStatus] = useState<TaskStatus>(task.status);
+  const [progress, setProgress] = useState(String(task.progress));
+  const [agentCodesInput, setAgentCodesInput] = useState(task.agentCodes.join(", "));
+  const [appCodesInput, setAppCodesInput] = useState(task.appCodes.join(", "));
+  const [assigneeUserCodes, setAssigneeUserCodes] = useState(task.assigneeUserCodes);
+  const [childTitle, setChildTitle] = useState("Follow-up subtask");
+
+  useEffect(() => {
+    setTitle(task.title);
+    setDescription(task.description ?? "");
+    setTaskType(task.taskType);
+    setSourceType(task.sourceType);
+    setSourceUrl(task.sourceUrl ?? "");
+    setPriority(task.priority);
+    setStatus(task.status);
+    setProgress(String(task.progress));
+    setAgentCodesInput(task.agentCodes.join(", "));
+    setAppCodesInput(task.appCodes.join(", "));
+    setAssigneeUserCodes(task.assigneeUserCodes);
+  }, [task]);
+
+  async function saveTask() {
+    if (archived) {
+      toast.warning("Restore archived task before editing");
+      return;
+    }
+    try {
+      const payload = {
+        agentCodes: splitCodes(agentCodesInput),
+        appCodes: splitCodes(appCodesInput),
+        assigneeUserCodes,
+        description,
+        priority,
+        sourceType,
+        sourceUrl,
+        taskType,
+        title,
+      };
+      const updated = dataSource === "api" ? await updateTask(task.taskCode, payload) : updateMockTask(task.taskCode, payload);
+      setTask(updated);
+      toast.success(`Task ${updated.taskCode} updated`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Task could not be updated");
+    }
+  }
+
+  async function saveStatus() {
+    if (archived) {
+      toast.warning("Restore archived task before changing status");
+      return;
+    }
+    try {
+      const payload = {
+        progress: Number(progress),
+        status,
+      };
+      const updated = dataSource === "api" ? await updateTaskStatus(task.taskCode, payload) : updateMockTaskStatus(task.taskCode, payload);
+      setTask(updated);
+      toast.success(`Task ${updated.taskCode} status updated`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Task status could not be updated");
+    }
+  }
+
+  async function addSubtask() {
+    if (archived) {
+      toast.warning("Restore archived task before adding subtasks");
+      return;
+    }
+    try {
+      const payload = {
+        agentCodes: [],
+        appCodes: [],
+        assigneeUserCodes: assigneeUserCodes.slice(0, 1),
+        description: `Subtask for ${task.taskCode}`,
+        parentTaskCode: task.taskCode,
+        priority: "Low" as TaskPriority,
+        sourceType: "Internal" as TaskSourceType,
+        sourceUrl: "",
+        taskType: "Etc" as TaskType,
+        title: childTitle,
+        workspaceCode: task.workspaceCode,
+      };
+      const child = dataSource === "api"
+        ? await createTask(payload)
+        : createMockTask(payload);
+      refresh();
+      toast.success(`Subtask ${child.taskCode} created`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Subtask could not be created");
+    }
+  }
+
+  async function toggleArchive() {
+    try {
+      if (archived) {
+        await (dataSource === "api" ? restoreTask(task.taskCode) : restoreMockTask(task.taskCode));
+        toast.success(`Task ${task.taskCode} restored`);
+      } else {
+        await (dataSource === "api" ? archiveTask(task.taskCode) : archiveMockTask(task.taskCode));
+        toast.success(`Task ${task.taskCode} archived`);
+      }
+      refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Task lifecycle action failed");
+    }
+  }
 
   return (
     <TronShell activeItem="Tasks" searchPlaceholder="Search task context...">
       <PageHeader
-        breadcrumbs={[{ label: "Tasks", href: "/tasks" }, { label: "Core Infrastructure Update" }, { label: task.id }]}
+        breadcrumbs={[{ label: "Tasks", href: "/tasks" }, { label: task.taskCode }]}
         title="Task Details"
-        actions={<Button onClick={() => {
-          setStatus("In Progress");
-          setNotice("Task execution queued");
-        }}>Execute Task</Button>}
+        status={loading ? "Loading" : archived ? "Archived" : statusLabel(task.status)}
+        actions={
+          <>
+            <Button variant="secondary" onClick={() => {
+              toast.info("Task execution is not available in v1");
+            }}>Execute Task</Button>
+            <Button variant="secondary" onClick={toggleArchive}>
+              {archived ? <RotateCcw size={16} aria-hidden="true" /> : <Archive size={16} aria-hidden="true" />}
+              {archived ? "Restore" : "Archive"}
+            </Button>
+          </>
+        }
       />
-      <Notice value={notice} />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
           <SurfaceCard>
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <div className="mb-2 flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-sm text-[var(--color-on-surface-variant)]">{task.id}</span>
-                  <SelectInput className="h-8 w-40" value={status} onChange={(event) => setStatus(event.target.value)}>
-                    {taskStatusOptions.map((item) => <option key={item}>{item}</option>)}
-                  </SelectInput>
-                  <Badge tone="error">{task.priority}</Badge>
-                </div>
-                <h2 className="text-2xl font-semibold">{task.title}</h2>
+            <div className="mb-4 flex flex-wrap items-center gap-2">
+              <span className="font-mono text-sm text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
+              <Badge tone={archived ? "neutral" : "accent"}>{archived ? "Archived" : statusLabel(task.status)}</Badge>
+              <Badge tone={task.priority === "High" ? "error" : task.priority === "Medium" ? "warning" : "neutral"}>{task.priority}</Badge>
+              <Badge tone="neutral">{task.taskType}</Badge>
+              <Badge tone="neutral">{task.sourceType}</Badge>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Title">
+                <TextInput aria-label="Task detail title" disabled={archived} value={title} onChange={(event) => setTitle(event.target.value)} />
+              </Field>
+              <Field label="Priority">
+                <SelectInput aria-label="Task detail priority" disabled={archived} value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)}>
+                  {options.priorities.map((item) => <option key={item}>{item}</option>)}
+                </SelectInput>
+              </Field>
+            </div>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <Field label="Task Type">
+                <SelectInput aria-label="Task detail type" disabled={archived} value={taskType} onChange={(event) => setTaskType(event.target.value as TaskType)}>
+                  {options.taskTypes.map((item) => <option key={item}>{item}</option>)}
+                </SelectInput>
+              </Field>
+              <Field label="Source Type">
+                <SelectInput aria-label="Task detail source type" disabled={archived} value={sourceType} onChange={(event) => setSourceType(event.target.value as TaskSourceType)}>
+                  {options.sourceTypes.map((item) => <option key={item}>{item}</option>)}
+                </SelectInput>
+              </Field>
+              <Field label="Source URL">
+                <TextInput aria-label="Task detail source URL" disabled={archived} placeholder="Optional GitHub/GitLab URL" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} />
+              </Field>
+              <Field label="Agent Codes">
+                <TextInput aria-label="Task detail agent codes" disabled={archived} placeholder="agent-reviewer, agent-builder" value={agentCodesInput} onChange={(event) => setAgentCodesInput(event.target.value)} />
+              </Field>
+              <Field label="App Codes">
+                <TextInput aria-label="Task detail app codes" disabled={archived} placeholder="github, notion" value={appCodesInput} onChange={(event) => setAppCodesInput(event.target.value)} />
+              </Field>
+            </div>
+            <div className="mt-4">
+              <Field label="Description">
+                <TextArea aria-label="Task detail description" className="min-h-36" disabled={archived} value={description} onChange={(event) => setDescription(event.target.value)} />
+              </Field>
+            </div>
+            <SurfaceCard className="mt-4 bg-[var(--color-surface-container-lowest)]">
+              <h3 className="mb-3 text-sm font-semibold">Assigned Users</h3>
+              <div className="grid gap-2 md:grid-cols-2">
+                {effectiveUsers.map((user) => (
+                  <label className="flex items-start gap-3 rounded-lg border border-[var(--color-outline-variant)] p-3 text-sm" key={user.userCode}>
+                    <input
+                      aria-label={`Assign ${user.displayName}`}
+                      checked={assigneeUserCodes.includes(user.userCode)}
+                      className="mt-1"
+                      disabled={archived}
+                      type="checkbox"
+                      onChange={() => setAssigneeUserCodes((current) => toggleCode(current, user.userCode))}
+                    />
+                    <span>
+                      <span className="block font-medium">{user.displayName}</span>
+                      <span className="block text-xs text-[var(--color-on-surface-variant)]">{user.userCode}</span>
+                    </span>
+                  </label>
+                ))}
+                {!effectiveUsers.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">No effective users available for this workspace.</p> : null}
               </div>
-              <div className="rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] px-3 py-2 text-sm">
-                <span className="block text-[11px] uppercase text-[var(--color-on-surface-variant)]">Assigned Agent</span>
-                <span className="font-medium">{task.agent}</span>
+            </SurfaceCard>
+            <Button className="mt-4" disabled={archived} onClick={saveTask}><Save size={15} />Save Details</Button>
+          </SurfaceCard>
+
+          <SurfaceCard>
+            <h3 className="mb-4 border-b border-[var(--color-outline-variant)] pb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Status & Progress</h3>
+            <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-[200px_180px_160px_auto]">
+              <Field label="Status">
+                <SelectInput aria-label="Task detail status" disabled={archived} value={status} onChange={(event) => setStatus(event.target.value as TaskStatus)}>
+                  {options.statuses.filter((item) => item !== "Archived").map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
+                </SelectInput>
+              </Field>
+              <Field label="Progress">
+                <TextInput
+                  aria-label="Task detail progress"
+                  disabled={archived}
+                  max="100"
+                  min="0"
+                  type="number"
+                  value={progress}
+                  onChange={(event) => setProgress(event.target.value)}
+                />
+              </Field>
+              <div className="flex items-end">
+                <Button disabled={archived} onClick={saveStatus}>Update Status</Button>
               </div>
             </div>
-          </SurfaceCard>
-          <SurfaceCard>
-            <h3 className="border-b border-[var(--color-outline-variant)] pb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Description & Requirements</h3>
-            <p className="mt-4 text-sm leading-6">{task.description}</p>
-            <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-[var(--color-on-surface-variant)]">
-              {task.requirements.map((item) => <li key={item}>{item}</li>)}
-            </ul>
-          </SurfaceCard>
-          <div className="grid gap-5 md:grid-cols-2">
-            <SurfaceCard><h3 className="mb-3 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Resource Inheritance</h3><div className="rounded-lg bg-[var(--color-surface-container-low)] p-3">Model Config → gpt-4-turbo-config-v2</div></SurfaceCard>
-            <SurfaceCard><h3 className="mb-3 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Linked Resources</h3>{task.resources.map((item) => <button className="mb-2 flex w-full rounded-lg border border-transparent p-2 text-left hover:border-[var(--color-outline-variant)] hover:bg-[var(--color-surface-container-low)]" type="button" key={item} onClick={() => setNotice(`${item} resource selected`)}>{item}</button>)}</SurfaceCard>
-          </div>
-          <SurfaceCard>
-            <div className="mb-3 flex items-center justify-between border-b border-[var(--color-outline-variant)] pb-2">
-              <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Execution Timeline</h3>
-              <Badge tone="accent">Live</Badge>
-            </div>
-            <div className="space-y-2 rounded-lg bg-[var(--color-surface-container-low)] p-4 font-mono text-[13px]">
-              {task.timeline.map((event) => <div className="flex gap-4" key={event.time}><span className="text-[var(--color-on-surface-variant)]">{event.time}</span><span>{event.message}</span></div>)}
-            </div>
+            <div className="mt-4"><ProgressBar value={Number(progress)} /></div>
           </SurfaceCard>
         </div>
         <aside className="space-y-5">
           <SurfaceCard>
-            <h3 className="border-b border-[var(--color-outline-variant)] pb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Task Metadata</h3>
-            <div className="mt-4 space-y-3 text-sm">
-              {Object.entries(task.metadata).map(([key, value]) => <div className="flex justify-between gap-3" key={key}><span className="text-[var(--color-on-surface-variant)]">{key}</span><span className="font-medium">{value}</span></div>)}
+            <h3 className="mb-3 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Task Metadata</h3>
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Workspace</span><span className="font-medium">{task.workspaceCode}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Parent</span><span className="font-medium">{task.parentTaskCode ?? "None"}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Created</span><span className="font-medium">{task.createdAt}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Updated</span><span className="font-medium">{task.updatedAt}</span></div>
+              <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Archived At</span><span className="font-medium">{task.archivedAt ?? "Not archived"}</span></div>
             </div>
           </SurfaceCard>
           <SurfaceCard>
-            <div className="mb-3 flex items-center justify-between border-b border-[var(--color-outline-variant)] pb-2"><h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Sub-tasks</h3><span className="text-xs">{completed}/{subtasks.length} Completed</span></div>
+            <h3 className="mb-3 border-b border-[var(--color-outline-variant)] pb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Subtasks</h3>
             <div className="space-y-2">
-              {subtasks.map((item) => (
-                <label className="block rounded-lg p-2 hover:bg-[var(--color-surface-container-low)]" key={item.id}>
-                  <div className="flex items-start gap-3">
-                    <input type="checkbox" checked={item.done} onChange={() => setSubtasks((rows) => rows.map((row) => row.id === item.id ? { ...row, done: !row.done, status: !row.done ? "Completed" : "Pending", progress: !row.done ? 100 : row.progress } : row))} />
-                    <div className="flex-1">
-                      <div className={cn("text-sm", item.done ? "text-[var(--color-on-surface-variant)] line-through" : "")}>{item.title}</div>
-                      <Badge tone={getStatusTone(item.status)}>{item.status}</Badge>
-                      <div className="mt-2"><ProgressBar value={item.progress} /></div>
-                    </div>
+              {task.subtasks.map((item) => (
+                <div className="rounded-lg border border-[var(--color-outline-variant)] p-3" key={item.taskCode}>
+                  <div className="font-mono text-[11px] text-[var(--color-on-surface-variant)]">{item.taskCode}</div>
+                  <div className="mt-1 text-sm font-medium">{item.title}</div>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <Badge tone={item.status === "Archived" ? "neutral" : "accent"}>{item.status === "Archived" ? "Archived" : statusLabel(item.status)}</Badge>
+                    <span className="text-xs text-[var(--color-on-surface-variant)]">{item.progress}%</span>
                   </div>
-                </label>
+                  <div className="mt-2"><ProgressBar value={item.progress} /></div>
+                </div>
               ))}
             </div>
-            <Button className="mt-3 w-full" variant="secondary" onClick={() => {
-              const nextIndex = subtasks.length + 1;
-              setSubtasks((rows) => [...rows, { id: `sub-${nextIndex}`, title: `Draft follow-up ${nextIndex}`, done: false, status: "Pending", progress: 0 }]);
-              setNotice(`Sub-task ${nextIndex} added`);
-            }}><Plus size={14} aria-hidden="true" />Add Sub-task</Button>
+            <div className="mt-4">
+              <Field label="New Subtask Title">
+                <TextInput aria-label="New subtask title" disabled={archived} value={childTitle} onChange={(event) => setChildTitle(event.target.value)} />
+              </Field>
+            </div>
+            <Button className="mt-3 w-full" disabled={archived || !childTitle.trim()} variant="secondary" onClick={addSubtask}><Plus size={14} aria-hidden="true" />Add Subtask</Button>
           </SurfaceCard>
         </aside>
       </div>

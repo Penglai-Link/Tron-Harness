@@ -1,13 +1,57 @@
-import { getTaskDetail } from "@/domain/task/mock/data";
-import { useServiceQuery } from "@/shared/api/serviceConfig";
-import { taskApiEndpoints } from "@/domain/task/api";
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
 
-export function useTaskDetail(taskId = "AGT-101") {
-  return useServiceQuery({
-    domain: "task",
-    endpoint: taskApiEndpoints.getTaskDetail,
-    mockData: () => getTaskDetail(),
-    deps: [taskId],
-    params: { taskId },
-  });
+import { fetchTaskDetail } from "@/domain/task/api";
+import { getTaskDetail } from "@/domain/task/mock/data";
+import type { TaskDetailData } from "@/domain/task/model";
+import { getServiceDataSource } from "@/shared/api/serviceConfig";
+
+export interface TaskDetailResult {
+  loading: boolean;
+  refresh: () => void;
+  setTask: (task: TaskDetailData) => void;
+  task: TaskDetailData;
+}
+
+export function useTaskDetail(taskCode = "TSK-SEED-BACKLOG"): TaskDetailResult {
+  const dataSource = getServiceDataSource("task");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [task, setTask] = useState(() => getTaskDetail(taskCode));
+
+  useEffect(() => {
+    if (dataSource === "api") return;
+    setTask(getTaskDetail(taskCode));
+  }, [dataSource, taskCode, reloadKey]);
+
+  useEffect(() => {
+    if (dataSource !== "api") return;
+    const controller = new AbortController();
+    setLoading(true);
+
+    fetchTaskDetail(taskCode, controller.signal)
+      .then(setTask)
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        console.warn("[task] Falling back to mock task detail.", error);
+        setTask(getTaskDetail(taskCode));
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [dataSource, reloadKey, taskCode]);
+
+  const refresh = useCallback(() => setReloadKey((value) => value + 1), []);
+
+  return {
+    loading,
+    refresh,
+    setTask,
+    task,
+  };
 }

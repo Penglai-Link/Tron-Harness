@@ -37,7 +37,6 @@ export const routePages: Record<string, RoutePageComponent> = {
   "skills.index": lazy(() => import("@/domain/skill/pages/SkillsPage").then((module) => ({ default: module.SkillsPage }))),
   "skills.new": lazy(() => import("@/domain/skill/pages/CreateSkillPage").then((module) => ({ default: module.CreateSkillPage }))),
   "tasks.detail": lazy(() => import("@/domain/task/pages/TaskDetailsPage").then((module) => ({ default: module.TaskDetailsPage }))),
-  "tasks.import": lazy(() => import("@/domain/task/pages/TasksImportPage").then((module) => ({ default: module.TasksImportPage }))),
   "tasks.index": lazy(() => import("@/domain/task/pages/TasksKanbanPage").then((module) => ({ default: module.TasksKanbanPage }))),
   "tasks.new": lazy(() => import("@/domain/task/pages/CreateTaskPage").then((module) => ({ default: module.CreateTaskPage }))),
   "variables.details": lazy(() => import("@/domain/variable/pages/VariableDetailsPage").then((module) => ({ default: module.VariableDetailsPage }))),
