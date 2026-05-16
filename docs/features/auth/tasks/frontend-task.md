@@ -25,8 +25,8 @@ Lead executes route-guard and auth UI work directly in `feature/clouds3n/auth`.
 
 ## Integration Notes
 
-Frontend auth state must come from backend session inspection and same-origin cookies, not a page-local long-lived token cache.
-Current evolution pass tightens the login surface to the reviewed single-card layout and aligns the live external provider with GitHub while keeping any deterministic dev provider test-only.
+Frontend auth state must keep the access JWT in runtime memory only, attach it to protected API calls through `Authorization: Bearer`, and rebuild that runtime state from the refresh-cookie contract on page load or OAuth callback.
+Current evolution pass tightens the login surface to the reviewed single-card layout, aligns the live external provider with GitHub, and removes the old access-cookie bootstrap path entirely.
 
 ## Open Decisions
 

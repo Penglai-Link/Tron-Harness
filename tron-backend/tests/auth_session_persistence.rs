@@ -3,6 +3,7 @@ mod common;
 use std::{
     fs,
     path::PathBuf,
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -15,6 +16,8 @@ use common::{
     AUTH_LOGIN, AUTH_PASSWORD, GITHUB_TEST_CODE, app_with_config, cookie_header_from_set_cookie,
     github_mock_server, github_oauth_config, header_values, request,
 };
+
+static NEXT_DB_ID: AtomicU64 = AtomicU64::new(1);
 
 #[tokio::test]
 async fn refresh_sessions_and_oauth2_identity_links_persist_without_plaintext_tokens() {
@@ -120,5 +123,6 @@ fn unique_database_path() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("system clock should be after epoch")
         .as_nanos();
-    std::env::temp_dir().join(format!("tron-auth-{nanos}.sqlite3"))
+    let sequence = NEXT_DB_ID.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("tron-auth-{nanos}-{sequence}.sqlite3"))
 }

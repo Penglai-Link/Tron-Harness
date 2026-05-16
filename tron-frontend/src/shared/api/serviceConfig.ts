@@ -7,6 +7,7 @@ import {
 
 import {
   buildApiUrl,
+  getApiAccessToken,
   type EndpointParams,
   parseEndpoint,
 } from "@/shared/api/httpClient";
@@ -120,9 +121,13 @@ export function useServiceQuery<T>({ domain, endpoint, mockData, params, deps = 
     if (dataSource !== "api") return;
 
     const controller = new AbortController();
+    const accessToken = getApiAccessToken();
 
     fetch(request.url, {
       credentials: "include",
+      headers: accessToken
+        ? { Authorization: `Bearer ${accessToken}` }
+        : undefined,
       method: request.method,
       signal: controller.signal,
     })

@@ -23,6 +23,7 @@ export class ApiError extends Error {
   }
 }
 
+let apiAccessToken: string | null = null;
 let unauthorizedHandler: (() => void) | null = null;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -44,14 +45,17 @@ function resolveRequestBody(body: ApiRequestOptions["body"]) {
 }
 
 function resolveHeaders(body: ApiRequestOptions["body"], headers?: HeadersInit) {
-  if (body === undefined || body instanceof Blob || body instanceof FormData || body instanceof URLSearchParams || typeof body === "string") {
-    return headers;
+  const resolved = new Headers(headers);
+
+  if (!(body === undefined || body instanceof Blob || body instanceof FormData || body instanceof URLSearchParams || typeof body === "string")) {
+    resolved.set("Content-Type", "application/json");
   }
 
-  return {
-    "Content-Type": "application/json",
-    ...headers,
-  };
+  if (apiAccessToken && !resolved.has("Authorization")) {
+    resolved.set("Authorization", `Bearer ${apiAccessToken}`);
+  }
+
+  return resolved;
 }
 
 function createApiError(response: Response, payload: unknown, method: string) {
@@ -71,6 +75,14 @@ function createApiError(response: Response, payload: unknown, method: string) {
 
 export function setApiUnauthorizedHandler(handler: (() => void) | null) {
   unauthorizedHandler = handler;
+}
+
+export function getApiAccessToken() {
+  return apiAccessToken;
+}
+
+export function setApiAccessToken(token: string | null) {
+  apiAccessToken = token && token.trim() ? token.trim() : null;
 }
 
 export function isApiError(error: unknown): error is ApiError {

@@ -449,24 +449,12 @@ impl UserService {
         )
     }
 
-    pub fn logout_session(
-        &self,
-        refresh_token: Option<&str>,
-        access_token: Option<&str>,
-    ) -> Result<(), AuthError> {
-        let session_code = refresh_token
-            .and_then(|token| {
-                decode_refresh_token(token, &self.auth_config.jwt_secret)
-                    .ok()
-                    .map(|claims| claims.sid)
-            })
-            .or_else(|| {
-                access_token.and_then(|token| {
-                    decode_access_token(token, &self.auth_config.jwt_secret)
-                        .ok()
-                        .map(|claims| claims.sid)
-                })
-            });
+    pub fn logout_session(&self, refresh_token: Option<&str>) -> Result<(), AuthError> {
+        let session_code = refresh_token.and_then(|token| {
+            decode_refresh_token(token, &self.auth_config.jwt_secret)
+                .ok()
+                .map(|claims| claims.sid)
+        });
         let Some(session_code) = session_code else {
             return Ok(());
         };

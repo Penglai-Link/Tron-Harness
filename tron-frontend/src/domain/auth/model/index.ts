@@ -31,6 +31,13 @@ export interface AuthSession {
   user: AuthenticatedUser;
 }
 
+export interface AuthGrant {
+  accessToken: string;
+  tokenType: "Bearer";
+  expiresIn: number;
+  session: AuthSession;
+}
+
 export interface InternalLoginPayload {
   login: string;
   password: string;

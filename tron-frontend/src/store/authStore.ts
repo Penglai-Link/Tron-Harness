@@ -1,15 +1,18 @@
 import { create } from "zustand";
 
 import {
-  fetchCurrentAuthSession,
   loginInternal,
   logoutAuthSession,
+  refreshAuthSession,
 } from "@/domain/auth/api";
 import type {
   AuthSession,
   InternalLoginPayload,
 } from "@/domain/auth/model";
-import { setApiUnauthorizedHandler } from "@/shared/api/httpClient";
+import {
+  setApiAccessToken,
+  setApiUnauthorizedHandler,
+} from "@/shared/api/httpClient";
 
 export type AuthStatus = "checking" | "authenticated" | "unauthenticated";
 
@@ -20,10 +23,21 @@ interface AuthState {
   loginWithInternalAccount: (payload: InternalLoginPayload) => Promise<AuthSession>;
   markUnauthenticated: () => void;
   logout: () => Promise<void>;
-  setSession: (session: AuthSession) => void;
 }
 
 let initializePromise: Promise<void> | null = null;
+
+function applyAuthenticatedSession(
+  set: (partial: Partial<AuthState>) => void,
+  accessToken: string,
+  session: AuthSession,
+) {
+  setApiAccessToken(accessToken);
+  set({
+    session,
+    status: "authenticated",
+  });
+}
 
 export const useAuthStore = create<AuthState>((set) => ({
   session: null,
@@ -35,14 +49,12 @@ export const useAuthStore = create<AuthState>((set) => ({
 
     set((state) => (state.status === "authenticated" ? state : { session: null, status: "checking" }));
 
-    initializePromise = fetchCurrentAuthSession()
-      .then((session) => {
-        set({
-          session,
-          status: "authenticated",
-        });
+    initializePromise = refreshAuthSession()
+      .then((grant) => {
+        applyAuthenticatedSession(set, grant.accessToken, grant.session);
       })
       .catch(() => {
+        setApiAccessToken(null);
         set({
           session: null,
           status: "unauthenticated",
@@ -55,12 +67,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     return initializePromise;
   },
   loginWithInternalAccount: async (payload) => {
-    const session = await loginInternal(payload);
-    set({
-      session,
-      status: "authenticated",
-    });
-    return session;
+    const grant = await loginInternal(payload);
+    applyAuthenticatedSession(set, grant.accessToken, grant.session);
+    return grant.session;
   },
   logout: async () => {
     set({
@@ -70,6 +79,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await logoutAuthSession();
     } finally {
+      setApiAccessToken(null);
       set({
         session: null,
         status: "unauthenticated",
@@ -77,15 +87,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
   markUnauthenticated: () => {
+    setApiAccessToken(null);
     set({
       session: null,
       status: "unauthenticated",
-    });
-  },
-  setSession: (session) => {
-    set({
-      session,
-      status: "authenticated",
     });
   },
 }));

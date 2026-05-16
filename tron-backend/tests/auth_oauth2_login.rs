@@ -3,6 +3,7 @@ mod common;
 use std::{
     fs,
     path::PathBuf,
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -10,10 +11,12 @@ use axum::http::{Method, StatusCode, header};
 use common::{
     GITHUB_TEST_CODE, GitHubEmailFixture, GitHubProfileFixture, app_with_config,
     cookie_header_from_set_cookie, github_mock_server_with_profile, github_oauth_config,
-    header_value_to_string, header_values, request, response_json,
+    header_value_to_string, header_values, request, request_with_headers, response_json,
 };
 use serde_json::json;
 use url::Url;
+
+static NEXT_DB_ID: AtomicU64 = AtomicU64::new(1);
 
 #[tokio::test]
 async fn oauth2_authorize_and_callback_auto_provision_an_authenticated_session() {
@@ -104,28 +107,41 @@ async fn oauth2_authorize_and_callback_auto_provision_an_authenticated_session()
         callback_redirect.starts_with("/auth/callback"),
         "callback should redirect to the frontend auth callback route, got {callback_redirect}",
     );
-
-    let session_cookie_header = cookie_header_from_set_cookie(
-        &set_cookie_headers,
-        &["tron_access_token", "tron_refresh_token"],
+    assert!(
+        set_cookie_headers
+            .iter()
+            .any(|value| value.starts_with("tron_refresh_token=")),
+        "OAuth2 callback should set the refresh cookie",
     );
-    let session_response = request(
+    assert!(
+        !set_cookie_headers
+            .iter()
+            .any(|value| value.starts_with("tron_access_token=")),
+        "OAuth2 callback should not set an access cookie",
+    );
+
+    let refresh_cookie_header =
+        cookie_header_from_set_cookie(&set_cookie_headers, &["tron_refresh_token"]);
+    let refresh_response = request(
         &app,
-        Method::GET,
-        "/api/v1/auth/session",
-        None,
-        Some(&session_cookie_header),
+        Method::POST,
+        "/api/v1/auth/refresh",
+        Some(json!({})),
+        Some(&refresh_cookie_header),
     )
     .await;
-    assert_eq!(session_response.status(), StatusCode::OK);
-    let session_json = response_json(session_response).await;
-    assert_eq!(session_json["data"]["authMethod"], "oauth2");
-    assert_eq!(session_json["data"]["provider"]["code"], "github");
-    assert_eq!(session_json["data"]["user"]["username"], "cloudsen");
-    assert_eq!(session_json["data"]["user"]["email"], "www.402645063@gmail.com");
-    assert_eq!(session_json["data"]["user"]["roleCodes"], json!(["VIEWER"]));
-    assert_eq!(session_json["data"]["user"]["spaceCodes"], json!(["PLATFORM"]));
-    assert_eq!(session_json["data"]["user"]["passwordResetRequired"], true);
+    assert_eq!(refresh_response.status(), StatusCode::OK);
+    let refresh_json = response_json(refresh_response).await;
+    assert_eq!(refresh_json["data"]["session"]["authMethod"], "oauth2");
+    assert_eq!(refresh_json["data"]["session"]["provider"]["code"], "github");
+    assert_eq!(refresh_json["data"]["session"]["user"]["username"], "cloudsen");
+    assert_eq!(refresh_json["data"]["session"]["user"]["email"], "www.402645063@gmail.com");
+    assert_eq!(refresh_json["data"]["session"]["user"]["roleCodes"], json!(["VIEWER"]));
+    assert_eq!(refresh_json["data"]["session"]["user"]["spaceCodes"], json!(["PLATFORM"]));
+    assert_eq!(
+        refresh_json["data"]["session"]["user"]["passwordResetRequired"],
+        true
+    );
 
     let _ = fs::remove_file(&database_path);
 }
@@ -168,26 +184,32 @@ async fn dev_oauth2_callback_auto_provisions_and_authenticates_session() {
     .await;
 
     assert_eq!(callback_response.status(), StatusCode::SEE_OTHER);
-    let session_cookie_header = cookie_header_from_set_cookie(
+    let refresh_cookie_header = cookie_header_from_set_cookie(
         &header_values(callback_response.headers(), header::SET_COOKIE),
-        &["tron_access_token", "tron_refresh_token"],
+        &["tron_refresh_token"],
     );
-    let session_response = request(
+    let refresh_response = request(
         &app,
-        Method::GET,
-        "/api/v1/auth/session",
-        None,
-        Some(&session_cookie_header),
+        Method::POST,
+        "/api/v1/auth/refresh",
+        Some(json!({})),
+        Some(&refresh_cookie_header),
     )
     .await;
-    assert_eq!(session_response.status(), StatusCode::OK);
+    assert_eq!(refresh_response.status(), StatusCode::OK);
 
-    let session_json = response_json(session_response).await;
-    assert_eq!(session_json["data"]["authMethod"], "oauth2");
-    assert_eq!(session_json["data"]["provider"]["code"], "dev");
-    assert_eq!(session_json["data"]["user"]["username"], "auth.operator");
-    assert_eq!(session_json["data"]["user"]["email"], "auth.operator@tron.ai");
-    assert_eq!(session_json["data"]["user"]["passwordResetRequired"], false);
+    let refresh_json = response_json(refresh_response).await;
+    assert_eq!(refresh_json["data"]["session"]["authMethod"], "oauth2");
+    assert_eq!(refresh_json["data"]["session"]["provider"]["code"], "dev");
+    assert_eq!(refresh_json["data"]["session"]["user"]["username"], "auth.operator");
+    assert_eq!(
+        refresh_json["data"]["session"]["user"]["email"],
+        "auth.operator@tron.ai"
+    );
+    assert_eq!(
+        refresh_json["data"]["session"]["user"]["passwordResetRequired"],
+        false
+    );
 
     let _ = fs::remove_file(&database_path);
 }
@@ -273,16 +295,34 @@ async fn oauth2_session_json(app: &axum::Router, authorize_uri: &str) -> serde_j
     .await;
     assert_eq!(callback_response.status(), StatusCode::SEE_OTHER);
 
-    let session_cookie_header = cookie_header_from_set_cookie(
+    let refresh_cookie_header = cookie_header_from_set_cookie(
         &header_values(callback_response.headers(), header::SET_COOKIE),
-        &["tron_access_token", "tron_refresh_token"],
+        &["tron_refresh_token"],
     );
-    let session_response = request(
+    let refresh_response = request(
+        app,
+        Method::POST,
+        "/api/v1/auth/refresh",
+        Some(json!({})),
+        Some(&refresh_cookie_header),
+    )
+    .await;
+    assert_eq!(refresh_response.status(), StatusCode::OK);
+
+    let refresh_json = response_json(refresh_response).await;
+    let authorization = format!(
+        "Bearer {}",
+        refresh_json["data"]["accessToken"]
+            .as_str()
+            .expect("refresh should return an access token"),
+    );
+    let session_response = request_with_headers(
         app,
         Method::GET,
         "/api/v1/auth/session",
         None,
-        Some(&session_cookie_header),
+        None,
+        Some(&authorization),
     )
     .await;
     assert_eq!(session_response.status(), StatusCode::OK);
@@ -294,5 +334,6 @@ fn unique_database_path() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("system clock should be after epoch")
         .as_nanos();
-    std::env::temp_dir().join(format!("tron-auth-auto-provision-{nanos}.sqlite3"))
+    let sequence = NEXT_DB_ID.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("tron-auth-auto-provision-{nanos}-{sequence}.sqlite3"))
 }

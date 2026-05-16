@@ -5,13 +5,17 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use crate::{application::user::UserService, response::ApiResponse};
+use crate::{
+    application::user::UserService,
+    domain::auth::CurrentSession,
+    response::ApiResponse,
+};
 
 use super::{
     error_mapper::auth_error_response,
     read_access_token, read_cookie,
     request::{InternalLoginRequest, OAuth2AuthorizeQuery, OAuth2CallbackQuery},
-    response::{AuthProvidersDto, LogoutDto},
+    response::{AuthGrantDto, AuthProvidersDto, LogoutDto},
 };
 
 const ACCESS_COOKIE_NAME: &str = "tron_access_token";
@@ -30,11 +34,14 @@ pub async fn login(
     Json(request): Json<InternalLoginRequest>,
 ) -> Response {
     match users.login_internal(&request.login, &request.password) {
-        Ok(session) => response_with_auth_cookies(
+        Ok(session) => response_with_refresh_cookie(
             StatusCode::OK,
-            Json(ApiResponse::success(session.session)),
+            Json(ApiResponse::success(auth_grant_response(
+                &users,
+                &session.access_token,
+                &session.session,
+            ))),
             &users,
-            &session.access_token,
             &session.refresh_token,
         ),
         Err(error) => auth_error_response(error),
@@ -43,17 +50,8 @@ pub async fn login(
 
 pub async fn current_session(State(users): State<UserService>, headers: HeaderMap) -> Response {
     let access_token = read_access_token(&headers);
-    let refresh_token = read_cookie(&headers, REFRESH_COOKIE_NAME);
-    match users.current_session(access_token.as_deref(), refresh_token.as_deref()) {
-        Ok(Some(session)) if !session.refresh_token.is_empty() => response_with_auth_cookies(
-            StatusCode::OK,
-            Json(ApiResponse::success(session.session)),
-            &users,
-            &session.access_token,
-            &session.refresh_token,
-        ),
-        Ok(Some(session)) => Json(ApiResponse::success(session.session)).into_response(),
-        Ok(None) => auth_error_response(crate::domain::auth::AuthError::Unauthorized),
+    match users.authenticate_access_token(access_token.as_deref()) {
+        Ok(session) => Json(ApiResponse::success(session)).into_response(),
         Err(error) => auth_error_response(error),
     }
 }
@@ -61,11 +59,14 @@ pub async fn current_session(State(users): State<UserService>, headers: HeaderMa
 pub async fn refresh(State(users): State<UserService>, headers: HeaderMap) -> Response {
     let refresh_token = read_cookie(&headers, REFRESH_COOKIE_NAME);
     match users.refresh_session(refresh_token.as_deref()) {
-        Ok(session) => response_with_auth_cookies(
+        Ok(session) => response_with_refresh_cookie(
             StatusCode::OK,
-            Json(ApiResponse::success(session.session)),
+            Json(ApiResponse::success(auth_grant_response(
+                &users,
+                &session.access_token,
+                &session.session,
+            ))),
             &users,
-            &session.access_token,
             &session.refresh_token,
         ),
         Err(error) => auth_error_response(error),
@@ -74,8 +75,7 @@ pub async fn refresh(State(users): State<UserService>, headers: HeaderMap) -> Re
 
 pub async fn logout(State(users): State<UserService>, headers: HeaderMap) -> Response {
     let refresh_token = read_cookie(&headers, REFRESH_COOKIE_NAME);
-    let access_token = read_access_token(&headers);
-    match users.logout_session(refresh_token.as_deref(), access_token.as_deref()) {
+    match users.logout_session(refresh_token.as_deref()) {
         Ok(()) => response_with_clear_cookies(
             StatusCode::OK,
             Json(ApiResponse::success(LogoutDto { logged_out: true })),
@@ -140,7 +140,6 @@ pub async fn oauth2_callback(
             append_auth_cookies(
                 response.headers_mut(),
                 &users,
-                &session.access_token,
                 &session.refresh_token,
             );
             response.headers_mut().append(
@@ -154,15 +153,14 @@ pub async fn oauth2_callback(
     }
 }
 
-fn response_with_auth_cookies<T: IntoResponse>(
+fn response_with_refresh_cookie<T: IntoResponse>(
     status: StatusCode,
     body: T,
     users: &UserService,
-    access_token: &str,
     refresh_token: &str,
 ) -> Response {
     let mut response = (status, body).into_response();
-    append_auth_cookies(response.headers_mut(), users, access_token, refresh_token);
+    append_auth_cookies(response.headers_mut(), users, refresh_token);
     response
 }
 
@@ -194,19 +192,8 @@ fn response_with_clear_cookies<T: IntoResponse>(
 fn append_auth_cookies(
     headers: &mut HeaderMap,
     users: &UserService,
-    access_token: &str,
     refresh_token: &str,
 ) {
-    headers.append(
-        header::SET_COOKIE,
-        HeaderValue::from_str(&auth_cookie(
-            ACCESS_COOKIE_NAME,
-            access_token,
-            users.access_token_ttl_seconds(),
-            users.cookie_secure(),
-        ))
-        .expect("access cookie should be valid"),
-    );
     headers.append(
         header::SET_COOKIE,
         HeaderValue::from_str(&auth_cookie(
@@ -217,6 +204,19 @@ fn append_auth_cookies(
         ))
         .expect("refresh cookie should be valid"),
     );
+}
+
+fn auth_grant_response(
+    users: &UserService,
+    access_token: &str,
+    session: &CurrentSession,
+) -> AuthGrantDto {
+    AuthGrantDto {
+        access_token: access_token.to_owned(),
+        token_type: "Bearer".into(),
+        expires_in: users.access_token_ttl_seconds(),
+        session: session.clone(),
+    }
 }
 
 fn auth_cookie(name: &str, value: &str, max_age: i64, secure: bool) -> String {

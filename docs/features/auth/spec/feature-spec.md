@@ -20,25 +20,26 @@
 
 ## Requirement
 
-Create a real authentication feature for Tron so every non-auth page requires a valid JWT-backed session, internal operators can sign in with existing user-management accounts, protected backend APIs can authenticate `Authorization: Bearer <jwt>` requests while preserving browser cookie compatibility, and enterprise OAuth2 sign-in, starting with GitHub OAuth, can land in the same session model without inventing a second user source.
+Create a real authentication feature for Tron so every non-auth page requires a valid JWT-backed session, internal operators can sign in with existing user-management accounts, protected backend APIs authenticate only through `Authorization: Bearer <access-jwt>`, refresh uses HttpOnly cookies only, and enterprise OAuth2 sign-in, starting with GitHub OAuth, lands in the same session model without inventing a second user source.
 
 ## Scope Boundary
 
-This slice owns backend auth/session APIs, protected-route behavior, login and callback pages, JWT session lifecycle with cookie bootstrap plus bearer-token API authentication, OAuth2 identity linking, and user-management integration at the authentication boundary only. It does not introduce authorization policy beyond authenticated access.
+This slice owns backend auth/session APIs, protected-route behavior, login and callback pages, JWT session lifecycle with access-token response bodies plus refresh-cookie bootstrap, OAuth2 identity linking, and user-management integration at the authentication boundary only. It does not introduce authorization policy beyond authenticated access.
 
 ## Assumptions
 
 - Existing user-management users are the source of truth for internal operators.
-- Local development should stay usable on plain HTTP, so cookie security flags must be configurable.
+- Local development should stay usable on plain HTTP, so refresh-cookie security flags must remain configurable for the dev environment.
 - OAuth2 provider details can be driven by backend environment variables, with GitHub as the first live provider and any deterministic dev provider reserved for automated proof only.
 - Existing role and space assignments remain managed data, not API authorization gates, in this slice.
 
 ## In Scope
 
 - Internal username-or-email plus password login against the persisted user store.
-- Short-lived access JWT plus rotating refresh JWT delivered through HttpOnly cookies.
-- `Authorization: Bearer <access-jwt>` parsing for protected backend routes, with cookie fallback for the existing browser flow.
-- Backend session bootstrap, refresh, logout, and current-session inspection endpoints.
+- Short-lived access JWT returned in auth response bodies plus rotating refresh JWT delivered through HttpOnly cookies only.
+- `Authorization: Bearer <access-jwt>` parsing for every protected backend route, with no access-cookie fallback.
+- Backend login, refresh, logout, OAuth callback completion, and access-token-backed current-session inspection endpoints.
+- Frontend bootstrap that exchanges the refresh cookie for a fresh access token before protected pages render.
 - Request-scoped authenticated-user context propagation so protected handlers can reuse operator identity during save or update operations.
 - OAuth2 authorize and callback endpoints, with GitHub as the first live provider and provider-subject reuse, verified-email matching, or first-login internal-user auto-provision.
 - Persistent refresh-session storage and persistent OAuth2 identity links.
@@ -51,14 +52,14 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 - Role-based API authorization, permission matrices, or tenancy isolation changes.
 - Admin configuration UI for OAuth2 providers.
 - Invitation approval workflows, domain allowlists, or admin review gates for auto-provisioned OAuth2 accounts.
-- New login flows or token issuance contracts outside the existing frontend console; bearer-token support only applies to already-issued access JWTs.
+- New login flows or token issuance contracts outside the existing frontend console.
 
 ## Constraints
 
 - Reuse the existing user-management persistence model instead of creating a second operator table.
 - Keep the backend response envelope aligned with `code`, `message`, and `data`.
-- Keep frontend auth state derived from backend session inspection instead of duplicating long-lived tokens in page-local state.
-- Preserve the browser-oriented cookie session bootstrap while allowing protected APIs to honor the standard `Authorization` header.
+- Keep frontend auth state derived from backend-issued session or refresh responses instead of duplicating long-lived tokens in page-local state.
+- Keep refresh-session material in cookies only, while protected APIs honor only the standard `Authorization` header for access-token authentication.
 - Preserve current mock-or-api data-source conventions while ensuring auth failures do not silently bypass route protection.
 
 ## Feature Model
@@ -68,15 +69,16 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
   - Authenticated internal operator.
   - Authenticated OAuth2-linked operator.
 - Core objects:
-  - `AuthSession`: refresh-session record plus cookie-backed JWT lifecycle.
+  - `AuthSession`: refresh-session record plus access-token grant lifecycle.
   - `AuthenticatedOperator`: stable user-management identity exposed to the frontend session model.
   - `OAuth2IdentityLink`: provider subject mapped to one internal user.
 - Rules:
   - Only `Active` users can authenticate.
   - Archived users are rejected before a session is issued.
-  - Frontend protected pages derive access from `GET /api/v1/auth/session`.
-  - Protected backend routes accept either `Authorization: Bearer <access-jwt>` or the existing access-token cookie, and successful auth must expose the operator identity to downstream handlers.
+  - Frontend protected pages derive access from a freshly issued access token obtained via login, refresh, or OAuth callback bootstrap.
+  - Protected backend routes accept only `Authorization: Bearer <access-jwt>`, and successful auth must expose the operator identity to downstream handlers.
   - Internal and OAuth2 login must converge on the same session and user payload.
+  - Refresh cookies are used only by auth lifecycle endpoints and must not be required by general business APIs.
   - First-time GitHub sign-in may auto-provision one internal user with minimal default assignments, and later sign-ins must reuse the durable provider subject link.
 - State transitions:
   - Anonymous -> internal login success -> authenticated.
@@ -90,7 +92,7 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 - `/auth/callback`: transient callback route that finalizes OAuth2 login and resumes the intended protected destination.
 - Protected shell routes: every existing route except `/login` and `/auth/callback` waits for session bootstrap and redirects anonymous users.
 - Backend modules:
-  - auth HTTP handlers, bearer-auth middleware, and request auth context extractor.
+  - auth HTTP handlers, bearer-auth middleware, auth grant responses, and request auth context extractor.
   - auth application service, token codec, provider adapters, and persistence extensions.
   - protected user-management API boundary reused by the existing admin frontend.
 
@@ -98,9 +100,9 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 
 - `tron-frontend/src/domain/auth/pages/LoginPage.tsx` is a static stub that only navigates to `/dashboard` and has no real auth integration.
 - `tron-frontend/src/app/App.tsx` treats `/login` as special but has no authenticated-route guard or session bootstrap.
-- `tron-frontend/src/shared/api/serviceConfig.ts` does not send browser credentials and currently swallows API errors back into mock data.
+- `tron-frontend/src/shared/api/httpClient.ts` and `serviceConfig.ts` still assume cookie-oriented browser auth and need to be narrowed so business APIs depend on bearer headers while refresh remains auth-endpoint-specific.
 - `tron-backend` already has Axum routing, SQLite persistence, bcrypt password hashing, and active versus archived user state in the user-management domain.
-- The prior auth delivery already issued access and refresh JWTs, but protected APIs only read the access token from `tron_access_token` cookies and did not expose current-user request context to downstream handlers.
+- The current auth delivery still mixes bearer and cookie access-token paths; the next evolution should remove access-token cookies entirely and keep only the refresh cookie for bootstrap or renewal.
 - Seeded users exist under `tron-backend/src/adapters/outbound/persistence/sqlite/seed.rs`, but the feature currently lacks any login contract or known auth fixture conventions.
 
 ## Open Decisions

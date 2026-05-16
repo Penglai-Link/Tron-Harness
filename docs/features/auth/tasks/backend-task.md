@@ -26,7 +26,7 @@ Lead executes backend auth, middleware, session-contract, and GitHub runtime ena
 
 ## Integration Notes
 
-Backend auth must protect user-management routes without introducing role-based authorization or a second user store, preserve the existing browser cookie flow, and expose request-scoped operator identity whenever protected handlers need save or update ownership.
+Backend auth must protect user-management routes without introducing role-based authorization or a second user store, issue access JWTs only through auth grant responses, keep refresh state in `HttpOnly` cookies, and expose request-scoped operator identity whenever protected handlers need save or update ownership.
 
 ## Open Decisions
 

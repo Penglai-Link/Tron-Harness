@@ -123,6 +123,22 @@ async function routeAuthApi(
   options: { onOAuth2Authorize?: (url: string) => void } = {},
 ) {
   let currentSession: typeof authUser | typeof oauthUser | null = null;
+  let hasRefreshSession = false;
+  let currentAccessToken = "";
+  let nextAccessTokenId = 1;
+
+  function issueGrant(session: typeof authUser | typeof oauthUser) {
+    currentSession = session;
+    hasRefreshSession = true;
+    currentAccessToken = `test-access-token-${nextAccessTokenId++}`;
+
+    return successEnvelope({
+      accessToken: currentAccessToken,
+      tokenType: "Bearer",
+      expiresIn: 900,
+      session,
+    });
+  }
 
   await page.route("**/api/v1/auth/providers", async (route) => {
     await fulfillJson(route, successEnvelope({
@@ -134,7 +150,10 @@ async function routeAuthApi(
   });
 
   await page.route("**/api/v1/auth/session", async (route) => {
-    if (!currentSession) {
+    if (
+      !currentSession
+      || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
+    ) {
       await fulfillJson(route, unauthorizedEnvelope(), 401);
       return;
     }
@@ -145,8 +164,7 @@ async function routeAuthApi(
   await page.route("**/api/v1/auth/login", async (route) => {
     const body = route.request().postDataJSON() as { login?: string; password?: string };
     if (body.login === "auth.operator" && body.password === "TronAuthPass123!") {
-      currentSession = authUser;
-      await fulfillJson(route, successEnvelope(authUser));
+      await fulfillJson(route, issueGrant(authUser));
       return;
     }
 
@@ -154,22 +172,26 @@ async function routeAuthApi(
   });
 
   await page.route("**/api/v1/auth/logout", async (route) => {
+    currentAccessToken = "";
+    hasRefreshSession = false;
     currentSession = null;
     await fulfillJson(route, successEnvelope({ loggedOut: true }));
   });
 
   await page.route("**/api/v1/auth/refresh", async (route) => {
-    if (!currentSession) {
+    if (!currentSession || !hasRefreshSession) {
       await fulfillJson(route, unauthorizedEnvelope("AUTH_REFRESH_INVALID", "invalid refresh session"), 401);
       return;
     }
 
-    await fulfillJson(route, successEnvelope(currentSession));
+    await fulfillJson(route, issueGrant(currentSession));
   });
 
   await page.route("**/api/v1/auth/oauth2/authorize/github**", async (route) => {
     options.onOAuth2Authorize?.(route.request().url());
     currentSession = oauthUser;
+    hasRefreshSession = true;
+    currentAccessToken = "";
     const url = new URL(route.request().url());
     const redirect = url.searchParams.get("redirect") ?? "/dashboard";
     await route.fulfill({
@@ -182,7 +204,10 @@ async function routeAuthApi(
   });
 
   await page.route("**/api/v1/admin/users**", async (route) => {
-    if (!currentSession) {
+    if (
+      !currentSession
+      || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
+    ) {
       await fulfillJson(route, unauthorizedEnvelope(), 401);
       return;
     }
@@ -217,7 +242,10 @@ async function routeAuthApi(
   });
 
   await page.route("**/api/v1/admin/users/statistics/**", async (route) => {
-    if (!currentSession) {
+    if (
+      !currentSession
+      || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
+    ) {
       await fulfillJson(route, unauthorizedEnvelope(), 401);
       return;
     }
@@ -271,6 +299,8 @@ test("redirects anonymous users to login, signs in, reaches user management, and
 
   await expect(page).toHaveURL(/\/dashboard$/);
   await page.goto(`${frontendBaseUrl}/admin/users`);
+  await expect(page).toHaveURL(/\/admin\/users$/);
+  await page.reload();
   await expect(page).toHaveURL(/\/admin\/users$/);
 
   await expect(page.getByRole("heading", { name: /users/i }).first()).toBeVisible();

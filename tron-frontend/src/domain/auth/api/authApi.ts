@@ -1,5 +1,6 @@
 import { AUTH_CALLBACK_PATH } from "@/domain/auth/constants";
 import type {
+  AuthGrant,
   AuthProvidersPayload,
   AuthSession,
   InternalLoginPayload,
@@ -28,11 +29,11 @@ export function fetchCurrentAuthSession(signal?: AbortSignal) {
 }
 
 export function loginInternal(payload: InternalLoginPayload) {
-  return requestApi<AuthSession>(authApiEndpoints.login, { body: payload });
+  return requestApi<AuthGrant>(authApiEndpoints.login, { body: payload });
 }
 
 export function refreshAuthSession() {
-  return requestApi<AuthSession>(authApiEndpoints.refresh, { body: {} });
+  return requestApi<AuthGrant>(authApiEndpoints.refresh, { body: {} });
 }
 
 export function logoutAuthSession() {

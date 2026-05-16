@@ -83,7 +83,7 @@ pub(crate) fn read_bearer_token(headers: &HeaderMap) -> Option<String> {
 }
 
 pub(crate) fn read_access_token(headers: &HeaderMap) -> Option<String> {
-    read_bearer_token(headers).or_else(|| read_cookie(headers, "tron_access_token"))
+    read_bearer_token(headers)
 }
 
 pub async fn require_auth(

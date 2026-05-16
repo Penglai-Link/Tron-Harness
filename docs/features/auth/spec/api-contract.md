@@ -2,7 +2,7 @@
 
 ## API Overview
 
-The auth feature introduces a small browser-oriented session API with protected-route bearer compatibility. Internal login and GitHub OAuth2 login converge on one authenticated session contract returned through the project uniform response envelope; browser clients keep HttpOnly cookies, and protected APIs also honor `Authorization: Bearer <access-jwt>`.
+The auth feature introduces a browser-oriented token API with one strict authentication contract. Internal login and GitHub OAuth2 login converge on one authenticated session model returned through the project uniform response envelope; auth grant responses return the short-lived access JWT in the body, refresh state stays in HttpOnly cookies only, and protected APIs honor only `Authorization: Bearer <access-jwt>`.
 
 ## Endpoints
 
@@ -10,19 +10,20 @@ The auth feature introduces a small browser-oriented session API with protected-
 | --- | --- | --- |
 | GET | `/api/v1/auth/providers` | list enabled login providers for the frontend login surface |
 | POST | `/api/v1/auth/login` | authenticate an internal operator with username-or-email plus password |
-| GET | `/api/v1/auth/session` | return the current authenticated operator if the access JWT is valid through the `Authorization` header or the cookie path |
-| POST | `/api/v1/auth/refresh` | rotate access and refresh cookies for an existing refresh session |
-| POST | `/api/v1/auth/logout` | revoke the current refresh session or bearer-authenticated session and clear auth cookies |
+| GET | `/api/v1/auth/session` | return the current authenticated operator for a valid bearer access JWT |
+| POST | `/api/v1/auth/refresh` | rotate the refresh cookie and return a fresh bearer access JWT plus session payload |
+| POST | `/api/v1/auth/logout` | revoke the current refresh session and clear auth cookies |
 | GET | `/api/v1/auth/oauth2/authorize/{provider}` | start OAuth2 login and redirect the browser to the provider |
 | GET | `/api/v1/auth/oauth2/callback/{provider}` | complete OAuth2 login, issue cookies, and redirect back to the frontend callback route |
 
 ## Auth And Permissions
 
 - `GET /api/v1/auth/providers`, `POST /api/v1/auth/login`, and the OAuth2 authorize or callback endpoints are public.
-- `GET /api/v1/auth/session` accepts the short-lived access JWT from `Authorization: Bearer` or the existing cookie path.
-- `POST /api/v1/auth/refresh` still rotates refresh-session cookies and therefore remains cookie-oriented.
-- `POST /api/v1/auth/logout` may revoke the current session through refresh-session cookies or the access JWT session identifier.
-- Existing admin user-management APIs become authenticated-only in this feature and accept the standard bearer header with cookie fallback.
+- `POST /api/v1/auth/login` returns the authenticated session plus a short-lived access JWT in the response body and sets only the refresh cookie.
+- `GET /api/v1/auth/session` accepts the short-lived access JWT from `Authorization: Bearer` only.
+- `POST /api/v1/auth/refresh` remains cookie-oriented, rotates the refresh-session cookie, and returns a fresh access JWT in the response body.
+- `POST /api/v1/auth/logout` revokes the current refresh session through the refresh cookie and clears auth cookies.
+- Existing admin user-management APIs become authenticated-only in this feature and accept the standard bearer header only.
 - Authentication proves operator identity only. Roles and permissions remain out of scope for API authorization.
 
 ## Error Contract
@@ -36,10 +37,10 @@ The auth feature introduces a small browser-oriented session API with protected-
 
 ## Frontend Backend Boundary
 
-- The frontend never constructs or validates JWTs directly.
-- The frontend learns auth state from `GET /api/v1/auth/session` and browser redirects.
-- Login, logout, and refresh are same-origin calls that rely on browser cookies with `credentials: include`.
-- Protected backend handlers can extract the authenticated operator from request context after bearer or cookie authentication succeeds.
+- The frontend never constructs or validates JWTs directly, but it does hold the current access JWT in runtime state and sends it through the `Authorization` header.
+- The frontend learns auth state from login or refresh responses and may use `GET /api/v1/auth/session` only as a bearer-token-backed inspection endpoint.
+- Login, refresh, logout, and OAuth callback bootstrap remain same-origin calls so the browser can receive or send the refresh cookie.
+- Protected backend handlers can extract the authenticated operator from request context after bearer authentication succeeds.
 - The frontend may use mock domain data for non-auth business areas, but route protection and current-session truth come only from backend auth APIs.
 
 ## Database And Transaction Boundary

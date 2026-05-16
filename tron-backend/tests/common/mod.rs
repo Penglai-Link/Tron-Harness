@@ -182,7 +182,7 @@ pub async fn response_json(response: axum::response::Response) -> Value {
     serde_json::from_slice(&bytes).expect("response body should be valid JSON")
 }
 
-pub async fn authenticated_cookie_header(app: &Router) -> String {
+pub async fn authenticated_refresh_cookie_header(app: &Router) -> String {
     let login_response = request(
         app,
         Method::POST,
@@ -201,7 +201,7 @@ pub async fn authenticated_cookie_header(app: &Router) -> String {
     );
     cookie_header_from_set_cookie(
         &header_values(login_response.headers(), header::SET_COOKIE),
-        &["tron_access_token", "tron_refresh_token"],
+        &["tron_refresh_token"],
     )
 }
 
@@ -211,8 +211,9 @@ pub async fn authenticated_request(
     uri: &str,
     body: Option<Value>,
 ) -> axum::response::Response {
-    let cookie_header = authenticated_cookie_header(app).await;
-    request(app, method, uri, body, Some(&cookie_header)).await
+    let access_token = authenticated_bearer_token(app).await;
+    let authorization = format!("Bearer {access_token}");
+    request_with_headers(app, method, uri, body, None, Some(&authorization)).await
 }
 
 pub async fn authenticated_request_with_config(
@@ -242,11 +243,11 @@ pub async fn authenticated_bearer_token(app: &Router) -> String {
         axum::http::StatusCode::OK,
         "test auth bootstrap should obtain a valid login session",
     );
-
-    cookie_value_from_set_cookie(
-        &header_values(login_response.headers(), header::SET_COOKIE),
-        "tron_access_token",
-    )
+    let login_json = response_json(login_response).await;
+    login_json["data"]["accessToken"]
+        .as_str()
+        .expect("login response should include an accessToken")
+        .to_owned()
 }
 
 pub fn header_values(headers: &HeaderMap, name: header::HeaderName) -> Vec<String> {
