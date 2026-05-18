@@ -45,10 +45,6 @@ function splitCodes(value: string) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
-function workspaceOptionLabel(name: string, workspaceCode: string) {
-  return name.trim() || workspaceCode;
-}
-
 export function CreateTaskPage() {
   const options = useTaskOptions();
   const quickReference = useTaskQuickReference();
@@ -118,7 +114,7 @@ export function CreateTaskPage() {
               <SelectInput aria-label="Workspace" value={workspaceCode} onChange={(event) => setWorkspaceCode(event.target.value)}>
                 {workspaces.map((workspace) => (
                   <option key={workspace.workspaceCode} value={workspace.workspaceCode}>
-                    {workspaceOptionLabel(workspace.name, workspace.workspaceCode)}
+                    {workspace.label}
                   </option>
                 ))}
               </SelectInput>

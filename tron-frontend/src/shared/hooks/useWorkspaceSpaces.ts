@@ -6,19 +6,20 @@ import {
 import {
   defaultPrimarySpaceId,
   defaultSecondarySpaceId,
+  getWorkspaceSwitcherMock,
   getSecondarySpaceMocks,
-  primarySpaceMocks,
 } from "@/shared/constants/workspaceSpaces";
 import type { WorkspaceSpacesContextValue } from "@/shared/types/WorkspaceSpace";
 
+const defaultSwitcher = getWorkspaceSwitcherMock();
 const defaultSecondarySpaces = getSecondarySpaceMocks(defaultPrimarySpaceId);
 
 export const WorkspaceSpacesContext = createContext<WorkspaceSpacesContextValue>({
-  primarySpaces: primarySpaceMocks,
+  primarySpaces: defaultSwitcher.primarySpaces,
   secondarySpaces: defaultSecondarySpaces,
-  selectedPrimarySpace: primarySpaceMocks.find((space) => space.id === defaultPrimarySpaceId),
+  selectedPrimarySpace: defaultSwitcher.primarySpaces.find((space) => space.workspaceCode === defaultPrimarySpaceId),
   selectedPrimarySpaceId: defaultPrimarySpaceId,
-  selectedSecondarySpace: defaultSecondarySpaces.find((space) => space.id === defaultSecondarySpaceId) ?? defaultSecondarySpaces[0],
+  selectedSecondarySpace: defaultSecondarySpaces.find((space) => space.workspaceCode === defaultSecondarySpaceId) ?? defaultSecondarySpaces[0],
   selectedSecondarySpaceId: defaultSecondarySpaceId,
 });
 

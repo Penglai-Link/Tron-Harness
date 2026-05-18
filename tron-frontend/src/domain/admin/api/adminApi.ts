@@ -13,6 +13,10 @@ import type {
   WorkspaceUserAccessRecord,
   WorkspaceStatus,
 } from "@/domain/admin/model";
+import type {
+  WorkspaceOption,
+  WorkspaceSwitcherData,
+} from "@/shared/types/WorkspaceSpace";
 import { requestApi } from "@/shared/api/httpClient";
 
 export const adminApiEndpoints = {
@@ -34,6 +38,8 @@ export const adminApiEndpoints = {
   replaceUserSpaces: "PUT /api/v1/admin/users/{userCode}/spaces",
   resetUserPassword: "POST /api/v1/admin/users/{userCode}/password/reset",
   listWorkspaces: "GET /api/v1/admin/workspaces",
+  listWorkspaceOptions: "GET /api/v1/admin/workspaces/options",
+  getWorkspaceSwitcher: "GET /api/v1/admin/workspaces/switcher",
   getTotalWorkspacesStatistic: "GET /api/v1/admin/workspaces/statistics/total-workspaces",
   getActiveWorkspacesStatistic: "GET /api/v1/admin/workspaces/statistics/active-workspaces",
   getDirectUserGrantsStatistic: "GET /api/v1/admin/workspaces/statistics/direct-user-grants",
@@ -141,7 +147,6 @@ export interface WorkspaceLifecycleResult {
 }
 
 export interface CreateWorkspacePayload {
-  workspaceCode: string;
   name: string;
   description?: string | null;
   parentWorkspaceCode?: string | null;
@@ -157,6 +162,7 @@ export interface MoveWorkspacePayload {
 }
 
 export interface WorkspaceListQuery {
+  includeArchived?: boolean;
   search?: string;
   status?: WorkspaceStatus;
 }
@@ -261,9 +267,27 @@ async function fetchWorkspaceStatisticCount(endpoint: string, signal?: AbortSign
 export async function fetchWorkspaceTree(query: WorkspaceListQuery = {}, signal?: AbortSignal) {
   return requestAdminApi<WorkspaceTreeNodeRecord[]>(adminApiEndpoints.listWorkspaces, {
     queryParams: {
+      includeArchived: query.includeArchived,
       search: query.search ?? "",
       status: query.status,
     },
+    signal,
+  });
+}
+
+export async function fetchWorkspaceOptions(query: WorkspaceListQuery = {}, signal?: AbortSignal) {
+  return requestAdminApi<WorkspaceOption[]>(adminApiEndpoints.listWorkspaceOptions, {
+    queryParams: {
+      includeArchived: query.includeArchived,
+      search: query.search ?? "",
+      status: query.status,
+    },
+    signal,
+  });
+}
+
+export async function fetchWorkspaceSwitcher(signal?: AbortSignal) {
+  return requestAdminApi<WorkspaceSwitcherData>(adminApiEndpoints.getWorkspaceSwitcher, {
     signal,
   });
 }

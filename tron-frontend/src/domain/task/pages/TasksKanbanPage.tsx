@@ -44,10 +44,6 @@ function SearchField({ placeholder, value, onChange }: { placeholder: string; va
   );
 }
 
-function workspaceOptionLabel(name: string, workspaceCode: string) {
-  return name.trim() || workspaceCode;
-}
-
 function ProgressBar({ value }: { value: number }) {
   return (
     <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
@@ -130,7 +126,7 @@ export function TasksKanbanPage() {
           <SelectInput aria-label="Task workspace" value={workspaceCode} onChange={(event) => setWorkspaceCode(event.target.value)}>
             {workspaces.map((workspace) => (
               <option key={workspace.workspaceCode} value={workspace.workspaceCode}>
-                {workspaceOptionLabel(workspace.name, workspace.workspaceCode)}
+                {workspace.label}
               </option>
             ))}
           </SelectInput>

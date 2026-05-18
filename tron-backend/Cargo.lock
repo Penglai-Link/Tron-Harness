@@ -1467,6 +1467,7 @@ dependencies = [
  "axum",
  "bcrypt",
  "jsonwebtoken",
+ "rand",
  "reqwest",
  "rusqlite",
  "serde",

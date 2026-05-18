@@ -20,6 +20,11 @@ Default to one bounded `tdd` row per AC slice. A `tdd` row owns RED -> GREEN -> 
 - AC-WS-06 | phase: tdd | owner: lead | scope: tron-backend/tests/workspace_management_api.rs | command_ref: CMD-BE-TEST | status: done.
 - AC-WS-07 | phase: tdd | owner: lead | scope: tron-frontend/tests/workspace-management-smoke.spec.ts | command_ref: CMD-WS-BROWSER | status: done.
 - AC-WS-08 | phase: tdd | owner: lead | scope: tron-backend/tests/workspace_management_api.rs | command_ref: CMD-BE-TEST | status: done.
+- AC-WS-09 | phase: tdd | owner: lead | scope: tron-backend/tests/workspace_management_api.rs tron-frontend/tests/workspace-management-smoke.spec.ts | command_ref: CMD-BE-TEST | status: done.
+- AC-WS-10 | phase: tdd | owner: lead | scope: tron-frontend/tests/workspace-management-smoke.spec.ts | command_ref: CMD-WS-BROWSER | status: done.
+- AC-WS-11 | phase: tdd | owner: lead | scope: tron-frontend/tests/workspace-management-smoke.spec.ts | command_ref: CMD-WS-BROWSER | status: done.
+- AC-WS-12 | phase: tdd | owner: lead | scope: tron-backend/tests/workspace_management_api.rs tron-frontend/tests/task-management-smoke.spec.ts | command_ref: CMD-TASK-BROWSER | status: done.
+- AC-WS-13 | phase: tdd | owner: lead | scope: tron-backend/tests/workspace_management_api.rs tron-frontend/tests/workspace-management-smoke.spec.ts | command_ref: CMD-WS-BROWSER | status: done.
 
 ## Worktree Notes
 

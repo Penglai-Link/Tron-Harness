@@ -47,16 +47,68 @@ Each node exposes:
 - `effectiveUserCount`
 - `children`
 
+### `GET /api/v1/admin/workspaces/options`
+
+Query params:
+
+- `search` optional
+- `status` optional: `Active` or `Archived`
+- `includeArchived` optional boolean
+
+Response `data`:
+
+- array of active selector records shaped for dropdown consumers
+
+Each record exposes:
+
+- `workspaceCode`
+- `label`
+- `name`
+- `description`
+- `parentWorkspaceCode`
+- `depth`
+- `status`
+
+### `GET /api/v1/admin/workspaces/switcher`
+
+Response `data`:
+
+```json
+{
+  "primarySpaces": [],
+  "secondarySpaces": []
+}
+```
+
+`primarySpaces` records expose:
+
+- `workspaceCode`
+- `name`
+- `description`
+- `status`
+- `childCount`
+
+`secondarySpaces` records expose:
+
+- `workspaceCode`
+- `primaryWorkspaceCode`
+- `label`
+- `name`
+- `description`
+- `status`
+- `depth`
+- `childCount`
+- `effectiveUserCount`
+
 ### `POST /api/v1/admin/workspaces`
 
 Request body:
 
-- `workspaceCode`
 - `name`
 - `description` optional
 - `parentWorkspaceCode` optional
 
-Creates root workspace when parent is absent.
+Creates root workspace when parent is absent. The backend generates `workspaceCode` and returns it in response `data`; clients must not submit or derive it from `name`.
 
 ### `GET /api/v1/admin/workspaces/{workspaceCode}`
 
@@ -206,15 +258,19 @@ Each returns:
 
 - `/admin/workspace` is the canonical write surface for workspace access configuration.
 - User Management may continue to display role and space summary fields, but it must not become the second canonical write path for the new workspace access rules introduced here.
+- Task workspace dropdowns may consume `/api/v1/admin/workspaces/options` instead of flattening the full workspace tree.
+- The top-left shell workspace switcher may consume `/api/v1/admin/workspaces/switcher` in API mode instead of relying on hardcoded workspace-space mocks.
 
 ## Database And Transaction Boundary
 
 - Create, update, move, archive, and restore operations execute through the workspace repository against SQLite persistence.
 - Direct-user and role-grant replacement are full-replacement writes scoped to one workspace at a time.
 - Effective-user reads and statistics endpoints are derived from persisted workspace, direct-user, role, and role-assignment data.
+- Selector projections are read-only views derived from the same persisted workspace tree and effective-user counts; they do not introduce new storage.
 
 ## Mock Or Adapter Expectations
 
 - Frontend mock data under `tron-frontend/src/domain/admin/mock/` must mirror the same route shapes and record fields as the backend API.
 - Browser proof may intercept `/api/v1/admin/workspaces/**` while preserving the real request paths, payloads, and envelope structure.
 - The page must stay compatible with the existing `VITE_TRON_ADMIN_DATA_SOURCE` switch between mock and API-backed reads.
+- Shell and task selector mock fallbacks must stay shape-compatible with the new `/options` and `/switcher` projections.

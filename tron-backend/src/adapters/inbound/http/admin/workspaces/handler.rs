@@ -36,6 +36,23 @@ pub async fn list_workspaces(
     }
 }
 
+pub async fn list_workspace_options(
+    State(workspaces): State<WorkspaceService>,
+    Query(query): Query<WorkspaceListQuery>,
+) -> Response {
+    match workspaces.list_workspace_options(query) {
+        Ok(items) => Json(ApiResponse::success(items)).into_response(),
+        Err(error) => workspace_error_response(error),
+    }
+}
+
+pub async fn workspace_switcher(State(workspaces): State<WorkspaceService>) -> Response {
+    match workspaces.workspace_switcher() {
+        Ok(data) => Json(ApiResponse::success(data)).into_response(),
+        Err(error) => workspace_error_response(error),
+    }
+}
+
 pub async fn total_workspaces(State(workspaces): State<WorkspaceService>) -> Response {
     statistics_response(workspaces, |statistics| statistics.total_workspaces)
 }

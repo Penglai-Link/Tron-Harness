@@ -75,6 +75,37 @@ const workspaceTree = [{
   children: [],
 }];
 
+const workspaceOptions = [{
+  workspaceCode: "TRON_CORE",
+  label: "Enterprise / Platform / Tron Core",
+  name: "Tron Core",
+  description: "Main Tron console workspace",
+  parentWorkspaceCode: "PLATFORM",
+  depth: 3,
+  status: "Active",
+}];
+
+const workspaceSwitcher = {
+  primarySpaces: [{
+    workspaceCode: "ENTERPRISE",
+    name: "Enterprise",
+    description: "Global governance workspace",
+    childCount: 1,
+    status: "Active",
+  }],
+  secondarySpaces: [{
+    workspaceCode: "TRON_CORE",
+    primaryWorkspaceCode: "ENTERPRISE",
+    label: "Enterprise / Platform / Tron Core",
+    name: "Tron Core",
+    description: "Main Tron console workspace",
+    depth: 3,
+    childCount: 0,
+    effectiveUserCount: 1,
+    status: "Active",
+  }],
+};
+
 const effectiveUsers = [{
   userCode: "USR-AUTH-0001",
   displayName: "Auth Operator",
@@ -200,6 +231,8 @@ async function routeApi(page: Page, requests: CapturedRequest[], tasks: Task[]) 
     if (captured.pathname === "/api/v1/auth/session") return fulfillJson(route, successEnvelope(authenticatedSession));
     if (captured.pathname === "/api/v1/auth/logout") return fulfillJson(route, successEnvelope({ loggedOut: true }));
     if (captured.pathname === "/api/v1/admin/workspaces") return fulfillJson(route, successEnvelope(workspaceTree));
+    if (captured.pathname === "/api/v1/admin/workspaces/options") return fulfillJson(route, successEnvelope(workspaceOptions));
+    if (captured.pathname === "/api/v1/admin/workspaces/switcher") return fulfillJson(route, successEnvelope(workspaceSwitcher));
     if (/^\/api\/v1\/admin\/workspaces\/[^/]+\/access\/effective-users$/.test(captured.pathname)) return fulfillJson(route, pageEnvelope(effectiveUsers));
     if (captured.pathname === "/api/v1/tasks/options") return fulfillJson(route, successEnvelope({ priorities: ["Low", "Medium", "High"], sourceTypes: ["Internal", "GitHub", "GitLab"], statuses, taskTypes: ["Feature", "BugFix", "Refactor"] }));
     if (captured.pathname === "/api/v1/tasks/quick-reference") return fulfillJson(route, successEnvelope({ tips: ["Task must belong to a workspace."], variables: ["workspaceCode", "taskType", "sourceType", "sourceUrl", "assigneeUserCodes"] }));
@@ -339,6 +372,8 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect(page.getByRole("button", { name: /^Sync$/ })).toHaveCount(0);
   await page.getByRole("button", { name: /^Refresh$/ }).click();
   await expect(toast(page, "Task board refreshed")).toBeVisible();
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/options")).toBe(true);
+  await expect(page.getByLabel("Task workspace").locator("option", { hasText: "Enterprise / Platform / Tron Core" })).toHaveCount(1);
   await expect(page.getByLabel("Task workspace")).toBeVisible();
   await expect(page.getByLabel("Task priority filter")).toBeVisible();
   await expect(page.getByLabel("Task status filter")).toHaveCount(0);

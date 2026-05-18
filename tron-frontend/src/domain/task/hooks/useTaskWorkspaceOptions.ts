@@ -6,41 +6,31 @@ import {
 
 import {
   fetchWorkspaceEffectiveUsers,
-  fetchWorkspaceTree,
+  fetchWorkspaceOptions,
 } from "@/domain/admin/api";
 import {
   getWorkspaceEffectiveUsers,
-  getWorkspaceTree,
 } from "@/domain/admin/mock";
-import type {
-  WorkspaceEffectiveUserRecord,
-  WorkspaceTreeNodeRecord,
-} from "@/domain/admin/model";
+import type { WorkspaceEffectiveUserRecord } from "@/domain/admin/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { getWorkspaceOptionMocks } from "@/shared/constants/workspaceSpaces";
+import type { WorkspaceOption } from "@/shared/types/WorkspaceSpace";
 
 export interface TaskWorkspaceOptions {
   effectiveUsers: WorkspaceEffectiveUserRecord[];
   loading: boolean;
-  workspaces: WorkspaceTreeNodeRecord[];
-}
-
-function flattenWorkspaceTree(records: WorkspaceTreeNodeRecord[]): WorkspaceTreeNodeRecord[] {
-  return records.flatMap((record) => [record, ...flattenWorkspaceTree(record.children)]);
+  workspaces: WorkspaceOption[];
 }
 
 export function useTaskWorkspaceOptions(workspaceCode: string): TaskWorkspaceOptions {
   const dataSource = getServiceDataSource("admin");
   const [loading, setLoading] = useState(false);
-  const [workspaceTree, setWorkspaceTree] = useState(() => getWorkspaceTree());
+  const [workspaces, setWorkspaces] = useState(() => getWorkspaceOptionMocks());
   const [effectiveUsers, setEffectiveUsers] = useState(() => getWorkspaceEffectiveUsers(workspaceCode));
-  const workspaces = useMemo(
-    () => flattenWorkspaceTree(workspaceTree).filter((workspace) => workspace.status === "Active"),
-    [workspaceTree],
-  );
 
   useEffect(() => {
     if (dataSource === "api") return;
-    setWorkspaceTree(getWorkspaceTree());
+    setWorkspaces(getWorkspaceOptionMocks());
     setEffectiveUsers(getWorkspaceEffectiveUsers(workspaceCode));
   }, [dataSource, workspaceCode]);
 
@@ -50,19 +40,19 @@ export function useTaskWorkspaceOptions(workspaceCode: string): TaskWorkspaceOpt
     setLoading(true);
 
     Promise.all([
-      fetchWorkspaceTree({}, controller.signal),
+      fetchWorkspaceOptions({}, controller.signal),
       workspaceCode
         ? fetchWorkspaceEffectiveUsers(workspaceCode, { current: 1, size: 100 }, controller.signal)
         : Promise.resolve({ current: 1, size: 100, total: 0, records: [] }),
     ])
-      .then(([tree, userPage]) => {
-        setWorkspaceTree(tree);
+      .then(([workspaceOptions, userPage]) => {
+        setWorkspaces(workspaceOptions);
         setEffectiveUsers(userPage.records);
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         console.warn("[task] Falling back to mock workspace options.", error);
-        setWorkspaceTree(getWorkspaceTree());
+        setWorkspaces(getWorkspaceOptionMocks());
         setEffectiveUsers(getWorkspaceEffectiveUsers(workspaceCode));
       })
       .finally(() => {

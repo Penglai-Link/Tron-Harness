@@ -210,9 +210,19 @@ type CapturedRequest = {
 };
 
 let nextWorkspaceId = 734400000000000100n;
+let nextGeneratedWorkspaceCode = 1;
 
 function nowTimestamp() {
   return "2026-05-16T12:00:00Z";
+}
+
+function generatedWorkspaceCode(nodes: WorkspaceNode[]) {
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const workspaceCode = `WS-${(nextGeneratedWorkspaceCode++).toString(16).padStart(16, "0").toUpperCase()}`;
+    if (!findNode(nodes, workspaceCode)) return workspaceCode;
+  }
+
+  throw new Error("Workspace code could not be generated.");
 }
 
 function delay(ms: number) {
@@ -361,11 +371,12 @@ function treeRecord(node: WorkspaceNode, directUserGrants: Record<string, Worksp
   };
 }
 
-function filterTree(records: ReturnType<typeof treeRecord>[], search: string, status: string | undefined) {
+function filterTree(records: ReturnType<typeof treeRecord>[], search: string, status: string | undefined, includeArchived: boolean) {
+  const visibleStatus = includeArchived && !status ? null : status ?? "Active";
   return records
     .map((record) => {
-      const children = filterTree(record.children, search, status);
-      const statusMatches = !status || record.status === status;
+      const children = filterTree(record.children, search, status, includeArchived);
+      const statusMatches = visibleStatus === null || record.status === visibleStatus;
       const searchMatches = matchesWorkspaceSearch(record, search);
       if (!(statusMatches && searchMatches) && !children.length) return null;
       return {
@@ -681,6 +692,19 @@ test("workspace management page supports hierarchy and separated access grants",
       archivedAt: null,
       children: [],
     },
+    {
+      id: "734400000000000005",
+      workspaceCode: "ARCHIVE_VAULT",
+      name: "Archive Vault",
+      description: "Archived workspace kept for historical access",
+      parentWorkspaceCode: null,
+      depth: 1,
+      status: "Archived",
+      createdAt: "2026-05-16T00:00:00Z",
+      updatedAt: "2026-05-16T00:00:00Z",
+      archivedAt: "2026-05-16T00:00:00Z",
+      children: [],
+    },
   ]);
   let directUserGrants: Record<string, WorkspaceUserGrant[]> = {
     TRON_CORE: [{ userCode: "USER_MAYA_SINGH", isOwner: true, grantedAt: "2026-05-16T00:00:00Z" }],
@@ -689,16 +713,59 @@ test("workspace management page supports hierarchy and separated access grants",
     PLATFORM: [{ roleCode: "WORKSPACE_ADMIN", grantedAt: "2026-05-16T00:00:00Z" }],
   };
 
-  function listWorkspaces(search: string, status: string | undefined) {
+  function listWorkspaces(search: string, status: string | undefined, includeArchived: boolean) {
     workspaceNodes = normalizeTree(workspaceNodes);
     const records = workspaceNodes.map((node) => treeRecord(node, directUserGrants, roleGrants));
-    return filterTree(records, search, status);
+    return filterTree(records, search, status, includeArchived);
   }
 
   function getWorkspaceOrThrow(workspaceCode: string) {
     const detail = detailRecord(workspaceNodes, workspaceCode, directUserGrants, roleGrants);
     if (!detail) throw new Error(`Workspace ${workspaceCode} was not found.`);
     return detail;
+  }
+
+  function workspaceOptionRecords() {
+    return flattenTree(workspaceNodes)
+      .filter((node) => node.status === "Active")
+      .map((node) => ({
+        workspaceCode: node.workspaceCode,
+        label: getWorkspaceOrThrow(node.workspaceCode).lineage.map((item) => item.name).join(" / "),
+        name: node.name,
+        description: node.description,
+        parentWorkspaceCode: node.parentWorkspaceCode,
+        depth: node.depth,
+        status: node.status,
+      }));
+  }
+
+  function workspaceSwitcherPayload() {
+    const activeNodes = flattenTree(workspaceNodes).filter((node) => node.status === "Active");
+    return {
+      primarySpaces: activeNodes
+        .filter((node) => node.parentWorkspaceCode === null)
+        .map((node) => ({
+          workspaceCode: node.workspaceCode,
+          name: node.name,
+          description: node.description,
+          childCount: node.children.length,
+          status: node.status,
+        })),
+      secondarySpaces: activeNodes.map((node) => {
+        const detail = getWorkspaceOrThrow(node.workspaceCode);
+        return {
+          workspaceCode: node.workspaceCode,
+          primaryWorkspaceCode: detail.lineage[0]?.workspaceCode ?? node.workspaceCode,
+          label: detail.lineage.map((item) => item.name).join(" / "),
+          name: node.name,
+          description: node.description,
+          depth: node.depth,
+          childCount: node.children.length,
+          effectiveUserCount: effectiveUsersFor(node.workspaceCode, directUserGrants, roleGrants).length,
+          status: node.status,
+        };
+      }),
+    };
   }
 
   await routeAuthenticatedSession(page);
@@ -718,17 +785,28 @@ test("workspace management page supports hierarchy and separated access grants",
         return;
       }
 
+      if (captured.pathname === "/api/v1/admin/workspaces/options") {
+        await fulfillJson(route, successEnvelope(workspaceOptionRecords()));
+        return;
+      }
+
+      if (captured.pathname === "/api/v1/admin/workspaces/switcher") {
+        await fulfillJson(route, successEnvelope(workspaceSwitcherPayload()));
+        return;
+      }
+
       if (captured.pathname === "/api/v1/admin/workspaces") {
         if (captured.method === "POST") {
           const payload = route.request().postDataJSON() as {
             description?: string | null;
             name: string;
             parentWorkspaceCode?: string | null;
-            workspaceCode: string;
           };
-          const workspaceCode = payload.workspaceCode.trim().toUpperCase();
+          if ("workspaceCode" in payload) {
+            throw new Error("workspaceCode should be generated by the backend.");
+          }
+          const workspaceCode = generatedWorkspaceCode(workspaceNodes);
           const parentWorkspaceCode = payload.parentWorkspaceCode ?? null;
-          if (findNode(workspaceNodes, workspaceCode)) throw new Error(`Workspace ${workspaceCode} already exists.`);
           const parent = parentWorkspaceCode ? findNode(workspaceNodes, parentWorkspaceCode) : null;
           const depth = (parent?.depth ?? 0) + 1;
           if (depth > 3) throw new Error("Workspace hierarchy cannot exceed 3 levels.");
@@ -751,7 +829,11 @@ test("workspace management page supports hierarchy and separated access grants",
           return;
         }
 
-        await fulfillJson(route, successEnvelope(listWorkspaces(captured.searchParams.search ?? "", captured.searchParams.status)));
+        await fulfillJson(route, successEnvelope(listWorkspaces(
+          captured.searchParams.search ?? "",
+          captured.searchParams.status,
+          captured.searchParams.includeArchived === "true",
+        )));
         return;
       }
 
@@ -919,41 +1001,89 @@ test("workspace management page supports hierarchy and separated access grants",
 
   await expect(page.getByRole("heading", { name: "Workspace Management" })).toBeVisible();
   await expect(page.getByText("Platform", { exact: true }).first()).toBeVisible();
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/switcher")).toBe(true);
+
+  const primarySpaceToggle = page.locator("header").getByRole("button", { name: /Enterprise/ }).first();
+  await primarySpaceToggle.click();
+  const primarySpacePanel = page.locator("div").filter({ has: page.getByText("Primary spaces", { exact: true }) }).last();
+  await expect(primarySpacePanel).toBeVisible();
+  await primarySpacePanel.getByRole("button", { name: /Compliance/ }).click();
+  await expect(page.locator("header").getByRole("button", { name: /Compliance/ }).first()).toBeVisible();
 
   const workspaceUrl = page.url();
-  const overviewSection = page.locator("section").filter({ has: page.getByRole("button", { name: "Save Metadata" }) }).first();
+  const searchBox = page.getByRole("searchbox", { name: "Search workspaces" });
+  await searchBox.fill("Compliance");
+  await expect.poll(() => requests.some((request) => (
+    request.pathname === "/api/v1/admin/workspaces"
+    && request.method === "GET"
+    && request.searchParams.search === "Compliance"
+    && request.searchParams.status === "Active"
+  ))).toBe(true);
+  await expect(page.getByRole("button", { name: "Select workspace COMPLIANCE", exact: true })).toBeVisible();
+
+  const requestCountBeforeClear = requests.length;
+  await page.getByRole("button", { name: "Clear workspace search" }).click();
+  await expect(searchBox).toHaveValue("");
+  await expect.poll(() => requests.slice(requestCountBeforeClear).some((request) => (
+    request.pathname === "/api/v1/admin/workspaces"
+    && request.method === "GET"
+    && request.searchParams.search === undefined
+    && request.searchParams.status === "Active"
+  ))).toBe(true);
+  await expect(page.getByRole("button", { name: "Select workspace PLATFORM", exact: true })).toBeVisible();
+
+  const statusFilterSelect = page.getByRole("combobox", { name: "Filter workspaces by status" });
+  const requestCountBeforeAllStatus = requests.length;
+  await statusFilterSelect.selectOption("All");
+  await expect.poll(() => requests.slice(requestCountBeforeAllStatus).some((request) => (
+    request.pathname === "/api/v1/admin/workspaces"
+    && request.method === "GET"
+    && request.searchParams.includeArchived === "true"
+    && request.searchParams.status === undefined
+  ))).toBe(true);
+  await expect(page.getByRole("button", { name: "Select workspace ARCHIVE_VAULT", exact: true })).toBeVisible();
+
+  const requestCountBeforeActiveStatus = requests.length;
+  await statusFilterSelect.selectOption("Active");
+  await expect.poll(() => requests.slice(requestCountBeforeActiveStatus).some((request) => (
+    request.pathname === "/api/v1/admin/workspaces"
+    && request.method === "GET"
+    && request.searchParams.status === "Active"
+    && request.searchParams.includeArchived === undefined
+  ))).toBe(true);
+  await expect(page.getByRole("button", { name: "Select workspace PLATFORM", exact: true })).toBeVisible();
+
   await page.getByRole("button", { name: "Select workspace PLATFORM", exact: true }).click();
+  const overviewSection = page.getByRole("combobox", { name: "Move parent" }).locator("xpath=ancestor::section[1]");
   await expect(page).toHaveURL(workspaceUrl);
   await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Platform");
 
-  await page.getByRole("button", { name: "Create Root Workspace" }).click();
-  await page.getByRole("textbox", { name: "Workspace code" }).fill("risk");
+  await page.getByRole("button", { name: "Create Root", exact: true }).click();
   await page.getByRole("textbox", { name: "Workspace name" }).fill("Risk");
   await page.getByRole("textbox", { name: "Workspace description" }).fill("Risk governance workspace");
-  await page.getByRole("button", { name: "Create Workspace" }).click();
-  await expect(sharedToastMessage(page, "Workspace RISK created")).toBeVisible();
+  await page.getByRole("textbox", { name: "Workspace name" }).locator("xpath=ancestor::section[1]").getByRole("button", { name: "Create", exact: true }).click();
+  await expect(sharedToastMessage(page, "Workspace WS-0000000000000001 created")).toBeVisible();
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces" && request.method === "POST")).toBe(true);
   await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk");
 
-  await page.getByRole("button", { name: "Create Child", exact: true }).click();
-  await page.getByRole("textbox", { name: "Workspace code" }).fill("risk_review");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("textbox", { name: "Workspace name" }).fill("Risk Review");
   await page.getByRole("textbox", { name: "Workspace description" }).fill("Child workspace for risk reviews");
-  await page.getByRole("button", { name: "Create Workspace" }).click();
-  await expect(sharedToastMessage(page, "Workspace RISK_REVIEW created")).toBeVisible();
+  await page.getByRole("textbox", { name: "Workspace name" }).locator("xpath=ancestor::section[1]").getByRole("button", { name: "Create", exact: true }).click();
+  await expect(sharedToastMessage(page, "Workspace WS-0000000000000002 created")).toBeVisible();
   await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk Review");
 
-  await page.getByRole("button", { name: "Select workspace RISK", exact: true }).click();
+  await page.getByRole("button", { name: "Select workspace WS-0000000000000001", exact: true }).click();
   await overviewSection.getByRole("textbox", { name: "Name", exact: true }).fill("Risk Control");
-  await page.getByRole("button", { name: "Save Metadata" }).click();
-  await expect(sharedToastMessage(page, "Workspace RISK updated")).toBeVisible();
+  await overviewSection.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(sharedToastMessage(page, "Workspace WS-0000000000000001 updated")).toBeVisible();
   await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk Control");
 
   await overviewSection.getByRole("combobox", { name: "Move parent" }).selectOption("COMPLIANCE");
-  await page.getByRole("button", { name: "Move Workspace" }).click();
-  await expect(sharedToastMessage(page, "Workspace RISK moved")).toBeVisible();
+  await overviewSection.getByRole("button", { name: "Move", exact: true }).click();
+  await expect(sharedToastMessage(page, "Workspace WS-0000000000000001 moved")).toBeVisible();
   await expect(page.getByText("Compliance / Risk Control")).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/RISK/move" && request.method === "POST")).toBe(true);
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/WS-0000000000000001/move" && request.method === "POST")).toBe(true);
 
   await page.getByRole("button", { name: "Select workspace PLATFORM", exact: true }).click();
   await page.getByRole("tab", { name: "Access", exact: true }).click();
@@ -978,14 +1108,16 @@ test("workspace management page supports hierarchy and separated access grants",
   await expect(effectiveUsersTable.getByText("Chen Wei", { exact: true }).first()).toBeVisible();
   await expect(effectiveUsersTable.getByText("Viewer", { exact: true }).first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Select workspace RISK", exact: true }).click();
-  await page.getByRole("button", { name: "Archive Workspace" }).click();
-  await expect(sharedToastMessage(page, "RISK archived")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Restore Workspace" })).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/RISK/archive" && request.method === "POST")).toBe(true);
+  await statusFilterSelect.selectOption("All");
+  await expect(page.getByRole("button", { name: "Select workspace WS-0000000000000001", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Select workspace WS-0000000000000001", exact: true }).click();
+  await page.getByRole("button", { name: "Archive", exact: true }).click();
+  await expect(sharedToastMessage(page, "WS-0000000000000001 archived")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Restore", exact: true })).toBeVisible();
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/WS-0000000000000001/archive" && request.method === "POST")).toBe(true);
 
-  await page.getByRole("button", { name: "Restore Workspace" }).click();
-  await expect(sharedToastMessage(page, "RISK restored")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Archive Workspace" })).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/RISK/restore" && request.method === "POST")).toBe(true);
+  await page.getByRole("button", { name: "Restore", exact: true }).click();
+  await expect(sharedToastMessage(page, "WS-0000000000000001 restored")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Archive", exact: true })).toBeVisible();
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/WS-0000000000000001/restore" && request.method === "POST")).toBe(true);
 });

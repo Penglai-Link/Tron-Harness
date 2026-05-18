@@ -193,6 +193,27 @@ const users = [
     archivedAt: "2026-05-08T19:00:00Z",
   },
 ];
+
+const workspaceSwitcher = {
+  primarySpaces: [{
+    workspaceCode: "ENTERPRISE",
+    name: "Enterprise",
+    description: "Global governance workspace",
+    childCount: 1,
+    status: "Active",
+  }],
+  secondarySpaces: [{
+    workspaceCode: "PLATFORM",
+    primaryWorkspaceCode: "ENTERPRISE",
+    label: "Enterprise / Platform",
+    name: "Platform",
+    description: "Core platform runtime workspace",
+    depth: 2,
+    childCount: 0,
+    effectiveUserCount: 2,
+    status: "Active",
+  }],
+};
 const auditLogs = [
   {
     id: "log-1",
@@ -413,6 +434,11 @@ test("role matrix interactions stay real across the simplified matrix workspace"
 
     if (captured.pathname === "/api/v1/admin/audit-logs") {
       await fulfillJson(route, successEnvelope(auditLogs));
+      return;
+    }
+
+    if (captured.pathname === "/api/v1/admin/workspaces/switcher") {
+      await fulfillJson(route, successEnvelope(workspaceSwitcher));
       return;
     }
 

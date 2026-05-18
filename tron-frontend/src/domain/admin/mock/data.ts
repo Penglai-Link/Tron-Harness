@@ -612,19 +612,16 @@ export function getWorkspaceEffectiveUsers(workspaceCode: string): WorkspaceEffe
 }
 
 export function createWorkspaceRecord(payload: {
-  workspaceCode: string;
   name: string;
   description?: string | null;
   parentWorkspaceCode?: string | null;
 }) {
-  const workspaceCode = payload.workspaceCode.trim().toUpperCase();
+  const workspaceCode = generateWorkspaceCode();
   const name = payload.name.trim();
   const description = payload.description?.trim() || null;
   const parentWorkspaceCode = payload.parentWorkspaceCode ?? null;
 
-  if (!workspaceCode) throw new Error("Workspace code is required.");
   if (!name) throw new Error("Workspace name is required.");
-  if (findWorkspaceNode(workspaceCode)) throw new Error(`Workspace ${workspaceCode} already exists.`);
   ensureActiveWorkspaceParent(parentWorkspaceCode);
 
   const parent = parentWorkspaceCode ? findWorkspaceNode(parentWorkspaceCode) : null;
@@ -641,6 +638,27 @@ export function createWorkspaceRecord(payload: {
   const detail = getWorkspaceDetail(workspaceCode);
   if (!detail) throw new Error(`Workspace ${workspaceCode} could not be created.`);
   return detail;
+}
+
+function generateWorkspaceCode() {
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const workspaceCode = `WS-${randomWorkspaceCodeSuffix()}`;
+    if (!findWorkspaceNode(workspaceCode)) return workspaceCode;
+  }
+
+  throw new Error("Workspace code could not be generated.");
+}
+
+function randomWorkspaceCodeSuffix() {
+  const buffer = new Uint32Array(2);
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(buffer);
+  } else {
+    buffer[0] = Math.floor(Math.random() * 0xffffffff);
+    buffer[1] = Math.floor(Math.random() * 0xffffffff);
+  }
+
+  return Array.from(buffer, (value) => value.toString(16).padStart(8, "0")).join("").toUpperCase();
 }
 
 export function updateWorkspaceRecord(

@@ -40,10 +40,10 @@ function DashboardContent() {
   const { secondarySpaces, selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
-  const primaryName = selectedPrimarySpace?.name ?? "Enterprise Workspace";
+  const primaryName = selectedPrimarySpace?.name ?? "Enterprise";
   const primaryMeta = selectedPrimarySpace
-    ? `${selectedPrimarySpace.region} · ${selectedPrimarySpace.status} · ${selectedPrimarySpace.description}`
-    : "Global · Active · Global governance, security, and shared AI resource policy.";
+    ? `${selectedPrimarySpace.status} · ${selectedPrimarySpace.childCount} child spaces · ${selectedPrimarySpace.description ?? "No description"}`
+    : "Active · 0 child spaces · No description";
 
   return (
     <>
@@ -84,9 +84,9 @@ function DashboardContent() {
                 <>
                   <span className="absolute bottom-7 left-[17px] top-0 w-px bg-[var(--color-outline-variant)]" aria-hidden="true" />
                   {secondarySpaces.map((space) => {
-                  const active = space.id === selectedSecondarySpace?.id;
+                  const active = space.workspaceCode === selectedSecondarySpace?.workspaceCode;
                   return (
-                    <div className="relative pb-3 last:pb-0" key={space.id}>
+                    <div className="relative pb-3 last:pb-0" key={space.workspaceCode}>
                       <span className={cn("absolute left-[-30px] top-6 h-px w-8", active ? "bg-[var(--color-primary)]" : "bg-[var(--color-outline-variant)]")} aria-hidden="true" />
                       <span
                         className={cn(
@@ -98,7 +98,7 @@ function DashboardContent() {
                       <TreeNode
                         active={active}
                         title={`${space.name}${active ? " (Current)" : ""}`}
-                        meta={`${space.description} · ${space.inheritedResources} inherited resources · ${space.localOverrides} local overrides · ${space.status}`}
+                        meta={`${space.label} · ${space.effectiveUserCount} effective users · ${space.childCount} child spaces · ${space.status}`}
                       />
                     </div>
                   );

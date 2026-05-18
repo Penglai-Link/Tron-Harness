@@ -14,14 +14,29 @@ export interface UserStatisticsResult extends UserStatistics {
   loading: boolean;
 }
 
+const emptyStatistics: UserStatistics = {
+  activeUsers: 0,
+  roleAssignments: 0,
+  spaceAssignments: 0,
+  totalUsers: 0,
+};
+
 export function useUserStatistics(): UserStatisticsResult {
   const dataSource = getServiceDataSource("admin");
-  const mockStatistics = useMemo(() => getUserStatistics(), []);
-  const [statistics, setStatistics] = useState<UserStatistics>(mockStatistics);
+  const mockStatistics = useMemo(
+    () => (dataSource === "api" ? emptyStatistics : getUserStatistics()),
+    [dataSource],
+  );
+  const [statistics, setStatistics] = useState<UserStatistics>(() => (
+    dataSource === "api" ? emptyStatistics : mockStatistics
+  ));
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (dataSource === "api") return;
+    if (dataSource === "api") {
+      setStatistics(emptyStatistics);
+      return;
+    }
     setStatistics(mockStatistics);
   }, [dataSource, mockStatistics]);
 
@@ -38,8 +53,8 @@ export function useUserStatistics(): UserStatisticsResult {
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         if (isUnauthorizedApiError(error)) return;
-        console.warn("[admin] Falling back to mock user statistics.", error);
-        setStatistics(mockStatistics);
+        console.warn("[admin] User statistics API request failed.", error);
+        setStatistics(emptyStatistics);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);

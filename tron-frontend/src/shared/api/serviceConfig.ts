@@ -32,6 +32,7 @@ export type ServiceDomain =
   | "variable";
 
 interface ServiceQueryOptions<T> {
+  apiInitialData?: () => T;
   domain: ServiceDomain;
   endpoint: string;
   mockData: () => T;
@@ -106,16 +107,25 @@ function resolveEndpoint(endpoint: string, params?: EndpointParams) {
   };
 }
 
-export function useServiceQuery<T>({ domain, endpoint, mockData, params, deps = [], select = selectApiData<T> }: ServiceQueryOptions<T>): T {
+export function useServiceQuery<T>({ apiInitialData, domain, endpoint, mockData, params, deps = [], select = selectApiData<T> }: ServiceQueryOptions<T>): T {
   const dataSource = getServiceDataSource(domain);
-  const mockValue = useMemo(mockData, deps);
-  const [data, setData] = useState(mockValue);
+  const shouldUseApiInitialData = dataSource === "api" && apiInitialData !== undefined;
+  const mockValue = useMemo(
+    () => (shouldUseApiInitialData ? undefined : mockData()),
+    [shouldUseApiInitialData, ...deps],
+  );
+  const apiInitialValue = useMemo(
+    () => (apiInitialData ? apiInitialData() : undefined),
+    [apiInitialData],
+  );
+  const initialValue = (shouldUseApiInitialData ? apiInitialValue : mockValue) as T;
+  const [data, setData] = useState<T>(initialValue);
   const paramsKey = JSON.stringify(params ?? {});
   const request = useMemo(() => resolveEndpoint(endpoint, params), [endpoint, paramsKey]);
 
   useEffect(() => {
-    setData(mockValue);
-  }, [mockValue]);
+    setData((shouldUseApiInitialData ? apiInitialValue : mockValue) as T);
+  }, [apiInitialValue, mockValue, shouldUseApiInitialData]);
 
   useEffect(() => {
     if (dataSource !== "api") return;
@@ -142,11 +152,17 @@ export function useServiceQuery<T>({ domain, endpoint, mockData, params, deps = 
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
+        if (domain === "admin") {
+          console.warn(`[services] API request failed for ${domain}.`, error);
+          if (shouldUseApiInitialData) setData(apiInitialValue as T);
+          return;
+        }
         console.warn(`[services] Falling back to mock data for ${domain}.`, error);
+        setData(mockValue as T);
       });
 
     return () => controller.abort();
-  }, [dataSource, domain, request.method, request.url, select]);
+  }, [apiInitialValue, dataSource, domain, mockValue, request.method, request.url, select, shouldUseApiInitialData]);
 
   return data;
 }

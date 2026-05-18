@@ -9,7 +9,6 @@ use crate::application::workspace::{
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateWorkspaceRequest {
-    pub workspace_code: String,
     pub name: String,
     pub description: Option<String>,
     pub parent_workspace_code: Option<String>,
@@ -18,7 +17,6 @@ pub struct CreateWorkspaceRequest {
 impl From<CreateWorkspaceRequest> for CreateWorkspaceCommand {
     fn from(request: CreateWorkspaceRequest) -> Self {
         Self {
-            workspace_code: request.workspace_code,
             name: request.name,
             description: request.description,
             parent_workspace_code: request.parent_workspace_code,

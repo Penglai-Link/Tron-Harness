@@ -7,14 +7,17 @@ use crate::app::AppState;
 
 use super::handler::{
     active_workspaces, archive_workspace, create_workspace, direct_user_grants, get_workspace,
-    list_effective_users, list_role_access, list_user_access, list_workspaces, move_workspace,
-    patch_workspace, replace_role_access, replace_user_access, restore_workspace, role_grants,
-    total_workspaces,
+    list_effective_users, list_role_access, list_user_access, list_workspace_options,
+    list_workspaces, move_workspace, patch_workspace, replace_role_access,
+    replace_user_access, restore_workspace, role_grants, total_workspaces,
+    workspace_switcher,
 };
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/admin/workspaces", get(list_workspaces).post(create_workspace))
+        .route("/api/v1/admin/workspaces/options", get(list_workspace_options))
+        .route("/api/v1/admin/workspaces/switcher", get(workspace_switcher))
         .route(
             "/api/v1/admin/workspaces/statistics/total-workspaces",
             get(total_workspaces),

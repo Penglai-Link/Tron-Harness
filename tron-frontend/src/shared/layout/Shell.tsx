@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useState,
   type ReactNode,
 } from "react";
 
@@ -20,11 +21,13 @@ import {
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
+import { fetchWorkspaceSwitcher } from "@/domain/admin/api";
+import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { tronNavigation } from "@/shared/constants/shellNavigation";
 import {
   defaultPrimarySpaceId,
-  getSecondarySpaceMocks,
-  primarySpaceMocks,
+  defaultSecondarySpaceId,
+  getWorkspaceSwitcherMock,
 } from "@/shared/constants/workspaceSpaces";
 import { WorkspaceSpacesContext } from "@/shared/hooks/useWorkspaceSpaces";
 import { Button } from "@/shared/ui/Button";
@@ -87,25 +90,34 @@ export function TronShell({
   const utilityPanel = useAppShellStore((state) => state.utilityPanel);
   const selectPrimarySpaceInStore = useAppShellStore((state) => state.selectPrimarySpace);
   const selectSecondarySpaceInStore = useAppShellStore((state) => state.selectSecondarySpace);
+  const dataSource = getServiceDataSource("admin");
+  const [workspaceSwitcher, setWorkspaceSwitcher] = useState(() => getWorkspaceSwitcherMock());
 
-  const primarySpaces = primarySpaceMocks;
-  const secondarySpaces = getSecondarySpaceMocks(selectedPrimarySpaceId);
-  const selectedPrimarySpace = primarySpaces.find((space) => space.id === selectedPrimarySpaceId);
-  const selectedSecondarySpace = secondarySpaces.find((space) => space.id === selectedSecondarySpaceId) ?? secondarySpaces[0];
+  const primarySpaces = workspaceSwitcher.primarySpaces;
+  const selectedPrimarySpace = primarySpaces.find((space) => space.workspaceCode === selectedPrimarySpaceId)
+    ?? primarySpaces.find((space) => space.workspaceCode === defaultPrimarySpaceId)
+    ?? primarySpaces[0];
+  const effectivePrimarySpaceId = selectedPrimarySpace?.workspaceCode ?? "";
+  const secondarySpaces = workspaceSwitcher.secondarySpaces.filter((space) => space.primaryWorkspaceCode === effectivePrimarySpaceId);
+  const selectedSecondarySpace = secondarySpaces.find((space) => space.workspaceCode === selectedSecondarySpaceId)
+    ?? secondarySpaces.find((space) => space.workspaceCode === defaultSecondarySpaceId)
+    ?? secondarySpaces[0];
+  const effectiveSecondarySpaceId = selectedSecondarySpace?.workspaceCode ?? "";
   const workspaceSpacesValue = useMemo<WorkspaceSpacesContextValue>(
     () => ({
       primarySpaces,
       secondarySpaces,
       selectedPrimarySpace,
-      selectedPrimarySpaceId,
+      selectedPrimarySpaceId: effectivePrimarySpaceId,
       selectedSecondarySpace,
-      selectedSecondarySpaceId: selectedSecondarySpace?.id ?? selectedSecondarySpaceId,
+      selectedSecondarySpaceId: effectiveSecondarySpaceId,
     }),
-    [primarySpaces, secondarySpaces, selectedPrimarySpace, selectedPrimarySpaceId, selectedSecondarySpace, selectedSecondarySpaceId],
+    [effectivePrimarySpaceId, effectiveSecondarySpaceId, primarySpaces, secondarySpaces, selectedPrimarySpace, selectedSecondarySpace],
   );
 
   function selectPrimarySpace(spaceId: string) {
-    selectPrimarySpaceInStore(spaceId, getSecondarySpaceMocks(spaceId)[0]?.id ?? "");
+    const firstSecondary = workspaceSwitcher.secondarySpaces.find((space) => space.primaryWorkspaceCode === spaceId);
+    selectPrimarySpaceInStore(spaceId, firstSecondary?.workspaceCode ?? "");
   }
 
   function selectSecondarySpace(spaceId: string) {
@@ -113,9 +125,47 @@ export function TronShell({
   }
 
   useEffect(() => {
+    if (dataSource !== "api") {
+      setWorkspaceSwitcher(getWorkspaceSwitcherMock());
+      return;
+    }
+
+    const controller = new AbortController();
+    fetchWorkspaceSwitcher(controller.signal)
+      .then((data) => {
+        setWorkspaceSwitcher(data);
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        console.warn("[shell] Falling back to mock workspace switcher.", error);
+        setWorkspaceSwitcher(getWorkspaceSwitcherMock());
+      });
+
+    return () => controller.abort();
+  }, [dataSource]);
+
+  useEffect(() => {
     const activeSection = tronNavigation.find((section) => sectionHasActiveItem(section, activeItem));
     ensureSectionOpen(activeSection?.label);
   }, [activeItem, ensureSectionOpen]);
+
+  useEffect(() => {
+    if (!effectivePrimarySpaceId || !effectiveSecondarySpaceId) return;
+    if (
+      effectivePrimarySpaceId === selectedPrimarySpaceId
+      && effectiveSecondarySpaceId === selectedSecondarySpaceId
+    ) {
+      return;
+    }
+
+    selectPrimarySpaceInStore(effectivePrimarySpaceId, effectiveSecondarySpaceId);
+  }, [
+    effectivePrimarySpaceId,
+    effectiveSecondarySpaceId,
+    selectPrimarySpaceInStore,
+    selectedPrimarySpaceId,
+    selectedSecondarySpaceId,
+  ]);
 
   if (shellFrameMounted) {
     return <InlineTronShellContent activeItem={activeItem} contentClassName={contentClassName} rightPanel={rightPanel}>{children}</InlineTronShellContent>;
@@ -176,7 +226,7 @@ export function TronShell({
                 <p className="text-[12px] font-medium text-[var(--color-on-surface-variant)]">{t("shell:workspace.primaryLabel")}</p>
                 {primarySpaces.length ? (
                   primarySpaces.map((space) => {
-                    const selected = space.id === selectedPrimarySpaceId;
+                    const selected = space.workspaceCode === effectivePrimarySpaceId;
                     return (
                       <button
                         className={cn(
@@ -185,12 +235,12 @@ export function TronShell({
                         )}
                         type="button"
                         aria-pressed={selected}
-                        key={space.id}
-                        onClick={() => selectPrimarySpace(space.id)}
+                        key={space.workspaceCode}
+                        onClick={() => selectPrimarySpace(space.workspaceCode)}
                       >
                         <span className="block text-sm font-medium">{space.name}</span>
                         <span className="mt-0.5 block text-[12px] text-[var(--color-on-surface-variant)]">{space.description}</span>
-                        <span className="mt-1 block text-[11px] text-[var(--color-on-surface-variant)]">{space.region} · {t("shell:workspace.status", { status: space.status })}</span>
+                        <span className="mt-1 block text-[11px] text-[var(--color-on-surface-variant)]">{space.childCount} child spaces · {t("shell:workspace.status", { status: space.status })}</span>
                       </button>
                     );
                   })
@@ -314,7 +364,7 @@ export function TronShell({
           <div className="mt-3 space-y-2">
             {secondarySpaces.length ? (
               secondarySpaces.map((space) => {
-                const selected = space.id === selectedSecondarySpace?.id;
+                const selected = space.workspaceCode === selectedSecondarySpace?.workspaceCode;
                 return (
                   <button
                     className={cn(
@@ -323,13 +373,13 @@ export function TronShell({
                     )}
                     type="button"
                     aria-pressed={selected}
-                    key={space.id}
-                    onClick={() => selectSecondarySpace(space.id)}
+                    key={space.workspaceCode}
+                    onClick={() => selectSecondarySpace(space.workspaceCode)}
                   >
                     <span className="block text-sm font-medium">{space.name}</span>
                     <span className="mt-0.5 block text-[12px] text-[var(--color-on-surface-variant)]">{space.description}</span>
                     <span className="mt-1 block text-[11px] text-[var(--color-on-surface-variant)]">
-                      {t("shell:workspace.inherited", { count: space.inheritedResources })} · {t("shell:workspace.localOverrides", { count: space.localOverrides })} · {t("shell:workspace.status", { status: space.status })}
+                      {space.label} · {space.effectiveUserCount} effective users · {space.childCount} child spaces · {t("shell:workspace.status", { status: space.status })}
                     </span>
                   </button>
                 );

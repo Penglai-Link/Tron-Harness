@@ -64,6 +64,15 @@ function makeMockPage(users: UserRecord[], options: Required<Pick<UseUserListOpt
   };
 }
 
+function makeEmptyPage(current: number, size: number): AdminPage<UserRecord> {
+  return {
+    current,
+    size,
+    total: 0,
+    records: [],
+  };
+}
+
 function upsertRecord(records: UserRecord[], user: UserRecord) {
   const index = records.findIndex((item) => item.userCode === user.userCode);
   if (index === -1) return [user, ...records];
@@ -95,16 +104,29 @@ export function useUserList(options: UseUserListOptions = {}): UserListResult {
   );
   const queryTrimmed = listOptions.search.trim();
 
-  const mockPage = useMemo(
-    () => makeMockPage(listUsers(), { current, search: queryTrimmed, size, status }),
-    [current, queryTrimmed, size, status],
+  const emptyPage = useMemo(
+    () => makeEmptyPage(current, size),
+    [current, size],
   );
-  const [page, setPage] = useState<AdminPage<UserRecord>>(mockPage);
+  const mockPage = useMemo(
+    () => (
+      dataSource === "api"
+        ? emptyPage
+        : makeMockPage(listUsers(), { current, search: queryTrimmed, size, status })
+    ),
+    [current, dataSource, emptyPage, queryTrimmed, size, status],
+  );
+  const [page, setPage] = useState<AdminPage<UserRecord>>(() => (
+    dataSource === "api" ? emptyPage : mockPage
+  ));
 
   useEffect(() => {
-    if (dataSource === "api") return;
+    if (dataSource === "api") {
+      setPage(emptyPage);
+      return;
+    }
     setPage(mockPage);
-  }, [dataSource, mockPage]);
+  }, [dataSource, emptyPage, mockPage]);
 
   useEffect(() => {
     const trimmedSearch = search.trim();
@@ -159,15 +181,15 @@ export function useUserList(options: UseUserListOptions = {}): UserListResult {
       .catch((error: unknown) => {
         if (requestId !== requestSequenceRef.current || controller.signal.aborted) return;
         if (isUnauthorizedApiError(error)) return;
-        console.warn("[admin] Falling back to mock user data.", error);
-        setPage(mockPage);
+        console.warn("[admin] User data API request failed.", error);
+        setPage(emptyPage);
       })
       .finally(() => {
         if (!controller.signal.aborted && requestId === requestSequenceRef.current) setLoading(false);
       });
 
     return () => controller.abort();
-  }, [current, dataSource, mockPage, queryTrimmed, reloadKey, searchVersion, size, status]);
+  }, [current, dataSource, emptyPage, queryTrimmed, reloadKey, searchVersion, size, status]);
 
   const refresh = useCallback(() => {
     setReloadKey((value) => value + 1);

@@ -1,19 +1,38 @@
-export interface PrimarySpace {
-  id: string;
+import type { WorkspaceStatus } from "@/domain/admin/model";
+
+export interface WorkspaceOption {
+  workspaceCode: string;
+  label: string;
   name: string;
-  description: string;
-  region: string;
-  status: "Active" | "Review" | "Archived";
+  description: string | null;
+  parentWorkspaceCode: string | null;
+  depth: number;
+  status: WorkspaceStatus;
+}
+
+export interface PrimarySpace {
+  workspaceCode: string;
+  name: string;
+  description: string | null;
+  status: WorkspaceStatus;
+  childCount: number;
 }
 
 export interface SecondarySpace {
-  id: string;
-  primarySpaceId: string;
+  workspaceCode: string;
+  primaryWorkspaceCode: string;
+  label: string;
   name: string;
-  description: string;
-  inheritedResources: number;
-  localOverrides: number;
-  status: "Active" | "Review" | "Disabled";
+  description: string | null;
+  status: WorkspaceStatus;
+  depth: number;
+  childCount: number;
+  effectiveUserCount: number;
+}
+
+export interface WorkspaceSwitcherData {
+  primarySpaces: PrimarySpace[];
+  secondarySpaces: SecondarySpace[];
 }
 
 export interface WorkspaceSpacesContextValue {

@@ -20,6 +20,11 @@ Review confirms AC coverage, command reuse policy, and final docs alignment afte
 - AC-WS-06 | phase: review | owner: lead | scope: docs/features/workspace-management tron-backend/src/adapters/inbound/http/admin/workspaces/* tron-backend/tests/workspace_management_api.rs | command_ref: none | status: done.
 - AC-WS-07 | phase: review | owner: lead | scope: docs/features/workspace-management tron-frontend/src/router/* tron-frontend/tests/workspace-management-smoke.spec.ts | command_ref: none | status: done.
 - AC-WS-08 | phase: review | owner: lead | scope: docs/features/workspace-management tron-backend/src/application/workspace.rs tron-backend/tests/workspace_management_api.rs | command_ref: none | status: done.
+- AC-WS-09 | phase: review | owner: lead | scope: docs/features/workspace-management tron-backend/src/application/workspace.rs tron-frontend/src/domain/admin/pages/WorkspaceManagementPage.tsx tron-frontend/tests/workspace-management-smoke.spec.ts | command_ref: none | status: done.
+- AC-WS-10 | phase: review | owner: lead | scope: docs/features/workspace-management tron-frontend/src/domain/admin/pages/WorkspaceManagementPage.tsx tron-frontend/tests/workspace-management-smoke.spec.ts | command_ref: none | status: done.
+- AC-WS-11 | phase: review | owner: lead | scope: docs/features/workspace-management tron-frontend/src/domain/admin/pages/WorkspaceManagementPage.tsx tron-frontend/tests/workspace-management-smoke.spec.ts | command_ref: none | status: done.
+- AC-WS-12 | phase: review | owner: lead | scope: docs/features/workspace-management tron-backend/src/application/workspace.rs tron-frontend/src/domain/task/hooks/useTaskWorkspaceOptions.ts tron-frontend/tests/task-management-smoke.spec.ts | command_ref: none | status: done.
+- AC-WS-13 | phase: review | owner: lead | scope: docs/features/workspace-management tron-backend/src/application/workspace.rs tron-frontend/src/shared/layout/Shell.tsx tron-frontend/tests/workspace-management-smoke.spec.ts | command_ref: none | status: done.
 
 ## Worktree Notes
 

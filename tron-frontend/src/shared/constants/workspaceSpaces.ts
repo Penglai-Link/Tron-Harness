@@ -1,55 +1,132 @@
-import type { PrimarySpace, SecondarySpace } from "@/shared/types/WorkspaceSpace";
+import type {
+  PrimarySpace,
+  SecondarySpace,
+  WorkspaceOption,
+  WorkspaceSwitcherData,
+} from "@/shared/types/WorkspaceSpace";
 
-export const defaultPrimarySpaceId = "ps-enterprise";
-export const defaultSecondarySpaceId = "ss-tron-main";
+export const defaultPrimarySpaceId = "ENTERPRISE";
+export const defaultSecondarySpaceId = "TRON_CORE";
 
 export const workspaceSpaceApiContracts = {
-  listPrimarySpaces: "GET /api/v1/primary-spaces",
-  listSecondarySpaces: "GET /api/v1/primary-spaces/{primarySpaceId}/secondary-spaces",
+  listWorkspaceOptions: "GET /api/v1/admin/workspaces/options",
+  getWorkspaceSwitcher: "GET /api/v1/admin/workspaces/switcher",
 } as const;
 
 export const primarySpaceMocks: PrimarySpace[] = [
   {
-    id: "ps-enterprise",
-    name: "Enterprise Workspace",
-    description: "Global governance, security, and shared AI resource policy.",
-    region: "Global",
+    workspaceCode: "ENTERPRISE",
+    name: "Enterprise",
+    description: "Global governance and shared AI resource policy.",
+    childCount: 1,
     status: "Active",
   },
   {
-    id: "ps-research",
-    name: "Research Workspace",
-    description: "R&D model evaluation, prompt experiments, and internal workspaces.",
-    region: "APAC",
-    status: "Active",
-  },
-  {
-    id: "ps-customer-ops",
-    name: "Customer Ops Workspace",
-    description: "Customer-facing agent operations and support workflows.",
-    region: "US",
-    status: "Active",
-  },
-  {
-    id: "ps-compliance",
-    name: "Compliance Workspace",
+    workspaceCode: "COMPLIANCE",
+    name: "Compliance",
     description: "Audit, retention, permission, and regulated resource controls.",
-    region: "EU",
-    status: "Review",
+    childCount: 0,
+    status: "Active",
   },
 ];
 
 export const secondarySpaceMocks: SecondarySpace[] = [
-  { id: "ss-tron-main", primarySpaceId: "ps-enterprise", name: "Tron", description: "Main Console", inheritedResources: 24, localOverrides: 5, status: "Active" },
-  { id: "ss-agent-platform", primarySpaceId: "ps-enterprise", name: "Agent Platform", description: "Runtime Governance", inheritedResources: 18, localOverrides: 3, status: "Active" },
-  { id: "ss-security-lab", primarySpaceId: "ps-enterprise", name: "Security Lab", description: "Policy Sandbox", inheritedResources: 16, localOverrides: 7, status: "Review" },
-  { id: "ss-model-research", primarySpaceId: "ps-research", name: "Model Research", description: "Evaluation Console", inheritedResources: 12, localOverrides: 8, status: "Active" },
-  { id: "ss-prompt-lab", primarySpaceId: "ps-research", name: "Prompt Lab", description: "Experiment Studio", inheritedResources: 10, localOverrides: 11, status: "Active" },
-  { id: "ss-support-ai", primarySpaceId: "ps-customer-ops", name: "Support AI", description: "Customer Agents", inheritedResources: 21, localOverrides: 4, status: "Active" },
-  { id: "ss-success-ops", primarySpaceId: "ps-customer-ops", name: "Success Ops", description: "Renewal Workflows", inheritedResources: 15, localOverrides: 6, status: "Active" },
-  { id: "ss-audit-center", primarySpaceId: "ps-compliance", name: "Audit Center", description: "Evidence Review", inheritedResources: 19, localOverrides: 2, status: "Review" },
+  {
+    workspaceCode: "ENTERPRISE",
+    primaryWorkspaceCode: "ENTERPRISE",
+    label: "Enterprise",
+    name: "Enterprise",
+    description: "Global governance and shared AI resource policy.",
+    status: "Active",
+    depth: 1,
+    childCount: 1,
+    effectiveUserCount: 1,
+  },
+  {
+    workspaceCode: "PLATFORM",
+    primaryWorkspaceCode: "ENTERPRISE",
+    label: "Enterprise / Platform",
+    name: "Platform",
+    description: "Agent runtime governance and admin operations.",
+    status: "Active",
+    depth: 2,
+    childCount: 1,
+    effectiveUserCount: 3,
+  },
+  {
+    workspaceCode: "TRON_CORE",
+    primaryWorkspaceCode: "ENTERPRISE",
+    label: "Enterprise / Platform / Tron Core",
+    name: "Tron Core",
+    description: "Main Tron console workspace.",
+    status: "Active",
+    depth: 3,
+    childCount: 0,
+    effectiveUserCount: 2,
+  },
+  {
+    workspaceCode: "COMPLIANCE",
+    primaryWorkspaceCode: "COMPLIANCE",
+    label: "Compliance",
+    name: "Compliance",
+    description: "Audit, retention, permission, and regulated resource controls.",
+    status: "Active",
+    depth: 1,
+    childCount: 0,
+    effectiveUserCount: 1,
+  },
 ];
 
-export function getSecondarySpaceMocks(primarySpaceId: PrimarySpace["id"]) {
-  return secondarySpaceMocks.filter((space) => space.primarySpaceId === primarySpaceId);
+export const workspaceOptionMocks: WorkspaceOption[] = [
+  {
+    workspaceCode: "ENTERPRISE",
+    label: "Enterprise",
+    name: "Enterprise",
+    description: "Global governance and shared AI resource policy.",
+    parentWorkspaceCode: null,
+    depth: 1,
+    status: "Active",
+  },
+  {
+    workspaceCode: "PLATFORM",
+    label: "Enterprise / Platform",
+    name: "Platform",
+    description: "Agent runtime governance and admin operations.",
+    parentWorkspaceCode: "ENTERPRISE",
+    depth: 2,
+    status: "Active",
+  },
+  {
+    workspaceCode: "TRON_CORE",
+    label: "Enterprise / Platform / Tron Core",
+    name: "Tron Core",
+    description: "Main Tron console workspace.",
+    parentWorkspaceCode: "PLATFORM",
+    depth: 3,
+    status: "Active",
+  },
+  {
+    workspaceCode: "COMPLIANCE",
+    label: "Compliance",
+    name: "Compliance",
+    description: "Audit, retention, permission, and regulated resource controls.",
+    parentWorkspaceCode: null,
+    depth: 1,
+    status: "Active",
+  },
+];
+
+export function getSecondarySpaceMocks(primaryWorkspaceCode: PrimarySpace["workspaceCode"]) {
+  return secondarySpaceMocks.filter((space) => space.primaryWorkspaceCode === primaryWorkspaceCode);
+}
+
+export function getWorkspaceOptionMocks() {
+  return workspaceOptionMocks;
+}
+
+export function getWorkspaceSwitcherMock(): WorkspaceSwitcherData {
+  return {
+    primarySpaces: primarySpaceMocks,
+    secondarySpaces: secondarySpaceMocks,
+  };
 }

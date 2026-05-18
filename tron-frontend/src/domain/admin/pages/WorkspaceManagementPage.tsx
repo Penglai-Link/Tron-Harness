@@ -13,6 +13,7 @@ import {
   Save,
   Search,
   Trash2,
+  X,
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
@@ -93,7 +94,6 @@ interface WorkspaceCreateFormState {
   description: string;
   name: string;
   parentWorkspaceCode: string;
-  workspaceCode: string;
 }
 
 const ROOT_PARENT_VALUE = "__ROOT__";
@@ -104,18 +104,44 @@ const workspaceInspectorTabs = [
   { label: "Create", value: "create" },
 ] satisfies ReadonlyArray<{ label: string; value: WorkspaceInspectorTab }>;
 
-function SearchField({ placeholder, value, onChange }: { placeholder: string; value: string; onChange: (value: string) => void }) {
+function SearchField({
+  onChange,
+  onClear,
+  placeholder,
+  value,
+}: {
+  onChange: (value: string) => void;
+  onClear?: () => void;
+  placeholder: string;
+  value: string;
+}) {
   return (
     <div className="relative">
       <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
       <TextInput
         aria-label="Search workspaces"
-        className="h-9 w-full pl-9"
+        className={cn("h-9 w-full pl-9", value ? "pr-9" : undefined)}
         placeholder={placeholder}
-        type="search"
+        role="searchbox"
+        type="text"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
+      {value ? (
+        <Button
+          aria-label="Clear workspace search"
+          className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
+          size="icon"
+          type="button"
+          variant="ghost"
+          onClick={() => {
+            onChange("");
+            onClear?.();
+          }}
+        >
+          <X size={14} aria-hidden="true" />
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -162,14 +188,6 @@ function formatTimestamp(value: string | null) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function normalizeWorkspaceCodeInput(value: string) {
-  return value
-    .trim()
-    .toUpperCase()
-    .replace(/[^A-Z0-9_-]+/g, "_")
-    .replace(/_{2,}/g, "_");
 }
 
 function rootValueToParent(value: string) {
@@ -258,57 +276,62 @@ function TreeNode({
   const selected = selectedWorkspaceCode === record.workspaceCode;
 
   return (
-    <div className="space-y-2">
+    <div className="relative">
       <div
         className={cn(
-          "rounded-xl border p-3 transition-colors",
+          "group flex min-h-12 items-center gap-1 rounded-lg px-1.5 py-1.5 transition-colors",
           selected
-            ? "border-[var(--color-primary)] bg-[var(--color-primary)]/5"
-            : "border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)]",
+            ? "bg-[var(--color-primary)]/10 ring-1 ring-[var(--color-primary)]/35"
+            : "hover:bg-[var(--color-hover-surface)]",
         )}
       >
-        <div className="flex items-start gap-2">
-          {hasChildren ? (
-            <Button
-              size="icon"
-              variant="ghost"
-              aria-label={`Toggle ${record.workspaceCode} children`}
-              className="size-8 shrink-0"
-              onClick={() => onToggle(record.workspaceCode)}
-            >
-              {expanded ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
-            </Button>
-          ) : (
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[var(--color-on-surface-variant)]">
-              <FolderTree size={16} aria-hidden="true" />
-            </div>
-          )}
-          <button
-            className="min-w-0 flex-1 text-left"
-            type="button"
-            aria-label={`Select workspace ${record.workspaceCode}`}
-            onClick={() => onSelect(record.workspaceCode)}
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium text-[var(--color-on-surface)]">{record.name}</span>
-              <Badge tone={getStatusTone(record.status)}>{record.status}</Badge>
-            </div>
-            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{record.workspaceCode}</p>
-            <p className="mt-2 line-clamp-2 text-sm text-[var(--color-on-surface-variant)]">{record.description ?? "No description"}</p>
-          </button>
+        {hasChildren ? (
           <Button
             size="icon"
             variant="ghost"
-            aria-label={`Create child workspace under ${record.workspaceCode}`}
-            className="size-8 shrink-0"
-            onClick={() => onPrepareCreate(record.workspaceCode)}
+            aria-label={`Toggle ${record.workspaceCode} children`}
+            className="size-7 shrink-0 text-[var(--color-on-surface-variant)]"
+            onClick={() => onToggle(record.workspaceCode)}
           >
-            <Plus size={16} aria-hidden="true" />
+            {expanded ? <ChevronDown size={15} aria-hidden="true" /> : <ChevronRight size={15} aria-hidden="true" />}
           </Button>
-        </div>
+        ) : (
+          <div className="h-7 w-1 shrink-0" aria-hidden="true" />
+        )}
+        <button
+          className="min-w-0 flex-1 rounded-md px-1 py-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+          type="button"
+          aria-current={selected ? "true" : undefined}
+          aria-label={`Select workspace ${record.workspaceCode}`}
+          onClick={() => onSelect(record.workspaceCode)}
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-sm font-medium text-[var(--color-on-surface)]">{record.name}</span>
+            <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
+              <span className={cn(
+                "size-1.5 rounded-full",
+                record.status === "Active" ? "bg-[var(--color-success)]" : "bg-[var(--color-warning)]",
+              )} />
+              {record.status}
+            </span>
+          </div>
+          <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[12px] text-[var(--color-on-surface-variant)]">
+            <span className="truncate font-mono">{record.workspaceCode}</span>
+            {record.childCount ? <span className="shrink-0">· {record.childCount} {record.childCount === 1 ? "child" : "children"}</span> : null}
+          </div>
+        </button>
+        <Button
+          size="icon"
+          variant="ghost"
+          aria-label={`Create child workspace under ${record.workspaceCode}`}
+          className="size-7 shrink-0 text-[var(--color-on-surface-variant)] opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
+          onClick={() => onPrepareCreate(record.workspaceCode)}
+        >
+          <Plus size={15} aria-hidden="true" />
+        </Button>
       </div>
       {hasChildren && expanded ? (
-        <div className="ml-6 space-y-2 border-l border-[var(--color-outline-variant)] pl-4">
+        <div className="ml-4 mt-1 space-y-1 border-l border-[var(--color-outline-variant)] pl-3">
           {record.children.map((child) => (
             <TreeNode
               expandedCodes={expandedCodes}
@@ -337,12 +360,12 @@ export function WorkspaceManagementPage() {
   const [catalogTree, setCatalogTree] = useState<WorkspaceTreeNodeRecord[]>([]);
   const [workspaceTree, setWorkspaceTree] = useState<WorkspaceTreeNodeRecord[]>([]);
   const [selectedWorkspaceCode, setSelectedWorkspaceCode] = useState<string | null>(null);
+  const [searchClearVersion, setSearchClearVersion] = useState(0);
   const [inspectorTab, setInspectorTab] = useState<WorkspaceInspectorTab>("overview");
   const [detail, setDetail] = useState<WorkspaceDetailRecord | null>(null);
   const [detailForm, setDetailForm] = useState<WorkspaceFormState>({ name: "", description: "" });
   const [moveParentWorkspaceCode, setMoveParentWorkspaceCode] = useState(ROOT_PARENT_VALUE);
   const [createForm, setCreateForm] = useState<WorkspaceCreateFormState>({
-    workspaceCode: "",
     name: "",
     description: "",
     parentWorkspaceCode: ROOT_PARENT_VALUE,
@@ -380,8 +403,12 @@ export function WorkspaceManagementPage() {
       setTreeLoading(true);
 
       try {
+        const workspaceTreeQuery = {
+          includeArchived: statusFilter === "All" ? true : undefined,
+          status: statusFilter === "All" ? undefined : statusFilter,
+        };
         const nextCatalogTree = isApiMode
-          ? await fetchWorkspaceTree({}, controller.signal)
+          ? await fetchWorkspaceTree(workspaceTreeQuery, controller.signal)
           : getWorkspaceTree();
         if (cancelled) return;
 
@@ -389,8 +416,8 @@ export function WorkspaceManagementPage() {
           ? (
             debouncedSearch || statusFilter !== "All"
               ? await fetchWorkspaceTree({
+                ...workspaceTreeQuery,
                 search: debouncedSearch,
-                status: statusFilter === "All" ? undefined : statusFilter,
               }, controller.signal)
               : nextCatalogTree
           )
@@ -419,7 +446,7 @@ export function WorkspaceManagementPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [debouncedSearch, isApiMode, statusFilter, toast, workspaceDataVersion]);
+  }, [debouncedSearch, isApiMode, searchClearVersion, statusFilter, toast, workspaceDataVersion]);
 
   useEffect(() => {
     if (!selectedWorkspaceCode) {
@@ -530,6 +557,11 @@ export function WorkspaceManagementPage() {
     setWorkspaceDataVersion((value) => value + 1);
   }
 
+  function clearWorkspaceSearch() {
+    setDebouncedSearch("");
+    setSearchClearVersion((value) => value + 1);
+  }
+
   function handleSelectWorkspace(workspaceCode: string) {
     setSelectedWorkspaceCode(workspaceCode);
     setInspectorTab("overview");
@@ -537,7 +569,6 @@ export function WorkspaceManagementPage() {
 
   function prepareCreate(parentWorkspaceCode: string | null) {
     setCreateForm({
-      workspaceCode: "",
       name: "",
       description: "",
       parentWorkspaceCode: parentToRootValue(parentWorkspaceCode),
@@ -559,7 +590,6 @@ export function WorkspaceManagementPage() {
     setCreatingWorkspace(true);
     try {
       const payload = {
-        workspaceCode: normalizeWorkspaceCodeInput(createForm.workspaceCode),
         name: createForm.name.trim(),
         description: createForm.description.trim() || null,
         parentWorkspaceCode: rootValueToParent(createForm.parentWorkspaceCode),
@@ -570,7 +600,6 @@ export function WorkspaceManagementPage() {
 
       setSelectedWorkspaceCode(created.workspaceCode);
       setCreateForm({
-        workspaceCode: "",
         name: "",
         description: "",
         parentWorkspaceCode: parentToRootValue(payload.parentWorkspaceCode),
@@ -754,7 +783,6 @@ export function WorkspaceManagementPage() {
   return (
     <TronShell activeItem="Workspace Admin" searchPlaceholder="Search workspaces...">
       <PageHeader
-        eyebrow="Admin"
         title="Workspace Management"
         description="Manage the workspace hierarchy and separate direct-user and role-based access grants from one admin console."
         actions={(
@@ -764,8 +792,8 @@ export function WorkspaceManagementPage() {
               {treeLoading ? "Refreshing..." : "Refresh"}
             </Button>
             <Button variant="secondary" onClick={() => prepareCreate(null)}>
-              <RotateCcw size={16} aria-hidden="true" />
-              Create Root Workspace
+              <Plus size={16} aria-hidden="true" />
+              Create Root
             </Button>
           </>
         )}
@@ -781,7 +809,7 @@ export function WorkspaceManagementPage() {
             {treeLoading ? <Badge tone="accent">Loading</Badge> : null}
           </div>
           <div className="grid gap-3">
-            <SearchField placeholder="Filter workspaces..." value={searchInput} onChange={setSearchInput} />
+            <SearchField placeholder="Filter workspaces..." value={searchInput} onChange={setSearchInput} onClear={clearWorkspaceSearch} />
             <SelectInput aria-label="Filter workspaces by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as WorkspaceStatusFilter)}>
               <option value="All">All Status</option>
               {adminUserStatusOptions.map((status) => (
@@ -789,7 +817,7 @@ export function WorkspaceManagementPage() {
               ))}
             </SelectInput>
           </div>
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+          <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-1">
             {workspaceTree.length ? workspaceTree.map((record) => (
               <TreeNode
                 expandedCodes={expandedCodeSet}
@@ -824,7 +852,7 @@ export function WorkspaceManagementPage() {
                 {detail ? (
                   <Button variant="secondary" onClick={() => prepareCreate(detail.workspaceCode)}>
                     <Plus size={16} aria-hidden="true" />
-                    Create Child
+                    Create
                   </Button>
                 ) : null}
               </div>
@@ -863,16 +891,6 @@ export function WorkspaceManagementPage() {
                       ))}
                     </SelectInput>
                   </Field>
-                  <Field label="Workspace code" hint="Uppercase code used as the stable external identifier.">
-                    <TextInput
-                      aria-label="Workspace code"
-                      value={createForm.workspaceCode}
-                      onChange={(event) => setCreateForm((current) => ({
-                        ...current,
-                        workspaceCode: normalizeWorkspaceCodeInput(event.target.value),
-                      }))}
-                    />
-                  </Field>
                   <Field label="Workspace name">
                     <TextInput
                       aria-label="Workspace name"
@@ -892,12 +910,12 @@ export function WorkspaceManagementPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <Button disabled={creatingWorkspace} aria-busy={creatingWorkspace} onClick={() => void handleCreateWorkspace()}>
                     <Plus size={16} aria-hidden="true" />
-                    {creatingWorkspace ? "Creating..." : "Create Workspace"}
+                    {creatingWorkspace ? "Creating..." : "Create"}
                   </Button>
                   {selectedWorkspaceCode ? (
                     <Button variant="secondary" onClick={() => prepareCreate(selectedWorkspaceCode)}>
                       <Plus size={16} aria-hidden="true" />
-                      Use Selected as Parent
+                      Use
                     </Button>
                   ) : null}
                 </div>
@@ -963,21 +981,21 @@ export function WorkspaceManagementPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <Button disabled={savingMetadata || detail.status === "Archived"} aria-busy={savingMetadata} onClick={() => void handleSaveMetadata()}>
                     <Save size={16} aria-hidden="true" />
-                    {savingMetadata ? "Saving..." : "Save Metadata"}
+                    {savingMetadata ? "Saving..." : "Save"}
                   </Button>
                   <Button variant="secondary" disabled={movingWorkspace || detail.status === "Archived"} aria-busy={movingWorkspace} onClick={() => void handleMoveWorkspace()}>
                     <FolderTree size={16} aria-hidden="true" />
-                    {movingWorkspace ? "Moving..." : "Move Workspace"}
+                    {movingWorkspace ? "Moving..." : "Move"}
                   </Button>
                   {detail.status === "Active" ? (
                     <Button variant="secondary" disabled={lifecycleLoading} aria-busy={lifecycleLoading} onClick={() => void handleWorkspaceLifecycle("archive")}>
                       <Trash2 size={16} aria-hidden="true" />
-                      {lifecycleLoading ? "Archiving..." : "Archive Workspace"}
+                      {lifecycleLoading ? "Archiving..." : "Archive"}
                     </Button>
                   ) : (
                     <Button variant="secondary" disabled={lifecycleLoading} aria-busy={lifecycleLoading} onClick={() => void handleWorkspaceLifecycle("restore")}>
                       <RotateCcw size={16} aria-hidden="true" />
-                      {lifecycleLoading ? "Restoring..." : "Restore Workspace"}
+                      {lifecycleLoading ? "Restoring..." : "Restore"}
                     </Button>
                   )}
                 </div>
