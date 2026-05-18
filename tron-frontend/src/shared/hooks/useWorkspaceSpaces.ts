@@ -12,7 +12,7 @@ import {
 import type { WorkspaceSpacesContextValue } from "@/shared/types/WorkspaceSpace";
 
 const defaultSwitcher = getWorkspaceSwitcherMock();
-const defaultSecondarySpaces = getSecondarySpaceMocks(defaultPrimarySpaceId);
+const defaultSecondarySpaces = getSecondarySpaceMocks(defaultPrimarySpaceId).filter((space) => space.depth > 1);
 
 export const WorkspaceSpacesContext = createContext<WorkspaceSpacesContextValue>({
   primarySpaces: defaultSwitcher.primarySpaces,

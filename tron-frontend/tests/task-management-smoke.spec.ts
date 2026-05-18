@@ -16,6 +16,7 @@ type TaskType = "Feature" | "BugFix" | "Refactor";
 type TaskSourceType = "Internal" | "GitHub" | "GitLab";
 type CapturedRequest = { body: unknown; method: string; pathname: string; searchParams: Record<string, string> };
 type TaskSummary = { priority: TaskPriority; progress: number; status: TaskStatus; taskCode: string; taskType: TaskType; title: string };
+type WorkspaceSwitcherPayload = typeof workspaceSwitcher;
 type Task = {
   agentCodes: string[];
   appCodes: string[];
@@ -220,8 +221,14 @@ function toast(page: Page, message: string | RegExp) {
   return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
 }
 
-async function routeApi(page: Page, requests: CapturedRequest[], tasks: Task[]) {
+async function routeApi(
+  page: Page,
+  requests: CapturedRequest[],
+  tasks: Task[],
+  options: { workspaceSwitcherResolver?: (requestCount: number) => WorkspaceSwitcherPayload } = {},
+) {
   let next = 1;
+  let workspaceSwitcherRequestCount = 0;
   await page.route("**/api/v1/**", async (route) => {
     const captured = captureRequest(route);
     requests.push(captured);
@@ -232,7 +239,11 @@ async function routeApi(page: Page, requests: CapturedRequest[], tasks: Task[]) 
     if (captured.pathname === "/api/v1/auth/logout") return fulfillJson(route, successEnvelope({ loggedOut: true }));
     if (captured.pathname === "/api/v1/admin/workspaces") return fulfillJson(route, successEnvelope(workspaceTree));
     if (captured.pathname === "/api/v1/admin/workspaces/options") return fulfillJson(route, successEnvelope(workspaceOptions));
-    if (captured.pathname === "/api/v1/admin/workspaces/switcher") return fulfillJson(route, successEnvelope(workspaceSwitcher));
+    if (captured.pathname === "/api/v1/admin/workspaces/switcher") {
+      workspaceSwitcherRequestCount += 1;
+      const payload = options.workspaceSwitcherResolver?.(workspaceSwitcherRequestCount) ?? workspaceSwitcher;
+      return fulfillJson(route, successEnvelope(payload));
+    }
     if (/^\/api\/v1\/admin\/workspaces\/[^/]+\/access\/effective-users$/.test(captured.pathname)) return fulfillJson(route, pageEnvelope(effectiveUsers));
     if (captured.pathname === "/api/v1/tasks/options") return fulfillJson(route, successEnvelope({ priorities: ["Low", "Medium", "High"], sourceTypes: ["Internal", "GitHub", "GitLab"], statuses, taskTypes: ["Feature", "BugFix", "Refactor"] }));
     if (captured.pathname === "/api/v1/tasks/quick-reference") return fulfillJson(route, successEnvelope({ tips: ["Task must belong to a workspace."], variables: ["workspaceCode", "taskType", "sourceType", "sourceUrl", "assigneeUserCodes"] }));
@@ -460,4 +471,273 @@ test("task management supports kanban search create detail updates subtasks arch
 
   await page.getByRole("button", { name: "Execute Task" }).click();
   await expect(toast(page, "Task execution is not available in v1")).toBeVisible();
+});
+
+test("task shell exposes a navigation drawer below the desktop breakpoint", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  const tasks: Task[] = [
+    task({ description: "Seeded task for responsive shell coverage", taskCode: "TSK-SEED-MOBILE", title: "Responsive shell coverage" }),
+  ];
+  await routeApi(page, requests, tasks);
+
+  await page.setViewportSize({ width: 393, height: 852 });
+  await page.goto(`${frontendBaseUrl}/tasks`);
+
+  const openNavigationButton = page.getByRole("button", { name: "Open navigation menu" });
+  await expect(openNavigationButton).toBeVisible();
+  await expect(page.locator("#tron-mobile-sidebar")).toHaveCount(0);
+
+  await openNavigationButton.click();
+
+  const mobileSidebar = page.locator("#tron-mobile-sidebar");
+  await expect(mobileSidebar).toBeVisible();
+  await expect(mobileSidebar.getByRole("link", { name: "Tasks" })).toBeVisible();
+  await mobileSidebar.getByRole("button", { name: "Administration" }).click();
+  await expect(mobileSidebar.getByRole("link", { name: "Workspace Admin" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Close navigation menu" }).click();
+  await expect(mobileSidebar).toHaveCount(0);
+});
+
+test("workspace switcher refreshes from the API on every header click", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  const tasks: Task[] = [
+    task({ description: "Seeded task for workspace switcher refresh coverage", taskCode: "TSK-SEED-SWITCHER", title: "Workspace switcher refresh" }),
+  ];
+
+  await routeApi(page, requests, tasks, {
+    workspaceSwitcherResolver: (requestCount) => ({
+      primarySpaces: [{
+        workspaceCode: "ENTERPRISE",
+        name: `Enterprise Live ${requestCount}`,
+        description: `Live workspace payload ${requestCount}`,
+        childCount: 1,
+        status: "Active",
+      }],
+      secondarySpaces: [{
+        workspaceCode: "TRON_CORE",
+        primaryWorkspaceCode: "ENTERPRISE",
+        label: `Enterprise Live ${requestCount} / Tron Core`,
+        name: `Tron Core Live ${requestCount}`,
+        description: `Live console payload ${requestCount}`,
+        depth: 3,
+        childCount: 0,
+        effectiveUserCount: 1,
+        status: "Active",
+      }],
+    }),
+  });
+
+  await page.goto(`${frontendBaseUrl}/tasks`);
+
+  const workspaceButton = page.locator("header button[aria-busy]").first();
+  const switcherRequestCount = () => requests.filter((request) => request.pathname === "/api/v1/admin/workspaces/switcher").length;
+  await expect.poll(switcherRequestCount).toBeGreaterThan(0);
+  const initialRequestCount = switcherRequestCount();
+  await expect(workspaceButton).toContainText(`Enterprise Live ${initialRequestCount}`);
+
+  await workspaceButton.click();
+  await expect.poll(switcherRequestCount).toBe(initialRequestCount + 1);
+  await expect(workspaceButton).toContainText(`Enterprise Live ${initialRequestCount + 1}`);
+  await expect(page.getByText(`Live workspace payload ${initialRequestCount + 1}`)).toBeVisible();
+
+  await workspaceButton.click();
+  await expect.poll(switcherRequestCount).toBe(initialRequestCount + 2);
+  await expect(workspaceButton).toContainText(`Enterprise Live ${initialRequestCount + 2}`);
+});
+
+test("sidebar workspace selector stays scoped to the current primary space and shows relative hierarchy only", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  const tasks: Task[] = [
+    task({ description: "Seeded task for sidebar workspace selector coverage", taskCode: "TSK-SEED-SIDEBAR-SWITCHER", title: "Sidebar workspace selector" }),
+  ];
+
+  await routeApi(page, requests, tasks, {
+    workspaceSwitcherResolver: () => ({
+      primarySpaces: [{
+        workspaceCode: "ENTERPRISE",
+        name: "Enterprise",
+        description: "Global governance workspace",
+        childCount: 1,
+        status: "Active",
+      }, {
+        workspaceCode: "COMPLIANCE",
+        name: "Compliance",
+        description: "Regulated operations workspace",
+        childCount: 1,
+        status: "Active",
+      }],
+      secondarySpaces: [
+        {
+          workspaceCode: "ENTERPRISE",
+          primaryWorkspaceCode: "ENTERPRISE",
+          label: "Enterprise",
+          name: "Enterprise",
+          description: "Global governance workspace",
+          depth: 1,
+          childCount: 1,
+          effectiveUserCount: 4,
+          status: "Active",
+        },
+        {
+          workspaceCode: "PLATFORM",
+          primaryWorkspaceCode: "ENTERPRISE",
+          label: "Enterprise / Platform",
+          name: "Platform",
+          description: "Shared agent runtime platform",
+          depth: 2,
+          childCount: 1,
+          effectiveUserCount: 3,
+          status: "Active",
+        },
+        {
+          workspaceCode: "TRON_CORE",
+          primaryWorkspaceCode: "ENTERPRISE",
+          label: "Enterprise / Platform / Tron Core",
+          name: "Tron Core",
+          description: "Main Tron console workspace",
+          depth: 3,
+          childCount: 0,
+          effectiveUserCount: 2,
+          status: "Active",
+        },
+        {
+          workspaceCode: "COMPLIANCE",
+          primaryWorkspaceCode: "COMPLIANCE",
+          label: "Compliance",
+          name: "Compliance",
+          description: "Regulated operations workspace",
+          depth: 1,
+          childCount: 1,
+          effectiveUserCount: 2,
+          status: "Active",
+        },
+        {
+          workspaceCode: "RISK_OPS",
+          primaryWorkspaceCode: "COMPLIANCE",
+          label: "Compliance / Risk Ops",
+          name: "Risk Ops",
+          description: "Regulated delivery oversight",
+          depth: 2,
+          childCount: 0,
+          effectiveUserCount: 1,
+          status: "Active",
+        },
+      ],
+    }),
+  });
+
+  await page.goto(`${frontendBaseUrl}/tasks`);
+
+  const sidebarWorkspaceButton = page.getByRole("button", { name: "Open workspace selector" });
+  const switcherRequestCount = () => requests.filter((request) => request.pathname === "/api/v1/admin/workspaces/switcher").length;
+  await expect.poll(switcherRequestCount).toBeGreaterThan(0);
+  const initialRequestCount = switcherRequestCount();
+
+  await sidebarWorkspaceButton.click();
+  await expect.poll(switcherRequestCount).toBe(initialRequestCount + 1);
+
+  const selector = page.locator("#tron-secondary-space-selector");
+  await expect(selector).toBeVisible();
+  await expect(page.locator("aside[data-collapsed] #tron-secondary-space-selector")).toHaveCount(0);
+  await expect(selector.getByRole("button", { name: "Enterprise", exact: true })).toHaveCount(0);
+  await expect(selector.getByRole("button", { name: "Platform", exact: true })).toBeVisible();
+  await expect(selector.getByRole("button", { name: "Platform / Tron Core", exact: true })).toBeVisible();
+  await expect(selector.getByRole("button", { name: "Risk Ops", exact: true })).toHaveCount(0);
+  await expect(selector).not.toContainText("effective users");
+  await expect(selector).not.toContainText("child spaces");
+  await expect(selector).not.toContainText("Status:");
+
+  await selector.getByRole("button", { name: "Platform", exact: true }).click();
+  await expect(selector).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Open workspace selector" })).toContainText("Platform");
+  await expect(page.getByRole("button", { name: "Open workspace selector" })).not.toContainText("Enterprise / Platform");
+
+  await page.getByRole("button", { name: "Open workspace selector" }).click();
+  await expect.poll(switcherRequestCount).toBe(initialRequestCount + 2);
+  await selector.getByRole("button", { name: "Platform / Tron Core", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Open workspace selector" })).toContainText("Platform / Tron Core");
+  await expect(page.getByRole("button", { name: "Open workspace selector" })).not.toContainText("Enterprise / Platform / Tron Core");
+
+  const workspaceButton = page.locator("header button[aria-busy]").first();
+  await workspaceButton.click();
+  await page.getByRole("button", { name: /Compliance/ }).click();
+  await expect(workspaceButton).toContainText("Compliance");
+  await expect(page.getByRole("button", { name: "Open workspace selector" })).toContainText("Risk Ops");
+
+  await page.getByRole("button", { name: "Open workspace selector" }).click();
+  await expect(selector.getByRole("button", { name: "Risk Ops", exact: true })).toBeVisible();
+  await expect(selector.getByRole("button", { name: "Platform", exact: true })).toHaveCount(0);
+});
+
+test("workspace switcher keeps a generic label when the API returns no spaces", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  const tasks: Task[] = [
+    task({ description: "Seeded task for empty workspace switcher coverage", taskCode: "TSK-SEED-SWITCHER-EMPTY", title: "Workspace switcher empty state" }),
+  ];
+
+  await routeApi(page, requests, tasks, {
+    workspaceSwitcherResolver: () => ({
+      primarySpaces: [],
+      secondarySpaces: [],
+    }),
+  });
+
+  await page.goto(`${frontendBaseUrl}/tasks`);
+
+  const workspaceButton = page.locator("header button[aria-busy]").first();
+  const switcherRequestCount = () => requests.filter((request) => request.pathname === "/api/v1/admin/workspaces/switcher").length;
+  await expect.poll(switcherRequestCount).toBeGreaterThan(0);
+  const initialRequestCount = switcherRequestCount();
+  await expect(workspaceButton).toContainText("Workspace");
+  await expect(workspaceButton).not.toContainText("Enterprise Workspace");
+
+  await workspaceButton.click();
+  await expect.poll(switcherRequestCount).toBe(initialRequestCount + 1);
+  await expect(page.getByText("No primary spaces available.")).toBeVisible();
+  await expect(page.getByText("Enterprise Workspace")).toHaveCount(0);
+});
+
+test("sidebar workspace selector shows a root-only empty state when no level 2 or level 3 spaces exist", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  const tasks: Task[] = [
+    task({ description: "Seeded task for root-only sidebar workspace selector coverage", taskCode: "TSK-SEED-SIDEBAR-ROOT", title: "Sidebar root-only selector" }),
+  ];
+
+  await routeApi(page, requests, tasks, {
+    workspaceSwitcherResolver: () => ({
+      primarySpaces: [{
+        workspaceCode: "ENTERPRISE",
+        name: "Enterprise",
+        description: "Global governance workspace",
+        childCount: 0,
+        status: "Active",
+      }],
+      secondarySpaces: [{
+        workspaceCode: "ENTERPRISE",
+        primaryWorkspaceCode: "ENTERPRISE",
+        label: "Enterprise",
+        name: "Enterprise",
+        description: "Global governance workspace",
+        depth: 1,
+        childCount: 0,
+        effectiveUserCount: 1,
+        status: "Active",
+      }],
+    }),
+  });
+
+  await page.goto(`${frontendBaseUrl}/tasks`);
+
+  const sidebarWorkspaceButton = page.getByRole("button", { name: "Open workspace selector" });
+  await expect(sidebarWorkspaceButton).toContainText("Secondary spaces");
+  await expect(sidebarWorkspaceButton).not.toContainText("Enterprise");
+  await expect(sidebarWorkspaceButton).toContainText("No level 2 or level 3 workspaces are available under the current primary space.");
+
+  await sidebarWorkspaceButton.click();
+
+  const selector = page.locator("#tron-secondary-space-selector");
+  await expect(selector).toBeVisible();
+  await expect(selector.getByRole("button", { name: "Enterprise", exact: true })).toHaveCount(0);
+  await expect(selector.getByText("No level 2 or level 3 workspaces are available under the current primary space.")).toBeVisible();
 });
