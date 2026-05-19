@@ -5,10 +5,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     parent_task_code TEXT NULL REFERENCES tasks(task_code),
     title TEXT NOT NULL,
     description TEXT NULL,
-    status TEXT NOT NULL CHECK (status IN ('Backlog', 'Todo', 'InProgress', 'Testing', 'Review', 'Reopen', 'Completed', 'Archived')),
-    previous_status TEXT NULL CHECK (previous_status IS NULL OR previous_status IN ('Backlog', 'Todo', 'InProgress', 'Testing', 'Review', 'Reopen', 'Completed')),
+    status TEXT NOT NULL CHECK (status IN ('Open', 'Designing', 'Red', 'Green', 'Regressioning', 'Review', 'InProgress', 'Reopen', 'Completed', 'Archived')),
+    previous_status TEXT NULL CHECK (previous_status IS NULL OR previous_status IN ('Open', 'Designing', 'Red', 'Green', 'Regressioning', 'Review', 'InProgress', 'Reopen', 'Completed')),
     priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High')),
-    task_type TEXT NOT NULL CHECK (task_type IN ('Feature', 'BugFix', 'Refactor')),
+    task_type TEXT NOT NULL CHECK (task_type IN ('Feature', 'Bug')),
     source_type TEXT NOT NULL CHECK (source_type IN ('Internal', 'GitHub', 'GitLab')),
     source_url TEXT NULL,
     progress_value INTEGER NOT NULL DEFAULT 0 CHECK (progress_value >= 0 AND progress_value <= 100),
@@ -47,5 +47,3 @@ CREATE INDEX IF NOT EXISTS idx_task_user_assignments_user_code ON task_user_assi
 CREATE INDEX IF NOT EXISTS idx_task_user_assignments_task_code ON task_user_assignments(task_code);
 CREATE INDEX IF NOT EXISTS idx_task_agent_links_task_code ON task_agent_links(task_code);
 CREATE INDEX IF NOT EXISTS idx_task_app_links_task_code ON task_app_links(task_code);
-
-UPDATE tasks SET task_type = 'Refactor' WHERE task_type = 'Etc';

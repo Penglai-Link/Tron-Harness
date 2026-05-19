@@ -6,11 +6,13 @@ use crate::shared::id::SnowflakeId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum TaskStatus {
-    Backlog,
-    Todo,
-    InProgress,
-    Testing,
+    Open,
+    Designing,
+    Red,
+    Green,
+    Regressioning,
     Review,
+    InProgress,
     Reopen,
     Completed,
     Archived,
@@ -26,8 +28,7 @@ pub enum TaskPriority {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskType {
     Feature,
-    BugFix,
-    Refactor,
+    Bug,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,6 +36,13 @@ pub enum TaskSourceType {
     Internal,
     GitHub,
     GitLab,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TaskRole {
+    FeatureRoot,
+    FeatureChild,
+    Bug,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,11 +79,29 @@ pub struct TaskCodeLink {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct TaskStatusRules {
+    pub feature_root: Vec<TaskStatus>,
+    pub feature_child: Vec<TaskStatus>,
+    pub bug: Vec<TaskStatus>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskDefaultStatuses {
+    pub feature_root: TaskStatus,
+    pub feature_child: TaskStatus,
+    pub bug: TaskStatus,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct TaskOptions {
     pub statuses: Vec<TaskStatus>,
     pub priorities: Vec<TaskPriority>,
     pub task_types: Vec<TaskType>,
     pub source_types: Vec<TaskSourceType>,
+    pub status_rules: TaskStatusRules,
+    pub default_statuses: TaskDefaultStatuses,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -187,6 +213,7 @@ pub enum TaskError {
     AssigneeNotInWorkspace,
     ActiveSubtaskExists,
     ArchivedMutationDenied,
+    StatusRoleInvalid,
     InvalidProgress,
     InvalidRequest,
     StorageFailure,
@@ -202,32 +229,93 @@ impl fmt::Display for TaskError {
             Self::AssigneeNotInWorkspace => formatter.write_str("task assignee is invalid"),
             Self::ActiveSubtaskExists => formatter.write_str("task has active subtasks"),
             Self::ArchivedMutationDenied => formatter.write_str("archived task cannot be modified"),
+            Self::StatusRoleInvalid => {
+                formatter.write_str("task status does not match the inferred task role")
+            }
             Self::InvalidProgress => formatter.write_str("task progress is invalid"),
             Self::InvalidRequest => formatter.write_str("task request is invalid"),
             Self::StorageFailure => formatter.write_str("task storage failure"),
         }
     }
 }
+
 impl Error for TaskError {}
 
-pub const TASK_STATUSES: [TaskStatus; 8] = [
-    TaskStatus::Backlog,
-    TaskStatus::Todo,
-    TaskStatus::InProgress,
-    TaskStatus::Testing,
+pub const TASK_STATUSES: [TaskStatus; 10] = [
+    TaskStatus::Open,
+    TaskStatus::Designing,
+    TaskStatus::Red,
+    TaskStatus::Green,
+    TaskStatus::Regressioning,
     TaskStatus::Review,
+    TaskStatus::InProgress,
     TaskStatus::Reopen,
     TaskStatus::Completed,
     TaskStatus::Archived,
 ];
+pub const FEATURE_ROOT_STATUSES: [TaskStatus; 8] = [
+    TaskStatus::Open,
+    TaskStatus::Designing,
+    TaskStatus::Red,
+    TaskStatus::Green,
+    TaskStatus::Regressioning,
+    TaskStatus::Review,
+    TaskStatus::Completed,
+    TaskStatus::Archived,
+];
+pub const FEATURE_CHILD_STATUSES: [TaskStatus; 4] = [
+    TaskStatus::Open,
+    TaskStatus::InProgress,
+    TaskStatus::Completed,
+    TaskStatus::Archived,
+];
+pub const BUG_STATUSES: [TaskStatus; 5] = [
+    TaskStatus::Open,
+    TaskStatus::InProgress,
+    TaskStatus::Completed,
+    TaskStatus::Reopen,
+    TaskStatus::Archived,
+];
 pub const TASK_PRIORITIES: [TaskPriority; 3] =
     [TaskPriority::Low, TaskPriority::Medium, TaskPriority::High];
-pub const TASK_TYPES: [TaskType; 3] = [TaskType::Feature, TaskType::BugFix, TaskType::Refactor];
+pub const TASK_TYPES: [TaskType; 2] = [TaskType::Feature, TaskType::Bug];
 pub const TASK_SOURCE_TYPES: [TaskSourceType; 3] = [
     TaskSourceType::Internal,
     TaskSourceType::GitHub,
     TaskSourceType::GitLab,
 ];
+
+pub fn infer_task_role(task_type: TaskType, parent_task_code: Option<&str>) -> TaskRole {
+    match task_type {
+        TaskType::Bug => TaskRole::Bug,
+        TaskType::Feature => {
+            let has_parent = parent_task_code.is_some_and(|value| !value.trim().is_empty());
+            if has_parent {
+                TaskRole::FeatureChild
+            } else {
+                TaskRole::FeatureRoot
+            }
+        }
+    }
+}
+
+pub fn task_statuses_for_role(role: TaskRole) -> &'static [TaskStatus] {
+    match role {
+        TaskRole::FeatureRoot => &FEATURE_ROOT_STATUSES,
+        TaskRole::FeatureChild => &FEATURE_CHILD_STATUSES,
+        TaskRole::Bug => &BUG_STATUSES,
+    }
+}
+
+pub fn task_default_status_for_role(role: TaskRole) -> TaskStatus {
+    match role {
+        TaskRole::FeatureRoot | TaskRole::FeatureChild | TaskRole::Bug => TaskStatus::Open,
+    }
+}
+
+pub fn task_status_allowed_for_role(role: TaskRole, status: TaskStatus) -> bool {
+    task_statuses_for_role(role).contains(&status)
+}
 
 pub fn task_options() -> TaskOptions {
     TaskOptions {
@@ -235,33 +323,50 @@ pub fn task_options() -> TaskOptions {
         priorities: TASK_PRIORITIES.to_vec(),
         task_types: TASK_TYPES.to_vec(),
         source_types: TASK_SOURCE_TYPES.to_vec(),
+        status_rules: TaskStatusRules {
+            feature_root: FEATURE_ROOT_STATUSES.to_vec(),
+            feature_child: FEATURE_CHILD_STATUSES.to_vec(),
+            bug: BUG_STATUSES.to_vec(),
+        },
+        default_statuses: TaskDefaultStatuses {
+            feature_root: task_default_status_for_role(TaskRole::FeatureRoot),
+            feature_child: task_default_status_for_role(TaskRole::FeatureChild),
+            bug: task_default_status_for_role(TaskRole::Bug),
+        },
     }
 }
+
 pub fn task_status_to_storage(status: TaskStatus) -> &'static str {
     match status {
-        TaskStatus::Backlog => "Backlog",
-        TaskStatus::Todo => "Todo",
-        TaskStatus::InProgress => "InProgress",
-        TaskStatus::Testing => "Testing",
+        TaskStatus::Open => "Open",
+        TaskStatus::Designing => "Designing",
+        TaskStatus::Red => "Red",
+        TaskStatus::Green => "Green",
+        TaskStatus::Regressioning => "Regressioning",
         TaskStatus::Review => "Review",
+        TaskStatus::InProgress => "InProgress",
         TaskStatus::Reopen => "Reopen",
         TaskStatus::Completed => "Completed",
         TaskStatus::Archived => "Archived",
     }
 }
+
 pub fn task_status_from_storage(value: &str) -> Result<TaskStatus, TaskError> {
     match value {
-        "Backlog" => Ok(TaskStatus::Backlog),
-        "Todo" => Ok(TaskStatus::Todo),
-        "InProgress" => Ok(TaskStatus::InProgress),
-        "Testing" => Ok(TaskStatus::Testing),
+        "Open" => Ok(TaskStatus::Open),
+        "Designing" => Ok(TaskStatus::Designing),
+        "Red" => Ok(TaskStatus::Red),
+        "Green" => Ok(TaskStatus::Green),
+        "Regressioning" => Ok(TaskStatus::Regressioning),
         "Review" => Ok(TaskStatus::Review),
+        "InProgress" => Ok(TaskStatus::InProgress),
         "Reopen" => Ok(TaskStatus::Reopen),
         "Completed" => Ok(TaskStatus::Completed),
         "Archived" => Ok(TaskStatus::Archived),
         _ => Err(TaskError::InvalidRequest),
     }
 }
+
 pub fn task_priority_to_storage(priority: TaskPriority) -> &'static str {
     match priority {
         TaskPriority::Low => "Low",
@@ -269,6 +374,7 @@ pub fn task_priority_to_storage(priority: TaskPriority) -> &'static str {
         TaskPriority::High => "High",
     }
 }
+
 pub fn task_priority_from_storage(value: &str) -> Result<TaskPriority, TaskError> {
     match value {
         "Low" => Ok(TaskPriority::Low),
@@ -277,22 +383,22 @@ pub fn task_priority_from_storage(value: &str) -> Result<TaskPriority, TaskError
         _ => Err(TaskError::InvalidRequest),
     }
 }
+
 pub fn task_type_to_storage(task_type: TaskType) -> &'static str {
     match task_type {
         TaskType::Feature => "Feature",
-        TaskType::BugFix => "BugFix",
-        TaskType::Refactor => "Refactor",
+        TaskType::Bug => "Bug",
     }
 }
+
 pub fn task_type_from_storage(value: &str) -> Result<TaskType, TaskError> {
     match value {
         "Feature" => Ok(TaskType::Feature),
-        "BugFix" => Ok(TaskType::BugFix),
-        "Refactor" => Ok(TaskType::Refactor),
-        "Etc" => Ok(TaskType::Refactor),
+        "Bug" => Ok(TaskType::Bug),
         _ => Err(TaskError::InvalidRequest),
     }
 }
+
 pub fn task_source_type_to_storage(source_type: TaskSourceType) -> &'static str {
     match source_type {
         TaskSourceType::Internal => "Internal",
@@ -300,6 +406,7 @@ pub fn task_source_type_to_storage(source_type: TaskSourceType) -> &'static str 
         TaskSourceType::GitLab => "GitLab",
     }
 }
+
 pub fn task_source_type_from_storage(value: &str) -> Result<TaskSourceType, TaskError> {
     match value {
         "Internal" => Ok(TaskSourceType::Internal),

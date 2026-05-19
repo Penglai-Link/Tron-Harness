@@ -8,14 +8,23 @@ Protected task APIs live under `/api/v1/tasks`, require the existing authenticat
 
 ### GET /api/v1/tasks/options - Task options
 
-- purpose: expose backend-owned v1 enums
+- purpose: expose backend-owned task enums plus role-based status rules
 - auth: authenticated
-- acceptance_ids: AC-TASK-01
+- acceptance_ids: AC-TASK-01, AC-TASK-07
 - parameter_passing: request headers
 - request: none
-- response: `statuses`, `priorities`, `taskTypes`, `sourceTypes`
-- client_impact: frontend task selectors consume this response in API mode
-- compatibility: new endpoint
+- response:
+  - `statuses`
+  - `priorities`
+  - `taskTypes`
+  - `sourceTypes`
+  - `statusRules: { featureRoot, featureChild, bug }`
+  - `defaultStatuses: { featureRoot, featureChild, bug }`
+- wire values:
+  - `taskTypes`: `Feature`, `Bug`
+  - `statuses`: `Open`, `Designing`, `Red`, `Green`, `Regressioning`, `Review`, `InProgress`, `Reopen`, `Completed`, `Archived`
+- client_impact: frontend task selectors and role-aware detail status dropdown consume this response in API mode
+- compatibility: replaces the old v1 global-only enum payload
 
 ### GET /api/v1/tasks/kanban - Task kanban
 
@@ -26,7 +35,7 @@ Protected task APIs live under `/api/v1/tasks`, require the existing authenticat
 - request: `workspaceCode`, optional `search`, `status`, `priority`, `taskType`, `sourceType`, `assigneeUserCode`, `includeArchived`
 - response: array of kanban columns with task cards
 - client_impact: `/tasks` board consumes this endpoint in API mode
-- compatibility: replaces placeholder frontend projection
+- compatibility: board columns now represent the new status enum set
 
 ### GET /api/v1/tasks - Task list
 
@@ -36,8 +45,8 @@ Protected task APIs live under `/api/v1/tasks`, require the existing authenticat
 - parameter_passing: query parameters
 - request: `workspaceCode`, optional `search`, `status`, `priority`, `taskType`, `sourceType`, `assigneeUserCode`, `parentTaskCode`, `includeArchived`, `current`, `size`
 - response: paged records with `current`, `size`, `total`, `records`
-- client_impact: supports list/search reuse
-- compatibility: new endpoint
+- client_impact: supports list/search reuse and browser verification
+- compatibility: unchanged envelope; enum values change
 
 ### POST /api/v1/tasks - Create task
 
@@ -47,19 +56,23 @@ Protected task APIs live under `/api/v1/tasks`, require the existing authenticat
 - parameter_passing: request body
 - request: `workspaceCode`, `title`, `priority`, `taskType`, `sourceType`, optional `sourceUrl`, optional `description`, optional `parentTaskCode`, optional `assigneeUserCodes`, optional `agentCodes`, optional `appCodes`
 - response: task detail
+- backend rules:
+  - task role is inferred from `taskType` and `parentTaskCode`
+  - default status is `Open` for every role
+  - feature child is determined only when `taskType=Feature` and `parentTaskCode` is present
 - client_impact: `/tasks/new` and detail subtask controls consume this endpoint
-- compatibility: new endpoint
+- compatibility: old `BugFix` and `Refactor` values are no longer accepted
 
 ### GET /api/v1/tasks/{taskCode} - Task detail
 
 - purpose: return task detail with parent summary, active direct subtasks, assignments, and string integration arrays
 - auth: authenticated
-- acceptance_ids: AC-TASK-04
+- acceptance_ids: AC-TASK-04, AC-TASK-07
 - parameter_passing: path variables
 - request: `taskCode`
 - response: task detail
 - client_impact: `/tasks/detail?taskCode=...` consumes this endpoint
-- compatibility: replaces placeholder frontend detail data
+- compatibility: unchanged envelope; returned enum values change
 
 ### PATCH /api/v1/tasks/{taskCode} - Update task
 
@@ -69,8 +82,11 @@ Protected task APIs live under `/api/v1/tasks`, require the existing authenticat
 - parameter_passing: path variables and request body
 - request: optional `title`, `description`, `priority`, `taskType`, `sourceType`, `sourceUrl`, `assigneeUserCodes`, `agentCodes`, `appCodes`
 - response: task detail
+- backend rules:
+  - archived tasks cannot be updated
+  - if `taskType` changes and the current status is not allowed for the new inferred role, the request is rejected with `TASK_STATUS_ROLE_INVALID`
 - client_impact: detail edit controls
-- compatibility: new endpoint
+- compatibility: `taskType` values are now `Feature` and `Bug`
 
 ### PATCH /api/v1/tasks/{taskCode}/status - Update task status
 
@@ -80,8 +96,12 @@ Protected task APIs live under `/api/v1/tasks`, require the existing authenticat
 - parameter_passing: path variables and request body
 - request: `status`, optional `progress`
 - response: task detail
-- client_impact: detail unified Save flow persists status/progress changes
-- compatibility: new endpoint
+- backend rules:
+  - direct status update to `Archived` is invalid; archive still uses the lifecycle route
+  - requested status must belong to the current task role, otherwise return `TASK_STATUS_ROLE_INVALID`
+  - `Completed` forces progress to `100`
+- client_impact: detail status dropdown persists role-aware lifecycle changes
+- compatibility: replaces the old global status update contract
 
 ### POST /api/v1/tasks/{taskCode}/archive - Archive task
 
@@ -91,23 +111,23 @@ Protected task APIs live under `/api/v1/tasks`, require the existing authenticat
 - parameter_passing: path variables
 - request: `taskCode`
 - response: lifecycle result
-- client_impact: detail archive button
-- compatibility: new endpoint
+- client_impact: detail archive transition
+- compatibility: unchanged route
 
 ### POST /api/v1/tasks/{taskCode}/restore - Restore task
 
-- purpose: restore an archived task to previous status or `Backlog`
+- purpose: restore an archived task to the stored previous status or role default `Open`
 - auth: authenticated
 - acceptance_ids: AC-TASK-06
 - parameter_passing: path variables
 - request: `taskCode`
 - response: lifecycle result
-- client_impact: detail restore button
-- compatibility: new endpoint
+- client_impact: detail restore transition
+- compatibility: fallback status changes from `Backlog` to `Open`
 
 ## Auth And Permissions
 
-All task endpoints require an authenticated user through the existing backend auth middleware. V1 does not add task-specific permission checks.
+All task endpoints require an authenticated user through the existing backend auth middleware. This slice does not add task-specific permission checks.
 
 ## Error Contract
 
@@ -115,20 +135,21 @@ All task endpoints require an authenticated user through the existing backend au
 - workspace not found or archived -> 400 / `TASK_WORKSPACE_INVALID`; unified error response; AC-TASK-03
 - invalid parent or cross-workspace parent -> 400 / `TASK_PARENT_INVALID`; unified error response; AC-TASK-04
 - assignee not effective in workspace -> 400 / `TASK_ASSIGNEE_INVALID`; unified error response; AC-TASK-03
-- archived task mutation -> 400 / `TASK_ARCHIVED_INVALID`; unified error response; AC-TASK-06
+- archived task mutation -> 400 / `TASK_ARCHIVED_INVALID`; unified error response; AC-TASK-05, AC-TASK-06
 - parent task has active subtasks during archive -> 400 / `TASK_ACTIVE_SUBTASK_EXISTS`; unified error response; AC-TASK-06
-- invalid enum, progress, or malformed request -> 400 / `TASK_REQUEST_INVALID`; unified error response where request extraction reaches the handler; AC-TASK-01, AC-TASK-03
+- requested status or type/status combination does not match the inferred task role -> 400 / `TASK_STATUS_ROLE_INVALID`; unified error response; AC-TASK-05
+- invalid enum, progress, or malformed request -> 400 / `TASK_REQUEST_INVALID`; unified error response where request extraction reaches the handler; AC-TASK-01, AC-TASK-03, AC-TASK-05
 - task not found -> 404 / `TASK_NOT_FOUND`; unified error response; AC-TASK-04
-- storage failure -> 500 / `TASK_STORAGE_FAILED`; unified error response; AC-TASK-02
+- storage failure -> 500 / `TASK_STORAGE_FAILED`; unified error response; AC-TASK-02, AC-TASK-08
 
 ## Frontend Backend Boundary
 
-The backend owns enum values, validation, persistence, taskCode generation, same-workspace parent checks, active-subtask archive guards, effective-user assignment checks, status/progress rules, archive/restore rules, and agent/app string-link persistence. The frontend owns interaction layout, workspace/user selector UX, read-only/edit detail mode, API-mode hooks, mock parity, and shared Toast feedback.
+The backend owns enum values, task role inference, allowed status sets, default statuses, validation, persistence, taskCode generation, same-workspace parent checks, active-subtask archive guards, effective-user assignment checks, status/progress rules, archive/restore rules, and agent/app string-link persistence. The frontend owns interaction layout, workspace/user selector UX, read-only/edit detail mode, API-mode hooks, mock/demo parity, debounced search input, and shared Toast feedback.
 
 ## Database And Transaction Boundary
 
-Create, update, status update, lifecycle update, and assignment/link replacement writes are persisted through the task repository. Replacement writes are scoped to one task.
+Create, update, status update, lifecycle update, and assignment/link replacement writes are persisted through the task repository. Legacy task schema reset is a one-time conditional backend action when the repository detects old task enum constraints.
 
 ## Mock Or Adapter Expectations
 
-Frontend task mocks must mirror backend enum values, response shapes, taskCode navigation, status/progress behavior, archive/restore behavior, and agent/app string arrays. Browser tests may intercept `/api/v1/tasks/**` but must assert real request paths and payloads.
+Frontend task mocks must mirror backend enum values, response shapes, task role inference, role-based status filtering, default `Open` creation, archive/restore fallback behavior, and agent/app string arrays. Browser tests may intercept `/api/v1/tasks/**` but must assert real request paths, payloads, and role-aware status lists.

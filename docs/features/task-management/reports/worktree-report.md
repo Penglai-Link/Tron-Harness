@@ -2,31 +2,30 @@
 
 ## Summary
 
-Worktree `feature/clouds3n/task-management` is implemented and verified.
+Feature branch `feature/clouds3n/task-management` completed the superpower status evolution and development-stage backend task reset with passing docs, backend, frontend, and browser validation.
 
 ## Evidence Rows
 
-- AC-TASK-01 | red: feature branch started without task enum implementation | green: backend enum options implementation verified | command_ref: CMD-BE-TEST | browser: clicks=create/edit/save/add subtask/child-parent links/archive guard/archive/restore/execute; inputs=workspace/search/type/source/url/users/agents/apps/progress; network=options/kanban/create/detail/update/status/archive guard/archive/restore asserted; feedback=created/saved/subtask/archive guard/archive/restore/execution Toasts; artifacts=Playwright line output | status: pass.
-- AC-TASK-02 | red: feature branch started without persisted kanban/list implementation | green: persisted kanban/list implementation verified | command_ref: CMD-BE-TEST | browser: clicks=create/edit/save/add subtask/child-parent links/archive guard/archive/restore/execute; inputs=workspace/search/type/source/url/users/agents/apps/progress; network=options/kanban/create/detail/update/status/archive guard/archive/restore asserted; feedback=created/saved/subtask/archive guard/archive/restore/execution Toasts; artifacts=Playwright line output | status: pass.
-- AC-TASK-03 | red: feature branch started without create validation implementation | green: create validation implementation verified | command_ref: CMD-BE-TEST | browser: clicks=create/edit/save/add subtask/child-parent links/archive guard/archive/restore/execute; inputs=workspace/search/type/source/url/users/agents/apps/progress; network=options/kanban/create/detail/update/status/archive guard/archive/restore asserted; feedback=created/saved/subtask/archive guard/archive/restore/execution Toasts; artifacts=Playwright line output | status: pass.
-- AC-TASK-04 | red: feature branch started without parent/child implementation | green: parent/child implementation plus archived-subtask filtering verified | command_ref: CMD-BE-TEST | browser: clicks=create/edit/save/add subtask/child-parent links/archive guard/archive/restore/execute; inputs=workspace/search/type/source/url/users/agents/apps/progress; network=options/kanban/create/detail/update/status/archive guard/archive/restore asserted; feedback=created/saved/subtask/archive guard/archive/restore/execution Toasts; artifacts=Playwright line output | status: pass.
-- AC-TASK-05 | red: feature branch started without update/status implementation | green: update/status implementation verified | command_ref: CMD-BE-TEST | browser: clicks=create/edit/save/add subtask/child-parent links/archive guard/archive/restore/execute; inputs=workspace/search/type/source/url/users/agents/apps/progress; network=options/kanban/create/detail/update/status/archive guard/archive/restore asserted; feedback=created/saved/subtask/archive guard/archive/restore/execution Toasts; artifacts=Playwright line output | status: pass.
-- AC-TASK-06 | red: feature branch started without archive lifecycle implementation | green: archive lifecycle and active-subtask parent guard verified | command_ref: CMD-BE-TEST | browser: clicks=create/edit/save/add subtask/child-parent links/archive guard/archive/restore/execute; inputs=workspace/search/type/source/url/users/agents/apps/progress; network=options/kanban/create/detail/update/status/archive guard/archive/restore asserted; feedback=created/saved/subtask/archive guard/archive/restore/execution Toasts; artifacts=Playwright line output | status: pass.
-- AC-TASK-07 | red: feature branch started without API-backed UI workflow proof | green: browser workflow verified read-only detail, edit/save, parent-child navigation, and archive guard | command_ref: CMD-TASK-BROWSER | browser: clicks=create/edit/save/add subtask/child-parent links/archive guard/archive/restore/execute; inputs=workspace/search/type/source/url/users/agents/apps/progress; network=options/kanban/create/detail/update/status/archive guard/archive/restore asserted; feedback=created/saved/subtask/archive guard/archive/restore/execution Toasts; artifacts=Playwright line output | status: pass.
-- AC-TASK-08 | red: feature branch started with task import route/action in scope | green: import/export task entry points removed from v1 board | command_ref: CMD-FE-CHECK | browser: clicks=board refresh/create actions inspected; inputs=workspace/search/priority filter; network=options/kanban asserted; feedback=refresh Toast and no import/export controls; artifacts=Playwright line output | status: pass.
+- AC-TASK-01 | red: feature branch started without role-aware options | green: backend options contract verified | command_ref: CMD-BE-TEST | browser:not applicable | status: pass.
+- AC-TASK-02 | red: feature branch started without empty-seed kanban/list verification | green: workspace-scoped kanban/list verified after seed removal | command_ref: CMD-BE-TEST | browser:not applicable | status: pass.
+- AC-TASK-03 | red: feature branch started without role-default `Open` creation | green: create validation and defaults verified | command_ref: CMD-BE-TEST | browser:not applicable | status: pass.
+- AC-TASK-04 | red: feature branch started without updated parent-child role handling | green: parent-child detail and subtask inheritance verified | command_ref: CMD-BE-TEST | browser:not applicable | status: pass.
+- AC-TASK-05 | red: feature branch started without role-incompatible status rejection | green: invalid status/type combinations verified through backend tests | command_ref: CMD-BE-TEST | browser:not applicable | status: pass.
+- AC-TASK-06 | red: feature branch started without restore fallback evolution | green: archive guard and restore-to-open behavior verified | command_ref: CMD-BE-TEST | browser:not applicable | status: pass.
+- AC-TASK-07 | red: feature branch started with browser-visible old enums | green: browser workflow passed with only the new visible enums | command_ref: CMD-TASK-BROWSER | browser: clicks=refresh board, open create dialog, save task, open detail, save detail, add subtask, follow child-parent links, trigger archive guard, archive child, archive parent, restore parent, click execute; inputs=search text, priority select, type select, source/url, assignee/app links, progress values; network=`GET /api/v1/tasks/options`, `GET /api/v1/tasks/kanban`, `POST /api/v1/tasks`, `GET /api/v1/tasks/{taskCode}`, `PATCH /api/v1/tasks/{taskCode}`, `PATCH /api/v1/tasks/{taskCode}/status`, `POST /api/v1/tasks/{taskCode}/archive`; feedback=refresh success, create success, save success, subtask success, archive guard toast, child archive success, execute toast; artifacts=Playwright line output plus request-body assertions inside `task-management-smoke.spec.ts` | status: pass.
+- AC-TASK-08 | red: feature branch started with legacy task schema/data and backend seed rows | green: conditional legacy reset plus seed removal verified | command_ref: CMD-BE-TEST | browser:not applicable | status: pass.
 
 ## Changed Paths
 
 - `docs/features/task-management/**`
-- `tron-backend/**`
+- `tron-backend/**/task*`
+- `tron-backend/migrations/20260516_0008_create_task_management_tasks.sql`
+- `tron-backend/migrations/20260519_0010_reset_task_management_superpower.sql`
 - `tron-frontend/src/domain/task/**`
-- `tron-frontend/src/router/routes.tsx`
-- `tron-frontend/src/router/pageRegistry.ts`
 - `tron-frontend/tests/task-management-smoke.spec.ts`
 
 ## Commands
 
-- `rtk make be-check`: pass.
 - `rtk make be-test`: pass.
 - `rtk make fe-check`: pass.
 - `rtk npm --prefix tron-frontend exec playwright -- test tests/task-management-smoke.spec.ts --reporter=line`: pass.

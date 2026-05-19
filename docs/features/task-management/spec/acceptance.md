@@ -2,14 +2,14 @@
 
 ## Acceptance Index
 
-- AC-TASK-01 [must] [api] Backend exposes final status, priority, task type, and source type enums from code; proof: `rtk make be-test`.
-- AC-TASK-02 [must] [business] List and kanban return workspace-scoped persisted tasks with filters and hide archived tasks by default; proof: `rtk make be-test`.
-- AC-TASK-03 [must] [business] Create requires active workspace, generated taskCode, valid workspace assignees, and unchecked agent/app links; proof: `rtk make be-test`.
-- AC-TASK-04 [must] [business] Detail returns parent, active subtasks, assignments, links, and enforces same-workspace parent creation; proof: `rtk make be-test`.
-- AC-TASK-05 [must] [business] Edit fields and dedicated status updates support `Testing`, `Reopen`, progress, and completed progress forcing; proof: `rtk make be-test`.
-- AC-TASK-06 [must] [business] Archive stores previous status, blocks edits, hides by default, refuses parents with active subtasks, and restore returns previous status; proof: `rtk make be-test`.
-- AC-TASK-07 [must] [interaction] Frontend supports API-backed board, create, read-only detail, edit/save, parent-child navigation, subtask, archive guard, restore, and execute Toast flows; proof: Playwright task workflow.
-- AC-TASK-08 [must] [interaction] Task board exposes no import or export entry points in v1; proof: board action verification.
+- AC-TASK-01 [must] [api] Backend exposes the final `Feature | Bug` task types, the superpower status enum, and role-based `statusRules` plus `defaultStatuses` from `/api/v1/tasks/options`; proof: `rtk make be-test`.
+- AC-TASK-02 [must] [business] List and kanban remain workspace-scoped, searchable, filterable, and hide archived tasks by default while projecting the new status universe; proof: `rtk make be-test`.
+- AC-TASK-03 [must] [business] Create validates active workspace and effective assignees, generates `taskCode`, and assigns backend-owned default status `Open` based on the inferred task role; proof: `rtk make be-test`.
+- AC-TASK-04 [must] [business] Detail and subtask flows preserve same-workspace parent rules, exclude archived subtasks from parent detail/statistics, and keep feature-child role inference tied to parent presence; proof: `rtk make be-test`.
+- AC-TASK-05 [must] [business] Status updates and task-type edits reject role-incompatible states with `TASK_STATUS_ROLE_INVALID`, while valid updates keep progress and archived-mutation rules intact; proof: `rtk make be-test`.
+- AC-TASK-06 [must] [business] Archive stores previous status, blocks parent archive while active subtasks exist, and restore returns to the stored active status or fallback `Open`; proof: `rtk make be-test`.
+- AC-TASK-07 [must] [interaction] Frontend create, detail, and subtask flows use role-aware task types and statuses without surfacing old enum values; proof: Playwright task workflow.
+- AC-TASK-08 [must] [business] Legacy backend task schema/data is reset once and backend task seeds are removed while frontend mock/demo parity remains available; proof: `rtk make be-test`.
 
 ## Open Decisions
 

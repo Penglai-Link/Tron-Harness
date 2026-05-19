@@ -19,6 +19,7 @@ import {
   TextInput,
   TronShell,
   useToast,
+  useWorkspaceSpaces,
 } from "@/shared";
 
 import { createTask } from "@/domain/task/api";
@@ -35,8 +36,6 @@ import type {
   TaskType,
 } from "@/domain/task/model";
 
-const DEFAULT_WORKSPACE_CODE = "TRON_CORE";
-
 function toggleCode(codes: string[], code: string) {
   return codes.includes(code) ? codes.filter((item) => item !== code) : [...codes, code];
 }
@@ -48,7 +47,6 @@ function splitCodes(value: string) {
 export function CreateTaskPage() {
   const options = useTaskOptions();
   const quickReference = useTaskQuickReference();
-  const [workspaceCode, setWorkspaceCode] = useState(DEFAULT_WORKSPACE_CODE);
   const [title, setTitle] = useState("Ship task management v1");
   const [description, setDescription] = useState("");
   const [taskType, setTaskType] = useState<TaskType>("Feature");
@@ -62,12 +60,10 @@ export function CreateTaskPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const dataSource = getServiceDataSource("task");
-  const { effectiveUsers, workspaces } = useTaskWorkspaceOptions(workspaceCode);
-
-  useEffect(() => {
-    if (!workspaces.length || workspaces.some((workspace) => workspace.workspaceCode === workspaceCode)) return;
-    setWorkspaceCode(workspaces[0].workspaceCode);
-  }, [workspaceCode, workspaces]);
+  const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
+  const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
+  const activeWorkspaceCode = activeWorkspace?.workspaceCode ?? "";
+  const { effectiveUsers } = useTaskWorkspaceOptions(activeWorkspaceCode);
 
   useEffect(() => {
     const allowed = new Set(effectiveUsers.map((user) => user.userCode));
@@ -75,6 +71,11 @@ export function CreateTaskPage() {
   }, [effectiveUsers]);
 
   async function submitTask() {
+    if (!activeWorkspaceCode) {
+      toast.error("Select a workspace in the shell header before creating a task");
+      return;
+    }
+
     setSubmitting(true);
     const payload = {
       agentCodes: splitCodes(agentCodesInput),
@@ -86,7 +87,7 @@ export function CreateTaskPage() {
       sourceUrl,
       taskType,
       title,
-      workspaceCode,
+      workspaceCode: activeWorkspaceCode,
     };
 
     try {
@@ -103,29 +104,32 @@ export function CreateTaskPage() {
 
   return (
     <TronShell activeItem="Tasks" searchPlaceholder="Search tasks...">
-      <PageHeader breadcrumbs={[{ label: "Tasks", href: "/tasks" }, { label: "New" }]} title="Create Task" />
+      <PageHeader
+        breadcrumbs={[{ label: "Tasks", href: "/tasks" }, { label: "New" }]}
+        title="Create Task"
+        actions={(
+          <>
+            <Button variant="secondary" onClick={() => navigate("/tasks")}>Cancel</Button>
+            <Button disabled={submitting || !title.trim() || !activeWorkspaceCode} onClick={submitTask}>
+              <Plus size={15} />
+              Create
+            </Button>
+          </>
+        )}
+      />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-6">
           <Field label="Task Title">
             <TextInput aria-label="Task title" className="w-full" value={title} onChange={(event) => setTitle(event.target.value)} />
           </Field>
           <div className="grid gap-6 xl:grid-cols-2">
-            <Field label="Workspace">
-              <SelectInput aria-label="Workspace" value={workspaceCode} onChange={(event) => setWorkspaceCode(event.target.value)}>
-                {workspaces.map((workspace) => (
-                  <option key={workspace.workspaceCode} value={workspace.workspaceCode}>
-                    {workspace.label}
-                  </option>
-                ))}
-              </SelectInput>
-            </Field>
             <Field label="Priority">
               <SelectInput aria-label="Priority" value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)}>
                 {options.priorities.map((item) => <option key={item}>{item}</option>)}
               </SelectInput>
             </Field>
           </div>
-          <SurfaceCard>
+          <section className="space-y-4">
             <h2 className="mb-3 text-base font-semibold">Classification & Source</h2>
             <div className="grid gap-4 lg:grid-cols-2">
               <Field label="Task Type">
@@ -148,10 +152,14 @@ export function CreateTaskPage() {
                 <TextInput aria-label="App Codes" placeholder="github, notion" value={appCodesInput} onChange={(event) => setAppCodesInput(event.target.value)} />
               </Field>
             </div>
-          </SurfaceCard>
+          </section>
           <SurfaceCard>
             <h2 className="mb-3 text-base font-semibold">Assigned Users</h2>
-            <p className="mb-4 text-sm text-[var(--color-on-surface-variant)]">Only effective users in the selected workspace can be assigned.</p>
+            <p className="mb-4 text-sm text-[var(--color-on-surface-variant)]">
+              {activeWorkspaceCode
+                ? `Only effective users in ${activeWorkspaceCode} can be assigned.`
+                : "Select a workspace in the shell header to load assignable users."}
+            </p>
             <div className="grid gap-2 md:grid-cols-2">
               {effectiveUsers.map((user) => (
                 <label className="flex items-start gap-3 rounded-lg border border-[var(--color-outline-variant)] p-3 text-sm" key={user.userCode}>
@@ -168,7 +176,11 @@ export function CreateTaskPage() {
                   </span>
                 </label>
               ))}
-              {!effectiveUsers.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">No effective users available for this workspace.</p> : null}
+              {!effectiveUsers.length ? (
+                <p className="text-sm text-[var(--color-on-surface-variant)]">
+                  {activeWorkspaceCode ? "No effective users available for the active workspace." : "No workspace selected in the shell header."}
+                </p>
+              ) : null}
             </div>
           </SurfaceCard>
           <SurfaceCard className="p-0">
@@ -195,13 +207,6 @@ export function CreateTaskPage() {
               {quickReference.variables.map((variable) => <Badge key={variable} tone="neutral">{variable}</Badge>)}
             </div>
           </SurfaceCard>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => navigate("/tasks")}>Cancel</Button>
-            <Button disabled={submitting || !title.trim() || !workspaceCode} onClick={submitTask}>
-              <Plus size={15} />
-              Create Task
-            </Button>
-          </div>
         </aside>
       </div>
     </TronShell>

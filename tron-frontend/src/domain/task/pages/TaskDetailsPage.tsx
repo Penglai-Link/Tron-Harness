@@ -56,6 +56,10 @@ import type {
   TaskStatus,
   TaskType,
 } from "@/domain/task/model";
+import {
+  inferTaskRole,
+  statusLabel,
+} from "@/domain/task/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 function ProgressBar({ value }: { value: number }) {
@@ -64,12 +68,6 @@ function ProgressBar({ value }: { value: number }) {
       <div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
     </div>
   );
-}
-
-function statusLabel(value: string) {
-  if (value === "InProgress") return "In Progress";
-  if (value === "Todo") return "To Do";
-  return value;
 }
 
 function toggleCode(codes: string[], code: string) {
@@ -146,7 +144,7 @@ function MarkdownContent({ ariaLabel, className, content }: { ariaLabel?: string
 
 export function TaskDetailsPage() {
   const [searchParams] = useSearchParams();
-  const taskCode = searchParams.get("taskCode") || "TSK-SEED-BACKLOG";
+  const taskCode = searchParams.get("taskCode") || "TSK-SEED-FEATURE";
   const { task, setTask, refresh, loading } = useTaskDetail(taskCode);
   const options = useTaskOptions();
   const toast = useToast();
@@ -174,6 +172,8 @@ export function TaskDetailsPage() {
   statusRef.current = status;
   progressRef.current = progress;
   const archived = status === "Archived" || task.status === "Archived" || Boolean(task.archivedAt);
+  const taskRole = inferTaskRole(task.taskType, task.parentTaskCode);
+  const availableStatuses = options.statusRules[taskRole];
 
   useEffect(() => {
     if (skipNextTaskSync.current) {
@@ -409,7 +409,7 @@ export function TaskDetailsPage() {
         priority: "Low" as TaskPriority,
         sourceType: "Internal" as TaskSourceType,
         sourceUrl: "",
-        taskType: "Feature" as TaskType,
+        taskType: task.taskType,
         title: childTitle,
         workspaceCode: task.workspaceCode,
       };
@@ -450,7 +450,7 @@ export function TaskDetailsPage() {
                 <SelectInput aria-label="Task detail status" value={status} onChange={(event) => {
                   void handleStatusChange(event.target.value as TaskStatus);
                 }}>
-                  {options.statuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
+                  {availableStatuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
                 </SelectInput>
               </Field>
               <Field label="Priority">

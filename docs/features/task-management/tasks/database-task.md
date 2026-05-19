@@ -8,20 +8,19 @@
 
 ## TDD Contract
 
-Database work is covered by backend API tests and migration-backed repository tests through `CMD-BE-TEST`.
+Database work is covered by backend API tests and migration/bootstrap behavior through `CMD-BE-TEST`.
 
 ## Task Rows
 
-- AC-TASK-02 | phase: tdd | owner: lead | scope: tron-backend SQLite task tables and seed data | command_ref: CMD-BE-TEST | status: done.
-- AC-TASK-06 | phase: tdd | owner: lead | scope: tron-backend archive persistence and previous status restoration | command_ref: CMD-BE-TEST | status: done.
+- AC-TASK-08 | phase: tdd | owner: lead | scope: task SQLite base migration rewrite, conditional legacy reset batch, and seed removal | command_ref: CMD-BE-TEST | status: done.
 
 ## Worktree Notes
 
-Lead worktree: `/Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/task-management`.
+Lead checkout: `/Users/clouds3n/Coding/open-source/ai/Tron` on branch `feature/clouds3n/task-management`.
 
 ## Integration Notes
 
-Migration must be included by the SQLite migrations registry and applied by the task repository.
+Migration/bootstrap logic must not wipe task data on every startup. Reset is only valid when legacy task schema is detected.
 
 ## Open Decisions
 

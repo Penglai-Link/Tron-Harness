@@ -20,6 +20,9 @@ pub(super) const WORKSPACE_ACCESS_GRANTS_MIGRATION: &str = include_str!(
 );
 pub(super) const TASKS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260516_0008_create_task_management_tasks.sql");
+pub(super) const TASKS_SUPERPOWER_RESET_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260519_0010_reset_task_management_superpower.sql"
+);
 pub(super) const VARIABLES_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260518_0009_create_variable_management_variables.sql"
 );

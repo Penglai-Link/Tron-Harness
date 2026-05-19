@@ -43,6 +43,11 @@ pub fn task_error_response(error: TaskError) -> Response {
             "TASK_ARCHIVED_INVALID",
             "restore archived task before modifying it",
         ),
+        TaskError::StatusRoleInvalid => (
+            StatusCode::BAD_REQUEST,
+            "TASK_STATUS_ROLE_INVALID",
+            "task status does not match the inferred task role",
+        ),
         TaskError::InvalidProgress | TaskError::InvalidRequest => (
             StatusCode::BAD_REQUEST,
             "TASK_REQUEST_INVALID",

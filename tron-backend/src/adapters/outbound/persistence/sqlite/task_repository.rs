@@ -1,19 +1,19 @@
 use std::{fs, path::Path};
 
-use rusqlite::{Connection, Row, params};
+use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::{
     application::task::TaskRepository,
     domain::task::{
-        Task, TaskCodeLink, TaskError, TaskPriority, TaskSourceType, TaskStatus, TaskType,
-        TaskUserAssignment, task_priority_from_storage, task_priority_to_storage,
-        task_source_type_from_storage, task_source_type_to_storage, task_status_from_storage,
-        task_status_to_storage, task_type_from_storage, task_type_to_storage,
+        Task, TaskCodeLink, TaskError, TaskUserAssignment, task_priority_from_storage,
+        task_priority_to_storage, task_source_type_from_storage, task_source_type_to_storage,
+        task_status_from_storage, task_status_to_storage, task_type_from_storage,
+        task_type_to_storage,
     },
     shared::id::SnowflakeId,
 };
 
-use super::migrations::TASKS_MIGRATION;
+use super::migrations::{TASKS_MIGRATION, TASKS_SUPERPOWER_RESET_MIGRATION};
 
 const DEFAULT_TIMESTAMP: &str = "2026-05-16T00:00:00Z";
 const DEFAULT_EPOCH_MS: i64 = 1_779_830_400_000;
@@ -41,83 +41,28 @@ impl SqliteTaskRepository {
             .connection
             .execute_batch(TASKS_MIGRATION)
             .map_err(storage_error)?;
-        repository.seed_if_empty()?;
+        repository.reset_legacy_schema_if_needed()?;
         Ok(repository)
     }
 
-    fn seed_if_empty(&mut self) -> Result<(), TaskError> {
-        let count: i64 = self
+    fn reset_legacy_schema_if_needed(&mut self) -> Result<(), TaskError> {
+        let create_sql: Option<String> = self
             .connection
-            .query_row("SELECT COUNT(*) FROM tasks", [], |row| row.get(0))
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tasks'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
             .map_err(storage_error)?;
-        if count > 0 {
-            return Ok(());
+        if create_sql
+            .as_deref()
+            .is_some_and(uses_legacy_task_schema_definition)
+        {
+            self.connection
+                .execute_batch(TASKS_SUPERPOWER_RESET_MIGRATION)
+                .map_err(storage_error)?;
         }
-        let seeds = [
-            seed_task(
-                734_500_000_000_000_001,
-                "TSK-SEED-BACKLOG",
-                TaskStatus::Backlog,
-                None,
-                TaskPriority::Medium,
-                TaskType::Feature,
-                TaskSourceType::Internal,
-                Some(""),
-                "Design task management v1",
-                0,
-                None,
-            ),
-            seed_task(
-                734_500_000_000_000_002,
-                "TSK-SEED-TESTING",
-                TaskStatus::Testing,
-                None,
-                TaskPriority::High,
-                TaskType::BugFix,
-                TaskSourceType::GitHub,
-                Some("https://github.com/clouds3n/tron/issues/42"),
-                "Verify task smoke flow",
-                65,
-                None,
-            ),
-            seed_task(
-                734_500_000_000_000_003,
-                "TSK-SEED-ARCHIVED",
-                TaskStatus::Archived,
-                Some(TaskStatus::Todo),
-                TaskPriority::Low,
-                TaskType::Refactor,
-                TaskSourceType::Internal,
-                Some(""),
-                "Archived task example",
-                15,
-                Some(DEFAULT_TIMESTAMP),
-            ),
-        ];
-        for task in &seeds {
-            self.create_task(task)?;
-        }
-        self.replace_user_assignments(
-            "TSK-SEED-BACKLOG",
-            &[TaskUserAssignment {
-                user_code: "USR-AUTH-0001".into(),
-                assigned_at: DEFAULT_TIMESTAMP.into(),
-            }],
-        )?;
-        self.replace_agent_links(
-            "TSK-SEED-TESTING",
-            &[TaskCodeLink {
-                code: "agent-reviewer".into(),
-                linked_at: DEFAULT_TIMESTAMP.into(),
-            }],
-        )?;
-        self.replace_app_links(
-            "TSK-SEED-TESTING",
-            &[TaskCodeLink {
-                code: "github".into(),
-                linked_at: DEFAULT_TIMESTAMP.into(),
-            }],
-        )?;
         Ok(())
     }
 
@@ -273,39 +218,6 @@ impl TaskRepository for SqliteTaskRepository {
     }
 }
 
-fn seed_task(
-    id: i64,
-    task_code: &str,
-    status: TaskStatus,
-    previous_status: Option<TaskStatus>,
-    priority: TaskPriority,
-    task_type: TaskType,
-    source_type: TaskSourceType,
-    source_url: Option<&str>,
-    title: &str,
-    progress: u8,
-    archived_at: Option<&str>,
-) -> Task {
-    Task {
-        id: SnowflakeId::new(id),
-        task_code: task_code.into(),
-        workspace_code: "TRON_CORE".into(),
-        parent_task_code: None,
-        title: title.into(),
-        description: Some(format!("Seeded task: {title}")),
-        status,
-        previous_status,
-        priority,
-        task_type,
-        source_type,
-        source_url: source_url.map(str::to_owned),
-        progress,
-        created_at: DEFAULT_TIMESTAMP.into(),
-        updated_at: DEFAULT_TIMESTAMP.into(),
-        archived_at: archived_at.map(str::to_owned),
-    }
-}
-
 fn row_to_task(row: &Row<'_>) -> rusqlite::Result<Task> {
     let status: String = row.get(6)?;
     let previous_status: Option<String> = row.get(7)?;
@@ -352,6 +264,13 @@ fn storage_error(error: rusqlite::Error) -> TaskError {
     eprintln!("task sqlite error: {error}");
     TaskError::StorageFailure
 }
+
+fn uses_legacy_task_schema_definition(create_sql: &str) -> bool {
+    ["Backlog", "Todo", "Testing", "BugFix", "Refactor"]
+        .iter()
+        .any(|needle| create_sql.contains(needle))
+}
+
 fn task_mapping_error(error: TaskError) -> rusqlite::Error {
     rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
 }

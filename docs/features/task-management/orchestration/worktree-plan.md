@@ -17,49 +17,50 @@
 - default_branch: master
 - base_ref: master
 - current_branch: feature/clouds3n/task-management
-- note: implementation is isolated in the Lite Spec mirrored worktree.
+- note: the selected Lite Spec mirrored worktree path resolves to `/Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/task-management`; implementation completed on the already-active feature branch checkout in `/Users/clouds3n/Coding/open-source/ai/Tron`.
 
 ## Multi-Agent Base Branch
 
 - branch: feature/clouds3n/task-management
 - base_ref: master
-- merge_strategy: lead-local work on the main feature branch
+- merge_strategy: lead-local work on the feature branch
 - conflict_owner: Main Agent
 
 ## Dispatch Decisions
 
 | ac_refs | decision | execution_owner | rationale | worker_ref | status |
 | --- | --- | --- | --- | --- | --- |
-| AC-TASK-01 | solo | lead | runtime policy forbids spawning without explicit subagent request | none | done |
-| AC-TASK-02 | solo | lead | runtime policy forbids spawning without explicit subagent request | none | done |
-| AC-TASK-03 | solo | lead | runtime policy forbids spawning without explicit subagent request | none | done |
-| AC-TASK-04 | solo | lead | runtime policy forbids spawning without explicit subagent request | none | done |
-| AC-TASK-05 | solo | lead | runtime policy forbids spawning without explicit subagent request | none | done |
-| AC-TASK-06 | solo | lead | runtime policy forbids spawning without explicit subagent request | none | done |
-| AC-TASK-07 | solo | lead | runtime policy forbids spawning without explicit subagent request | none | done |
-| AC-TASK-08 | solo | lead | runtime policy forbids spawning without explicit subagent request | none | done |
+| AC-TASK-01 | solo | lead | user explicitly approved direct implementation through `PLEASE IMPLEMENT THIS PLAN`, and current developer rules do not allow subagents without an explicit subagent request | none | done |
+| AC-TASK-02 | solo | lead | user explicitly approved direct implementation through `PLEASE IMPLEMENT THIS PLAN`, and the kanban/list changes stay in the same bounded backend slice | none | done |
+| AC-TASK-03 | solo | lead | user explicitly approved direct implementation through `PLEASE IMPLEMENT THIS PLAN`, and create/default-status logic stays in the same bounded backend slice | none | done |
+| AC-TASK-04 | solo | lead | user explicitly approved direct implementation through `PLEASE IMPLEMENT THIS PLAN`, and parent-child rules plus child inheritance stay tightly coupled in one slice | none | done |
+| AC-TASK-05 | solo | lead | user explicitly approved direct implementation through `PLEASE IMPLEMENT THIS PLAN`, and role-based validation spans the same domain, API, and smoke surface | none | done |
+| AC-TASK-06 | solo | lead | user explicitly approved direct implementation through `PLEASE IMPLEMENT THIS PLAN`, and archive/restore fallback stays in the same lifecycle slice | none | done |
+| AC-TASK-07 | solo | lead | user explicitly approved direct implementation through `PLEASE IMPLEMENT THIS PLAN`, and the frontend/browser adaptation is a bounded coupled slice | none | done |
+| AC-TASK-08 | solo | lead | user explicitly approved direct implementation through `PLEASE IMPLEMENT THIS PLAN`, and reset logic plus mock parity are a bounded coupled slice | none | done |
 
 ## Agent Worktrees
 
-- None. Solo execution uses the selected Lite Spec feature worktree.
+- None. Solo execution stays on the selected Lite Spec feature branch in the active checkout.
 
 ## Branch And Path Rules
 
-- Branch and worktree mirror `eliteforge-git-feature-oriented-lite-spec`.
+- Branch naming follows `eliteforge-git-feature-oriented-lite-spec`.
 - No delegated worker branch or worktree is created unless the user explicitly asks for subagents.
 
 ## Merge Strategy
 
 - Direct lead-local edits on `feature/clouds3n/task-management`.
-- No worker merges are expected for this feature.
+- No worker merges are expected for this feature evolution slice.
 
 ## Conflict Rules
 
-- The main task-management worktree owns every spec, backend, frontend, test, and report edit in this slice.
+- The current feature branch owns every spec, backend, frontend, test, and report edit in this slice.
+- The pre-existing debounced search change in `tron-frontend/src/domain/task/pages/TasksKanbanPage.tsx` remains in scope and must be preserved while integrating the status-model evolution.
 
 ## Cleanup Plan
 
-- Keep `feature/clouds3n/task-management` until implementation is validated and the user decides whether to merge.
+- Keep `feature/clouds3n/task-management` until implementation is validated and the user decides whether to merge or push.
 
 ## Open Decisions
 

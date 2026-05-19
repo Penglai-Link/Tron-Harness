@@ -10,7 +10,8 @@ use crate::{
             PagedTaskRecords, TASK_STATUSES, Task, TaskCodeLink, TaskDetail, TaskError,
             TaskKanbanColumn, TaskLifecycleResult, TaskListItem, TaskListQuery, TaskOptions,
             TaskPriority, TaskSourceType, TaskStatus, TaskSummary, TaskType, TaskUserAssignment,
-            task_options,
+            infer_task_role, task_default_status_for_role, task_options,
+            task_status_allowed_for_role,
         },
         workspace::{WorkspaceAccessListQuery, WorkspaceError, WorkspaceStatus},
     },
@@ -155,6 +156,7 @@ impl TaskService {
         if let Some(parent_code) = parent_task_code.as_deref() {
             self.ensure_valid_parent(parent_code, &workspace_code)?;
         }
+        let task_role = infer_task_role(command.task_type, parent_task_code.as_deref());
         let assignees = self.validated_assignees(&workspace_code, command.assignee_user_codes)?;
         let agent_links = normalized_code_links(command.agent_codes);
         let app_links = normalized_code_links(command.app_codes);
@@ -171,7 +173,7 @@ impl TaskService {
             parent_task_code,
             title,
             description: optional_trimmed(command.description),
-            status: TaskStatus::Backlog,
+            status: task_default_status_for_role(task_role),
             previous_status: None,
             priority: command.priority,
             task_type: command.task_type,
@@ -220,6 +222,10 @@ impl TaskService {
             task.priority = priority;
         }
         if let Some(task_type) = command.task_type {
+            let next_role = infer_task_role(task_type, task.parent_task_code.as_deref());
+            if !task_status_allowed_for_role(next_role, task.status) {
+                return Err(TaskError::StatusRoleInvalid);
+            }
             task.task_type = task_type;
         }
         if let Some(source_type) = command.source_type {
@@ -268,6 +274,10 @@ impl TaskService {
         if task.status == TaskStatus::Archived {
             return Err(TaskError::ArchivedMutationDenied);
         }
+        let task_role = infer_task_role(task.task_type, task.parent_task_code.as_deref());
+        if !task_status_allowed_for_role(task_role, command.status) {
+            return Err(TaskError::StatusRoleInvalid);
+        }
         task.status = command.status;
         task.progress = if command.status == TaskStatus::Completed {
             100
@@ -311,7 +321,11 @@ impl TaskService {
     pub fn restore_task(&self, task_code: &str) -> Result<TaskLifecycleResult, TaskError> {
         let mut task = self.get_task_record(task_code)?;
         if task.status == TaskStatus::Archived {
-            task.status = task.previous_status.unwrap_or(TaskStatus::Backlog);
+            let task_role = infer_task_role(task.task_type, task.parent_task_code.as_deref());
+            task.status = task
+                .previous_status
+                .filter(|status| task_status_allowed_for_role(task_role, *status))
+                .unwrap_or_else(|| task_default_status_for_role(task_role));
             task.previous_status = None;
             task.archived_at = None;
             task.updated_at = DEFAULT_TIMESTAMP.into();
@@ -689,11 +703,13 @@ fn matches_search(task: &Task, search: Option<&str>) -> bool {
 }
 fn status_title(status: TaskStatus) -> &'static str {
     match status {
-        TaskStatus::Backlog => "Backlog",
-        TaskStatus::Todo => "To Do",
-        TaskStatus::InProgress => "In Progress",
-        TaskStatus::Testing => "Testing",
+        TaskStatus::Open => "Open",
+        TaskStatus::Designing => "Designing",
+        TaskStatus::Red => "Red",
+        TaskStatus::Green => "Green",
+        TaskStatus::Regressioning => "Regressioning",
         TaskStatus::Review => "Review",
+        TaskStatus::InProgress => "In Progress",
         TaskStatus::Reopen => "Reopen",
         TaskStatus::Completed => "Completed",
         TaskStatus::Archived => "Archived",

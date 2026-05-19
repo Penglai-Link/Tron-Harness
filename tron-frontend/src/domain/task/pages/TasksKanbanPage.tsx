@@ -50,15 +50,8 @@ function ProgressBar({ value }: { value: number }) {
   );
 }
 
-function statusLabel(value: string) {
-  if (value === "InProgress") return "In Progress";
-  if (value === "Todo") return "To Do";
-  return value;
-}
-
 function taskTypeTone(taskType: TaskType) {
-  if (taskType === "BugFix") return "error";
-  if (taskType === "Refactor") return "warning";
+  if (taskType === "Bug") return "error";
   return "accent";
 }
 
@@ -90,7 +83,8 @@ function KanbanCard({ task, selected, onSelect }: { task: TaskListItem; selected
 
 export function TasksKanbanPage() {
   const options = useTaskOptions();
-  const [query, setQuery] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [priority, setPriority] = useState("");
   const [selectedTaskCode, setSelectedTaskCode] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -98,11 +92,20 @@ export function TasksKanbanPage() {
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const workspaceCode = activeWorkspace?.workspaceCode ?? "";
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+    }, 280);
+
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
   const taskQuery = useMemo(() => ({
     priority: priority || undefined,
-    search: query,
+    search: debouncedSearch,
     workspaceCode,
-  }), [priority, query, workspaceCode]);
+  }), [debouncedSearch, priority, workspaceCode]);
   const { columns, loading, refresh } = useTaskKanbanColumns(taskQuery);
 
   useEffect(() => {
@@ -127,7 +130,7 @@ export function TasksKanbanPage() {
       <SurfaceCard className="mb-4 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_220px]">
         <div className="grid gap-1.5">
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Search</span>
-          <SearchField placeholder="Filter task code, title, or description..." value={query} onChange={setQuery} />
+          <SearchField placeholder="Filter task code, title, or description..." value={searchInput} onChange={setSearchInput} />
         </div>
         <div className="grid gap-1.5">
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Priority</span>

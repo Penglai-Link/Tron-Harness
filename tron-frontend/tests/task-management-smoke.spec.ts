@@ -10,9 +10,9 @@ let frontendProcess: ChildProcessWithoutNullStreams | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
 
-type TaskStatus = "Backlog" | "Todo" | "InProgress" | "Testing" | "Review" | "Reopen" | "Completed" | "Archived";
+type TaskStatus = "Open" | "Designing" | "Red" | "Green" | "Regressioning" | "Review" | "InProgress" | "Reopen" | "Completed" | "Archived";
 type TaskPriority = "Low" | "Medium" | "High";
-type TaskType = "Feature" | "BugFix" | "Refactor";
+type TaskType = "Feature" | "Bug";
 type TaskSourceType = "Internal" | "GitHub" | "GitLab";
 type CapturedRequest = { body: unknown; method: string; pathname: string; searchParams: Record<string, string> };
 type TaskSummary = { priority: TaskPriority; progress: number; status: TaskStatus; taskCode: string; taskType: TaskType; title: string };
@@ -41,7 +41,17 @@ type Task = {
   workspaceCode: string;
 };
 
-const statuses: TaskStatus[] = ["Backlog", "Todo", "InProgress", "Testing", "Review", "Reopen", "Completed", "Archived"];
+const statuses: TaskStatus[] = ["Open", "Designing", "Red", "Green", "Regressioning", "Review", "InProgress", "Reopen", "Completed", "Archived"];
+const statusRules = {
+  bug: ["Open", "InProgress", "Completed", "Reopen", "Archived"],
+  featureChild: ["Open", "InProgress", "Completed", "Archived"],
+  featureRoot: ["Open", "Designing", "Red", "Green", "Regressioning", "Review", "Completed", "Archived"],
+} satisfies Record<"bug" | "featureChild" | "featureRoot", TaskStatus[]>;
+const defaultStatuses = {
+  bug: "Open",
+  featureChild: "Open",
+  featureRoot: "Open",
+} satisfies Record<"bug" | "featureChild" | "featureRoot", TaskStatus>;
 const now = "2026-05-16T12:00:00Z";
 
 const authenticatedSession = {
@@ -132,7 +142,7 @@ function task(values: Partial<Task> & Pick<Task, "taskCode" | "title">): Task {
     progress: 0,
     sourceType: "Internal",
     sourceUrl: "",
-    status: "Backlog",
+    status: "Open",
     subtasks: [],
     taskCode: values.taskCode,
     taskType: "Feature",
@@ -225,6 +235,11 @@ function filtered(tasks: Task[], query: Record<string, string>) {
   });
 }
 
+function inferTaskRole(taskType: TaskType, parentTaskCode: string | null) {
+  if (taskType === "Bug") return "bug" as const;
+  return parentTaskCode ? "featureChild" as const : "featureRoot" as const;
+}
+
 function toast(page: Page, message: string | RegExp) {
   return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
 }
@@ -253,8 +268,17 @@ async function routeApi(
       return fulfillJson(route, successEnvelope(payload));
     }
     if (/^\/api\/v1\/admin\/workspaces\/[^/]+\/access\/effective-users$/.test(captured.pathname)) return fulfillJson(route, pageEnvelope(effectiveUsers));
-    if (captured.pathname === "/api/v1/tasks/options") return fulfillJson(route, successEnvelope({ priorities: ["Low", "Medium", "High"], sourceTypes: ["Internal", "GitHub", "GitLab"], statuses, taskTypes: ["Feature", "BugFix", "Refactor"] }));
-    if (captured.pathname === "/api/v1/tasks/quick-reference") return fulfillJson(route, successEnvelope({ tips: ["Task must belong to a workspace."], variables: ["workspaceCode", "taskType", "sourceType", "sourceUrl", "assigneeUserCodes"] }));
+    if (captured.pathname === "/api/v1/tasks/options") return fulfillJson(route, successEnvelope({ priorities: ["Low", "Medium", "High"], sourceTypes: ["Internal", "GitHub", "GitLab"], statuses, taskTypes: ["Feature", "Bug"], statusRules, defaultStatuses }));
+    if (captured.pathname === "/api/v1/tasks/quick-reference") {
+      return fulfillJson(route, successEnvelope({
+        tips: [
+          "Task status options are backend-owned and depend on task role.",
+          "New tasks inherit the workspace selected in the shell header.",
+          "Only effective workspace users can be assigned.",
+        ],
+        variables: ["taskType", "sourceType", "sourceUrl", "assigneeUserCodes"],
+      }));
+    }
     if (captured.pathname === "/api/v1/tasks/kanban") {
       const records = filtered(tasks, captured.searchParams);
       return fulfillJson(route, successEnvelope(statuses.filter((status) => captured.searchParams.includeArchived === "true" || status !== "Archived").map((status) => ({ status, title: status, tasks: records.filter((item) => item.status === status).map((item) => listItem(tasks, item)) }))));
@@ -277,6 +301,7 @@ async function routeApi(
         taskType: body.taskType ?? "Feature",
         title: body.title ?? "Untitled task",
         workspaceCode: body.workspaceCode ?? "TRON_CORE",
+        status: defaultStatuses[inferTaskRole((body.taskType as TaskType | undefined) ?? "Feature", (body.parentTaskCode as string | null | undefined) ?? null)],
       }));
       return fulfillJson(route, successEnvelope(detail(tasks, taskCode)), 201);
     }
@@ -292,7 +317,7 @@ async function routeApi(
         selected.archivedAt = now;
       }
       if (selected && archiveMatch[2] === "restore" && selected.status === "Archived") {
-        selected.status = selected.previousStatus ?? "Backlog";
+        selected.status = selected.previousStatus ?? defaultStatuses[inferTaskRole(selected.taskType, selected.parentTaskCode)];
         selected.previousStatus = null;
         selected.archivedAt = null;
       }
@@ -302,6 +327,9 @@ async function routeApi(
     if (statusMatch) {
       const selected = tasks.find((item) => item.taskCode === decodeURIComponent(statusMatch[1]));
       if (!selected) return fulfillJson(route, { code: "TASK_NOT_FOUND", message: "task was not found", data: {} }, 404);
+      if (selected.status === "Archived") {
+        return fulfillJson(route, { code: "TASK_ARCHIVED_INVALID", message: "restore archived task before modifying it", data: {} }, 400);
+      }
       const body = captured.body as { progress?: number; status: TaskStatus };
       selected.status = body.status;
       selected.progress = body.status === "Completed" ? 100 : body.progress ?? selected.progress;
@@ -378,9 +406,9 @@ test.afterAll(async () => {
 test("task management supports kanban search create detail updates subtasks archive restore execution toast and no import export actions", async ({ page }) => {
   const requests: CapturedRequest[] = [];
   const tasks: Task[] = [
-    task({ description: "Seeded task for board search", priority: "Medium", taskCode: "TSK-SEED-BACKLOG", title: "Design task management v1" }),
-    task({ description: "Active implementation fixture", priority: "High", progress: 65, status: "Testing", taskCode: "TSK-SEED-TESTING", taskType: "BugFix", title: "Verify task smoke flow" }),
-    task({ archivedAt: now, description: "Archived board fixture", previousStatus: "Todo", status: "Archived", taskCode: "TSK-SEED-ARCHIVED", taskType: "Refactor", title: "Archived task example" }),
+    task({ description: "Seeded task for board search", priority: "Medium", taskCode: "TSK-SEED-FEATURE", title: "Design task management v1" }),
+    task({ description: "Active implementation fixture", priority: "High", progress: 65, status: "InProgress", taskCode: "TSK-SEED-BUG", taskType: "Bug", title: "Verify task smoke flow" }),
+    task({ archivedAt: now, description: "Archived board fixture", previousStatus: "Review", status: "Archived", taskCode: "TSK-SEED-ARCHIVED", taskType: "Feature", title: "Archived task example" }),
   ];
   await routeApi(page, requests, tasks);
 
@@ -406,7 +434,7 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect(page.getByText("Verify task smoke flow")).toBeVisible();
   const highPriorityTaskCard = page.getByRole("button", { name: /Verify task smoke flow/ });
   await expect.poll(async () => {
-    const taskTypeClass = await highPriorityTaskCard.getByText("BugFix", { exact: true }).getAttribute("class");
+    const taskTypeClass = await highPriorityTaskCard.getByText("Bug", { exact: true }).getAttribute("class");
     const sourceTypeClass = await highPriorityTaskCard.getByText("Internal", { exact: true }).getAttribute("class");
     return taskTypeClass !== null && sourceTypeClass !== null && taskTypeClass !== sourceTypeClass;
   }).toBe(true);
@@ -414,10 +442,16 @@ test("task management supports kanban search create detail updates subtasks arch
 
   await page.getByRole("button", { name: /Create Task/ }).click();
   await expect(page.getByRole("heading", { name: "Create Task" })).toBeVisible();
-  await expect(page.getByLabel("Task Type").locator("option", { hasText: "Etc" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Create" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create Task" })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Workspace" })).toHaveCount(0);
+  await expect(page.getByLabel("Current workspace")).toHaveCount(0);
+  await expect(page.getByLabel("Task Type").locator("option")).toHaveText(["Feature", "Bug"]);
+  await expect(page.getByLabel("Task Type").locator("option", { hasText: "BugFix" })).toHaveCount(0);
+  await expect(page.getByLabel("Task Type").locator("option", { hasText: "Refactor" })).toHaveCount(0);
   await page.getByLabel("Task title").fill("Playwright created task");
   await page.getByLabel("Priority").selectOption("High");
-  await page.getByLabel("Task Type").selectOption("BugFix");
+  await page.getByLabel("Task Type").selectOption("Feature");
   await page.getByLabel("Source Type").selectOption("GitHub");
   await page.getByLabel("Source URL").fill("https://github.com/clouds3n/tron/issues/100");
   await page.getByLabel("Agent Codes").fill("agent-reviewer, agent-builder");
@@ -425,7 +459,7 @@ test("task management supports kanban search create detail updates subtasks arch
   await page.getByLabel("Assign Auth Operator").check();
   await expect(page.getByLabel("Task description")).toHaveClass(/w-full/);
   await page.getByLabel("Task description").fill("## Playwright Notes\n- Created through the task-management smoke.");
-  await page.getByRole("button", { name: /Create Task/ }).click();
+  await page.getByRole("button", { name: "Create" }).click();
   await expect(page).toHaveURL(/\/tasks\/detail\?taskCode=TSK-PW-0001/);
   await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
   await expect(page.getByText("Playwright created task")).toBeVisible();
@@ -445,6 +479,7 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect(page.getByLabel("Task detail source type")).toHaveCount(0);
   await expect(page.getByLabel("Task detail source URL")).toHaveCount(0);
   await expect(page.getByLabel("Task detail status")).toBeVisible();
+  await expect(page.getByLabel("Task detail status").locator("option")).toHaveText(["Open", "Designing", "Red", "Green", "Regressioning", "Review", "Completed", "Archived"]);
   await expect(page.getByLabel("Task detail priority")).toBeVisible();
   await expect(page.getByLabel("Task detail progress")).toBeVisible();
   await expect(page.getByLabel("Task detail agent codes")).toBeVisible();
@@ -461,14 +496,19 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect(descriptionFullscreenPreview).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Update Status" })).toHaveCount(0);
   await expect(page.locator("span.inline-flex.h-6").filter({ hasText: "BugFix" })).toHaveCount(0);
+  await expect(page.locator("span.inline-flex.h-6").filter({ hasText: "Refactor" })).toHaveCount(0);
   await expect.poll(() => {
     const body = requests.find((request) => request.method === "POST" && request.pathname === "/api/v1/tasks")?.body as Partial<Task> | undefined;
-    return body?.taskType === "BugFix" && body.sourceType === "GitHub" && body.agentCodes?.includes("agent-reviewer") === true && body.appCodes?.includes("notion") === true;
+    return body?.workspaceCode === "TRON_CORE"
+      && body.taskType === "Feature"
+      && body.sourceType === "GitHub"
+      && body.agentCodes?.includes("agent-reviewer") === true
+      && body.appCodes?.includes("notion") === true;
   }).toBe(true);
 
   await page.getByLabel("Task detail priority").selectOption("Low");
   await expect(toast(page, /Task TSK-PW-0001 updates saved/)).toBeVisible();
-  await page.getByLabel("Task detail status").selectOption("Testing");
+  await page.getByLabel("Task detail status").selectOption("Green");
   await expect(toast(page, /Task TSK-PW-0001 updates saved/)).toBeVisible();
   await page.getByLabel("Task detail progress").fill("55");
   await page.getByLabel("Task detail progress").press("Tab");
@@ -480,11 +520,11 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001" && request.method !== "GET" && (request.body as Partial<Task> | null)?.priority === "Low")).toBe(true);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001" && request.method !== "GET" && (request.body as Partial<Task> | null)?.agentCodes?.includes("agent-qa") === true)).toBe(true);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001" && request.method !== "GET" && (request.body as Partial<Task> | null)?.appCodes?.includes("slack") === true)).toBe(true);
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001/status" && (request.body as { progress?: number; status?: TaskStatus } | null)?.progress === 55 && (request.body as { status?: TaskStatus } | null)?.status === "Testing")).toBe(true);
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001/status" && (request.body as { progress?: number; status?: TaskStatus } | null)?.progress === 55 && (request.body as { status?: TaskStatus } | null)?.status === "Green")).toBe(true);
 
   await page.getByRole("button", { name: "Edit Details" }).click();
   await page.getByLabel("Task detail title").fill("Playwright created task updated");
-  await page.getByLabel("Task detail type").selectOption("Refactor");
+  await expect(page.getByLabel("Task detail type").locator("option")).toHaveText(["Feature", "Bug"]);
   await page.getByLabel("Task detail source type").selectOption("GitLab");
   await page.getByLabel("Task detail source URL").fill("https://gitlab.com/clouds3n/tron/-/issues/101");
   await page.getByRole("button", { name: "Open description fullscreen" }).click();
@@ -497,18 +537,18 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect(toast(page, /Task TSK-PW-0001 details saved/)).toBeVisible();
   await expect(page.getByLabel("Task description markdown").getByText("Playwright Notes Updated", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Task description markdown").getByRole("listitem").filter({ hasText: "Fullscreen edit path" })).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001" && request.method !== "GET" && (request.body as Partial<Task> | null)?.taskType === "Refactor" && (request.body as Partial<Task> | null)?.sourceType === "GitLab" && (request.body as Partial<Task> | null)?.title === "Playwright created task updated")).toBe(true);
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001" && request.method !== "GET" && (request.body as Partial<Task> | null)?.sourceType === "GitLab" && (request.body as Partial<Task> | null)?.title === "Playwright created task updated")).toBe(true);
 
   await expect(page.getByRole("button", { name: /Add Subtask/ })).toBeVisible();
   await page.getByLabel("New subtask title").fill("Smoke child task");
   await page.getByRole("button", { name: /Add Subtask/ }).click();
   await expect(toast(page, /Subtask TSK-PW-0002 created/)).toBeVisible();
   await expect(page.getByText("Smoke child task")).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.method === "POST" && request.pathname === "/api/v1/tasks" && (request.body as { parentTaskCode?: string } | null)?.parentTaskCode === "TSK-PW-0001")).toBe(true);
+  await expect.poll(() => requests.some((request) => request.method === "POST" && request.pathname === "/api/v1/tasks" && (request.body as { parentTaskCode?: string; taskType?: TaskType } | null)?.parentTaskCode === "TSK-PW-0001" && (request.body as { taskType?: TaskType } | null)?.taskType === "Feature")).toBe(true);
 
   await page.getByLabel("Task detail status").selectOption("Archived");
   await expect(toast(page, "archive active subtasks before archiving the parent task")).toBeVisible();
-  await expect(page.getByLabel("Task detail status")).toHaveValue("Testing");
+  await expect(page.getByLabel("Task detail status")).toHaveValue("Green");
 
   await page.getByRole("link", { name: /Smoke child task/ }).click();
   await expect(page).toHaveURL(/\/tasks\/detail\?taskCode=TSK-PW-0002/);
@@ -516,6 +556,7 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect(childBreadcrumb.getByRole("link", { name: "Tasks" })).toBeVisible();
   await expect(childBreadcrumb.getByRole("link", { name: "TSK-PW-0001" })).toBeVisible();
   await expect(childBreadcrumb.getByText("TSK-PW-0002", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Task detail status").locator("option")).toHaveText(["Open", "In Progress", "Completed", "Archived"]);
   await page.getByLabel("Task detail status").selectOption("Archived");
   await expect(toast(page, "Task TSK-PW-0002 archived")).toBeVisible();
   await expect(page.getByLabel("Task detail status")).toHaveValue("Archived");
@@ -527,9 +568,8 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect.poll(() => requests.some((request) => request.method === "POST" && request.pathname === "/api/v1/tasks/TSK-PW-0001/archive")).toBe(true);
   await expect(page.getByLabel("Task detail status")).toHaveValue("Archived");
   await expect(page.getByText("Not archived", { exact: true })).toHaveCount(0);
-  await page.getByLabel("Task detail status").selectOption("Backlog");
-  await expect.poll(() => requests.some((request) => request.method === "POST" && request.pathname === "/api/v1/tasks/TSK-PW-0001/restore")).toBe(true);
-  await expect(page.getByLabel("Task detail status")).toHaveValue("Backlog");
+  await page.getByLabel("Task detail status").selectOption("Open");
+  await expect(page.getByLabel("Task detail status")).toHaveValue("Open");
 
   await expect(page.getByRole("button", { name: "Execute Task" })).toHaveCount(0);
   await page.getByRole("button", { name: "Execute" }).click();
@@ -539,9 +579,9 @@ test("task management supports kanban search create detail updates subtasks arch
 test("parent task detail derives progress from active subtasks and keeps the progress field read-only", async ({ page }) => {
   const requests: CapturedRequest[] = [];
   const tasks: Task[] = [
-    task({ priority: "High", progress: 0, status: "InProgress", taskCode: "TSK-PROGRESS-PARENT", title: "Parent progress task" }),
+    task({ priority: "High", progress: 0, status: "Green", taskCode: "TSK-PROGRESS-PARENT", title: "Parent progress task" }),
     task({ parentTaskCode: "TSK-PROGRESS-PARENT", priority: "High", progress: 100, status: "Completed", taskCode: "TSK-PROGRESS-CHILD-1", title: "Completed child" }),
-    task({ parentTaskCode: "TSK-PROGRESS-PARENT", priority: "Low", progress: 0, status: "Backlog", taskCode: "TSK-PROGRESS-CHILD-2", title: "Backlog child" }),
+    task({ parentTaskCode: "TSK-PROGRESS-PARENT", priority: "Low", progress: 0, status: "Open", taskCode: "TSK-PROGRESS-CHILD-2", title: "Open child" }),
   ];
   await routeApi(page, requests, tasks);
 
@@ -550,7 +590,7 @@ test("parent task detail derives progress from active subtasks and keeps the pro
   await expect(page.getByLabel("Task detail progress")).toHaveValue("50");
   await expect(page.getByLabel("Task detail progress")).toBeDisabled();
   await expect(page.getByText("Completed child")).toBeVisible();
-  await expect(page.getByText("Backlog child")).toBeVisible();
+  await expect(page.getByText("Open child")).toBeVisible();
 });
 
 test("task detail description preview stays bounded inline and expands in fullscreen", async ({ page }) => {
