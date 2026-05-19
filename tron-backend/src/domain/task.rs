@@ -272,8 +272,8 @@ pub const FEATURE_CHILD_STATUSES: [TaskStatus; 4] = [
 pub const BUG_STATUSES: [TaskStatus; 5] = [
     TaskStatus::Open,
     TaskStatus::InProgress,
-    TaskStatus::Completed,
     TaskStatus::Reopen,
+    TaskStatus::Completed,
     TaskStatus::Archived,
 ];
 pub const TASK_PRIORITIES: [TaskPriority; 3] =

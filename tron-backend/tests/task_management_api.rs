@@ -38,7 +38,7 @@ async fn task_options_and_default_kanban_exclude_archived_tasks_and_seed_data() 
         json!({
             "featureRoot": ["Open", "Designing", "Red", "Green", "Regressioning", "Review", "Completed", "Archived"],
             "featureChild": ["Open", "InProgress", "Completed", "Archived"],
-            "bug": ["Open", "InProgress", "Completed", "Reopen", "Archived"]
+            "bug": ["Open", "InProgress", "Reopen", "Completed", "Archived"]
         })
     );
     assert_eq!(
@@ -65,6 +65,50 @@ async fn task_options_and_default_kanban_exclude_archived_tasks_and_seed_data() 
     assert_eq!(columns.len(), 9);
     assert!(!columns.iter().any(|column| column["status"] == "Archived"));
     assert!(columns.iter().all(|column| column["tasks"] == json!([])));
+
+    let feature_kanban = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/tasks/kanban?workspaceCode=TRON_CORE&taskType=Feature",
+        None,
+    )
+    .await;
+    assert_eq!(feature_kanban.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(feature_kanban).await["data"]
+            .as_array()
+            .expect("feature kanban data should be an array")
+            .iter()
+            .map(|column| column["status"].as_str().unwrap_or_default())
+            .collect::<Vec<_>>(),
+        vec![
+            "Open",
+            "Designing",
+            "Red",
+            "Green",
+            "Regressioning",
+            "Review",
+            "Completed",
+        ]
+    );
+
+    let bug_kanban = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/tasks/kanban?workspaceCode=TRON_CORE&taskType=Bug",
+        None,
+    )
+    .await;
+    assert_eq!(bug_kanban.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(bug_kanban).await["data"]
+            .as_array()
+            .expect("bug kanban data should be an array")
+            .iter()
+            .map(|column| column["status"].as_str().unwrap_or_default())
+            .collect::<Vec<_>>(),
+        vec!["Open", "InProgress", "Reopen", "Completed"]
+    );
 
     let list_response = authenticated_request(
         &router,

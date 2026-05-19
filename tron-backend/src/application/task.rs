@@ -9,9 +9,9 @@ use crate::{
         task::{
             PagedTaskRecords, TASK_STATUSES, Task, TaskCodeLink, TaskDetail, TaskError,
             TaskKanbanColumn, TaskLifecycleResult, TaskListItem, TaskListQuery, TaskOptions,
-            TaskPriority, TaskSourceType, TaskStatus, TaskSummary, TaskType, TaskUserAssignment,
-            infer_task_role, task_default_status_for_role, task_options,
-            task_status_allowed_for_role,
+            TaskPriority, TaskSourceType, TaskStatus, TaskSummary, TaskType,
+            TaskUserAssignment, infer_task_role, task_default_status_for_role, task_options,
+            task_status_allowed_for_role, task_statuses_for_role,
         },
         workspace::{WorkspaceAccessListQuery, WorkspaceError, WorkspaceStatus},
     },
@@ -132,7 +132,14 @@ impl TaskService {
     pub fn kanban(&self, query: TaskListQuery) -> Result<Vec<TaskKanbanColumn>, TaskError> {
         let include_archived = query.include_archived.unwrap_or(false);
         let items = self.filtered_task_items(&query)?;
-        Ok(TASK_STATUSES
+        let statuses = match query.task_type {
+            Some(TaskType::Bug) => task_statuses_for_role(crate::domain::task::TaskRole::Bug).to_vec(),
+            Some(TaskType::Feature) => {
+                task_statuses_for_role(crate::domain::task::TaskRole::FeatureRoot).to_vec()
+            }
+            None => TASK_STATUSES.to_vec(),
+        };
+        Ok(statuses
             .into_iter()
             .filter(|status| include_archived || *status != TaskStatus::Archived)
             .map(|status| TaskKanbanColumn {

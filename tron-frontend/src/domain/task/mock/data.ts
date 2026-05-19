@@ -25,7 +25,7 @@ const taskOptions: TaskOptions = {
   priorities: ["Low", "Medium", "High"],
   sourceTypes: ["Internal", "GitHub", "GitLab"],
   statusRules: {
-    bug: ["Open", "InProgress", "Completed", "Reopen", "Archived"],
+    bug: ["Open", "InProgress", "Reopen", "Completed", "Archived"],
     featureChild: ["Open", "InProgress", "Completed", "Archived"],
     featureRoot: ["Open", "Designing", "Red", "Green", "Regressioning", "Review", "Completed", "Archived"],
   },
@@ -111,18 +111,23 @@ export function getTaskOptions() { return taskOptions; }
 export function getTaskQuickReference(): QuickReference {
   return {
     tips: [
-      "Task status options are backend-owned and depend on task role.",
-      "New tasks inherit the workspace selected in the shell header.",
-      "Only effective workspace users can be assigned.",
+      "Start with the target outcome, then state the concrete deliverables the agent must produce.",
+      "Include the context, constraints, acceptance checks, and any repos, links, or paths the agent should use.",
+      "Reference reusable variables directly in the task body, for example $VAR1, so the agent can substitute workspace-specific values.",
     ],
-    variables: ["taskType", "sourceType", "sourceUrl", "assigneeUserCodes"],
+    variables: ["$VAR1"],
   };
 }
 
 export function listKanbanColumns(query: TaskListQuery): KanbanColumn[] {
   const records = filterTasks(query);
   const includeArchived = query.includeArchived === true;
-  return taskOptions.statuses
+  const statuses = query.taskType === "Bug"
+    ? taskOptions.statusRules.bug
+    : query.taskType === "Feature"
+      ? taskOptions.statusRules.featureRoot
+      : taskOptions.statuses;
+  return statuses
     .filter((status) => includeArchived || status !== "Archived")
     .map((status) => ({
       status,

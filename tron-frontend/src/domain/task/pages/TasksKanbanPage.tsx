@@ -85,6 +85,7 @@ export function TasksKanbanPage() {
   const options = useTaskOptions();
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [taskType, setTaskType] = useState<TaskType>("Feature");
   const [priority, setPriority] = useState("");
   const [selectedTaskCode, setSelectedTaskCode] = useState<string | null>(null);
   const navigate = useNavigate();
@@ -104,13 +105,14 @@ export function TasksKanbanPage() {
   const taskQuery = useMemo(() => ({
     priority: priority || undefined,
     search: debouncedSearch,
+    taskType,
     workspaceCode,
-  }), [debouncedSearch, priority, workspaceCode]);
+  }), [debouncedSearch, priority, taskType, workspaceCode]);
   const { columns, loading, refresh } = useTaskKanbanColumns(taskQuery);
 
   useEffect(() => {
     setSelectedTaskCode(null);
-  }, [workspaceCode]);
+  }, [taskType, workspaceCode]);
 
   return (
     <TronShell activeItem="Tasks" searchPlaceholder="Search tasks...">
@@ -127,10 +129,16 @@ export function TasksKanbanPage() {
           </>
         }
       />
-      <SurfaceCard className="mb-4 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_220px]">
+      <SurfaceCard className="mb-4 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_180px_220px]">
         <div className="grid gap-1.5">
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Search</span>
           <SearchField placeholder="Filter task code, title, or description..." value={searchInput} onChange={setSearchInput} />
+        </div>
+        <div className="grid gap-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Task Type</span>
+          <SelectInput aria-label="Task type filter" value={taskType} onChange={(event) => setTaskType(event.target.value as TaskType)}>
+            {options.taskTypes.map((item) => <option key={item} value={item}>{item}</option>)}
+          </SelectInput>
         </div>
         <div className="grid gap-1.5">
           <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Priority</span>

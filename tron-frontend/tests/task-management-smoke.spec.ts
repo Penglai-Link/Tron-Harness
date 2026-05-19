@@ -43,7 +43,7 @@ type Task = {
 
 const statuses: TaskStatus[] = ["Open", "Designing", "Red", "Green", "Regressioning", "Review", "InProgress", "Reopen", "Completed", "Archived"];
 const statusRules = {
-  bug: ["Open", "InProgress", "Completed", "Reopen", "Archived"],
+  bug: ["Open", "InProgress", "Reopen", "Completed", "Archived"],
   featureChild: ["Open", "InProgress", "Completed", "Archived"],
   featureRoot: ["Open", "Designing", "Red", "Green", "Regressioning", "Review", "Completed", "Archived"],
 } satisfies Record<"bug" | "featureChild" | "featureRoot", TaskStatus[]>;
@@ -53,6 +53,17 @@ const defaultStatuses = {
   featureRoot: "Open",
 } satisfies Record<"bug" | "featureChild" | "featureRoot", TaskStatus>;
 const now = "2026-05-16T12:00:00Z";
+
+function kanbanStatusesForTaskType(taskType?: TaskType): TaskStatus[] {
+  if (taskType === "Bug") return statusRules.bug;
+  if (taskType === "Feature") return statusRules.featureRoot;
+  return statuses;
+}
+
+function statusTitle(status: TaskStatus) {
+  if (status === "InProgress") return "In Progress";
+  return status;
+}
 
 const authenticatedSession = {
   authMethod: "internal",
@@ -248,7 +259,7 @@ async function routeApi(
   page: Page,
   requests: CapturedRequest[],
   tasks: Task[],
-  options: { workspaceSwitcherResolver?: (requestCount: number) => WorkspaceSwitcherPayload } = {},
+  options: { createTaskDelayMs?: number; workspaceSwitcherResolver?: (requestCount: number) => WorkspaceSwitcherPayload } = {},
 ) {
   let next = 1;
   let workspaceSwitcherRequestCount = 0;
@@ -272,22 +283,23 @@ async function routeApi(
     if (captured.pathname === "/api/v1/tasks/quick-reference") {
       return fulfillJson(route, successEnvelope({
         tips: [
-          "Task status options are backend-owned and depend on task role.",
-          "New tasks inherit the workspace selected in the shell header.",
-          "Only effective workspace users can be assigned.",
+          "Start with the target outcome, then state the concrete deliverables the agent must produce.",
+          "Include the context, constraints, acceptance checks, and any repos, links, or paths the agent should use.",
+          "Reference reusable variables directly in the task body, for example $VAR1, so the agent can substitute workspace-specific values.",
         ],
-        variables: ["taskType", "sourceType", "sourceUrl", "assigneeUserCodes"],
+        variables: ["$VAR1"],
       }));
     }
     if (captured.pathname === "/api/v1/tasks/kanban") {
       const records = filtered(tasks, captured.searchParams);
-      return fulfillJson(route, successEnvelope(statuses.filter((status) => captured.searchParams.includeArchived === "true" || status !== "Archived").map((status) => ({ status, title: status, tasks: records.filter((item) => item.status === status).map((item) => listItem(tasks, item)) }))));
+      return fulfillJson(route, successEnvelope(kanbanStatusesForTaskType(captured.searchParams.taskType as TaskType | undefined).filter((status) => captured.searchParams.includeArchived === "true" || status !== "Archived").map((status) => ({ status, title: statusTitle(status), tasks: records.filter((item) => item.status === status).map((item) => listItem(tasks, item)) }))));
     }
     if (captured.pathname === "/api/v1/tasks" && captured.method === "GET") return fulfillJson(route, pageEnvelope(filtered(tasks, captured.searchParams).map((item) => listItem(tasks, item))));
     if (captured.pathname === "/api/v1/tasks" && captured.method === "POST") {
       const body = captured.body as Partial<Task>;
       const taskCode = `TSK-PW-${String(next).padStart(4, "0")}`;
       next += 1;
+      if (options.createTaskDelayMs) await new Promise((resolve) => setTimeout(resolve, options.createTaskDelayMs));
       tasks.push(task({
         agentCodes: body.agentCodes ?? [],
         appCodes: body.appCodes ?? [],
@@ -410,26 +422,38 @@ test("task management supports kanban search create detail updates subtasks arch
     task({ description: "Active implementation fixture", priority: "High", progress: 65, status: "InProgress", taskCode: "TSK-SEED-BUG", taskType: "Bug", title: "Verify task smoke flow" }),
     task({ archivedAt: now, description: "Archived board fixture", previousStatus: "Review", status: "Archived", taskCode: "TSK-SEED-ARCHIVED", taskType: "Feature", title: "Archived task example" }),
   ];
-  await routeApi(page, requests, tasks);
+  await routeApi(page, requests, tasks, { createTaskDelayMs: 150 });
 
   await page.goto(`${frontendBaseUrl}/tasks`);
   const taskHeader = page.locator("header").filter({ has: page.getByRole("heading", { name: "Task Management" }) });
+  const kanbanColumnTitles = page.locator("main main > div.flex > section > div > span:first-child");
   await expect(taskHeader.getByText("Kanban", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Refresh$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Sync$/ })).toHaveCount(0);
   await page.getByRole("button", { name: /^Refresh$/ }).click();
   await expect(toast(page, "Task board refreshed")).toBeVisible();
   await expect(page.getByLabel("Task workspace")).toHaveCount(0);
+  await expect(page.getByLabel("Task type filter")).toBeVisible();
+  await expect(page.getByLabel("Task type filter")).toHaveValue("Feature");
+  await expect(page.getByLabel("Task type filter").locator("option")).toHaveText(["Feature", "Bug"]);
   await expect(page.getByLabel("Task priority filter")).toBeVisible();
   await expect(page.getByLabel("Task status filter")).toHaveCount(0);
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/kanban" && request.searchParams.workspaceCode === "TRON_CORE")).toBe(true);
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/kanban" && request.searchParams.workspaceCode === "TRON_CORE" && request.searchParams.taskType === "Feature")).toBe(true);
   await expect(page.getByRole("button", { name: /^Import$/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Export$/ })).toHaveCount(0);
+  await expect(page.getByText("Reopen", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("In Progress", { exact: true })).toHaveCount(0);
+  await expect(kanbanColumnTitles).toHaveText(["Open", "Designing", "Red", "Green", "Regressioning", "Review", "Completed"]);
   await page.getByPlaceholder("Filter task code, title, or description...").fill("Design");
   await expect(page.getByText("Design task management v1")).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/kanban" && request.searchParams.search === "Design" && request.searchParams.workspaceCode === "TRON_CORE")).toBe(true);
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/kanban" && request.searchParams.search === "Design" && request.searchParams.workspaceCode === "TRON_CORE" && request.searchParams.taskType === "Feature")).toBe(true);
 
   await page.getByPlaceholder("Filter task code, title, or description...").fill("");
+  await expect(page.getByText("Verify task smoke flow")).toHaveCount(0);
+  await page.getByLabel("Task type filter").selectOption("Bug");
+  await expect(page.getByText("Reopen", { exact: true })).toBeVisible();
+  await expect(page.getByText("Designing", { exact: true })).toHaveCount(0);
+  await expect(kanbanColumnTitles).toHaveText(["Open", "In Progress", "Reopen", "Completed"]);
   await page.getByLabel("Task priority filter").selectOption("High");
   await expect(page.getByText("Verify task smoke flow")).toBeVisible();
   const highPriorityTaskCard = page.getByRole("button", { name: /Verify task smoke flow/ });
@@ -438,17 +462,22 @@ test("task management supports kanban search create detail updates subtasks arch
     const sourceTypeClass = await highPriorityTaskCard.getByText("Internal", { exact: true }).getAttribute("class");
     return taskTypeClass !== null && sourceTypeClass !== null && taskTypeClass !== sourceTypeClass;
   }).toBe(true);
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/kanban" && request.searchParams.priority === "High" && request.searchParams.workspaceCode === "TRON_CORE")).toBe(true);
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/kanban" && request.searchParams.priority === "High" && request.searchParams.workspaceCode === "TRON_CORE" && request.searchParams.taskType === "Bug")).toBe(true);
 
   await page.getByRole("button", { name: /Create Task/ }).click();
   await expect(page.getByRole("heading", { name: "Create Task" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Create" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create Task" })).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Workspace" })).toHaveCount(0);
   await expect(page.getByLabel("Current workspace")).toHaveCount(0);
+  await expect(page.getByText("Classification & Source", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/Only effective users in/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Editor Tools" })).toHaveCount(0);
   await expect(page.getByLabel("Task Type").locator("option")).toHaveText(["Feature", "Bug"]);
   await expect(page.getByLabel("Task Type").locator("option", { hasText: "BugFix" })).toHaveCount(0);
   await expect(page.getByLabel("Task Type").locator("option", { hasText: "Refactor" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Quick Reference" })).toHaveCount(0);
+  await expect(page.getByText("assigneeUserCodes", { exact: true })).toHaveCount(0);
   await page.getByLabel("Task title").fill("Playwright created task");
   await page.getByLabel("Priority").selectOption("High");
   await page.getByLabel("Task Type").selectOption("Feature");
@@ -457,9 +486,15 @@ test("task management supports kanban search create detail updates subtasks arch
   await page.getByLabel("Agent Codes").fill("agent-reviewer, agent-builder");
   await page.getByLabel("App Codes").fill("github, notion");
   await page.getByLabel("Assign Auth Operator").check();
-  await expect(page.getByLabel("Task description")).toHaveClass(/w-full/);
-  await page.getByLabel("Task description").fill("## Playwright Notes\n- Created through the task-management smoke.");
-  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Open description fullscreen" }).click();
+  const createDescriptionFullscreenEditor = page.getByRole("dialog", { name: "Description fullscreen editor" });
+  await expect(createDescriptionFullscreenEditor).toBeVisible();
+  await createDescriptionFullscreenEditor.getByLabel("Task description fullscreen").fill("## Playwright Notes\n- Created through the task-management smoke.\n- Uses $VAR1 during execution.");
+  await createDescriptionFullscreenEditor.getByRole("button", { name: "Close description fullscreen" }).click();
+  await expect(createDescriptionFullscreenEditor).toHaveCount(0);
+  await expect(page.getByLabel("Task description")).toHaveValue("## Playwright Notes\n- Created through the task-management smoke.\n- Uses $VAR1 during execution.");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("button", { name: "Saving..." })).toHaveAttribute("aria-busy", "true");
   await expect(page).toHaveURL(/\/tasks\/detail\?taskCode=TSK-PW-0001/);
   await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
   await expect(page.getByText("Playwright created task")).toBeVisible();
@@ -567,7 +602,7 @@ test("task management supports kanban search create detail updates subtasks arch
   await page.getByLabel("Task detail status").selectOption("Archived");
   await expect.poll(() => requests.some((request) => request.method === "POST" && request.pathname === "/api/v1/tasks/TSK-PW-0001/archive")).toBe(true);
   await expect(page.getByLabel("Task detail status")).toHaveValue("Archived");
-  await expect(page.getByText("Not archived", { exact: true })).toHaveCount(0);
+  await expect.poll(() => page.getByText("Not archived", { exact: true }).count()).toBe(0);
   await page.getByLabel("Task detail status").selectOption("Open");
   await expect(page.getByLabel("Task detail status")).toHaveValue("Open");
 
