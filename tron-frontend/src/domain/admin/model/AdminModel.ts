@@ -49,6 +49,7 @@ export interface RoleRecord {
 }
 
 export type UserStatus = "Active" | "Archived";
+export type UserSourceType = "Internal" | "GitHub";
 
 export type UserRoleCode =
   | "ADMIN"
@@ -67,6 +68,7 @@ export interface UserPhone {
 export interface UserRecord {
   id: string;
   userCode: string;
+  sourceType: UserSourceType;
   username: string;
   firstName: string;
   lastName: string;

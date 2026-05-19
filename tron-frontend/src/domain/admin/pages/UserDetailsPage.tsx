@@ -537,6 +537,7 @@ export function UserDetailsPage() {
                     className={readOnlyInputClass}
                   />
                 </Field>
+                <DetailField label="Source Type" value={user.sourceType} />
                 <Field label="First Name">
                   <TextInput
                     value={profileForm.firstName}
@@ -594,6 +595,7 @@ export function UserDetailsPage() {
               <>
                 <DetailField label="User Code" value={user.userCode} />
                 <DetailField label="Username" value={user.username} />
+                <DetailField label="Source Type" value={user.sourceType} />
                 <DetailField label="First Name" value={user.firstName} />
                 <DetailField label="Last Name" value={user.lastName} />
                 <DetailField label="Display Name" value={user.displayName} />

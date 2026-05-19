@@ -7,7 +7,7 @@ mod password;
 mod profile;
 mod query;
 
-pub use aggregate::User;
+pub use aggregate::{User, UserSourceType};
 pub(crate) use assignment::{unique_preserving_order, validate_role_codes, validate_space_codes};
 pub use error::UserError;
 pub(crate) use identity::{normalize_code_segment, validate_user_code};

@@ -38,7 +38,6 @@ export function AuditLogsPage() {
     <TronShell activeItem="Audit Logs" searchPlaceholder="Search users, roles, logs...">
       <PageHeader
         title="Users & Roles"
-        description="Audit all administrative changes, inherited policy updates, and workspace access events."
         actions={
           <Button variant="secondary" onClick={() => setNotice(`${filteredRows.length} audit rows exported`)}>
             <FileText size={15} />

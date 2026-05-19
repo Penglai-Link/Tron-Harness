@@ -59,7 +59,7 @@ export const tronNavigation: TronNavSection[] = [
       { label: "Users", href: "/admin/users", icon: UsersRound, translationKey: "shell:nav.items.users" },
       { label: "Roles", href: "/admin/roles", icon: LockKeyhole, translationKey: "shell:nav.items.roles" },
       { label: "Audit Logs", href: "/admin/audit-logs", icon: FileClock, translationKey: "shell:nav.items.auditLogs" },
-      { label: "Workspace Admin", href: "/admin/workspace", icon: Settings2, translationKey: "shell:nav.items.workspaceAdmin" },
+      { label: "Workspace", href: "/admin/workspace", icon: Settings2, translationKey: "shell:nav.items.workspaceAdmin" },
     ],
   },
 ];

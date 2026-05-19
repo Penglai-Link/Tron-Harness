@@ -17,8 +17,8 @@ use crate::{
             CurrentSession, OAuth2IdentityLink, OAuth2Profile, RefreshSession,
         },
         user::{
-            ListUsersQuery, PagedUsers, PasswordResetResult, User, UserError, UserStatistics,
-            UserStatus, normalize_code_segment, optional_trimmed, parse_user_status,
+            ListUsersQuery, PagedUsers, PasswordResetResult, User, UserError, UserSourceType,
+            UserStatistics, UserStatus, normalize_code_segment, optional_trimmed, parse_user_status,
             required_profile_field, unique_preserving_order, validate_initial_password,
             validate_role_codes, validate_space_codes, validate_user_code,
         },
@@ -41,7 +41,7 @@ const GITHUB_AUTO_PROVISION_DEFAULT_ROLE_CODE: &str = "VIEWER";
 const GITHUB_AUTO_PROVISION_DEFAULT_SPACE_CODE: &str = "PLATFORM";
 const GITHUB_AUTO_PROVISION_DEFAULT_LOCALE: &str = "en-US";
 const GITHUB_AUTO_PROVISION_DEFAULT_TIMEZONE: &str = "UTC";
-const GITHUB_AUTO_PROVISION_FALLBACK_LAST_NAME: &str = "GitHub";
+const OAUTH2_AUTO_PROVISION_FALLBACK_NAME: &str = "User";
 const OAUTH_STATE_TTL_SECONDS: i64 = 300;
 
 #[derive(Clone)]
@@ -649,6 +649,7 @@ impl UserService {
         let user = User {
             id: SnowflakeId::new(id),
             user_code: user_code.clone(),
+            source_type: UserSourceType::Internal,
             username,
             first_name,
             last_name,
@@ -1320,12 +1321,12 @@ fn split_display_name(display_name: &str) -> (String, String) {
     let mut parts = display_name.split_whitespace();
     let first_name = parts
         .next()
-        .unwrap_or(GITHUB_AUTO_PROVISION_FALLBACK_LAST_NAME);
+        .unwrap_or(OAUTH2_AUTO_PROVISION_FALLBACK_NAME);
     let last_name = parts.collect::<Vec<_>>().join(" ");
     if last_name.is_empty() {
         (
             first_name.to_owned(),
-            GITHUB_AUTO_PROVISION_FALLBACK_LAST_NAME.into(),
+            first_name.to_owned(),
         )
     } else {
         (first_name.to_owned(), last_name)
@@ -1460,5 +1461,13 @@ mod tests {
             validate_initial_password(&password).is_ok(),
             "generated OAuth2 bootstrap password should satisfy the initial password policy",
         );
+    }
+
+    #[test]
+    fn split_display_name_avoids_provider_name_fallback_for_single_token_profiles() {
+        let (first_name, last_name) = split_display_name("CloudS3n");
+
+        assert_eq!(first_name, "CloudS3n");
+        assert_eq!(last_name, "CloudS3n");
     }
 }

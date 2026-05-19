@@ -14,11 +14,10 @@ import {
   Bot,
   ChevronDown,
   CircleUserRound,
-  Command,
   PanelLeftClose,
   PanelLeftOpen,
+  Settings2,
   ShieldCheck,
-  SlidersHorizontal,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -60,8 +59,8 @@ interface TronShellProps {
 
 const TronShellFrameContext = createContext(false);
 
-interface SecondarySpaceTreeNode {
-  children: SecondarySpaceTreeNode[];
+interface WorkspaceTreeNode {
+  children: WorkspaceTreeNode[];
   space: WorkspaceSwitcherData["secondarySpaces"][number];
 }
 
@@ -69,12 +68,12 @@ function sectionHasActiveItem(section: TronNavSection, activeItem?: string) {
   return Boolean(activeItem && section.items.some((item) => item.label === activeItem));
 }
 
-function buildSecondarySpaceTree(secondarySpaces: WorkspaceSwitcherData["secondarySpaces"]) {
-  const roots: SecondarySpaceTreeNode[] = [];
-  const stack: SecondarySpaceTreeNode[] = [];
+function buildWorkspaceTree(secondarySpaces: WorkspaceSwitcherData["secondarySpaces"]) {
+  const roots: WorkspaceTreeNode[] = [];
+  const stack: WorkspaceTreeNode[] = [];
 
   secondarySpaces.forEach((space) => {
-    const node: SecondarySpaceTreeNode = {
+    const node: WorkspaceTreeNode = {
       children: [],
       space,
     };
@@ -95,13 +94,27 @@ function buildSecondarySpaceTree(secondarySpaces: WorkspaceSwitcherData["seconda
   return roots;
 }
 
-function getRelativeSecondarySpaceLabel(label: string, primarySpaceLabel?: string) {
-  if (!primarySpaceLabel) {
-    return label;
+function findWorkspaceNodePath(nodes: WorkspaceTreeNode[], targetWorkspaceCode?: string): WorkspaceTreeNode[] {
+  if (!targetWorkspaceCode) {
+    return [];
   }
 
-  const prefix = `${primarySpaceLabel} / `;
-  return label.startsWith(prefix) ? label.slice(prefix.length) : label;
+  for (const node of nodes) {
+    if (node.space.workspaceCode === targetWorkspaceCode) {
+      return [node];
+    }
+
+    const childPath = findWorkspaceNodePath(node.children, targetWorkspaceCode);
+    if (childPath.length) {
+      return [node, ...childPath];
+    }
+  }
+
+  return [];
+}
+
+function compactWorkspacePath(label: string) {
+  return label.replace(/\s*\/\s*/g, "/");
 }
 
 function InlineTronShellContent({ children, contentClassName, rightPanel }: TronShellProps) {
@@ -131,14 +144,12 @@ export function TronShell({
   const closeFloatingPanels = useAppShellStore((state) => state.closeFloatingPanels);
   const ensureSectionOpen = useAppShellStore((state) => state.ensureSectionOpen);
   const openSections = useAppShellStore((state) => state.openSections);
-  const secondarySpaceMenuOpen = useAppShellStore((state) => state.secondarySpaceMenuOpen);
   const selectedPrimarySpaceId = useAppShellStore((state) => state.selectedPrimarySpaceId);
   const selectedSecondarySpaceId = useAppShellStore((state) => state.selectedSecondarySpaceId);
   const setAgentOpen = useAppShellStore((state) => state.setAgentOpen);
   const setSidebarCollapsed = useAppShellStore((state) => state.setSidebarCollapsed);
   const sidebarCollapsed = useAppShellStore((state) => state.sidebarCollapsed);
   const toggleAgent = useAppShellStore((state) => state.toggleAgent);
-  const toggleSecondarySpaceMenu = useAppShellStore((state) => state.toggleSecondarySpaceMenu);
   const toggleSection = useAppShellStore((state) => state.toggleSection);
   const toggleUtilityPanel = useAppShellStore((state) => state.toggleUtilityPanel);
   const utilityPanel = useAppShellStore((state) => state.utilityPanel);
@@ -153,6 +164,7 @@ export function TronShell({
   ));
   const workspaceSwitcherControllerRef = useRef<AbortController | null>(null);
   const workspaceSwitcherRequestSequenceRef = useRef(0);
+  const [expandedWorkspaceCodes, setExpandedWorkspaceCodes] = useState<string[]>([]);
 
   const primarySpaces = workspaceSwitcher.primarySpaces;
   const selectedPrimarySpace = primarySpaces.find((space) => space.workspaceCode === selectedPrimarySpaceId)
@@ -172,17 +184,25 @@ export function TronShell({
     () => currentPrimarySecondarySpaces.filter((space) => space.depth > 1),
     [currentPrimarySecondarySpaces],
   );
-  const selectedSecondarySpace = secondarySpaces.find((space) => space.workspaceCode === selectedSecondarySpaceId)
-    ?? secondarySpaces.find((space) => space.workspaceCode === defaultSecondarySpaceId)
-    ?? secondarySpaces[0];
+  const selectedSecondarySpace = selectedSecondarySpaceId
+    ? secondarySpaces.find((space) => space.workspaceCode === selectedSecondarySpaceId)
+      ?? secondarySpaces.find((space) => space.workspaceCode === defaultSecondarySpaceId)
+      ?? secondarySpaces[0]
+    : undefined;
   const effectiveSecondarySpaceId = selectedSecondarySpace?.workspaceCode ?? "";
-  const secondarySpaceLabelPrefix = currentPrimaryRootSpace?.label ?? selectedPrimarySpace?.name;
-  const selectedSecondarySpaceLabel = selectedSecondarySpace
-    ? getRelativeSecondarySpaceLabel(selectedSecondarySpace.label, secondarySpaceLabelPrefix)
-    : t("shell:workspace.secondaryLabel");
-  const secondarySpaceTree = useMemo(
-    () => buildSecondarySpaceTree(secondarySpaces),
-    [secondarySpaces],
+  const selectedWorkspaceNode = selectedSecondarySpace ?? currentPrimaryRootSpace;
+  const selectedWorkspacePathLabel = selectedWorkspaceNode
+    ? compactWorkspacePath(selectedWorkspaceNode.label)
+    : selectedPrimarySpace?.name ?? t("shell:utilityPanel.workspace");
+  const workspaceTree = useMemo(
+    () => buildWorkspaceTree(workspaceSwitcher.secondarySpaces),
+    [workspaceSwitcher.secondarySpaces],
+  );
+  const defaultExpandedWorkspaceCodes = useMemo(
+    () => findWorkspaceNodePath(workspaceTree, selectedWorkspaceNode?.workspaceCode)
+      .filter((node) => node.children.length > 0)
+      .map((node) => node.space.workspaceCode),
+    [selectedWorkspaceNode?.workspaceCode, workspaceTree],
   );
   const workspaceSpacesValue = useMemo<WorkspaceSpacesContextValue>(
     () => ({
@@ -195,17 +215,6 @@ export function TronShell({
     }),
     [effectivePrimarySpaceId, effectiveSecondarySpaceId, primarySpaces, secondarySpaces, selectedPrimarySpace, selectedSecondarySpace],
   );
-
-  function selectPrimarySpace(spaceId: string) {
-    const firstSecondary = workspaceSwitcher.secondarySpaces.find(
-      (space) => space.primaryWorkspaceCode === spaceId && space.depth > 1,
-    );
-    selectPrimarySpaceInStore(spaceId, firstSecondary?.workspaceCode ?? "");
-  }
-
-  function selectSecondarySpace(space: WorkspaceSwitcherData["secondarySpaces"][number]) {
-    selectPrimarySpaceInStore(space.primaryWorkspaceCode, space.workspaceCode);
-  }
 
   const refreshWorkspaceSwitcher = useCallback(async () => {
     if (dataSource !== "api") {
@@ -272,6 +281,10 @@ export function TronShell({
   ]);
 
   useEffect(() => {
+    setExpandedWorkspaceCodes(defaultExpandedWorkspaceCodes);
+  }, [defaultExpandedWorkspaceCodes]);
+
+  useEffect(() => {
     setMobileSidebarOpen(false);
   }, [pathname]);
 
@@ -319,61 +332,84 @@ export function TronShell({
     toggleUtilityPanel("workspace");
   }
 
-  function handleSecondarySpaceSelectorClick() {
-    if (!secondarySpaceMenuOpen) {
-      void refreshWorkspaceSwitcher();
-    }
-
-    toggleSecondarySpaceMenu();
+  function selectWorkspaceNode(space: WorkspaceSwitcherData["secondarySpaces"][number]) {
+    const nextSecondarySpaceId = space.depth > 1 ? space.workspaceCode : "";
+    selectPrimarySpaceInStore(space.primaryWorkspaceCode, nextSecondarySpaceId);
   }
 
-  function renderSecondarySpaceTreeNode(node: SecondarySpaceTreeNode, nestingLevel = 0): ReactNode {
+  function toggleWorkspaceExpanded(workspaceCode: string) {
+    setExpandedWorkspaceCodes((current) => (
+      current.includes(workspaceCode)
+        ? current.filter((code) => code !== workspaceCode)
+        : [...current, workspaceCode]
+    ));
+  }
+
+  function renderWorkspaceTreeNode(node: WorkspaceTreeNode, nestingLevel = 0): ReactNode {
     const { space } = node;
-    const selected = space.workspaceCode === selectedSecondarySpace?.workspaceCode;
-    const relativeLabel = getRelativeSecondarySpaceLabel(space.label, secondarySpaceLabelPrefix);
+    const workspacePathLabel = compactWorkspacePath(space.label);
+    const hasChildren = node.children.length > 0;
+    const expanded = hasChildren && expandedWorkspaceCodes.includes(space.workspaceCode);
+    const selected = space.workspaceCode === selectedWorkspaceNode?.workspaceCode;
+    const rowClassName = cn(
+      "flex min-w-0 flex-1 items-center rounded-lg border px-2.5 py-1.5 text-left transition-colors",
+      selected
+        ? "border-[var(--color-primary)] bg-[var(--color-surface-container)]"
+        : "border-transparent hover:bg-[var(--color-hover-surface)]",
+    );
+    const content = (
+      <>
+        <span className="truncate text-sm font-medium">{space.name}</span>
+      </>
+    );
 
     return (
-      <div key={space.workspaceCode} className="space-y-1">
-        <button
-          className={cn(
-            "block w-full rounded-lg border px-3 py-2 text-left transition-colors",
-            selected
-              ? "border-[var(--color-primary)] bg-[var(--color-surface-container)]"
-              : "border-transparent hover:bg-[var(--color-hover-surface)]",
+      <div key={space.workspaceCode} className="space-y-0.5">
+        <div className="flex items-center gap-1" style={{ paddingLeft: `${nestingLevel * 12}px` }}>
+          {hasChildren ? (
+            <button
+              className="flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
+              type="button"
+              aria-label={`${expanded ? "Collapse" : "Expand"} ${workspacePathLabel}`}
+              aria-expanded={expanded}
+              onClick={() => toggleWorkspaceExpanded(space.workspaceCode)}
+            >
+              <ChevronDown className={cn("transition-transform", expanded ? "rotate-180" : "-rotate-90")} size={14} aria-hidden="true" />
+            </button>
+          ) : (
+            <span className="block size-6 shrink-0" aria-hidden="true" />
           )}
-          type="button"
-          aria-label={relativeLabel}
-          aria-pressed={selected}
-          onClick={() => selectSecondarySpace(space)}
-          style={{ marginLeft: `${nestingLevel * 18}px` }}
-        >
-          <span className="block text-sm font-medium">{relativeLabel}</span>
-          {space.description ? <span className="mt-0.5 block text-[12px] text-[var(--color-on-surface-variant)]">{space.description}</span> : null}
-        </button>
-        {node.children.length ? (
-          <div className="space-y-1">
-            {node.children.map((child) => renderSecondarySpaceTreeNode(child, nestingLevel + 1))}
+          <button
+            className={rowClassName}
+            type="button"
+            aria-label={workspacePathLabel}
+            aria-pressed={selected}
+            onClick={() => selectWorkspaceNode(space)}
+          >
+            {content}
+          </button>
+        </div>
+        {hasChildren && expanded ? (
+          <div className="space-y-0.5">
+            {node.children.map((child) => renderWorkspaceTreeNode(child, nestingLevel + 1))}
           </div>
         ) : null}
       </div>
     );
   }
 
-  function renderSecondarySpaceMenuContent() {
+  function renderWorkspaceSwitcherContent() {
     return (
       <>
         <p className="font-medium">{t("shell:workspace.selectorTitle")}</p>
-        <p className="mt-1 text-[12px] text-[var(--color-on-surface-variant)]">{t("shell:workspace.selectorDescription")}</p>
-        <div className="mt-3">
-          {workspaceSwitcherLoading ? <p className="mb-3 text-[12px] text-[var(--color-on-surface-variant)]">{t("shell:workspace.refreshing")}</p> : null}
-          {secondarySpaceTree.length ? (
-            <div className="space-y-2" role="tree" aria-label={t("shell:workspace.secondaryLabel")}>
-              {secondarySpaceTree.map((root) => renderSecondarySpaceTreeNode(root))}
+        <div className="mt-2">
+          {workspaceSwitcherLoading ? <p className="mb-2 text-[12px] text-[var(--color-on-surface-variant)]">{t("shell:workspace.refreshing")}</p> : null}
+          {workspaceTree.length ? (
+            <div className="max-h-[min(60vh,24rem)] space-y-1 overflow-y-auto pr-1" role="tree" aria-label={t("shell:workspace.selectorTitle")}>
+              {workspaceTree.map((root) => renderWorkspaceTreeNode(root))}
             </div>
           ) : (
-            <p className="text-[13px] text-[var(--color-on-surface-variant)]">
-              {selectedPrimarySpace ? t("shell:workspace.rootOnlyHint") : t("shell:workspace.noSecondarySpaces")}
-            </p>
+            <p className="text-[13px] text-[var(--color-on-surface-variant)]">{t("shell:workspace.noPrimarySpaces")}</p>
           )}
         </div>
       </>
@@ -385,28 +421,6 @@ export function TronShell({
 
     return (
       <>
-        <div className={cn("mb-6 flex items-center gap-3 px-2", compact ? "justify-center" : "")}>
-          <button
-            className={cn("flex w-full items-center gap-3 rounded-lg text-left", compact ? "justify-center" : "")}
-            type="button"
-            aria-expanded={secondarySpaceMenuOpen}
-            aria-haspopup="dialog"
-            aria-label={secondarySpaceMenuOpen ? t("shell:aria.closeWorkspaceSelector") : t("shell:aria.openWorkspaceSelector")}
-            onClick={handleSecondarySpaceSelectorClick}
-          >
-            <span className="flex size-9 items-center justify-center rounded-xl bg-[var(--color-primary)] text-[var(--color-on-primary)]">
-              <Command size={18} aria-hidden="true" />
-            </span>
-            <span className={cn(compact ? "sr-only" : "")}>
-              <span className="block text-sm font-semibold">{selectedSecondarySpaceLabel}</span>
-              <span className="block text-xs text-[var(--color-on-surface-variant)]">
-                {selectedSecondarySpace?.description ?? (selectedPrimarySpace ? t("shell:workspace.rootOnlyHint") : t("common:brand.console"))}
-              </span>
-            </span>
-            {compact ? null : <ChevronDown className={cn("ml-auto transition-transform", secondarySpaceMenuOpen ? "rotate-180" : "")} size={14} aria-hidden="true" />}
-          </button>
-        </div>
-
         <nav className={cn("space-y-4", compact ? "space-y-2" : "")} aria-label={t("shell:aria.primaryNavigation")}>
           {tronNavigation.map((section) => {
             const open = openSections[section.label];
@@ -484,14 +498,18 @@ export function TronShell({
               {mobileSidebarOpen ? <PanelLeftClose size={17} aria-hidden="true" /> : <PanelLeftOpen size={17} aria-hidden="true" />}
             </Button>
             <button
-              className="inline-flex h-9 shrink-0 items-center gap-2 rounded-lg bg-[var(--color-surface-container)] px-3 text-sm font-medium text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
+              className="inline-flex h-9 max-w-[min(60vw,28rem)] shrink-0 items-center gap-2 rounded-lg bg-[var(--color-surface-container)] px-3 text-sm font-medium text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
               type="button"
+              id="tron-workspace-trigger"
               aria-busy={workspaceSwitcherLoading}
               aria-expanded={utilityPanel === "workspace"}
+              aria-haspopup="dialog"
+              aria-label={utilityPanel === "workspace" ? t("shell:aria.closeWorkspaceSelector") : t("shell:aria.openWorkspaceSelector")}
               onClick={handleWorkspaceSwitcherClick}
+              title={selectedWorkspacePathLabel}
             >
               <ShieldCheck size={16} aria-hidden="true" />
-              {selectedPrimarySpace?.name ?? t("shell:utilityPanel.workspace")}
+              <span className="truncate">{selectedWorkspacePathLabel}</span>
               <ChevronDown size={15} aria-hidden="true" />
             </button>
             <Button
@@ -508,8 +526,8 @@ export function TronShell({
           </div>
           <div className="flex items-center gap-2">
             {topbarActions}
-            <Button size="icon" variant="ghost" aria-label={t("shell:aria.openFilters")} aria-pressed={utilityPanel === "filters"} onClick={() => toggleUtilityPanel("filters")}>
-              <SlidersHorizontal size={17} aria-hidden="true" />
+            <Button size="icon" variant="ghost" aria-label={t("shell:aria.openSystemSettings")} aria-pressed={utilityPanel === "settings"} onClick={() => toggleUtilityPanel("settings")}>
+              <Settings2 size={17} aria-hidden="true" />
             </Button>
             <Button size="icon" variant="ghost" aria-label={t("shell:aria.viewNotifications")} aria-pressed={utilityPanel === "notifications"} onClick={() => toggleUtilityPanel("notifications")}>
               <Bell size={17} aria-hidden="true" />
@@ -521,39 +539,20 @@ export function TronShell({
         </div>
         {utilityPanel ? (
           <div
+            id={utilityPanel === "workspace" ? "tron-workspace-selector-panel" : undefined}
             className={cn(
-              "absolute top-[calc(100%+8px)] w-[min(360px,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-4 py-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
-              utilityPanel === "workspace" ? "left-4 sm:left-6" : "right-4 sm:right-6",
+              "absolute top-[calc(100%+8px)] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
+              utilityPanel === "workspace"
+                ? "left-4 w-[min(360px,calc(100vw-2rem))] sm:left-6"
+                : "right-4 w-[min(360px,calc(100vw-2rem))] sm:right-6",
             )}
+            role={utilityPanel === "workspace" ? "dialog" : undefined}
+            aria-label={utilityPanel === "workspace" ? t("shell:workspace.selectorTitle") : undefined}
           >
-            <p className="font-medium">{t(`shell:utilityPanel.${utilityPanel}`)}</p>
+            {utilityPanel === "workspace" ? null : <p className="font-medium">{t(`shell:utilityPanel.${utilityPanel}`)}</p>}
             {utilityPanel === "workspace" ? (
-              <div className="mt-3 space-y-2">
-                <p className="text-[12px] font-medium text-[var(--color-on-surface-variant)]">{t("shell:workspace.primaryLabel")}</p>
-                {workspaceSwitcherLoading ? <p className="text-[12px] text-[var(--color-on-surface-variant)]">{t("shell:workspace.refreshing")}</p> : null}
-                {primarySpaces.length ? (
-                  primarySpaces.map((space) => {
-                    const selected = space.workspaceCode === effectivePrimarySpaceId;
-                    return (
-                      <button
-                        className={cn(
-                          "block w-full rounded-lg border px-3 py-2 text-left transition-colors",
-                          selected ? "border-[var(--color-primary)] bg-[var(--color-surface-container)]" : "border-transparent hover:bg-[var(--color-hover-surface)]",
-                        )}
-                        type="button"
-                        aria-pressed={selected}
-                        key={space.workspaceCode}
-                        onClick={() => selectPrimarySpace(space.workspaceCode)}
-                      >
-                        <span className="block text-sm font-medium">{space.name}</span>
-                        <span className="mt-0.5 block text-[12px] text-[var(--color-on-surface-variant)]">{space.description}</span>
-                        <span className="mt-1 block text-[11px] text-[var(--color-on-surface-variant)]">{space.childCount} child spaces · {t("shell:workspace.status", { status: space.status })}</span>
-                      </button>
-                    );
-                  })
-                ) : (
-                  <p className="text-[13px] text-[var(--color-on-surface-variant)]">{t("shell:workspace.noPrimarySpaces")}</p>
-                )}
+              <div>
+                {renderWorkspaceSwitcherContent()}
               </div>
             ) : utilityPanel === "user" ? (
               <div className="mt-3 space-y-4">
@@ -628,22 +627,6 @@ export function TronShell({
       >
         {renderSidebarContent()}
       </aside>
-
-      {secondarySpaceMenuOpen ? (
-        <>
-          <div
-            className={cn(
-              "fixed inset-x-4 top-[4.75rem] z-50 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-4 py-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)] lg:inset-x-auto lg:top-[4.5rem] lg:w-[min(380px,calc(100vw-2rem))]",
-              sidebarCollapsed ? "lg:left-[84px]" : "lg:left-[292px]",
-            )}
-            id="tron-secondary-space-selector"
-            role="dialog"
-            aria-label={t("shell:workspace.selectorTitle")}
-          >
-            {renderSecondarySpaceMenuContent()}
-          </div>
-        </>
-      ) : null}
 
       <section className={cn("min-w-0 pt-14 transition-[padding-left] duration-200", sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[280px]")}>
         <div className={cn("grid min-h-[calc(100vh-3.5rem)] grid-cols-1", rightPanel ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "")}>

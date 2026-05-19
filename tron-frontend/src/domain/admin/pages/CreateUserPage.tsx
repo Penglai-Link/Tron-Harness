@@ -55,6 +55,7 @@ function makeMockCreatedUser(payload: CreateUserPayload): UserRecord {
     ...payload,
     id: makeMockId(generatedCode),
     userCode: generatedCode,
+    sourceType: "Internal",
     avatarUrl: null,
     phone: payload.phone ?? null,
     locale: payload.locale,

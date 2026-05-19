@@ -1,6 +1,8 @@
 use serde::Serialize;
 
-use crate::domain::user::{PagedUsers, PasswordResetResult, PhoneNumber, User, UserStatus};
+use crate::domain::user::{
+    PagedUsers, PasswordResetResult, PhoneNumber, User, UserSourceType, UserStatus,
+};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,6 +39,7 @@ impl From<PagedUsers> for PagedUsersDto {
 struct UserListItemDto {
     id: String,
     user_code: String,
+    source_type: UserSourceType,
     username: String,
     first_name: String,
     last_name: String,
@@ -60,6 +63,7 @@ impl From<User> for UserListItemDto {
         Self {
             id: user.id.as_decimal_string(),
             user_code: user.user_code,
+            source_type: user.source_type,
             username: user.username,
             first_name: user.first_name,
             last_name: user.last_name,
@@ -85,6 +89,7 @@ impl From<User> for UserListItemDto {
 pub struct UserDetailDto {
     id: String,
     user_code: String,
+    source_type: UserSourceType,
     username: String,
     first_name: String,
     last_name: String,
@@ -125,6 +130,7 @@ impl From<User> for UserDetailDto {
         Self {
             id: user.id.as_decimal_string(),
             user_code: user.user_code,
+            source_type: user.source_type,
             username: user.username,
             first_name: user.first_name,
             last_name: user.last_name,

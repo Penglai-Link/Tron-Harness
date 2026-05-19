@@ -238,6 +238,12 @@ test("switches between light and matrix dark themes from the user menu and persi
   await signIn(page);
 
   const header = page.locator("header");
+  await expect(header.getByRole("button", { name: /open filters/i })).toHaveCount(0);
+  await expect(header.getByRole("button", { name: /open system settings/i })).toBeVisible();
+
+  await header.getByRole("button", { name: /open system settings/i }).click();
+  await expect(header.getByText("System Settings", { exact: true })).toBeVisible();
+
   await header.getByRole("button", { name: /open user menu/i }).click();
 
   const themeSelect = header.getByLabel(/^theme$/i);

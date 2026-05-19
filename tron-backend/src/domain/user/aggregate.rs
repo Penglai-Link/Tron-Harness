@@ -4,11 +4,18 @@ use crate::shared::id::SnowflakeId;
 
 use super::{PhoneNumber, UserStatus};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum UserSourceType {
+    Internal,
+    GitHub,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     pub id: SnowflakeId,
     pub user_code: String,
+    pub source_type: UserSourceType,
     pub username: String,
     pub first_name: String,
     pub last_name: String,

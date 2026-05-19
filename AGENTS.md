@@ -37,3 +37,5 @@ Pagable response body format:
 
 ## What's more
 If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
+<!-- Surprising: authenticated frontend smoke tests that mount `TronShell` must also mock `GET /api/v1/admin/workspaces/switcher`; a 401 from the shell-level workspace switcher request triggers the global unauthorized handler and silently bounces the page back to `/login`, even when the target page API itself is mocked successfully. -->
+<!-- Surprising: `user_oauth_identities` already preserved GitHub provenance, but legacy single-token GitHub profiles had overloaded `last_name = GitHub`; user detail now needs a dedicated `sourceType` field and a read-time fallback cleanup so old OAuth users stop surfacing provider names as surnames. -->

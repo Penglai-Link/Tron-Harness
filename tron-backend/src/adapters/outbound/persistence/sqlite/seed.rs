@@ -1,5 +1,5 @@
 use crate::{
-    domain::user::{PhoneNumber, User, UserStatus},
+    domain::user::{PhoneNumber, User, UserSourceType, UserStatus},
     shared::id::SnowflakeId,
 };
 
@@ -132,6 +132,7 @@ fn seeded_user(
     User {
         id: SnowflakeId::new(id),
         user_code: user_code.into(),
+        source_type: UserSourceType::Internal,
         username: username.into(),
         first_name: first_name.into(),
         last_name: last_name.into(),

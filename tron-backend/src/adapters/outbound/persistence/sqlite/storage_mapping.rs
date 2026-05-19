@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use crate::domain::user::{PhoneNumber, UserError, UserStatus};
+use crate::domain::user::{PhoneNumber, UserError, UserSourceType, UserStatus};
 
 const DEFAULT_TIMESTAMP: &str = "2026-05-12T00:00:00Z";
 const DEFAULT_EPOCH_MS: i64 = 1_778_544_000_000;
@@ -9,6 +9,7 @@ const LAST_ACTIVE_EPOCH_MS: i64 = 1_778_487_000_000;
 pub(super) struct StoredUserRow {
     pub(super) id: i64,
     pub(super) user_code: String,
+    pub(super) source_type: UserSourceType,
     pub(super) username: String,
     pub(super) first_name: String,
     pub(super) last_name: String,
@@ -69,6 +70,13 @@ pub(super) fn user_status_from_storage(value: &str) -> Result<UserStatus, UserEr
         "active" => Ok(UserStatus::Active),
         "archived" => Ok(UserStatus::Archived),
         _ => Err(UserError::StorageFailure),
+    }
+}
+
+pub(super) fn user_source_type_from_provider_code(value: Option<String>) -> UserSourceType {
+    match value.as_deref() {
+        Some("github") => UserSourceType::GitHub,
+        _ => UserSourceType::Internal,
     }
 }
 

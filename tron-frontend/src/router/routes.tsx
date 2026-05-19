@@ -44,7 +44,7 @@ export const appRoutes: AppRoute[] = [
   { pageId: "prompts.index", route: "/prompts", activeNav: "Prompts", title: "Prompt Management", archetype: "split-pane" },
   { pageId: "resources.index", route: "/resources", activeNav: "Resources", title: "Resources", archetype: "data-table" },
   { pageId: "admin.roles", route: "/admin/roles", activeNav: "Roles", title: "Role Matrix", archetype: "permission-grid" },
-  { pageId: "admin.workspace", route: "/admin/workspace", activeNav: "Workspace Admin", title: "Workspace Management", archetype: "split-pane" },
+  { pageId: "admin.workspace", route: "/admin/workspace", activeNav: "Workspace", title: "Workspace Management", archetype: "split-pane" },
   { pageId: "admin.userDetails", route: "/admin/users/detail", activeNav: "Users", title: "User Detail", archetype: "detail" },
   { pageId: "admin.usersNew", route: "/admin/users/new", activeNav: "Users", title: "Create User", archetype: "form" },
   { pageId: "skills.index", route: "/skills", activeNav: "Skills", title: "Skills and MCP", archetype: "split-pane" },

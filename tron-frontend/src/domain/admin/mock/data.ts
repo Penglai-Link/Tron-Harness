@@ -88,6 +88,7 @@ const users: UserRecord[] = [
   {
     id: "734102998871252992",
     userCode: "USER_ALEX_JOHNSON",
+    sourceType: "Internal",
     username: "alex.johnson",
     firstName: "Alex",
     lastName: "Johnson",
@@ -109,6 +110,7 @@ const users: UserRecord[] = [
   {
     id: "734103002743185408",
     userCode: "USER_MAYA_SINGH",
+    sourceType: "Internal",
     username: "maya.singh",
     firstName: "Maya",
     lastName: "Singh",
@@ -130,6 +132,7 @@ const users: UserRecord[] = [
   {
     id: "9007199254740993",
     userCode: "USER_CHEN_WEI",
+    sourceType: "Internal",
     username: "chen.wei",
     firstName: "Chen",
     lastName: "Wei",
@@ -151,6 +154,7 @@ const users: UserRecord[] = [
   {
     id: "734103112812822528",
     userCode: "USER_RINA_PATEL",
+    sourceType: "Internal",
     username: "rina.patel",
     firstName: "Rina",
     lastName: "Patel",

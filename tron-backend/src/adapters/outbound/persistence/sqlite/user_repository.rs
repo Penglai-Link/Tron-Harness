@@ -5,7 +5,7 @@ use crate::{
     domain::{
         auth::{AuthError, AuthMethod, OAuth2IdentityLink, RefreshSession},
         user::{
-            ListUsersQuery, PagedUsers, User, UserError, UserStatistics, UserStatus,
+            ListUsersQuery, PagedUsers, User, UserError, UserSourceType, UserStatistics, UserStatus,
             normalize_code_segment,
         },
     },
@@ -20,8 +20,8 @@ use super::{
     seed::seeded_users,
     storage_mapping::{
         StoredUserRow, bool_to_int, ensure_database_parent, phone_from_parts, storage_error,
-        timestamp_from_millis, timestamp_to_millis, user_status_from_storage,
-        user_status_to_storage,
+        timestamp_from_millis, timestamp_to_millis, user_source_type_from_provider_code,
+        user_status_from_storage, user_status_to_storage,
     },
 };
 
@@ -191,6 +191,45 @@ impl SqliteUserRepository {
             .optional()
             .map_err(|_| AuthError::StorageFailure)
     }
+
+    fn source_type_for_user_code(&self, user_code: &str) -> Result<crate::domain::user::UserSourceType, UserError> {
+        let provider_code = self
+            .connection
+            .query_row(
+                "SELECT provider_code
+                 FROM user_oauth_identities
+                 WHERE user_code = ?1
+                 ORDER BY linked_at ASC
+                 LIMIT 1",
+                [user_code],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(storage_error)?;
+        Ok(user_source_type_from_provider_code(provider_code))
+    }
+
+    fn normalize_legacy_oauth_profile(&self, mut user: User) -> User {
+        let single_token_display_name = user.display_name.split_whitespace().count() <= 1;
+        let provider_fallback_last_name = user.last_name.eq_ignore_ascii_case("github");
+
+        if user.source_type == UserSourceType::GitHub
+            && single_token_display_name
+            && provider_fallback_last_name
+        {
+            let normalized_last_name = if user.first_name.trim().is_empty() {
+                user.display_name.trim()
+            } else {
+                user.first_name.trim()
+            };
+
+            if !normalized_last_name.is_empty() {
+                user.last_name = normalized_last_name.to_owned();
+            }
+        }
+
+        user
+    }
 }
 
 impl UserRepository for SqliteUserRepository {
@@ -247,6 +286,7 @@ impl UserRepository for SqliteUserRepository {
     }
 
     fn get_user(&mut self, user_code: &str) -> Result<User, UserError> {
+        let source_type = self.source_type_for_user_code(user_code)?;
         let row = self
             .connection
             .query_row(
@@ -256,6 +296,7 @@ impl UserRepository for SqliteUserRepository {
                     Ok(StoredUserRow {
                         id: row.get(0)?,
                         user_code: row.get(1)?,
+                        source_type,
                         username: row.get(2)?,
                         first_name: row.get(3)?,
                         last_name: row.get(4)?,
@@ -283,9 +324,10 @@ impl UserRepository for SqliteUserRepository {
         let role_codes = self.role_codes(row.id)?;
         let space_codes = self.space_codes(row.id)?;
 
-        Ok(User {
+        Ok(self.normalize_legacy_oauth_profile(User {
             id: SnowflakeId::new(row.id),
             user_code: row.user_code,
+            source_type: row.source_type,
             username: row.username,
             first_name: row.first_name,
             last_name: row.last_name,
@@ -304,7 +346,7 @@ impl UserRepository for SqliteUserRepository {
             created_at: timestamp_from_millis(row.created_at),
             updated_at: timestamp_from_millis(row.updated_at),
             archived_at: row.archived_at.map(timestamp_from_millis),
-        })
+        }))
     }
 
     fn statistics(&mut self) -> Result<UserStatistics, UserError> {
@@ -686,5 +728,80 @@ impl UserRepository for SqliteUserRepository {
             )
             .map_err(|_| AuthError::StorageFailure)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SqliteUserRepository;
+    use crate::{
+        application::user::UserRepository,
+        domain::{auth::OAuth2IdentityLink, user::UserSourceType},
+    };
+
+    #[test]
+    fn get_user_derives_github_source_type_from_oauth_identity() {
+        let mut repository = SqliteUserRepository::connect(":memory:")
+            .expect("in-memory user repository should initialize");
+        let seeded_user = repository
+            .get_user("USR-0001")
+            .expect("seeded user should exist");
+        assert_eq!(seeded_user.source_type, UserSourceType::Internal);
+
+        let link_id = repository.next_id().expect("oauth identity id should be generated");
+        repository
+            .upsert_oauth_identity(&OAuth2IdentityLink {
+                id: link_id,
+                user_id: seeded_user.id.value(),
+                user_code: seeded_user.user_code.clone(),
+                provider_code: "github".into(),
+                provider_subject: "github-usr-0001".into(),
+                email: seeded_user.email.clone(),
+                display_name: seeded_user.display_name.clone(),
+                linked_at: 1_778_544_000_000,
+                updated_at: 1_778_544_000_000,
+            })
+            .expect("oauth identity should be linked");
+
+        let github_user = repository
+            .get_user("USR-0001")
+            .expect("seeded user should still exist");
+        assert_eq!(github_user.source_type, UserSourceType::GitHub);
+    }
+
+    #[test]
+    fn get_user_normalizes_legacy_github_fallback_last_name() {
+        let mut repository = SqliteUserRepository::connect(":memory:")
+            .expect("in-memory user repository should initialize");
+        let mut user = repository
+            .get_user("USR-0001")
+            .expect("seeded user should exist");
+        user.first_name = "CloudS3n".into();
+        user.last_name = "GitHub".into();
+        user.display_name = "CloudS3n".into();
+        repository
+            .update_user(&user)
+            .expect("legacy GitHub fallback profile should be persisted");
+
+        let link_id = repository.next_id().expect("oauth identity id should be generated");
+        repository
+            .upsert_oauth_identity(&OAuth2IdentityLink {
+                id: link_id,
+                user_id: user.id.value(),
+                user_code: user.user_code.clone(),
+                provider_code: "github".into(),
+                provider_subject: "github-legacy-user".into(),
+                email: user.email.clone(),
+                display_name: user.display_name.clone(),
+                linked_at: 1_778_544_000_000,
+                updated_at: 1_778_544_000_000,
+            })
+            .expect("oauth identity should be linked");
+
+        let normalized_user = repository
+            .get_user("USR-0001")
+            .expect("seeded user should still exist");
+        assert_eq!(normalized_user.source_type, UserSourceType::GitHub);
+        assert_eq!(normalized_user.last_name, "CloudS3n");
     }
 }

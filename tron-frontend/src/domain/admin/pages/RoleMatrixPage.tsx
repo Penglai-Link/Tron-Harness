@@ -591,7 +591,6 @@ export function RoleMatrixPage() {
       searchPlaceholder="Search users or roles..."
     >
       <PageHeader
-        description="Review fixed role codes, edit permission drafts, and keep role-matrix changes consistent with current user-management assignments."
         title="Users & Roles"
         actions={
           <>

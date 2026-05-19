@@ -210,6 +210,88 @@ async fn parent_detail_and_archive_rules_ignore_archived_subtasks() {
 }
 
 #[tokio::test]
+async fn parent_progress_is_derived_from_active_subtasks() {
+    let router = task_app("parent-progress-derived");
+    let parent = create_task(&router, "TRON_CORE", None, "Parent progress").await;
+    let parent_code = parent["data"]["taskCode"].as_str().unwrap().to_owned();
+    let first_child = create_task(&router, "TRON_CORE", Some(&parent_code), "Child one").await;
+    let first_child_code = first_child["data"]["taskCode"].as_str().unwrap().to_owned();
+    let second_child = create_task(&router, "TRON_CORE", Some(&parent_code), "Child two").await;
+    let second_child_code = second_child["data"]["taskCode"].as_str().unwrap().to_owned();
+
+    let first_completed = authenticated_request(
+        &router,
+        Method::PATCH,
+        &format!("/api/v1/tasks/{first_child_code}/status"),
+        Some(json!({ "status": "Completed", "progress": 10 })),
+    )
+    .await;
+    assert_eq!(first_completed.status(), StatusCode::OK);
+    let second_backlog = authenticated_request(
+        &router,
+        Method::PATCH,
+        &format!("/api/v1/tasks/{second_child_code}/status"),
+        Some(json!({ "status": "Backlog", "progress": 0 })),
+    )
+    .await;
+    assert_eq!(second_backlog.status(), StatusCode::OK);
+
+    let detail = authenticated_request(
+        &router,
+        Method::GET,
+        &format!("/api/v1/tasks/{parent_code}"),
+        None,
+    )
+    .await;
+    assert_eq!(response_json(detail).await["data"]["progress"], 50);
+
+    let list = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/tasks?workspaceCode=TRON_CORE&parentTaskCode=__ROOT__&search=Parent%20progress",
+        None,
+    )
+    .await;
+    assert_eq!(response_json(list).await["data"]["records"][0]["progress"], 50);
+
+    let kanban = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/tasks/kanban?workspaceCode=TRON_CORE&search=Parent%20progress",
+        None,
+    )
+    .await;
+    let kanban_json = response_json(kanban).await;
+    let backlog_parent = kanban_json["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .flat_map(|column| column["tasks"].as_array().into_iter().flatten())
+        .find(|task| task["taskCode"] == parent_code)
+        .cloned()
+        .expect("parent task should be listed in kanban");
+    assert_eq!(backlog_parent["progress"], 50);
+
+    let second_archived = authenticated_request(
+        &router,
+        Method::POST,
+        &format!("/api/v1/tasks/{second_child_code}/archive"),
+        None,
+    )
+    .await;
+    assert_eq!(second_archived.status(), StatusCode::OK);
+
+    let detail_after_archive = authenticated_request(
+        &router,
+        Method::GET,
+        &format!("/api/v1/tasks/{parent_code}"),
+        None,
+    )
+    .await;
+    assert_eq!(response_json(detail_after_archive).await["data"]["progress"], 100);
+}
+
+#[tokio::test]
 async fn update_status_archive_and_restore_task_lifecycle() {
     let router = task_app("status-archive-restore");
     let created = create_task(&router, "TRON_CORE", None, "Lifecycle task").await;

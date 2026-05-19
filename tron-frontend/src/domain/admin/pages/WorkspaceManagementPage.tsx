@@ -781,10 +781,9 @@ export function WorkspaceManagementPage() {
   }
 
   return (
-    <TronShell activeItem="Workspace Admin" searchPlaceholder="Search workspaces...">
+    <TronShell activeItem="Workspace" searchPlaceholder="Search workspaces...">
       <PageHeader
         title="Workspace Management"
-        description="Manage the workspace hierarchy and separate direct-user and role-based access grants from one admin console."
         actions={(
           <>
             <Button variant="secondary" disabled={treeLoading} aria-busy={treeLoading} onClick={refreshWorkspaceData}>
@@ -804,7 +803,6 @@ export function WorkspaceManagementPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Workspace Tree</h2>
-              <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">Search and select nodes in the hierarchy.</p>
             </div>
             {treeLoading ? <Badge tone="accent">Loading</Badge> : null}
           </div>

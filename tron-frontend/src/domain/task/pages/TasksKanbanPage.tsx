@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -12,19 +13,18 @@ import {
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
-  Field,
   PageHeader,
   SelectInput,
   SurfaceCard,
   TextInput,
   TronShell,
   useToast,
+  useWorkspaceSpaces,
 } from "@/shared";
 
 import {
   useTaskKanbanColumns,
   useTaskOptions,
-  useTaskWorkspaceOptions,
 } from "@/domain/task/hooks";
 import type {
   TaskListItem,
@@ -32,8 +32,6 @@ import type {
   TaskType,
 } from "@/domain/task/model";
 import { cn } from "@/shared/lib/utils";
-
-const DEFAULT_WORKSPACE_CODE = "TRON_CORE";
 
 function SearchField({ placeholder, value, onChange }: { placeholder: string; value: string; onChange: (value: string) => void }) {
   return (
@@ -92,19 +90,24 @@ function KanbanCard({ task, selected, onSelect }: { task: TaskListItem; selected
 
 export function TasksKanbanPage() {
   const options = useTaskOptions();
-  const [workspaceCode, setWorkspaceCode] = useState(DEFAULT_WORKSPACE_CODE);
   const [query, setQuery] = useState("");
   const [priority, setPriority] = useState("");
   const [selectedTaskCode, setSelectedTaskCode] = useState<string | null>(null);
   const navigate = useNavigate();
   const toast = useToast();
-  const { workspaces } = useTaskWorkspaceOptions(workspaceCode);
+  const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
+  const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
+  const workspaceCode = activeWorkspace?.workspaceCode ?? "";
   const taskQuery = useMemo(() => ({
     priority: priority || undefined,
     search: query,
     workspaceCode,
   }), [priority, query, workspaceCode]);
   const { columns, loading, refresh } = useTaskKanbanColumns(taskQuery);
+
+  useEffect(() => {
+    setSelectedTaskCode(null);
+  }, [workspaceCode]);
 
   return (
     <TronShell activeItem="Tasks" searchPlaceholder="Search tasks...">
@@ -121,25 +124,18 @@ export function TasksKanbanPage() {
           </>
         }
       />
-      <SurfaceCard className="mb-4 grid gap-3 p-4 md:grid-cols-[240px_minmax(0,1fr)_220px]">
-        <Field label="Workspace">
-          <SelectInput aria-label="Task workspace" value={workspaceCode} onChange={(event) => setWorkspaceCode(event.target.value)}>
-            {workspaces.map((workspace) => (
-              <option key={workspace.workspaceCode} value={workspace.workspaceCode}>
-                {workspace.label}
-              </option>
-            ))}
-          </SelectInput>
-        </Field>
-        <Field label="Search">
+      <SurfaceCard className="mb-4 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="grid gap-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Search</span>
           <SearchField placeholder="Filter task code, title, or description..." value={query} onChange={setQuery} />
-        </Field>
-        <Field label="Priority">
+        </div>
+        <div className="grid gap-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Priority</span>
           <SelectInput aria-label="Task priority filter" value={priority} onChange={(event) => setPriority(event.target.value)}>
             <option value="">All priorities</option>
             {options.priorities.map((item) => <option key={item} value={item}>{item}</option>)}
           </SelectInput>
-        </Field>
+        </div>
       </SurfaceCard>
       <div className="flex h-[720px] gap-4 overflow-x-auto pb-4">
         {columns.map((column) => (

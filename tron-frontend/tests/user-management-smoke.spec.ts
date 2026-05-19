@@ -22,6 +22,7 @@ let frontendBaseUrl = "";
 const alexUserRecord = {
   id: "9007199254740993",
   userCode: "USER_ALEX_JOHNSON",
+  sourceType: "Internal",
   username: "alex.johnson",
   firstName: "Alex",
   lastName: "Johnson",
@@ -127,6 +128,14 @@ function successEnvelope(data: unknown) {
   };
 }
 
+function unauthorizedEnvelope(code = "AUTH_UNAUTHORIZED", message = "authentication required") {
+  return {
+    code,
+    message,
+    data: {},
+  };
+}
+
 function pagedEnvelope(records: unknown[], current = 1, size = 20, total = records.length) {
   return successEnvelope({
     current,
@@ -134,6 +143,114 @@ function pagedEnvelope(records: unknown[], current = 1, size = 20, total = recor
     total,
     records,
   });
+}
+
+async function routeAuthenticatedSession(page: Page) {
+  const session = {
+    authMethod: "internal",
+    authenticated: true,
+    provider: null,
+    user: {
+      displayName: "Auth Operator",
+      email: "auth.operator@tron.ai",
+      roleCodes: ["ADMIN", "DEVELOPER"],
+      spaceCodes: ["PLATFORM", "DATA"],
+      status: "Active",
+      userCode: "USR-AUTH-0001",
+      username: "auth.operator",
+    },
+  };
+  let currentAccessToken = "";
+  let hasRefreshSession = false;
+
+  function issueGrant() {
+    currentAccessToken = "user-management-smoke-access-token";
+    hasRefreshSession = true;
+    return successEnvelope({
+      accessToken: currentAccessToken,
+      tokenType: "Bearer",
+      expiresIn: 900,
+      session,
+    });
+  }
+
+  await page.route("**/api/v1/auth/providers", async (route) => {
+    await fulfillJson(route, successEnvelope({
+      providers: [
+        { code: "internal", name: "Internal Account", type: "internal" },
+        { code: "github", name: "GitHub", type: "oauth2" },
+      ],
+    }));
+  });
+
+  await page.route("**/api/v1/auth/session", async (route) => {
+    if (route.request().headers().authorization !== `Bearer ${currentAccessToken}`) {
+      await fulfillJson(route, unauthorizedEnvelope(), 401);
+      return;
+    }
+
+    await fulfillJson(route, successEnvelope(session));
+  });
+
+  await page.route("**/api/v1/auth/login", async (route) => {
+    const body = route.request().postDataJSON() as { login?: string; password?: string };
+    if (body.login === "auth.operator" && body.password === "TronAuthPass123!") {
+      await fulfillJson(route, issueGrant());
+      return;
+    }
+
+    await fulfillJson(route, unauthorizedEnvelope("AUTH_INVALID_CREDENTIALS", "invalid credentials"), 401);
+  });
+
+  await page.route("**/api/v1/auth/refresh", async (route) => {
+    if (!hasRefreshSession) {
+      await fulfillJson(route, unauthorizedEnvelope("AUTH_REFRESH_INVALID", "invalid refresh session"), 401);
+      return;
+    }
+
+    await fulfillJson(route, issueGrant());
+  });
+
+  await page.route("**/api/v1/auth/logout", async (route) => {
+    currentAccessToken = "";
+    hasRefreshSession = false;
+    await fulfillJson(route, successEnvelope({ loggedOut: true }));
+  });
+
+  await page.route("**/api/v1/admin/workspaces/switcher", async (route) => {
+    await fulfillJson(route, successEnvelope({
+      primarySpaces: [
+        {
+          childCount: 0,
+          description: "Primary workspace for authenticated admin smoke tests.",
+          name: "Primary Space",
+          status: "Active",
+          workspaceCode: "PLATFORM",
+        },
+      ],
+      secondarySpaces: [
+        {
+          childCount: 0,
+          depth: 1,
+          description: "Root workspace context for authenticated admin smoke tests.",
+          effectiveUserCount: 1,
+          label: "Primary Space",
+          name: "Primary Space",
+          primaryWorkspaceCode: "PLATFORM",
+          status: "Active",
+          workspaceCode: "PLATFORM",
+        },
+      ],
+    }));
+  });
+}
+
+async function signInToProtectedRoute(page: Page, targetPath: string) {
+  await page.goto(`${frontendBaseUrl}/login?redirect=${encodeURIComponent(targetPath)}`);
+  await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
+  await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
+  await page.getByRole("button", { name: /sign in/i }).click();
+  await expect(page).toHaveURL(`${frontendBaseUrl}${targetPath}`);
 }
 
 function sharedToastViewport(page: Page) {
@@ -1621,6 +1738,7 @@ test("operator refinement TDD-UM-23: detail inline save should keep userCode and
     updatedAt: "2026-05-13T00:00:00.000Z",
   });
 
+  await routeAuthenticatedSession(page);
   await page.route("**/api/v1/admin/users**", async (route) => {
     const captured = captureAdminRequest(route);
     requests.push(captured);
@@ -1679,7 +1797,7 @@ test("operator refinement TDD-UM-23: detail inline save should keep userCode and
     await fulfillJson(route, { code: "TEST_ROUTE_NOT_FOUND", message: `${captured.method} ${captured.pathname}`, data: {} }, 404);
   });
 
-  await page.goto(`${frontendBaseUrl}/admin/users/detail?userCode=USER_ALEX_JOHNSON`);
+  await signInToProtectedRoute(page, "/admin/users/detail?userCode=USER_ALEX_JOHNSON");
 
   await expect(page.getByRole("heading", { name: "Alex Johnson" })).toBeVisible();
   await expect(page.getByText("Phone Country Code", { exact: true })).toBeVisible();
@@ -1755,6 +1873,31 @@ test("operator refinement TDD-UM-23: detail inline save should keep userCode and
   await expect(page.getByText("zh-CN", { exact: true })).toBeVisible();
   await expect(page.getByText("Asia/Shanghai", { exact: true })).toBeVisible();
   await expect(page.getByText(formatUiTimestamp("2026-05-13T03:00:00.000Z"), { exact: true })).toBeVisible();
+});
+
+test("github oauth2 users expose source type without overloading last name", async ({ page }) => {
+  const githubUser = makeUserRecord({
+    userCode: "USR-CLOUDSEN",
+    sourceType: "GitHub",
+    username: "cloudsen",
+    firstName: "CloudS3n",
+    lastName: "CloudS3n",
+    displayName: "CloudS3n",
+    email: "cloudsen@example.com",
+    roleCodes: ["VIEWER"],
+    spaceCodes: ["PLATFORM"],
+  });
+
+  await routeAuthenticatedSession(page);
+  await routeAdminUsers(page, [githubUser]);
+  await signInToProtectedRoute(page, "/admin/users/detail?userCode=USR-CLOUDSEN");
+
+  const detailFieldValue = (label: string) =>
+    page.getByText(label, { exact: true }).locator("xpath=following-sibling::p[1]");
+
+  await expect(detailFieldValue("Source Type")).toHaveText("GitHub");
+  await expect(detailFieldValue("Last Name")).toHaveText("CloudS3n");
+  await expect(detailFieldValue("Last Name")).not.toHaveText("GitHub");
 });
 
 test("operator refinement TDD-UM-24: create flow should omit userCode input/payload and render backend-generated userCode", async ({ page }) => {

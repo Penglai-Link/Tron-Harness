@@ -389,12 +389,12 @@ impl TaskService {
                     .iter()
                     .find(|candidate| candidate.task_code == parent_code)
             })
-            .map(summary_from_task);
+            .map(|parent| summary_from_task(parent, &all_tasks));
         let mut subtasks = all_tasks
             .iter()
             .filter(|candidate| candidate.parent_task_code.as_deref() == Some(&task.task_code))
             .filter(|candidate| candidate.status != TaskStatus::Archived)
-            .map(summary_from_task)
+            .map(|candidate| summary_from_task(candidate, &all_tasks))
             .collect::<Vec<_>>();
         subtasks.sort_by(|left, right| left.task_code.cmp(&right.task_code));
         let assignee_user_codes = self
@@ -412,6 +412,7 @@ impl TaskService {
             .into_iter()
             .map(|entry| entry.code)
             .collect();
+        let progress = effective_progress(&task, &all_tasks);
         Ok(TaskDetail {
             id: task.id.as_decimal_string(),
             task_code: task.task_code,
@@ -425,7 +426,7 @@ impl TaskService {
             task_type: task.task_type,
             source_type: task.source_type,
             source_url: task.source_url,
-            progress: task.progress,
+            progress,
             assignee_user_codes,
             agent_codes,
             app_codes,
@@ -445,7 +446,7 @@ impl TaskService {
             title: task.title.clone(),
             status: task.status,
             priority: task.priority,
-            progress: task.progress,
+            progress: effective_progress(task, all_tasks),
             task_type: task.task_type,
             source_type: task.source_type,
             source_url: task.source_url.clone(),
@@ -645,15 +646,30 @@ fn parent_filter_matches(task: &Task, parent_task_code: Option<&str>) -> bool {
     }
     task.parent_task_code.as_deref() == Some(parent_filter)
 }
-fn summary_from_task(task: &Task) -> TaskSummary {
+fn summary_from_task(task: &Task, all_tasks: &[Task]) -> TaskSummary {
     TaskSummary {
         task_code: task.task_code.clone(),
         title: task.title.clone(),
         status: task.status,
         priority: task.priority,
-        progress: task.progress,
+        progress: effective_progress(task, all_tasks),
         task_type: task.task_type,
     }
+}
+fn effective_progress(task: &Task, all_tasks: &[Task]) -> u8 {
+    let active_subtasks = all_tasks
+        .iter()
+        .filter(|candidate| candidate.parent_task_code.as_deref() == Some(&task.task_code))
+        .filter(|candidate| candidate.status != TaskStatus::Archived)
+        .collect::<Vec<_>>();
+    if active_subtasks.is_empty() {
+        return task.progress;
+    }
+    let total = active_subtasks
+        .iter()
+        .map(|candidate| usize::from(effective_progress(candidate, all_tasks)))
+        .sum::<usize>();
+    ((total + (active_subtasks.len() / 2)) / active_subtasks.len()) as u8
 }
 fn matches_search(task: &Task, search: Option<&str>) -> bool {
     let Some(search) = search.map(str::trim).filter(|value| !value.is_empty()) else {

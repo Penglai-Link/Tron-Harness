@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -8,13 +9,14 @@ import {
   useSearchParams,
 } from "react-router";
 import {
-  Archive,
   Edit3,
+  Maximize2,
   Plus,
-  RotateCcw,
   Save,
   X,
 } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import { Button } from "@/shared/ui/Button";
 import {
@@ -27,6 +29,7 @@ import {
   TronShell,
   useToast,
 } from "@/shared";
+import { cn } from "@/shared/lib/utils";
 
 import {
   archiveTask,
@@ -77,6 +80,10 @@ function splitCodes(value: string) {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
 
+function sameCodes(left: string[], right: string[]) {
+  return left.length === right.length && left.every((item, index) => item === right[index]);
+}
+
 function progressValue(value: string) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 0;
@@ -89,8 +96,50 @@ function taskDetailHref(taskCode: string) {
 
 function ReadValue({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-10 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm leading-6 text-[var(--color-on-surface)]">
+    <div className="min-h-6 py-1 text-sm leading-6 text-[var(--color-on-surface)] whitespace-pre-wrap">
       {children || <span className="text-[var(--color-on-surface-variant)]">None</span>}
+    </div>
+  );
+}
+
+function MarkdownContent({ ariaLabel, className, content }: { ariaLabel?: string; className?: string; content?: string | null }) {
+  const value = content?.trim();
+
+  if (!value) {
+    return (
+      <div aria-label={ariaLabel} className={cn("min-h-6 py-1 text-sm leading-6 text-[var(--color-on-surface)]", className)}>
+        <span className="text-[var(--color-on-surface-variant)]">None</span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      aria-label={ariaLabel}
+      className={cn(
+        "min-h-6 py-1 text-sm leading-7 text-[var(--color-on-surface)]",
+        "[&_a]:text-[var(--color-primary)] [&_a]:underline-offset-2 hover:[&_a]:underline",
+        "[&_blockquote]:mb-3 [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--color-outline-variant)] [&_blockquote]:pl-4 [&_blockquote]:text-[var(--color-on-surface-variant)]",
+        "[&_code]:font-mono [&_code]:text-[13px]",
+        "[&_h1]:mb-4 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight",
+        "[&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:leading-tight",
+        "[&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:leading-tight",
+        "[&_hr]:my-4 [&_hr]:border-[var(--color-outline-variant)]",
+        "[&_li]:mb-1",
+        "[&_ol]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5",
+        "[&_p]:mb-3 [&_p:last-child]:mb-0",
+        "[&_p_code]:rounded [&_p_code]:bg-[var(--color-surface-container-lowest)] [&_p_code]:px-1.5 [&_p_code]:py-0.5",
+        "[&_pre]:mb-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-[var(--color-surface-container-lowest)] [&_pre]:p-3",
+        "[&_pre_code]:bg-transparent [&_pre_code]:p-0",
+        "[&_table]:mb-3 [&_table]:w-full [&_table]:border-collapse [&_table]:overflow-hidden [&_table]:rounded-lg",
+        "[&_tbody_tr]:border-b [&_tbody_tr]:border-[var(--color-outline-variant)] [&_tbody_tr:last-child]:border-b-0",
+        "[&_td]:px-3 [&_td]:py-2 [&_td]:align-top",
+        "[&_th]:border-b [&_th]:border-[var(--color-outline-variant)] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold",
+        "[&_ul]:mb-3 [&_ul]:list-disc [&_ul]:pl-5",
+        className,
+      )}
+    >
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
     </div>
   );
 }
@@ -102,7 +151,6 @@ export function TaskDetailsPage() {
   const options = useTaskOptions();
   const toast = useToast();
   const dataSource = getServiceDataSource("task");
-  const archived = task.status === "Archived" || Boolean(task.archivedAt);
   const { effectiveUsers } = useTaskWorkspaceOptions(task.workspaceCode);
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
@@ -116,9 +164,22 @@ export function TaskDetailsPage() {
   const [appCodesInput, setAppCodesInput] = useState(task.appCodes.join(", "));
   const [assigneeUserCodes, setAssigneeUserCodes] = useState(task.assigneeUserCodes);
   const [childTitle, setChildTitle] = useState("Follow-up subtask");
+  const [descriptionFullscreenOpen, setDescriptionFullscreenOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const skipNextTaskSync = useRef(false);
+  const taskRef = useRef(task);
+  const statusRef = useRef(status);
+  const progressRef = useRef(progress);
+  taskRef.current = task;
+  statusRef.current = status;
+  progressRef.current = progress;
+  const archived = status === "Archived" || task.status === "Archived" || Boolean(task.archivedAt);
 
   useEffect(() => {
+    if (skipNextTaskSync.current) {
+      skipNextTaskSync.current = false;
+      return;
+    }
     setTitle(task.title);
     setDescription(task.description ?? "");
     setTaskType(task.taskType);
@@ -130,58 +191,207 @@ export function TaskDetailsPage() {
     setAgentCodesInput(task.agentCodes.join(", "));
     setAppCodesInput(task.appCodes.join(", "));
     setAssigneeUserCodes(task.assigneeUserCodes);
+    setDescriptionFullscreenOpen(false);
     setEditing(false);
   }, [task]);
 
+  useEffect(() => {
+    if (!descriptionFullscreenOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDescriptionFullscreenOpen(false);
+    };
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [descriptionFullscreenOpen]);
+
   const effectiveUserByCode = new Map(effectiveUsers.map((user) => [user.userCode, user]));
   const assignedUsers = assigneeUserCodes.map((userCode) => effectiveUserByCode.get(userCode)?.displayName ?? userCode);
-  const editable = editing && !archived;
+  const detailEditable = editing && !archived;
+  const updatesEditable = !archived;
+  const progressManagedBySubtasks = task.subtasks.length > 0;
+  const nextAgentCodes = splitCodes(agentCodesInput);
+  const nextAppCodes = splitCodes(appCodesInput);
+  const detailDirty = title !== task.title
+    || description !== (task.description ?? "")
+    || taskType !== task.taskType
+    || sourceType !== task.sourceType
+    || sourceUrl !== (task.sourceUrl ?? "");
+  const breadcrumbs = [
+    { label: "Tasks", href: "/tasks" },
+    ...(task.parent ? [{ label: task.parent.taskCode, href: taskDetailHref(task.parent.taskCode) }] : []),
+    { label: task.taskCode },
+  ];
 
-  function resetForm() {
+  function resetDetailFields() {
     setTitle(task.title);
     setDescription(task.description ?? "");
     setTaskType(task.taskType);
     setSourceType(task.sourceType);
     setSourceUrl(task.sourceUrl ?? "");
-    setPriority(task.priority);
-    setStatus(task.status);
-    setProgress(String(task.progress));
-    setAgentCodesInput(task.agentCodes.join(", "));
-    setAppCodesInput(task.appCodes.join(", "));
-    setAssigneeUserCodes(task.assigneeUserCodes);
+    setDescriptionFullscreenOpen(false);
     setEditing(false);
   }
 
-  async function saveTask() {
+  async function saveDetailFields() {
     if (archived) {
       toast.warning("Restore archived task before editing");
       return;
     }
     try {
       const payload = {
-        agentCodes: splitCodes(agentCodesInput),
-        appCodes: splitCodes(appCodesInput),
-        assigneeUserCodes,
         description,
-        priority,
         sourceType,
         sourceUrl,
         taskType,
         title,
       };
-      let updated = dataSource === "api" ? await updateTask(task.taskCode, payload) : updateMockTask(task.taskCode, payload);
-      const nextProgress = progressValue(progress);
-      if (status !== task.status || nextProgress !== task.progress) {
-        updated = dataSource === "api"
-          ? await updateTaskStatus(task.taskCode, { progress: nextProgress, status })
-          : updateMockTaskStatus(task.taskCode, { progress: nextProgress, status });
-      }
+      const updated = dataSource === "api" ? await updateTask(task.taskCode, payload) : updateMockTask(task.taskCode, payload);
       setTask(updated);
+      setDescriptionFullscreenOpen(false);
       setEditing(false);
-      toast.success(`Task ${updated.taskCode} saved`);
+      toast.success(`Task ${updated.taskCode} details saved`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Task could not be updated");
+      toast.error(error instanceof Error ? error.message : "Task details could not be updated");
     }
+  }
+
+  async function saveUpdateFields(overrides: Partial<{
+    agentCodes: string[];
+    appCodes: string[];
+    assigneeUserCodes: string[];
+    priority: TaskPriority;
+    progress: number;
+    status: TaskStatus;
+  }> = {}, options: { onError?: () => void } = {}) {
+
+    const draft = {
+      agentCodes: nextAgentCodes,
+      appCodes: nextAppCodes,
+      assigneeUserCodes,
+      priority,
+      progress: progressValue(progress),
+      status,
+      ...overrides,
+    };
+    const hasChanges = draft.priority !== task.priority
+      || draft.status !== task.status
+      || draft.progress !== task.progress
+      || !sameCodes(draft.agentCodes, task.agentCodes)
+      || !sameCodes(draft.appCodes, task.appCodes)
+      || !sameCodes(draft.assigneeUserCodes, task.assigneeUserCodes);
+
+    if (!hasChanges) return;
+
+    try {
+      if (archived) return;
+
+      const payload = {
+        agentCodes: draft.agentCodes,
+        appCodes: draft.appCodes,
+        assigneeUserCodes: draft.assigneeUserCodes,
+        priority: draft.priority,
+      };
+      let updated = dataSource === "api" ? await updateTask(task.taskCode, payload) : updateMockTask(task.taskCode, payload);
+      if (draft.status !== task.status || draft.progress !== task.progress) {
+        updated = dataSource === "api"
+          ? await updateTaskStatus(task.taskCode, { progress: draft.progress, status: draft.status })
+          : updateMockTaskStatus(task.taskCode, { progress: draft.progress, status: draft.status });
+      }
+      skipNextTaskSync.current = true;
+      setTask(updated);
+      toast.success(`Task ${updated.taskCode} updates saved`);
+    } catch (error) {
+      options.onError?.();
+      toast.error(error instanceof Error ? error.message : "Updates could not be saved");
+    }
+  }
+
+  async function handleStatusChange(nextStatus: TaskStatus) {
+    const currentTask = taskRef.current;
+    const currentProgress = progressRef.current;
+    const previousStatus = statusRef.current;
+    const archivedNow = previousStatus === "Archived" || currentTask.status === "Archived" || Boolean(currentTask.archivedAt);
+    setStatus(nextStatus);
+    statusRef.current = nextStatus;
+    if (nextStatus === previousStatus) return;
+
+    try {
+      if (nextStatus === "Archived" && !archivedNow) {
+        const lifecycle = dataSource === "api" ? await archiveTask(currentTask.taskCode) : archiveMockTask(currentTask.taskCode);
+        skipNextTaskSync.current = true;
+        setTask({
+          ...currentTask,
+          archivedAt: lifecycle.archivedAt,
+          previousStatus: lifecycle.previousStatus,
+          status: lifecycle.status,
+        });
+        setStatus(lifecycle.status);
+        statusRef.current = lifecycle.status;
+        toast.success(`Task ${currentTask.taskCode} archived`);
+        return;
+      }
+
+      if (archivedNow && nextStatus !== "Archived") {
+        await (dataSource === "api" ? restoreTask(currentTask.taskCode) : restoreMockTask(currentTask.taskCode));
+        const updated = dataSource === "api"
+          ? await updateTaskStatus(currentTask.taskCode, { progress: progressValue(currentProgress), status: nextStatus })
+          : updateMockTaskStatus(currentTask.taskCode, { progress: progressValue(currentProgress), status: nextStatus });
+        skipNextTaskSync.current = true;
+        setTask(updated);
+        setStatus(updated.status);
+        statusRef.current = updated.status;
+        setProgress(String(updated.progress));
+        progressRef.current = String(updated.progress);
+        toast.success(`Task ${currentTask.taskCode} restored`);
+        return;
+      }
+
+      const updated = dataSource === "api"
+        ? await updateTaskStatus(currentTask.taskCode, { progress: progressValue(currentProgress), status: nextStatus })
+        : updateMockTaskStatus(currentTask.taskCode, { progress: progressValue(currentProgress), status: nextStatus });
+      skipNextTaskSync.current = true;
+      setTask(updated);
+      setStatus(updated.status);
+      statusRef.current = updated.status;
+      setProgress(String(updated.progress));
+      progressRef.current = String(updated.progress);
+      toast.success(`Task ${updated.taskCode} updates saved`);
+    } catch (error) {
+      setStatus(previousStatus);
+      statusRef.current = previousStatus;
+      toast.error(error instanceof Error ? error.message : "Updates could not be saved");
+    }
+  }
+
+  function handlePriorityChange(nextPriority: TaskPriority) {
+    setPriority(nextPriority);
+    void saveUpdateFields({ priority: nextPriority });
+  }
+
+  function handleProgressBlur() {
+    void saveUpdateFields({ progress: progressValue(progress) });
+  }
+
+  function handleAgentCodesBlur() {
+    void saveUpdateFields({ agentCodes: splitCodes(agentCodesInput) });
+  }
+
+  function handleAppCodesBlur() {
+    void saveUpdateFields({ appCodes: splitCodes(appCodesInput) });
+  }
+
+  function handleAssigneeToggle(userCode: string) {
+    const nextCodes = toggleCode(assigneeUserCodes, userCode);
+    setAssigneeUserCodes(nextCodes);
+    void saveUpdateFields({ assigneeUserCodes: nextCodes });
   }
 
   async function addSubtask() {
@@ -213,73 +423,39 @@ export function TaskDetailsPage() {
     }
   }
 
-  async function toggleArchive() {
-    try {
-      if (archived) {
-        await (dataSource === "api" ? restoreTask(task.taskCode) : restoreMockTask(task.taskCode));
-        toast.success(`Task ${task.taskCode} restored`);
-      } else {
-        await (dataSource === "api" ? archiveTask(task.taskCode) : archiveMockTask(task.taskCode));
-        toast.success(`Task ${task.taskCode} archived`);
-      }
-      refresh();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Task lifecycle action failed");
-    }
-  }
-
   return (
     <TronShell activeItem="Tasks" searchPlaceholder="Search task context...">
       <PageHeader
-        breadcrumbs={[{ label: "Tasks", href: "/tasks" }, { label: task.taskCode }]}
+        breadcrumbs={breadcrumbs}
         title="Task Details"
         description={loading ? "Loading task data..." : undefined}
         actions={
           <>
-            {editable ? (
-              <>
-                <Button onClick={saveTask}><Save size={15} />Save</Button>
-                <Button variant="secondary" onClick={resetForm}><X size={15} />Cancel</Button>
-              </>
-            ) : !archived ? (
-              <Button variant="secondary" onClick={() => setEditing(true)}><Edit3 size={15} />Edit</Button>
-            ) : null}
-            <Button variant="secondary" onClick={() => {
+            <Button className="bg-black text-white hover:bg-neutral-800" variant="primary" onClick={() => {
               toast.info("Task execution is not available in v1");
-            }}>Execute Task</Button>
-            <Button variant="secondary" onClick={toggleArchive}>
-              {archived ? <RotateCcw size={16} aria-hidden="true" /> : <Archive size={16} aria-hidden="true" />}
-              {archived ? "Restore" : "Archive"}
-            </Button>
+            }}>Execute</Button>
           </>
         }
       />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
           <SurfaceCard>
-            <div className="mb-4">
-              <span className="font-mono text-sm text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
+            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Task Attributes</h2>
+              </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Title">
-                {editable ? (
-                  <TextInput aria-label="Task detail title" value={title} onChange={(event) => setTitle(event.target.value)} />
-                ) : (
-                  <ReadValue>{task.title}</ReadValue>
-                )}
-              </Field>
-              <Field label="Status">
-                {editable ? (
-                  <SelectInput aria-label="Task detail status" value={status} onChange={(event) => setStatus(event.target.value as TaskStatus)}>
-                    {options.statuses.filter((item) => item !== "Archived").map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
-                  </SelectInput>
-                ) : (
-                  <ReadValue>{archived ? "Archived" : statusLabel(task.status)}</ReadValue>
-                )}
+              <Field label="Task Status">
+                <SelectInput aria-label="Task detail status" value={status} onChange={(event) => {
+                  void handleStatusChange(event.target.value as TaskStatus);
+                }}>
+                  {options.statuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
+                </SelectInput>
               </Field>
               <Field label="Priority">
-                {editable ? (
-                  <SelectInput aria-label="Task detail priority" value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)}>
+                {updatesEditable ? (
+                  <SelectInput aria-label="Task detail priority" value={priority} onChange={(event) => handlePriorityChange(event.target.value as TaskPriority)}>
                     {options.priorities.map((item) => <option key={item}>{item}</option>)}
                   </SelectInput>
                 ) : (
@@ -287,72 +463,60 @@ export function TaskDetailsPage() {
                 )}
               </Field>
               <Field label="Progress">
-                {editable ? (
+                {updatesEditable ? (
                   <TextInput
                     aria-label="Task detail progress"
+                    disabled={progressManagedBySubtasks}
                     max="100"
                     min="0"
                     type="number"
-                    value={progress}
+                    value={progressManagedBySubtasks ? String(task.progress) : progress}
                     onChange={(event) => setProgress(event.target.value)}
+                    onBlur={handleProgressBlur}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
                   />
                 ) : (
                   <ReadValue>{task.progress}%</ReadValue>
                 )}
               </Field>
-              <Field label="Task Type">
-                {editable ? (
-                  <SelectInput aria-label="Task detail type" value={taskType} onChange={(event) => setTaskType(event.target.value as TaskType)}>
-                    {options.taskTypes.map((item) => <option key={item}>{item}</option>)}
-                  </SelectInput>
-                ) : (
-                  <ReadValue>{task.taskType}</ReadValue>
-                )}
-              </Field>
-              <Field label="Source Type">
-                {editable ? (
-                  <SelectInput aria-label="Task detail source type" value={sourceType} onChange={(event) => setSourceType(event.target.value as TaskSourceType)}>
-                    {options.sourceTypes.map((item) => <option key={item}>{item}</option>)}
-                  </SelectInput>
-                ) : (
-                  <ReadValue>{task.sourceType}</ReadValue>
-                )}
-              </Field>
-              <Field label="Source URL">
-                {editable ? (
-                  <TextInput aria-label="Task detail source URL" placeholder="Optional GitHub/GitLab URL" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} />
-                ) : (
-                  <ReadValue>{task.sourceUrl || "None"}</ReadValue>
-                )}
-              </Field>
               <Field label="Agent Codes">
-                {editable ? (
-                  <TextInput aria-label="Task detail agent codes" placeholder="agent-reviewer, agent-builder" value={agentCodesInput} onChange={(event) => setAgentCodesInput(event.target.value)} />
+                {updatesEditable ? (
+                  <TextInput
+                    aria-label="Task detail agent codes"
+                    placeholder="agent-reviewer, agent-builder"
+                    value={agentCodesInput}
+                    onChange={(event) => setAgentCodesInput(event.target.value)}
+                    onBlur={handleAgentCodesBlur}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
+                  />
                 ) : (
                   <ReadValue>{task.agentCodes.join(", ") || "None"}</ReadValue>
                 )}
               </Field>
               <Field label="App Codes">
-                {editable ? (
-                  <TextInput aria-label="Task detail app codes" placeholder="github, notion" value={appCodesInput} onChange={(event) => setAppCodesInput(event.target.value)} />
+                {updatesEditable ? (
+                  <TextInput
+                    aria-label="Task detail app codes"
+                    placeholder="github, notion"
+                    value={appCodesInput}
+                    onChange={(event) => setAppCodesInput(event.target.value)}
+                    onBlur={handleAppCodesBlur}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
+                  />
                 ) : (
                   <ReadValue>{task.appCodes.join(", ") || "None"}</ReadValue>
                 )}
               </Field>
             </div>
-            <div className="mt-4"><ProgressBar value={editable ? progressValue(progress) : task.progress} /></div>
-            <div className="mt-4">
-              <Field label="Description">
-                {editable ? (
-                  <TextArea aria-label="Task detail description" className="min-h-36 w-full" value={description} onChange={(event) => setDescription(event.target.value)} />
-                ) : (
-                  <ReadValue>{task.description || "None"}</ReadValue>
-                )}
-              </Field>
-            </div>
             <SurfaceCard className="mt-4 bg-[var(--color-surface-container-lowest)]">
               <h3 className="mb-3 text-sm font-semibold">Assigned Users</h3>
-              {editable ? (
+              {updatesEditable ? (
                 <div className="grid gap-2 md:grid-cols-2">
                   {effectiveUsers.map((user) => (
                     <label className="flex items-start gap-3 rounded-lg border border-[var(--color-outline-variant)] p-3 text-sm" key={user.userCode}>
@@ -361,7 +525,7 @@ export function TaskDetailsPage() {
                         checked={assigneeUserCodes.includes(user.userCode)}
                         className="mt-1"
                         type="checkbox"
-                        onChange={() => setAssigneeUserCodes((current) => toggleCode(current, user.userCode))}
+                        onChange={() => handleAssigneeToggle(user.userCode)}
                       />
                       <span>
                         <span className="block font-medium">{user.displayName}</span>
@@ -375,6 +539,76 @@ export function TaskDetailsPage() {
                 <ReadValue>{assignedUsers.join(", ") || "None"}</ReadValue>
               )}
             </SurfaceCard>
+          </SurfaceCard>
+          <SurfaceCard>
+            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Task Definition</h2>
+                <p className="mt-1 font-mono text-sm text-[var(--color-on-surface-variant)]">{task.taskCode}</p>
+              </div>
+              {detailEditable ? (
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" onClick={saveDetailFields} disabled={!detailDirty}><Save size={15} />Save Details</Button>
+                  <Button size="sm" variant="secondary" onClick={resetDetailFields}><X size={15} />Cancel</Button>
+                </div>
+              ) : !archived ? (
+                <Button size="sm" variant="secondary" onClick={() => setEditing(true)}><Edit3 size={15} />Edit Details</Button>
+              ) : null}
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Title">
+                {detailEditable ? (
+                  <TextInput aria-label="Task detail title" value={title} onChange={(event) => setTitle(event.target.value)} />
+                ) : (
+                  <ReadValue>{task.title}</ReadValue>
+                )}
+              </Field>
+              <Field label="Task Type">
+                {detailEditable ? (
+                  <SelectInput aria-label="Task detail type" value={taskType} onChange={(event) => setTaskType(event.target.value as TaskType)}>
+                    {options.taskTypes.map((item) => <option key={item}>{item}</option>)}
+                  </SelectInput>
+                ) : (
+                  <ReadValue>{task.taskType}</ReadValue>
+                )}
+              </Field>
+              <Field label="Source Type">
+                {detailEditable ? (
+                  <SelectInput aria-label="Task detail source type" value={sourceType} onChange={(event) => setSourceType(event.target.value as TaskSourceType)}>
+                    {options.sourceTypes.map((item) => <option key={item}>{item}</option>)}
+                  </SelectInput>
+                ) : (
+                  <ReadValue>{task.sourceType}</ReadValue>
+                )}
+              </Field>
+              <Field label="Source URL">
+                {detailEditable ? (
+                  <TextInput aria-label="Task detail source URL" placeholder="Optional GitHub/GitLab URL" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} />
+                ) : (
+                  <ReadValue>{task.sourceUrl || "None"}</ReadValue>
+                )}
+              </Field>
+            </div>
+            <div className="mt-4 grid gap-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Description</span>
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                  aria-label="Open description fullscreen"
+                  onClick={() => setDescriptionFullscreenOpen(true)}
+                >
+                  <Maximize2 size={14} aria-hidden="true" />
+                  Fullscreen
+                </Button>
+              </div>
+              {detailEditable ? (
+                <TextArea aria-label="Task detail description" className="min-h-36 w-full" value={description} onChange={(event) => setDescription(event.target.value)} />
+              ) : (
+                <MarkdownContent ariaLabel="Task description markdown" className="max-h-80 overflow-y-auto pr-2" content={task.description} />
+              )}
+            </div>
           </SurfaceCard>
         </div>
         <aside className="space-y-5">
@@ -413,7 +647,7 @@ export function TaskDetailsPage() {
               ))}
               {!task.subtasks.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">No active subtasks.</p> : null}
             </div>
-            {editable ? (
+            {!archived ? (
               <>
                 <div className="mt-4">
                   <Field label="New Subtask Title">
@@ -426,6 +660,48 @@ export function TaskDetailsPage() {
           </SurfaceCard>
         </aside>
       </div>
+      {descriptionFullscreenOpen ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+          <div
+            className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
+            role="dialog"
+            aria-modal="true"
+            aria-label={detailEditable ? "Description fullscreen editor" : "Description fullscreen preview"}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
+              <div>
+                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Description</h2>
+                <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">
+                  {detailEditable ? "Edit the task description in a larger workspace." : "Preview the rendered markdown for this task description."}
+                </p>
+              </div>
+              <Button
+                size="icon"
+                type="button"
+                variant="ghost"
+                aria-label="Close description fullscreen"
+                onClick={() => setDescriptionFullscreenOpen(false)}
+              >
+                <X size={16} aria-hidden="true" />
+              </Button>
+            </div>
+            <div className="min-h-0 flex-1 px-5 py-4">
+              {detailEditable ? (
+                <TextArea
+                  aria-label="Task detail description fullscreen"
+                  className="h-full min-h-0 w-full resize-none"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                />
+              ) : (
+                <div className="h-full overflow-y-auto pr-1">
+                  <MarkdownContent ariaLabel="Task description markdown fullscreen" className="max-w-none" content={task.description} />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </TronShell>
   );
 }
