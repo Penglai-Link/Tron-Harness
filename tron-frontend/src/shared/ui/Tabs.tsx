@@ -22,7 +22,7 @@ export function SegmentedTabs({ items, onValueChange, value }: SegmentedTabsProp
           <button
             className={cn(
               "h-8 rounded-md px-3 text-[13px] font-medium transition-colors",
-              selected ? "bg-white text-[var(--color-on-surface)] shadow-sm" : "text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]",
+              selected ? "bg-[var(--color-elevated-surface-strong)] text-[var(--color-on-surface)] shadow-sm" : "text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]",
             )}
             type="button"
             role="tab"

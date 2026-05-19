@@ -40,7 +40,7 @@ export function AuthUserMenuPanel() {
         <p className="mt-2 text-sm font-medium text-[var(--color-on-surface)]">{session.user.displayName}</p>
         <p className="text-[12px] text-[var(--color-on-surface-variant)]">{session.user.email}</p>
         {session.provider ? (
-          <span className="mt-3 inline-flex rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
+          <span className="mt-3 inline-flex rounded-full bg-[var(--color-elevated-surface)] px-2.5 py-1 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
             {session.provider.name}
           </span>
         ) : null}

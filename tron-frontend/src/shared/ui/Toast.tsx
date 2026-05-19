@@ -56,7 +56,7 @@ const ToastContext = createContext<ToastApi | undefined>(undefined);
 const DEFAULT_TOAST_DURATION_MS = 2400;
 
 const toneClasses: Record<ToastTone, string> = {
-  info: "border-[var(--color-accent-container)] bg-white text-[var(--color-on-surface)]",
+  info: "border-[var(--color-accent-container)] bg-[var(--color-elevated-surface-strong)] text-[var(--color-on-surface)]",
   success: "border-[var(--color-success-container)] bg-[var(--color-success-container)] text-[var(--color-on-success-container)]",
   warning: "border-[var(--color-warning-container)] bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]",
   error: "border-[var(--color-error-container)] bg-[var(--color-error-container)] text-[var(--color-on-error-container)]",
@@ -147,7 +147,7 @@ export function ToastProvider({ children, defaultDurationMs = DEFAULT_TOAST_DURA
               </div>
               <button
                 aria-label="Dismiss toast"
-                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-current opacity-70 transition hover:bg-black/5 hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-current opacity-70 transition hover:bg-[var(--color-hover-overlay)] hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
                 type="button"
                 onClick={() => dismiss(toast.id)}
               >

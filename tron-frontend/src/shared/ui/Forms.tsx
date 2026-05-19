@@ -76,10 +76,9 @@ export function ToggleSwitch({ checked, label, onCheckedChange }: ToggleSwitchPr
           checked ? "bg-[var(--color-primary)]" : "bg-[var(--color-surface-container-highest)]",
         )}
       >
-        <span className={cn("absolute size-4 rounded-full bg-white shadow transition-transform", checked ? "translate-x-[18px]" : "translate-x-0.5")} />
+        <span className={cn("absolute size-4 rounded-full bg-[var(--color-elevated-surface-strong)] shadow transition-transform", checked ? "translate-x-[18px]" : "translate-x-0.5")} />
       </span>
       <span>{label}</span>
     </button>
   );
 }
-

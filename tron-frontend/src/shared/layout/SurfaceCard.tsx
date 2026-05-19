@@ -6,7 +6,7 @@ import type {
 import { cn } from "@/shared/lib/utils";
 
 export function SurfaceCard({ className, ...props }: HTMLAttributes<HTMLElement>) {
-  return <section className={cn("rounded-2xl border border-[var(--color-card-border)] bg-white p-5 shadow-[0_18px_50px_rgba(0,0,0,0.04)]", className)} {...props} />;
+  return <section className={cn("rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-5 shadow-[0_18px_50px_rgba(0,0,0,0.04)]", className)} {...props} />;
 }
 
 interface MetricCardProps {
@@ -19,7 +19,7 @@ interface MetricCardProps {
 
 export function MetricCard({ className, icon, label, trend, value }: MetricCardProps) {
   return (
-    <div className={cn("rounded-2xl border border-[var(--color-card-border)] bg-white p-4", className)}>
+    <div className={cn("rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-4", className)}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{label}</p>
@@ -31,4 +31,3 @@ export function MetricCard({ className, icon, label, trend, value }: MetricCardP
     </div>
   );
 }
-

@@ -23,6 +23,7 @@ import {
   useBootstrapAuthSession,
 } from "@/domain/auth";
 import {
+  ThemeProvider,
   ToastProvider,
   TronShell,
   tronNavigation,
@@ -283,9 +284,11 @@ function RoutedApp() {
 export function App() {
   return (
     <BrowserRouter>
-      <ToastProvider>
-        <RoutedApp />
-      </ToastProvider>
+      <ThemeProvider>
+        <ToastProvider>
+          <RoutedApp />
+        </ToastProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

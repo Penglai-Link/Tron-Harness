@@ -40,6 +40,8 @@ import { Button } from "@/shared/ui/Button";
 import { useLocale } from "@/i18n";
 import { useAppShellStore } from "@/store/appShellStore";
 import { cn } from "@/shared/lib/utils";
+import { useTheme } from "@/shared/theme/ThemeProvider";
+import { SelectInput } from "@/shared/ui/Forms";
 import type { TronNavSection } from "@/shared/types/ShellNavigation";
 import type {
   WorkspaceSpacesContextValue,
@@ -106,7 +108,7 @@ function InlineTronShellContent({ children, contentClassName, rightPanel }: Tron
   return (
     <div className={cn("-mx-6 -my-6 grid min-h-[calc(100vh-3.5rem)] grid-cols-1", rightPanel ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "")}>
       <main className={cn("min-w-0 px-6 py-6", contentClassName)}>{children}</main>
-      {rightPanel ? <aside className="border-l border-[var(--color-outline-variant)] bg-white px-5 py-6">{rightPanel}</aside> : null}
+      {rightPanel ? <aside className="border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-5 py-6">{rightPanel}</aside> : null}
     </div>
   );
 }
@@ -122,6 +124,7 @@ export function TronShell({
 }: TronShellProps) {
   const { t } = useTranslation(["common", "shell"]);
   const { changeLocale, currentLocale, supportedLocales: locales } = useLocale();
+  const { setTheme, theme, themes } = useTheme();
   const { pathname } = useLocation();
   const shellFrameMounted = useContext(TronShellFrameContext);
   const agentOpen = useAppShellStore((state) => state.agentOpen);
@@ -465,7 +468,7 @@ export function TronShell({
     <TronShellFrameContext.Provider value={true}>
     <WorkspaceSpacesContext.Provider value={workspaceSpacesValue}>
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]">
-      <header className="fixed inset-x-0 top-0 z-50 h-14 border-b border-[var(--color-outline-variant)] bg-[rgba(253,248,248,0.92)] px-4 backdrop-blur sm:px-6">
+      <header className="fixed inset-x-0 top-0 z-50 h-14 border-b border-[var(--color-outline-variant)] bg-[var(--color-header-backdrop)] px-4 backdrop-blur sm:px-6">
         <div className="flex h-full items-center justify-between gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <Button
@@ -519,7 +522,7 @@ export function TronShell({
         {utilityPanel ? (
           <div
             className={cn(
-              "absolute top-[calc(100%+8px)] w-[min(360px,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-white px-4 py-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
+              "absolute top-[calc(100%+8px)] w-[min(360px,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-4 py-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
               utilityPanel === "workspace" ? "left-4 sm:left-6" : "right-4 sm:right-6",
             )}
           >
@@ -555,23 +558,41 @@ export function TronShell({
             ) : utilityPanel === "user" ? (
               <div className="mt-3 space-y-4">
                 {userMenuContent}
-                <div className={cn(userMenuContent ? "border-t border-[var(--color-outline-variant)] pt-4" : "")}>
-                  <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-locale-select">
-                    {t("common:locale.label")}
-                  </label>
-                  <select
-                    className="h-9 w-full rounded-lg border border-[var(--color-outline-variant)] bg-white px-3 text-sm outline-none"
-                    id="tron-locale-select"
-                    value={currentLocale}
-                    onChange={(event) => void changeLocale(event.target.value as typeof currentLocale)}
-                  >
-                    {locales.map((locale) => (
-                      <option key={locale.code} value={locale.code}>
-                        {t(locale.labelKey)}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-2 text-[12px] text-[var(--color-on-surface-variant)]">{t("common:locale.unavailable")}</p>
+                <div className={cn("space-y-4", userMenuContent ? "border-t border-[var(--color-outline-variant)] pt-4" : "")}>
+                  <div>
+                    <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-theme-select">
+                      {t("shell:theme.label")}
+                    </label>
+                    <SelectInput
+                      id="tron-theme-select"
+                      value={theme}
+                      onChange={(event) => setTheme(event.target.value === "matrix-dark" ? "matrix-dark" : "light")}
+                    >
+                      {themes.map((themeOption) => (
+                        <option key={themeOption.value} value={themeOption.value}>
+                          {t(themeOption.labelKey)}
+                        </option>
+                      ))}
+                    </SelectInput>
+                    <p className="mt-2 text-[12px] text-[var(--color-on-surface-variant)]">{t("shell:theme.hint")}</p>
+                  </div>
+                  <div className="border-t border-[var(--color-outline-variant)] pt-4">
+                    <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-locale-select">
+                      {t("common:locale.label")}
+                    </label>
+                    <SelectInput
+                      id="tron-locale-select"
+                      value={currentLocale}
+                      onChange={(event) => void changeLocale(event.target.value as typeof currentLocale)}
+                    >
+                      {locales.map((locale) => (
+                        <option key={locale.code} value={locale.code}>
+                          {t(locale.labelKey)}
+                        </option>
+                      ))}
+                    </SelectInput>
+                    <p className="mt-2 text-[12px] text-[var(--color-on-surface-variant)]">{t("common:locale.unavailable")}</p>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -584,13 +605,13 @@ export function TronShell({
       {mobileSidebarOpen ? (
         <>
           <button
-            className="fixed inset-x-0 bottom-0 top-14 z-30 bg-[rgba(15,23,42,0.24)] lg:hidden"
+            className="fixed inset-x-0 bottom-0 top-14 z-30 bg-[var(--color-backdrop-scrim)] lg:hidden"
             type="button"
             aria-label={t("common:actions.close")}
             onClick={closeMobileSidebar}
           />
           <aside
-            className="fixed bottom-0 left-0 top-14 z-40 flex w-[min(20rem,calc(100vw-1rem))] flex-col overflow-y-auto border-r border-[var(--color-outline-variant)] bg-white px-3 py-4 shadow-[0_18px_45px_rgba(15,23,42,0.18)] lg:hidden"
+            className="fixed bottom-0 left-0 top-14 z-40 flex w-[min(20rem,calc(100vw-1rem))] flex-col overflow-y-auto border-r border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-3 py-4 shadow-[0_18px_45px_rgba(15,23,42,0.18)] lg:hidden"
             id="tron-mobile-sidebar"
           >
             {renderSidebarContent(true)}
@@ -600,7 +621,7 @@ export function TronShell({
 
       <aside
         className={cn(
-          "fixed bottom-0 left-0 top-14 z-40 hidden flex-col overflow-y-auto border-r border-[var(--color-outline-variant)] bg-white py-4 transition-[width] duration-200 lg:flex",
+          "fixed bottom-0 left-0 top-14 z-40 hidden flex-col overflow-y-auto border-r border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] py-4 transition-[width] duration-200 lg:flex",
           sidebarCollapsed ? "w-[76px] px-2" : "w-[280px] px-3",
         )}
         data-collapsed={sidebarCollapsed}
@@ -612,7 +633,7 @@ export function TronShell({
         <>
           <div
             className={cn(
-              "fixed inset-x-4 top-[4.75rem] z-50 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl border border-[var(--color-card-border)] bg-white px-4 py-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)] lg:inset-x-auto lg:top-[4.5rem] lg:w-[min(380px,calc(100vw-2rem))]",
+              "fixed inset-x-4 top-[4.75rem] z-50 max-h-[calc(100vh-6rem)] overflow-y-auto rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-4 py-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)] lg:inset-x-auto lg:top-[4.5rem] lg:w-[min(380px,calc(100vw-2rem))]",
               sidebarCollapsed ? "lg:left-[84px]" : "lg:left-[292px]",
             )}
             id="tron-secondary-space-selector"
@@ -627,7 +648,7 @@ export function TronShell({
       <section className={cn("min-w-0 pt-14 transition-[padding-left] duration-200", sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[280px]")}>
         <div className={cn("grid min-h-[calc(100vh-3.5rem)] grid-cols-1", rightPanel ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "")}>
           <main className={cn("min-w-0 px-6 py-6", contentClassName)}>{children}</main>
-          {rightPanel ? <aside className="border-l border-[var(--color-outline-variant)] bg-white px-5 py-6">{rightPanel}</aside> : null}
+          {rightPanel ? <aside className="border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-5 py-6">{rightPanel}</aside> : null}
         </div>
       </section>
 
@@ -641,7 +662,7 @@ export function TronShell({
         {t("shell:assistant.title")}
       </button>
       {agentOpen ? (
-        <section className="fixed bottom-24 right-6 z-40 w-[320px] rounded-2xl border border-[var(--color-card-border)] bg-white p-4 shadow-[0_18px_50px_rgba(0,0,0,0.14)]">
+        <section className="fixed bottom-24 right-6 z-40 w-[320px] rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.14)]">
           <p className="text-sm font-semibold">{t("shell:assistant.title")}</p>
           <p className="mt-2 text-[13px] leading-5 text-[var(--color-on-surface-variant)]">{t("shell:assistant.body")}</p>
           <button className="mt-3 h-8 rounded-lg bg-[var(--color-surface-container)] px-3 text-[13px] font-medium hover:bg-[var(--color-hover-surface)]" type="button" onClick={() => setAgentOpen(false)}>

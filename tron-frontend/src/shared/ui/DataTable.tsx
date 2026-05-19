@@ -22,7 +22,7 @@ interface DataTableProps<T> {
 
 export function DataTable<T>({ columns, emptyState, pagination, rowKey, rows, title, toolbar }: DataTableProps<T>) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--color-card-border)] bg-white">
+    <section className="overflow-hidden rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]">
       {(title || toolbar) && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
           {title ? <h2 className="text-base font-semibold">{title}</h2> : <span />}

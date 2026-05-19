@@ -54,6 +54,14 @@ export const shell = {
     user: "User",
     workspace: "Workspace",
   },
+  theme: {
+    hint: "Light is the current default. Matrix Dark applies a neon-green dark console palette and stays active after reload.",
+    label: "Theme",
+    options: {
+      light: "Light",
+      matrixDark: "Matrix Dark",
+    },
+  },
   workspace: {
     current: "Workspace",
     inherited: "{{count}} inherited",

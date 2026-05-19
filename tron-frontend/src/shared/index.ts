@@ -6,6 +6,7 @@ export * from "./layout/Shell";
 export * from "./layout/SurfaceCard";
 export * from "./hooks/useWorkspaceSpaces";
 export * from "./hooks/useTablePagination";
+export * from "./theme/ThemeProvider";
 export * from "./types/ShellNavigation";
 export * from "./types/WorkspaceSpace";
 export * from "./ui/DataTable";
