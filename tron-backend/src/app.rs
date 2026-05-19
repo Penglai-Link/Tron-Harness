@@ -11,18 +11,20 @@ use crate::{
             },
             auth::{require_auth, routes as auth_routes},
             tasks::routes as task_routes,
+            variables::routes::routes as variable_routes,
         },
         outbound::{
             crypto::BcryptPasswordHasher,
             persistence::{
                 SqliteRoleRepository, SqliteTaskRepository, SqliteUserRepository,
-                SqliteWorkspaceRepository,
+                SqliteVariableRepository, SqliteWorkspaceRepository,
             },
         },
     },
     application::role::RoleService,
     application::task::TaskService,
     application::user::UserService,
+    application::variable::VariableService,
     application::workspace::WorkspaceService,
     config::AppConfig,
     health::health,
@@ -32,6 +34,7 @@ static GLOBAL_USER_SERVICE: OnceLock<UserService> = OnceLock::new();
 static GLOBAL_ROLE_SERVICE: OnceLock<RoleService> = OnceLock::new();
 static GLOBAL_WORKSPACE_SERVICE: OnceLock<WorkspaceService> = OnceLock::new();
 static GLOBAL_TASK_SERVICE: OnceLock<TaskService> = OnceLock::new();
+static GLOBAL_VARIABLE_SERVICE: OnceLock<VariableService> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct AppState {
@@ -39,6 +42,7 @@ pub struct AppState {
     pub roles: RoleService,
     pub tasks: TaskService,
     pub users: UserService,
+    pub variables: VariableService,
     pub workspaces: WorkspaceService,
 }
 
@@ -72,12 +76,20 @@ impl AppState {
         } else {
             build_task_service(&config.database_url, workspaces.clone())
         };
+        let variables = if config.database_url == ":memory:" {
+            GLOBAL_VARIABLE_SERVICE
+                .get_or_init(|| build_variable_service(":memory:", workspaces.clone()))
+                .clone()
+        } else {
+            build_variable_service(&config.database_url, workspaces.clone())
+        };
 
         Self {
             config,
             roles,
             tasks,
             users,
+            variables,
             workspaces,
         }
     }
@@ -113,12 +125,19 @@ impl FromRef<AppState> for TaskService {
     }
 }
 
+impl FromRef<AppState> for VariableService {
+    fn from_ref(state: &AppState) -> Self {
+        state.variables.clone()
+    }
+}
+
 pub fn build_router(config: AppConfig) -> Router {
     let state = AppState::new(config);
     let protected_routes = user_routes()
         .merge(role_routes())
         .merge(workspace_routes())
         .merge(task_routes())
+        .merge(variable_routes())
         .route_layer(middleware::from_fn_with_state(
             state.users.clone(),
             require_auth,
@@ -157,4 +176,10 @@ fn build_task_service(database_url: &str, workspaces: WorkspaceService) -> TaskS
     let repository = SqliteTaskRepository::connect(database_url)
         .expect("task SQLite repository should initialize");
     TaskService::new(repository, workspaces)
+}
+
+fn build_variable_service(database_url: &str, workspaces: WorkspaceService) -> VariableService {
+    let repository = SqliteVariableRepository::connect(database_url)
+        .expect("variable SQLite repository should initialize");
+    VariableService::new(repository, workspaces)
 }

@@ -9,6 +9,10 @@ docs/tasks/frontend-onboarding/evidence/
 # logs
 *.log
 
+# JavaScript dependencies
+node_modules
+node_modules/
+
 # Archives
 *.tar.gz
 *.tar
