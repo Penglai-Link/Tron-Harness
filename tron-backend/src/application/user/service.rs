@@ -23,7 +23,10 @@ use crate::{
             validate_role_codes, validate_space_codes, validate_user_code,
         },
     },
-    shared::id::SnowflakeId,
+    shared::{
+        event_bus::{BusEventDraft, BusPriority, EventBusHandle},
+        id::SnowflakeId,
+    },
 };
 
 const DEFAULT_TIMESTAMP: &str = "2026-05-12T00:00:00Z";
@@ -47,6 +50,7 @@ pub struct UserService {
     password_hasher: Arc<dyn PasswordHasher>,
     auth_config: AuthConfig,
     oauth_client: Client,
+    event_bus: EventBusHandle,
 }
 
 #[derive(Debug, Clone)]
@@ -110,11 +114,26 @@ impl UserService {
         password_hasher: impl PasswordHasher + 'static,
         auth_config: AuthConfig,
     ) -> Self {
+        Self::with_event_bus(
+            repository,
+            password_hasher,
+            auth_config,
+            EventBusHandle::disabled(),
+        )
+    }
+
+    pub fn with_event_bus(
+        repository: impl UserRepository + 'static,
+        password_hasher: impl PasswordHasher + 'static,
+        auth_config: AuthConfig,
+        event_bus: EventBusHandle,
+    ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             password_hasher: Arc::new(password_hasher),
             auth_config,
             oauth_client: Client::new(),
+            event_bus,
         }
     }
 
@@ -168,7 +187,19 @@ impl UserService {
             return Err(AuthError::InvalidCredentials);
         }
 
-        self.create_session(repository.as_mut(), &user, AuthMethod::Internal, None, None)
+        let session =
+            self.create_session(repository.as_mut(), &user, AuthMethod::Internal, None, None)?;
+        drop(repository);
+        self.publish_auth_session_event(
+            "auth.session.created",
+            "Created authenticated session",
+            &session.session.user,
+            Some(AuthMethod::Internal),
+            session.session.provider.as_ref().map(|provider| provider.code.as_str()),
+            None,
+            BusPriority::Critical,
+        );
+        Ok(session)
     }
 
     pub fn oauth2_authorize(
@@ -277,7 +308,7 @@ impl UserService {
         session.revoked_at = None;
         repository.replace_refresh_session(&session)?;
 
-        Ok(AuthorizedSession {
+        let authorized_session = AuthorizedSession {
             session: CurrentSession {
                 authenticated: true,
                 auth_method: session.auth_method,
@@ -290,7 +321,22 @@ impl UserService {
             access_token,
             refresh_token,
             redirect_path: None,
-        })
+        };
+        drop(repository);
+        self.publish_auth_session_event(
+            "auth.session.refreshed",
+            "Refreshed authenticated session",
+            &authorized_session.session.user,
+            Some(authorized_session.session.auth_method),
+            authorized_session
+                .session
+                .provider
+                .as_ref()
+                .map(|provider| provider.code.as_str()),
+            Some(session.session_code.as_str()),
+            BusPriority::Standard,
+        );
+        Ok(authorized_session)
     }
 
     fn dev_oauth2_authorize(
@@ -387,13 +433,24 @@ impl UserService {
         };
         repository.upsert_oauth_identity(&identity)?;
 
-        self.create_session(
+        let session = self.create_session(
             repository.as_mut(),
             &user,
             AuthMethod::Oauth2,
             Some(self.dev_provider_descriptor()),
             Some(claims.redirect_path),
-        )
+        )?;
+        drop(repository);
+        self.publish_auth_session_event(
+            "auth.session.created",
+            "Created OAuth2 session",
+            &session.session.user,
+            Some(session.session.auth_method),
+            session.session.provider.as_ref().map(|provider| provider.code.as_str()),
+            None,
+            BusPriority::Critical,
+        );
+        Ok(session)
     }
 
     async fn github_oauth2_callback(
@@ -440,13 +497,24 @@ impl UserService {
         };
         repository.upsert_oauth_identity(&identity)?;
 
-        self.create_session(
+        let session = self.create_session(
             repository.as_mut(),
             &user,
             AuthMethod::Oauth2,
             Some(self.github_provider_descriptor()),
             Some(claims.redirect_path),
-        )
+        )?;
+        drop(repository);
+        self.publish_auth_session_event(
+            "auth.session.created",
+            "Created OAuth2 session",
+            &session.session.user,
+            Some(session.session.auth_method),
+            session.session.provider.as_ref().map(|provider| provider.code.as_str()),
+            None,
+            BusPriority::Critical,
+        );
+        Ok(session)
     }
 
     pub fn logout_session(&self, refresh_token: Option<&str>) -> Result<(), AuthError> {
@@ -463,7 +531,24 @@ impl UserService {
             .repository
             .lock()
             .expect("user repository mutex poisoned");
-        repository.revoke_refresh_session(&session_code, now_seconds())
+        let session = repository.find_refresh_session(&session_code)?;
+        repository.revoke_refresh_session(&session_code, now_seconds())?;
+        drop(repository);
+        if let Some(session) = session {
+            let _ = self.event_bus.publish(
+                BusEventDraft::audit("auth.session.revoked", "auth_service")
+                    .priority(BusPriority::Standard)
+                    .subject("session", session.session_code)
+                    .summary("Revoked authenticated session")
+                    .attr("userCode", session.user_code)
+                    .attr("authMethod", auth_method_name(session.auth_method))
+                    .attr(
+                        "providerCode",
+                        session.provider_code.unwrap_or_else(|| "internal".into()),
+                    ),
+            );
+        }
+        Ok(())
     }
 
     pub fn authenticate_access_token(
@@ -500,14 +585,23 @@ impl UserService {
 
     pub fn create_user(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         command: CreateUserCommand,
     ) -> Result<User, UserError> {
         let mut repository = self
             .repository
             .lock()
             .expect("user repository mutex poisoned");
-        self.create_user_in_repository(repository.as_mut(), command)
+        let user = self.create_user_in_repository(repository.as_mut(), command)?;
+        drop(repository);
+        self.publish_user_event(
+            "user.created",
+            "Created user",
+            actor,
+            &user,
+            BusPriority::Standard,
+        );
+        Ok(user)
     }
 
     fn create_user_in_repository(
@@ -583,7 +677,7 @@ impl UserService {
 
     pub fn patch_user(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         user_code: &str,
         command: UpdateUserCommand,
     ) -> Result<User, UserError> {
@@ -637,12 +731,21 @@ impl UserService {
         user.updated_at = DEFAULT_TIMESTAMP.into();
 
         repository.update_user(&user)?;
-        Ok(user.clone())
+        let updated = user.clone();
+        drop(repository);
+        self.publish_user_event(
+            "user.updated",
+            "Updated user profile",
+            actor,
+            &updated,
+            BusPriority::Standard,
+        );
+        Ok(updated)
     }
 
     pub fn archive_user(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         user_code: &str,
     ) -> Result<User, UserError> {
         let mut repository = self
@@ -654,12 +757,21 @@ impl UserService {
         user.archived_at = Some(DEFAULT_TIMESTAMP.into());
         user.updated_at = DEFAULT_TIMESTAMP.into();
         repository.update_user(&user)?;
-        Ok(user.clone())
+        let archived = user.clone();
+        drop(repository);
+        self.publish_user_event(
+            "user.archived",
+            "Archived user",
+            actor,
+            &archived,
+            BusPriority::Critical,
+        );
+        Ok(archived)
     }
 
     pub fn restore_user(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         user_code: &str,
     ) -> Result<User, UserError> {
         let mut repository = self
@@ -671,12 +783,21 @@ impl UserService {
         user.archived_at = None;
         user.updated_at = DEFAULT_TIMESTAMP.into();
         repository.update_user(&user)?;
-        Ok(user.clone())
+        let restored = user.clone();
+        drop(repository);
+        self.publish_user_event(
+            "user.restored",
+            "Restored user",
+            actor,
+            &restored,
+            BusPriority::Standard,
+        );
+        Ok(restored)
     }
 
     pub fn replace_roles(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         user_code: &str,
         role_codes: Vec<String>,
     ) -> Result<User, UserError> {
@@ -689,12 +810,21 @@ impl UserService {
         user.role_codes = unique_preserving_order(role_codes);
         user.updated_at = DEFAULT_TIMESTAMP.into();
         repository.replace_role_codes(&user)?;
-        Ok(user.clone())
+        let updated = user.clone();
+        drop(repository);
+        self.publish_user_event(
+            "user.roles_replaced",
+            "Replaced user role assignments",
+            actor,
+            &updated,
+            BusPriority::Standard,
+        );
+        Ok(updated)
     }
 
     pub fn replace_spaces(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         user_code: &str,
         space_codes: Vec<String>,
     ) -> Result<User, UserError> {
@@ -707,12 +837,21 @@ impl UserService {
         user.space_codes = unique_preserving_order(space_codes);
         user.updated_at = DEFAULT_TIMESTAMP.into();
         repository.replace_space_codes(&user)?;
-        Ok(user.clone())
+        let updated = user.clone();
+        drop(repository);
+        self.publish_user_event(
+            "user.spaces_replaced",
+            "Replaced user space assignments",
+            actor,
+            &updated,
+            BusPriority::Standard,
+        );
+        Ok(updated)
     }
 
     pub fn reset_password(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         user_code: &str,
     ) -> Result<PasswordResetResult, UserError> {
         let mut repository = self
@@ -729,11 +868,21 @@ impl UserService {
         user.updated_at = DEFAULT_TIMESTAMP.into();
         repository.record_password_reset(&user, reset_id)?;
 
-        Ok(PasswordResetResult {
+        let result = PasswordResetResult {
             user_code: user.user_code.clone(),
             temporary_password,
             password_reset_required: true,
-        })
+        };
+        drop(repository);
+        let _ = self.event_bus.publish(
+            BusEventDraft::audit("user.password_reset", "user_service")
+                .priority(BusPriority::Critical)
+                .subject("user", result.user_code.clone())
+                .actor(actor)
+                .summary("Reset user password")
+                .attr("passwordResetRequired", result.password_reset_required.to_string()),
+        );
+        Ok(result)
     }
 
     fn create_session(
@@ -790,6 +939,59 @@ impl UserService {
             refresh_token,
             redirect_path,
         })
+    }
+
+    fn publish_user_event(
+        &self,
+        event_name: &'static str,
+        summary: &'static str,
+        actor: &AuthenticatedUser,
+        user: &User,
+        priority: BusPriority,
+    ) {
+        let _ = self.event_bus.publish(
+            BusEventDraft::audit(event_name, "user_service")
+                .priority(priority)
+                .subject("user", user.user_code.clone())
+                .actor(actor)
+                .summary(summary)
+                .attr("status", format!("{:?}", user.status))
+                .attr("roleCount", user.role_codes.len().to_string())
+                .attr("spaceCount", user.space_codes.len().to_string())
+                .attr(
+                    "passwordResetRequired",
+                    user.password_reset_required.to_string(),
+                ),
+        );
+    }
+
+    fn publish_auth_session_event(
+        &self,
+        event_name: &'static str,
+        summary: &'static str,
+        user: &AuthenticatedUser,
+        auth_method: Option<AuthMethod>,
+        provider_code: Option<&str>,
+        session_code: Option<&str>,
+        priority: BusPriority,
+    ) {
+        let mut draft = BusEventDraft::audit(event_name, "auth_service")
+            .priority(priority)
+            .subject("user", user.user_code.clone())
+            .actor(user)
+            .summary(summary)
+            .attr(
+                "authMethod",
+                auth_method
+                    .map(auth_method_name)
+                    .unwrap_or("unknown")
+                    .to_string(),
+            )
+            .attr("providerCode", provider_code.unwrap_or("internal").to_string());
+        if let Some(session_code) = session_code {
+            draft = draft.attr("sessionCode", session_code.to_string());
+        }
+        let _ = self.event_bus.publish(draft);
     }
 
     fn session_from_access_token(&self, access_token: &str) -> Result<CurrentSession, AuthError> {
@@ -1181,6 +1383,10 @@ fn auth_method_as_str(value: AuthMethod) -> &'static str {
         AuthMethod::Internal => "internal",
         AuthMethod::Oauth2 => "oauth2",
     }
+}
+
+fn auth_method_name(value: AuthMethod) -> &'static str {
+    auth_method_as_str(value)
 }
 
 fn ensure_active_user(user: &User) -> Result<(), AuthError> {

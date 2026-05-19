@@ -1,4 +1,4 @@
-use std::sync::OnceLock;
+use std::sync::{Arc, OnceLock};
 
 use axum::{Router, extract::FromRef, middleware, routing::get};
 
@@ -28,6 +28,10 @@ use crate::{
     application::workspace::WorkspaceService,
     config::AppConfig,
     health::health,
+    shared::{
+        event_bus::{AguiEventSink, EventBusHandle, EventBusRuntimeBuilder},
+        id::SnowflakedSnowflakeIdProvider,
+    },
 };
 
 static GLOBAL_USER_SERVICE: OnceLock<UserService> = OnceLock::new();
@@ -39,6 +43,8 @@ static GLOBAL_VARIABLE_SERVICE: OnceLock<VariableService> = OnceLock::new();
 #[derive(Clone)]
 pub struct AppState {
     pub config: AppConfig,
+    pub agui_events: Arc<AguiEventSink>,
+    pub event_bus: EventBusHandle,
     pub roles: RoleService,
     pub tasks: TaskService,
     pub users: UserService,
@@ -48,33 +54,54 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(config: AppConfig) -> Self {
+        let agui_events = Arc::new(AguiEventSink::new(&config.event_bus));
+        let event_bus = EventBusRuntimeBuilder::new(
+            config.event_bus.clone(),
+            Arc::new(SnowflakedSnowflakeIdProvider::default()),
+        )
+        .register_sink(agui_events.clone())
+        .build();
         let users = if config.database_url == ":memory:" {
             GLOBAL_USER_SERVICE
-                .get_or_init(|| build_user_service(&config))
+                .get_or_init(|| build_user_service(&config, event_bus.clone()))
                 .clone()
         } else {
-            build_user_service(&config)
+            build_user_service(&config, event_bus.clone())
         };
         let roles = if config.database_url == ":memory:" {
             GLOBAL_ROLE_SERVICE
-                .get_or_init(|| build_role_service(":memory:"))
+                .get_or_init(|| build_role_service(":memory:", event_bus.clone()))
                 .clone()
         } else {
-            build_role_service(&config.database_url)
+            build_role_service(&config.database_url, event_bus.clone())
         };
         let workspaces = if config.database_url == ":memory:" {
             GLOBAL_WORKSPACE_SERVICE
-                .get_or_init(|| build_workspace_service(":memory:", users.clone(), roles.clone()))
+                .get_or_init(|| {
+                    build_workspace_service(
+                        ":memory:",
+                        users.clone(),
+                        roles.clone(),
+                        event_bus.clone(),
+                    )
+                })
                 .clone()
         } else {
-            build_workspace_service(&config.database_url, users.clone(), roles.clone())
+            build_workspace_service(
+                &config.database_url,
+                users.clone(),
+                roles.clone(),
+                event_bus.clone(),
+            )
         };
         let tasks = if config.database_url == ":memory:" {
             GLOBAL_TASK_SERVICE
-                .get_or_init(|| build_task_service(":memory:", workspaces.clone()))
+                .get_or_init(|| {
+                    build_task_service(":memory:", workspaces.clone(), event_bus.clone())
+                })
                 .clone()
         } else {
-            build_task_service(&config.database_url, workspaces.clone())
+            build_task_service(&config.database_url, workspaces.clone(), event_bus.clone())
         };
         let variables = if config.database_url == ":memory:" {
             GLOBAL_VARIABLE_SERVICE
@@ -86,6 +113,8 @@ impl AppState {
 
         Self {
             config,
+            agui_events,
+            event_bus,
             roles,
             tasks,
             users,
@@ -104,6 +133,12 @@ impl FromRef<AppState> for AppConfig {
 impl FromRef<AppState> for UserService {
     fn from_ref(state: &AppState) -> Self {
         state.users.clone()
+    }
+}
+
+impl FromRef<AppState> for EventBusHandle {
+    fn from_ref(state: &AppState) -> Self {
+        state.event_bus.clone()
     }
 }
 
@@ -150,32 +185,37 @@ pub fn build_router(config: AppConfig) -> Router {
         .with_state(state)
 }
 
-fn build_user_service(config: &AppConfig) -> UserService {
+fn build_user_service(config: &AppConfig, event_bus: EventBusHandle) -> UserService {
     let repository = SqliteUserRepository::connect(&config.database_url)
         .expect("user SQLite repository should initialize");
-    UserService::new(repository, BcryptPasswordHasher, config.auth.clone())
+    UserService::with_event_bus(repository, BcryptPasswordHasher, config.auth.clone(), event_bus)
 }
 
-fn build_role_service(database_url: &str) -> RoleService {
+fn build_role_service(database_url: &str, event_bus: EventBusHandle) -> RoleService {
     let repository = SqliteRoleRepository::connect(database_url)
         .expect("role SQLite repository should initialize");
-    RoleService::new(repository)
+    RoleService::with_event_bus(repository, event_bus)
 }
 
 fn build_workspace_service(
     database_url: &str,
     users: UserService,
     roles: RoleService,
+    event_bus: EventBusHandle,
 ) -> WorkspaceService {
     let repository = SqliteWorkspaceRepository::connect(database_url)
         .expect("workspace SQLite repository should initialize");
-    WorkspaceService::new(repository, users, roles)
+    WorkspaceService::with_event_bus(repository, users, roles, event_bus)
 }
 
-fn build_task_service(database_url: &str, workspaces: WorkspaceService) -> TaskService {
+fn build_task_service(
+    database_url: &str,
+    workspaces: WorkspaceService,
+    event_bus: EventBusHandle,
+) -> TaskService {
     let repository = SqliteTaskRepository::connect(database_url)
         .expect("task SQLite repository should initialize");
-    TaskService::new(repository, workspaces)
+    TaskService::with_event_bus(repository, workspaces, event_bus)
 }
 
 fn build_variable_service(database_url: &str, workspaces: WorkspaceService) -> VariableService {

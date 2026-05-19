@@ -1,5 +1,7 @@
 use std::{env, error::Error, fmt, net::SocketAddr};
 
+use crate::shared::event_bus::EventBusConfig;
+
 const DEFAULT_BIND_ADDRESS: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 8080;
 const DEFAULT_DATABASE_URL: &str = "tron-backend/target/tron.sqlite3";
@@ -21,6 +23,7 @@ pub struct AppConfig {
     pub port: u16,
     pub database_url: String,
     pub auth: AuthConfig,
+    pub event_bus: EventBusConfig,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -60,6 +63,38 @@ impl AppConfig {
         let database_url =
             env::var("TRON_BACKEND_DATABASE_URL").unwrap_or_else(|_| DEFAULT_DATABASE_URL.into());
         let github_oauth_enabled = parse_bool_env("TRON_AUTH_GITHUB_ENABLED", false)?;
+        let event_bus = EventBusConfig {
+            enabled: parse_bool_env("TRON_EVENT_BUS_ENABLED", true)?,
+            critical_ingress_capacity: parse_usize_env(
+                "TRON_EVENT_BUS_CRITICAL_INGRESS_CAPACITY",
+                EventBusConfig::default().critical_ingress_capacity,
+            )?,
+            standard_ingress_capacity: parse_usize_env(
+                "TRON_EVENT_BUS_STANDARD_INGRESS_CAPACITY",
+                EventBusConfig::default().standard_ingress_capacity,
+            )?,
+            default_sink_capacity: parse_usize_env(
+                "TRON_EVENT_BUS_DEFAULT_SINK_CAPACITY",
+                EventBusConfig::default().default_sink_capacity,
+            )?,
+            agui_replay_events_per_stream: parse_usize_env(
+                "TRON_EVENT_BUS_AGUI_REPLAY_EVENTS_PER_STREAM",
+                EventBusConfig::default().agui_replay_events_per_stream,
+            )?,
+            agui_replay_bytes_per_stream: parse_usize_env(
+                "TRON_EVENT_BUS_AGUI_REPLAY_BYTES_PER_STREAM",
+                EventBusConfig::default().agui_replay_bytes_per_stream,
+            )?,
+            agui_global_replay_bytes: parse_usize_env(
+                "TRON_EVENT_BUS_AGUI_GLOBAL_REPLAY_BYTES",
+                EventBusConfig::default().agui_global_replay_bytes,
+            )?,
+            agui_stream_idle_ttl_seconds: parse_u64_env(
+                "TRON_EVENT_BUS_AGUI_STREAM_IDLE_TTL_SECONDS",
+                EventBusConfig::default().agui_stream_idle_ttl_seconds,
+            )?,
+            ..EventBusConfig::default()
+        };
         let auth = AuthConfig {
             jwt_secret: env::var("TRON_AUTH_JWT_SECRET")
                 .unwrap_or_else(|_| DEFAULT_AUTH_JWT_SECRET.into()),
@@ -101,6 +136,7 @@ impl AppConfig {
             port,
             database_url,
             auth,
+            event_bus,
         })
     }
 
@@ -130,6 +166,7 @@ impl Default for AppConfig {
                 dev_oauth2_name: DEFAULT_AUTH_DEV_OAUTH2_NAME.into(),
                 github_oauth: None,
             },
+            event_bus: EventBusConfig::default(),
         }
     }
 }
@@ -202,6 +239,32 @@ fn required_env(key: &str) -> Result<String, ConfigError> {
 }
 
 fn parse_i64_env(key: &str, default: i64) -> Result<i64, ConfigError> {
+    match env::var(key) {
+        Ok(value) => value
+            .parse()
+            .map_err(|source| ConfigError::InvalidInteger {
+                key: key.into(),
+                value,
+                source,
+            }),
+        Err(_) => Ok(default),
+    }
+}
+
+fn parse_usize_env(key: &str, default: usize) -> Result<usize, ConfigError> {
+    match env::var(key) {
+        Ok(value) => value
+            .parse()
+            .map_err(|source| ConfigError::InvalidInteger {
+                key: key.into(),
+                value,
+                source,
+            }),
+        Err(_) => Ok(default),
+    }
+}
+
+fn parse_u64_env(key: &str, default: u64) -> Result<u64, ConfigError> {
     match env::var(key) {
         Ok(value) => value
             .parse()

@@ -9,7 +9,10 @@ use crate::{
         DEFAULT_ROLE_UPDATED_AT, Role, RoleError, RoleKind, RoleManagedBy, fixed_system_role_codes,
         normalize_permissions, permission_domains, validate_role_catalog,
     },
-    shared::id::SnowflakeId,
+    shared::{
+        event_bus::{BusEventDraft, EventBusHandle},
+        id::SnowflakeId,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -38,12 +41,21 @@ pub trait RoleRepository: Send {
 #[derive(Clone)]
 pub struct RoleService {
     repository: Arc<Mutex<Box<dyn RoleRepository>>>,
+    event_bus: EventBusHandle,
 }
 
 impl RoleService {
     pub fn new(repository: impl RoleRepository + 'static) -> Self {
+        Self::with_event_bus(repository, EventBusHandle::disabled())
+    }
+
+    pub fn with_event_bus(
+        repository: impl RoleRepository + 'static,
+        event_bus: EventBusHandle,
+    ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
+            event_bus,
         }
     }
 
@@ -64,7 +76,7 @@ impl RoleService {
 
     pub fn replace_roles(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         command: ReplaceRolesCommand,
     ) -> Result<Vec<Role>, RoleError> {
         let mut repository = self
@@ -78,7 +90,18 @@ impl RoleService {
             .collect::<Result<Vec<_>, _>>()?;
 
         validate_role_catalog(&roles)?;
-        repository.replace_roles(&roles)
+        let replaced = repository.replace_roles(&roles)?;
+        drop(repository);
+
+        let _ = self.event_bus.publish(
+            BusEventDraft::audit("role.catalog.replaced", "role_service")
+                .subject_type_only("role_catalog")
+                .actor(actor)
+                .summary("Replaced role catalog")
+                .attr("roleCount", replaced.len().to_string()),
+        );
+
+        Ok(replaced)
     }
 }
 

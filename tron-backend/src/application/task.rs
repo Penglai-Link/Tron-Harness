@@ -14,7 +14,10 @@ use crate::{
         },
         workspace::{WorkspaceAccessListQuery, WorkspaceError, WorkspaceStatus},
     },
-    shared::id::SnowflakeId,
+    shared::{
+        event_bus::{BusEventDraft, EventBusHandle},
+        id::SnowflakeId,
+    },
 };
 
 const DEFAULT_TIMESTAMP: &str = "2026-05-16T00:00:00Z";
@@ -85,13 +88,23 @@ pub trait TaskRepository: Send {
 pub struct TaskService {
     repository: Arc<Mutex<Box<dyn TaskRepository>>>,
     workspaces: WorkspaceService,
+    event_bus: EventBusHandle,
 }
 
 impl TaskService {
     pub fn new(repository: impl TaskRepository + 'static, workspaces: WorkspaceService) -> Self {
+        Self::with_event_bus(repository, workspaces, EventBusHandle::disabled())
+    }
+
+    pub fn with_event_bus(
+        repository: impl TaskRepository + 'static,
+        workspaces: WorkspaceService,
+        event_bus: EventBusHandle,
+    ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             workspaces,
+            event_bus,
         }
     }
     pub fn options(&self) -> TaskOptions {
@@ -179,7 +192,9 @@ impl TaskService {
             repository.replace_agent_links(&task_code, &agent_links)?;
             repository.replace_app_links(&task_code, &app_links)?;
         }
-        self.get_task(&task_code)
+        let detail = self.get_task(&task_code)?;
+        self.publish_task_detail_event("task.created", "Created task", &detail);
+        Ok(detail)
     }
 
     pub fn get_task(&self, task_code: &str) -> Result<TaskDetail, TaskError> {
@@ -236,7 +251,9 @@ impl TaskService {
                 repository.replace_app_links(task_code, &entries)?;
             }
         }
-        self.get_task(task_code)
+        let detail = self.get_task(task_code)?;
+        self.publish_task_detail_event("task.updated", "Updated task", &detail);
+        Ok(detail)
     }
 
     pub fn update_status(
@@ -262,7 +279,9 @@ impl TaskService {
             .lock()
             .expect("task repository mutex poisoned")
             .update_task(&task)?;
-        self.get_task(task_code)
+        let detail = self.get_task(task_code)?;
+        self.publish_task_detail_event("task.status_updated", "Updated task status", &detail);
+        Ok(detail)
     }
 
     pub fn archive_task(&self, task_code: &str) -> Result<TaskLifecycleResult, TaskError> {
@@ -284,7 +303,9 @@ impl TaskService {
                 .expect("task repository mutex poisoned")
                 .update_task(&task)?;
         }
-        self.lifecycle_result(task_code)
+        let result = self.lifecycle_result(task_code)?;
+        self.publish_task_lifecycle_event("task.archived", "Archived task", &result);
+        Ok(result)
     }
 
     pub fn restore_task(&self, task_code: &str) -> Result<TaskLifecycleResult, TaskError> {
@@ -299,7 +320,9 @@ impl TaskService {
                 .expect("task repository mutex poisoned")
                 .update_task(&task)?;
         }
-        self.lifecycle_result(task_code)
+        let result = self.lifecycle_result(task_code)?;
+        self.publish_task_lifecycle_event("task.restored", "Restored task", &result);
+        Ok(result)
     }
 
     fn lifecycle_result(&self, task_code: &str) -> Result<TaskLifecycleResult, TaskError> {
@@ -506,6 +529,47 @@ impl TaskService {
         }
         Ok(())
     }
+
+    fn publish_task_detail_event(
+        &self,
+        event_name: &'static str,
+        summary: &'static str,
+        detail: &TaskDetail,
+    ) {
+        let _ = self.event_bus.publish(
+            BusEventDraft::audit(event_name, "task_service")
+                .subject("task", detail.task_code.clone())
+                .summary(summary)
+                .attr("workspaceCode", detail.workspace_code.clone())
+                .attr("status", format!("{:?}", detail.status))
+                .attr("progress", detail.progress.to_string())
+                .attr("assigneeCount", detail.assignee_user_codes.len().to_string())
+                .attr("agentCount", detail.agent_codes.len().to_string())
+                .attr("appCount", detail.app_codes.len().to_string()),
+        );
+    }
+
+    fn publish_task_lifecycle_event(
+        &self,
+        event_name: &'static str,
+        summary: &'static str,
+        result: &TaskLifecycleResult,
+    ) {
+        let _ = self.event_bus.publish(
+            BusEventDraft::audit(event_name, "task_service")
+                .subject("task", result.task_code.clone())
+                .summary(summary)
+                .attr("status", format!("{:?}", result.status))
+                .attr(
+                    "previousStatus",
+                    result
+                        .previous_status
+                        .map(|status| format!("{status:?}"))
+                        .unwrap_or_else(|| "None".into()),
+                ),
+        );
+    }
+
     fn validated_assignees(
         &self,
         workspace_code: &str,

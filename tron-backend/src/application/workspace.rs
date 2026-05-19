@@ -21,7 +21,10 @@ use crate::{
             WorkspaceUserAccessListItem,
         },
     },
-    shared::id::SnowflakeId,
+    shared::{
+        event_bus::{BusEventDraft, EventBusHandle},
+        id::SnowflakeId,
+    },
 };
 
 const DEFAULT_TIMESTAMP: &str = "2026-05-16T00:00:00Z";
@@ -107,6 +110,7 @@ pub struct WorkspaceService {
     repository: Arc<Mutex<Box<dyn WorkspaceRepository>>>,
     users: UserService,
     roles: RoleService,
+    event_bus: EventBusHandle,
 }
 
 impl WorkspaceService {
@@ -115,10 +119,20 @@ impl WorkspaceService {
         users: UserService,
         roles: RoleService,
     ) -> Self {
+        Self::with_event_bus(repository, users, roles, EventBusHandle::disabled())
+    }
+
+    pub fn with_event_bus(
+        repository: impl WorkspaceRepository + 'static,
+        users: UserService,
+        roles: RoleService,
+        event_bus: EventBusHandle,
+    ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             users,
             roles,
+            event_bus,
         }
     }
 
@@ -240,7 +254,7 @@ impl WorkspaceService {
 
     pub fn create_workspace(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         command: CreateWorkspaceCommand,
     ) -> Result<WorkspaceDetail, WorkspaceError> {
         let mut workspaces = self.all_workspaces()?;
@@ -291,12 +305,14 @@ impl WorkspaceService {
             repository.create_workspace(&workspace)?;
         }
         workspaces.push(workspace);
-        self.get_workspace(&workspace_code)
+        let detail = self.get_workspace(&workspace_code)?;
+        self.publish_workspace_detail_event("workspace.created", "Created workspace", actor, &detail);
+        Ok(detail)
     }
 
     pub fn update_workspace(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         workspace_code: &str,
         command: UpdateWorkspaceCommand,
     ) -> Result<WorkspaceDetail, WorkspaceError> {
@@ -317,12 +333,14 @@ impl WorkspaceService {
                 .expect("workspace repository mutex poisoned");
             repository.update_workspace(&workspace)?;
         }
-        self.get_workspace(workspace_code)
+        let detail = self.get_workspace(workspace_code)?;
+        self.publish_workspace_detail_event("workspace.updated", "Updated workspace", actor, &detail);
+        Ok(detail)
     }
 
     pub fn move_workspace(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         workspace_code: &str,
         command: MoveWorkspaceCommand,
     ) -> Result<WorkspaceDetail, WorkspaceError> {
@@ -371,12 +389,14 @@ impl WorkspaceService {
                 .expect("workspace repository mutex poisoned");
             repository.update_workspace(&workspaces[target_index])?;
         }
-        self.get_workspace(workspace_code)
+        let detail = self.get_workspace(workspace_code)?;
+        self.publish_workspace_detail_event("workspace.moved", "Moved workspace", actor, &detail);
+        Ok(detail)
     }
 
     pub fn archive_workspace(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         workspace_code: &str,
     ) -> Result<WorkspaceLifecycleResult, WorkspaceError> {
         let workspaces = self.all_workspaces()?;
@@ -397,11 +417,20 @@ impl WorkspaceService {
             archived_at: Some(DEFAULT_TIMESTAMP.into()),
             affected_workspace_count,
         })
+        .map(|result| {
+            self.publish_workspace_lifecycle_event(
+                "workspace.archived",
+                "Archived workspace subtree",
+                actor,
+                &result,
+            );
+            result
+        })
     }
 
     pub fn restore_workspace(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         workspace_code: &str,
     ) -> Result<WorkspaceLifecycleResult, WorkspaceError> {
         let workspaces = self.all_workspaces()?;
@@ -427,6 +456,15 @@ impl WorkspaceService {
             status: WorkspaceStatus::Active,
             archived_at: None,
             affected_workspace_count,
+        })
+        .map(|result| {
+            self.publish_workspace_lifecycle_event(
+                "workspace.restored",
+                "Restored workspace subtree",
+                actor,
+                &result,
+            );
+            result
         })
     }
 
@@ -455,7 +493,7 @@ impl WorkspaceService {
 
     pub fn replace_user_access(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         workspace_code: &str,
         command: ReplaceWorkspaceUserAccessCommand,
     ) -> Result<PagedWorkspaceRecords<WorkspaceUserAccessListItem>, WorkspaceError> {
@@ -487,14 +525,22 @@ impl WorkspaceService {
                 .expect("workspace repository mutex poisoned");
             repository.replace_user_access(workspace_code, &entries)?;
         }
-        self.list_user_access(
+        let result = self.list_user_access(
             workspace_code,
             WorkspaceAccessListQuery {
                 current: Some(1),
                 size: Some(100),
                 search: None,
             },
-        )
+        )?;
+        self.publish_workspace_access_event(
+            "workspace.user_access_replaced",
+            "Replaced workspace user access grants",
+            actor,
+            workspace_code,
+            result.records.len(),
+        );
+        Ok(result)
     }
 
     pub fn list_role_access(
@@ -532,7 +578,7 @@ impl WorkspaceService {
 
     pub fn replace_role_access(
         &self,
-        _actor: &AuthenticatedUser,
+        actor: &AuthenticatedUser,
         workspace_code: &str,
         command: ReplaceWorkspaceRoleAccessCommand,
     ) -> Result<Vec<WorkspaceRoleAccessListItem>, WorkspaceError> {
@@ -570,7 +616,15 @@ impl WorkspaceService {
                 .expect("workspace repository mutex poisoned");
             repository.replace_role_access(workspace_code, &entries)?;
         }
-        self.list_role_access(workspace_code)
+        let result = self.list_role_access(workspace_code)?;
+        self.publish_workspace_access_event(
+            "workspace.role_access_replaced",
+            "Replaced workspace role access grants",
+            actor,
+            workspace_code,
+            result.len(),
+        );
+        Ok(result)
     }
 
     pub fn list_effective_users(
@@ -758,6 +812,70 @@ impl WorkspaceService {
             counts.insert(workspace.workspace_code.clone(), count);
         }
         Ok(counts)
+    }
+
+    fn publish_workspace_detail_event(
+        &self,
+        event_name: &'static str,
+        summary: &'static str,
+        actor: &AuthenticatedUser,
+        detail: &WorkspaceDetail,
+    ) {
+        let _ = self.event_bus.publish(
+            BusEventDraft::audit(event_name, "workspace_service")
+                .subject("workspace", detail.workspace_code.clone())
+                .actor(actor)
+                .summary(summary)
+                .attr("status", format!("{:?}", detail.status))
+                .attr("depth", detail.depth.to_string())
+                .attr(
+                    "parentWorkspaceCode",
+                    detail
+                        .parent_workspace_code
+                        .clone()
+                        .unwrap_or_else(|| "ROOT".into()),
+                )
+                .attr("directUserCount", detail.direct_user_count.to_string())
+                .attr("roleGrantCount", detail.role_grant_count.to_string())
+                .attr("effectiveUserCount", detail.effective_user_count.to_string()),
+        );
+    }
+
+    fn publish_workspace_lifecycle_event(
+        &self,
+        event_name: &'static str,
+        summary: &'static str,
+        actor: &AuthenticatedUser,
+        result: &WorkspaceLifecycleResult,
+    ) {
+        let _ = self.event_bus.publish(
+            BusEventDraft::audit(event_name, "workspace_service")
+                .subject("workspace", result.workspace_code.clone())
+                .actor(actor)
+                .summary(summary)
+                .attr("status", format!("{:?}", result.status))
+                .attr(
+                    "affectedWorkspaceCount",
+                    result.affected_workspace_count.to_string(),
+                ),
+        );
+    }
+
+    fn publish_workspace_access_event(
+        &self,
+        event_name: &'static str,
+        summary: &'static str,
+        actor: &AuthenticatedUser,
+        workspace_code: &str,
+        grant_count: usize,
+    ) {
+        let _ = self.event_bus.publish(
+            BusEventDraft::audit(event_name, "workspace_service")
+                .subject("workspace", workspace_code.to_string())
+                .actor(actor)
+                .summary(summary)
+                .attr("grantCount", grant_count.to_string()),
+        );
     }
 }
 
