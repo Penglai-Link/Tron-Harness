@@ -1,3 +1,4 @@
+pub mod skill;
 pub mod role;
 pub mod task;
 pub mod user;

@@ -26,3 +26,5 @@ pub(super) const TASKS_SUPERPOWER_RESET_MIGRATION: &str = include_str!(
 pub(super) const VARIABLES_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260518_0009_create_variable_management_variables.sql"
 );
+pub(super) const SKILL_REGISTRY_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260519_0011_create_skill_registry.sql");

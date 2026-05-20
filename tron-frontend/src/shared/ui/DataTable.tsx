@@ -5,24 +5,40 @@ import { cn } from "@/shared/lib/utils";
 
 export interface DataTableColumn<T> {
   align?: "left" | "right";
+  cellClassName?: string;
   header: string;
+  headerClassName?: string;
   id: string;
   render: (row: T) => ReactNode;
 }
 
 interface DataTableProps<T> {
+  className?: string;
   columns: DataTableColumn<T>[];
   emptyState?: ReactNode;
+  onRowClick?: (row: T) => void;
   pagination?: ReactNode;
   rowKey: (row: T, index: number) => string;
+  rowClassName?: (row: T) => string | undefined;
   rows: T[];
   title?: string;
   toolbar?: ReactNode;
 }
 
-export function DataTable<T>({ columns, emptyState, pagination, rowKey, rows, title, toolbar }: DataTableProps<T>) {
+export function DataTable<T>({
+  className,
+  columns,
+  emptyState,
+  onRowClick,
+  pagination,
+  rowKey,
+  rowClassName,
+  rows,
+  title,
+  toolbar,
+}: DataTableProps<T>) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]">
+    <section className={cn("overflow-hidden rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]", className)}>
       {(title || toolbar) && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
           {title ? <h2 className="text-base font-semibold">{title}</h2> : <span />}
@@ -34,7 +50,14 @@ export function DataTable<T>({ columns, emptyState, pagination, rowKey, rows, ti
           <thead>
             <tr className="border-b border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
               {columns.map((column) => (
-                <th className={cn("px-5 py-3", column.align === "right" ? "text-right" : "text-left")} key={column.id}>
+                <th
+                  className={cn(
+                    "px-5 py-3",
+                    column.align === "right" ? "text-right" : "text-left",
+                    column.headerClassName,
+                  )}
+                  key={column.id}
+                >
                   {column.header}
                 </th>
               ))}
@@ -43,9 +66,24 @@ export function DataTable<T>({ columns, emptyState, pagination, rowKey, rows, ti
           <tbody>
             {rows.length ? (
               rows.map((row, index) => (
-                <tr className="border-b border-[var(--color-outline-variant)] last:border-0 hover:bg-[var(--color-hover-surface)]" key={rowKey(row, index)}>
+                <tr
+                  className={cn(
+                    "border-b border-[var(--color-outline-variant)] last:border-0 hover:bg-[var(--color-hover-surface)]",
+                    onRowClick ? "cursor-pointer" : null,
+                    rowClassName?.(row),
+                  )}
+                  key={rowKey(row, index)}
+                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                >
                   {columns.map((column) => (
-                    <td className={cn("px-5 py-3 align-middle", column.align === "right" ? "text-right" : "text-left")} key={column.id}>
+                    <td
+                      className={cn(
+                        "px-5 py-3 align-middle",
+                        column.align === "right" ? "text-right" : "text-left",
+                        column.cellClassName,
+                      )}
+                      key={column.id}
+                    >
                       {column.render(row)}
                     </td>
                   ))}
