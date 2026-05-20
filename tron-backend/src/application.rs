@@ -1,3 +1,4 @@
+pub mod automation;
 pub mod skill;
 pub mod role;
 pub mod task;

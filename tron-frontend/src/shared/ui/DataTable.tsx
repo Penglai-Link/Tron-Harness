@@ -37,12 +37,26 @@ export function DataTable<T>({
   title,
   toolbar,
 }: DataTableProps<T>) {
+  const hasHeader = title || toolbar;
+
   return (
     <section className={cn("overflow-hidden rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]", className)}>
-      {(title || toolbar) && (
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
-          {title ? <h2 className="text-base font-semibold">{title}</h2> : <span />}
-          {toolbar ? <div className="flex flex-wrap items-center gap-2">{toolbar}</div> : null}
+      {hasHeader && (
+        <div className={cn(
+          "flex flex-wrap items-center gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4",
+          title && toolbar ? "justify-between" : "justify-start",
+        )}
+        >
+          {title ? <h2 className="text-base font-semibold">{title}</h2> : null}
+          {toolbar ? (
+            <div className={cn(
+              "flex min-w-0 flex-wrap items-center gap-2",
+              title ? "justify-end" : "w-full justify-start",
+            )}
+            >
+              {toolbar}
+            </div>
+          ) : null}
         </div>
       )}
       <div className="overflow-x-auto">

@@ -1,5 +1,6 @@
 pub mod sqlite;
 
+pub use sqlite::SqliteAutomationRepository;
 pub use sqlite::SqliteRoleRepository;
 pub use sqlite::SqliteSkillRegistryRepository;
 pub use sqlite::SqliteTaskRepository;

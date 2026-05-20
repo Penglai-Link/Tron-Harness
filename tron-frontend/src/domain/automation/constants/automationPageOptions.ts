@@ -1,19 +1,26 @@
-import type { AutomationRecord } from "../model";
+import type {
+  AutomationExecutionStatus,
+  AutomationOperationalStatus,
+  AutomationStatus,
+} from "../model";
 
-export const automationInspectorTabs = [
-  { label: "Details", value: "details" },
-  { label: "Logs", value: "logs" },
-  { label: "Traces", value: "traces" },
-] as const;
+export const editableAutomationStatuses: AutomationOperationalStatus[] = [
+  "Active",
+  "Paused",
+];
 
-export const defaultAutomationPrerequisites = ["Data Extract Job (ID: 8821)", "Validation Check (ID: 9012)"] as const;
+export function getAutomationStatusTone(status: AutomationStatus) {
+  if (status === "Active") return "success";
+  if (status === "Paused") return "warning";
+  return "neutral";
+}
 
-export function getAutomationStatusTone(status: AutomationRecord["status"]) {
-  if (status === "Success" || status === "Running") {
-    return "success";
-  }
-  if (status === "Failed") {
-    return "error";
-  }
+export function getAutomationExecutionStatusTone(
+  status: AutomationExecutionStatus | null | undefined,
+) {
+  if (status === "Success") return "success";
+  if (status === "Failed") return "error";
+  if (status === "Running") return "accent";
+  if (status === "Skipped" || status === "Canceled") return "warning";
   return "neutral";
 }

@@ -9,6 +9,7 @@ use crate::{
                 roles::routes as role_routes, users::routes as user_routes,
                 workspaces::routes as workspace_routes,
             },
+            automations::routes as automation_routes,
             auth::{require_auth, routes as auth_routes},
             skills::routes::routes as skill_routes,
             tasks::routes as task_routes,
@@ -17,11 +18,13 @@ use crate::{
         outbound::{
             crypto::BcryptPasswordHasher,
             persistence::{
-                SqliteRoleRepository, SqliteSkillRegistryRepository, SqliteTaskRepository,
+                SqliteAutomationRepository, SqliteRoleRepository,
+                SqliteSkillRegistryRepository, SqliteTaskRepository,
                 SqliteUserRepository, SqliteVariableRepository, SqliteWorkspaceRepository,
             },
         },
     },
+    application::automation::AutomationService,
     application::role::RoleService,
     application::skill::SkillRegistryService,
     application::task::TaskService,
@@ -47,6 +50,7 @@ static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
 pub struct AppState {
     pub config: AppConfig,
     pub agui_events: Arc<AguiEventSink>,
+    pub automations: AutomationService,
     pub event_bus: EventBusHandle,
     pub roles: RoleService,
     pub tasks: TaskService,
@@ -131,10 +135,16 @@ impl AppState {
                 &config.skills_registry_root,
             )
         };
+        let automations =
+            build_automation_service(&config.database_url, workspaces.clone(), event_bus.clone());
+        automations
+            .bootstrap_scheduler()
+            .expect("automation scheduler should initialize");
 
         Self {
             config,
             agui_events,
+            automations,
             event_bus,
             skills,
             roles,
@@ -182,6 +192,12 @@ impl FromRef<AppState> for TaskService {
     }
 }
 
+impl FromRef<AppState> for AutomationService {
+    fn from_ref(state: &AppState) -> Self {
+        state.automations.clone()
+    }
+}
+
 impl FromRef<AppState> for VariableService {
     fn from_ref(state: &AppState) -> Self {
         state.variables.clone()
@@ -199,6 +215,7 @@ pub fn build_router(config: AppConfig) -> Router {
     let protected_routes = user_routes()
         .merge(role_routes())
         .merge(workspace_routes())
+        .merge(automation_routes())
         .merge(task_routes())
         .merge(variable_routes())
         .merge(skill_routes())
@@ -245,6 +262,16 @@ fn build_task_service(
     let repository = SqliteTaskRepository::connect(database_url)
         .expect("task SQLite repository should initialize");
     TaskService::with_event_bus(repository, workspaces, event_bus)
+}
+
+fn build_automation_service(
+    database_url: &str,
+    workspaces: WorkspaceService,
+    event_bus: EventBusHandle,
+) -> AutomationService {
+    let repository = SqliteAutomationRepository::connect(database_url)
+        .expect("automation SQLite repository should initialize");
+    AutomationService::with_event_bus(repository, workspaces, event_bus)
 }
 
 fn build_variable_service(database_url: &str, workspaces: WorkspaceService) -> VariableService {

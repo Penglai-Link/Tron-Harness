@@ -19,6 +19,7 @@ export const routePages: Record<string, RoutePageComponent> = {
   "apps.import.local": lazy(() => import("@/domain/app/pages/ImportApplicationLocalPage").then((module) => ({ default: module.ImportApplicationLocalPage }))),
   "auth.callback": lazy(() => import("@/domain/auth/pages/AuthCallbackPage").then((module) => ({ default: module.AuthCallbackPage }))),
   "auth.login": lazy(() => import("@/domain/auth/pages/LoginPage").then((module) => ({ default: module.LoginPage }))),
+  "automations.detail": lazy(() => import("@/domain/automation/pages/AutomationDetailsPage").then((module) => ({ default: module.AutomationDetailsPage }))),
   "automations.index": lazy(() => import("@/domain/automation/pages/AutomationsPage").then((module) => ({ default: module.AutomationsPage }))),
   "automations.new": lazy(() => import("@/domain/automation/pages/CreateAutomationPage").then((module) => ({ default: module.CreateAutomationPage }))),
   "chats.execution": lazy(() => import("@/domain/chat/pages/ChatSessionExecutionPage").then((module) => ({ default: module.ChatSessionExecutionPage }))),

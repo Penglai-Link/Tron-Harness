@@ -1,3 +1,4 @@
+mod automation_repository;
 mod migrations;
 mod role_repository;
 mod seed;
@@ -8,6 +9,7 @@ mod user_repository;
 mod variable_repository;
 mod workspace_repository;
 
+pub use automation_repository::SqliteAutomationRepository;
 pub use role_repository::SqliteRoleRepository;
 pub use skill_repository::SqliteSkillRegistryRepository;
 pub use task_repository::SqliteTaskRepository;

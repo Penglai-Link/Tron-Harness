@@ -23,6 +23,9 @@ pub(super) const TASKS_MIGRATION: &str =
 pub(super) const TASKS_SUPERPOWER_RESET_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260519_0010_reset_task_management_superpower.sql"
 );
+pub(super) const AUTOMATIONS_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260519_0011_create_automation_management_automations.sql"
+);
 pub(super) const VARIABLES_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260518_0009_create_variable_management_variables.sql"
 );

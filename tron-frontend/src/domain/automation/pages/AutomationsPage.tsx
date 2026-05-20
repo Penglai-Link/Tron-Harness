@@ -1,160 +1,520 @@
-import { useState } from "react";
 import {
-  Filter,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router";
+import {
+  MoreHorizontal,
   Plus,
-  Settings2,
-  Trash2,
+  RefreshCcw,
+  Search,
+  X,
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
   DataTable,
-  InspectorPanel,
   PageHeader,
-  SegmentedTabs,
+  SelectInput,
   SurfaceCard,
   TablePagination,
   TextInput,
   TronShell,
-  useTablePagination,
+  useToast,
+  useWorkspaceSpaces,
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
-import { useAutomationList } from "@/domain/automation/hooks";
-import type { AutomationRecord } from "@/domain/automation/model";
 import {
-  automationInspectorTabs,
+  archiveAutomation,
+  executeAutomation,
+  restoreAutomation,
+  updateAutomationStatus,
+} from "@/domain/automation/api";
+import {
+  getAutomationExecutionStatusTone,
   getAutomationStatusTone,
 } from "@/domain/automation/constants";
+import { useAutomationList } from "@/domain/automation/hooks";
+import {
+  archiveMockAutomation,
+  executeMockAutomation,
+  restoreMockAutomation,
+  updateMockAutomationStatus,
+} from "@/domain/automation/mock/data";
+import type {
+  AutomationListItem,
+  AutomationOperationalStatus,
+  AutomationStatus,
+} from "@/domain/automation/model";
+import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
-
-function IconButton({ label, children, onClick }: { label: string; children: React.ReactNode; onClick?: () => void }) {
+function SearchField({
+  className,
+  inputClassName,
+  onChange,
+  value,
+}: {
+  className?: string;
+  inputClassName?: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
   return (
-    <button className="inline-flex size-8 items-center justify-center rounded-lg text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]" type="button" aria-label={label} onClick={onClick}>
-      {children}
-    </button>
-  );
-}
-
-function Notice({ value }: { value: string }) {
-  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
-}
-
-function KeyValue({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4 text-sm">
-      <span className="text-[var(--color-on-surface-variant)]">{label}</span>
-      <span className="font-mono text-[13px]">{value}</span>
+    <div className={cn("relative", className)}>
+      <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
+      <TextInput
+        aria-label="Search automations"
+        className={cn("h-9 w-full pl-9", value ? "pr-9" : undefined, inputClassName)}
+        placeholder="Filter by code, name, description, or latest result..."
+        type="search"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {value ? (
+        <Button
+          aria-label="Clear automation search"
+          className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
+          size="icon"
+          type="button"
+          variant="ghost"
+          onClick={() => onChange("")}
+        >
+          <X size={14} aria-hidden="true" />
+        </Button>
+      ) : null}
     </div>
   );
 }
 
+function formatTimestamp(value?: string | null, fallback = "Not available") {
+  if (!value) return fallback;
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function pageBounds(page: number, pageSize: number, total: number, visible: number) {
+  if (!total || !visible) return { end: 0, start: 0 };
+  const start = (page - 1) * pageSize + 1;
+  return {
+    end: start + visible - 1,
+    start,
+  };
+}
+
+function StatisticCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: number;
+}) {
+  return (
+    <SurfaceCard className="p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">
+        {label}
+      </p>
+      <p className="mt-2 text-3xl font-semibold leading-none text-[var(--color-on-surface)]">
+        {value}
+      </p>
+    </SurfaceCard>
+  );
+}
+
+interface RowMenuState {
+  automationCode: string;
+  left: number;
+  top: number;
+}
+
 export function AutomationsPage() {
-  const rows = useAutomationList();
-  const [selectedId, setSelectedId] = useState(rows[0]?.id ?? "");
-  const [tab, setTab] = useState("details");
-  const [query, setQuery] = useState("");
-  const [notice, setNotice] = useState("");
-  const selected = rows.find((row) => row.id === selectedId) ?? rows[0];
-  const filteredRows = rows.filter((row) => row.name.toLowerCase().includes(query.trim().toLowerCase()));
-  const automationPagination = useTablePagination(filteredRows);
+  const navigate = useNavigate();
+  const toast = useToast();
+  const dataSource = getServiceDataSource("automation");
+  const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
+  const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
+  const activeWorkspaceCode = activeWorkspace?.workspaceCode ?? "";
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<AutomationStatus | "">("");
+  const [current, setCurrent] = useState(1);
+  const [size, setSize] = useState(15);
+  const [rowBusyKey, setRowBusyKey] = useState("");
+  const [openRowMenu, setOpenRowMenu] = useState<RowMenuState | null>(null);
+  const rowMenuRef = useRef<HTMLDivElement | null>(null);
+  const query = useMemo(() => ({
+    current,
+    search: debouncedSearch,
+    size,
+    status: statusFilter || undefined,
+    workspaceCode: activeWorkspaceCode,
+  }), [activeWorkspaceCode, current, debouncedSearch, size, statusFilter]);
+  const { page, refresh } = useAutomationList(query);
+  const totalPages = Math.max(1, Math.ceil(page.total / page.size));
+  const bounds = pageBounds(page.current, page.size, page.total, page.records.length);
+  const activeCount = page.records.filter((item) => item.status === "Active").length;
+  const pausedCount = page.records.filter((item) => item.status === "Paused").length;
+  const openMenuRow = openRowMenu
+    ? page.records.find((item) => item.automationCode === openRowMenu.automationCode) ?? null
+    : null;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+      setCurrent(1);
+    }, 220);
+
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setCurrent(1);
+  }, [activeWorkspaceCode, size, statusFilter]);
+
+  useEffect(() => {
+    setOpenRowMenu(null);
+  }, [current, debouncedSearch, size, statusFilter, activeWorkspaceCode]);
+
+  useEffect(() => {
+    if (!openRowMenu) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (rowMenuRef.current?.contains(target)) return;
+      const trigger = document.querySelector<HTMLButtonElement>(
+        `[data-automation-menu-trigger="${openRowMenu.automationCode}"]`,
+      );
+      if (trigger?.contains(target)) return;
+      setOpenRowMenu(null);
+    };
+
+    const handleViewportChange = () => setOpenRowMenu(null);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenRowMenu(null);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openRowMenu]);
+
+  function toggleRowMenu(row: AutomationListItem, trigger: HTMLButtonElement) {
+    if (rowBusyKey.includes(`:${row.automationCode}`)) return;
+    if (openRowMenu?.automationCode === row.automationCode) {
+      setOpenRowMenu(null);
+      return;
+    }
+
+    const menuWidth = 176;
+    const estimatedMenuHeight = row.status === "Archived" ? 112 : 160;
+    const rect = trigger.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(12, rect.right - menuWidth),
+      window.innerWidth - menuWidth - 12,
+    );
+    const top = Math.min(
+      Math.max(12, rect.bottom + 8),
+      window.innerHeight - estimatedMenuHeight - 12,
+    );
+
+    setOpenRowMenu({
+      automationCode: row.automationCode,
+      left,
+      top,
+    });
+  }
+
+  async function handleExecute(row: AutomationListItem) {
+    const busyKey = `execute:${row.automationCode}`;
+    if (rowBusyKey === busyKey || row.status === "Archived") return;
+    setRowBusyKey(busyKey);
+    setOpenRowMenu(null);
+
+    try {
+      const updated = dataSource === "api"
+        ? await executeAutomation(row.automationCode)
+        : executeMockAutomation(row.automationCode);
+      toast.success(`Manual execution recorded for ${updated.automationCode}`);
+      refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Automation execution could not be recorded");
+    } finally {
+      setRowBusyKey("");
+    }
+  }
+
+  async function handleStatusToggle(row: AutomationListItem) {
+    const busyKey = `status:${row.automationCode}`;
+    if (rowBusyKey === busyKey || row.status === "Archived") return;
+    setRowBusyKey(busyKey);
+    setOpenRowMenu(null);
+
+    try {
+      const status: AutomationOperationalStatus = row.status === "Active" ? "Paused" : "Active";
+      const updated = dataSource === "api"
+        ? await updateAutomationStatus(row.automationCode, { status })
+        : updateMockAutomationStatus(row.automationCode, { status });
+      toast.success(`Automation ${updated.automationCode} ${status === "Active" ? "activated" : "paused"}`);
+      refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Automation status could not be updated");
+    } finally {
+      setRowBusyKey("");
+    }
+  }
+
+  async function handleArchive(row: AutomationListItem) {
+    const busyKey = `archive:${row.automationCode}`;
+    if (rowBusyKey === busyKey) return;
+    setRowBusyKey(busyKey);
+    setOpenRowMenu(null);
+
+    try {
+      if (row.status === "Archived") {
+        const result = dataSource === "api"
+          ? await restoreAutomation(row.automationCode)
+          : restoreMockAutomation(row.automationCode);
+        toast.success(`Automation ${result.automationCode} restored to ${result.status}`);
+      } else {
+        const result = dataSource === "api"
+          ? await archiveAutomation(row.automationCode)
+          : archiveMockAutomation(row.automationCode);
+        toast.success(`Automation ${result.automationCode} archived`);
+      }
+      refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Automation lifecycle update failed");
+    } finally {
+      setRowBusyKey("");
+    }
+  }
 
   return (
-    <TronShell
-      activeItem="Automations"
-      searchPlaceholder="Search automations..."
-      rightPanel={
-        selected ? (
-          <InspectorPanel title={selected.name}>
-            <SegmentedTabs value={tab} onValueChange={setTab} items={automationInspectorTabs} />
-            {tab === "details" ? (
-              <div className="space-y-4">
-                <SurfaceCard className="rounded-xl p-4 shadow-none">
-                  <KeyValue label="Schedule" value={selected.cron} />
-                  <KeyValue label="Owner" value={selected.owner} />
-                  <KeyValue label="Last Run" value={selected.lastRun} />
-                </SurfaceCard>
-                <SurfaceCard className="rounded-xl p-4 shadow-none">
-                  <h3 className="mb-3 text-sm font-semibold">Dependency Flow</h3>
-                  <div className="space-y-2">
-                    {selected.dependencies.map((dependency) => (
-                      <div className="flex items-center gap-2" key={dependency.label}>
-                        <span className={cn("size-2 rounded-full", dependency.status === "failed" ? "bg-[var(--color-error)]" : dependency.status === "blocked" ? "bg-[var(--color-warning)]" : "bg-[var(--color-success)]")} />
-                        <span className="text-sm">{dependency.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                </SurfaceCard>
-              </div>
-            ) : (
-              <SurfaceCard className="rounded-xl p-4 shadow-none">
-                {(tab === "logs" ? selected.logs : selected.traces).map((line) => (
-                  <p className="font-mono text-[12px] leading-6" key={line}>
-                    {line}
-                  </p>
-                ))}
-              </SurfaceCard>
-            )}
-          </InspectorPanel>
-        ) : null
-      }
-    >
+    <TronShell activeItem="Automations" searchPlaceholder="Search automations...">
       <PageHeader
-        title="Automations Management"
-        description="Configure and monitor scheduled intelligence workflows."
+        title="Automations"
         actions={
-          <Button onClick={() => setNotice("New automation draft opened")}>
-            <Plus size={15} />
-            New Automation
-          </Button>
-        }
-      />
-      <Notice value={notice} />
-      <DataTable<AutomationRecord>
-        rows={automationPagination.visibleItems}
-        rowKey={(row) => row.id}
-        toolbar={
           <>
-            <TextInput className="h-8 w-56" placeholder="Search automations..." value={query} onChange={(event) => setQuery(event.target.value)} />
-            <Button size="sm" variant="secondary" onClick={() => setNotice(`Filter panel opened for ${filteredRows.length} automations`)}>
-              <Filter size={14} />
-              Filter
+            <Button variant="secondary" onClick={() => {
+              refresh();
+              toast.success("Automation list refreshed");
+            }}
+            >
+              <RefreshCcw size={15} aria-hidden="true" />
+              Refresh
+            </Button>
+            <Button disabled={!activeWorkspaceCode} onClick={() => navigate("/automations/new")}>
+              <Plus size={15} aria-hidden="true" />
+              New
             </Button>
           </>
         }
-        pagination={<TablePagination itemLabel="automations" {...automationPagination.paginationProps} />}
+      />
+      <section className="mb-4 grid gap-3 md:grid-cols-3">
+        <StatisticCard label="In Scope" value={page.total} />
+        <StatisticCard label="Active" value={activeCount} />
+        <StatisticCard label="Paused" value={pausedCount} />
+      </section>
+      <DataTable<AutomationListItem>
+        emptyState={activeWorkspaceCode ? "No automations match the current filters." : "Choose a workspace in the shell header before managing automations."}
+        onRowClick={(row) => navigate(`/automations/detail?automationCode=${encodeURIComponent(row.automationCode)}`)}
+        rows={page.records}
+        rowKey={(row) => row.automationCode}
+        toolbar={
+          <>
+            <SearchField
+              className="min-w-0 grow basis-full sm:basis-0"
+              value={searchInput}
+              onChange={setSearchInput}
+            />
+            <SelectInput
+              className="h-9 w-full sm:w-44"
+              aria-label="Automation status filter"
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as AutomationStatus | "")}
+            >
+              <option value="">All active states</option>
+              <option value="Active">Active</option>
+              <option value="Paused">Paused</option>
+              <option value="Archived">Archived</option>
+            </SelectInput>
+          </>
+        }
+        pagination={(
+          <TablePagination
+            endItem={bounds.end}
+            itemLabel="automations"
+            page={page.current}
+            pageCount={totalPages}
+            pageSize={page.size}
+            startItem={bounds.start}
+            totalItems={page.total}
+            onPageChange={(nextPage) => setCurrent(Math.min(totalPages, Math.max(1, nextPage)))}
+            onPageSizeChange={(nextSize) => {
+              setCurrent(1);
+              setSize(nextSize);
+            }}
+          />
+        )}
         columns={[
           {
-            id: "name",
             header: "Automation",
+            id: "name",
             render: (row) => (
-              <button className="text-left font-medium hover:underline" type="button" onClick={() => setSelectedId(row.id)}>
-                {row.name}
-              </button>
-            ),
-          },
-          { id: "cadence", header: "Cadence", render: (row) => row.cadence },
-          { id: "cron", header: "CRON", render: (row) => <span className="font-mono text-[13px]">{row.cron}</span> },
-          { id: "lastRun", header: "Last Run", render: (row) => row.lastRun },
-          { id: "status", header: "Status", render: (row) => <Badge tone={getAutomationStatusTone(row.status)}>{row.status}</Badge> },
-          {
-            id: "actions",
-            header: "Actions",
-            align: "right",
-            render: (row) => (
-              <div className="flex justify-end gap-1">
-                <IconButton label={`Edit ${row.name}`} onClick={() => setSelectedId(row.id)}>
-                  <Settings2 size={15} />
-                </IconButton>
-                <IconButton label={`Delete ${row.name}`} onClick={() => setNotice(`Delete ${row.name} requested`)}>
-                  <Trash2 size={15} />
-                </IconButton>
+              <div className="space-y-1">
+                <p className="font-medium text-[var(--color-on-surface)]">{row.name}</p>
+                <p className="max-w-[28rem] text-sm leading-6 text-[var(--color-on-surface-variant)]">{row.description ?? "No description"}</p>
               </div>
             ),
           },
+          {
+            header: "Schedule",
+            id: "schedule",
+            render: (row) => (
+              <div className="space-y-1">
+                <p className="font-mono text-[13px] text-[var(--color-on-surface)]">{row.cronExpression}</p>
+                <p className="text-sm text-[var(--color-on-surface-variant)]">Next: {formatTimestamp(row.nextRunAt, "Not scheduled")}</p>
+              </div>
+            ),
+          },
+          {
+            header: "Latest result",
+            id: "latest",
+            render: (row) => (
+              <div>
+                {row.lastExecutionStatus ? (
+                  <Badge tone={getAutomationExecutionStatusTone(row.lastExecutionStatus)}>
+                    {row.lastExecutionStatus}
+                  </Badge>
+                ) : (
+                  <Badge tone="neutral">Never run</Badge>
+                )}
+              </div>
+            ),
+          },
+          {
+            header: "Status",
+            id: "status",
+            render: (row) => (
+              <Badge tone={getAutomationStatusTone(row.status)}>{row.status}</Badge>
+            ),
+          },
+          {
+            header: "Updated",
+            id: "updated",
+            render: (row) => (
+              <span className="text-sm text-[var(--color-on-surface-variant)]">{formatTimestamp(row.updatedAt)}</span>
+            ),
+          },
+          {
+            align: "right",
+            header: "Actions",
+            id: "actions",
+            render: (row) => {
+              const isMenuOpen = openRowMenu?.automationCode === row.automationCode;
+              const isBusy = rowBusyKey.includes(`:${row.automationCode}`);
+
+              return (
+                <div className="flex justify-end">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={`Open actions for ${row.name}`}
+                    aria-expanded={isMenuOpen}
+                    data-automation-menu-trigger={row.automationCode}
+                    disabled={isBusy}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      toggleRowMenu(row, event.currentTarget);
+                    }}
+                  >
+                    <MoreHorizontal size={16} aria-hidden="true" />
+                  </Button>
+                </div>
+              );
+            },
+          },
         ]}
       />
+      {openRowMenu && openMenuRow
+        ? createPortal(
+          <div
+            ref={rowMenuRef}
+            style={{ left: openRowMenu.left, top: openRowMenu.top }}
+            className="fixed z-[80] w-44 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-2 text-left text-sm shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
+            role="menu"
+            aria-label={`Actions for ${openMenuRow.name}`}
+          >
+            {openMenuRow.status !== "Archived" ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={rowBusyKey === `execute:${openMenuRow.automationCode}`}
+                onClick={() => {
+                  void handleExecute(openMenuRow);
+                }}
+              >
+                Run
+              </button>
+            ) : null}
+            {openMenuRow.status !== "Archived" ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={rowBusyKey === `status:${openMenuRow.automationCode}`}
+                onClick={() => {
+                  void handleStatusToggle(openMenuRow);
+                }}
+              >
+                {openMenuRow.status === "Active" ? "Pause" : "Activate"}
+              </button>
+            ) : null}
+            {openMenuRow.status !== "Archived" ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={rowBusyKey === `archive:${openMenuRow.automationCode}`}
+                onClick={() => {
+                  void handleArchive(openMenuRow);
+                }}
+              >
+                Archive
+              </button>
+            ) : null}
+            {openMenuRow.status === "Archived" ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={rowBusyKey === `archive:${openMenuRow.automationCode}`}
+                onClick={() => {
+                  void handleArchive(openMenuRow);
+                }}
+              >
+                Restore
+              </button>
+            ) : null}
+          </div>,
+          document.body,
+        )
+        : null}
     </TronShell>
   );
 }

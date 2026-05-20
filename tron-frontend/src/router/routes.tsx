@@ -27,6 +27,7 @@ export const appRoutes: AppRoute[] = [
   { pageId: "chats.reasoning", route: "/chats/8842-alpha", activeNav: "Chats", title: "Chat Sessions", archetype: "chat" },
   { pageId: "chats.execution", route: "/chats/8842-alpha?variant=execution", activeNav: "Chats", title: "Chat Session Detail", archetype: "chat" },
   { pageId: "automations.new", route: "/automations/new", activeNav: "Automations", title: "Create Automation", archetype: "form" },
+  { pageId: "automations.detail", route: "/automations/detail", activeNav: "Automations", title: "Automation Detail", archetype: "detail" },
   { pageId: "prompts.new", route: "/prompts/new", activeNav: "Prompts", title: "Create New Prompt", archetype: "form-inspector" },
   { pageId: "skills.new", route: "/skills/new", activeNav: "Skills", title: "Install Skill", archetype: "form-inspector" },
   { pageId: "skills.bind", route: "/skills/bind", activeNav: "Skills", title: "Bind Skill", archetype: "form-inspector" },
