@@ -24,7 +24,9 @@ import { DEFAULT_AUTH_REDIRECT } from "@/domain/auth/constants";
 import { resolveAuthRedirect } from "@/domain/auth/model";
 import {
   Field,
+  PixelBlast,
   TextInput,
+  useTheme,
   useToast,
 } from "@/shared";
 import { Button } from "@/shared/ui/Button";
@@ -35,6 +37,7 @@ export function LoginPage() {
   const { t } = useTranslation(["auth", "common"]);
   const location = useLocation();
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const toast = useToast();
   const loginWithInternalAccount = useAuthStore((state) => state.loginWithInternalAccount);
   const redirectTarget = useMemo(
@@ -114,15 +117,66 @@ export function LoginPage() {
     window.location.assign(buildOAuth2AuthorizeUrl(providerCode, redirectTarget));
   }
 
+  const pixelBlastProps = theme === "matrix-dark"
+    ? {
+        color: "#5cff85",
+        edgeFade: 0.22,
+        enableRipples: true,
+        liquid: true,
+        liquidRadius: 1.15,
+        liquidStrength: 0.11,
+        liquidWobbleSpeed: 4.9,
+        patternDensity: 1.08,
+        patternScale: 2.35,
+        pixelSize: 6,
+        pixelSizeJitter: 0.5,
+        rippleIntensityScale: 1.35,
+        rippleSpeed: 0.42,
+        rippleThickness: 0.12,
+        speed: 0.62,
+        transparent: true,
+        variant: "circle" as const,
+      }
+    : {
+        color: "#8ea5d6",
+        edgeFade: 0.34,
+        enableRipples: true,
+        liquid: false,
+        patternDensity: 0.94,
+        patternScale: 1.85,
+        pixelSize: 5,
+        pixelSizeJitter: 0.32,
+        rippleIntensityScale: 0.9,
+        rippleSpeed: 0.34,
+        rippleThickness: 0.11,
+        speed: 0.4,
+        transparent: true,
+        variant: "diamond" as const,
+      };
+
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(188,220,255,0.28),_transparent_42%),linear-gradient(180deg,_#f7fafc_0%,_#eef3f8_100%)] px-6 py-10 text-[var(--color-on-surface)]">
-      <section className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl items-center justify-center">
-        <section className="w-full max-w-[420px] rounded-[28px] border border-white/80 bg-white p-8 shadow-[0_28px_80px_rgba(42,71,110,0.14)]">
+    <main className="auth-page-shell relative min-h-screen overflow-hidden px-6 py-10 text-[var(--color-on-surface)]">
+      <div className="absolute inset-0">
+        <PixelBlast
+          {...pixelBlastProps}
+          className="absolute inset-0"
+        />
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: theme === "matrix-dark"
+              ? "radial-gradient(circle at center, rgba(1, 6, 3, 0.04) 0%, rgba(1, 6, 3, 0.34) 52%, rgba(1, 6, 3, 0.7) 100%)"
+              : "radial-gradient(circle at center, rgba(255, 255, 255, 0.08) 0%, rgba(247, 250, 252, 0.4) 52%, rgba(238, 243, 248, 0.76) 100%)",
+          }}
+        />
+      </div>
+      <section className="relative z-10 mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl items-center justify-center">
+        <section className="auth-elevated-card w-full max-w-[420px] rounded-[28px] p-8">
           <div className="mb-8 flex items-start justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-semibold text-slate-950">{t("auth:cardSubtitle")}</h1>
+              <h1 className="text-2xl font-semibold text-[var(--color-on-surface)]">{t("auth:cardSubtitle")}</h1>
             </div>
-            <div className="flex size-12 items-center justify-center rounded-2xl bg-slate-950 text-white">
+            <div className="flex size-12 items-center justify-center rounded-2xl bg-[var(--color-surface-container-highest)] text-[var(--color-primary)]">
               <LockKeyhole size={20} aria-hidden="true" />
             </div>
           </div>

@@ -1,0 +1,9 @@
+.pixel-blast-container {
+  height: 100%;
+  overflow: hidden;
+  width: 100%;
+}
+
+.pixel-blast-container canvas {
+  display: block;
+}

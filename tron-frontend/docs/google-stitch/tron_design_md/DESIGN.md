@@ -175,6 +175,19 @@ The layout philosophy follows a **Fluid Grid with strict 4px/8px increments**. T
 - **Main Canvas:** Fluid, utilizing a 12-column system with 16px gutters.
 - **Density:** High density is achieved not by shrinking text, but by reducing vertical padding in lists (8px) and increasing horizontal margins (24px) to create "breathing room" at the edges of the screen.
 
+By default, the page header section may only contain:
+1. Main title
+2. Action buttons
+3. Tabs
+4. Breadcrumbs
+
+The following are prohibited:
+1. Subtitles
+2. Title descriptions
+3. Page instructions
+4. Promotional copy
+5. Explanatory text such as “Used for xxx,” “Supports xxx,” or “You can xxx here”
+
 ## Elevation & Depth
 
 Depth is conveyed through **Tonal Layering and Soft Ambient Shadows**, avoiding heavy borders which can clutter a dense UI.

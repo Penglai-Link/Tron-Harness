@@ -33,12 +33,12 @@ export function AuthCallbackPage() {
   }, [navigate, redirectTarget, status]);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(188,220,255,0.28),_transparent_42%),linear-gradient(180deg,_#f7fafc_0%,_#eef3f8_100%)] px-6 py-10 text-[var(--color-on-surface)]">
-      <section className="w-full max-w-lg rounded-[28px] border border-white/80 bg-white p-8 text-center shadow-[0_28px_80px_rgba(42,71,110,0.14)]">
-        <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-slate-950 text-white">
+    <main className="auth-page-shell flex min-h-screen items-center justify-center px-6 py-10 text-[var(--color-on-surface)]">
+      <section className="auth-elevated-card w-full max-w-lg rounded-[28px] p-8 text-center">
+        <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-[var(--color-surface-container-highest)] text-[var(--color-primary)]">
           <Orbit size={22} aria-hidden="true" />
         </div>
-        <h1 className="mt-6 text-2xl font-semibold text-slate-950">{t("callback.title")}</h1>
+        <h1 className="mt-6 text-2xl font-semibold text-[var(--color-on-surface)]">{t("callback.title")}</h1>
         <p className="mt-3 text-sm leading-6 text-[var(--color-on-surface-variant)]">
           {status === "checking" ? t("callback.progress") : t("callback.failed")}
         </p>

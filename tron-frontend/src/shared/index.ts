@@ -11,6 +11,7 @@ export * from "./types/ShellNavigation";
 export * from "./types/WorkspaceSpace";
 export * from "./ui/DataTable";
 export * from "./ui/Forms";
+export * from "./ui/PixelBlast";
 export * from "./ui/TablePagination";
 export * from "./ui/Tabs";
 export * from "./ui/Toast";
