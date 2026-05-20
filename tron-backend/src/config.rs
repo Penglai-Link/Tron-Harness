@@ -1,4 +1,4 @@
-use std::{env, error::Error, fmt, net::SocketAddr};
+use std::{env, error::Error, fmt, net::SocketAddr, path::PathBuf};
 
 use crate::shared::event_bus::EventBusConfig;
 
@@ -16,12 +16,14 @@ const DEFAULT_AUTH_GITHUB_TOKEN_URL: &str = "https://github.com/login/oauth/acce
 const DEFAULT_AUTH_GITHUB_USER_API_URL: &str = "https://api.github.com/user";
 const DEFAULT_AUTH_GITHUB_EMAILS_API_URL: &str = "https://api.github.com/user/emails";
 const DEFAULT_AUTH_GITHUB_SCOPE: &str = "read:user user:email";
+const DEFAULT_SKILLS_REGISTRY_ROOT_SUFFIX: &str = ".tron/skills-registry";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppConfig {
     pub bind_address: String,
     pub port: u16,
     pub database_url: String,
+    pub skills_registry_root: String,
     pub auth: AuthConfig,
     pub event_bus: EventBusConfig,
 }
@@ -62,6 +64,8 @@ impl AppConfig {
         };
         let database_url =
             env::var("TRON_BACKEND_DATABASE_URL").unwrap_or_else(|_| DEFAULT_DATABASE_URL.into());
+        let skills_registry_root = env::var("TRON_SKILLS_REGISTRY_ROOT")
+            .unwrap_or_else(|_| default_skills_registry_root_from_home());
         let github_oauth_enabled = parse_bool_env("TRON_AUTH_GITHUB_ENABLED", false)?;
         let event_bus = EventBusConfig {
             enabled: parse_bool_env("TRON_EVENT_BUS_ENABLED", true)?,
@@ -135,6 +139,7 @@ impl AppConfig {
             bind_address,
             port,
             database_url,
+            skills_registry_root,
             auth,
             event_bus,
         })
@@ -157,6 +162,10 @@ impl Default for AppConfig {
             bind_address: DEFAULT_BIND_ADDRESS.into(),
             port: DEFAULT_PORT,
             database_url: TEST_DATABASE_URL.into(),
+            skills_registry_root: std::env::temp_dir()
+                .join("tron-skills-registry-test")
+                .display()
+                .to_string(),
             auth: AuthConfig {
                 jwt_secret: DEFAULT_AUTH_JWT_SECRET.into(),
                 access_token_ttl_seconds: DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS,
@@ -169,6 +178,14 @@ impl Default for AppConfig {
             event_bus: EventBusConfig::default(),
         }
     }
+}
+
+fn default_skills_registry_root_from_home() -> String {
+    env::var("HOME")
+        .map(|home| PathBuf::from(home).join(DEFAULT_SKILLS_REGISTRY_ROOT_SUFFIX))
+        .unwrap_or_else(|_| PathBuf::from(DEFAULT_SKILLS_REGISTRY_ROOT_SUFFIX))
+        .display()
+        .to_string()
 }
 
 #[derive(Debug)]

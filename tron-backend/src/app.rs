@@ -10,18 +10,20 @@ use crate::{
                 workspaces::routes as workspace_routes,
             },
             auth::{require_auth, routes as auth_routes},
+            skills::routes::routes as skill_routes,
             tasks::routes as task_routes,
             variables::routes::routes as variable_routes,
         },
         outbound::{
             crypto::BcryptPasswordHasher,
             persistence::{
-                SqliteRoleRepository, SqliteTaskRepository, SqliteUserRepository,
-                SqliteVariableRepository, SqliteWorkspaceRepository,
+                SqliteRoleRepository, SqliteSkillRegistryRepository, SqliteTaskRepository,
+                SqliteUserRepository, SqliteVariableRepository, SqliteWorkspaceRepository,
             },
         },
     },
     application::role::RoleService,
+    application::skill::SkillRegistryService,
     application::task::TaskService,
     application::user::UserService,
     application::variable::VariableService,
@@ -39,6 +41,7 @@ static GLOBAL_ROLE_SERVICE: OnceLock<RoleService> = OnceLock::new();
 static GLOBAL_WORKSPACE_SERVICE: OnceLock<WorkspaceService> = OnceLock::new();
 static GLOBAL_TASK_SERVICE: OnceLock<TaskService> = OnceLock::new();
 static GLOBAL_VARIABLE_SERVICE: OnceLock<VariableService> = OnceLock::new();
+static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct AppState {
@@ -50,6 +53,7 @@ pub struct AppState {
     pub users: UserService,
     pub variables: VariableService,
     pub workspaces: WorkspaceService,
+    pub skills: SkillRegistryService,
 }
 
 impl AppState {
@@ -110,11 +114,29 @@ impl AppState {
         } else {
             build_variable_service(&config.database_url, workspaces.clone())
         };
+        let skills = if config.database_url == ":memory:" {
+            GLOBAL_SKILL_SERVICE
+                .get_or_init(|| {
+                    build_skill_registry_service(
+                        ":memory:",
+                        workspaces.clone(),
+                        &config.skills_registry_root,
+                    )
+                })
+                .clone()
+        } else {
+            build_skill_registry_service(
+                &config.database_url,
+                workspaces.clone(),
+                &config.skills_registry_root,
+            )
+        };
 
         Self {
             config,
             agui_events,
             event_bus,
+            skills,
             roles,
             tasks,
             users,
@@ -166,6 +188,12 @@ impl FromRef<AppState> for VariableService {
     }
 }
 
+impl FromRef<AppState> for SkillRegistryService {
+    fn from_ref(state: &AppState) -> Self {
+        state.skills.clone()
+    }
+}
+
 pub fn build_router(config: AppConfig) -> Router {
     let state = AppState::new(config);
     let protected_routes = user_routes()
@@ -173,6 +201,7 @@ pub fn build_router(config: AppConfig) -> Router {
         .merge(workspace_routes())
         .merge(task_routes())
         .merge(variable_routes())
+        .merge(skill_routes())
         .route_layer(middleware::from_fn_with_state(
             state.users.clone(),
             require_auth,
@@ -222,4 +251,14 @@ fn build_variable_service(database_url: &str, workspaces: WorkspaceService) -> V
     let repository = SqliteVariableRepository::connect(database_url)
         .expect("variable SQLite repository should initialize");
     VariableService::new(repository, workspaces)
+}
+
+fn build_skill_registry_service(
+    database_url: &str,
+    workspaces: WorkspaceService,
+    registry_root: &str,
+) -> SkillRegistryService {
+    let repository = SqliteSkillRegistryRepository::connect(database_url)
+        .expect("skill registry SQLite repository should initialize");
+    SkillRegistryService::new(repository, workspaces, registry_root)
 }
