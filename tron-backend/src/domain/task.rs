@@ -211,6 +211,7 @@ pub enum TaskError {
     InvalidWorkspace,
     InvalidParent,
     AssigneeNotInWorkspace,
+    InvalidApp,
     ActiveSubtaskExists,
     ArchivedMutationDenied,
     StatusRoleInvalid,
@@ -227,6 +228,7 @@ impl fmt::Display for TaskError {
             Self::InvalidWorkspace => formatter.write_str("task workspace is invalid"),
             Self::InvalidParent => formatter.write_str("task parent is invalid"),
             Self::AssigneeNotInWorkspace => formatter.write_str("task assignee is invalid"),
+            Self::InvalidApp => formatter.write_str("task app is invalid"),
             Self::ActiveSubtaskExists => formatter.write_str("task has active subtasks"),
             Self::ArchivedMutationDenied => formatter.write_str("archived task cannot be modified"),
             Self::StatusRoleInvalid => {

@@ -9,8 +9,10 @@ use crate::{
                 roles::routes as role_routes, users::routes as user_routes,
                 workspaces::routes as workspace_routes,
             },
+            apps::routes::routes as app_routes,
             automations::routes as automation_routes,
             auth::{require_auth, routes as auth_routes},
+            models::routes::routes as model_routes,
             skills::routes::routes as skill_routes,
             tasks::routes as task_routes,
             variables::routes::routes as variable_routes,
@@ -18,13 +20,15 @@ use crate::{
         outbound::{
             crypto::BcryptPasswordHasher,
             persistence::{
-                SqliteAutomationRepository, SqliteRoleRepository,
-                SqliteSkillRegistryRepository, SqliteTaskRepository,
+                SqliteAppRepository, SqliteAutomationRepository, SqliteModelRepository,
+                SqliteRoleRepository, SqliteSkillRegistryRepository, SqliteTaskRepository,
                 SqliteUserRepository, SqliteVariableRepository, SqliteWorkspaceRepository,
             },
         },
     },
+    application::app::AppService,
     application::automation::AutomationService,
+    application::model::ModelService,
     application::role::RoleService,
     application::skill::SkillRegistryService,
     application::task::TaskService,
@@ -42,6 +46,8 @@ use crate::{
 static GLOBAL_USER_SERVICE: OnceLock<UserService> = OnceLock::new();
 static GLOBAL_ROLE_SERVICE: OnceLock<RoleService> = OnceLock::new();
 static GLOBAL_WORKSPACE_SERVICE: OnceLock<WorkspaceService> = OnceLock::new();
+static GLOBAL_APP_SERVICE: OnceLock<AppService> = OnceLock::new();
+static GLOBAL_MODEL_SERVICE: OnceLock<ModelService> = OnceLock::new();
 static GLOBAL_TASK_SERVICE: OnceLock<TaskService> = OnceLock::new();
 static GLOBAL_VARIABLE_SERVICE: OnceLock<VariableService> = OnceLock::new();
 static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
@@ -50,8 +56,10 @@ static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
 pub struct AppState {
     pub config: AppConfig,
     pub agui_events: Arc<AguiEventSink>,
+    pub apps: AppService,
     pub automations: AutomationService,
     pub event_bus: EventBusHandle,
+    pub models: ModelService,
     pub roles: RoleService,
     pub tasks: TaskService,
     pub users: UserService,
@@ -102,14 +110,38 @@ impl AppState {
                 event_bus.clone(),
             )
         };
+        let apps = if config.database_url == ":memory:" {
+            GLOBAL_APP_SERVICE
+                .get_or_init(|| build_app_service(":memory:", workspaces.clone()))
+                .clone()
+        } else {
+            build_app_service(&config.database_url, workspaces.clone())
+        };
+        let models = if config.database_url == ":memory:" {
+            GLOBAL_MODEL_SERVICE
+                .get_or_init(|| build_model_service(":memory:", workspaces.clone()))
+                .clone()
+        } else {
+            build_model_service(&config.database_url, workspaces.clone())
+        };
         let tasks = if config.database_url == ":memory:" {
             GLOBAL_TASK_SERVICE
                 .get_or_init(|| {
-                    build_task_service(":memory:", workspaces.clone(), event_bus.clone())
+                    build_task_service(
+                        ":memory:",
+                        workspaces.clone(),
+                        apps.clone(),
+                        event_bus.clone(),
+                    )
                 })
                 .clone()
         } else {
-            build_task_service(&config.database_url, workspaces.clone(), event_bus.clone())
+            build_task_service(
+                &config.database_url,
+                workspaces.clone(),
+                apps.clone(),
+                event_bus.clone(),
+            )
         };
         let variables = if config.database_url == ":memory:" {
             GLOBAL_VARIABLE_SERVICE
@@ -144,14 +176,16 @@ impl AppState {
         Self {
             config,
             agui_events,
+            apps,
             automations,
             event_bus,
-            skills,
+            models,
             roles,
             tasks,
             users,
             variables,
             workspaces,
+            skills,
         }
     }
 }
@@ -165,6 +199,18 @@ impl FromRef<AppState> for AppConfig {
 impl FromRef<AppState> for UserService {
     fn from_ref(state: &AppState) -> Self {
         state.users.clone()
+    }
+}
+
+impl FromRef<AppState> for AppService {
+    fn from_ref(state: &AppState) -> Self {
+        state.apps.clone()
+    }
+}
+
+impl FromRef<AppState> for ModelService {
+    fn from_ref(state: &AppState) -> Self {
+        state.models.clone()
     }
 }
 
@@ -216,6 +262,8 @@ pub fn build_router(config: AppConfig) -> Router {
         .merge(role_routes())
         .merge(workspace_routes())
         .merge(automation_routes())
+        .merge(app_routes())
+        .merge(model_routes())
         .merge(task_routes())
         .merge(variable_routes())
         .merge(skill_routes())
@@ -254,14 +302,27 @@ fn build_workspace_service(
     WorkspaceService::with_event_bus(repository, users, roles, event_bus)
 }
 
+fn build_app_service(database_url: &str, workspaces: WorkspaceService) -> AppService {
+    let repository = SqliteAppRepository::connect(database_url)
+        .expect("app SQLite repository should initialize");
+    AppService::new(repository, workspaces)
+}
+
+fn build_model_service(database_url: &str, workspaces: WorkspaceService) -> ModelService {
+    let repository = SqliteModelRepository::connect(database_url)
+        .expect("model SQLite repository should initialize");
+    ModelService::new(repository, workspaces)
+}
+
 fn build_task_service(
     database_url: &str,
     workspaces: WorkspaceService,
+    apps: AppService,
     event_bus: EventBusHandle,
 ) -> TaskService {
     let repository = SqliteTaskRepository::connect(database_url)
         .expect("task SQLite repository should initialize");
-    TaskService::with_event_bus(repository, workspaces, event_bus)
+    TaskService::with_event_bus(repository, workspaces, apps, event_bus)
 }
 
 fn build_automation_service(

@@ -1,6 +1,8 @@
+pub mod app;
 pub mod automation;
-pub mod skill;
+pub mod model;
 pub mod role;
+pub mod skill;
 pub mod task;
 pub mod user;
 pub mod variable;

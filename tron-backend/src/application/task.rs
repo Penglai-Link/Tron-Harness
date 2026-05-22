@@ -4,8 +4,9 @@ use std::{
 };
 
 use crate::{
-    application::workspace::WorkspaceService,
+    application::{app::AppService, workspace::WorkspaceService},
     domain::{
+        app::AppError,
         task::{
             PagedTaskRecords, TASK_STATUSES, Task, TaskCodeLink, TaskDetail, TaskError,
             TaskKanbanColumn, TaskLifecycleResult, TaskListItem, TaskListQuery, TaskOptions,
@@ -89,22 +90,29 @@ pub trait TaskRepository: Send {
 pub struct TaskService {
     repository: Arc<Mutex<Box<dyn TaskRepository>>>,
     workspaces: WorkspaceService,
+    apps: AppService,
     event_bus: EventBusHandle,
 }
 
 impl TaskService {
-    pub fn new(repository: impl TaskRepository + 'static, workspaces: WorkspaceService) -> Self {
-        Self::with_event_bus(repository, workspaces, EventBusHandle::disabled())
+    pub fn new(
+        repository: impl TaskRepository + 'static,
+        workspaces: WorkspaceService,
+        apps: AppService,
+    ) -> Self {
+        Self::with_event_bus(repository, workspaces, apps, EventBusHandle::disabled())
     }
 
     pub fn with_event_bus(
         repository: impl TaskRepository + 'static,
         workspaces: WorkspaceService,
+        apps: AppService,
         event_bus: EventBusHandle,
     ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             workspaces,
+            apps,
             event_bus,
         }
     }
@@ -166,7 +174,10 @@ impl TaskService {
         let task_role = infer_task_role(command.task_type, parent_task_code.as_deref());
         let assignees = self.validated_assignees(&workspace_code, command.assignee_user_codes)?;
         let agent_links = normalized_code_links(command.agent_codes);
-        let app_links = normalized_code_links(command.app_codes);
+        let app_links = self.validated_app_links(
+            &workspace_code,
+            normalized_code_links(command.app_codes),
+        )?;
         let id = self
             .repository
             .lock()
@@ -247,7 +258,10 @@ impl TaskService {
             .map(|codes| self.validated_assignees(&task.workspace_code, codes))
             .transpose()?;
         let agent_links = command.agent_codes.map(normalized_code_links);
-        let app_links = command.app_codes.map(normalized_code_links);
+        let app_links = command
+            .app_codes
+            .map(|codes| self.validated_app_links(&task.workspace_code, normalized_code_links(codes)))
+            .transpose()?;
         {
             let mut repository = self
                 .repository
@@ -629,6 +643,23 @@ impl TaskService {
             })
             .collect()
     }
+
+    fn validated_app_links(
+        &self,
+        workspace_code: &str,
+        app_links: Vec<TaskCodeLink>,
+    ) -> Result<Vec<TaskCodeLink>, TaskError> {
+        let allowed_codes = self
+            .apps
+            .assignable_app_codes(workspace_code)
+            .map_err(map_app_error)?;
+        for app_link in &app_links {
+            if !allowed_codes.contains(&app_link.code) {
+                return Err(TaskError::InvalidApp);
+            }
+        }
+        Ok(app_links)
+    }
 }
 
 fn normalized_required(value: String) -> Option<String> {
@@ -728,5 +759,12 @@ fn map_workspace_error(error: WorkspaceError) -> TaskError {
             TaskError::InvalidWorkspace
         }
         _ => TaskError::StorageFailure,
+    }
+}
+
+fn map_app_error(error: AppError) -> TaskError {
+    match error {
+        AppError::StorageFailure => TaskError::StorageFailure,
+        _ => TaskError::InvalidApp,
     }
 }

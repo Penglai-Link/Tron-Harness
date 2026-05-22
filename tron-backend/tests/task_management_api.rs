@@ -137,7 +137,7 @@ async fn create_task_validates_workspace_assignees_and_defaults_to_open() {
             "sourceUrl": "",
             "assigneeUserCodes": ["USR-ARCHIVED"],
             "agentCodes": ["agent-main"],
-            "appCodes": ["github"]
+            "appCodes": ["APP-TRON-API"]
         })),
     )
     .await;
@@ -161,7 +161,7 @@ async fn create_task_validates_workspace_assignees_and_defaults_to_open() {
             "sourceUrl": "",
             "assigneeUserCodes": ["USR-AUTH-0001"],
             "agentCodes": ["agent-main", "agent-main", "agent-reviewer"],
-            "appCodes": ["github"]
+            "appCodes": ["APP-TRON-API"]
         })),
     )
     .await;
@@ -171,9 +171,81 @@ async fn create_task_validates_workspace_assignees_and_defaults_to_open() {
     assert_eq!(body["data"]["status"], "Open");
     assert_eq!(body["data"]["sourceType"], "GitHub");
     assert_eq!(body["data"]["sourceUrl"], "");
+    assert_eq!(body["data"]["appCodes"], json!(["APP-TRON-API"]));
     assert_eq!(
         body["data"]["agentCodes"],
         json!(["agent-main", "agent-reviewer"])
+    );
+}
+
+#[tokio::test]
+async fn task_app_codes_must_reference_active_apps_in_the_same_workspace() {
+    let router = task_app("task-app-validation");
+
+    for invalid_app_codes in [
+        json!(["APP-NOT-FOUND"]),
+        json!(["APP-TRON-LEGACY"]),
+        json!(["APP-COMPLIANCE-API"]),
+    ] {
+        let response = authenticated_request(
+            &router,
+            Method::POST,
+            "/api/v1/tasks",
+            Some(json!({
+                "workspaceCode": "TRON_CORE",
+                "title": "Invalid app selection",
+                "priority": "Medium",
+                "taskType": "Feature",
+                "sourceType": "Internal",
+                "sourceUrl": "",
+                "assigneeUserCodes": ["USR-AUTH-0001"],
+                "agentCodes": [],
+                "appCodes": invalid_app_codes,
+            })),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(response_json(response).await["code"], "TASK_APP_INVALID");
+    }
+
+    let created = create_task(
+        &router,
+        "TRON_CORE",
+        None,
+        "Valid app selection",
+        "Feature",
+    )
+    .await;
+    let task_code = created["data"]["taskCode"].as_str().unwrap().to_owned();
+
+    let updated = authenticated_request(
+        &router,
+        Method::PATCH,
+        &format!("/api/v1/tasks/{task_code}"),
+        Some(json!({
+            "appCodes": ["APP-TRON-CONSOLE", "APP-TRON-API"]
+        })),
+    )
+    .await;
+    assert_eq!(updated.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(updated).await["data"]["appCodes"],
+        json!(["APP-TRON-API", "APP-TRON-CONSOLE"])
+    );
+
+    let invalid_update = authenticated_request(
+        &router,
+        Method::PATCH,
+        &format!("/api/v1/tasks/{task_code}"),
+        Some(json!({
+            "appCodes": ["APP-COMPLIANCE-API"]
+        })),
+    )
+    .await;
+    assert_eq!(invalid_update.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response_json(invalid_update).await["code"],
+        "TASK_APP_INVALID"
     );
 }
 

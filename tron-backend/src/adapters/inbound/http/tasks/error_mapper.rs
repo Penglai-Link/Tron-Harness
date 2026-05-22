@@ -33,6 +33,11 @@ pub fn task_error_response(error: TaskError) -> Response {
             "TASK_ASSIGNEE_INVALID",
             "task assignees must be effective users in the task workspace",
         ),
+        TaskError::InvalidApp => (
+            StatusCode::BAD_REQUEST,
+            "TASK_APP_INVALID",
+            "task apps must reference active apps in the task workspace",
+        ),
         TaskError::ActiveSubtaskExists => (
             StatusCode::BAD_REQUEST,
             "TASK_ACTIVE_SUBTASK_EXISTS",

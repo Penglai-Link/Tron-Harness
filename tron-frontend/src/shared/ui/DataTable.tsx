@@ -16,7 +16,7 @@ interface DataTableProps<T> {
   className?: string;
   columns: DataTableColumn<T>[];
   emptyState?: ReactNode;
-  onRowClick?: (row: T) => void;
+  onRowClick?: (row: T, index: number) => void;
   pagination?: ReactNode;
   rowKey: (row: T, index: number) => string;
   rowClassName?: (row: T) => string | undefined;
@@ -42,17 +42,19 @@ export function DataTable<T>({
   return (
     <section className={cn("overflow-hidden rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]", className)}>
       {hasHeader && (
-        <div className={cn(
-          "flex flex-wrap items-center gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4",
-          title && toolbar ? "justify-between" : "justify-start",
-        )}
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4",
+            title && toolbar ? "justify-between" : "justify-start",
+          )}
         >
           {title ? <h2 className="text-base font-semibold">{title}</h2> : null}
           {toolbar ? (
-            <div className={cn(
-              "flex min-w-0 flex-wrap items-center gap-2",
-              title ? "justify-end" : "w-full justify-start",
-            )}
+            <div
+              className={cn(
+                "flex min-w-0 flex-wrap items-center gap-2",
+                title ? "justify-end" : "w-full justify-start",
+              )}
             >
               {toolbar}
             </div>
@@ -87,7 +89,16 @@ export function DataTable<T>({
                     rowClassName?.(row),
                   )}
                   key={rowKey(row, index)}
-                  onClick={onRowClick ? () => onRowClick(row) : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  onClick={onRowClick ? () => onRowClick(row, index) : undefined}
+                  onKeyDown={onRowClick
+                    ? (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onRowClick(row, index);
+                      }
+                    }
+                    : undefined}
                 >
                   {columns.map((column) => (
                     <td

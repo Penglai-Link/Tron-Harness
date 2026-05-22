@@ -14,9 +14,32 @@ type TaskStatus = "Open" | "Designing" | "Red" | "Green" | "Regressioning" | "Re
 type TaskPriority = "Low" | "Medium" | "High";
 type TaskType = "Feature" | "Bug";
 type TaskSourceType = "Internal" | "GitHub" | "GitLab";
+type AppRuntimeRole = "Frontend" | "Backend";
+type AppStatus = "Active" | "Archived";
 type CapturedRequest = { body: unknown; method: string; pathname: string; searchParams: Record<string, string> };
 type TaskSummary = { priority: TaskPriority; progress: number; status: TaskStatus; taskCode: string; taskType: TaskType; title: string };
 type WorkspaceSwitcherPayload = typeof workspaceSwitcher;
+type AppOption = {
+  appCode: string;
+  description: string | null;
+  name: string;
+  runtimeRole: AppRuntimeRole;
+};
+type AppRecord = {
+  appCode: string;
+  archivedAt: string | null;
+  createdAt: string;
+  defaultBranch: string | null;
+  description: string | null;
+  id: string;
+  name: string;
+  repositoryUrl: string | null;
+  runtimeRole: AppRuntimeRole;
+  status: AppStatus;
+  tags: string[];
+  updatedAt: string;
+  workspaceCode: string;
+};
 type Task = {
   agentCodes: string[];
   appCodes: string[];
@@ -136,6 +159,64 @@ const effectiveUsers = [{
   matchedRoleCodes: [],
   isOwner: true,
 }];
+
+function appRecord(values: Partial<AppRecord> & Pick<AppRecord, "appCode" | "name" | "workspaceCode">): AppRecord {
+  return {
+    appCode: values.appCode,
+    archivedAt: null,
+    createdAt: now,
+    defaultBranch: "master",
+    description: null,
+    id: values.id ?? values.appCode.replace("APP-", "7349"),
+    name: values.name,
+    repositoryUrl: null,
+    runtimeRole: "Frontend",
+    status: "Active",
+    tags: [],
+    updatedAt: now,
+    workspaceCode: values.workspaceCode,
+    ...values,
+  };
+}
+
+const defaultApps: AppRecord[] = [
+  appRecord({
+    appCode: "APP-TRON-CONSOLE",
+    name: "Tron Console",
+    workspaceCode: "TRON_CORE",
+    description: "Primary operator-facing frontend.",
+    repositoryUrl: "https://github.com/clouds3n/tron-console",
+    runtimeRole: "Frontend",
+    tags: ["Operator", "React"],
+  }),
+  appRecord({
+    appCode: "APP-TRON-API",
+    name: "Tron API",
+    workspaceCode: "TRON_CORE",
+    description: "Core backend serving task workflows.",
+    repositoryUrl: "https://github.com/clouds3n/tron-backend",
+    runtimeRole: "Backend",
+    tags: ["Core", "Rust"],
+  }),
+  appRecord({
+    appCode: "APP-TRON-LEGACY",
+    name: "Legacy Console",
+    workspaceCode: "TRON_CORE",
+    archivedAt: now,
+    description: "Archived frontend kept for historical reference.",
+    runtimeRole: "Frontend",
+    status: "Archived",
+    tags: ["Legacy"],
+  }),
+  appRecord({
+    appCode: "APP-COMPLIANCE-API",
+    name: "Compliance API",
+    workspaceCode: "COMPLIANCE",
+    description: "Backend for regulated workflows.",
+    runtimeRole: "Backend",
+    tags: ["Audit"],
+  }),
+];
 
 function task(values: Partial<Task> & Pick<Task, "taskCode" | "title">): Task {
   return {
@@ -259,10 +340,50 @@ async function routeApi(
   page: Page,
   requests: CapturedRequest[],
   tasks: Task[],
-  options: { createTaskDelayMs?: number; workspaceSwitcherResolver?: (requestCount: number) => WorkspaceSwitcherPayload } = {},
+  options: {
+    apps?: AppRecord[];
+    createTaskDelayMs?: number;
+    workspaceSwitcherResolver?: (requestCount: number) => WorkspaceSwitcherPayload;
+  } = {},
 ) {
   let next = 1;
   let workspaceSwitcherRequestCount = 0;
+  const apps = options.apps ?? defaultApps.map((item) => ({ ...item, tags: [...item.tags] }));
+
+  function taskAppCodesAreValid(workspaceCode: string, appCodes: string[]) {
+    const activeCodes = new Set(
+      apps
+        .filter((app) => app.workspaceCode === workspaceCode && app.status === "Active")
+        .map((app) => app.appCode),
+    );
+    return appCodes.every((appCode) => activeCodes.has(appCode));
+  }
+
+  function appMatchesSearch(app: AppRecord, search?: string) {
+    if (!search?.trim()) return true;
+    return [
+      app.appCode,
+      app.name,
+      app.description ?? "",
+      app.repositoryUrl ?? "",
+      app.defaultBranch ?? "",
+      app.tags.join(" "),
+    ].join(" ").toLowerCase().includes(search.trim().toLowerCase());
+  }
+
+  function listAppOptions(workspaceCode: string, search?: string): AppOption[] {
+    return apps
+      .filter((app) => app.workspaceCode === workspaceCode && app.status === "Active")
+      .filter((app) => appMatchesSearch(app, search))
+      .sort((left, right) => left.name.localeCompare(right.name) || left.appCode.localeCompare(right.appCode))
+      .map((app) => ({
+        appCode: app.appCode,
+        description: app.description,
+        name: app.name,
+        runtimeRole: app.runtimeRole,
+      }));
+  }
+
   await page.route("**/api/v1/**", async (route) => {
     const captured = captureRequest(route);
     requests.push(captured);
@@ -279,6 +400,10 @@ async function routeApi(
       return fulfillJson(route, successEnvelope(payload));
     }
     if (/^\/api\/v1\/admin\/workspaces\/[^/]+\/access\/effective-users$/.test(captured.pathname)) return fulfillJson(route, pageEnvelope(effectiveUsers));
+    const appOptionsMatch = captured.pathname.match(/^\/api\/v1\/apps\/workspaces\/([^/]+)\/options$/);
+    if (appOptionsMatch) {
+      return fulfillJson(route, successEnvelope(listAppOptions(decodeURIComponent(appOptionsMatch[1]), captured.searchParams.search)));
+    }
     if (captured.pathname === "/api/v1/tasks/options") return fulfillJson(route, successEnvelope({ priorities: ["Low", "Medium", "High"], sourceTypes: ["Internal", "GitHub", "GitLab"], statuses, taskTypes: ["Feature", "Bug"], statusRules, defaultStatuses }));
     if (captured.pathname === "/api/v1/tasks/quick-reference") {
       return fulfillJson(route, successEnvelope({
@@ -297,6 +422,9 @@ async function routeApi(
     if (captured.pathname === "/api/v1/tasks" && captured.method === "GET") return fulfillJson(route, pageEnvelope(filtered(tasks, captured.searchParams).map((item) => listItem(tasks, item))));
     if (captured.pathname === "/api/v1/tasks" && captured.method === "POST") {
       const body = captured.body as Partial<Task>;
+      if (!taskAppCodesAreValid(body.workspaceCode ?? "TRON_CORE", body.appCodes ?? [])) {
+        return fulfillJson(route, { code: "TASK_APP_INVALID", message: "selected apps must belong to the same active workspace", data: {} }, 400);
+      }
       const taskCode = `TSK-PW-${String(next).padStart(4, "0")}`;
       next += 1;
       if (options.createTaskDelayMs) await new Promise((resolve) => setTimeout(resolve, options.createTaskDelayMs));
@@ -361,7 +489,12 @@ async function routeApi(
       if (body.sourceType !== undefined) selected.sourceType = body.sourceType;
       if (body.sourceUrl !== undefined) selected.sourceUrl = body.sourceUrl;
       if (body.agentCodes !== undefined) selected.agentCodes = body.agentCodes;
-      if (body.appCodes !== undefined) selected.appCodes = body.appCodes;
+      if (body.appCodes !== undefined) {
+        if (!taskAppCodesAreValid(selected.workspaceCode, body.appCodes)) {
+          return fulfillJson(route, { code: "TASK_APP_INVALID", message: "selected apps must belong to the same active workspace", data: {} }, 400);
+        }
+        selected.appCodes = body.appCodes;
+      }
       if (body.assigneeUserCodes !== undefined) selected.assigneeUserCodes = body.assigneeUserCodes;
       selected.updatedAt = now;
       return fulfillJson(route, successEnvelope(detail(tasks, selected.taskCode)));
@@ -469,7 +602,6 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create Task" })).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Workspace" })).toHaveCount(0);
-  await expect(page.getByLabel("Current workspace")).toHaveCount(0);
   await expect(page.getByText("Classification & Source", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/Only effective users in/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Editor Tools" })).toHaveCount(0);
@@ -478,13 +610,14 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect(page.getByLabel("Task Type").locator("option", { hasText: "Refactor" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Quick Reference" })).toHaveCount(0);
   await expect(page.getByText("assigneeUserCodes", { exact: true })).toHaveCount(0);
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/apps/workspaces/TRON_CORE/options")).toBe(true);
   await page.getByLabel("Task title").fill("Playwright created task");
   await page.getByLabel("Priority").selectOption("High");
   await page.getByLabel("Task Type").selectOption("Feature");
   await page.getByLabel("Source Type").selectOption("GitHub");
   await page.getByLabel("Source URL").fill("https://github.com/clouds3n/tron/issues/100");
   await page.getByLabel("Agent Codes").fill("agent-reviewer, agent-builder");
-  await page.getByLabel("App Codes").fill("github, notion");
+  await page.getByLabel("Available apps").getByText("Tron API", { exact: true }).click();
   await page.getByLabel("Assign Auth Operator").check();
   await page.getByRole("button", { name: "Open description fullscreen" }).click();
   const createDescriptionFullscreenEditor = page.getByRole("dialog", { name: "Description fullscreen editor" });
@@ -518,7 +651,8 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect(page.getByLabel("Task detail priority")).toBeVisible();
   await expect(page.getByLabel("Task detail progress")).toBeVisible();
   await expect(page.getByLabel("Task detail agent codes")).toBeVisible();
-  await expect(page.getByLabel("Task detail app codes")).toBeVisible();
+  await expect(page.getByLabel("Task detail app codes")).toHaveCount(0);
+  await expect(page.getByLabel("Available apps").getByText("Tron API", { exact: true })).toBeVisible();
   const descriptionMarkdown = page.getByLabel("Task description markdown");
   await expect(descriptionMarkdown.getByText("Playwright Notes", { exact: true })).toBeVisible();
   await expect(descriptionMarkdown.getByRole("listitem").filter({ hasText: "Created through the task-management smoke." })).toBeVisible();
@@ -538,7 +672,7 @@ test("task management supports kanban search create detail updates subtasks arch
       && body.taskType === "Feature"
       && body.sourceType === "GitHub"
       && body.agentCodes?.includes("agent-reviewer") === true
-      && body.appCodes?.includes("notion") === true;
+      && body.appCodes?.includes("APP-TRON-API") === true;
   }).toBe(true);
 
   await page.getByLabel("Task detail priority").selectOption("Low");
@@ -549,12 +683,11 @@ test("task management supports kanban search create detail updates subtasks arch
   await page.getByLabel("Task detail progress").press("Tab");
   await page.getByLabel("Task detail agent codes").fill("agent-reviewer, agent-builder, agent-qa");
   await page.getByLabel("Task detail agent codes").press("Tab");
-  await page.getByLabel("Task detail app codes").fill("github, notion, slack");
-  await page.getByLabel("Task detail app codes").press("Tab");
+  await page.getByLabel("Available apps").getByText("Tron Console", { exact: true }).click();
   await expect(toast(page, /Task TSK-PW-0001 updates saved/)).toBeVisible();
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001" && request.method !== "GET" && (request.body as Partial<Task> | null)?.priority === "Low")).toBe(true);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001" && request.method !== "GET" && (request.body as Partial<Task> | null)?.agentCodes?.includes("agent-qa") === true)).toBe(true);
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001" && request.method !== "GET" && (request.body as Partial<Task> | null)?.appCodes?.includes("slack") === true)).toBe(true);
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001" && request.method !== "GET" && (request.body as Partial<Task> | null)?.appCodes?.includes("APP-TRON-CONSOLE") === true)).toBe(true);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001/status" && (request.body as { progress?: number; status?: TaskStatus } | null)?.progress === 55 && (request.body as { status?: TaskStatus } | null)?.status === "Green")).toBe(true);
 
   await page.getByRole("button", { name: "Edit Details" }).click();
@@ -602,7 +735,6 @@ test("task management supports kanban search create detail updates subtasks arch
   await page.getByLabel("Task detail status").selectOption("Archived");
   await expect.poll(() => requests.some((request) => request.method === "POST" && request.pathname === "/api/v1/tasks/TSK-PW-0001/archive")).toBe(true);
   await expect(page.getByLabel("Task detail status")).toHaveValue("Archived");
-  await expect.poll(() => page.getByText("Not archived", { exact: true }).count()).toBe(0);
   await page.getByLabel("Task detail status").selectOption("Open");
   await expect(page.getByLabel("Task detail status")).toHaveValue("Open");
 
@@ -678,6 +810,33 @@ test("task detail description preview stays bounded inline and expands in fullsc
   expect(fullscreenPreview.maxHeight).toBe("none");
   await descriptionFullscreenPreview.getByRole("button", { name: "Close description fullscreen" }).click();
   await expect(descriptionFullscreenPreview).toHaveCount(0);
+});
+
+test("task detail keeps legacy app codes visible and does not resend them on unrelated updates", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  const tasks: Task[] = [
+    task({
+      appCodes: ["APP-TRON-CONSOLE", "github"],
+      description: "Legacy app code coverage",
+      taskCode: "TSK-LEGACY-APP",
+      title: "Legacy app selection coverage",
+    }),
+  ];
+  await routeApi(page, requests, tasks);
+
+  await page.goto(`${frontendBaseUrl}/tasks/detail?taskCode=TSK-LEGACY-APP`);
+  await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
+  await expect(page.getByText("github", { exact: true })).toBeVisible();
+
+  await page.getByLabel("Task detail priority").selectOption("Low");
+  await expect(toast(page, /Task TSK-LEGACY-APP updates saved/)).toBeVisible();
+  const priorityUpdate = requests.find((request) => request.pathname === "/api/v1/tasks/TSK-LEGACY-APP" && request.method === "PATCH" && (request.body as Partial<Task> | null)?.priority === "Low");
+  expect(priorityUpdate).toBeTruthy();
+  expect(((priorityUpdate?.body as Partial<Task> | null) ?? {}).appCodes).toBeUndefined();
+
+  await page.getByRole("button", { name: "Remove legacy app code github" }).click();
+  await expect(toast(page, /Task TSK-LEGACY-APP updates saved/)).toBeVisible();
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-LEGACY-APP" && request.method === "PATCH" && Array.isArray((request.body as Partial<Task> | null)?.appCodes) && ((request.body as Partial<Task> | null)?.appCodes ?? []).length === 1 && ((request.body as Partial<Task> | null)?.appCodes ?? [])[0] === "APP-TRON-CONSOLE")).toBe(true);
 });
 
 test("task shell exposes a navigation drawer below the desktop breakpoint", async ({ page }) => {

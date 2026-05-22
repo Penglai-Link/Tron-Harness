@@ -3,17 +3,35 @@ export interface ModelCostLine {
   value: string;
 }
 
-export interface ModelRegistryItem {
-  id: string;
+export type ModelVendor = "OpenAI" | "Anthropic" | "Google";
+export type WorkspaceModelStatus = "Available" | "Removed";
+
+export interface WorkspaceModelRecord {
+  modelCode: string;
   name: string;
   purpose: string;
-  vendor: "OpenAI" | "Anthropic" | "Google";
+  vendor: ModelVendor;
   context: string;
-  inheritance: string;
-  status: "Enabled" | "Disabled";
-  price: string;
   maxOutput: string;
   trainingData: string;
   speed: string;
-  benchmarks: Array<{ label: string; score: number }>;
+  price: string;
+  status: WorkspaceModelStatus;
+  sourceWorkspaceCode: string;
+  sourceWorkspaceName: string;
+  sourceLabel: string;
+  removedAt: string | null;
+}
+
+export interface WorkspaceModelMutationResult {
+  workspaceCode: string;
+  modelCode: string;
+  status: WorkspaceModelStatus;
+  removedAt: string | null;
+}
+
+export interface WorkspaceModelQuery {
+  search?: string;
+  status?: WorkspaceModelStatus;
+  vendor?: ModelVendor;
 }

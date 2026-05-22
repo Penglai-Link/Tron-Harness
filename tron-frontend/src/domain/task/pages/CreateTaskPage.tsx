@@ -28,6 +28,7 @@ import {
   useTaskOptions,
   useTaskWorkspaceOptions,
 } from "@/domain/task/hooks";
+import { TaskAppSelectionField } from "@/domain/task/components";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import type {
   TaskPriority,
@@ -52,7 +53,7 @@ export function CreateTaskPage() {
   const [sourceUrl, setSourceUrl] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("Medium");
   const [agentCodesInput, setAgentCodesInput] = useState("");
-  const [appCodesInput, setAppCodesInput] = useState("");
+  const [selectedAppCodes, setSelectedAppCodes] = useState<string[]>([]);
   const [assigneeUserCodes, setAssigneeUserCodes] = useState<string[]>([]);
   const [descriptionFullscreenOpen, setDescriptionFullscreenOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -62,12 +63,17 @@ export function CreateTaskPage() {
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const activeWorkspaceCode = activeWorkspace?.workspaceCode ?? "";
-  const { effectiveUsers } = useTaskWorkspaceOptions(activeWorkspaceCode);
+  const { appOptions, effectiveUsers, loading: workspaceOptionsLoading } = useTaskWorkspaceOptions(activeWorkspaceCode);
 
   useEffect(() => {
     const allowed = new Set(effectiveUsers.map((user) => user.userCode));
     setAssigneeUserCodes((current) => current.filter((userCode) => allowed.has(userCode)));
   }, [effectiveUsers]);
+
+  useEffect(() => {
+    const allowed = new Set(appOptions.map((app) => app.appCode));
+    setSelectedAppCodes((current) => current.filter((appCode) => allowed.has(appCode)));
+  }, [appOptions]);
 
   useEffect(() => {
     if (!descriptionFullscreenOpen) return;
@@ -97,7 +103,7 @@ export function CreateTaskPage() {
     setSubmitting(true);
     const payload = {
       agentCodes: splitCodes(agentCodesInput),
-      appCodes: splitCodes(appCodesInput),
+      appCodes: selectedAppCodes,
       assigneeUserCodes,
       description,
       priority,
@@ -163,9 +169,17 @@ export function CreateTaskPage() {
           <Field label="Agent Codes">
             <TextInput aria-label="Agent Codes" placeholder="agent-reviewer, agent-builder" value={agentCodesInput} onChange={(event) => setAgentCodesInput(event.target.value)} />
           </Field>
-          <Field label="App Codes">
-            <TextInput aria-label="App Codes" placeholder="github, notion" value={appCodesInput} onChange={(event) => setAppCodesInput(event.target.value)} />
-          </Field>
+          <div className="lg:col-span-2">
+            <Field label="Apps" hint="Select active apps from the current workspace.">
+              <TaskAppSelectionField
+                availableApps={appOptions}
+                emptyMessage={activeWorkspaceCode ? "No active apps are available in this workspace." : "Select a workspace in the shell header to choose apps."}
+                loading={workspaceOptionsLoading}
+                selectedAppCodes={selectedAppCodes}
+                onToggle={(appCode) => setSelectedAppCodes((current) => toggleCode(current, appCode))}
+              />
+            </Field>
+          </div>
         </div>
         <SurfaceCard>
           <h2 className="mb-3 text-base font-semibold">Assigned Users</h2>

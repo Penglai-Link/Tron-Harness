@@ -1,17 +1,24 @@
 import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
+  type SyntheticEvent,
+  useEffect,
   useMemo,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router";
 import {
-  Database,
-  Filter,
+  Archive,
+  ExternalLink,
+  MoreHorizontal,
+  Pencil,
   Plus,
-  Settings2,
-  Terminal,
-  Trash2,
+  RefreshCcw,
+  RotateCcw,
 } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
   DataTable,
@@ -20,115 +27,420 @@ import {
   TablePagination,
   TextInput,
   TronShell,
-  useTablePagination,
+  useToast,
+  useWorkspaceSpaces,
 } from "@/shared";
 
+import {
+  archiveApp,
+  restoreApp,
+} from "@/domain/app/api";
+import {
+  AppRuntimeRoleBadge,
+  AppStatusBadge,
+  AppTagList,
+} from "@/domain/app/components";
 import { useAppList } from "@/domain/app/hooks";
-import type { AppRecord } from "@/domain/app/model";
+import {
+  archiveMockApp,
+  restoreMockApp,
+} from "@/domain/app/mock";
+import type {
+  AppListItem,
+  AppRuntimeRole,
+} from "@/domain/app/model";
+import { formatAppTimestamp } from "@/domain/app/model";
+import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
-function IconButton({ label, children, onClick }: { label: string; children: React.ReactNode; onClick?: () => void }) {
-  return (
-    <button className="inline-flex size-8 items-center justify-center rounded-lg text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]" type="button" aria-label={label} onClick={onClick}>
-      {children}
-    </button>
+type StatusFilter = "Active" | "Archived" | "All";
+type OpenRowMenuState = {
+  anchorRect: DOMRect;
+  appCode: string;
+};
+
+const ACTION_MENU_GAP = 8;
+const ACTION_MENU_HEIGHT = 108;
+const ACTION_MENU_MARGIN = 12;
+const ACTION_MENU_WIDTH = 176;
+
+function stopRowNavigation(event: SyntheticEvent<HTMLElement>) {
+  event.stopPropagation();
+}
+
+function getActionMenuStyle(anchorRect: DOMRect): CSSProperties {
+  const left = Math.min(
+    window.innerWidth - ACTION_MENU_WIDTH - ACTION_MENU_MARGIN,
+    Math.max(ACTION_MENU_MARGIN, anchorRect.right - ACTION_MENU_WIDTH),
   );
+  const top = anchorRect.bottom + ACTION_MENU_GAP + ACTION_MENU_HEIGHT <= window.innerHeight - ACTION_MENU_MARGIN
+    ? anchorRect.bottom + ACTION_MENU_GAP
+    : Math.max(ACTION_MENU_MARGIN, anchorRect.top - ACTION_MENU_GAP - ACTION_MENU_HEIGHT);
+
+  return {
+    left,
+    position: "fixed",
+    top,
+    width: ACTION_MENU_WIDTH,
+  };
 }
 
-function Notice({ value }: { value: string }) {
-  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
-}
-
-function tagList(tags: string[]) {
+function AppActions({
+  app,
+  isOpen,
+  onToggleOpen,
+}: {
+  app: AppListItem;
+  isOpen: boolean;
+  onToggleOpen: (event: MouseEvent<HTMLButtonElement>) => void;
+}) {
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {tags.map((tag) => (
-        <Badge key={tag} tone="neutral">
-          {tag}
-        </Badge>
-      ))}
+    <div className="flex justify-end">
+      <Button
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        aria-label={`Open actions for ${app.name}`}
+        size="icon"
+        type="button"
+        variant="ghost"
+        onClick={(event) => {
+          event.stopPropagation();
+          onToggleOpen(event);
+        }}
+      >
+        <MoreHorizontal size={16} aria-hidden="true" />
+      </Button>
     </div>
   );
 }
 
 export function AppsPage() {
-  const rows = useAppList();
-  const [query, setQuery] = useState("");
-  const [source, setSource] = useState("all");
-  const [notice, setNotice] = useState("");
-  const filteredRows = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    return rows.filter((row) => (source === "all" || row.source === source) && (!normalized || Object.values(row).join(" ").toLowerCase().includes(normalized)));
-  }, [query, rows, source]);
-  const appPagination = useTablePagination(filteredRows);
+  const navigate = useNavigate();
+  const toast = useToast();
+  const dataSource = getServiceDataSource("app");
+  const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
+  const activeWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [runtimeRole, setRuntimeRole] = useState<"" | AppRuntimeRole>("");
+  const [status, setStatus] = useState<StatusFilter>("Active");
+  const [current, setCurrent] = useState(1);
+  const [size, setSize] = useState(15);
+  const [openRowMenu, setOpenRowMenu] = useState<OpenRowMenuState | null>(null);
+  const [pendingLifecycleCode, setPendingLifecycleCode] = useState<string | null>(null);
+  const query = useMemo(() => ({
+    current,
+    includeArchived: status === "All",
+    runtimeRole: runtimeRole || undefined,
+    search: debouncedSearch || undefined,
+    size,
+    status: status === "All" ? undefined : status,
+    workspaceCode: activeWorkspaceCode,
+  }), [activeWorkspaceCode, current, debouncedSearch, runtimeRole, size, status]);
+  const { loading, page, refresh } = useAppList(query);
+  const pageCount = Math.max(1, Math.ceil(page.total / page.size));
+
+  useEffect(() => {
+    setCurrent(1);
+  }, [activeWorkspaceCode, runtimeRole, searchInput, status]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+    }, 280);
+
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setOpenRowMenu(null);
+  }, [activeWorkspaceCode, current, runtimeRole, searchInput, size, status]);
+
+  useEffect(() => {
+    if (current > pageCount) {
+      setCurrent(pageCount);
+    }
+  }, [current, pageCount]);
+
+  useEffect(() => {
+    if (!openRowMenu) {
+      return undefined;
+    }
+
+    function closeMenu() {
+      setOpenRowMenu(null);
+    }
+
+    function handlePointerDown(event: globalThis.MouseEvent) {
+      const target = event.target;
+      if (target instanceof Node && document.querySelector("[data-app-actions-menu]")?.contains(target)) {
+        return;
+      }
+      closeMenu();
+    }
+
+    function handleKeyDown(event: globalThis.KeyboardEvent) {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    }
+
+    window.addEventListener("resize", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openRowMenu]);
+
+  const openMenuApp = useMemo(
+    () => (openRowMenu ? page.records.find((app) => app.appCode === openRowMenu.appCode) ?? null : null),
+    [openRowMenu, page.records],
+  );
+
+  async function updateLifecycle(app: AppListItem, action: "archive" | "restore") {
+    setOpenRowMenu(null);
+    setPendingLifecycleCode(app.appCode);
+    try {
+      if (action === "archive") {
+        if (dataSource === "api") {
+          await archiveApp(app.appCode);
+        } else {
+          archiveMockApp(app.appCode);
+        }
+        toast.success(`${app.name} archived`);
+      } else {
+        if (dataSource === "api") {
+          await restoreApp(app.appCode);
+        } else {
+          restoreMockApp(app.appCode);
+        }
+        toast.success(`${app.name} restored`);
+      }
+      refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : `App lifecycle update failed for ${app.appCode}`);
+    } finally {
+      setPendingLifecycleCode(null);
+    }
+  }
 
   return (
-    <TronShell activeItem="Apps" searchPlaceholder="Search apps, paths, worktrees...">
+    <TronShell activeItem="Apps" searchPlaceholder="Search apps, repositories, and tags...">
       <PageHeader
-        title="Connected Applications"
-        description="Manage application sources, paths, worktrees, tags, and quick actions."
-        status={`${filteredRows.length} visible`}
-        actions={
+        title="App Management"
+        actions={(
           <>
-            <Button variant="secondary" onClick={() => setNotice("Import Apps requested")}>
-              <Database size={15} />
-              Import
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={loading}
+              onClick={() => {
+                setOpenRowMenu(null);
+                refresh();
+                toast.success("App registry refreshed");
+              }}
+            >
+              <RefreshCcw size={15} aria-hidden="true" />
+              Refresh
             </Button>
-            <Button onClick={() => setNotice("New App requested")}>
-              <Plus size={15} />
-              New App
+            <Button type="button" disabled={!activeWorkspaceCode} onClick={() => navigate("/apps/new")}>
+              <Plus size={15} aria-hidden="true" />
+              New
             </Button>
           </>
-        }
+        )}
       />
-      <Notice value={notice} />
-      <DataTable<AppRecord>
-        title="Application Registry"
-        rows={appPagination.visibleItems}
-        rowKey={(row) => row.id}
-        toolbar={
+      <DataTable<AppListItem>
+        rows={page.records}
+        rowKey={(row) => row.appCode}
+        onRowClick={(app) => navigate(`/apps/detail?appCode=${encodeURIComponent(app.appCode)}`)}
+        emptyState={activeWorkspaceCode
+          ? "No apps match the current filters."
+          : "Select a workspace in the shell header to load apps."}
+        toolbar={(
           <>
-            <TextInput className="h-8 w-56" placeholder="Search apps..." value={query} onChange={(event) => setQuery(event.target.value)} />
-            <SelectInput className="h-8 w-40" value={source} onChange={(event) => setSource(event.target.value)}>
-              <option value="all">All sources</option>
+            <TextInput
+              aria-label="Search apps"
+              className="h-8 min-w-[20rem] w-[30rem] max-w-full"
+              placeholder="Search apps, repos, branches, or tags..."
+              type="search"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+            />
+            <SelectInput aria-label="Runtime role filter" className="h-8 min-w-36" value={runtimeRole} onChange={(event) => setRuntimeRole(event.target.value as "" | AppRuntimeRole)}>
+              <option value="">All roles</option>
               <option value="Frontend">Frontend</option>
               <option value="Backend">Backend</option>
-              <option value="Worker">Worker</option>
             </SelectInput>
-            <Button size="sm" variant="secondary" onClick={() => setNotice("Sort by last update toggled")}>
-              <Filter size={14} />
-              Sort
-            </Button>
+            <SelectInput aria-label="App status filter" className="h-8 min-w-36" value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)}>
+              <option value="Active">Active</option>
+              <option value="Archived">Archived</option>
+              <option value="All">All</option>
+            </SelectInput>
           </>
-        }
-        pagination={
-          <TablePagination itemLabel="apps" {...appPagination.paginationProps} />
-        }
+        )}
+        pagination={(
+          <TablePagination
+            itemLabel="apps"
+            endItem={Math.min(page.total, (page.current - 1) * page.size + page.records.length)}
+            page={page.current}
+            pageCount={pageCount}
+            pageSize={page.size}
+            startItem={page.total ? ((page.current - 1) * page.size) + 1 : 0}
+            totalItems={page.total}
+            onPageChange={setCurrent}
+            onPageSizeChange={(value) => {
+              setSize(value);
+              setCurrent(1);
+            }}
+          />
+        )}
         columns={[
-          { id: "name", header: "App Name", render: (row) => <span className="font-medium">{row.name}</span> },
-          { id: "source", header: "Source", render: (row) => <Badge tone="accent">{row.source}</Badge> },
-          { id: "path", header: "Path", render: (row) => <span className="font-mono text-[13px]">{row.path}</span> },
-          { id: "worktree", header: "Worktree", render: (row) => <span>{row.worktree}</span> },
-          { id: "tags", header: "Tags", render: (row) => tagList(row.tags) },
           {
-            id: "actions",
-            header: "Actions",
-            align: "right",
-            render: (row) => (
-              <div className="flex justify-end gap-1">
-                <IconButton label={`Edit ${row.name}`} onClick={() => setNotice(`Edit ${row.name}`)}>
-                  <Settings2 size={15} />
-                </IconButton>
-                <IconButton label={`Open terminal for ${row.name}`} onClick={() => setNotice(`Terminal for ${row.name}`)}>
-                  <Terminal size={15} />
-                </IconButton>
-                <IconButton label={`Delete ${row.name}`} onClick={() => setNotice(`Delete ${row.name} requested`)}>
-                  <Trash2 size={15} />
-                </IconButton>
+            id: "name",
+            header: "Name",
+            render: (app) => (
+              <div>
+                <p className="text-sm font-semibold text-[var(--color-on-surface)]">{app.name}</p>
+                <p className="mt-1 font-mono text-[11px] text-[var(--color-on-surface-variant)]">{app.appCode}</p>
               </div>
             ),
           },
-        ]}
+          {
+            id: "description",
+            header: "Description",
+            render: (app) => (
+              <p className="max-w-72 text-sm leading-5 text-[var(--color-on-surface-variant)]">
+                {app.description ?? "-"}
+              </p>
+            ),
+          },
+          {
+            id: "runtimeRole",
+            header: "Runtime",
+            render: (app) => <AppRuntimeRoleBadge runtimeRole={app.runtimeRole} />,
+          },
+          {
+            id: "repository",
+            header: "Repository",
+            render: (app) => (
+              <div className="space-y-1">
+                {app.repositoryUrl ? (
+                  <a
+                    className="inline-flex max-w-[13rem] items-start gap-1 text-sm text-[var(--color-primary)] underline decoration-[0.08em] underline-offset-2 transition-opacity hover:opacity-80"
+                    href={app.repositoryUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                    onClick={stopRowNavigation}
+                    onMouseDown={stopRowNavigation}
+                    onKeyDown={stopRowNavigation}
+                    title={app.repositoryUrl}
+                  >
+                    <span
+                      className="min-w-0 break-all leading-5"
+                      style={{
+                        WebkitBoxOrient: "vertical",
+                        WebkitLineClamp: 2,
+                        display: "-webkit-box",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {app.repositoryUrl}
+                    </span>
+                    <ExternalLink className="mt-0.5 shrink-0" size={12} aria-hidden="true" />
+                  </a>
+                ) : (
+                  <p className="break-all text-sm text-[var(--color-on-surface)]">Not set</p>
+                )}
+              </div>
+            ),
+          },
+          {
+            id: "tags",
+            header: "Tags",
+            render: (app) => <AppTagList tags={app.tags} />,
+          },
+          {
+            id: "status",
+            header: "Status",
+            render: (app) => <AppStatusBadge status={app.status} />,
+          },
+          {
+            id: "updatedAt",
+            header: "Updated",
+            render: (app) => <span>{formatAppTimestamp(app.updatedAt)}</span>,
+          },
+          {
+            id: "actions",
+            align: "right",
+            header: "Actions",
+            render: (app) => (
+                <AppActions
+                  app={app}
+                  isOpen={openRowMenu?.appCode === app.appCode}
+                  onToggleOpen={(event) => {
+                    const anchorRect = event.currentTarget.getBoundingClientRect();
+                    setOpenRowMenu((currentMenu) => (currentMenu?.appCode === app.appCode ? null : { appCode: app.appCode, anchorRect }));
+                  }}
+                />
+              ),
+            },
+          ]}
       />
+      {openMenuApp && openRowMenu
+        ? createPortal(
+          <div
+            className="z-50 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface-strong)] p-2 shadow-[0_12px_28px_rgba(0,0,0,0.18)]"
+            data-app-actions-menu
+            role="menu"
+            aria-label={`Actions for ${openMenuApp.name}`}
+            style={getActionMenuStyle(openRowMenu.anchorRect)}
+            onClick={stopRowNavigation}
+          >
+            <button
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
+              role="menuitem"
+              type="button"
+              onClick={() => {
+                setOpenRowMenu(null);
+                navigate(`/apps/edit?appCode=${encodeURIComponent(openMenuApp.appCode)}`);
+              }}
+            >
+              <Pencil size={14} aria-hidden="true" />
+              Edit
+            </button>
+            {openMenuApp.status === "Archived" ? (
+              <button
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+                role="menuitem"
+                type="button"
+                disabled={pendingLifecycleCode === openMenuApp.appCode}
+                onClick={() => void updateLifecycle(openMenuApp, "restore")}
+              >
+                <RotateCcw size={14} aria-hidden="true" />
+                Restore
+              </button>
+            ) : (
+              <button
+                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+                role="menuitem"
+                type="button"
+                disabled={pendingLifecycleCode === openMenuApp.appCode}
+                onClick={() => void updateLifecycle(openMenuApp, "archive")}
+              >
+                <Archive size={14} aria-hidden="true" />
+                Archive
+              </button>
+            )}
+          </div>,
+          document.body,
+        )
+        : null}
     </TronShell>
   );
 }

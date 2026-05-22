@@ -22,6 +22,9 @@ export interface AppRoute {
 export const appRoutes: AppRoute[] = [
   { pageId: "models.new", route: "/models/new", activeNav: "Models", title: "Add Model", archetype: "form-inspector" },
   { pageId: "apps.index", route: "/apps", activeNav: "Apps", title: "App Management", archetype: "data-table" },
+  { pageId: "apps.new", route: "/apps/new", activeNav: "Apps", title: "Create App", archetype: "form" },
+  { pageId: "apps.detail", route: "/apps/detail", activeNav: "Apps", title: "App Detail", archetype: "detail" },
+  { pageId: "apps.edit", route: "/apps/edit", activeNav: "Apps", title: "Edit App", archetype: "form" },
   { pageId: "admin.auditLogs", route: "/admin/audit-logs", activeNav: "Audit Logs", title: "Audit Logs", archetype: "data-table" },
   { pageId: "automations.index", route: "/automations", activeNav: "Automations", title: "Automations", archetype: "split-pane" },
   { pageId: "chats.reasoning", route: "/chats/8842-alpha", activeNav: "Chats", title: "Chat Sessions", archetype: "chat" },
@@ -35,8 +38,6 @@ export const appRoutes: AppRoute[] = [
   { pageId: "skills.installedNew", route: "/skills/installed/new", activeNav: "Skills", title: "Install Skill", archetype: "form-inspector" },
   { pageId: "tasks.new", route: "/tasks/new", activeNav: "Tasks", title: "Create Task", archetype: "form" },
   { pageId: "dashboard.index", route: "/dashboard", activeNav: "Dashboard", title: "Dashboard", archetype: "dashboard" },
-  { pageId: "apps.import.github", route: "/apps/import?source=github", activeNav: "Apps", title: "Import Application", archetype: "form" },
-  { pageId: "apps.import.local", route: "/apps/import?source=local", activeNav: "Apps", title: "Import Application Review", archetype: "form" },
   { pageId: "knowledgeGraph.index", route: "/knowledge-graph", activeNav: "Graph", title: "Knowledge Graph", archetype: "graph" },
   { pageId: "knowledgeGraph.domainFiltering", route: "/knowledge-graph/domain-filtering", activeNav: "Graph", title: "Knowledge Graph Domain Filtering", archetype: "graph" },
   { pageId: "auth.login", route: "/login", activeNav: "Login", title: "Login", archetype: "auth" },

@@ -1,3 +1,4 @@
+import { isKnownAppCode } from "@/domain/app/mock";
 import type { TaskListQuery } from "@/domain/task/api";
 import {
   inferTaskRole,
@@ -60,7 +61,7 @@ let tasks: TaskDetailData[] = [
   },
   {
     agentCodes: ["agent-reviewer"],
-    appCodes: ["github"],
+    appCodes: ["APP-TRON-API"],
     archivedAt: null,
     assigneeUserCodes: ["USR-AUTH-0001"],
     createdAt: NOW,
@@ -78,6 +79,29 @@ let tasks: TaskDetailData[] = [
     taskCode: "TSK-SEED-BUG",
     taskType: "Bug",
     title: "Fix task board workflow regression",
+    updatedAt: NOW,
+    workspaceCode: "TRON_CORE",
+  },
+  {
+    agentCodes: [],
+    appCodes: ["APP-TRON-CONSOLE", "github"],
+    archivedAt: null,
+    assigneeUserCodes: ["USR-AUTH-0001"],
+    createdAt: NOW,
+    description: "Legacy app codes should remain visible until the selection is explicitly changed.",
+    id: "734500000000000104",
+    parent: null,
+    parentTaskCode: null,
+    previousStatus: null,
+    priority: "Medium",
+    progress: 20,
+    sourceType: "Internal",
+    sourceUrl: "",
+    status: "Open",
+    subtasks: [],
+    taskCode: "TSK-SEED-LEGACY-APP",
+    taskType: "Feature",
+    title: "Legacy app selection example",
     updatedAt: NOW,
     workspaceCode: "TRON_CORE",
   },
@@ -143,6 +167,7 @@ export function getTaskDetail(taskCode = "TSK-SEED-FEATURE") {
 }
 
 export function createMockTask(payload: CreateTaskPayload) {
+  validateAppCodes(payload.workspaceCode, payload.appCodes);
   const taskCode = `TSK-MOCK-${nextTaskId++}`;
   const taskRole = inferTaskRole(payload.taskType, payload.parentTaskCode ?? null);
   const task: TaskDetailData = {
@@ -174,6 +199,7 @@ export function createMockTask(payload: CreateTaskPayload) {
 
 export function updateMockTask(taskCode: string, payload: UpdateTaskPayload) {
   const current = getTaskDetail(taskCode);
+  if (payload.appCodes) validateAppCodes(current.workspaceCode, payload.appCodes);
   const nextTaskType = payload.taskType ?? current.taskType;
   const nextRole = inferTaskRole(nextTaskType, current.parentTaskCode);
   if (!taskOptions.statusRules[nextRole].includes(current.status)) {
@@ -310,4 +336,9 @@ function withRelationships(task: TaskDetailData): TaskDetailData {
 
 function uniqueCodes(codes: string[]) {
   return Array.from(new Set(codes.map((code) => code.trim()).filter(Boolean)));
+}
+
+function validateAppCodes(workspaceCode: string, appCodes: string[]) {
+  if (appCodes.every((code) => isKnownAppCode(workspaceCode, code))) return;
+  throw new Error("One or more selected apps are invalid for this workspace");
 }

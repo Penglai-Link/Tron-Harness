@@ -50,11 +50,13 @@ import {
   useTaskOptions,
   useTaskWorkspaceOptions,
 } from "@/domain/task/hooks";
+import { TaskAppSelectionField } from "@/domain/task/components";
 import type {
   TaskPriority,
   TaskSourceType,
   TaskStatus,
   TaskType,
+  UpdateTaskPayload,
 } from "@/domain/task/model";
 import {
   inferTaskRole,
@@ -149,7 +151,7 @@ export function TaskDetailsPage() {
   const options = useTaskOptions();
   const toast = useToast();
   const dataSource = getServiceDataSource("task");
-  const { effectiveUsers } = useTaskWorkspaceOptions(task.workspaceCode);
+  const { appOptions, effectiveUsers, loading: workspaceOptionsLoading } = useTaskWorkspaceOptions(task.workspaceCode);
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
   const [taskType, setTaskType] = useState<TaskType>(task.taskType);
@@ -159,7 +161,7 @@ export function TaskDetailsPage() {
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [progress, setProgress] = useState(String(task.progress));
   const [agentCodesInput, setAgentCodesInput] = useState(task.agentCodes.join(", "));
-  const [appCodesInput, setAppCodesInput] = useState(task.appCodes.join(", "));
+  const [selectedAppCodes, setSelectedAppCodes] = useState(task.appCodes);
   const [assigneeUserCodes, setAssigneeUserCodes] = useState(task.assigneeUserCodes);
   const [childTitle, setChildTitle] = useState("Follow-up subtask");
   const [descriptionFullscreenOpen, setDescriptionFullscreenOpen] = useState(false);
@@ -174,6 +176,8 @@ export function TaskDetailsPage() {
   const archived = status === "Archived" || task.status === "Archived" || Boolean(task.archivedAt);
   const taskRole = inferTaskRole(task.taskType, task.parentTaskCode);
   const availableStatuses = options.statusRules[taskRole];
+  const availableAppCodeSet = new Set(appOptions.map((app) => app.appCode));
+  const legacyAppCodes = selectedAppCodes.filter((code) => !availableAppCodeSet.has(code));
 
   useEffect(() => {
     if (skipNextTaskSync.current) {
@@ -189,7 +193,7 @@ export function TaskDetailsPage() {
     setStatus(task.status);
     setProgress(String(task.progress));
     setAgentCodesInput(task.agentCodes.join(", "));
-    setAppCodesInput(task.appCodes.join(", "));
+    setSelectedAppCodes(task.appCodes);
     setAssigneeUserCodes(task.assigneeUserCodes);
     setDescriptionFullscreenOpen(false);
     setEditing(false);
@@ -218,7 +222,7 @@ export function TaskDetailsPage() {
   const updatesEditable = !archived;
   const progressManagedBySubtasks = task.subtasks.length > 0;
   const nextAgentCodes = splitCodes(agentCodesInput);
-  const nextAppCodes = splitCodes(appCodesInput);
+  const nextAppCodes = Array.from(new Set(selectedAppCodes.map((code) => code.trim()).filter(Boolean)));
   const detailDirty = title !== task.title
     || description !== (task.description ?? "")
     || taskType !== task.taskType
@@ -293,13 +297,23 @@ export function TaskDetailsPage() {
     try {
       if (archived) return;
 
-      const payload = {
-        agentCodes: draft.agentCodes,
-        appCodes: draft.appCodes,
-        assigneeUserCodes: draft.assigneeUserCodes,
-        priority: draft.priority,
-      };
-      let updated = dataSource === "api" ? await updateTask(task.taskCode, payload) : updateMockTask(task.taskCode, payload);
+      const appCodesChanged = !sameCodes(draft.appCodes, task.appCodes);
+      if (appCodesChanged && draft.appCodes.some((code) => !availableAppCodeSet.has(code))) {
+        options.onError?.();
+        toast.warning("Remove legacy app codes before changing app selection");
+        return;
+      }
+
+      const payload: UpdateTaskPayload = {};
+      if (!sameCodes(draft.agentCodes, task.agentCodes)) payload.agentCodes = draft.agentCodes;
+      if (appCodesChanged) payload.appCodes = draft.appCodes;
+      if (!sameCodes(draft.assigneeUserCodes, task.assigneeUserCodes)) payload.assigneeUserCodes = draft.assigneeUserCodes;
+      if (draft.priority !== task.priority) payload.priority = draft.priority;
+
+      let updated = task;
+      if (Object.keys(payload).length > 0) {
+        updated = dataSource === "api" ? await updateTask(task.taskCode, payload) : updateMockTask(task.taskCode, payload);
+      }
       if (draft.status !== task.status || draft.progress !== task.progress) {
         updated = dataSource === "api"
           ? await updateTaskStatus(task.taskCode, { progress: draft.progress, status: draft.status })
@@ -384,8 +398,20 @@ export function TaskDetailsPage() {
     void saveUpdateFields({ agentCodes: splitCodes(agentCodesInput) });
   }
 
-  function handleAppCodesBlur() {
-    void saveUpdateFields({ appCodes: splitCodes(appCodesInput) });
+  function handleAppToggle(appCode: string) {
+    const nextCodes = toggleCode(selectedAppCodes, appCode);
+    setSelectedAppCodes(nextCodes);
+    void saveUpdateFields({ appCodes: nextCodes }, {
+      onError: () => setSelectedAppCodes(taskRef.current.appCodes),
+    });
+  }
+
+  function handleLegacyAppRemove(appCode: string) {
+    const nextCodes = selectedAppCodes.filter((code) => code !== appCode);
+    setSelectedAppCodes(nextCodes);
+    void saveUpdateFields({ appCodes: nextCodes }, {
+      onError: () => setSelectedAppCodes(taskRef.current.appCodes),
+    });
   }
 
   function handleAssigneeToggle(userCode: string) {
@@ -402,7 +428,7 @@ export function TaskDetailsPage() {
     try {
       const payload = {
         agentCodes: [],
-        appCodes: [],
+        appCodes: selectedAppCodes.filter((code) => availableAppCodeSet.has(code)),
         assigneeUserCodes: assigneeUserCodes.slice(0, 1),
         description: `Subtask for ${task.taskCode}`,
         parentTaskCode: task.taskCode,
@@ -497,22 +523,20 @@ export function TaskDetailsPage() {
                   <ReadValue>{task.agentCodes.join(", ") || "None"}</ReadValue>
                 )}
               </Field>
-              <Field label="App Codes">
-                {updatesEditable ? (
-                  <TextInput
-                    aria-label="Task detail app codes"
-                    placeholder="github, notion"
-                    value={appCodesInput}
-                    onChange={(event) => setAppCodesInput(event.target.value)}
-                    onBlur={handleAppCodesBlur}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                    }}
+              <div className="md:col-span-2">
+                <Field label="Apps" hint="Only active apps from this workspace can be newly assigned.">
+                  <TaskAppSelectionField
+                    availableApps={appOptions}
+                    disabled={!updatesEditable}
+                    emptyMessage="No active apps are available for this workspace."
+                    legacyAppCodes={legacyAppCodes}
+                    loading={workspaceOptionsLoading}
+                    selectedAppCodes={selectedAppCodes}
+                    onRemoveLegacy={updatesEditable ? handleLegacyAppRemove : undefined}
+                    onToggle={updatesEditable ? handleAppToggle : undefined}
                   />
-                ) : (
-                  <ReadValue>{task.appCodes.join(", ") || "None"}</ReadValue>
-                )}
-              </Field>
+                </Field>
+              </div>
             </div>
             <SurfaceCard className="mt-4 bg-[var(--color-surface-container-lowest)]">
               <h3 className="mb-3 text-sm font-semibold">Assigned Users</h3>
