@@ -59,7 +59,7 @@ type OpenRowMenuState = {
 };
 
 const ACTION_MENU_GAP = 8;
-const ACTION_MENU_HEIGHT = 108;
+const ACTION_MENU_HEIGHT = 196;
 const ACTION_MENU_MARGIN = 12;
 const ACTION_MENU_WIDTH = 176;
 
@@ -82,6 +82,10 @@ function getActionMenuStyle(anchorRect: DOMRect): CSSProperties {
     top,
     width: ACTION_MENU_WIDTH,
   };
+}
+
+function openExternalLink(url: string) {
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 function AppActions({
@@ -432,11 +436,37 @@ export function AppsPage() {
                 type="button"
                 disabled={pendingLifecycleCode === openMenuApp.appCode}
                 onClick={() => void updateLifecycle(openMenuApp, "archive")}
-              >
-                <Archive size={14} aria-hidden="true" />
-                Archive
-              </button>
+            >
+              <Archive size={14} aria-hidden="true" />
+              Archive
+            </button>
             )}
+            <div className="my-1 border-t border-[var(--color-outline-variant)]" aria-hidden="true" />
+            <button
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+              role="menuitem"
+              type="button"
+              disabled={!openMenuApp.repositoryUrl}
+              onClick={() => {
+                if (!openMenuApp.repositoryUrl) {
+                  return;
+                }
+                setOpenRowMenu(null);
+                openExternalLink(openMenuApp.repositoryUrl);
+              }}
+            >
+              <ExternalLink size={14} aria-hidden="true" />
+              Gitlab
+            </button>
+            <button
+              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[var(--color-on-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+              role="menuitem"
+              type="button"
+              disabled
+            >
+              <ExternalLink size={14} aria-hidden="true" />
+              Poseidon
+            </button>
           </div>,
           document.body,
         )
