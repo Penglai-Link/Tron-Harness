@@ -17,7 +17,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Settings2,
-  ShieldCheck,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -149,7 +148,6 @@ export function TronShell({
   const setAgentOpen = useAppShellStore((state) => state.setAgentOpen);
   const setSidebarCollapsed = useAppShellStore((state) => state.setSidebarCollapsed);
   const sidebarCollapsed = useAppShellStore((state) => state.sidebarCollapsed);
-  const toggleAgent = useAppShellStore((state) => state.toggleAgent);
   const toggleSection = useAppShellStore((state) => state.toggleSection);
   const toggleUtilityPanel = useAppShellStore((state) => state.toggleUtilityPanel);
   const utilityPanel = useAppShellStore((state) => state.utilityPanel);
@@ -328,8 +326,22 @@ export function TronShell({
   }
 
   function handleWorkspaceSwitcherClick() {
+    setAgentOpen(false);
     void refreshWorkspaceSwitcher();
     toggleUtilityPanel("workspace");
+  }
+
+  function handleUtilityPanelClick(panel: string) {
+    setAgentOpen(false);
+    toggleUtilityPanel(panel);
+  }
+
+  function handleAgentLauncherClick() {
+    if (!agentOpen) {
+      closeFloatingPanels();
+    }
+
+    setAgentOpen(!agentOpen);
   }
 
   function selectWorkspaceNode(space: WorkspaceSwitcherData["secondarySpaces"][number]) {
@@ -482,7 +494,7 @@ export function TronShell({
     <TronShellFrameContext.Provider value={true}>
     <WorkspaceSpacesContext.Provider value={workspaceSpacesValue}>
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]">
-      <header className="fixed inset-x-0 top-0 z-50 h-14 border-b border-[var(--color-outline-variant)] bg-[var(--color-header-backdrop)] px-4 backdrop-blur sm:px-6">
+      <header className="fixed inset-x-0 top-0 z-50 h-14 bg-[var(--color-header-backdrop)] px-4 shadow-[0_10px_28px_rgba(15,23,42,0.045)] backdrop-blur sm:px-6">
         <div className="flex h-full items-center justify-between gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <Button
@@ -508,7 +520,6 @@ export function TronShell({
               onClick={handleWorkspaceSwitcherClick}
               title={selectedWorkspacePathLabel}
             >
-              <ShieldCheck size={16} aria-hidden="true" />
               <span className="truncate">{selectedWorkspacePathLabel}</span>
               <ChevronDown size={15} aria-hidden="true" />
             </button>
@@ -526,14 +537,17 @@ export function TronShell({
           </div>
           <div className="flex items-center gap-2">
             {topbarActions}
-            <Button size="icon" variant="ghost" aria-label={t("shell:aria.openSystemSettings")} aria-pressed={utilityPanel === "settings"} onClick={() => toggleUtilityPanel("settings")}>
+            <Button size="icon" variant="ghost" aria-label={t("shell:aria.openSystemSettings")} aria-pressed={utilityPanel === "settings"} onClick={() => handleUtilityPanelClick("settings")}>
               <Settings2 size={17} aria-hidden="true" />
             </Button>
-            <Button size="icon" variant="ghost" aria-label={t("shell:aria.viewNotifications")} aria-pressed={utilityPanel === "notifications"} onClick={() => toggleUtilityPanel("notifications")}>
+            <Button size="icon" variant="ghost" aria-label={t("shell:aria.viewNotifications")} aria-pressed={utilityPanel === "notifications"} onClick={() => handleUtilityPanelClick("notifications")}>
               <Bell size={17} aria-hidden="true" />
             </Button>
-            <Button size="icon" variant="secondary" aria-label={t("shell:aria.openUserMenu")} aria-pressed={utilityPanel === "user"} onClick={() => toggleUtilityPanel("user")}>
+            <Button className="rounded-full hover:bg-transparent" size="icon" variant="ghost" aria-label={t("shell:aria.openUserMenu")} aria-pressed={utilityPanel === "user"} onClick={() => handleUtilityPanelClick("user")}>
               <CircleUserRound size={18} aria-hidden="true" />
+            </Button>
+            <Button className={cn("rounded-full", agentOpen ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]" : "")} size="icon" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} title={t("shell:assistant.title")} onClick={handleAgentLauncherClick}>
+              <Bot size={17} aria-hidden="true" />
             </Button>
           </div>
         </div>
@@ -599,6 +613,15 @@ export function TronShell({
             )}
           </div>
         ) : null}
+        {agentOpen ? (
+          <section className="absolute right-4 top-[calc(100%+8px)] z-40 w-[min(320px,calc(100vw-2rem))] rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-4 text-sm shadow-[0_18px_50px_rgba(0,0,0,0.14)] sm:right-6">
+            <p className="font-semibold">{t("shell:assistant.title")}</p>
+            <p className="mt-2 text-[13px] leading-5 text-[var(--color-on-surface-variant)]">{t("shell:assistant.body")}</p>
+            <button className="mt-3 h-8 rounded-lg bg-[var(--color-surface-container)] px-3 text-[13px] font-medium hover:bg-[var(--color-hover-surface)]" type="button" onClick={() => setAgentOpen(false)}>
+              {t("common:actions.close")}
+            </button>
+          </section>
+        ) : null}
       </header>
 
       {mobileSidebarOpen ? (
@@ -610,7 +633,7 @@ export function TronShell({
             onClick={closeMobileSidebar}
           />
           <aside
-            className="fixed bottom-0 left-0 top-14 z-40 flex w-[min(20rem,calc(100vw-1rem))] flex-col overflow-y-auto border-r border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-3 py-4 shadow-[0_18px_45px_rgba(15,23,42,0.18)] lg:hidden"
+            className="fixed bottom-0 left-0 top-14 z-40 flex w-[min(20rem,calc(100vw-1rem))] flex-col overflow-y-auto bg-[var(--color-elevated-surface)] px-3 py-4 shadow-[12px_0_34px_rgba(15,23,42,0.12),0_18px_45px_rgba(15,23,42,0.12)] lg:hidden"
             id="tron-mobile-sidebar"
           >
             {renderSidebarContent(true)}
@@ -620,7 +643,7 @@ export function TronShell({
 
       <aside
         className={cn(
-          "fixed bottom-0 left-0 top-14 z-40 hidden flex-col overflow-y-auto border-r border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] py-4 transition-[width] duration-200 lg:flex",
+          "fixed bottom-0 left-0 top-14 z-40 hidden flex-col overflow-y-auto bg-[var(--color-elevated-surface)] py-4 shadow-[10px_0_28px_rgba(15,23,42,0.04)] transition-[width] duration-200 lg:flex",
           sidebarCollapsed ? "w-[76px] px-2" : "w-[280px] px-3",
         )}
         data-collapsed={sidebarCollapsed}
@@ -635,24 +658,6 @@ export function TronShell({
         </div>
       </section>
 
-      <button
-        className="fixed bottom-6 right-6 z-40 flex h-12 items-center gap-2 rounded-full bg-[var(--color-primary)] px-4 text-sm font-medium text-[var(--color-on-primary)] shadow-[0_18px_45px_rgba(0,0,0,0.18)] transition-transform hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
-        type="button"
-        aria-expanded={agentOpen}
-        onClick={toggleAgent}
-      >
-        <Bot size={18} aria-hidden="true" />
-        {t("shell:assistant.title")}
-      </button>
-      {agentOpen ? (
-        <section className="fixed bottom-24 right-6 z-40 w-[320px] rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-4 shadow-[0_18px_50px_rgba(0,0,0,0.14)]">
-          <p className="text-sm font-semibold">{t("shell:assistant.title")}</p>
-          <p className="mt-2 text-[13px] leading-5 text-[var(--color-on-surface-variant)]">{t("shell:assistant.body")}</p>
-          <button className="mt-3 h-8 rounded-lg bg-[var(--color-surface-container)] px-3 text-[13px] font-medium hover:bg-[var(--color-hover-surface)]" type="button" onClick={() => setAgentOpen(false)}>
-            {t("common:actions.close")}
-          </button>
-        </section>
-      ) : null}
     </div>
     </WorkspaceSpacesContext.Provider>
     </TronShellFrameContext.Provider>
