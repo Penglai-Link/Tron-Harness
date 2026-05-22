@@ -6,6 +6,7 @@ interface ApiRequestOptions {
   headers?: HeadersInit;
   pathParams?: EndpointParams;
   queryParams?: EndpointParams;
+  retryOnUnauthorized?: boolean;
   signal?: AbortSignal;
 }
 
@@ -24,10 +25,24 @@ export class ApiError extends Error {
 }
 
 let apiAccessToken: string | null = null;
-let unauthorizedHandler: (() => void) | null = null;
+let unauthorizedHandler: (() => Promise<boolean>) | null = null;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function readBearerToken(headers: Headers) {
+  const authorization = headers.get("Authorization");
+  if (!authorization) {
+    return null;
+  }
+
+  const [scheme, token] = authorization.trim().split(/\s+/, 2);
+  if (!scheme || !token || scheme.toLowerCase() !== "bearer") {
+    return null;
+  }
+
+  return token;
 }
 
 function resolveRequestBody(body: ApiRequestOptions["body"]) {
@@ -64,16 +79,10 @@ function createApiError(response: Response, payload: unknown, method: string) {
     : `${method} ${response.url} failed with ${response.status}`;
   const code = isRecord(payload) && typeof payload.code === "string" ? payload.code : undefined;
   const data = isRecord(payload) && "data" in payload ? payload.data : undefined;
-  const error = new ApiError(message, response.status, { code, data });
-
-  if (response.status === 401) {
-    unauthorizedHandler?.();
-  }
-
-  return error;
+  return new ApiError(message, response.status, { code, data });
 }
 
-export function setApiUnauthorizedHandler(handler: (() => void) | null) {
+export function setApiUnauthorizedHandler(handler: (() => Promise<boolean>) | null) {
   unauthorizedHandler = handler;
 }
 
@@ -143,14 +152,39 @@ export function unwrapApiEnvelope<T>(payload: unknown): T {
 
 export async function requestApi<T>(endpoint: string, options: ApiRequestOptions = {}): Promise<T> {
   const { method, path } = parseEndpoint(endpoint);
+  const headers = resolveHeaders(options.body, options.headers);
   const response = await fetch(buildApiUrl(path, options.pathParams, options.queryParams), {
     body: resolveRequestBody(options.body),
     credentials: options.credentials ?? "include",
-    headers: resolveHeaders(options.body, options.headers),
+    headers,
     method,
     signal: options.signal,
   });
   const payload = await response.json().catch(() => null);
+
+  if (
+    response.status === 401
+    && options.retryOnUnauthorized !== false
+    && apiAccessToken
+    && readBearerToken(headers) !== apiAccessToken
+  ) {
+    return requestApi<T>(endpoint, {
+      ...options,
+      retryOnUnauthorized: false,
+    });
+  }
+
+  if (
+    response.status === 401
+    && options.retryOnUnauthorized !== false
+    && unauthorizedHandler
+    && await unauthorizedHandler()
+  ) {
+    return requestApi<T>(endpoint, {
+      ...options,
+      retryOnUnauthorized: false,
+    });
+  }
 
   if (!response.ok) {
     throw createApiError(response, payload, method);

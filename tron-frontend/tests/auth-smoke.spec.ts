@@ -120,14 +120,22 @@ function unauthorizedEnvelope(code = "AUTH_UNAUTHORIZED", message = "authenticat
 
 async function routeAuthApi(
   page: Page,
-  options: { onOAuth2Authorize?: (url: string) => void } = {},
+  options: {
+    expireFirstAdminUsersRequest?: boolean;
+    loginGrantExpiresIn?: number;
+    onOAuth2Authorize?: (url: string) => void;
+    onRefreshGrantIssued?: (count: number) => void;
+    refreshGrantExpiresIn?: number;
+  } = {},
 ) {
   let currentSession: typeof authUser | typeof oauthUser | null = null;
   let hasRefreshSession = false;
   let currentAccessToken = "";
   let nextAccessTokenId = 1;
+  let refreshGrantCount = 0;
+  let shouldExpireAdminUsersRequest = options.expireFirstAdminUsersRequest ?? false;
 
-  function issueGrant(session: typeof authUser | typeof oauthUser) {
+  function issueGrant(session: typeof authUser | typeof oauthUser, expiresIn: number) {
     currentSession = session;
     hasRefreshSession = true;
     currentAccessToken = `test-access-token-${nextAccessTokenId++}`;
@@ -135,7 +143,7 @@ async function routeAuthApi(
     return successEnvelope({
       accessToken: currentAccessToken,
       tokenType: "Bearer",
-      expiresIn: 900,
+      expiresIn,
       session,
     });
   }
@@ -164,7 +172,7 @@ async function routeAuthApi(
   await page.route("**/api/v1/auth/login", async (route) => {
     const body = route.request().postDataJSON() as { login?: string; password?: string };
     if (body.login === "auth.operator" && body.password === "TronAuthPass123!") {
-      await fulfillJson(route, issueGrant(authUser));
+      await fulfillJson(route, issueGrant(authUser, options.loginGrantExpiresIn ?? 900));
       return;
     }
 
@@ -184,7 +192,9 @@ async function routeAuthApi(
       return;
     }
 
-    await fulfillJson(route, issueGrant(currentSession));
+    refreshGrantCount += 1;
+    options.onRefreshGrantIssued?.(refreshGrantCount);
+    await fulfillJson(route, issueGrant(currentSession, options.refreshGrantExpiresIn ?? 900));
   });
 
   await page.route("**/api/v1/auth/oauth2/authorize/github**", async (route) => {
@@ -204,6 +214,12 @@ async function routeAuthApi(
   });
 
   await page.route("**/api/v1/admin/users**", async (route) => {
+    if (shouldExpireAdminUsersRequest) {
+      shouldExpireAdminUsersRequest = false;
+      await fulfillJson(route, unauthorizedEnvelope(), 401);
+      return;
+    }
+
     if (
       !currentSession
       || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
@@ -337,5 +353,56 @@ test("supports oauth2 entry and lands on the intended protected route", async ({
     `http://127.0.0.1:${frontendPort}/api/v1/auth/oauth2/authorize/github?redirect=%2Fadmin%2Fusers`,
   );
   await expect(page).toHaveURL(`http://127.0.0.1:${frontendPort}/admin/users`);
+  await expect(page.getByRole("table")).toContainText("Auth Operator");
+});
+
+test("refreshes the access token before it expires while the operator stays idle", async ({ page }) => {
+  let refreshGrantCount = 0;
+
+  await routeAuthApi(page, {
+    loginGrantExpiresIn: 2,
+    onRefreshGrantIssued(count) {
+      refreshGrantCount = count;
+    },
+  });
+
+  await page.goto(`${frontendBaseUrl}/dashboard`);
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/);
+
+  await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
+  await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
+  await page.getByRole("button", { name: /sign in/i }).click();
+
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect.poll(() => refreshGrantCount, { timeout: 6_000 }).toBe(1);
+
+  await page.goto(`${frontendBaseUrl}/admin/users`);
+  await expect(page).toHaveURL(/\/admin\/users$/);
+  await expect(page.getByRole("table")).toContainText("Auth Operator");
+});
+
+test("refreshes and retries a protected request after the first 401 instead of redirecting to login", async ({ page }) => {
+  let refreshGrantCount = 0;
+
+  await routeAuthApi(page, {
+    expireFirstAdminUsersRequest: true,
+    onRefreshGrantIssued(count) {
+      refreshGrantCount = count;
+    },
+  });
+
+  await page.goto(`${frontendBaseUrl}/dashboard`);
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/);
+
+  await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
+  await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
+  await page.getByRole("button", { name: /sign in/i }).click();
+
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await page.goto(`${frontendBaseUrl}/admin/users`);
+
+  await expect.poll(() => refreshGrantCount > 0).toBe(true);
+  await expect(page).toHaveURL(/\/admin\/users$/);
+  await expect(page).not.toHaveURL(/\/login/);
   await expect(page.getByRole("table")).toContainText("Auth Operator");
 });

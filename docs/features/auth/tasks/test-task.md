@@ -29,7 +29,7 @@ Lead keeps RED and VERIFY evidence in the main auth worktree because execution m
 
 ## Integration Notes
 
-Frontend browser proof must cover both anonymous blocking and successful access to existing user-management routes after authentication.
+Frontend browser proof must cover anonymous blocking, successful access to existing user-management routes after authentication, idle silent renewal, and first-401 recovery without a route bounce.
 
 ## Open Decisions
 

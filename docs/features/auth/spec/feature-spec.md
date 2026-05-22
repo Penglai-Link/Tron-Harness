@@ -14,13 +14,13 @@
 - status: approved_with_defaults
 - owner: clouds3n
 - source_request: use `eliteforge-codex-superpower` to create and implement the `auth` feature with frontend and backend, related to `user-management`, supporting internal user login and OAuth2 login
-- main_agent: lead agent on `feature/clouds3n/auth`
+- main_agent: lead agent on `feature/clouds3n/auth/base`
 - dependency_features: `user-management-model`
 - dependency_contracts: `AGENTS.md` uniform response envelope; existing `tron-frontend` route registry and shell; existing `tron-backend` user repository, bcrypt password model, and SQLite persistence
 
 ## Requirement
 
-Create a real authentication feature for Tron so every non-auth page requires a valid JWT-backed session, internal operators can sign in with existing user-management accounts, protected backend APIs authenticate only through `Authorization: Bearer <access-jwt>`, refresh uses HttpOnly cookies only, and enterprise OAuth2 sign-in, starting with GitHub OAuth, lands in the same session model without inventing a second user source.
+Create a real authentication feature for Tron so every non-auth page requires a valid JWT-backed session, internal operators can sign in with existing user-management accounts, protected backend APIs authenticate only through `Authorization: Bearer <access-jwt>`, refresh uses HttpOnly cookies only, the frontend silently renews access before idle expiry and retries the first expired-request 401 once after refresh, and enterprise OAuth2 sign-in, starting with GitHub OAuth, lands in the same session model without inventing a second user source.
 
 ## Scope Boundary
 
@@ -40,6 +40,7 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 - `Authorization: Bearer <access-jwt>` parsing for every protected backend route, with no access-cookie fallback.
 - Backend login, refresh, logout, OAuth callback completion, and access-token-backed current-session inspection endpoints.
 - Frontend bootstrap that exchanges the refresh cookie for a fresh access token before protected pages render.
+- Frontend session lifecycle that silently renews the in-memory access token before idle expiry, retries the first expired protected request after a successful refresh, and avoids redundant refresh churn when a newer bearer token is already available in memory.
 - Request-scoped authenticated-user context propagation so protected handlers can reuse operator identity during save or update operations.
 - OAuth2 authorize and callback endpoints, with GitHub as the first live provider and provider-subject reuse, verified-email matching, or first-login internal-user auto-provision.
 - Persistent refresh-session storage and persistent OAuth2 identity links.
@@ -104,6 +105,7 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 - `tron-backend` already has Axum routing, SQLite persistence, bcrypt password hashing, and active versus archived user state in the user-management domain.
 - The current auth delivery still mixes bearer and cookie access-token paths; the next evolution should remove access-token cookies entirely and keep only the refresh cookie for bootstrap or renewal.
 - Seeded users exist under `tron-backend/src/adapters/outbound/persistence/sqlite/seed.rs`, but the feature currently lacks any login contract or known auth fixture conventions.
+- The current frontend delivery refreshes only during bootstrap and marks the session unauthenticated on any protected-route 401, so long-lived admin forms can still lose in-progress edits unless access renewal and expired-request retry become proactive.
 
 ## Open Decisions
 

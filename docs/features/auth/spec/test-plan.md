@@ -4,7 +4,7 @@
 
 - status: approved_with_defaults
 - approved_by: clouds3n
-- approved_at: 2026-05-15
+- approved_at: 2026-05-22
 
 Valid statuses: `waiting_human_decision`, `approved`, `approved_with_defaults`.
 
@@ -17,14 +17,14 @@ Valid statuses: `waiting_human_decision`, `approved`, `approved_with_defaults`.
 - AC-AUTH-05 | layer: api | case: login and refresh issue access JWTs in response bodies, protected APIs accept only bearer access tokens, and logout or refresh preserve the refresh-cookie contract | red: auth endpoints still depend on access-token cookies, ignore `Authorization: Bearer`, or fail to expose current-user context | green: auth grant responses return access tokens, protected APIs reject cookie-only access attempts, downstream handlers can read the authenticated operator, and refresh or logout keep stable cookie behavior | interaction: not applicable | command_ref: CMD-BE-TEST.
 - AC-AUTH-06 | layer: database | case: refresh sessions and OAuth2 identity links persist without plaintext session material | red: schema lacks durable auth session or identity link storage | green: auth persistence stores hashed or opaque auth material only | interaction: not applicable | command_ref: CMD-BE-TEST.
 - AC-AUTH-07 | layer: security | case: archived users, wrong passwords, bad refresh tokens, and invalid OAuth2 state are rejected consistently | red: invalid auth attempts succeed or return unstable auth errors | green: invalid auth attempts return stable errors and no authenticated session | interaction: not applicable | command_ref: CMD-BE-TEST.
-- AC-AUTH-08 | layer: browser | case: authenticated operators can reach existing user-management routes with header-only access tokens, browser reload rebuilds auth state through refresh, and anonymous operators are blocked after logout | red: route protection breaks existing shell navigation, bearer JWT bootstrap fails after page reload, or anonymous admin API access is still allowed | green: user-management stays usable after sign-in, a page reload silently refreshes access through the refresh cookie, account identity moves behind the avatar menu, and logout still redirects to login | interaction: sign in -> open `/admin/users` -> reload page -> user-management remains available -> menu shows profile and logout -> revisit route redirects to `/login` after logout | command_ref: CMD-FE-AUTH-BROWSER.
+- AC-AUTH-08 | layer: browser | case: authenticated operators can reach existing user-management routes with header-only access tokens, idle tabs silently renew access before expiry, the first expired-request 401 refreshes and retries once, browser reload rebuilds auth state through refresh, and anonymous operators are blocked after logout | red: route protection breaks existing shell navigation, idle access expires without renewal, expired protected requests bounce directly to `/login`, bearer JWT bootstrap fails after page reload, or anonymous admin API access is still allowed | green: user-management stays usable after sign-in, idle access renews without user input, the first expired-request 401 is recovered without losing the route, a page reload silently refreshes access through the refresh cookie, account identity moves behind the avatar menu, and logout still redirects to login | interaction: sign in -> idle past a short access-token TTL -> access stays usable -> open `/admin/users` with one forced 401 -> user-management remains available -> reload page -> menu shows profile and logout -> revisit route redirects to `/login` after logout | command_ref: CMD-FE-AUTH-BROWSER.
 
 ## Command Index
 
 - CMD-BE-TEST | command: rtk make be-test | cost: medium | when: red/green/verify/final | rerun: affected backend or schema changes | expect: focused auth integration, bearer-context, contract, and persistence tests pass.
 - CMD-BE-CHECK | command: rtk make be-check | cost: medium | when: green/verify/final | rerun: affected backend compilation changes | expect: backend auth modules compile cleanly.
 - CMD-FE-CHECK | command: rtk make fe-check | cost: medium | when: green/verify/final | rerun: affected frontend or route changes | expect: typecheck and build succeed with auth guard changes.
-- CMD-FE-AUTH-BROWSER | command: rtk npm --prefix tron-frontend exec playwright -- test auth-smoke --reporter=line | cost: slow/browser | when: verify | rerun: review-if-stale | expect: redirect, login, logout, GitHub callback, and user-management route evidence with concrete browser interactions.
+- CMD-FE-AUTH-BROWSER | command: rtk npm --prefix tron-frontend exec playwright -- test auth-smoke --reporter=line | cost: slow/browser | when: verify | rerun: review-if-stale | expect: redirect, login, logout, GitHub callback, idle renewal, expired-request recovery, and user-management route evidence with concrete browser interactions.
 - CMD-DOCS-FINAL | command: rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/auth --phase final | cost: medium | when: final | rerun: after doc, task, report, or orchestration edits | expect: auth feature workspace validates end to end.
 
 ## Evidence Rules

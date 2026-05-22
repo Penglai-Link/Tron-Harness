@@ -21,7 +21,10 @@ export const authApiEndpoints = {
 } as const;
 
 export function fetchAuthProviders(signal?: AbortSignal) {
-  return requestApi<AuthProvidersPayload>(authApiEndpoints.listProviders, { signal });
+  return requestApi<AuthProvidersPayload>(authApiEndpoints.listProviders, {
+    retryOnUnauthorized: false,
+    signal,
+  });
 }
 
 export function fetchCurrentAuthSession(signal?: AbortSignal) {
@@ -29,15 +32,24 @@ export function fetchCurrentAuthSession(signal?: AbortSignal) {
 }
 
 export function loginInternal(payload: InternalLoginPayload) {
-  return requestApi<AuthGrant>(authApiEndpoints.login, { body: payload });
+  return requestApi<AuthGrant>(authApiEndpoints.login, {
+    body: payload,
+    retryOnUnauthorized: false,
+  });
 }
 
 export function refreshAuthSession() {
-  return requestApi<AuthGrant>(authApiEndpoints.refresh, { body: {} });
+  return requestApi<AuthGrant>(authApiEndpoints.refresh, {
+    body: {},
+    retryOnUnauthorized: false,
+  });
 }
 
 export function logoutAuthSession() {
-  return requestApi<{ loggedOut: boolean }>(authApiEndpoints.logout, { body: {} });
+  return requestApi<{ loggedOut: boolean }>(authApiEndpoints.logout, {
+    body: {},
+    retryOnUnauthorized: false,
+  });
 }
 
 export function buildOAuth2AuthorizeUrl(providerCode: string, redirectPath: string) {

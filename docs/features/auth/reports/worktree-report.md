@@ -2,7 +2,7 @@
 
 ## Summary
 
-Solo auth execution on `feature/clouds3n/auth` is complete. The interrupted pass was recovered by moving the dirty root-worktree state back onto the mirrored feature worktree, then the lead carried docs, backend, frontend, and verification changes locally without delegated worker branches, and the final result keeps auth and user-management aligned in one consistent branch history.
+Solo auth execution on `feature/clouds3n/auth/base` is complete. The interrupted pass was recovered from the dirty root worktree earlier in the feature history, and the 2026-05-22 lifecycle evolution stayed in the mirrored Lite Spec base worktree while the lead carried docs, frontend, and verification changes locally without delegated worker branches.
 
 ## Evidence Rows
 
@@ -24,9 +24,9 @@ Solo auth execution on `feature/clouds3n/auth` is complete. The interrupted pass
 
 ## Commands
 
-- `rtk make be-test` passed on 2026-05-15.
-- `rtk make fe-check` passed on 2026-05-15.
-- `rtk npm --prefix tron-frontend exec playwright -- test auth-smoke.spec.ts --reporter=line` passed with 2 tests on 2026-05-15.
+- `rtk make be-test` remains the 2026-05-15 backend evidence because this evolution changed frontend-only auth lifecycle code.
+- `rtk make fe-check` passed on 2026-05-22.
+- `rtk npm --prefix tron-frontend exec playwright -- test auth-smoke --reporter=line` passed with 4 tests on 2026-05-22.
 
 ## Blockers
 
