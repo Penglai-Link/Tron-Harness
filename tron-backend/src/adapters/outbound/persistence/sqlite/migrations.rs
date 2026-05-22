@@ -28,9 +28,6 @@ pub(super) const AUTOMATIONS_MIGRATION: &str = include_str!(
 );
 pub(super) const APPS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260519_0011_create_app_management_apps.sql");
-pub(super) const MODELS_MIGRATION: &str = include_str!(
-    "../../../../../migrations/20260522_0012_create_workspace_model_management_models.sql"
-);
 pub(super) const VARIABLES_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260518_0009_create_variable_management_variables.sql"
 );

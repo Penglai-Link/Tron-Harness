@@ -12,7 +12,6 @@ use crate::{
             apps::routes::routes as app_routes,
             automations::routes as automation_routes,
             auth::{require_auth, routes as auth_routes},
-            models::routes::routes as model_routes,
             skills::routes::routes as skill_routes,
             tasks::routes as task_routes,
             variables::routes::routes as variable_routes,
@@ -20,15 +19,14 @@ use crate::{
         outbound::{
             crypto::BcryptPasswordHasher,
             persistence::{
-                SqliteAppRepository, SqliteAutomationRepository, SqliteModelRepository,
-                SqliteRoleRepository, SqliteSkillRegistryRepository, SqliteTaskRepository,
-                SqliteUserRepository, SqliteVariableRepository, SqliteWorkspaceRepository,
+                SqliteAppRepository, SqliteAutomationRepository, SqliteRoleRepository,
+                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteUserRepository,
+                SqliteVariableRepository, SqliteWorkspaceRepository,
             },
         },
     },
     application::app::AppService,
     application::automation::AutomationService,
-    application::model::ModelService,
     application::role::RoleService,
     application::skill::SkillRegistryService,
     application::task::TaskService,
@@ -47,7 +45,6 @@ static GLOBAL_USER_SERVICE: OnceLock<UserService> = OnceLock::new();
 static GLOBAL_ROLE_SERVICE: OnceLock<RoleService> = OnceLock::new();
 static GLOBAL_WORKSPACE_SERVICE: OnceLock<WorkspaceService> = OnceLock::new();
 static GLOBAL_APP_SERVICE: OnceLock<AppService> = OnceLock::new();
-static GLOBAL_MODEL_SERVICE: OnceLock<ModelService> = OnceLock::new();
 static GLOBAL_TASK_SERVICE: OnceLock<TaskService> = OnceLock::new();
 static GLOBAL_VARIABLE_SERVICE: OnceLock<VariableService> = OnceLock::new();
 static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
@@ -59,7 +56,6 @@ pub struct AppState {
     pub apps: AppService,
     pub automations: AutomationService,
     pub event_bus: EventBusHandle,
-    pub models: ModelService,
     pub roles: RoleService,
     pub tasks: TaskService,
     pub users: UserService,
@@ -117,13 +113,6 @@ impl AppState {
         } else {
             build_app_service(&config.database_url, workspaces.clone())
         };
-        let models = if config.database_url == ":memory:" {
-            GLOBAL_MODEL_SERVICE
-                .get_or_init(|| build_model_service(":memory:", workspaces.clone()))
-                .clone()
-        } else {
-            build_model_service(&config.database_url, workspaces.clone())
-        };
         let tasks = if config.database_url == ":memory:" {
             GLOBAL_TASK_SERVICE
                 .get_or_init(|| {
@@ -179,13 +168,12 @@ impl AppState {
             apps,
             automations,
             event_bus,
-            models,
+            skills,
             roles,
             tasks,
             users,
             variables,
             workspaces,
-            skills,
         }
     }
 }
@@ -205,12 +193,6 @@ impl FromRef<AppState> for UserService {
 impl FromRef<AppState> for AppService {
     fn from_ref(state: &AppState) -> Self {
         state.apps.clone()
-    }
-}
-
-impl FromRef<AppState> for ModelService {
-    fn from_ref(state: &AppState) -> Self {
-        state.models.clone()
     }
 }
 
@@ -263,7 +245,6 @@ pub fn build_router(config: AppConfig) -> Router {
         .merge(workspace_routes())
         .merge(automation_routes())
         .merge(app_routes())
-        .merge(model_routes())
         .merge(task_routes())
         .merge(variable_routes())
         .merge(skill_routes())
@@ -306,12 +287,6 @@ fn build_app_service(database_url: &str, workspaces: WorkspaceService) -> AppSer
     let repository = SqliteAppRepository::connect(database_url)
         .expect("app SQLite repository should initialize");
     AppService::new(repository, workspaces)
-}
-
-fn build_model_service(database_url: &str, workspaces: WorkspaceService) -> ModelService {
-    let repository = SqliteModelRepository::connect(database_url)
-        .expect("model SQLite repository should initialize");
-    ModelService::new(repository, workspaces)
 }
 
 fn build_task_service(

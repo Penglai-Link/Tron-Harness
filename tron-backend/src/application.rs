@@ -1,6 +1,5 @@
 pub mod app;
 pub mod automation;
-pub mod model;
 pub mod role;
 pub mod skill;
 pub mod task;

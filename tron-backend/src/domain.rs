@@ -1,4 +1,3 @@
-pub mod model;
 pub mod app;
 pub mod auth;
 pub mod automation;
