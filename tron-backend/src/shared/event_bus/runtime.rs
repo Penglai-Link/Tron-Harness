@@ -136,9 +136,7 @@ impl EventBusHandle {
             }
             Err(BusEventValidationError::IdGenerationFailed(_)) => {
                 inner.stats.increment_rejected_invalid();
-                return PublishOutcome::RejectedInvalid {
-                    field: "event_id",
-                };
+                return PublishOutcome::RejectedInvalid { field: "event_id" };
             }
             Err(
                 BusEventValidationError::MissingField(field)
@@ -196,7 +194,11 @@ impl EventBusRuntimeBuilder {
         self
     }
 
-    pub fn register_sink_with_capacity(mut self, sink: Arc<dyn EventSink>, capacity: usize) -> Self {
+    pub fn register_sink_with_capacity(
+        mut self,
+        sink: Arc<dyn EventSink>,
+        capacity: usize,
+    ) -> Self {
         self.sinks.push((sink, capacity.max(1)));
         self
     }
@@ -212,10 +214,8 @@ impl EventBusRuntimeBuilder {
             return EventBusHandle::disabled();
         }
         let stats = Arc::new(BusRuntimeStats::default());
-        let (critical_tx, critical_rx) =
-            sync_channel(self.config.critical_ingress_capacity.max(1));
-        let (standard_tx, standard_rx) =
-            sync_channel(self.config.standard_ingress_capacity.max(1));
+        let (critical_tx, critical_rx) = sync_channel(self.config.critical_ingress_capacity.max(1));
+        let (standard_tx, standard_rx) = sync_channel(self.config.standard_ingress_capacity.max(1));
 
         let mut sink_registrations = Vec::with_capacity(self.sinks.len());
         for (sink, capacity) in self.sinks {

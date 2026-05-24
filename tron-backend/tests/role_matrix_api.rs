@@ -153,13 +153,8 @@ async fn replace_roles_persists_catalog_to_configured_sqlite_database() {
         ]
     });
 
-    let replace_response = authenticated_request(
-        &router,
-        Method::PUT,
-        "/api/v1/admin/roles",
-        Some(payload),
-    )
-    .await;
+    let replace_response =
+        authenticated_request(&router, Method::PUT, "/api/v1/admin/roles", Some(payload)).await;
 
     assert_eq!(
         replace_response.status(),

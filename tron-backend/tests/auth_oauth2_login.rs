@@ -60,7 +60,8 @@ async fn oauth2_authorize_and_callback_auto_provision_an_authenticated_session()
             .get(header::LOCATION)
             .expect("authorize redirect should include Location"),
     );
-    let authorize_url = Url::parse(&callback_location).expect("authorize redirect should be a valid URL");
+    let authorize_url =
+        Url::parse(&callback_location).expect("authorize redirect should be a valid URL");
     assert_eq!(authorize_url.path(), "/login/oauth/authorize");
     assert_eq!(
         authorize_url
@@ -133,11 +134,26 @@ async fn oauth2_authorize_and_callback_auto_provision_an_authenticated_session()
     assert_eq!(refresh_response.status(), StatusCode::OK);
     let refresh_json = response_json(refresh_response).await;
     assert_eq!(refresh_json["data"]["session"]["authMethod"], "oauth2");
-    assert_eq!(refresh_json["data"]["session"]["provider"]["code"], "github");
-    assert_eq!(refresh_json["data"]["session"]["user"]["username"], "cloudsen");
-    assert_eq!(refresh_json["data"]["session"]["user"]["email"], "www.402645063@gmail.com");
-    assert_eq!(refresh_json["data"]["session"]["user"]["roleCodes"], json!(["VIEWER"]));
-    assert_eq!(refresh_json["data"]["session"]["user"]["spaceCodes"], json!(["PLATFORM"]));
+    assert_eq!(
+        refresh_json["data"]["session"]["provider"]["code"],
+        "github"
+    );
+    assert_eq!(
+        refresh_json["data"]["session"]["user"]["username"],
+        "cloudsen"
+    );
+    assert_eq!(
+        refresh_json["data"]["session"]["user"]["email"],
+        "www.402645063@gmail.com"
+    );
+    assert_eq!(
+        refresh_json["data"]["session"]["user"]["roleCodes"],
+        json!(["VIEWER"])
+    );
+    assert_eq!(
+        refresh_json["data"]["session"]["user"]["spaceCodes"],
+        json!(["PLATFORM"])
+    );
     assert_eq!(
         refresh_json["data"]["session"]["user"]["passwordResetRequired"],
         true
@@ -201,7 +217,10 @@ async fn dev_oauth2_callback_auto_provisions_and_authenticates_session() {
     let refresh_json = response_json(refresh_response).await;
     assert_eq!(refresh_json["data"]["session"]["authMethod"], "oauth2");
     assert_eq!(refresh_json["data"]["session"]["provider"]["code"], "dev");
-    assert_eq!(refresh_json["data"]["session"]["user"]["username"], "auth.operator");
+    assert_eq!(
+        refresh_json["data"]["session"]["user"]["username"],
+        "auth.operator"
+    );
     assert_eq!(
         refresh_json["data"]["session"]["user"]["email"],
         "auth.operator@tron.ai"
@@ -232,8 +251,11 @@ async fn oauth2_callback_reuses_existing_subject_link_when_github_email_changes(
     first_config.database_url = database_path.to_string_lossy().into_owned();
     let first_app = app_with_config(first_config);
 
-    let first_session_json =
-        oauth2_session_json(&first_app, "/api/v1/auth/oauth2/authorize/github?redirect=%2Fdashboard").await;
+    let first_session_json = oauth2_session_json(
+        &first_app,
+        "/api/v1/auth/oauth2/authorize/github?redirect=%2Fdashboard",
+    )
+    .await;
     let first_user_code = first_session_json["data"]["user"]["userCode"]
         .as_str()
         .expect("first OAuth2 login should return a userCode")
@@ -256,10 +278,19 @@ async fn oauth2_callback_reuses_existing_subject_link_when_github_email_changes(
     second_config.database_url = database_path.to_string_lossy().into_owned();
     let second_app = app_with_config(second_config);
 
-    let second_session_json =
-        oauth2_session_json(&second_app, "/api/v1/auth/oauth2/authorize/github?redirect=%2Fdashboard").await;
-    assert_eq!(second_session_json["data"]["user"]["userCode"], json!(first_user_code));
-    assert_eq!(second_session_json["data"]["user"]["email"], json!("www.402645063@gmail.com"));
+    let second_session_json = oauth2_session_json(
+        &second_app,
+        "/api/v1/auth/oauth2/authorize/github?redirect=%2Fdashboard",
+    )
+    .await;
+    assert_eq!(
+        second_session_json["data"]["user"]["userCode"],
+        json!(first_user_code)
+    );
+    assert_eq!(
+        second_session_json["data"]["user"]["email"],
+        json!("www.402645063@gmail.com")
+    );
 
     let _ = fs::remove_file(&database_path);
 }
@@ -278,7 +309,8 @@ async fn oauth2_session_json(app: &axum::Router, authorize_uri: &str) -> serde_j
             .get(header::LOCATION)
             .expect("authorize redirect should include Location"),
     );
-    let authorize_url = Url::parse(&callback_location).expect("authorize redirect should be a valid URL");
+    let authorize_url =
+        Url::parse(&callback_location).expect("authorize redirect should be a valid URL");
     let state = authorize_url
         .query_pairs()
         .find(|(key, _)| key == "state")
@@ -335,5 +367,7 @@ fn unique_database_path() -> PathBuf {
         .expect("system clock should be after epoch")
         .as_nanos();
     let sequence = NEXT_DB_ID.fetch_add(1, Ordering::Relaxed);
-    std::env::temp_dir().join(format!("tron-auth-auto-provision-{nanos}-{sequence}.sqlite3"))
+    std::env::temp_dir().join(format!(
+        "tron-auth-auto-provision-{nanos}-{sequence}.sqlite3"
+    ))
 }

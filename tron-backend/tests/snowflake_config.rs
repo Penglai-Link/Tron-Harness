@@ -21,7 +21,11 @@ fn read_fixture(file_name: &str) -> String {
 }
 
 fn assert_snowflake_config_loader_is_implemented(filter_name: &str) {
-    let config_module = backend_root().join("src").join("shared").join("id").join("config.rs");
+    let config_module = backend_root()
+        .join("src")
+        .join("shared")
+        .join("id")
+        .join("config.rs");
 
     assert!(
         config_module.exists(),

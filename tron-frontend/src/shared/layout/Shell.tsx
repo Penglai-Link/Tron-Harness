@@ -22,6 +22,7 @@ import { useTranslation } from "react-i18next";
 import {
   Link,
   useLocation,
+  useNavigate,
 } from "react-router";
 
 import { fetchWorkspaceSwitcher } from "@/domain/admin/api";
@@ -137,7 +138,8 @@ export function TronShell({
   const { t } = useTranslation(["common", "shell"]);
   const { changeLocale, currentLocale, supportedLocales: locales } = useLocale();
   const { setTheme, theme, themes } = useTheme();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const navigate = useNavigate();
   const shellFrameMounted = useContext(TronShellFrameContext);
   const agentOpen = useAppShellStore((state) => state.agentOpen);
   const closeFloatingPanels = useAppShellStore((state) => state.closeFloatingPanels);
@@ -537,7 +539,15 @@ export function TronShell({
           </div>
           <div className="flex items-center gap-2">
             {topbarActions}
-            <Button size="icon" variant="ghost" aria-label={t("shell:aria.openSystemSettings")} aria-pressed={utilityPanel === "settings"} onClick={() => handleUtilityPanelClick("settings")}>
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label={t("shell:aria.openSystemSettings")}
+              onClick={() => {
+                closeFloatingPanels();
+                navigate("/settings", { state: { from: `${pathname}${search}` } });
+              }}
+            >
               <Settings2 size={17} aria-hidden="true" />
             </Button>
             <Button size="icon" variant="ghost" aria-label={t("shell:aria.viewNotifications")} aria-pressed={utilityPanel === "notifications"} onClick={() => handleUtilityPanelClick("notifications")}>

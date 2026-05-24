@@ -292,10 +292,7 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
   return (
     <TronShell activeItem="Variables" searchPlaceholder="Search variables...">
       <PageHeader
-        eyebrow="Current Workspace"
         title="Variable Management"
-        status={routeVariant === "details" ? "Details" : activeWorkspaceCode || "Workspace"}
-        description={`Manage the effective variables for ${activeWorkspaceLabel}. Child workspaces inherit parent variables and can override the same key locally without changing ancestor values.`}
         actions={(
           <>
             <Button variant="secondary" disabled={loading} aria-busy={loading} onClick={refresh}>

@@ -2,6 +2,7 @@ export * from "./constants/designTokens";
 export * from "./constants/shellNavigation";
 export * from "./constants/workspaceSpaces";
 export * from "./layout/PageHeader";
+export * from "./layout/SettingsShell";
 export * from "./layout/Shell";
 export * from "./layout/SurfaceCard";
 export * from "./hooks/useWorkspaceSpaces";

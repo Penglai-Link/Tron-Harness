@@ -1,4 +1,6 @@
-use tron_backend::shared::id::{SnowflakeIdError, SnowflakeIdProvider, SnowflakedSnowflakeIdProvider};
+use tron_backend::shared::id::{
+    SnowflakeIdError, SnowflakeIdProvider, SnowflakedSnowflakeIdProvider,
+};
 
 #[test]
 fn snowflaked_adapter_error_mapping_returns_tron_owned_generation_error() {

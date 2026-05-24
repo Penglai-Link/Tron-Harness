@@ -20,9 +20,8 @@ pub(super) const WORKSPACE_ACCESS_GRANTS_MIGRATION: &str = include_str!(
 );
 pub(super) const TASKS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260516_0008_create_task_management_tasks.sql");
-pub(super) const TASKS_SUPERPOWER_RESET_MIGRATION: &str = include_str!(
-    "../../../../../migrations/20260519_0010_reset_task_management_superpower.sql"
-);
+pub(super) const TASKS_SUPERPOWER_RESET_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260519_0010_reset_task_management_superpower.sql");
 pub(super) const AUTOMATIONS_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260519_0011_create_automation_management_automations.sql"
 );
@@ -31,5 +30,14 @@ pub(super) const APPS_MIGRATION: &str =
 pub(super) const VARIABLES_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260518_0009_create_variable_management_variables.sql"
 );
+pub(super) const MODELS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260520_0012_create_model_management_models.sql");
+pub(super) const MODEL_CAPABILITIES_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260522_0013_add_model_capabilities_to_models.sql");
+pub(super) const MODEL_REMOVE_EXPLICIT_PLATFORM_RESTORE_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260522_0014_remove_explicit_workspace_platform_restore.sql"
+);
+pub(super) const MODEL_REMOVE_SEEDED_DATA_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260522_0015_remove_seeded_model_data.sql");
 pub(super) const SKILL_REGISTRY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260519_0011_create_skill_registry.sql");

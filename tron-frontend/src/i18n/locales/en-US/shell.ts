@@ -47,6 +47,15 @@ export const shell = {
   placeholders: {
     search: "Search Tron...",
   },
+  settings: {
+    back: "Back",
+    items: {
+      general: "General",
+      models: "Models",
+    },
+    navigation: "Configuration",
+    title: "Settings",
+  },
   utilityPanel: {
     notifications: "Notifications",
     settings: "System Settings",

@@ -179,8 +179,8 @@ fn seeded_auth_user(
         vec!["ADMIN", "DEVELOPER"],
         vec!["PLATFORM", "DATA"],
     );
-    user.password_hash =
-        bcrypt::hash(AUTH_OPERATOR_PASSWORD, 4).expect("auth seed password hash should be generated");
+    user.password_hash = bcrypt::hash(AUTH_OPERATOR_PASSWORD, 4)
+        .expect("auth seed password hash should be generated");
     user.password_reset_required = false;
     user
 }

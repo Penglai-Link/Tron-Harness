@@ -108,9 +108,6 @@ export function ObservabilityPage() {
     <TronShell activeItem="Observability" searchPlaceholder="Search traces, agents, metrics..." rightPanel={rightPanel}>
       <PageHeader
         title="Observability Dashboard"
-        eyebrow="Runtime telemetry"
-        status="Live"
-        description="Trace volume, latency, error budgets, heatmaps, and sampled agent spans."
         actions={
           <>
             <Button variant="secondary" onClick={() => setInspectorOpen(true)}>Open Inspector</Button>

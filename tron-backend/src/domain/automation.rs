@@ -246,9 +246,7 @@ pub fn automation_status_from_storage(value: &str) -> Result<AutomationStatus, A
     }
 }
 
-pub fn automation_execution_status_to_storage(
-    status: AutomationExecutionStatus,
-) -> &'static str {
+pub fn automation_execution_status_to_storage(status: AutomationExecutionStatus) -> &'static str {
     match status {
         AutomationExecutionStatus::Pending => "Pending",
         AutomationExecutionStatus::Running => "Running",

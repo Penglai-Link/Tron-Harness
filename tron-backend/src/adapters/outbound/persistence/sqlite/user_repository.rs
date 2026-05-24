@@ -5,8 +5,8 @@ use crate::{
     domain::{
         auth::{AuthError, AuthMethod, OAuth2IdentityLink, RefreshSession},
         user::{
-            ListUsersQuery, PagedUsers, User, UserError, UserSourceType, UserStatistics, UserStatus,
-            normalize_code_segment,
+            ListUsersQuery, PagedUsers, User, UserError, UserSourceType, UserStatistics,
+            UserStatus, normalize_code_segment,
         },
     },
     shared::id::SnowflakeId,
@@ -14,8 +14,8 @@ use crate::{
 
 use super::{
     migrations::{
-        ASSIGNMENTS_MIGRATION, AUTH_OAUTH_IDENTITIES_MIGRATION,
-        AUTH_REFRESH_SESSIONS_MIGRATION, PASSWORD_RESET_MIGRATION, USERS_MIGRATION,
+        ASSIGNMENTS_MIGRATION, AUTH_OAUTH_IDENTITIES_MIGRATION, AUTH_REFRESH_SESSIONS_MIGRATION,
+        PASSWORD_RESET_MIGRATION, USERS_MIGRATION,
     },
     seed::seeded_users,
     storage_mapping::{
@@ -192,7 +192,10 @@ impl SqliteUserRepository {
             .map_err(|_| AuthError::StorageFailure)
     }
 
-    fn source_type_for_user_code(&self, user_code: &str) -> Result<crate::domain::user::UserSourceType, UserError> {
+    fn source_type_for_user_code(
+        &self,
+        user_code: &str,
+    ) -> Result<crate::domain::user::UserSourceType, UserError> {
         let provider_code = self
             .connection
             .query_row(
@@ -637,7 +640,10 @@ impl UserRepository for SqliteUserRepository {
         Ok(())
     }
 
-    fn find_refresh_session(&mut self, session_code: &str) -> Result<Option<RefreshSession>, AuthError> {
+    fn find_refresh_session(
+        &mut self,
+        session_code: &str,
+    ) -> Result<Option<RefreshSession>, AuthError> {
         self.connection
             .query_row(
                 "SELECT id, session_code, user_id, user_code, auth_method, provider_code, refresh_token_hash, expires_at, created_at, updated_at, last_used_at, revoked_at
@@ -690,7 +696,11 @@ impl UserRepository for SqliteUserRepository {
         Ok(())
     }
 
-    fn revoke_refresh_session(&mut self, session_code: &str, revoked_at: i64) -> Result<(), AuthError> {
+    fn revoke_refresh_session(
+        &mut self,
+        session_code: &str,
+        revoked_at: i64,
+    ) -> Result<(), AuthError> {
         self.connection
             .execute(
                 "UPDATE auth_refresh_sessions
@@ -748,7 +758,9 @@ mod tests {
             .expect("seeded user should exist");
         assert_eq!(seeded_user.source_type, UserSourceType::Internal);
 
-        let link_id = repository.next_id().expect("oauth identity id should be generated");
+        let link_id = repository
+            .next_id()
+            .expect("oauth identity id should be generated");
         repository
             .upsert_oauth_identity(&OAuth2IdentityLink {
                 id: link_id,
@@ -783,7 +795,9 @@ mod tests {
             .update_user(&user)
             .expect("legacy GitHub fallback profile should be persisted");
 
-        let link_id = repository.next_id().expect("oauth identity id should be generated");
+        let link_id = repository
+            .next_id()
+            .expect("oauth identity id should be generated");
         repository
             .upsert_oauth_identity(&OAuth2IdentityLink {
                 id: link_id,

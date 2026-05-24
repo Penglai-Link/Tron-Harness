@@ -71,7 +71,9 @@ impl fmt::Display for VariableError {
                 formatter.write_str("variable workspace must reference an active workspace")
             }
             Self::InvalidKey => formatter.write_str("variable key is invalid"),
-            Self::DuplicateKey => formatter.write_str("variable key already exists in the workspace"),
+            Self::DuplicateKey => {
+                formatter.write_str("variable key already exists in the workspace")
+            }
             Self::InheritedMutationDenied => {
                 formatter.write_str("inherited variable must be overridden locally first")
             }

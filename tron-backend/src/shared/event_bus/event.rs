@@ -291,8 +291,11 @@ impl BusEvent {
             draft.producer.as_ref(),
             config.max_producer_bytes,
         )?;
-        let summary =
-            bounded_optional("summary", draft.summary.as_deref(), config.max_summary_bytes)?;
+        let summary = bounded_optional(
+            "summary",
+            draft.summary.as_deref(),
+            config.max_summary_bytes,
+        )?;
         let subject = draft
             .subject
             .map(|subject| validate_subject(subject, config))
@@ -365,7 +368,10 @@ impl BusEvent {
                 .request_id
                 .as_ref()
                 .map_or(0, std::string::String::len);
-            total += request.trace_id.as_ref().map_or(0, std::string::String::len);
+            total += request
+                .trace_id
+                .as_ref()
+                .map_or(0, std::string::String::len);
             total += request.route.as_ref().map_or(0, std::string::String::len);
             total += request
                 .session_code
@@ -386,15 +392,23 @@ impl BusEvent {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PublishOutcome {
     Disabled,
-    Accepted { event_id: SnowflakeId },
-    RejectedInvalid { field: &'static str },
+    Accepted {
+        event_id: SnowflakeId,
+    },
+    RejectedInvalid {
+        field: &'static str,
+    },
     RejectedOversize {
         field: &'static str,
         actual: usize,
         limit: usize,
     },
-    DroppedIngressFull { lane: BusIngressLane },
-    DroppedIngressDisconnected { lane: BusIngressLane },
+    DroppedIngressFull {
+        lane: BusIngressLane,
+    },
+    DroppedIngressDisconnected {
+        lane: BusIngressLane,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -568,7 +582,13 @@ fn validate_attr_list(
 fn ensure_safe_key(key: &str) -> Result<(), BusEventValidationError> {
     let normalized = key
         .chars()
-        .map(|ch| if ch == '-' { '_' } else { ch.to_ascii_lowercase() })
+        .map(|ch| {
+            if ch == '-' {
+                '_'
+            } else {
+                ch.to_ascii_lowercase()
+            }
+        })
         .collect::<String>();
     if FORBIDDEN_FIELD_TOKENS
         .iter()
@@ -580,7 +600,10 @@ fn ensure_safe_key(key: &str) -> Result<(), BusEventValidationError> {
 }
 
 fn attr_bytes(attrs: &[BusEventAttr]) -> usize {
-    attrs.iter().map(|attr| attr.key.len() + attr.value.len()).sum()
+    attrs
+        .iter()
+        .map(|attr| attr.key.len() + attr.value.len())
+        .sum()
 }
 
 fn now_millis() -> i64 {

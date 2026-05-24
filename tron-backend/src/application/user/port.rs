@@ -37,9 +37,16 @@ pub trait UserRepository: Send {
         provider_subject: &str,
     ) -> Result<Option<User>, AuthError>;
     fn create_refresh_session(&mut self, session: &RefreshSession) -> Result<(), AuthError>;
-    fn find_refresh_session(&mut self, session_code: &str) -> Result<Option<RefreshSession>, AuthError>;
+    fn find_refresh_session(
+        &mut self,
+        session_code: &str,
+    ) -> Result<Option<RefreshSession>, AuthError>;
     fn replace_refresh_session(&mut self, session: &RefreshSession) -> Result<(), AuthError>;
-    fn revoke_refresh_session(&mut self, session_code: &str, revoked_at: i64) -> Result<(), AuthError>;
+    fn revoke_refresh_session(
+        &mut self,
+        session_code: &str,
+        revoked_at: i64,
+    ) -> Result<(), AuthError>;
     fn upsert_oauth_identity(&mut self, identity: &OAuth2IdentityLink) -> Result<(), AuthError>;
 }
 

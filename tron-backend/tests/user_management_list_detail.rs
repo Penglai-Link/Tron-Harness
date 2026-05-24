@@ -12,12 +12,7 @@ use common::{app as auth_test_app, authenticated_request};
 
 #[tokio::test]
 async fn list_users_defaults_to_active_scope_with_paged_envelope() {
-    let response = request(
-        Method::GET,
-        "/api/v1/admin/users?page=1&size=20",
-        None,
-    )
-    .await;
+    let response = request(Method::GET, "/api/v1/admin/users?page=1&size=20", None).await;
 
     assert_eq!(
         response.status(),
@@ -62,7 +57,10 @@ async fn user_detail_resolves_by_user_code() {
     let json = response_json(response).await;
     assert_eq!(json["code"], "SUCCESS");
     assert_eq!(json["data"]["userCode"], "USR-0001");
-    assert!(json["data"]["id"].is_string(), "internal ID must be serialized as string");
+    assert!(
+        json["data"]["id"].is_string(),
+        "internal ID must be serialized as string"
+    );
 }
 
 async fn request(method: Method, uri: &str, body: Option<Value>) -> axum::response::Response {

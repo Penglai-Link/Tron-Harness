@@ -76,7 +76,10 @@ async fn create_override_and_delete_falls_back_to_inherited_value() {
     );
     let create_json = response_json(create_response).await;
     assert_eq!(create_json["data"]["sourceKind"], json!("Override"));
-    assert_eq!(create_json["data"]["sourceWorkspaceCode"], json!("TRON_CORE"));
+    assert_eq!(
+        create_json["data"]["sourceWorkspaceCode"],
+        json!("TRON_CORE")
+    );
 
     let delete_response = authenticated_request(
         &router,
@@ -134,7 +137,7 @@ async fn update_local_variable_persists_new_value() {
     let payload = response_json(response).await;
     assert_eq!(payload["data"]["value"], json!("sk-tron-core-rotated"));
     assert_eq!(payload["data"]["sourceKind"], json!("Local"));
-  }
+}
 
 #[tokio::test]
 async fn duplicate_local_keys_and_inherited_updates_are_rejected() {

@@ -501,7 +501,6 @@ export function UserDetailsPage() {
     <TronShell activeItem="Users" searchPlaceholder="Search users...">
       <PageHeader
         title={user.displayName}
-        status={user.userCode}
         actions={<Button asChild variant="secondary"><Link to="/admin/users"><ArrowLeft size={16} aria-hidden="true" />Back to Users</Link></Button>}
       />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">

@@ -77,7 +77,6 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
     <RoutePageShell activeItem="Memory">
       <PageHeader
         title="Memory Repository"
-        description="Manage, query, and structure agent memory fragments."
         actions={<><Button variant="secondary" onClick={() => setNotice("Import data drawer opened")}><Upload size={16} />Import Data</Button><Button onClick={() => setNotice("Index sync queued")}><RefreshCw size={16} />Sync Indices</Button></>}
       />
       <Notice value={notice} />

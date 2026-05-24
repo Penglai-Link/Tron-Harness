@@ -5,11 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use crate::{
-    application::user::UserService,
-    domain::auth::CurrentSession,
-    response::ApiResponse,
-};
+use crate::{application::user::UserService, domain::auth::CurrentSession, response::ApiResponse};
 
 use super::{
     error_mapper::auth_error_response,
@@ -137,11 +133,7 @@ pub async fn oauth2_callback(
                 HeaderValue::from_str(&format!("/auth/callback?redirect={redirect_target}"))
                     .expect("oauth2 callback redirect should be valid"),
             );
-            append_auth_cookies(
-                response.headers_mut(),
-                &users,
-                &session.refresh_token,
-            );
+            append_auth_cookies(response.headers_mut(), &users, &session.refresh_token);
             response.headers_mut().append(
                 header::SET_COOKIE,
                 HeaderValue::from_str(&clear_state_cookie(users.cookie_secure()))
@@ -189,11 +181,7 @@ fn response_with_clear_cookies<T: IntoResponse>(
     response
 }
 
-fn append_auth_cookies(
-    headers: &mut HeaderMap,
-    users: &UserService,
-    refresh_token: &str,
-) {
+fn append_auth_cookies(headers: &mut HeaderMap, users: &UserService, refresh_token: &str) {
     headers.append(
         header::SET_COOKIE,
         HeaderValue::from_str(&auth_cookie(

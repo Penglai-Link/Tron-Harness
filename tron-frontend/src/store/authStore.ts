@@ -1,6 +1,12 @@
 import { create } from "zustand";
 
 import {
+  LOGIN_PATH,
+} from "@/domain/auth/constants";
+import {
+  buildLoginUrl,
+} from "@/domain/auth/model";
+import {
   loginInternal,
   logoutAuthSession,
   refreshAuthSession,
@@ -43,6 +49,19 @@ let refreshPromise: Promise<boolean> | null = null;
 let sessionRefreshTimer: number | null = null;
 let accessTokenExpiresAtMs: number | null = null;
 let authEpoch = 0;
+
+function redirectToLoginIfNeeded() {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  const { pathname, search } = window.location;
+  if (pathname === LOGIN_PATH) {
+    return;
+  }
+
+  window.location.replace(buildLoginUrl(`${pathname}${search}`));
+}
 
 function applyAuthenticatedSession(
   set: AuthStateSetter,

@@ -63,7 +63,10 @@ pub fn auth_error_response(error: AuthError) -> Response {
             "AUTH_OAUTH2_UPSTREAM_FAILED",
             "oauth2 upstream request failed",
         ),
-        AuthError::TokenEncodingFailed | AuthError::TokenDecodingFailed | AuthError::PasswordVerifyFailed | AuthError::StorageFailure => (
+        AuthError::TokenEncodingFailed
+        | AuthError::TokenDecodingFailed
+        | AuthError::PasswordVerifyFailed
+        | AuthError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "AUTH_INTERNAL_ERROR",
             "auth operation failed",

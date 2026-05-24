@@ -268,6 +268,52 @@ async function routeAuthApi(
 
     await fulfillJson(route, successEnvelope({ count: 1 }));
   });
+
+  await page.route("**/api/v1/admin/workspaces/switcher", async (route) => {
+    if (
+      !currentSession
+      || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
+    ) {
+      await fulfillJson(route, unauthorizedEnvelope(), 401);
+      return;
+    }
+
+    await fulfillJson(route, successEnvelope({
+      primarySpaces: [
+        {
+          workspaceCode: "PLATFORM",
+          name: "Platform",
+          description: "Platform workspace",
+          childCount: 1,
+          status: "Active",
+        },
+      ],
+      secondarySpaces: [
+        {
+          workspaceCode: "PLATFORM",
+          primaryWorkspaceCode: "PLATFORM",
+          label: "Platform",
+          name: "Platform",
+          description: "Platform workspace",
+          depth: 1,
+          childCount: 1,
+          effectiveUserCount: 1,
+          status: "Active",
+        },
+        {
+          workspaceCode: "DATA",
+          primaryWorkspaceCode: "PLATFORM",
+          label: "Platform / Data",
+          name: "Data",
+          description: "Data workspace",
+          depth: 2,
+          childCount: 0,
+          effectiveUserCount: 1,
+          status: "Active",
+        },
+      ],
+    }));
+  });
 }
 
 test.beforeAll(async () => {
@@ -333,6 +379,9 @@ test("redirects anonymous users to login, signs in, reaches user management, and
 
   await page.goto(`${frontendBaseUrl}/admin/users`);
   await expect(page).toHaveURL(/\/login\?redirect=%2Fadmin%2Fusers$/);
+
+  await page.goto(`${frontendBaseUrl}/settings/models`);
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fsettings%2Fmodels$/);
 });
 
 test("supports oauth2 entry and lands on the intended protected route", async ({ page }) => {

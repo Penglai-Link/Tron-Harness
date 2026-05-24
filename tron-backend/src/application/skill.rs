@@ -13,12 +13,12 @@ use crate::{
     domain::{
         skill::{
             PreparedWorkspaceSkill, PreparedWorkspaceSkills, RegistrySkill, RegistrySkillDetail,
-            RegistrySkillFile, RegistrySkillListItem, RegistrySkillListQuery, SkillBindingMutationResult,
-            SkillError, SkillManagedBy, SkillRegistryMutationResult, SkillRegistryState,
-            SkillRegistryUninstallResult,
-            SkillRegistrySyncResult, SkillSearchCandidate, SkillSearchMode, SkillSourceType,
-            SkillUpdateStatus, SkillWorkspaceSourceKind, WorkspaceSkillBinding,
-            WorkspaceSkillDetail, WorkspaceSkillListItem, WorkspaceSkillListQuery,
+            RegistrySkillFile, RegistrySkillListItem, RegistrySkillListQuery,
+            SkillBindingMutationResult, SkillError, SkillManagedBy, SkillRegistryMutationResult,
+            SkillRegistryState, SkillRegistrySyncResult, SkillRegistryUninstallResult,
+            SkillSearchCandidate, SkillSearchMode, SkillSourceType, SkillUpdateStatus,
+            SkillWorkspaceSourceKind, WorkspaceSkillBinding, WorkspaceSkillDetail,
+            WorkspaceSkillListItem, WorkspaceSkillListQuery,
         },
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceStatus},
     },
@@ -42,8 +42,10 @@ pub trait SkillRegistryRepository: Send {
         &mut self,
         workspace_code: Option<&str>,
     ) -> Result<Vec<WorkspaceSkillBinding>, SkillError>;
-    fn upsert_workspace_binding(&mut self, binding: &WorkspaceSkillBinding)
-    -> Result<(), SkillError>;
+    fn upsert_workspace_binding(
+        &mut self,
+        binding: &WorkspaceSkillBinding,
+    ) -> Result<(), SkillError>;
     fn delete_workspace_binding(
         &mut self,
         workspace_code: &str,
@@ -247,7 +249,9 @@ impl SkillRegistryService {
             source_workspace_name: resolved
                 .as_ref()
                 .map(|binding| binding.source_workspace_name.clone()),
-            source_label: resolved.as_ref().map(|binding| binding.source_label.clone()),
+            source_label: resolved
+                .as_ref()
+                .map(|binding| binding.source_label.clone()),
             shadowed_workspace_code: resolved
                 .as_ref()
                 .and_then(|binding| binding.shadowed_workspace_code.clone()),
@@ -327,7 +331,12 @@ impl SkillRegistryService {
                 files,
             ))
         } else {
-            Ok(build_workspace_skill_detail(None, &resolved, None, Vec::new()))
+            Ok(build_workspace_skill_detail(
+                None,
+                &resolved,
+                None,
+                Vec::new(),
+            ))
         }
     }
 
@@ -366,7 +375,14 @@ impl SkillRegistryService {
         let (_, skill_name) = split_package_ref(&package_ref)?;
 
         let output = self.run_skills_command(
-            ["add", package_ref.as_str(), "--copy", "-a", "universal", "-y"],
+            [
+                "add",
+                package_ref.as_str(),
+                "--copy",
+                "-a",
+                "universal",
+                "-y",
+            ],
             self.registry_root(),
         )?;
         if !output.status.success() {
@@ -448,7 +464,11 @@ impl SkillRegistryService {
         Ok(SkillRegistryUninstallResult {
             skill_name,
             removed_bindings_count,
-            kept_bindings_count: if remove_bindings { 0 } else { kept_bindings_count },
+            kept_bindings_count: if remove_bindings {
+                0
+            } else {
+                kept_bindings_count
+            },
         })
     }
 
@@ -554,7 +574,10 @@ impl SkillRegistryService {
         fs::create_dir_all(&destination_root).map_err(|_| SkillError::StorageFailure)?;
 
         let mut prepared = Vec::new();
-        for binding in bindings.into_values().filter(|binding| binding.binding.enabled) {
+        for binding in bindings
+            .into_values()
+            .filter(|binding| binding.binding.enabled)
+        {
             let Some(skill) = skill_map.get(&binding.binding.skill_name) else {
                 continue;
             };
@@ -749,7 +772,9 @@ impl SkillRegistryService {
             for binding in workspace_bindings.iter().cloned() {
                 let previous = resolved.remove(&binding.skill_name);
                 let source_kind = match previous {
-                    Some(_) if entry.code == current_workspace_code => SkillWorkspaceSourceKind::Override,
+                    Some(_) if entry.code == current_workspace_code => {
+                        SkillWorkspaceSourceKind::Override
+                    }
                     Some(_) => SkillWorkspaceSourceKind::Inherited,
                     None if entry.code == current_workspace_code => SkillWorkspaceSourceKind::Local,
                     None => SkillWorkspaceSourceKind::Inherited,
@@ -1318,7 +1343,9 @@ fn parse_source_type(value: &str) -> Option<SkillSourceType> {
 
 fn map_workspace_error(error: WorkspaceError) -> SkillError {
     match error {
-        WorkspaceError::NotFound | WorkspaceError::InvalidWorkspaceCode => SkillError::InvalidWorkspace,
+        WorkspaceError::NotFound | WorkspaceError::InvalidWorkspaceCode => {
+            SkillError::InvalidWorkspace
+        }
         _ => SkillError::StorageFailure,
     }
 }
@@ -1340,8 +1367,8 @@ fn copy_dir_all(source: &Path, destination: &Path) -> Result<(), SkillError> {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, fs};
     use std::time::{SystemTime, UNIX_EPOCH};
+    use std::{collections::BTreeMap, fs};
 
     use crate::{
         application::{
@@ -1363,9 +1390,9 @@ mod tests {
     };
 
     use super::{
-        build_package_ref, parse_repo_listing_output, parse_search_output, SkillRegistryRepository,
-        SkillRegistryService, DEFAULT_TIMESTAMP,
-        parse_skill_frontmatter, read_skills_lock, strip_ansi,
+        DEFAULT_TIMESTAMP, SkillRegistryRepository, SkillRegistryService, build_package_ref,
+        parse_repo_listing_output, parse_search_output, parse_skill_frontmatter, read_skills_lock,
+        strip_ansi,
     };
 
     #[derive(Default)]
@@ -1375,7 +1402,9 @@ mod tests {
     }
 
     impl SkillRegistryRepository for TestSkillRegistryRepository {
-        fn list_registry_skills(&mut self) -> Result<Vec<RegistrySkill>, crate::domain::skill::SkillError> {
+        fn list_registry_skills(
+            &mut self,
+        ) -> Result<Vec<RegistrySkill>, crate::domain::skill::SkillError> {
             Ok(self.registry_skills.values().cloned().collect())
         }
 
@@ -1402,9 +1431,7 @@ mod tests {
             Ok(self
                 .workspace_bindings
                 .iter()
-                .filter(|binding| {
-                    workspace_code.is_none_or(|code| binding.workspace_code == code)
-                })
+                .filter(|binding| workspace_code.is_none_or(|code| binding.workspace_code == code))
                 .cloned()
                 .collect())
         }
@@ -1657,7 +1684,11 @@ mod tests {
     fn build_test_workspace_service() -> WorkspaceService {
         WorkspaceService::new(
             DummyWorkspaceRepository,
-            UserService::new(DummyUserRepository, DummyPasswordHasher, AppConfig::default().auth),
+            UserService::new(
+                DummyUserRepository,
+                DummyPasswordHasher,
+                AppConfig::default().auth,
+            ),
             RoleService::new(DummyRoleRepository),
         )
     }
@@ -1674,7 +1705,10 @@ github/awesome-copilot@javascript-typescript-jest 10.5K installs\n\
         assert_eq!(candidates[0].source_ref, "wshobson/agents");
         assert_eq!(candidates[0].skill_name, "typescript-advanced-types");
         assert_eq!(candidates[0].description, None);
-        assert_eq!(candidates[0].installs_label.as_deref(), Some("42K installs"));
+        assert_eq!(
+            candidates[0].installs_label.as_deref(),
+            Some("42K installs")
+        );
         assert_eq!(
             candidates[1].detail_url.as_deref(),
             Some("https://skills.sh/github/awesome-copilot/javascript-typescript-jest")
@@ -1826,11 +1860,8 @@ github/awesome-copilot@javascript-typescript-jest 10.5K installs\n\
             }],
         };
 
-        let service = SkillRegistryService::new(
-            repository,
-            build_test_workspace_service(),
-            &registry_root,
-        );
+        let service =
+            SkillRegistryService::new(repository, build_test_workspace_service(), &registry_root);
 
         service
             .sync_registry(false, false)

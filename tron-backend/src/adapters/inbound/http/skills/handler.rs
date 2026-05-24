@@ -23,7 +23,10 @@ pub async fn search_skills(
     State(skills): State<SkillRegistryService>,
     Json(request): Json<SearchSkillsRequest>,
 ) -> Response {
-    match skills.search_marketplace(&request.query, request.mode.unwrap_or(SkillSearchMode::Find)) {
+    match skills.search_marketplace(
+        &request.query,
+        request.mode.unwrap_or(SkillSearchMode::Find),
+    ) {
         Ok(records) => Json(ApiResponse::success(records)).into_response(),
         Err(error) => skill_error_response(error),
     }

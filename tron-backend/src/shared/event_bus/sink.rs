@@ -127,13 +127,15 @@ impl AguiEventSink {
             .streams
             .iter()
             .filter(|(_, stream)| {
-                stream.watcher_count == 0 && now.duration_since(stream.last_touched) >= self.stream_idle_ttl
+                stream.watcher_count == 0
+                    && now.duration_since(stream.last_touched) >= self.stream_idle_ttl
             })
             .map(|(key, _)| key.clone())
             .collect::<Vec<_>>();
         for key in stale_keys {
             if let Some(stream) = state.streams.remove(&key) {
-                state.total_replay_bytes = state.total_replay_bytes.saturating_sub(stream.total_bytes);
+                state.total_replay_bytes =
+                    state.total_replay_bytes.saturating_sub(stream.total_bytes);
             }
         }
     }
@@ -149,7 +151,12 @@ impl AguiEventSink {
             let oldest_key = state
                 .streams
                 .iter()
-                .filter_map(|(key, stream)| stream.entries.front().map(|entry| (key.clone(), entry.captured_at)))
+                .filter_map(|(key, stream)| {
+                    stream
+                        .entries
+                        .front()
+                        .map(|entry| (key.clone(), entry.captured_at))
+                })
                 .min_by_key(|(_, captured_at)| *captured_at)
                 .map(|(key, _)| key);
             let Some(oldest_key) = oldest_key else {

@@ -41,7 +41,9 @@ async fn providers_refresh_and_logout_follow_the_uniform_auth_contract() {
     let login_json = response_json(login_response).await;
     assert_eq!(login_json["data"]["tokenType"], "Bearer");
     assert!(
-        login_json["data"]["accessToken"].as_str().is_some_and(|value| !value.is_empty()),
+        login_json["data"]["accessToken"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty()),
         "login should return an access token in the response body",
     );
     assert!(
@@ -56,7 +58,8 @@ async fn providers_refresh_and_logout_follow_the_uniform_auth_contract() {
             .any(|value| value.starts_with("tron_access_token=")),
         "login should not set an access cookie",
     );
-    let refresh_cookie_header = cookie_header_from_set_cookie(&set_cookie_headers, &["tron_refresh_token"]);
+    let refresh_cookie_header =
+        cookie_header_from_set_cookie(&set_cookie_headers, &["tron_refresh_token"]);
 
     let refresh_response = request(
         &app,
@@ -75,9 +78,14 @@ async fn providers_refresh_and_logout_follow_the_uniform_auth_contract() {
     let refresh_json = response_json(refresh_response).await;
     assert_eq!(refresh_json["code"], "SUCCESS");
     assert_eq!(refresh_json["data"]["tokenType"], "Bearer");
-    assert_eq!(refresh_json["data"]["session"]["user"]["username"], AUTH_LOGIN);
+    assert_eq!(
+        refresh_json["data"]["session"]["user"]["username"],
+        AUTH_LOGIN
+    );
     assert!(
-        refresh_json["data"]["accessToken"].as_str().is_some_and(|value| !value.is_empty()),
+        refresh_json["data"]["accessToken"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty()),
         "refresh should return a fresh access token in the response body",
     );
     assert!(

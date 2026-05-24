@@ -1,12 +1,15 @@
-use axum::{Router, routing::{get, post}};
+use axum::{
+    Router,
+    routing::{get, post},
+};
 
 use crate::app::AppState;
 
 use super::handler::{
     bind_workspace_skill, check_registry_skill_updates, get_registry_skill, get_workspace_skill,
-    install_registry_skill, list_registry_skills, list_workspace_skills,
-    refresh_workspace_skills, rescan_registry_skills, search_skills, unbind_workspace_skill,
-    uninstall_registry_skill, update_registry_skills,
+    install_registry_skill, list_registry_skills, list_workspace_skills, refresh_workspace_skills,
+    rescan_registry_skills, search_skills, unbind_workspace_skill, uninstall_registry_skill,
+    update_registry_skills,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -25,7 +28,10 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/skills/registry/check-updates",
             post(check_registry_skill_updates),
         )
-        .route("/api/v1/skills/registry/update", post(update_registry_skills))
+        .route(
+            "/api/v1/skills/registry/update",
+            post(update_registry_skills),
+        )
         .route(
             "/api/v1/skills/registry/{skill_name}",
             get(get_registry_skill).delete(uninstall_registry_skill),

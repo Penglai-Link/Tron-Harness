@@ -10,8 +10,8 @@ use crate::{
         task::{
             PagedTaskRecords, TASK_STATUSES, Task, TaskCodeLink, TaskDetail, TaskError,
             TaskKanbanColumn, TaskLifecycleResult, TaskListItem, TaskListQuery, TaskOptions,
-            TaskPriority, TaskSourceType, TaskStatus, TaskSummary, TaskType,
-            TaskUserAssignment, infer_task_role, task_default_status_for_role, task_options,
+            TaskPriority, TaskSourceType, TaskStatus, TaskSummary, TaskType, TaskUserAssignment,
+            infer_task_role, task_default_status_for_role, task_options,
             task_status_allowed_for_role, task_statuses_for_role,
         },
         workspace::{WorkspaceAccessListQuery, WorkspaceError, WorkspaceStatus},
@@ -141,7 +141,9 @@ impl TaskService {
         let include_archived = query.include_archived.unwrap_or(false);
         let items = self.filtered_task_items(&query)?;
         let statuses = match query.task_type {
-            Some(TaskType::Bug) => task_statuses_for_role(crate::domain::task::TaskRole::Bug).to_vec(),
+            Some(TaskType::Bug) => {
+                task_statuses_for_role(crate::domain::task::TaskRole::Bug).to_vec()
+            }
             Some(TaskType::Feature) => {
                 task_statuses_for_role(crate::domain::task::TaskRole::FeatureRoot).to_vec()
             }
@@ -579,7 +581,10 @@ impl TaskService {
                 .attr("workspaceCode", detail.workspace_code.clone())
                 .attr("status", format!("{:?}", detail.status))
                 .attr("progress", detail.progress.to_string())
-                .attr("assigneeCount", detail.assignee_user_codes.len().to_string())
+                .attr(
+                    "assigneeCount",
+                    detail.assignee_user_codes.len().to_string(),
+                )
                 .attr("agentCount", detail.agent_codes.len().to_string())
                 .attr("appCount", detail.app_codes.len().to_string()),
         );

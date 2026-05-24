@@ -47,7 +47,9 @@ impl SqliteVariableRepository {
     fn seed_if_empty(&mut self) -> Result<(), VariableError> {
         let count: i64 = self
             .connection
-            .query_row("SELECT COUNT(*) FROM workspace_variables", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM workspace_variables", [], |row| {
+                row.get(0)
+            })
             .map_err(storage_error)?;
         if count > 0 {
             return Ok(());

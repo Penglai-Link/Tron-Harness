@@ -89,7 +89,6 @@ export function PromptsPage() {
     <TronShell activeItem="Prompts" searchPlaceholder="Search anything...">
       <PageHeader
         title="Prompt Management"
-        status="Split pane"
         actions={
           <>
             <Button variant="secondary" onClick={() => setNotice(`${filtered.length} prompts exported`)}>Bulk Export</Button>

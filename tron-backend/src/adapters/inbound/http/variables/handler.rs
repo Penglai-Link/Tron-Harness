@@ -6,8 +6,7 @@ use axum::{
 };
 
 use crate::{
-    application::variable::VariableService,
-    domain::variable::VariableCatalogQuery,
+    application::variable::VariableService, domain::variable::VariableCatalogQuery,
     response::ApiResponse,
 };
 

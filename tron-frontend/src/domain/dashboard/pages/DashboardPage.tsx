@@ -49,7 +49,6 @@ function DashboardContent() {
     <>
       <PageHeader
         title="Workspace Overview"
-        description="Monitor agent health, task execution, and system inheritance."
         actions={
           <Button variant="secondary" onClick={() => setShowAll((current) => !current)}>
             <Download size={16} aria-hidden="true" />

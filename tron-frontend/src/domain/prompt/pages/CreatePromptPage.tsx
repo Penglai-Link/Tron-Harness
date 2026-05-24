@@ -79,7 +79,6 @@ export function CreatePromptPage() {
       <PageHeader
         breadcrumbs={[{ label: "Prompts", href: "/prompts" }, { label: "New" }]}
         title="Create New Prompt"
-        status={navItem}
         actions={
           <>
             <Button variant="secondary" onClick={() => setNotice("Prompt test queued")}>

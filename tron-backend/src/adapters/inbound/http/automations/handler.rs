@@ -13,9 +13,7 @@ use crate::{
 
 use super::{
     error_mapper::automation_error_response,
-    request::{
-        CreateAutomationRequest, UpdateAutomationRequest, UpdateAutomationStatusRequest,
-    },
+    request::{CreateAutomationRequest, UpdateAutomationRequest, UpdateAutomationStatusRequest},
 };
 
 pub async fn options(State(automations): State<AutomationService>) -> Response {

@@ -118,7 +118,6 @@ export function TasksKanbanPage() {
     <TronShell activeItem="Tasks" searchPlaceholder="Search tasks...">
       <PageHeader
         title="Task Management"
-        status={loading ? "Loading" : selectedTaskCode ?? undefined}
         actions={
           <>
             <Button variant="secondary" onClick={() => {

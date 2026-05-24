@@ -84,9 +84,6 @@ export function SharedShellPreviewPage() {
           { label: "Tron", href: "/dashboard" },
           { label: "Shared Shell Preview" },
         ]}
-        description="Reusable layout and primitive contracts derived from the PRD, design system, and the full Stitch design scan."
-        eyebrow="Frontend onboarding / Step 2"
-        status="Shared contract"
         title="Workspace console foundation"
         actions={
           <>

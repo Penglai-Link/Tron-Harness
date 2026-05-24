@@ -114,25 +114,27 @@ impl AppConfig {
             dev_oauth2_enabled: parse_bool_env("TRON_AUTH_DEV_OAUTH2_ENABLED", false)?,
             dev_oauth2_name: env::var("TRON_AUTH_DEV_OAUTH2_NAME")
                 .unwrap_or_else(|_| DEFAULT_AUTH_DEV_OAUTH2_NAME.into()),
-            github_oauth: github_oauth_enabled.then(|| {
-                Ok(GitHubOAuthConfig {
-                    client_id: required_env("TRON_AUTH_GITHUB_CLIENT_ID")?,
-                    client_secret: required_env("TRON_AUTH_GITHUB_CLIENT_SECRET")?,
-                    redirect_uri: required_env("TRON_AUTH_GITHUB_REDIRECT_URI")?,
-                    name: env::var("TRON_AUTH_GITHUB_NAME")
-                        .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_NAME.into()),
-                    scope: env::var("TRON_AUTH_GITHUB_SCOPE")
-                        .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_SCOPE.into()),
-                    authorize_url: env::var("TRON_AUTH_GITHUB_AUTHORIZE_URL")
-                        .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_AUTHORIZE_URL.into()),
-                    token_url: env::var("TRON_AUTH_GITHUB_TOKEN_URL")
-                        .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_TOKEN_URL.into()),
-                    user_api_url: env::var("TRON_AUTH_GITHUB_USER_API_URL")
-                        .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_USER_API_URL.into()),
-                    emails_api_url: env::var("TRON_AUTH_GITHUB_EMAILS_API_URL")
-                        .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_EMAILS_API_URL.into()),
+            github_oauth: github_oauth_enabled
+                .then(|| {
+                    Ok(GitHubOAuthConfig {
+                        client_id: required_env("TRON_AUTH_GITHUB_CLIENT_ID")?,
+                        client_secret: required_env("TRON_AUTH_GITHUB_CLIENT_SECRET")?,
+                        redirect_uri: required_env("TRON_AUTH_GITHUB_REDIRECT_URI")?,
+                        name: env::var("TRON_AUTH_GITHUB_NAME")
+                            .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_NAME.into()),
+                        scope: env::var("TRON_AUTH_GITHUB_SCOPE")
+                            .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_SCOPE.into()),
+                        authorize_url: env::var("TRON_AUTH_GITHUB_AUTHORIZE_URL")
+                            .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_AUTHORIZE_URL.into()),
+                        token_url: env::var("TRON_AUTH_GITHUB_TOKEN_URL")
+                            .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_TOKEN_URL.into()),
+                        user_api_url: env::var("TRON_AUTH_GITHUB_USER_API_URL")
+                            .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_USER_API_URL.into()),
+                        emails_api_url: env::var("TRON_AUTH_GITHUB_EMAILS_API_URL")
+                            .unwrap_or_else(|_| DEFAULT_AUTH_GITHUB_EMAILS_API_URL.into()),
+                    })
                 })
-            }).transpose()?,
+                .transpose()?,
         };
 
         Ok(Self {
@@ -225,7 +227,9 @@ impl fmt::Display for ConfigError {
             Self::InvalidBoolean { key, value } => {
                 write!(formatter, "invalid {key} value `{value}`")
             }
-            Self::MissingEnv { key } => write!(formatter, "missing required environment variable `{key}`"),
+            Self::MissingEnv { key } => {
+                write!(formatter, "missing required environment variable `{key}`")
+            }
             Self::InvalidSocketAddr {
                 bind_address, port, ..
             } => write!(
@@ -257,39 +261,33 @@ fn required_env(key: &str) -> Result<String, ConfigError> {
 
 fn parse_i64_env(key: &str, default: i64) -> Result<i64, ConfigError> {
     match env::var(key) {
-        Ok(value) => value
-            .parse()
-            .map_err(|source| ConfigError::InvalidInteger {
-                key: key.into(),
-                value,
-                source,
-            }),
+        Ok(value) => value.parse().map_err(|source| ConfigError::InvalidInteger {
+            key: key.into(),
+            value,
+            source,
+        }),
         Err(_) => Ok(default),
     }
 }
 
 fn parse_usize_env(key: &str, default: usize) -> Result<usize, ConfigError> {
     match env::var(key) {
-        Ok(value) => value
-            .parse()
-            .map_err(|source| ConfigError::InvalidInteger {
-                key: key.into(),
-                value,
-                source,
-            }),
+        Ok(value) => value.parse().map_err(|source| ConfigError::InvalidInteger {
+            key: key.into(),
+            value,
+            source,
+        }),
         Err(_) => Ok(default),
     }
 }
 
 fn parse_u64_env(key: &str, default: u64) -> Result<u64, ConfigError> {
     match env::var(key) {
-        Ok(value) => value
-            .parse()
-            .map_err(|source| ConfigError::InvalidInteger {
-                key: key.into(),
-                value,
-                source,
-            }),
+        Ok(value) => value.parse().map_err(|source| ConfigError::InvalidInteger {
+            key: key.into(),
+            value,
+            source,
+        }),
         Err(_) => Ok(default),
     }
 }

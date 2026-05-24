@@ -9,7 +9,10 @@ export type AppPageArchetype =
   | "split-pane"
   | "chat"
   | "detail"
-  | "permission-grid";
+  | "permission-grid"
+  | "settings";
+
+export type AppRouteLayout = "console" | "settings";
 
 export interface AppRoute {
   pageId: string;
@@ -17,10 +20,13 @@ export interface AppRoute {
   activeNav: string;
   title: string;
   archetype: AppPageArchetype;
+  layout?: AppRouteLayout;
+  settingsNav?: string;
 }
 
 export const appRoutes: AppRoute[] = [
-  { pageId: "models.new", route: "/models/new", activeNav: "Models", title: "Add Model", archetype: "form-inspector" },
+  { pageId: "models.new", route: "/models/new", activeNav: "Models", title: "Create Workspace Model", archetype: "form" },
+  { pageId: "models.detail", route: "/models/detail", activeNav: "Models", title: "Workspace Model Detail", archetype: "detail" },
   { pageId: "apps.index", route: "/apps", activeNav: "Apps", title: "App Management", archetype: "data-table" },
   { pageId: "apps.new", route: "/apps/new", activeNav: "Apps", title: "Create App", archetype: "form" },
   { pageId: "apps.detail", route: "/apps/detail", activeNav: "Apps", title: "App Detail", archetype: "detail" },
@@ -44,7 +50,7 @@ export const appRoutes: AppRoute[] = [
   { pageId: "agent.main", route: "/agent", activeNav: "Main Agent", title: "Main Agent", archetype: "chat" },
   { pageId: "memory.index", route: "/memory", activeNav: "Memory", title: "Memory Repository", archetype: "data-table" },
   { pageId: "memory.details", route: "/memory/details", activeNav: "Memory", title: "Memory Details", archetype: "split-pane" },
-  { pageId: "models.index", route: "/models", activeNav: "Models", title: "Model Registry", archetype: "split-pane" },
+  { pageId: "models.index", route: "/models", activeNav: "Models", title: "Model Registry", archetype: "data-table" },
   { pageId: "observability.index", route: "/observability", activeNav: "Observability", title: "Observability Dashboard", archetype: "dashboard" },
   { pageId: "prompts.index", route: "/prompts", activeNav: "Prompts", title: "Prompt Management", archetype: "split-pane" },
   { pageId: "resources.index", route: "/resources", activeNav: "Resources", title: "Resources", archetype: "data-table" },
@@ -58,4 +64,8 @@ export const appRoutes: AppRoute[] = [
   { pageId: "admin.users", route: "/admin/users", activeNav: "Users", title: "Users", archetype: "data-table" },
   { pageId: "variables.index", route: "/variables", activeNav: "Variables", title: "Variable Management", archetype: "split-pane" },
   { pageId: "variables.details", route: "/variables/details", activeNav: "Variables", title: "Variable Details", archetype: "split-pane" },
+  { pageId: "settings.general", route: "/settings/general", activeNav: "Settings", title: "General Settings", archetype: "settings", layout: "settings", settingsNav: "General" },
+  { pageId: "settings.models", route: "/settings/models", activeNav: "Settings", title: "Platform Models", archetype: "settings", layout: "settings", settingsNav: "Models" },
+  { pageId: "settings.modelsNew", route: "/settings/models/new", activeNav: "Settings", title: "Create Platform Model", archetype: "settings", layout: "settings", settingsNav: "Models" },
+  { pageId: "settings.modelsDetail", route: "/settings/models/detail", activeNav: "Settings", title: "Platform Model Detail", archetype: "settings", layout: "settings", settingsNav: "Models" },
 ] as const;

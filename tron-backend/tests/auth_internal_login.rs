@@ -31,11 +31,16 @@ async fn internal_login_accepts_username_and_returns_current_session() {
     let set_cookie_headers = header_values(login_response.headers(), header::SET_COOKIE);
     let login_json = response_json(login_response).await;
     assert_eq!(login_json["code"], "SUCCESS");
-    assert_eq!(login_json["data"]["session"]["user"]["username"], AUTH_LOGIN);
+    assert_eq!(
+        login_json["data"]["session"]["user"]["username"],
+        AUTH_LOGIN
+    );
     assert_eq!(login_json["data"]["session"]["authenticated"], true);
     assert_eq!(login_json["data"]["tokenType"], "Bearer");
     assert!(
-        login_json["data"]["accessToken"].as_str().is_some_and(|value| !value.is_empty()),
+        login_json["data"]["accessToken"]
+            .as_str()
+            .is_some_and(|value| !value.is_empty()),
         "login should return a bearer access token in the response body",
     );
     assert!(

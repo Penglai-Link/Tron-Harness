@@ -27,7 +27,9 @@ async fn automation_options_and_empty_workspace_list() {
     );
     assert_eq!(
         options_json["data"]["executionStatuses"],
-        json!(["Pending", "Running", "Success", "Failed", "Canceled", "Skipped"])
+        json!([
+            "Pending", "Running", "Success", "Failed", "Canceled", "Skipped"
+        ])
     );
     assert_eq!(options_json["data"]["defaultStatus"], "Paused");
 

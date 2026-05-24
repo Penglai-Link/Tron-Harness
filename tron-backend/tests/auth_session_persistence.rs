@@ -46,7 +46,8 @@ async fn refresh_sessions_and_oauth2_identity_links_persist_without_plaintext_to
         "AC-AUTH-06 RED: internal login should create a persisted refresh session",
     );
     let refresh_cookie_headers = header_values(login_response.headers(), header::SET_COOKIE);
-    let refresh_cookie_header = cookie_header_from_set_cookie(&refresh_cookie_headers, &["tron_refresh_token"]);
+    let refresh_cookie_header =
+        cookie_header_from_set_cookie(&refresh_cookie_headers, &["tron_refresh_token"]);
     let refresh_cookie_value = refresh_cookie_header
         .strip_prefix("tron_refresh_token=")
         .expect("refresh cookie should be present")
@@ -93,7 +94,8 @@ async fn refresh_sessions_and_oauth2_identity_links_persist_without_plaintext_to
         "AC-AUTH-06 RED: OAuth2 callback should persist an identity link",
     );
 
-    let connection = Connection::open(&database_path).expect("auth test database should be readable");
+    let connection =
+        Connection::open(&database_path).expect("auth test database should be readable");
     let stored_hash: String = connection
         .query_row(
             "SELECT refresh_token_hash FROM auth_refresh_sessions ORDER BY created_at DESC LIMIT 1",
@@ -113,7 +115,10 @@ async fn refresh_sessions_and_oauth2_identity_links_persist_without_plaintext_to
             |row| row.get(0),
         )
         .expect("OAuth2 identity link should persist");
-    assert!(link_count >= 1, "OAuth2 callback should create at least one identity link");
+    assert!(
+        link_count >= 1,
+        "OAuth2 callback should create at least one identity link"
+    );
 
     let _ = fs::remove_file(&database_path);
 }

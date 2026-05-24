@@ -16,9 +16,8 @@ use crate::{
             WorkspaceAccessListQuery, WorkspaceDetail, WorkspaceEffectiveUser, WorkspaceError,
             WorkspaceLifecycleResult, WorkspaceLineageItem, WorkspaceListQuery, WorkspaceOption,
             WorkspaceRoleAccess, WorkspaceRoleAccessListItem, WorkspaceStatistics, WorkspaceStatus,
-            WorkspaceSwitcherData, WorkspaceSwitcherPrimarySpace,
-            WorkspaceSwitcherSecondarySpace, WorkspaceTreeNode, WorkspaceUserAccess,
-            WorkspaceUserAccessListItem,
+            WorkspaceSwitcherData, WorkspaceSwitcherPrimarySpace, WorkspaceSwitcherSecondarySpace,
+            WorkspaceTreeNode, WorkspaceUserAccess, WorkspaceUserAccessListItem,
         },
     },
     shared::{
@@ -306,7 +305,12 @@ impl WorkspaceService {
         }
         workspaces.push(workspace);
         let detail = self.get_workspace(&workspace_code)?;
-        self.publish_workspace_detail_event("workspace.created", "Created workspace", actor, &detail);
+        self.publish_workspace_detail_event(
+            "workspace.created",
+            "Created workspace",
+            actor,
+            &detail,
+        );
         Ok(detail)
     }
 
@@ -334,7 +338,12 @@ impl WorkspaceService {
             repository.update_workspace(&workspace)?;
         }
         let detail = self.get_workspace(workspace_code)?;
-        self.publish_workspace_detail_event("workspace.updated", "Updated workspace", actor, &detail);
+        self.publish_workspace_detail_event(
+            "workspace.updated",
+            "Updated workspace",
+            actor,
+            &detail,
+        );
         Ok(detail)
     }
 
@@ -837,7 +846,10 @@ impl WorkspaceService {
                 )
                 .attr("directUserCount", detail.direct_user_count.to_string())
                 .attr("roleGrantCount", detail.role_grant_count.to_string())
-                .attr("effectiveUserCount", detail.effective_user_count.to_string()),
+                .attr(
+                    "effectiveUserCount",
+                    detail.effective_user_count.to_string(),
+                ),
         );
     }
 
@@ -1056,12 +1068,7 @@ fn collect_workspace_switcher_secondary(
     });
 
     for child in &node.children {
-        collect_workspace_switcher_secondary(
-            child,
-            primary_workspace_code,
-            lineage_names,
-            acc,
-        );
+        collect_workspace_switcher_secondary(child, primary_workspace_code, lineage_names, acc);
     }
 
     lineage_names.pop();

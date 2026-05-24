@@ -167,14 +167,17 @@ impl AutomationService {
     }
 
     pub fn bootstrap_scheduler(&self) -> Result<(), AutomationError> {
-        for automation in self.all_automations()?.into_iter().filter(|item| item.status == AutomationStatus::Active) {
-            self.runtime
-                .register(
-                    &automation.automation_code,
-                    &automation.scheduler_expression,
-                    self.repository.clone(),
-                    self.event_bus.clone(),
-                )?;
+        for automation in self
+            .all_automations()?
+            .into_iter()
+            .filter(|item| item.status == AutomationStatus::Active)
+        {
+            self.runtime.register(
+                &automation.automation_code,
+                &automation.scheduler_expression,
+                self.repository.clone(),
+                self.event_bus.clone(),
+            )?;
         }
         Ok(())
     }
@@ -187,8 +190,8 @@ impl AutomationService {
         &self,
         query: AutomationListQuery,
     ) -> Result<PagedAutomationRecords<AutomationListItem>, AutomationError> {
-        let workspace_code =
-            normalized_required(query.workspace_code.clone()).ok_or(AutomationError::WorkspaceRequired)?;
+        let workspace_code = normalized_required(query.workspace_code.clone())
+            .ok_or(AutomationError::WorkspaceRequired)?;
         self.ensure_active_workspace(&workspace_code)?;
         let current = query.current.unwrap_or(1).max(1);
         let size = query.size.unwrap_or(20).clamp(1, 100);
@@ -207,11 +210,10 @@ impl AutomationService {
         &self,
         command: CreateAutomationCommand,
     ) -> Result<AutomationDetail, AutomationError> {
-        let workspace_code =
-            normalized_required(Some(command.workspace_code)).ok_or(AutomationError::WorkspaceRequired)?;
+        let workspace_code = normalized_required(Some(command.workspace_code))
+            .ok_or(AutomationError::WorkspaceRequired)?;
         self.ensure_active_workspace(&workspace_code)?;
-        let name =
-            normalized_required(Some(command.name)).ok_or(AutomationError::NameRequired)?;
+        let name = normalized_required(Some(command.name)).ok_or(AutomationError::NameRequired)?;
         let prompt =
             normalized_required(Some(command.prompt)).ok_or(AutomationError::PromptRequired)?;
         let description = optional_trimmed(command.description);
@@ -263,11 +265,7 @@ impl AutomationService {
             )?;
         }
         let detail = self.get_automation(&automation_code)?;
-        self.publish_automation_detail_event(
-            "automation.created",
-            "Created automation",
-            &detail,
-        );
+        self.publish_automation_detail_event("automation.created", "Created automation", &detail);
         Ok(detail)
     }
 
@@ -299,8 +297,8 @@ impl AutomationService {
                 normalized_required(Some(prompt)).ok_or(AutomationError::PromptRequired)?;
         }
         if let Some(cron_expression) = command.cron_expression {
-            let normalized = normalized_required(Some(cron_expression))
-                .ok_or(AutomationError::InvalidCron)?;
+            let normalized =
+                normalized_required(Some(cron_expression)).ok_or(AutomationError::InvalidCron)?;
             automation.scheduler_expression = normalized_scheduler_expression(&normalized)?;
             automation.cron_expression = normalized;
         }
@@ -311,11 +309,7 @@ impl AutomationService {
             .update_automation(&automation)?;
         self.sync_runtime(&automation)?;
         let detail = self.get_automation(automation_code)?;
-        self.publish_automation_detail_event(
-            "automation.updated",
-            "Updated automation",
-            &detail,
-        );
+        self.publish_automation_detail_event("automation.updated", "Updated automation", &detail);
         Ok(detail)
     }
 
@@ -378,7 +372,9 @@ impl AutomationService {
     ) -> Result<AutomationLifecycleResult, AutomationError> {
         let mut automation = self.get_automation_record(automation_code)?;
         if automation.status == AutomationStatus::Archived {
-            automation.status = automation.previous_status.unwrap_or(AutomationStatus::Paused);
+            automation.status = automation
+                .previous_status
+                .unwrap_or(AutomationStatus::Paused);
             automation.previous_status = None;
             automation.archived_at = None;
             automation.updated_at = current_timestamp();
@@ -397,10 +393,7 @@ impl AutomationService {
         Ok(result)
     }
 
-    pub fn execute_now(
-        &self,
-        automation_code: &str,
-    ) -> Result<AutomationDetail, AutomationError> {
+    pub fn execute_now(&self, automation_code: &str) -> Result<AutomationDetail, AutomationError> {
         self.execute_internal(automation_code, AutomationTriggerSource::Manual)?;
         let detail = self.get_automation(automation_code)?;
         self.publish_automation_detail_event(
@@ -474,7 +467,12 @@ impl AutomationService {
         query: &AutomationListQuery,
     ) -> Result<Vec<AutomationListItem>, AutomationError> {
         let include_archived = query.include_archived.unwrap_or(false);
-        let search = query.search.as_deref().map(str::trim).unwrap_or("").to_lowercase();
+        let search = query
+            .search
+            .as_deref()
+            .map(str::trim)
+            .unwrap_or("")
+            .to_lowercase();
         let status = query.status;
         let mut records = self
             .all_automations()?
@@ -625,7 +623,6 @@ impl AutomationService {
                 ),
         );
     }
-
 }
 
 fn to_execution_list_item(record: AutomationExecutionRecord) -> AutomationExecutionListItem {
@@ -749,10 +746,7 @@ fn normalized_scheduler_expression(cron_expression: &str) -> Result<String, Auto
     Ok(normalized)
 }
 
-fn next_run_preview(
-    scheduler_expression: &str,
-    status: AutomationStatus,
-) -> Option<String> {
+fn next_run_preview(scheduler_expression: &str, status: AutomationStatus) -> Option<String> {
     if status != AutomationStatus::Active {
         return None;
     }

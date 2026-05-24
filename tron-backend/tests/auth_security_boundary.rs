@@ -67,7 +67,14 @@ async fn invalid_password_archived_user_invalid_refresh_and_bad_oauth_state_are_
     let invalid_refresh_json = response_json(invalid_refresh_response).await;
     assert_eq!(invalid_refresh_json["code"], "AUTH_REFRESH_INVALID");
 
-    let authorize_response = request(&app, Method::GET, "/api/v1/auth/oauth2/authorize/github", None, None).await;
+    let authorize_response = request(
+        &app,
+        Method::GET,
+        "/api/v1/auth/oauth2/authorize/github",
+        None,
+        None,
+    )
+    .await;
     assert_eq!(authorize_response.status(), StatusCode::SEE_OTHER);
     let _good_state_cookie = cookie_header_from_set_cookie(
         &header_values(authorize_response.headers(), header::SET_COOKIE),
@@ -91,7 +98,10 @@ async fn invalid_password_archived_user_invalid_refresh_and_bad_oauth_state_are_
     let bad_state_response = request(
         &app,
         Method::GET,
-        &format!("/api/v1/auth/oauth2/callback/github?code={}&state={bad_state}", common::GITHUB_TEST_CODE),
+        &format!(
+            "/api/v1/auth/oauth2/callback/github?code={}&state={bad_state}",
+            common::GITHUB_TEST_CODE
+        ),
         None,
         Some("tron_oauth2_state=another-state"),
     )

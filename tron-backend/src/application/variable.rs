@@ -7,8 +7,8 @@ use crate::{
     application::workspace::WorkspaceService,
     domain::{
         variable::{
-            EffectiveVariable, Variable, VariableCatalogQuery, VariableError, VariableMutationResult,
-            VariableSourceKind, validate_variable_key,
+            EffectiveVariable, Variable, VariableCatalogQuery, VariableError,
+            VariableMutationResult, VariableSourceKind, validate_variable_key,
         },
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceStatus},
     },
@@ -63,7 +63,10 @@ struct ResolvedVariable {
 }
 
 impl VariableService {
-    pub fn new(repository: impl VariableRepository + 'static, workspaces: WorkspaceService) -> Self {
+    pub fn new(
+        repository: impl VariableRepository + 'static,
+        workspaces: WorkspaceService,
+    ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             workspaces,
@@ -128,7 +131,8 @@ impl VariableService {
         let workspace = self.active_workspace_detail(workspace_code)?;
         let key = normalized_key(variable_key.to_owned())?;
         let variables = self.all_variables()?;
-        let Some(existing) = find_local_variable(&variables, &workspace.workspace_code, &key) else {
+        let Some(existing) = find_local_variable(&variables, &workspace.workspace_code, &key)
+        else {
             return if self.key_exists_in_lineage(&workspace, &variables, &key) {
                 Err(VariableError::InheritedMutationDenied)
             } else {
@@ -179,7 +183,10 @@ impl VariableService {
         })
     }
 
-    fn active_workspace_detail(&self, workspace_code: &str) -> Result<WorkspaceDetail, VariableError> {
+    fn active_workspace_detail(
+        &self,
+        workspace_code: &str,
+    ) -> Result<WorkspaceDetail, VariableError> {
         let code = workspace_code.trim();
         if code.is_empty() {
             return Err(VariableError::WorkspaceRequired);
@@ -208,13 +215,10 @@ impl VariableService {
         workspace_code: &str,
         key: &str,
     ) -> Result<EffectiveVariable, VariableError> {
-        self.list_variables(
-            workspace_code,
-            VariableCatalogQuery { search: None },
-        )?
-        .into_iter()
-        .find(|record| record.key == key)
-        .ok_or(VariableError::NotFound)
+        self.list_variables(workspace_code, VariableCatalogQuery { search: None })?
+            .into_iter()
+            .find(|record| record.key == key)
+            .ok_or(VariableError::NotFound)
     }
 
     fn key_exists_in_lineage(
@@ -315,7 +319,11 @@ impl VariableService {
     }
 }
 
-fn find_local_variable(variables: &[Variable], workspace_code: &str, key: &str) -> Option<Variable> {
+fn find_local_variable(
+    variables: &[Variable],
+    workspace_code: &str,
+    key: &str,
+) -> Option<Variable> {
     variables
         .iter()
         .find(|variable| variable.workspace_code == workspace_code && variable.key == key)
@@ -350,11 +358,15 @@ fn normalized_key(value: String) -> Result<String, VariableError> {
 }
 
 fn normalized_search(value: Option<String>) -> Option<String> {
-    value.map(|item| item.trim().to_lowercase()).filter(|item| !item.is_empty())
+    value
+        .map(|item| item.trim().to_lowercase())
+        .filter(|item| !item.is_empty())
 }
 
 fn optional_trimmed(value: Option<String>) -> Option<String> {
-    value.map(|item| item.trim().to_string()).filter(|item| !item.is_empty())
+    value
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
 }
 
 fn workspace_lineage(workspace: &WorkspaceDetail) -> Vec<LineageEntry> {

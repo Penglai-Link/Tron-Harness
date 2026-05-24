@@ -56,7 +56,8 @@ impl EventSink for RecordingEventSink {
     }
 
     fn accepts(&self, event: &BusEvent) -> bool {
-        self.route_class.is_none_or(|route_class| route_class == event.route_class)
+        self.route_class
+            .is_none_or(|route_class| route_class == event.route_class)
     }
 
     fn handle(&self, event: Arc<BusEvent>) {
@@ -69,11 +70,11 @@ impl EventSink for RecordingEventSink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shared::id::FixedSnowflakeIdProvider;
     use crate::shared::event_bus::{
         AguiEventSink, BusEventDraft, BusIngressLane, BusOutcome, BusPriority, BusRequestRef,
         BusRuntimeStatsSnapshot, EventBusConfig, EventBusRuntimeBuilder, PublishOutcome,
     };
+    use crate::shared::id::FixedSnowflakeIdProvider;
 
     #[test]
     fn event_bus_rejects_secret_like_payload_fields() {
@@ -133,8 +134,10 @@ mod tests {
             .without_workers_for_testing()
             .build();
 
-        let first_standard = handle.publish(BusEventDraft::agui("agui.run.progress", "agent_runtime"));
-        let second_standard = handle.publish(BusEventDraft::agui("agui.run.progress", "agent_runtime"));
+        let first_standard =
+            handle.publish(BusEventDraft::agui("agui.run.progress", "agent_runtime"));
+        let second_standard =
+            handle.publish(BusEventDraft::agui("agui.run.progress", "agent_runtime"));
         let critical = handle.publish(
             BusEventDraft::audit("user.created", "user_service").priority(BusPriority::Critical),
         );
@@ -176,10 +179,7 @@ mod tests {
         let handle = super::super::EventBusHandle::disabled();
         let outcome = handle.publish(BusEventDraft::observe("noop", "test"));
         assert_eq!(outcome, PublishOutcome::Disabled);
-        assert_eq!(
-            handle.stats_snapshot(),
-            BusRuntimeStatsSnapshot::default()
-        );
+        assert_eq!(handle.stats_snapshot(), BusRuntimeStatsSnapshot::default());
     }
 
     #[test]

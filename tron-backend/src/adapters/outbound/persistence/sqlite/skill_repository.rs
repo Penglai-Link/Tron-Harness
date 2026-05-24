@@ -241,7 +241,9 @@ fn ensure_database_parent(database_url: &str) -> Result<(), SkillError> {
     Ok(())
 }
 
-fn ensure_workspace_skill_binding_enabled_column(connection: &Connection) -> Result<(), SkillError> {
+fn ensure_workspace_skill_binding_enabled_column(
+    connection: &Connection,
+) -> Result<(), SkillError> {
     let mut statement = connection
         .prepare("PRAGMA table_info(workspace_skill_bindings)")
         .map_err(storage_error)?;

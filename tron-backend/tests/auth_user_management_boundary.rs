@@ -33,10 +33,8 @@ async fn user_management_routes_require_authentication_and_work_after_login() {
     assert_eq!(login_response.status(), StatusCode::OK);
     let set_cookie_headers = header_values(login_response.headers(), header::SET_COOKIE);
     let login_json = response_json(login_response).await;
-    let refresh_cookie_header = cookie_header_from_set_cookie(
-        &set_cookie_headers,
-        &["tron_refresh_token"],
-    );
+    let refresh_cookie_header =
+        cookie_header_from_set_cookie(&set_cookie_headers, &["tron_refresh_token"]);
     let authorization = format!(
         "Bearer {}",
         login_json["data"]["accessToken"]

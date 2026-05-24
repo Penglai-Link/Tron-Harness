@@ -454,7 +454,6 @@ export function TaskDetailsPage() {
       <PageHeader
         breadcrumbs={breadcrumbs}
         title="Task Details"
-        description={loading ? "Loading task data..." : undefined}
         actions={
           <>
             <Button className="bg-black text-white hover:bg-neutral-800" variant="primary" onClick={() => {

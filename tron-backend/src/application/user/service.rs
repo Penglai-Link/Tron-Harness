@@ -18,9 +18,10 @@ use crate::{
         },
         user::{
             ListUsersQuery, PagedUsers, PasswordResetResult, User, UserError, UserSourceType,
-            UserStatistics, UserStatus, normalize_code_segment, optional_trimmed, parse_user_status,
-            required_profile_field, unique_preserving_order, validate_initial_password,
-            validate_role_codes, validate_space_codes, validate_user_code,
+            UserStatistics, UserStatus, normalize_code_segment, optional_trimmed,
+            parse_user_status, required_profile_field, unique_preserving_order,
+            validate_initial_password, validate_role_codes, validate_space_codes,
+            validate_user_code,
         },
     },
     shared::{
@@ -195,7 +196,11 @@ impl UserService {
             "Created authenticated session",
             &session.session.user,
             Some(AuthMethod::Internal),
-            session.session.provider.as_ref().map(|provider| provider.code.as_str()),
+            session
+                .session
+                .provider
+                .as_ref()
+                .map(|provider| provider.code.as_str()),
             None,
             BusPriority::Critical,
         );
@@ -446,7 +451,11 @@ impl UserService {
             "Created OAuth2 session",
             &session.session.user,
             Some(session.session.auth_method),
-            session.session.provider.as_ref().map(|provider| provider.code.as_str()),
+            session
+                .session
+                .provider
+                .as_ref()
+                .map(|provider| provider.code.as_str()),
             None,
             BusPriority::Critical,
         );
@@ -510,7 +519,11 @@ impl UserService {
             "Created OAuth2 session",
             &session.session.user,
             Some(session.session.auth_method),
-            session.session.provider.as_ref().map(|provider| provider.code.as_str()),
+            session
+                .session
+                .provider
+                .as_ref()
+                .map(|provider| provider.code.as_str()),
             None,
             BusPriority::Critical,
         );
@@ -881,7 +894,10 @@ impl UserService {
                 .subject("user", result.user_code.clone())
                 .actor(actor)
                 .summary("Reset user password")
-                .attr("passwordResetRequired", result.password_reset_required.to_string()),
+                .attr(
+                    "passwordResetRequired",
+                    result.password_reset_required.to_string(),
+                ),
         );
         Ok(result)
     }
@@ -988,7 +1004,10 @@ impl UserService {
                     .unwrap_or("unknown")
                     .to_string(),
             )
-            .attr("providerCode", provider_code.unwrap_or("internal").to_string());
+            .attr(
+                "providerCode",
+                provider_code.unwrap_or("internal").to_string(),
+            );
         if let Some(session_code) = session_code {
             draft = draft.attr("sessionCode", session_code.to_string());
         }
@@ -1319,15 +1338,10 @@ fn select_github_verified_email(emails: &[GitHubEmailResponse]) -> Option<String
 
 fn split_display_name(display_name: &str) -> (String, String) {
     let mut parts = display_name.split_whitespace();
-    let first_name = parts
-        .next()
-        .unwrap_or(OAUTH2_AUTO_PROVISION_FALLBACK_NAME);
+    let first_name = parts.next().unwrap_or(OAUTH2_AUTO_PROVISION_FALLBACK_NAME);
     let last_name = parts.collect::<Vec<_>>().join(" ");
     if last_name.is_empty() {
-        (
-            first_name.to_owned(),
-            first_name.to_owned(),
-        )
+        (first_name.to_owned(), first_name.to_owned())
     } else {
         (first_name.to_owned(), last_name)
     }

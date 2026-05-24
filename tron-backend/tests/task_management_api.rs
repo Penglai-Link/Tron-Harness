@@ -293,14 +293,7 @@ async fn parent_detail_archive_rules_ignore_archived_subtasks_and_restore_to_ope
     let database_path = database_path("subtask-archive-rules");
     let router = task_app_with_database_path(database_path.clone(), true);
 
-    let parent = create_task(
-        &router,
-        "TRON_CORE",
-        None,
-        "Parent archive rule",
-        "Feature",
-    )
-    .await;
+    let parent = create_task(&router, "TRON_CORE", None, "Parent archive rule", "Feature").await;
     let parent_code = parent["data"]["taskCode"].as_str().unwrap().to_owned();
     let active_child = create_task(
         &router,
@@ -310,7 +303,10 @@ async fn parent_detail_archive_rules_ignore_archived_subtasks_and_restore_to_ope
         "Feature",
     )
     .await;
-    let active_child_code = active_child["data"]["taskCode"].as_str().unwrap().to_owned();
+    let active_child_code = active_child["data"]["taskCode"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     let archived_child = create_task(
         &router,
         "TRON_CORE",
@@ -431,7 +427,10 @@ async fn parent_progress_is_derived_from_active_subtasks() {
         "Feature",
     )
     .await;
-    let second_child_code = second_child["data"]["taskCode"].as_str().unwrap().to_owned();
+    let second_child_code = second_child["data"]["taskCode"]
+        .as_str()
+        .unwrap()
+        .to_owned();
 
     let first_completed = authenticated_request(
         &router,
@@ -475,16 +474,21 @@ async fn parent_progress_is_derived_from_active_subtasks() {
         None,
     )
     .await;
-    assert_eq!(response_json(detail_after_archive).await["data"]["progress"], 100);
+    assert_eq!(
+        response_json(detail_after_archive).await["data"]["progress"],
+        100
+    );
 }
 
 #[tokio::test]
 async fn role_based_status_updates_and_type_changes_are_validated() {
     let router = task_app("role-validation");
 
-    let feature_root =
-        create_task(&router, "TRON_CORE", None, "Root feature", "Feature").await;
-    let feature_root_code = feature_root["data"]["taskCode"].as_str().unwrap().to_owned();
+    let feature_root = create_task(&router, "TRON_CORE", None, "Root feature", "Feature").await;
+    let feature_root_code = feature_root["data"]["taskCode"]
+        .as_str()
+        .unwrap()
+        .to_owned();
 
     let designing = authenticated_request(
         &router,
@@ -524,9 +528,18 @@ async fn role_based_status_updates_and_type_changes_are_validated() {
         "TASK_STATUS_ROLE_INVALID"
     );
 
-    let feature_open =
-        create_task(&router, "TRON_CORE", None, "Feature can become bug", "Feature").await;
-    let feature_open_code = feature_open["data"]["taskCode"].as_str().unwrap().to_owned();
+    let feature_open = create_task(
+        &router,
+        "TRON_CORE",
+        None,
+        "Feature can become bug",
+        "Feature",
+    )
+    .await;
+    let feature_open_code = feature_open["data"]["taskCode"]
+        .as_str()
+        .unwrap()
+        .to_owned();
     let valid_type_change = authenticated_request(
         &router,
         Method::PATCH,
@@ -535,7 +548,10 @@ async fn role_based_status_updates_and_type_changes_are_validated() {
     )
     .await;
     assert_eq!(valid_type_change.status(), StatusCode::OK);
-    assert_eq!(response_json(valid_type_change).await["data"]["taskType"], "Bug");
+    assert_eq!(
+        response_json(valid_type_change).await["data"]["taskType"],
+        "Bug"
+    );
 
     let bug = create_task(&router, "TRON_CORE", None, "Bug task", "Bug").await;
     let bug_code = bug["data"]["taskCode"].as_str().unwrap().to_owned();

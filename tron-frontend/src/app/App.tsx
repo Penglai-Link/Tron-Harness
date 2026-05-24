@@ -23,6 +23,7 @@ import {
   useBootstrapAuthSession,
 } from "@/domain/auth";
 import {
+  SettingsShell,
   ThemeProvider,
   ToastProvider,
   TronShell,
@@ -38,6 +39,7 @@ import { Button } from "@/shared/ui/Button";
 
 import { appRoutes } from "@/router/routes";
 import { routePages } from "@/router/pageRegistry";
+import { settingsNavigation } from "@/domain/settings/constants/settingsNavigation";
 
 const DesignStandardPage = lazy(() => import("@/domain/design-standard/pages/DesignStandardPage").then((module) => ({ default: module.DesignStandardPage })));
 const SharedShellPreviewPage = lazy(() => import("@/domain/shared-shell/pages/SharedShellPreviewPage").then((module) => ({ default: module.SharedShellPreviewPage })));
@@ -158,6 +160,15 @@ function AppRoutePage() {
   const resolved = resolveAppRoute(pathname, search);
   if (resolved) {
     const { Component, route } = resolved;
+    if (route.layout === "settings") {
+      return (
+        <SettingsShell activeItem={route.settingsNav ?? route.title} items={settingsNavigation}>
+          <SuspendedRoute>
+            <Component />
+          </SuspendedRoute>
+        </SettingsShell>
+      );
+    }
     return (
       <TronShell activeItem={route.activeNav} userMenuContent={<AuthUserMenuPanel />}>
         <SuspendedRoute>
@@ -255,6 +266,22 @@ function RoutedApp() {
         element={(
           <ProtectedRoute>
             <Navigate replace to="/chats/8842-alpha" />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/settings"
+        element={(
+          <ProtectedRoute>
+            <Navigate replace to="/settings/general" />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/admin/platform/models"
+        element={(
+          <ProtectedRoute>
+            <Navigate replace to="/settings/models" />
           </ProtectedRoute>
         )}
       />

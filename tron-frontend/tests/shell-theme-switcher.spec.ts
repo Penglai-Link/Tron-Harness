@@ -188,6 +188,18 @@ async function routeThemeApi(page: Page) {
 
     await fulfillJson(route, successEnvelope(getWorkspaceSwitcherMock()));
   });
+
+  await page.route("**/api/v1/admin/platform/models", async (route) => {
+    if (
+      !currentSession
+      || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
+    ) {
+      await fulfillJson(route, unauthorizedEnvelope(), 401);
+      return;
+    }
+
+    await fulfillJson(route, successEnvelope([]));
+  });
 }
 
 async function signIn(page: Page) {
@@ -233,20 +245,20 @@ test.afterAll(async () => {
   });
 });
 
-test("switches between light and matrix dark themes from the user menu and persists the selection", async ({ page }) => {
+test("opens the full-screen settings page, switches settings sections, and persists theme changes", async ({ page }) => {
   await routeThemeApi(page);
   await signIn(page);
 
-  const header = page.locator("header");
+  const header = page.getByRole("banner");
   await expect(header.getByRole("button", { name: /open filters/i })).toHaveCount(0);
   await expect(header.getByRole("button", { name: /open system settings/i })).toBeVisible();
 
   await header.getByRole("button", { name: /open system settings/i }).click();
-  await expect(header.getByText("System Settings", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings\/general$/);
+  await expect(page.locator("#tron-workspace-trigger")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Models" })).toBeVisible();
 
-  await header.getByRole("button", { name: /open user menu/i }).click();
-
-  const themeSelect = header.getByLabel(/^theme$/i);
+  const themeSelect = page.locator('label:has-text("Theme") select');
   await expect(themeSelect).toHaveValue("light");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe("light");
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(253, 248, 248)");
@@ -258,12 +270,17 @@ test("switches between light and matrix dark themes from the user menu and persi
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(1, 6, 3)");
   await expect.poll(() => header.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe("rgba(3, 12, 8, 0.92)");
 
-  await page.reload();
-  await expect(page).toHaveURL(/\/dashboard$/);
-  await header.getByRole("button", { name: /open user menu/i }).click();
-  await expect(header.getByLabel(/^theme$/i)).toHaveValue("matrix-dark");
+  await page.getByRole("link", { name: "Models" }).click();
+  await expect(page).toHaveURL(/\/settings\/models$/);
+  await expect(page.getByRole("heading", { name: "Platform Models" })).toBeVisible();
+  await page.getByRole("link", { name: "General" }).click();
+  await expect(page).toHaveURL(/\/settings\/general$/);
 
-  await header.getByLabel(/^theme$/i).selectOption("light");
+  await page.reload();
+  await expect(page).toHaveURL(/\/settings\/general$/);
+  await expect(page.locator('label:has-text("Theme") select')).toHaveValue("matrix-dark");
+
+  await page.locator('label:has-text("Theme") select').selectOption("light");
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe("light");
   await expect.poll(() => page.evaluate((storageKey) => window.localStorage.getItem(storageKey), themeStorageKey)).toBe("light");
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(253, 248, 248)");

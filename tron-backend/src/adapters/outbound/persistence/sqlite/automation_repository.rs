@@ -6,10 +6,10 @@ use rusqlite::{Connection, Row, params};
 use crate::{
     application::automation::AutomationRepository,
     domain::automation::{
-        Automation, AutomationError, AutomationExecutionRecord, automation_execution_status_from_storage,
-        automation_execution_status_to_storage, automation_status_from_storage,
-        automation_status_to_storage, automation_trigger_source_from_storage,
-        automation_trigger_source_to_storage,
+        Automation, AutomationError, AutomationExecutionRecord,
+        automation_execution_status_from_storage, automation_execution_status_to_storage,
+        automation_status_from_storage, automation_status_to_storage,
+        automation_trigger_source_from_storage, automation_trigger_source_to_storage,
     },
     shared::id::SnowflakeId,
 };
