@@ -1313,6 +1313,22 @@ test("workspace models show local and inherited source semantics with inherited-
   await openModelsPage(page);
   await expect(page.getByRole("columnheader", { name: "Source" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Inherited From" })).toBeVisible();
+  await expect(page.getByText("Protocol Type", { exact: true })).toHaveCount(0);
+
+  const tableBody = page.locator("tbody");
+  const protocolFilter = page.getByLabel("Protocol", { exact: true });
+  const typeFilter = page.getByLabel("Type", { exact: true });
+  await expect(protocolFilter).toBeVisible();
+  await expect(typeFilter).toBeVisible();
+  await expect(protocolFilter).not.toContainText("·");
+  await protocolFilter.selectOption("RESPONSES");
+  await expect(tableBody).toContainText("GPT-4o Main");
+  await expect(tableBody).not.toContainText("Core Fast");
+  await protocolFilter.selectOption("ALL");
+  await typeFilter.selectOption("EMBEDDING::TEXT_VECTOR");
+  await expect(tableBody).toContainText("Embedding Shared");
+  await expect(tableBody).not.toContainText("Core Fast");
+  await typeFilter.selectOption("ALL");
 
   const inheritedRow = page.locator("tr", { has: page.getByText("Parent Shared Writer", { exact: true }) });
   await expect(inheritedRow).toContainText("Inherited");

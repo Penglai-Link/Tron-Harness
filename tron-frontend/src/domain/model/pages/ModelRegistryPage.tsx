@@ -74,7 +74,8 @@ export function ModelRegistryPage() {
   const [openRowMenu, setOpenRowMenu] = useState<RowMenuState | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [protocolTypeFilter, setProtocolTypeFilter] = useState("ALL");
+  const [protocolFilter, setProtocolFilter] = useState("ALL");
+  const [typeFilter, setTypeFilter] = useState("ALL");
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
   const rowMenuOpenedAtRef = useRef(0);
 
@@ -83,12 +84,29 @@ export function ModelRegistryPage() {
     ? records.find((record) => record.modelCode === openRowMenu.modelCode) ?? null
     : null;
 
-  function getProtocolTypeValue(record: ModelRecord) {
-    return `${record.protocol}::${record.modelType}::${record.modelCapabilities.join(",")}`;
+  function getProtocolFilterValue(record: ModelRecord) {
+    return record.protocol;
   }
 
-  function getProtocolTypeLabel(record: ModelRecord) {
-    return `${formatModelProtocol(record.protocol, record.modelType)} · ${formatModelCapabilities(record.modelCapabilities, record.modelType)}`;
+  function getProtocolFilterLabel(protocol: ModelRecord["protocol"]) {
+    switch (protocol) {
+      case "OPENAI_COMPATIBLE":
+        return "OpenAI Compatible";
+      case "RESPONSES":
+        return "OpenAI Compatible - Response";
+      case "RERANK":
+        return "OpenAI Compatible - Rerank";
+      default:
+        return protocol;
+    }
+  }
+
+  function getTypeFilterValue(record: ModelRecord) {
+    return `${record.modelType}::${record.modelCapabilities.join(",")}`;
+  }
+
+  function getTypeFilterLabel(record: ModelRecord) {
+    return formatModelCapabilities(record.modelCapabilities, record.modelType);
   }
 
   function getWorkspaceSourceLabel(record: ModelRecord) {
@@ -126,13 +144,23 @@ export function ModelRegistryPage() {
     };
   }
 
-  const protocolTypeOptions = useMemo(() => {
+  const protocolOptions = useMemo(() => {
     const seen = new Set<string>();
     return records.flatMap((record) => {
-      const value = getProtocolTypeValue(record);
+      const value = getProtocolFilterValue(record);
       if (seen.has(value)) return [];
       seen.add(value);
-      return [{ value, label: getProtocolTypeLabel(record) }];
+      return [{ value, label: getProtocolFilterLabel(record.protocol) }];
+    });
+  }, [records]);
+
+  const typeOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return records.flatMap((record) => {
+      const value = getTypeFilterValue(record);
+      if (seen.has(value)) return [];
+      seen.add(value);
+      return [{ value, label: getTypeFilterLabel(record) }];
     });
   }, [records]);
 
@@ -141,7 +169,8 @@ export function ModelRegistryPage() {
     return records.filter((record) => {
       if (statusFilter === "ENABLED" && !record.enabled) return false;
       if (statusFilter === "DISABLED" && record.enabled) return false;
-      if (protocolTypeFilter !== "ALL" && getProtocolTypeValue(record) !== protocolTypeFilter) return false;
+      if (protocolFilter !== "ALL" && getProtocolFilterValue(record) !== protocolFilter) return false;
+      if (typeFilter !== "ALL" && getTypeFilterValue(record) !== typeFilter) return false;
       if (!normalizedSearch) return true;
       const inheritedFrom = getWorkspaceInheritedFrom(record);
 
@@ -152,11 +181,13 @@ export function ModelRegistryPage() {
         getWorkspaceSourceLabel(record),
         inheritedFrom?.label ?? "",
         inheritedFrom?.code ?? "",
-        getProtocolTypeLabel(record),
+        formatModelProtocol(record.protocol, record.modelType),
+        getProtocolFilterLabel(record.protocol),
+        getTypeFilterLabel(record),
       ].join(" ").toLowerCase();
       return haystack.includes(normalizedSearch);
     });
-  }, [protocolTypeFilter, records, searchQuery, statusFilter]);
+  }, [protocolFilter, records, searchQuery, statusFilter, typeFilter]);
 
   async function refreshWorkspaceModels() {
     if (!activeWorkspaceCode) {
@@ -371,7 +402,7 @@ export function ModelRegistryPage() {
 
       <div className="space-y-5">
         <SurfaceCard className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="min-w-0">
               <Field label="Search">
                 <TextInput
@@ -392,10 +423,32 @@ export function ModelRegistryPage() {
               </Field>
             </div>
             <div className="min-w-0">
-              <Field label="Protocol Type">
-                <SelectInput className="w-full" value={protocolTypeFilter} onChange={(event) => setProtocolTypeFilter(event.target.value)}>
+              <Field label="Protocol">
+                <SelectInput
+                  aria-label="Protocol"
+                  className="w-full"
+                  value={protocolFilter}
+                  onChange={(event) => setProtocolFilter(event.target.value)}
+                >
                   <option value="ALL">All</option>
-                  {protocolTypeOptions.map((option) => (
+                  {protocolOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </SelectInput>
+              </Field>
+            </div>
+            <div className="min-w-0">
+              <Field label="Type">
+                <SelectInput
+                  aria-label="Type"
+                  className="w-full"
+                  value={typeFilter}
+                  onChange={(event) => setTypeFilter(event.target.value)}
+                >
+                  <option value="ALL">All</option>
+                  {typeOptions.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>

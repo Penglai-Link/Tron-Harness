@@ -93,6 +93,7 @@ Workspace model management:
 - Behavior:
   - show `Source` as `Local`, `Inherited`, or `Override`
   - show `Inherited From` as `Platform` for platform-sourced rows, or the full source workspace lineage path for workspace-sourced rows, for example `Enterprise / Platform / Tron Core`
+  - filter the effective catalog by search text, status, protocol, and type as separate controls; `Protocol` filters only the protocol enum, while `Type` filters the displayed type or capability set
   - allow `Set Default` for any enabled visible row
   - allow `Disable/Enable` for any visible row
   - allow `Edit` on local rows and on inherited or override rows, where inherited edits create a current-workspace override
