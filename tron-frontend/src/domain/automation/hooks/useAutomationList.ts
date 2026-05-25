@@ -21,6 +21,17 @@ export interface AutomationListResult {
 
 const automationListRequests = new Map<string, Promise<AutomationPage<AutomationListItem>>>();
 
+function createEmptyAutomationPage(
+  query: AutomationListQuery,
+): AutomationPage<AutomationListItem> {
+  return {
+    current: Math.max(1, query.current ?? 1),
+    records: [],
+    size: Math.min(100, Math.max(1, query.size ?? 15)),
+    total: 0,
+  };
+}
+
 function parseAutomationListQuery(queryKey: string): AutomationListQuery {
   return JSON.parse(queryKey) as AutomationListQuery;
 }
@@ -34,8 +45,13 @@ function loadAutomationPage(
 
   const request = fetchAutomationPage(query)
     .catch((error: unknown) => {
-      console.warn("[automation] Falling back to mock automation list.", error);
-      return listAutomations(query);
+      console.warn("[automation] Automation list request failed.", error);
+      return {
+        current: Math.max(1, query.current ?? 1),
+        records: [],
+        size: Math.min(100, Math.max(1, query.size ?? 15)),
+        total: 0,
+      };
     })
     .finally(() => {
       automationListRequests.delete(requestKey);
@@ -51,12 +67,18 @@ export function useAutomationList(query: AutomationListQuery): AutomationListRes
   const queryKey = JSON.stringify(query);
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState(() => listAutomations(query));
+  const [page, setPage] = useState(() => (
+    dataSource === "api" ? createEmptyAutomationPage(query) : listAutomations(query)
+  ));
 
   useEffect(() => {
-    if (!hasWorkspaceCode || dataSource !== "api") {
+    if (dataSource !== "api") {
       setPage(listAutomations(parseAutomationListQuery(queryKey)));
       return;
+    }
+
+    if (!hasWorkspaceCode) {
+      setPage(createEmptyAutomationPage(parseAutomationListQuery(queryKey)));
     }
   }, [dataSource, hasWorkspaceCode, queryKey, reloadKey]);
 

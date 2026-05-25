@@ -12,7 +12,9 @@ use common::{app as auth_test_app, authenticated_request};
 
 #[tokio::test]
 async fn replace_spaces_rejects_blank_or_malformed_codes() {
+    let router = auth_test_app();
     let response = request(
+        &router,
         Method::PUT,
         "/api/v1/admin/users/USR-0001/spaces",
         Some(json!({
@@ -34,7 +36,9 @@ async fn replace_spaces_rejects_blank_or_malformed_codes() {
 
 #[tokio::test]
 async fn failed_space_replacement_must_not_overwrite_previous_assignments() {
+    let router = auth_test_app();
     let set_valid_response = request(
+        &router,
         Method::PUT,
         "/api/v1/admin/users/USR-0002/spaces",
         Some(json!({
@@ -49,6 +53,7 @@ async fn failed_space_replacement_must_not_overwrite_previous_assignments() {
     );
 
     let set_invalid_response = request(
+        &router,
         Method::PUT,
         "/api/v1/admin/users/USR-0002/spaces",
         Some(json!({
@@ -58,7 +63,7 @@ async fn failed_space_replacement_must_not_overwrite_previous_assignments() {
     .await;
     assert_eq!(set_invalid_response.status(), StatusCode::BAD_REQUEST);
 
-    let detail_response = request(Method::GET, "/api/v1/admin/users/USR-0002", None).await;
+    let detail_response = request(&router, Method::GET, "/api/v1/admin/users/USR-0002", None).await;
     assert_eq!(detail_response.status(), StatusCode::OK);
     let detail_json = response_json(detail_response).await;
     assert_eq!(
@@ -68,9 +73,13 @@ async fn failed_space_replacement_must_not_overwrite_previous_assignments() {
     );
 }
 
-async fn request(method: Method, uri: &str, body: Option<Value>) -> axum::response::Response {
-    let router = auth_test_app();
-    authenticated_request(&router, method, uri, body).await
+async fn request(
+    router: &axum::Router,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+) -> axum::response::Response {
+    authenticated_request(router, method, uri, body).await
 }
 
 async fn response_json(response: axum::response::Response) -> Value {

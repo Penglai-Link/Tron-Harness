@@ -38,10 +38,7 @@ export const appRoutes: AppRoute[] = [
   { pageId: "automations.new", route: "/automations/new", activeNav: "Automations", title: "Create Automation", archetype: "form" },
   { pageId: "automations.detail", route: "/automations/detail", activeNav: "Automations", title: "Automation Detail", archetype: "detail" },
   { pageId: "prompts.new", route: "/prompts/new", activeNav: "Prompts", title: "Create New Prompt", archetype: "form-inspector" },
-  { pageId: "skills.new", route: "/skills/new", activeNav: "Skills", title: "Install Skill", archetype: "form-inspector" },
   { pageId: "skills.bind", route: "/skills/bind", activeNav: "Skills", title: "Bind Skill", archetype: "form-inspector" },
-  { pageId: "skills.installed", route: "/skills/installed", activeNav: "Skills", title: "Installed Skills", archetype: "split-pane" },
-  { pageId: "skills.installedNew", route: "/skills/installed/new", activeNav: "Skills", title: "Install Skill", archetype: "form-inspector" },
   { pageId: "tasks.new", route: "/tasks/new", activeNav: "Tasks", title: "Create Task", archetype: "form" },
   { pageId: "dashboard.index", route: "/dashboard", activeNav: "Dashboard", title: "Dashboard", archetype: "dashboard" },
   { pageId: "knowledgeGraph.index", route: "/knowledge-graph", activeNav: "Graph", title: "Knowledge Graph", archetype: "graph" },
@@ -68,4 +65,6 @@ export const appRoutes: AppRoute[] = [
   { pageId: "settings.models", route: "/settings/models", activeNav: "Settings", title: "Platform Models", archetype: "settings", layout: "settings", settingsNav: "Models" },
   { pageId: "settings.modelsNew", route: "/settings/models/new", activeNav: "Settings", title: "Create Platform Model", archetype: "settings", layout: "settings", settingsNav: "Models" },
   { pageId: "settings.modelsDetail", route: "/settings/models/detail", activeNav: "Settings", title: "Platform Model Detail", archetype: "settings", layout: "settings", settingsNav: "Models" },
+  { pageId: "settings.skills", route: "/settings/skills", activeNav: "Settings", title: "Skill Center", archetype: "settings", layout: "settings", settingsNav: "Skill Center" },
+  { pageId: "settings.skillsSync", route: "/settings/skills/sync", activeNav: "Settings", title: "Sync Skills", archetype: "settings", layout: "settings", settingsNav: "Skill Center" },
 ] as const;

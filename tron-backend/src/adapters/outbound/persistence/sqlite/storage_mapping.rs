@@ -1,10 +1,12 @@
 use std::{fs, path::Path};
 
-use crate::domain::user::{PhoneNumber, UserError, UserSourceType, UserStatus};
-
-const DEFAULT_TIMESTAMP: &str = "2026-05-12T00:00:00Z";
-const DEFAULT_EPOCH_MS: i64 = 1_778_544_000_000;
-const LAST_ACTIVE_EPOCH_MS: i64 = 1_778_487_000_000;
+use crate::{
+    domain::user::{PhoneNumber, UserError, UserSourceType, UserStatus},
+    shared::time::{
+        timestamp_from_millis as shared_timestamp_from_millis,
+        timestamp_to_millis as shared_timestamp_to_millis,
+    },
+};
 
 pub(super) struct StoredUserRow {
     pub(super) id: i64,
@@ -81,19 +83,11 @@ pub(super) fn user_source_type_from_provider_code(value: Option<String>) -> User
 }
 
 pub(super) fn timestamp_to_millis(value: &str) -> i64 {
-    match value {
-        "2026-05-11T08:30:00Z" => LAST_ACTIVE_EPOCH_MS,
-        "2026-05-11T08:00:00Z" => DEFAULT_EPOCH_MS - 86_400_000,
-        _ => DEFAULT_EPOCH_MS,
-    }
+    shared_timestamp_to_millis(value)
 }
 
 pub(super) fn timestamp_from_millis(value: i64) -> String {
-    match value {
-        LAST_ACTIVE_EPOCH_MS => "2026-05-11T08:30:00Z".into(),
-        value if value == DEFAULT_EPOCH_MS - 86_400_000 => "2026-05-11T08:00:00Z".into(),
-        _ => DEFAULT_TIMESTAMP.into(),
-    }
+    shared_timestamp_from_millis(value)
 }
 
 pub(super) fn storage_error(_error: rusqlite::Error) -> UserError {

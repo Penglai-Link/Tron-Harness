@@ -9,6 +9,32 @@ import { getTaskDetail } from "@/domain/task/mock/data";
 import type { TaskDetailData } from "@/domain/task/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
+function emptyTaskDetail(taskCode: string): TaskDetailData {
+  return {
+    agentCodes: [],
+    appCodes: [],
+    archivedAt: null,
+    assigneeUserCodes: [],
+    createdAt: "",
+    description: null,
+    id: "",
+    parent: null,
+    parentTaskCode: null,
+    previousStatus: null,
+    priority: "Medium",
+    progress: 0,
+    sourceType: "Internal",
+    sourceUrl: null,
+    status: "Open",
+    subtasks: [],
+    taskCode,
+    taskType: "Feature",
+    title: "",
+    updatedAt: "",
+    workspaceCode: "",
+  };
+}
+
 export interface TaskDetailResult {
   loading: boolean;
   refresh: () => void;
@@ -20,7 +46,9 @@ export function useTaskDetail(taskCode = "TSK-SEED-BACKLOG"): TaskDetailResult {
   const dataSource = getServiceDataSource("task");
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [task, setTask] = useState(() => getTaskDetail(taskCode));
+  const [task, setTask] = useState(() => (
+    dataSource === "api" ? emptyTaskDetail(taskCode) : getTaskDetail(taskCode)
+  ));
 
   useEffect(() => {
     if (dataSource === "api") return;
@@ -36,8 +64,8 @@ export function useTaskDetail(taskCode = "TSK-SEED-BACKLOG"): TaskDetailResult {
       .then(setTask)
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        console.warn("[task] Falling back to mock task detail.", error);
-        setTask(getTaskDetail(taskCode));
+        console.warn("[task] Task detail request failed.", error);
+        setTask(emptyTaskDetail(taskCode));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);

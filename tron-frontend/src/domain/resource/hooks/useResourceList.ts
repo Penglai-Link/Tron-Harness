@@ -4,6 +4,7 @@ import { resourceApiEndpoints } from "@/domain/resource/api";
 
 export function useResourceList() {
   return useServiceQuery({
+    apiInitialData: () => [],
     domain: "resource",
     endpoint: resourceApiEndpoints.listResources,
     mockData: () => listResources(),

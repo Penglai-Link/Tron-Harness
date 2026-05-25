@@ -25,7 +25,6 @@ import {
   PageHeader,
   SurfaceCard,
   TextInput,
-  TronShell,
   useToast,
 } from "@/shared";
 
@@ -355,9 +354,8 @@ export function InstalledSkillsPage() {
   }
 
   return (
-    <TronShell activeItem="Skills" searchPlaceholder="Search installed skills...">
+    <>
       <PageHeader
-        breadcrumbs={[{ label: "Skills", href: "/skills" }, { label: "Skill Center" }]}
         title="Skill Center"
         actions={(
           <>
@@ -370,7 +368,7 @@ export function InstalledSkillsPage() {
               <RefreshCw size={16} aria-hidden="true" />
               {syncing === "update" ? "Updating..." : "Update"}
             </Button>
-            <Button onClick={() => navigate("/skills/installed/new")}>
+            <Button onClick={() => navigate("/settings/skills/sync")}>
               <Plus size={16} aria-hidden="true" />
               Sync
             </Button>
@@ -688,6 +686,6 @@ export function InstalledSkillsPage() {
           </div>
         </div>
       ) : null}
-    </TronShell>
+    </>
   );
 }

@@ -10,13 +10,18 @@ use crate::{
         task_status_from_storage, task_status_to_storage, task_type_from_storage,
         task_type_to_storage,
     },
-    shared::id::SnowflakeId,
+    shared::{
+        id::SnowflakeId,
+        time::{
+            option_timestamp_from_millis,
+            option_timestamp_to_millis,
+            timestamp_from_millis,
+            timestamp_to_millis,
+        },
+    },
 };
 
 use super::migrations::{TASKS_MIGRATION, TASKS_SUPERPOWER_RESET_MIGRATION};
-
-const DEFAULT_TIMESTAMP: &str = "2026-05-16T00:00:00Z";
-const DEFAULT_EPOCH_MS: i64 = 1_779_830_400_000;
 
 pub struct SqliteTaskRepository {
     connection: Connection,
@@ -144,7 +149,7 @@ impl TaskRepository for SqliteTaskRepository {
     fn create_task(&mut self, task: &Task) -> Result<(), TaskError> {
         self.connection.execute(
             "INSERT INTO tasks (id, task_code, workspace_code, parent_task_code, title, description, status, previous_status, priority, task_type, source_type, source_url, progress_value, created_at, updated_at, archived_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
-            params![task.id.value(), task.task_code, task.workspace_code, task.parent_task_code, task.title, task.description, task_status_to_storage(task.status), task.previous_status.map(task_status_to_storage), task_priority_to_storage(task.priority), task_type_to_storage(task.task_type), task_source_type_to_storage(task.source_type), task.source_url, i64::from(task.progress), timestamp_to_millis(&task.created_at), timestamp_to_millis(&task.updated_at), task.archived_at.as_deref().map(timestamp_to_millis)],
+            params![task.id.value(), task.task_code, task.workspace_code, task.parent_task_code, task.title, task.description, task_status_to_storage(task.status), task.previous_status.map(task_status_to_storage), task_priority_to_storage(task.priority), task_type_to_storage(task.task_type), task_source_type_to_storage(task.source_type), task.source_url, i64::from(task.progress), timestamp_to_millis(&task.created_at), timestamp_to_millis(&task.updated_at), option_timestamp_to_millis(task.archived_at.as_deref())],
         ).map_err(storage_error)?;
         Ok(())
     }
@@ -152,7 +157,7 @@ impl TaskRepository for SqliteTaskRepository {
     fn update_task(&mut self, task: &Task) -> Result<(), TaskError> {
         self.connection.execute(
             "UPDATE tasks SET parent_task_code = ?2, title = ?3, description = ?4, status = ?5, previous_status = ?6, priority = ?7, task_type = ?8, source_type = ?9, source_url = ?10, progress_value = ?11, updated_at = ?12, archived_at = ?13 WHERE task_code = ?1",
-            params![task.task_code, task.parent_task_code, task.title, task.description, task_status_to_storage(task.status), task.previous_status.map(task_status_to_storage), task_priority_to_storage(task.priority), task_type_to_storage(task.task_type), task_source_type_to_storage(task.source_type), task.source_url, i64::from(task.progress), timestamp_to_millis(&task.updated_at), task.archived_at.as_deref().map(timestamp_to_millis)],
+            params![task.task_code, task.parent_task_code, task.title, task.description, task_status_to_storage(task.status), task.previous_status.map(task_status_to_storage), task_priority_to_storage(task.priority), task_type_to_storage(task.task_type), task_source_type_to_storage(task.source_type), task.source_url, i64::from(task.progress), timestamp_to_millis(&task.updated_at), option_timestamp_to_millis(task.archived_at.as_deref())],
         ).map_err(storage_error)?;
         Ok(())
     }
@@ -245,7 +250,7 @@ fn row_to_task(row: &Row<'_>) -> rusqlite::Result<Task> {
         progress: progress.clamp(0, 100) as u8,
         created_at: timestamp_from_millis(row.get(13)?),
         updated_at: timestamp_from_millis(row.get(14)?),
-        archived_at: row.get::<_, Option<i64>>(15)?.map(timestamp_from_millis),
+        archived_at: option_timestamp_from_millis(row.get::<_, Option<i64>>(15)?),
     })
 }
 
@@ -273,10 +278,4 @@ fn uses_legacy_task_schema_definition(create_sql: &str) -> bool {
 
 fn task_mapping_error(error: TaskError) -> rusqlite::Error {
     rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
-}
-fn timestamp_to_millis(_value: &str) -> i64 {
-    DEFAULT_EPOCH_MS
-}
-fn timestamp_from_millis(_value: i64) -> String {
-    DEFAULT_TIMESTAMP.into()
 }

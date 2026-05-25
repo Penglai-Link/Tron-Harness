@@ -52,6 +52,12 @@ export interface ToastProviderProps {
   defaultDurationMs?: number;
 }
 
+interface ToastTimerState {
+  remainingMs: number;
+  startedAt?: number;
+  timeoutId?: ReturnType<typeof setTimeout>;
+}
+
 const ToastContext = createContext<ToastApi | undefined>(undefined);
 const DEFAULT_TOAST_DURATION_MS = 2400;
 
@@ -75,16 +81,58 @@ function createToastId() {
 
 export function ToastProvider({ children, defaultDurationMs = DEFAULT_TOAST_DURATION_MS }: ToastProviderProps) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const timers = useRef(new Map<string, ToastTimerState>());
 
-  const dismiss = useCallback((id: string) => {
-    const timer = timers.current.get(id);
-    if (timer) {
-      clearTimeout(timer);
-      timers.current.delete(id);
-    }
+  const removeToast = useCallback((id: string) => {
     setToasts((currentToasts) => currentToasts.filter((toast) => toast.id !== id));
   }, []);
+
+  const clearToastTimer = useCallback((id: string) => {
+    const timerState = timers.current.get(id);
+    if (!timerState?.timeoutId) return;
+    clearTimeout(timerState.timeoutId);
+    timerState.timeoutId = undefined;
+  }, []);
+
+  const scheduleDismiss = useCallback((id: string, durationMs: number) => {
+    const timerState = timers.current.get(id);
+    if (!timerState) return;
+    if (durationMs <= 0) {
+      timers.current.delete(id);
+      removeToast(id);
+      return;
+    }
+
+    clearToastTimer(id);
+    timerState.remainingMs = durationMs;
+    timerState.startedAt = Date.now();
+    timerState.timeoutId = setTimeout(() => {
+      timers.current.delete(id);
+      removeToast(id);
+    }, durationMs);
+  }, [clearToastTimer, removeToast]);
+
+  const pauseDismiss = useCallback((id: string) => {
+    const timerState = timers.current.get(id);
+    if (!timerState?.timeoutId) return;
+
+    const elapsedMs = Date.now() - (timerState.startedAt ?? Date.now());
+    timerState.remainingMs = Math.max(0, timerState.remainingMs - elapsedMs);
+    clearToastTimer(id);
+    timerState.startedAt = undefined;
+  }, [clearToastTimer]);
+
+  const resumeDismiss = useCallback((id: string) => {
+    const timerState = timers.current.get(id);
+    if (!timerState || timerState.timeoutId) return;
+    scheduleDismiss(id, timerState.remainingMs);
+  }, [scheduleDismiss]);
+
+  const dismiss = useCallback((id: string) => {
+    clearToastTimer(id);
+    timers.current.delete(id);
+    removeToast(id);
+  }, [clearToastTimer, removeToast]);
 
   const show = useCallback((toast: ToastShowOptions) => {
     const id = createToastId();
@@ -97,18 +145,26 @@ export function ToastProvider({ children, defaultDurationMs = DEFAULT_TOAST_DURA
       durationMs,
     };
 
-    setToasts((currentToasts) => [...currentToasts, nextToast].slice(-4));
+    setToasts((currentToasts) => {
+      const nextToasts = [...currentToasts, nextToast].slice(-4);
+      const nextToastIds = new Set(nextToasts.map((item) => item.id));
+
+      currentToasts.forEach((item) => {
+        if (nextToastIds.has(item.id)) return;
+        clearToastTimer(item.id);
+        timers.current.delete(item.id);
+      });
+
+      return nextToasts;
+    });
 
     if (durationMs > 0) {
-      const timer = setTimeout(() => {
-        timers.current.delete(id);
-        setToasts((currentToasts) => currentToasts.filter((item) => item.id !== id));
-      }, durationMs);
-      timers.current.set(id, timer);
+      timers.current.set(id, { remainingMs: durationMs });
+      scheduleDismiss(id, durationMs);
     }
 
     return id;
-  }, [defaultDurationMs]);
+  }, [clearToastTimer, defaultDurationMs, scheduleDismiss]);
 
   const api = useMemo<ToastApi>(() => ({
     show,
@@ -120,7 +176,9 @@ export function ToastProvider({ children, defaultDurationMs = DEFAULT_TOAST_DURA
   }), [dismiss, show]);
 
   useEffect(() => () => {
-    timers.current.forEach((timer) => clearTimeout(timer));
+    timers.current.forEach((timerState) => {
+      if (timerState.timeoutId) clearTimeout(timerState.timeoutId);
+    });
     timers.current.clear();
   }, []);
 
@@ -139,6 +197,8 @@ export function ToastProvider({ children, defaultDurationMs = DEFAULT_TOAST_DURA
               )}
               key={toast.id}
               role="status"
+              onPointerEnter={() => pauseDismiss(toast.id)}
+              onPointerLeave={() => resumeDismiss(toast.id)}
             >
               <Icon className="mt-0.5 shrink-0" size={18} aria-hidden="true" />
               <div className="min-w-0">

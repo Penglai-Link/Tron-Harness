@@ -11,7 +11,7 @@ use tron_backend::{
     domain::automation::{AutomationListQuery, AutomationStatus},
 };
 
-use common::{app_with_config, authenticated_request, response_json};
+use common::{app_with_config, authenticated_request, prepared_config, response_json};
 
 #[tokio::test]
 async fn automation_options_and_empty_workspace_list() {
@@ -47,7 +47,7 @@ async fn automation_options_and_empty_workspace_list() {
 #[tokio::test]
 async fn automation_list_stays_workspace_scoped_and_hides_archived_by_default() {
     let database_path = database_path("list-filters");
-    let config = config_for_path(database_path);
+    let config = prepared_config(config_for_path(database_path));
     let state = AppState::new(config.clone());
     let service = state.automations.clone();
 
@@ -258,7 +258,7 @@ async fn manual_execution_persists_history_and_rolls_up_latest_result() {
 #[tokio::test]
 async fn lifecycle_and_bootstrap_scheduler_only_track_active_automations() {
     let database_path = database_path("scheduler-bootstrap");
-    let config = config_for_path(database_path);
+    let config = prepared_config(config_for_path(database_path));
     let state = AppState::new(config.clone());
     let service = state.automations.clone();
 

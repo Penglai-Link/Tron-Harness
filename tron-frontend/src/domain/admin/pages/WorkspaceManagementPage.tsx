@@ -792,7 +792,7 @@ export function WorkspaceManagementPage() {
             </Button>
             <Button variant="secondary" onClick={() => prepareCreate(null)}>
               <Plus size={16} aria-hidden="true" />
-              Create Root
+              New
             </Button>
           </>
         )}
@@ -850,7 +850,7 @@ export function WorkspaceManagementPage() {
                 {detail ? (
                   <Button variant="secondary" onClick={() => prepareCreate(detail.workspaceCode)}>
                     <Plus size={16} aria-hidden="true" />
-                    Create
+                    New
                   </Button>
                 ) : null}
               </div>
@@ -908,7 +908,7 @@ export function WorkspaceManagementPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <Button disabled={creatingWorkspace} aria-busy={creatingWorkspace} onClick={() => void handleCreateWorkspace()}>
                     <Plus size={16} aria-hidden="true" />
-                    {creatingWorkspace ? "Creating..." : "Create"}
+                    {creatingWorkspace ? "Saving..." : "Save"}
                   </Button>
                   {selectedWorkspaceCode ? (
                     <Button variant="secondary" onClick={() => prepareCreate(selectedWorkspaceCode)}>

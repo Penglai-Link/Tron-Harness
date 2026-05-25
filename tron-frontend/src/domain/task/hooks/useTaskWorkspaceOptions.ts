@@ -26,8 +26,12 @@ export function useTaskWorkspaceOptions(workspaceCode: string): TaskWorkspaceOpt
   const appDataSource = getServiceDataSource("app");
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingApps, setLoadingApps] = useState(false);
-  const [appOptions, setAppOptions] = useState(() => listAppOptions({ workspaceCode }));
-  const [effectiveUsers, setEffectiveUsers] = useState(() => getWorkspaceEffectiveUsers(workspaceCode));
+  const [appOptions, setAppOptions] = useState(() => (
+    appDataSource === "api" ? [] : listAppOptions({ workspaceCode })
+  ));
+  const [effectiveUsers, setEffectiveUsers] = useState(() => (
+    adminDataSource === "api" ? [] : getWorkspaceEffectiveUsers(workspaceCode)
+  ));
 
   useEffect(() => {
     if (adminDataSource === "api") return;
@@ -54,8 +58,8 @@ export function useTaskWorkspaceOptions(workspaceCode: string): TaskWorkspaceOpt
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        console.warn("[task] Falling back to mock workspace users.", error);
-        setEffectiveUsers(getWorkspaceEffectiveUsers(workspaceCode));
+        console.warn("[task] Workspace users request failed.", error);
+        setEffectiveUsers([]);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoadingUsers(false);
@@ -79,8 +83,8 @@ export function useTaskWorkspaceOptions(workspaceCode: string): TaskWorkspaceOpt
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        console.warn("[task] Falling back to mock workspace apps.", error);
-        setAppOptions(listAppOptions({ workspaceCode }));
+        console.warn("[task] Workspace app options request failed.", error);
+        setAppOptions([]);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoadingApps(false);

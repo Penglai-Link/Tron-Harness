@@ -9,7 +9,15 @@ use crate::{
         ModelType, ModelVerifyStatus, PlatformDefaultModelAssignment,
         WorkspaceDefaultModelAssignment, default_model_capabilities_for_type,
     },
-    shared::id::SnowflakeId,
+    shared::{
+        id::SnowflakeId,
+        time::{
+            option_timestamp_from_millis,
+            option_timestamp_to_millis,
+            timestamp_from_millis,
+            timestamp_to_millis,
+        },
+    },
 };
 
 use super::migrations::{
@@ -17,8 +25,6 @@ use super::migrations::{
     MODEL_REMOVE_SEEDED_DATA_MIGRATION, MODELS_MIGRATION,
 };
 
-const DEFAULT_TIMESTAMP: &str = "2026-05-20T00:00:00Z";
-const DEFAULT_EPOCH_MS: i64 = 1_779_235_200_000;
 const MODEL_ID_SEED: i64 = 734_600_000_000_000_000;
 
 pub struct SqliteModelRepository {
@@ -112,7 +118,7 @@ impl ModelRepository for SqliteModelRepository {
                     top_p: row.get(19)?,
                     timeout_ms: row.get::<_, Option<u64>>(20)?,
                     max_retries: row.get::<_, Option<u32>>(21)?,
-                    last_verified_at: row.get::<_, Option<i64>>(22)?.map(timestamp_from_millis),
+                    last_verified_at: option_timestamp_from_millis(row.get::<_, Option<i64>>(22)?),
                     last_verify_status: row
                         .get::<_, Option<String>>(23)?
                         .map(|value| verify_status_from_storage(value.as_str()))
@@ -180,7 +186,7 @@ impl ModelRepository for SqliteModelRepository {
                     model.top_p,
                     model.timeout_ms,
                     model.max_retries,
-                    model.last_verified_at.as_deref().map(timestamp_to_millis),
+                    option_timestamp_to_millis(model.last_verified_at.as_deref()),
                     model.last_verify_status.map(verify_status_to_storage),
                     model.last_verify_message,
                     source_kind_to_storage(model.source_kind),
@@ -249,7 +255,7 @@ impl ModelRepository for SqliteModelRepository {
                     model.top_p,
                     model.timeout_ms,
                     model.max_retries,
-                    model.last_verified_at.as_deref().map(timestamp_to_millis),
+                    option_timestamp_to_millis(model.last_verified_at.as_deref()),
                     model.last_verify_status.map(verify_status_to_storage),
                     model.last_verify_message,
                     source_kind_to_storage(model.source_kind),
@@ -464,14 +470,6 @@ fn model_capabilities_from_storage(
 
 fn bool_to_int(value: bool) -> i64 {
     i64::from(value)
-}
-
-fn timestamp_to_millis(_value: &str) -> i64 {
-    DEFAULT_EPOCH_MS
-}
-
-fn timestamp_from_millis(_value: i64) -> String {
-    DEFAULT_TIMESTAMP.into()
 }
 
 fn scope_kind_to_storage(value: ModelScopeKind) -> &'static str {

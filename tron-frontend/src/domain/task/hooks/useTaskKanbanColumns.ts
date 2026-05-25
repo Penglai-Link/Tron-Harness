@@ -24,7 +24,7 @@ export function useTaskKanbanColumns(query: TaskListQuery): TaskKanbanResult {
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const mockColumns = useMemo(() => listKanbanColumns(query), [query]);
-  const [columns, setColumns] = useState(mockColumns);
+  const [columns, setColumns] = useState(() => (dataSource === "api" ? [] : mockColumns));
   const queryKey = JSON.stringify(query);
 
   useEffect(() => {
@@ -41,8 +41,8 @@ export function useTaskKanbanColumns(query: TaskListQuery): TaskKanbanResult {
       .then(setColumns)
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        console.warn("[task] Falling back to mock kanban data.", error);
-        setColumns(mockColumns);
+        console.warn("[task] Task kanban request failed.", error);
+        setColumns([]);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);

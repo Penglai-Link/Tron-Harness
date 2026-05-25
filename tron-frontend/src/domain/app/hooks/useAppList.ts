@@ -32,7 +32,9 @@ export function useAppList(query: AppListQuery): AppListResult {
   const dataSource = getServiceDataSource("app");
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [page, setPage] = useState<AppPage<AppListItem>>(() => listAppPage(query));
+  const [page, setPage] = useState<AppPage<AppListItem>>(() => (
+    dataSource === "api" ? emptyPage(query) : listAppPage(query)
+  ));
   const queryKey = JSON.stringify(query);
 
   useEffect(() => {
@@ -52,8 +54,8 @@ export function useAppList(query: AppListQuery): AppListResult {
       .then(setPage)
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        console.warn("[app] Falling back to mock app list.", error);
-        setPage(listAppPage(query));
+        console.warn("[app] App list request failed.", error);
+        setPage(emptyPage(query));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);

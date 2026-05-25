@@ -459,6 +459,14 @@ export function TaskDetailsPage() {
             <Button className="bg-black text-white hover:bg-neutral-800" variant="primary" onClick={() => {
               toast.info("Task execution is not available in v1");
             }}>Execute</Button>
+            {detailEditable ? (
+              <>
+                <Button variant="secondary" onClick={resetDetailFields}>Cancel</Button>
+                <Button disabled={!detailDirty} onClick={() => void saveDetailFields()}><Save size={15} aria-hidden="true" />Save</Button>
+              </>
+            ) : !archived ? (
+              <Button variant="secondary" onClick={() => setEditing(true)}><Edit3 size={15} aria-hidden="true" />Edit Details</Button>
+            ) : null}
           </>
         }
       />
@@ -569,14 +577,6 @@ export function TaskDetailsPage() {
                 <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Task Definition</h2>
                 <p className="mt-1 font-mono text-sm text-[var(--color-on-surface-variant)]">{task.taskCode}</p>
               </div>
-              {detailEditable ? (
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" onClick={saveDetailFields} disabled={!detailDirty}><Save size={15} />Save Details</Button>
-                  <Button size="sm" variant="secondary" onClick={resetDetailFields}><X size={15} />Cancel</Button>
-                </div>
-              ) : !archived ? (
-                <Button size="sm" variant="secondary" onClick={() => setEditing(true)}><Edit3 size={15} />Edit Details</Button>
-              ) : null}
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Title">

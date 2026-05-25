@@ -4,6 +4,7 @@ import { promptApiEndpoints } from "@/domain/prompt/api";
 
 export function usePromptVariableList() {
   return useServiceQuery({
+    apiInitialData: () => [],
     domain: "prompt",
     endpoint: promptApiEndpoints.listPromptVariables,
     mockData: () => getPromptVariables(),

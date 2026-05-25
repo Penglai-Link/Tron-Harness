@@ -19,7 +19,9 @@ export interface AppOptionsResult {
 export function useAppOptions(query: AppOptionQuery): AppOptionsResult {
   const dataSource = getServiceDataSource("app");
   const [loading, setLoading] = useState(false);
-  const [options, setOptions] = useState<AppOption[]>(() => listAppOptions(query));
+  const [options, setOptions] = useState<AppOption[]>(() => (
+    dataSource === "api" ? [] : listAppOptions(query)
+  ));
   const queryKey = JSON.stringify(query);
 
   useEffect(() => {
@@ -36,8 +38,8 @@ export function useAppOptions(query: AppOptionQuery): AppOptionsResult {
       .then(setOptions)
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        console.warn("[app] Falling back to mock app options.", error);
-        setOptions(listAppOptions(query));
+        console.warn("[app] App options request failed.", error);
+        setOptions([]);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);

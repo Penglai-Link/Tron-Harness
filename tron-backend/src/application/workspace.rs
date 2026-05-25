@@ -23,10 +23,10 @@ use crate::{
     shared::{
         event_bus::{BusEventDraft, EventBusHandle},
         id::SnowflakeId,
+        time::current_timestamp,
     },
 };
 
-const DEFAULT_TIMESTAMP: &str = "2026-05-16T00:00:00Z";
 const GENERATED_WORKSPACE_CODE_PREFIX: &str = "WS-";
 const WORKSPACE_CODE_GENERATION_ATTEMPTS: usize = 16;
 
@@ -292,8 +292,8 @@ impl WorkspaceService {
             description: optional_trimmed(command.description),
             parent_workspace_code,
             status: WorkspaceStatus::Active,
-            created_at: DEFAULT_TIMESTAMP.into(),
-            updated_at: DEFAULT_TIMESTAMP.into(),
+            created_at: current_timestamp(),
+            updated_at: current_timestamp(),
             archived_at: None,
         };
         {
@@ -329,7 +329,7 @@ impl WorkspaceService {
         }
         workspace.name = command.name.trim().to_string();
         workspace.description = optional_trimmed(command.description);
-        workspace.updated_at = DEFAULT_TIMESTAMP.into();
+        workspace.updated_at = current_timestamp();
         {
             let mut repository = self
                 .repository
@@ -390,7 +390,7 @@ impl WorkspaceService {
         }
 
         workspaces[target_index].parent_workspace_code = new_parent;
-        workspaces[target_index].updated_at = DEFAULT_TIMESTAMP.into();
+        workspaces[target_index].updated_at = current_timestamp();
         {
             let mut repository = self
                 .repository
@@ -418,12 +418,12 @@ impl WorkspaceService {
                 .repository
                 .lock()
                 .expect("workspace repository mutex poisoned");
-            repository.archive_subtree(&subtree_codes, DEFAULT_TIMESTAMP)?
+            repository.archive_subtree(&subtree_codes, &current_timestamp())?
         };
         Ok(WorkspaceLifecycleResult {
             workspace_code: workspace.workspace_code.clone(),
             status: WorkspaceStatus::Archived,
-            archived_at: Some(DEFAULT_TIMESTAMP.into()),
+            archived_at: Some(current_timestamp()),
             affected_workspace_count,
         })
         .map(|result| {
@@ -458,7 +458,7 @@ impl WorkspaceService {
                 .repository
                 .lock()
                 .expect("workspace repository mutex poisoned");
-            repository.restore_subtree(&subtree_codes, DEFAULT_TIMESTAMP)?
+            repository.restore_subtree(&subtree_codes, &current_timestamp())?
         };
         Ok(WorkspaceLifecycleResult {
             workspace_code: workspace.workspace_code.clone(),
@@ -523,7 +523,7 @@ impl WorkspaceService {
                 Ok(WorkspaceUserAccess {
                     user_code,
                     is_owner: draft.is_owner,
-                    granted_at: DEFAULT_TIMESTAMP.into(),
+                    granted_at: current_timestamp(),
                 })
             })
             .collect::<Result<Vec<_>, WorkspaceError>>()?;
@@ -614,7 +614,7 @@ impl WorkspaceService {
                 }
                 Ok(WorkspaceRoleAccess {
                     role_code,
-                    granted_at: DEFAULT_TIMESTAMP.into(),
+                    granted_at: current_timestamp(),
                 })
             })
             .collect::<Result<Vec<_>, WorkspaceError>>()?;

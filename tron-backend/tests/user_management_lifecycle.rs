@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 use std::{
     fs,
     path::PathBuf,
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 use tron_backend::config::AppConfig;
@@ -14,6 +15,8 @@ use tron_backend::config::AppConfig;
 mod common;
 
 use common::authenticated_request_with_config;
+
+static TEST_DB_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[tokio::test]
 async fn create_user_returns_stringified_id_and_user_code() {
@@ -344,7 +347,9 @@ async fn patch_user_rejects_invalid_status_with_uniform_envelope() {
 
 #[tokio::test]
 async fn patch_user_accepts_active_and_archived_status_values() {
-    let create_response = request(
+    let config = temp_database_config("user-status-patch");
+    let create_response = request_with_config(
+        config.clone(),
         Method::POST,
         "/api/v1/admin/users",
         Some(valid_create_payload(
@@ -356,7 +361,8 @@ async fn patch_user_accepts_active_and_archived_status_values() {
     .await;
     assert_eq!(create_response.status(), StatusCode::CREATED);
 
-    let archived_response = request(
+    let archived_response = request_with_config(
+        config.clone(),
         Method::PATCH,
         "/api/v1/admin/users/USR-STATUS-PATCH",
         Some(json!({ "status": "Archived" })),
@@ -375,7 +381,8 @@ async fn patch_user_accepts_active_and_archived_status_values() {
         "archiving through PATCH must set archivedAt",
     );
 
-    let active_response = request(
+    let active_response = request_with_config(
+        config,
         Method::PATCH,
         "/api/v1/admin/users/USR-STATUS-PATCH",
         Some(json!({ "status": "Active" })),
@@ -394,23 +401,40 @@ async fn patch_user_accepts_active_and_archived_status_values() {
 
 #[tokio::test]
 async fn archive_then_restore_transitions_user_status() {
-    let archive_response =
-        request(Method::POST, "/api/v1/admin/users/USR-0009/archive", None).await;
+    let config = temp_database_config("user-archive-restore");
+    let archive_response = request_with_config(
+        config.clone(),
+        Method::POST,
+        "/api/v1/admin/users/USR-0009/archive",
+        None,
+    )
+    .await;
     assert_eq!(
         archive_response.status(),
         StatusCode::OK,
         "TDD-UM-02 RED: archive transition endpoint is missing",
     );
 
-    let restore_response =
-        request(Method::POST, "/api/v1/admin/users/USR-0009/restore", None).await;
+    let restore_response = request_with_config(
+        config.clone(),
+        Method::POST,
+        "/api/v1/admin/users/USR-0009/restore",
+        None,
+    )
+    .await;
     assert_eq!(
         restore_response.status(),
         StatusCode::OK,
         "TDD-UM-02 RED: restore transition endpoint is missing",
     );
 
-    let detail_response = request(Method::GET, "/api/v1/admin/users/USR-0009", None).await;
+    let detail_response = request_with_config(
+        config,
+        Method::GET,
+        "/api/v1/admin/users/USR-0009",
+        None,
+    )
+    .await;
     assert_eq!(detail_response.status(), StatusCode::OK);
     let json = response_json(detail_response).await;
     assert_eq!(json["data"]["status"], "Active");
@@ -455,7 +479,15 @@ fn temp_database_path(test_name: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("system time should be after Unix epoch")
         .as_nanos();
-    std::env::temp_dir().join(format!("tron-{test_name}-{nanos}.sqlite3"))
+    let sequence = TEST_DB_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("tron-{test_name}-{nanos}-{sequence}.sqlite3"))
+}
+
+fn temp_database_config(test_name: &str) -> AppConfig {
+    AppConfig {
+        database_url: temp_database_path(test_name).to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    }
 }
 
 async fn response_json(response: axum::response::Response) -> Value {

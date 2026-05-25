@@ -5,16 +5,21 @@ use rusqlite::{Connection, params};
 use crate::{
     application::app::AppRepository,
     domain::app::{
-        App, AppError, AppRuntimeRole, AppStatus, AppTag, app_runtime_role_from_storage,
+        App, AppError, AppTag, app_runtime_role_from_storage,
         app_runtime_role_to_storage, app_status_from_storage, app_status_to_storage,
     },
-    shared::id::SnowflakeId,
+    shared::{
+        id::SnowflakeId,
+        time::{
+            option_timestamp_from_millis,
+            option_timestamp_to_millis,
+            timestamp_from_millis,
+            timestamp_to_millis,
+        },
+    },
 };
 
 use super::migrations::APPS_MIGRATION;
-
-const DEFAULT_TIMESTAMP: &str = "2026-05-19T00:00:00Z";
-const DEFAULT_EPOCH_MS: i64 = 1_779_148_800_000;
 
 pub struct SqliteAppRepository {
     connection: Connection,
@@ -37,7 +42,6 @@ impl SqliteAppRepository {
 
         let mut repository = Self { connection };
         repository.apply_migrations()?;
-        repository.seed_if_empty()?;
         Ok(repository)
     }
 
@@ -46,102 +50,6 @@ impl SqliteAppRepository {
             .execute_batch(APPS_MIGRATION)
             .map_err(storage_error)?;
         self.ensure_current_schema()
-    }
-
-    fn seed_if_empty(&mut self) -> Result<(), AppError> {
-        let count: i64 = self
-            .connection
-            .query_row("SELECT COUNT(*) FROM apps", [], |row| row.get(0))
-            .map_err(storage_error)?;
-        if count > 0 {
-            return Ok(());
-        }
-
-        let apps = [
-            (
-                App {
-                    id: SnowflakeId::new(734_900_000_000_000_001),
-                    app_code: "APP-TRON-CONSOLE".into(),
-                    workspace_code: "TRON_CORE".into(),
-                    name: "Tron Console".into(),
-                    description: Some("Primary operator-facing frontend.".into()),
-                    local_directory: "/workspace/tron/tron-frontend".into(),
-                    runtime_role: AppRuntimeRole::Frontend,
-                    repository_url: Some("https://github.com/clouds3n/tron-console".into()),
-                    default_branch: Some("master".into()),
-                    status: AppStatus::Active,
-                    created_at: DEFAULT_TIMESTAMP.into(),
-                    updated_at: DEFAULT_TIMESTAMP.into(),
-                    archived_at: None,
-                },
-                vec!["Operator".to_string(), "React".to_string()],
-            ),
-            (
-                App {
-                    id: SnowflakeId::new(734_900_000_000_000_002),
-                    app_code: "APP-TRON-API".into(),
-                    workspace_code: "TRON_CORE".into(),
-                    name: "Tron API".into(),
-                    description: Some("Core backend serving task and admin workflows.".into()),
-                    local_directory: "/workspace/tron/tron-backend".into(),
-                    runtime_role: AppRuntimeRole::Backend,
-                    repository_url: Some("https://github.com/clouds3n/tron-backend".into()),
-                    default_branch: Some("master".into()),
-                    status: AppStatus::Active,
-                    created_at: DEFAULT_TIMESTAMP.into(),
-                    updated_at: DEFAULT_TIMESTAMP.into(),
-                    archived_at: None,
-                },
-                vec!["Rust".to_string(), "Core".to_string()],
-            ),
-            (
-                App {
-                    id: SnowflakeId::new(734_900_000_000_000_003),
-                    app_code: "APP-COMPLIANCE-API".into(),
-                    workspace_code: "COMPLIANCE".into(),
-                    name: "Compliance API".into(),
-                    description: Some("Backend used by regulated reporting workflows.".into()),
-                    local_directory: "/workspace/apps/compliance-api".into(),
-                    runtime_role: AppRuntimeRole::Backend,
-                    repository_url: Some("https://github.com/clouds3n/compliance-api".into()),
-                    default_branch: Some("master".into()),
-                    status: AppStatus::Active,
-                    created_at: DEFAULT_TIMESTAMP.into(),
-                    updated_at: DEFAULT_TIMESTAMP.into(),
-                    archived_at: None,
-                },
-                vec!["Audit".to_string()],
-            ),
-            (
-                App {
-                    id: SnowflakeId::new(734_900_000_000_000_004),
-                    app_code: "APP-TRON-LEGACY".into(),
-                    workspace_code: "TRON_CORE".into(),
-                    name: "Legacy Console".into(),
-                    description: Some("Archived frontend kept for historical reference.".into()),
-                    local_directory: "/workspace/tron/legacy-console".into(),
-                    runtime_role: AppRuntimeRole::Frontend,
-                    repository_url: None,
-                    default_branch: None,
-                    status: AppStatus::Archived,
-                    created_at: DEFAULT_TIMESTAMP.into(),
-                    updated_at: DEFAULT_TIMESTAMP.into(),
-                    archived_at: Some(DEFAULT_TIMESTAMP.into()),
-                },
-                vec!["Legacy".to_string()],
-            ),
-        ];
-
-        for (app, tags) in apps {
-            self.create_app(&app)?;
-            self.replace_app_tags(&app.app_code, &tags.iter().map(|tag| AppTag {
-                app_code: app.app_code.clone(),
-                tag: tag.clone(),
-                linked_at: DEFAULT_TIMESTAMP.into(),
-            }).collect::<Vec<_>>())?;
-        }
-
-        Ok(())
     }
 
     fn ensure_current_schema(&mut self) -> Result<(), AppError> {
@@ -235,9 +143,9 @@ impl AppRepository for SqliteAppRepository {
                         repository_url,
                         default_branch,
                         status: app_status_from_storage(status.as_str())?,
-                        created_at: millis_to_timestamp(created_at),
-                        updated_at: millis_to_timestamp(updated_at),
-                        archived_at: archived_at.map(millis_to_timestamp),
+                        created_at: timestamp_from_millis(created_at),
+                        updated_at: timestamp_from_millis(updated_at),
+                        archived_at: option_timestamp_from_millis(archived_at),
                     })
                 },
             )
@@ -259,7 +167,7 @@ impl AppRepository for SqliteAppRepository {
                 Ok(AppTag {
                     app_code: row.get(0)?,
                     tag: row.get(1)?,
-                    linked_at: millis_to_timestamp(row.get(2)?),
+                    linked_at: timestamp_from_millis(row.get(2)?),
                 })
             })
             .map_err(storage_error)?
@@ -296,7 +204,7 @@ impl AppRepository for SqliteAppRepository {
                     app_status_to_storage(app.status),
                     timestamp_to_millis(&app.created_at),
                     timestamp_to_millis(&app.updated_at),
-                    app.archived_at.as_deref().map(timestamp_to_millis),
+                    option_timestamp_to_millis(app.archived_at.as_deref()),
                 ],
             )
             .map_err(storage_error)?;
@@ -328,7 +236,7 @@ impl AppRepository for SqliteAppRepository {
                     app.default_branch,
                     app_status_to_storage(app.status),
                     timestamp_to_millis(&app.updated_at),
-                    app.archived_at.as_deref().map(timestamp_to_millis),
+                    option_timestamp_to_millis(app.archived_at.as_deref()),
                 ],
             )
             .map_err(storage_error)?;
@@ -374,14 +282,6 @@ fn ensure_database_parent(database_url: &str) -> Result<(), AppError> {
         fs::create_dir_all(parent).map_err(|_| AppError::StorageFailure)?;
     }
     Ok(())
-}
-
-fn timestamp_to_millis(_value: &str) -> i64 {
-    DEFAULT_EPOCH_MS
-}
-
-fn millis_to_timestamp(_value: i64) -> String {
-    DEFAULT_TIMESTAMP.into()
 }
 
 fn storage_error(_error: rusqlite::Error) -> AppError {

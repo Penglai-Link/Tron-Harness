@@ -463,10 +463,6 @@ export function SkillsPage() {
               <RefreshCcw size={16} aria-hidden="true" />
               {refreshing ? "Refreshing..." : "Refresh"}
             </Button>
-            <Button variant="secondary" onClick={() => navigate("/skills/installed")}>
-              <Package size={16} aria-hidden="true" />
-              Skill Center
-            </Button>
             <Button disabled={!activeWorkspaceCode} onClick={() => navigate("/skills/bind")}>
               <Link2 size={16} aria-hidden="true" />
               Install
@@ -699,7 +695,7 @@ export function SkillsPage() {
                       size="sm"
                       type="button"
                       variant="secondary"
-                      onClick={() => navigate("/skills/installed")}
+                      onClick={() => navigate("/settings/skills")}
                     >
                       <Package size={14} aria-hidden="true" />
                       Skill Center

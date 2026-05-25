@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { useNavigate } from "react-router";
@@ -33,6 +34,36 @@ import type {
 } from "@/domain/task/model";
 import { cn } from "@/shared/lib/utils";
 
+type BoardScalePreset = "fit" | "100" | "90" | "80" | "70" | "60" | "50";
+
+const BOARD_SCALE_STORAGE_KEY = "tron.tasks.boardScale";
+const BOARD_BASE_COLUMN_WIDTH = 320;
+const BOARD_BASE_GAP = 16;
+const BOARD_BASE_COLUMN_PADDING = 12;
+const BOARD_MIN_SCALE = 0.5;
+const BOARD_SCALE_PRESETS: Array<{ label: string; value: Exclude<BoardScalePreset, "fit"> }> = [
+  { label: "100%", value: "100" },
+  { label: "90%", value: "90" },
+  { label: "80%", value: "80" },
+  { label: "70%", value: "70" },
+  { label: "60%", value: "60" },
+  { label: "50%", value: "50" },
+];
+
+function resolveStoredBoardScale(value: string | null): BoardScalePreset {
+  if (value === "100" || value === "90" || value === "80" || value === "70" || value === "60" || value === "50") return value;
+  return "fit";
+}
+
+function presetScaleFactor(preset: BoardScalePreset) {
+  if (preset === "fit") return null;
+  return Number(preset) / 100;
+}
+
+function clampBoardScale(value: number) {
+  return Math.min(1, Math.max(BOARD_MIN_SCALE, value));
+}
+
 function SearchField({ placeholder, value, onChange }: { placeholder: string; value: string; onChange: (value: string) => void }) {
   return (
     <div className="relative">
@@ -60,21 +91,29 @@ function sourceTypeTone(sourceType: TaskSourceType) {
   return "success";
 }
 
-function KanbanCard({ task, selected, onSelect }: { task: TaskListItem; selected: boolean; onSelect: () => void }) {
+function KanbanCard({ task, selected, compact, dense, onSelect }: { task: TaskListItem; selected: boolean; compact: boolean; dense: boolean; onSelect: () => void }) {
   return (
-    <button className={cn("w-full rounded-lg border bg-white p-3 text-left shadow-sm hover:border-[var(--color-outline)]", selected ? "border-[var(--color-primary)]" : "border-[var(--color-outline-variant)]")} type="button" onClick={onSelect}>
-      <div className="mb-2 flex items-center justify-between">
-        <span className="font-mono text-[11px] text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
+    <button
+      className={cn(
+        "w-full rounded-lg border bg-white text-left shadow-sm hover:border-[var(--color-outline)]",
+        dense ? "p-2" : compact ? "p-2.5" : "p-3",
+        selected ? "border-[var(--color-primary)]" : "border-[var(--color-outline-variant)]",
+      )}
+      type="button"
+      onClick={onSelect}
+    >
+      <div className={cn("flex items-center justify-between gap-2", dense ? "mb-1" : compact ? "mb-1.5" : "mb-2")}>
+        <span className="min-w-0 truncate font-mono text-[11px] text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
         <Badge tone={task.priority === "High" ? "error" : task.priority === "Medium" ? "warning" : "neutral"}>{task.priority}</Badge>
       </div>
-      <h3 className="mb-3 text-sm font-medium leading-5">{task.title}</h3>
-      <div className="mb-3 flex flex-wrap gap-1.5">
+      <h3 className={cn("font-medium leading-5", dense ? "mb-1.5 text-[12px]" : compact ? "mb-2 text-[13px]" : "mb-3 text-sm")}>{task.title}</h3>
+      <div className={cn("flex flex-wrap", dense ? "mb-1.5 gap-1" : compact ? "mb-2 gap-1" : "mb-3 gap-1.5")}>
         <Badge tone={taskTypeTone(task.taskType)}>{task.taskType}</Badge>
         <Badge tone={sourceTypeTone(task.sourceType)}>{task.sourceType}</Badge>
       </div>
       <ProgressBar value={task.progress} />
-      <div className="mt-3 flex items-center justify-between">
-        <span className="text-[11px] text-[var(--color-on-surface-variant)]">{task.assigneeUserCodes[0] ?? "Unassigned"}</span>
+      <div className={cn("flex items-center justify-between gap-2", dense ? "mt-2" : compact ? "mt-2.5" : "mt-3")}>
+        <span className="min-w-0 truncate text-[11px] text-[var(--color-on-surface-variant)]">{task.assigneeUserCodes[0] ?? "Unassigned"}</span>
         <span className="text-[11px] text-[var(--color-on-surface-variant)]">{task.subtaskCount} subtasks</span>
       </div>
     </button>
@@ -88,9 +127,15 @@ export function TasksKanbanPage() {
   const [taskType, setTaskType] = useState<TaskType>("Feature");
   const [priority, setPriority] = useState("");
   const [selectedTaskCode, setSelectedTaskCode] = useState<string | null>(null);
+  const [boardScalePreset, setBoardScalePreset] = useState<BoardScalePreset>(() => {
+    if (typeof window === "undefined") return "fit";
+    return resolveStoredBoardScale(window.localStorage.getItem(BOARD_SCALE_STORAGE_KEY));
+  });
+  const [boardViewportWidth, setBoardViewportWidth] = useState(0);
   const navigate = useNavigate();
   const toast = useToast();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
+  const boardViewportRef = useRef<HTMLDivElement | null>(null);
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const workspaceCode = activeWorkspace?.workspaceCode ?? "";
 
@@ -114,61 +159,117 @@ export function TasksKanbanPage() {
     setSelectedTaskCode(null);
   }, [taskType, workspaceCode]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(BOARD_SCALE_STORAGE_KEY, boardScalePreset);
+  }, [boardScalePreset]);
+
+  useEffect(() => {
+    const viewport = boardViewportRef.current;
+    if (!viewport) return undefined;
+
+    const updateViewportWidth = () => {
+      setBoardViewportWidth(viewport.clientWidth);
+    };
+
+    updateViewportWidth();
+
+    const observer = new ResizeObserver((entries) => {
+      const nextWidth = entries[0]?.contentRect.width ?? viewport.clientWidth;
+      setBoardViewportWidth(nextWidth);
+    });
+
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
+
+  const fitBoardScale = useMemo(() => {
+    if (!columns.length || boardViewportWidth <= 0) return 1;
+    const naturalBoardWidth = columns.length * BOARD_BASE_COLUMN_WIDTH + Math.max(0, columns.length - 1) * BOARD_BASE_GAP;
+    return clampBoardScale(boardViewportWidth / naturalBoardWidth);
+  }, [boardViewportWidth, columns.length]);
+
+  const boardScale = presetScaleFactor(boardScalePreset) ?? fitBoardScale;
+  const boardScalePercent = Math.round(boardScale * 100);
+  const boardLayout = useMemo(() => ({
+    compact: boardScale < 0.86,
+    dense: boardScale < 0.68,
+    columnGap: Math.max(8, Math.round(BOARD_BASE_GAP * boardScale)),
+    columnPadding: Math.max(6, Math.round(BOARD_BASE_COLUMN_PADDING * boardScale)),
+    columnWidth: Math.max(160, Math.round(BOARD_BASE_COLUMN_WIDTH * boardScale)),
+  }), [boardScale]);
+
   return (
     <TronShell activeItem="Tasks" searchPlaceholder="Search tasks...">
-      <PageHeader
-        title="Task Management"
-        actions={
-          <>
-            <Button variant="secondary" onClick={() => {
-              refresh();
-              toast.success("Task board refreshed");
-            }}><RefreshCcw size={16} aria-hidden="true" />Refresh</Button>
-            <Button onClick={() => navigate("/tasks/new")}><Plus size={16} aria-hidden="true" />Create Task</Button>
-          </>
-        }
-      />
-      <SurfaceCard className="mb-4 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_180px_220px]">
-        <div className="grid gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Search</span>
-          <SearchField placeholder="Filter task code, title, or description..." value={searchInput} onChange={setSearchInput} />
+      <div className="flex min-h-[calc(100vh-6.5rem)] flex-col">
+        <PageHeader
+          title="Task Management"
+          actions={
+            <>
+              <SelectInput aria-label="Task board scale" className="w-[128px] bg-white" value={boardScalePreset} onChange={(event) => setBoardScalePreset(event.target.value as BoardScalePreset)}>
+                <option value="fit">{`Fit (${boardScalePercent}%)`}</option>
+                {BOARD_SCALE_PRESETS.map((preset) => <option key={preset.value} value={preset.value}>{preset.label}</option>)}
+              </SelectInput>
+              <Button variant="secondary" onClick={() => {
+                refresh();
+                toast.success("Task board refreshed");
+              }}><RefreshCcw size={16} aria-hidden="true" />Refresh</Button>
+              <Button onClick={() => navigate("/tasks/new")}><Plus size={16} aria-hidden="true" />New</Button>
+            </>
+          }
+        />
+        <SurfaceCard className="mb-4 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_180px_220px]">
+          <div className="grid gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Search</span>
+            <SearchField placeholder="Filter task code, title, or description..." value={searchInput} onChange={setSearchInput} />
+          </div>
+          <div className="grid gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Task Type</span>
+            <SelectInput aria-label="Task type filter" value={taskType} onChange={(event) => setTaskType(event.target.value as TaskType)}>
+              {options.taskTypes.map((item) => <option key={item} value={item}>{item}</option>)}
+            </SelectInput>
+          </div>
+          <div className="grid gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Priority</span>
+            <SelectInput aria-label="Task priority filter" value={priority} onChange={(event) => setPriority(event.target.value)}>
+              <option value="">All priorities</option>
+              {options.priorities.map((item) => <option key={item} value={item}>{item}</option>)}
+            </SelectInput>
+          </div>
+        </SurfaceCard>
+        <div className="flex min-h-0 flex-1 overflow-x-auto pb-4" ref={boardViewportRef} style={{ gap: `${boardLayout.columnGap}px` }}>
+          {columns.map((column) => (
+            <section
+              className="flex shrink-0 flex-col rounded-lg bg-[var(--color-surface-container)]"
+              key={column.status}
+              style={{
+                gap: `${boardLayout.columnGap}px`,
+                padding: `${boardLayout.columnPadding}px`,
+                width: `${boardLayout.columnWidth}px`,
+              }}
+            >
+              <div className="flex items-center justify-between border-b-2 border-[var(--color-outline-variant)] px-1 py-1">
+                <span className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{column.title}</span>
+                <span className="rounded bg-[var(--color-surface-container-high)] px-2 text-[11px]">{column.tasks.length}</span>
+              </div>
+              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+                {column.tasks.map((task) => (
+                  <KanbanCard
+                    key={task.taskCode}
+                    task={task}
+                    compact={boardLayout.compact}
+                    dense={boardLayout.dense}
+                    selected={selectedTaskCode === task.taskCode}
+                    onSelect={() => {
+                      setSelectedTaskCode(task.taskCode);
+                      navigate(`/tasks/detail?taskCode=${encodeURIComponent(task.taskCode)}`);
+                    }}
+                  />
+                ))}
+              </div>
+            </section>
+          ))}
         </div>
-        <div className="grid gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Task Type</span>
-          <SelectInput aria-label="Task type filter" value={taskType} onChange={(event) => setTaskType(event.target.value as TaskType)}>
-            {options.taskTypes.map((item) => <option key={item} value={item}>{item}</option>)}
-          </SelectInput>
-        </div>
-        <div className="grid gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Priority</span>
-          <SelectInput aria-label="Task priority filter" value={priority} onChange={(event) => setPriority(event.target.value)}>
-            <option value="">All priorities</option>
-            {options.priorities.map((item) => <option key={item} value={item}>{item}</option>)}
-          </SelectInput>
-        </div>
-      </SurfaceCard>
-      <div className="flex h-[720px] gap-4 overflow-x-auto pb-4">
-        {columns.map((column) => (
-          <section className="flex w-[320px] shrink-0 flex-col gap-3 rounded-lg bg-[var(--color-surface-container)] p-3" key={column.status}>
-            <div className="flex items-center justify-between border-b-2 border-[var(--color-outline-variant)] px-1 py-1">
-              <span className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{column.title}</span>
-              <span className="rounded bg-[var(--color-surface-container-high)] px-2 text-[11px]">{column.tasks.length}</span>
-            </div>
-            <div className="space-y-3 overflow-y-auto">
-              {column.tasks.map((task) => (
-                <KanbanCard
-                  key={task.taskCode}
-                  task={task}
-                  selected={selectedTaskCode === task.taskCode}
-                  onSelect={() => {
-                    setSelectedTaskCode(task.taskCode);
-                    navigate(`/tasks/detail?taskCode=${encodeURIComponent(task.taskCode)}`);
-                  }}
-                />
-              ))}
-            </div>
-          </section>
-        ))}
       </div>
     </TronShell>
   );

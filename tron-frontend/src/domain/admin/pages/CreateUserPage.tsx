@@ -134,9 +134,21 @@ export function CreateUserPage() {
 
   return (
     <TronShell activeItem="Users" searchPlaceholder="Search users...">
-      <PageHeader breadcrumbs={[{ label: "Users", href: "/admin/users" }, { label: "New" }]} title="Create User" />
+      <PageHeader
+        breadcrumbs={[{ label: "Users", href: "/admin/users" }, { label: "New" }]}
+        title="Create User"
+        actions={(
+          <>
+            <Button type="button" variant="secondary" onClick={() => navigate("/admin/users")}>Cancel</Button>
+            <Button type="submit" form="create-user-form" disabled={submitting}>
+              <UserPlus size={16} aria-hidden="true" />
+              {submitting ? "Saving..." : "Save"}
+            </Button>
+          </>
+        )}
+      />
       <SurfaceCard>
-        <form className="grid gap-5" onSubmit={handleSubmit}>
+        <form className="grid gap-5" id="create-user-form" onSubmit={handleSubmit}>
           <div className="grid gap-4 md:grid-cols-3">
             <Field label="Username">
               <TextInput required value={form.username} onChange={(event) => updateForm("username", event.target.value)} />
@@ -165,13 +177,6 @@ export function CreateUserPage() {
             <Field label="Timezone">
               <TextInput value={form.timezone} onChange={(event) => updateForm("timezone", event.target.value)} />
             </Field>
-          </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => navigate("/admin/users")}>Cancel</Button>
-            <Button type="submit" disabled={submitting}>
-              <UserPlus size={16} aria-hidden="true" />
-              {submitting ? "Creating..." : "Create User"}
-            </Button>
           </div>
         </form>
       </SurfaceCard>

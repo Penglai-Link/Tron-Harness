@@ -4,6 +4,13 @@ import { observabilityApiEndpoints } from "@/domain/observability/api";
 
 export function useObservabilityOverview() {
   return useServiceQuery({
+    apiInitialData: () => ({
+      errors: [],
+      heatmap: [],
+      metrics: [],
+      throughput: [],
+      traces: [],
+    }),
     domain: "observability",
     endpoint: observabilityApiEndpoints.getObservabilityOverview,
     mockData: () => listObservabilityData(),

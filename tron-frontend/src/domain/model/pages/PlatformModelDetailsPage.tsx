@@ -30,7 +30,7 @@ import {
   deletePlatformModel,
   disablePlatformModel,
   enablePlatformModel,
-  fetchPlatformModels,
+  fetchPlatformModel,
   setPlatformDefaultModel,
   updatePlatformModel,
   verifyPlatformModel,
@@ -51,7 +51,7 @@ import {
 } from "@/domain/model/constants/modelPageOptions";
 import {
   deletePlatformModelRecord,
-  listPlatformModelsMock,
+  getPlatformModelRecord,
   setPlatformDefaultRecord,
   setPlatformModelEnabled,
   updatePlatformModelRecord,
@@ -95,7 +95,7 @@ export function PlatformModelDetailsPage() {
   const toast = useToast();
   const dataSource = getServiceDataSource("model");
   const modelCode = searchParams.get("modelCode") ?? "";
-  const [records, setRecords] = useState<ModelRecord[]>([]);
+  const [selectedRecord, setSelectedRecord] = useState<ModelRecord | null>(null);
   const [form, setForm] = useState<ModelFormState>(emptyModelFormState());
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -106,22 +106,15 @@ export function PlatformModelDetailsPage() {
   const [verifyPreview, setVerifyPreview] = useState<ModelRecord | null>(null);
   const apiKeyInputRef = useRef<HTMLInputElement | null>(null);
 
-  const selectedRecord = records.find((record) => record.modelCode === modelCode) ?? null;
-  const duplicateDisplayName = form.displayName.trim()
-    ? records.some((record) => record.displayName === form.displayName.trim() && record.modelCode !== modelCode)
-    : false;
-  const formDirty = selectedRecord
-    ? JSON.stringify(form) !== JSON.stringify(modelFormFromRecord(selectedRecord)) || apiKeyDirty
-    : false;
   const verifyStatusRecord = verifyPreview ?? selectedRecord;
 
-  async function refreshPlatformModels() {
+  async function refreshPlatformModel() {
     setLoading(true);
     try {
-      const nextRecords = dataSource === "api"
-        ? await fetchPlatformModels()
-        : listPlatformModelsMock();
-      setRecords(nextRecords);
+      const nextRecord = dataSource === "api"
+        ? await fetchPlatformModel(modelCode)
+        : getPlatformModelRecord(modelCode);
+      setSelectedRecord(nextRecord);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Platform models could not be loaded");
     } finally {
@@ -137,10 +130,10 @@ export function PlatformModelDetailsPage() {
     async function loadPlatformModels() {
       setLoading(true);
       try {
-        const nextRecords = dataSource === "api"
-          ? await fetchPlatformModels()
-          : listPlatformModelsMock();
-        if (active) setRecords(nextRecords);
+        const nextRecord = dataSource === "api"
+          ? await fetchPlatformModel(modelCode)
+          : getPlatformModelRecord(modelCode);
+        if (active) setSelectedRecord(nextRecord);
       } catch (error) {
         if (active) toast.error(error instanceof Error ? error.message : "Platform models could not be loaded");
       } finally {
@@ -181,10 +174,6 @@ export function PlatformModelDetailsPage() {
 
   async function saveModel() {
     if (!selectedRecord) return;
-    if (duplicateDisplayName) {
-      toast.error("displayName already exists in platform models");
-      return;
-    }
 
     setSubmitting(true);
     try {
@@ -195,7 +184,7 @@ export function PlatformModelDetailsPage() {
       toast.success(`${saved.displayName} saved`);
       setVerifyPreview(null);
       setEditing(false);
-      await refreshPlatformModels();
+      await refreshPlatformModel();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Platform model could not be saved");
     } finally {
@@ -212,7 +201,7 @@ export function PlatformModelDetailsPage() {
       title: "Verify",
     });
     try {
-      const payload = formDirty
+      const payload = editing
         ? platformPayload(form, apiKeyInputRef.current?.value.trim() ?? "", selectedRecord.enabled)
         : undefined;
       const verified = dataSource === "api"
@@ -225,7 +214,7 @@ export function PlatformModelDetailsPage() {
         setVerifyPreview(verified);
       } else {
         setVerifyPreview(null);
-        await refreshPlatformModels();
+        await refreshPlatformModel();
       }
       toast.success(`${verified.displayName} verified`);
     } catch (error) {
@@ -252,7 +241,7 @@ export function PlatformModelDetailsPage() {
           : await enablePlatformModel(selectedRecord.modelCode))
         : setPlatformModelEnabled(selectedRecord.modelCode, !selectedRecord.enabled);
       toast.success(`${toggled.displayName} ${toggled.enabled ? "enabled" : "disabled"}`);
-      await refreshPlatformModels();
+      await refreshPlatformModel();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Status update failed");
     }
@@ -286,7 +275,7 @@ export function PlatformModelDetailsPage() {
         setPlatformDefaultRecord(selectedRecord.modelCode);
       }
       toast.success(`${selectedRecord.displayName} set as default`);
-      await refreshPlatformModels();
+      await refreshPlatformModel();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Default model could not be updated");
     } finally {
@@ -323,74 +312,69 @@ export function PlatformModelDetailsPage() {
       <PageHeader
         breadcrumbs={[{ label: "Models", href: "/settings/models" }, { label: selectedRecord.displayName }]}
         title={selectedRecord.displayName}
+        actions={editing ? (
+          <>
+            <Button
+              variant="secondary"
+              disabled={submitting || verifying || !form.displayName.trim()}
+              aria-busy={verifying}
+              onClick={() => void runVerify()}
+            >
+              <ShieldCheck size={16} aria-hidden="true" />
+              {verifying ? "Verifying..." : "Verify"}
+            </Button>
+            <Button variant="secondary" disabled={submitting || verifying} onClick={resetDraft}>
+              <X size={16} aria-hidden="true" />
+              Cancel
+            </Button>
+            <Button
+              disabled={submitting || verifying || !form.displayName.trim()}
+              aria-busy={submitting}
+              onClick={() => void saveModel()}
+            >
+              <Save size={16} aria-hidden="true" />
+              {submitting ? "Saving..." : "Save"}
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={() => setEditing(true)}>
+              <Edit3 size={16} aria-hidden="true" />
+              Edit
+            </Button>
+            <Button variant="secondary" disabled={verifying} aria-busy={verifying} onClick={() => void runVerify()}>
+              <ShieldCheck size={16} aria-hidden="true" />
+              {verifying ? "Verifying..." : "Verify"}
+            </Button>
+            {!selectedRecord.isDefault && selectedRecord.enabled ? (
+              <Button variant="secondary" disabled={submitting || verifying} onClick={() => void makeDefault()}>
+                <Save size={16} aria-hidden="true" />
+                Set Default
+              </Button>
+            ) : null}
+            <Button variant="secondary" onClick={() => void toggleEnabled()}>
+              <Zap size={16} aria-hidden="true" />
+              {selectedRecord.enabled ? "Disable" : "Enable"}
+            </Button>
+            <Button variant="ghost" disabled={deleting} aria-busy={deleting} onClick={() => void removeModel()}>
+              <Trash2 size={16} aria-hidden="true" />
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          </>
+        )}
       />
 
       <div className="max-w-5xl space-y-5">
         <VerifyStatusCard record={verifyStatusRecord} />
 
         <SurfaceCard className="space-y-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <ModelSourceBadge sourceKind={selectedRecord.sourceKind} label={selectedRecord.sourceLabel} />
-              <Badge tone={selectedRecord.enabled ? "success" : "neutral"}>{selectedRecord.enabled ? "Enabled" : "Disabled"}</Badge>
-              {selectedRecord.isDefault ? <Badge tone="accent">Default</Badge> : null}
-              <code className="rounded-md bg-[var(--color-surface-container-low)] px-2 py-1 text-[13px] text-[var(--color-on-surface-variant)]">
-                {selectedRecord.modelCode}
-              </code>
-            </div>
-
-            <div className="flex flex-wrap justify-end gap-2">
-              {editing ? (
-                <>
-                  <Button
-                    disabled={submitting || verifying || !form.displayName.trim()}
-                    aria-busy={submitting}
-                    onClick={() => void saveModel()}
-                  >
-                    <Save size={16} aria-hidden="true" />
-                    {submitting ? "Saving..." : "Save"}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    disabled={submitting || verifying || !form.displayName.trim()}
-                    aria-busy={verifying}
-                    onClick={() => void runVerify()}
-                  >
-                    <ShieldCheck size={16} aria-hidden="true" />
-                    {verifying ? "Verifying..." : "Verify"}
-                  </Button>
-                  <Button variant="secondary" disabled={submitting || verifying} onClick={resetDraft}>
-                    <X size={16} aria-hidden="true" />
-                    Cancel
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button variant="secondary" onClick={() => setEditing(true)}>
-                    <Edit3 size={16} aria-hidden="true" />
-                    Edit
-                  </Button>
-                  <Button variant="secondary" disabled={verifying} aria-busy={verifying} onClick={() => void runVerify()}>
-                    <ShieldCheck size={16} aria-hidden="true" />
-                    {verifying ? "Verifying..." : "Verify"}
-                  </Button>
-                  {!selectedRecord.isDefault && selectedRecord.enabled ? (
-                    <Button variant="secondary" disabled={submitting || verifying} onClick={() => void makeDefault()}>
-                      <Save size={16} aria-hidden="true" />
-                      Set Default
-                    </Button>
-                  ) : null}
-                  <Button variant="secondary" onClick={() => void toggleEnabled()}>
-                    <Zap size={16} aria-hidden="true" />
-                    {selectedRecord.enabled ? "Disable" : "Enable"}
-                  </Button>
-                  <Button variant="ghost" disabled={deleting} aria-busy={deleting} onClick={() => void removeModel()}>
-                    <Trash2 size={16} aria-hidden="true" />
-                    {deleting ? "Deleting..." : "Delete"}
-                  </Button>
-                </>
-              )}
-            </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <ModelSourceBadge sourceKind={selectedRecord.sourceKind} label={selectedRecord.sourceLabel} />
+            <Badge tone={selectedRecord.enabled ? "success" : "neutral"}>{selectedRecord.enabled ? "Enabled" : "Disabled"}</Badge>
+            {selectedRecord.isDefault ? <Badge tone="accent">Default</Badge> : null}
+            <code className="rounded-md bg-[var(--color-surface-container-low)] px-2 py-1 text-[13px] text-[var(--color-on-surface-variant)]">
+              {selectedRecord.modelCode}
+            </code>
           </div>
 
           {editing ? (
@@ -400,7 +384,6 @@ export function PlatformModelDetailsPage() {
               apiKeyInputRef={apiKeyInputRef}
               apiKeyFieldHint="Leave blank to keep the current key."
               onApiKeyDirtyChange={setApiKeyDirty}
-              displayNameError={duplicateDisplayName ? "displayName already exists in platform models" : undefined}
             />
           ) : (
             <div className="grid gap-x-8 gap-y-5 md:grid-cols-2">

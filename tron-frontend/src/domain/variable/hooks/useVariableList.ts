@@ -18,7 +18,7 @@ export function useVariableCatalog(workspaceCode: string): VariableCatalogState 
   const dataSource = getServiceDataSource("variable");
   const [loading, setLoading] = useState(false);
   const [variables, setVariables] = useState<VariableRecord[]>(() => (
-    workspaceCode ? listVariableCatalog(workspaceCode) : []
+    workspaceCode && dataSource !== "api" ? listVariableCatalog(workspaceCode) : []
   ));
   const [refreshVersion, setRefreshVersion] = useState(0);
 
@@ -43,8 +43,8 @@ export function useVariableCatalog(workspaceCode: string): VariableCatalogState 
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        console.warn("[variable] Falling back to mock catalog.", error);
-        setVariables(listVariableCatalog(workspaceCode));
+        console.warn("[variable] Variable catalog request failed.", error);
+        setVariables([]);
       })
       .finally(() => {
         if (!controller.signal.aborted) {

@@ -35,8 +35,8 @@ function loadExecutionPage(
 
   const request = fetchAutomationExecutionPage(automationCode, query)
     .catch((error: unknown) => {
-      console.warn("[automation] Falling back to mock automation executions.", error);
-      return listAutomationExecutions(automationCode, query);
+      console.warn("[automation] Automation executions request failed.", error);
+      return createEmptyExecutionPage(query);
     })
     .finally(() => {
       executionPageRequests.delete(requestKey);

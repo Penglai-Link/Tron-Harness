@@ -28,6 +28,16 @@ pub async fn create_platform_model(
     }
 }
 
+pub async fn verify_platform_model_create_draft(
+    State(models): State<ModelService>,
+    Json(request): Json<ModelRequest>,
+) -> Response {
+    match models.verify_platform_model_create_draft(request.into()).await {
+        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Err(error) => model_error_response(error),
+    }
+}
+
 pub async fn duplicate_platform_model(
     State(models): State<ModelService>,
     Path(model_code): Path<String>,

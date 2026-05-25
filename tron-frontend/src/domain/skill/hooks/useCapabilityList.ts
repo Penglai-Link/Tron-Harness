@@ -4,6 +4,7 @@ import { skillApiEndpoints } from "@/domain/skill/api";
 
 export function useCapabilityList() {
   return useServiceQuery({
+    apiInitialData: () => [],
     domain: "skill",
     endpoint: skillApiEndpoints.listCapabilities,
     mockData: () => listCapabilities(),

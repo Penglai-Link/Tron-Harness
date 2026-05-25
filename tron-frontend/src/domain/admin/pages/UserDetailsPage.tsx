@@ -1,12 +1,10 @@
 import {
-  type FormEvent,
   useEffect,
   useMemo,
   useState,
 } from "react";
 import {
   Archive,
-  ArrowLeft,
   BriefcaseBusiness,
   Copy,
   KeyRound,
@@ -15,7 +13,6 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import {
-  Link,
   useLocation,
 } from "react-router";
 
@@ -271,8 +268,8 @@ export function UserDetailsPage() {
     return (
       <TronShell activeItem="Users" searchPlaceholder="Search users...">
         <PageHeader
+          breadcrumbs={[{ label: "Users", href: "/admin/users" }, { label: requestedUserCode || "Loading" }]}
           title="User Detail"
-          actions={<Button asChild variant="secondary"><Link to="/admin/users"><ArrowLeft size={16} aria-hidden="true" />Back to Users</Link></Button>}
         />
         <SurfaceCard>
           <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Loading user detail</h2>
@@ -290,8 +287,8 @@ export function UserDetailsPage() {
     return (
       <TronShell activeItem="Users" searchPlaceholder="Search users...">
         <PageHeader
+          breadcrumbs={[{ label: "Users", href: "/admin/users" }, { label: requestedUserCode || "Not Found" }]}
           title="User Detail"
-          actions={<Button asChild variant="secondary"><Link to="/admin/users"><ArrowLeft size={16} aria-hidden="true" />Back to Users</Link></Button>}
         />
         <SurfaceCard>
           <h2 className="text-base font-semibold text-[var(--color-on-surface)]">User not found</h2>
@@ -306,9 +303,9 @@ export function UserDetailsPage() {
   const currentStatus = user.status;
   const currentResetState = resetState?.userCode === user.userCode ? resetState : null;
   const isEditingProfile = profileForm !== null;
+  const detailBreadcrumbs = [{ label: "Users", href: "/admin/users" }, { label: user.displayName || user.userCode }];
 
-  async function saveProfile(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function saveProfile() {
     if (!profileForm || !user || savingProfile) return;
 
     setSavingProfile(true);
@@ -500,8 +497,27 @@ export function UserDetailsPage() {
   return (
     <TronShell activeItem="Users" searchPlaceholder="Search users...">
       <PageHeader
+        breadcrumbs={detailBreadcrumbs}
         title={user.displayName}
-        actions={<Button asChild variant="secondary"><Link to="/admin/users"><ArrowLeft size={16} aria-hidden="true" />Back to Users</Link></Button>}
+        actions={isEditingProfile ? (
+          <>
+            <Button type="button" variant="secondary" disabled={savingProfile} onClick={() => setProfileForm(null)}>Cancel</Button>
+            <Button type="button" disabled={savingProfile} aria-busy={savingProfile} onClick={() => void saveProfile()}>{savingProfile ? "Saving..." : "Save"}</Button>
+          </>
+        ) : (
+          <>
+            <Button variant="secondary" onClick={() => setProfileForm(makeProfileForm(user))}>
+              <Pencil size={16} aria-hidden="true" />
+              Edit Profile
+            </Button>
+            <Button variant="secondary" disabled={updatingLifecycle} aria-busy={updatingLifecycle} onClick={() => void toggleLifecycle(user)}>
+              {currentStatus === "Archived" ? <RotateCcw size={16} aria-hidden="true" /> : <Archive size={16} aria-hidden="true" />}
+              {updatingLifecycle
+                ? currentStatus === "Archived" ? "Restoring..." : "Archiving..."
+                : currentStatus === "Archived" ? "Restore User" : "Archive User"}
+            </Button>
+          </>
+        )}
       />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
         <SurfaceCard>
@@ -609,26 +625,6 @@ export function UserDetailsPage() {
               </>
             )}
           </div>
-          <div className="mt-5 flex flex-wrap gap-2 border-t border-[var(--color-outline-variant)] pt-4">
-            {isEditingProfile ? null : (
-              <Button variant="secondary" onClick={() => setProfileForm(makeProfileForm(user))}>
-                <Pencil size={16} aria-hidden="true" />
-                Edit Profile
-              </Button>
-            )}
-            <Button variant="secondary" disabled={updatingLifecycle} aria-busy={updatingLifecycle} onClick={() => void toggleLifecycle(user)}>
-              {currentStatus === "Archived" ? <RotateCcw size={16} aria-hidden="true" /> : <Archive size={16} aria-hidden="true" />}
-              {updatingLifecycle
-                ? currentStatus === "Archived" ? "Restoring..." : "Archiving..."
-                : currentStatus === "Archived" ? "Restore User" : "Archive User"}
-            </Button>
-          </div>
-          {isEditingProfile ? (
-            <form className="mt-5 flex flex-wrap justify-end gap-2" onSubmit={saveProfile}>
-              <Button type="button" variant="ghost" disabled={savingProfile} onClick={() => setProfileForm(null)}>Cancel</Button>
-              <Button type="submit" disabled={savingProfile} aria-busy={savingProfile}>{savingProfile ? "Saving Profile..." : "Save Profile"}</Button>
-            </form>
-          ) : null}
         </SurfaceCard>
 
         <div className="grid gap-4">

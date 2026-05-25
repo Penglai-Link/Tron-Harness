@@ -4,6 +4,7 @@ import { memoryApiEndpoints } from "@/domain/memory/api";
 
 export function useMemoryFragmentList() {
   return useServiceQuery({
+    apiInitialData: () => [],
     domain: "memory",
     endpoint: memoryApiEndpoints.listMemoryFragments,
     mockData: () => getMemoryFragments(),

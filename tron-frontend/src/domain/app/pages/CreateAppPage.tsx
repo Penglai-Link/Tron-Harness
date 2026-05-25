@@ -72,7 +72,7 @@ export function CreateAppPage() {
             <Button type="button" variant="secondary" onClick={() => navigate("/apps")}>Cancel</Button>
             <Button type="submit" disabled={submitting || !activeWorkspaceCode || !canSubmitAppForm(form)}>
               <Plus size={15} aria-hidden="true" />
-              {submitting ? "Creating..." : "Create App"}
+              {submitting ? "Saving..." : "Save"}
             </Button>
           </div>
         </form>

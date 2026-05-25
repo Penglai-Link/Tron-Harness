@@ -851,6 +851,12 @@ export function listPlatformModelsMock() {
   return sortModelRecords(platformModels.map((record) => buildPlatformView(record)));
 }
 
+export function getPlatformModelRecord(modelCode: string) {
+  const record = platformModels.find((item) => item.modelCode === modelCode);
+  if (!record) throw new Error("model was not found");
+  return buildPlatformView(record);
+}
+
 export function resetModelMockState() {
   nextMockModelSequence = 1000;
   platformModels = buildInitialPlatformModels();
@@ -863,6 +869,7 @@ export function resetModelMockState() {
 
 export function createPlatformModelRecord(payload: ModelMutationPayload) {
   ensurePlatformDisplayNameUnique(payload.displayName);
+  const defaultsBeforeCreate = resolveEffectivePlatformDefaults();
   const record = createSeedBaseModel(
     generateModelCode(),
     payload.displayName.trim(),
@@ -876,7 +883,31 @@ export function createPlatformModelRecord(payload: ModelMutationPayload) {
   );
   updateBaseModelFromPayload(record, payload, {});
   platformModels.push(record);
+  if (record.enabled && !defaultsBeforeCreate[record.modelType]) {
+    platformDefaults = {
+      ...platformDefaults,
+      [record.modelType]: record.modelCode,
+    };
+  }
   return buildPlatformView(record);
+}
+
+export function verifyPlatformModelCreateDraftRecord(payload: ModelMutationPayload) {
+  ensurePlatformDisplayNameUnique(payload.displayName);
+  const preview = createSeedBaseModel(
+    "",
+    payload.displayName.trim(),
+    payload.vendor.trim(),
+    payload.protocol,
+    payload.modelType,
+    payload.baseUrl.trim(),
+    payload.apiPath?.trim() ? payload.apiPath.trim() : null,
+    payload.apiKeyRef.trim(),
+    payload.modelName.trim(),
+  );
+  updateBaseModelFromPayload(preview, payload, {});
+  verifyBaseModel(preview);
+  return buildPlatformView(preview);
 }
 
 export function updatePlatformModelRecord(modelCode: string, payload: ModelMutationPayload) {
@@ -1004,6 +1035,43 @@ export function createWorkspaceModelRecord(
   });
   workspaceLocalModels.push(record);
   return resolveWorkspaceRecordState(workspaceCode, record.modelCode).record.view;
+}
+
+export function verifyWorkspaceModelCreateDraftRecord(
+  workspaceCode: string,
+  payload: ModelMutationPayload,
+) {
+  currentWorkspaceEntry(workspaceCode);
+  ensureWorkspaceDisplayNameUnique(workspaceCode, payload.displayName);
+  const preview: WorkspaceLocalModel = {
+    ...createSeedBaseModel(
+      "",
+      payload.displayName.trim(),
+      payload.vendor.trim(),
+      payload.protocol,
+      payload.modelType,
+      payload.baseUrl.trim(),
+      payload.apiPath?.trim() ? payload.apiPath.trim() : null,
+      payload.apiKeyRef.trim(),
+      payload.modelName.trim(),
+    ),
+    allowInheritance: payload.allowInheritance ?? true,
+    workspaceCode,
+  };
+  updateBaseModelFromPayload(preview, payload, {
+    allowInheritance: payload.allowInheritance ?? true,
+  });
+  verifyBaseModel(preview);
+  return buildWorkspaceView(
+    workspaceCode,
+    preview.modelCode,
+    preview,
+    "LOCAL",
+    null,
+    preview.enabled,
+    preview.allowInheritance,
+    { createdAt: preview.createdAt, updatedAt: preview.updatedAt },
+  );
 }
 
 export function duplicateWorkspaceModelRecord(workspaceCode: string, modelCode: string) {

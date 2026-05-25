@@ -152,13 +152,8 @@ export function useServiceQuery<T>({ apiInitialData, domain, endpoint, mockData,
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        if (domain === "admin") {
-          console.warn(`[services] API request failed for ${domain}.`, error);
-          if (shouldUseApiInitialData) setData(apiInitialValue as T);
-          return;
-        }
-        console.warn(`[services] Falling back to mock data for ${domain}.`, error);
-        setData(mockValue as T);
+        console.warn(`[services] API request failed for ${domain}.`, error);
+        if (shouldUseApiInitialData) setData(apiInitialValue as T);
       });
 
     return () => controller.abort();

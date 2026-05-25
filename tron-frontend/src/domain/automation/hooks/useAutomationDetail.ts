@@ -9,6 +9,31 @@ import { getAutomationDetail } from "@/domain/automation/mock/data";
 import type { AutomationDetailData } from "@/domain/automation/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
+function emptyAutomationDetail(automationCode: string): AutomationDetailData {
+  return {
+    archivedAt: null,
+    automationCode,
+    createdAt: "",
+    cronExpression: "",
+    description: null,
+    id: "",
+    lastExecutionCode: null,
+    lastExecutionStatus: null,
+    lastExecutionSummary: null,
+    lastFinishedAt: null,
+    lastStartedAt: null,
+    name: "",
+    nextRunAt: null,
+    previousStatus: null,
+    prompt: "",
+    schedulerExpression: "",
+    status: "Active",
+    timezone: "",
+    updatedAt: "",
+    workspaceCode: "",
+  };
+}
+
 export interface AutomationDetailResult {
   automation: AutomationDetailData;
   loading: boolean;
@@ -20,7 +45,9 @@ export function useAutomationDetail(automationCode = ""): AutomationDetailResult
   const dataSource = getServiceDataSource("automation");
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [automation, setAutomation] = useState(() => getAutomationDetail(automationCode));
+  const [automation, setAutomation] = useState(() => (
+    dataSource === "api" ? emptyAutomationDetail(automationCode) : getAutomationDetail(automationCode)
+  ));
 
   useEffect(() => {
     if (dataSource === "api") return;
@@ -37,8 +64,8 @@ export function useAutomationDetail(automationCode = ""): AutomationDetailResult
       .then(setAutomation)
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        console.warn("[automation] Falling back to mock automation detail.", error);
-        setAutomation(getAutomationDetail(automationCode));
+        console.warn("[automation] Automation detail request failed.", error);
+        setAutomation(emptyAutomationDetail(automationCode));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);

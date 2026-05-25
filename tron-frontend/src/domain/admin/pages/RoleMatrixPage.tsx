@@ -601,7 +601,7 @@ export function RoleMatrixPage() {
               onClick={() => runDebouncedAction("header-add-role", addCustomRole)}
             >
               <Plus size={16} aria-hidden="true" />
-              Add Role
+              New
             </Button>
             <Button
               className={HEADER_ACTION_BUTTON_CLASS}
@@ -802,7 +802,7 @@ export function RoleMatrixPage() {
               </Button>
               <Button onClick={() => runDebouncedAction("empty-add-role", addCustomRole)}>
                 <Plus size={16} aria-hidden="true" />
-                Add Role
+                New
               </Button>
             </div>
           </div>

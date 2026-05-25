@@ -12,10 +12,8 @@ use crate::{
         },
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceStatus},
     },
-    shared::id::SnowflakeId,
+    shared::{id::SnowflakeId, time::current_timestamp},
 };
-
-const DEFAULT_TIMESTAMP: &str = "2026-05-18T00:00:00Z";
 
 #[derive(Debug, Clone)]
 pub struct CreateVariableCommand {
@@ -112,8 +110,8 @@ impl VariableService {
             key: key.clone(),
             value,
             description,
-            created_at: DEFAULT_TIMESTAMP.into(),
-            updated_at: DEFAULT_TIMESTAMP.into(),
+            created_at: current_timestamp(),
+            updated_at: current_timestamp(),
         };
         self.repository
             .lock()
@@ -143,7 +141,7 @@ impl VariableService {
         let mut updated = existing.clone();
         updated.value = command.value;
         updated.description = optional_trimmed(command.description);
-        updated.updated_at = DEFAULT_TIMESTAMP.into();
+        updated.updated_at = current_timestamp();
 
         self.repository
             .lock()

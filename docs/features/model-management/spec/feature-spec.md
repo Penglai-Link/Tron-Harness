@@ -30,6 +30,10 @@ The workspace UI must stop treating inherited platform rows as removable shadows
 
 Workspace defaults must be slot-based rather than shadow-record-based. When an agent or another downstream consumer does not specify a model explicitly, it should resolve the current workspace default for the required `modelType` from the current workspace explicit default first, then the nearest ancestor workspace explicit default, then the platform default or platform fallback.
 
+Platform and workspace verify actions must always validate the current form payload independently from save. Create pages may call a dedicated draft-verify endpoint before any row exists, and detail pages may send the current edit draft for verification without persisting it. Verify must never mutate the stored model definition implicitly.
+
+Platform defaults and workspace defaults are keyed by the coarse `modelType` slot, not by fine-grained capability labels such as `Text Generation` or `Deep Thinking`. Multiple capability labels may map into the same `modelType` slot. If a platform `modelType` slot has no explicit default yet, the first enabled platform root model created in that slot must materialize the platform default assignment automatically.
+
 ## Scope Boundary
 
 This feature evolution rewrites the model-management contract across backend resolution logic, frontend workspace model pages, mock data, migrations, focused API tests, browser smoke coverage, and the feature docs themselves.
@@ -47,6 +51,9 @@ This feature evolution rewrites the model-management contract across backend res
 - Allow ancestor override rows to flow to descendants as inherited effective rows.
 - Keep local status changes separate from source classification so `disable` can remain `Inherited` when only `enabled` changes in the current workspace.
 - Let enabled `Local`, `Inherited`, and `Override` rows all participate in workspace default selection.
+- Support draft-first verify on both platform and workspace create or detail pages without implicit save.
+- Materialize an explicit platform default assignment when the first enabled platform root model is created in an empty `modelType` slot.
+- Treat default-slot identity as the coarse `modelType`, not as a capability combination.
 - Replace inherited-row delete or remove semantics with local status toggles and override reverts.
 - Remove old restore-route, remove-shadow, and compatibility behavior from API, frontend, mocks, and persistence cleanup.
 
@@ -72,6 +79,7 @@ Bounded context:
 Entities:
 
 - `PlatformModel`: a platform-owned root model slot.
+- `PlatformDefaultAssignment`: a platform-scoped choice of which platform root model should be the default per `modelType`.
 - `WorkspaceLocalModel`: a workspace-owned root model slot with optional descendant inheritance.
 - `WorkspaceOverrideModel`: a workspace-owned definition override that targets one upstream slot by visible `modelCode`.
 - `WorkspaceStatusPatch`: a workspace-owned status-only patch that targets one upstream slot by visible `modelCode`.
@@ -82,6 +90,9 @@ Policies:
 - Every visible workspace row is resolved against one stable slot key, exposed as the effective `modelCode`.
 - A child workspace inherits the nearest upstream effective definition. If a parent override exists, descendants inherit that override until they create their own override.
 - A status-only patch changes only `enabled` for the current workspace view and does not relabel the source as `Override`.
+- Platform and workspace default assignments are keyed by coarse `modelType`; capability labels may affect validation or display but do not create separate default slots.
+- Create-page and detail-page verify actions always validate the current draft payload without persisting it.
+- If a platform `modelType` slot has no explicit default assignment yet, creating the first enabled platform root model in that slot materializes one automatically.
 - A workspace default always points at the visible slot key, so a current-workspace override still satisfies the same default assignment.
 - Legacy restore or remove shadow data is not part of the active model and may be deleted during cleanup.
 
@@ -97,23 +108,29 @@ Workspace model management:
   - allow `Set Default` for any enabled visible row
   - allow `Disable/Enable` for any visible row
   - allow `Edit` on local rows and on inherited or override rows, where inherited edits create a current-workspace override
+  - allow `Verify` on create and detail pages against the current form values without saving
   - allow `Delete` only for local rows
   - allow `Revert` only for override rows
 
 Platform model management:
 
 - Route surface: `/settings/models`, `/settings/models/detail`, `/settings/models/new`
-- Behavior: remains the only surface that creates, edits, disables, duplicates, deletes, or chooses defaults for platform root models.
+- Behavior:
+  - remains the only surface that creates, edits, disables, duplicates, deletes, or chooses defaults for platform root models
+  - allow `Verify` on create and detail pages against the current form values without saving
+  - keep create-page verify on the current page and do not create a row implicitly
+  - choose defaults per coarse `modelType` slot rather than per capability label combination
+  - materialize the platform default automatically when the first enabled platform root model is created in an empty `modelType` slot
 
 Backend model API:
 
 - Modules: `tron-backend/src/application/model.rs`, `tron-backend/src/adapters/inbound/http/models/*`, `tron-backend/src/adapters/outbound/persistence/sqlite/*`
-- Behavior: expose latest-only workspace-effective semantics, slot-based defaults, and no restore/remove compatibility layer.
+- Behavior: expose platform plus workspace draft-verify endpoints, latest-only workspace-effective semantics, coarse-`modelType` slot-based defaults, automatic first-platform-default materialization, and no restore/remove compatibility layer.
 
 Frontend model modules:
 
 - Modules: `tron-frontend/src/domain/model/api/modelApi.ts`, `tron-frontend/src/domain/model/mock/data.ts`, `tron-frontend/src/domain/model/pages/*`, `tron-frontend/tests/model-management-smoke.spec.ts`
-- Behavior: render current-workspace source semantics, inherited-from details, and latest-only actions.
+- Behavior: render current-workspace source semantics, inherited-from details, draft-first verify flows, and latest-only actions.
 
 ## Repository Findings
 

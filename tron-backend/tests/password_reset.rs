@@ -12,7 +12,9 @@ use common::{app as auth_test_app, authenticated_request};
 
 #[tokio::test]
 async fn reset_password_returns_temporary_password_once_without_persisting_plaintext() {
+    let router = auth_test_app();
     let reset_response = request(
+        &router,
         Method::POST,
         "/api/v1/admin/users/USR-1001/password/reset",
         Some(json!({})),
@@ -35,7 +37,7 @@ async fn reset_password_returns_temporary_password_once_without_persisting_plain
         "temporary password cannot be blank",
     );
 
-    let detail_response = request(Method::GET, "/api/v1/admin/users/USR-1001", None).await;
+    let detail_response = request(&router, Method::GET, "/api/v1/admin/users/USR-1001", None).await;
     assert_eq!(detail_response.status(), StatusCode::OK);
     let detail_json = response_json(detail_response).await;
     assert!(
@@ -59,7 +61,8 @@ async fn reset_password_returns_temporary_password_once_without_persisting_plain
 
 #[tokio::test]
 async fn user_detail_never_exposes_password_hash() {
-    let detail_response = request(Method::GET, "/api/v1/admin/users/USR-1001", None).await;
+    let router = auth_test_app();
+    let detail_response = request(&router, Method::GET, "/api/v1/admin/users/USR-1001", None).await;
     assert_eq!(detail_response.status(), StatusCode::OK);
     let detail_json = response_json(detail_response).await;
     assert!(
@@ -68,9 +71,13 @@ async fn user_detail_never_exposes_password_hash() {
     );
 }
 
-async fn request(method: Method, uri: &str, body: Option<Value>) -> axum::response::Response {
-    let router = auth_test_app();
-    authenticated_request(&router, method, uri, body).await
+async fn request(
+    router: &axum::Router,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+) -> axum::response::Response {
+    authenticated_request(router, method, uri, body).await
 }
 
 async fn response_json(response: axum::response::Response) -> Value {

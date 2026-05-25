@@ -27,10 +27,10 @@ use crate::{
     shared::{
         event_bus::{BusEventDraft, BusPriority, EventBusHandle},
         id::SnowflakeId,
+        time::current_timestamp,
     },
 };
 
-const DEFAULT_TIMESTAMP: &str = "2026-05-12T00:00:00Z";
 const DEV_OAUTH2_CODE: &str = "dev-oauth2-code";
 const DEV_OAUTH2_SUBJECT: &str = "dev-auth-operator";
 const DEV_OAUTH2_LOGIN: &str = "auth.operator";
@@ -680,8 +680,8 @@ impl UserService {
             password_hash,
             password_reset_required: command.password_reset_required.unwrap_or(true),
             last_active_at: None,
-            created_at: DEFAULT_TIMESTAMP.into(),
-            updated_at: DEFAULT_TIMESTAMP.into(),
+            created_at: current_timestamp(),
+            updated_at: current_timestamp(),
             archived_at: None,
         };
 
@@ -739,10 +739,10 @@ impl UserService {
             user.status = status;
             user.archived_at = match status {
                 UserStatus::Active => None,
-                UserStatus::Archived => Some(DEFAULT_TIMESTAMP.into()),
+                UserStatus::Archived => Some(current_timestamp()),
             };
         }
-        user.updated_at = DEFAULT_TIMESTAMP.into();
+        user.updated_at = current_timestamp();
 
         repository.update_user(&user)?;
         let updated = user.clone();
@@ -768,8 +768,8 @@ impl UserService {
             .expect("user repository mutex poisoned");
         let mut user = repository.get_user(user_code)?;
         user.status = UserStatus::Archived;
-        user.archived_at = Some(DEFAULT_TIMESTAMP.into());
-        user.updated_at = DEFAULT_TIMESTAMP.into();
+        user.archived_at = Some(current_timestamp());
+        user.updated_at = current_timestamp();
         repository.update_user(&user)?;
         let archived = user.clone();
         drop(repository);
@@ -795,7 +795,7 @@ impl UserService {
         let mut user = repository.get_user(user_code)?;
         user.status = UserStatus::Active;
         user.archived_at = None;
-        user.updated_at = DEFAULT_TIMESTAMP.into();
+        user.updated_at = current_timestamp();
         repository.update_user(&user)?;
         let restored = user.clone();
         drop(repository);
@@ -822,7 +822,7 @@ impl UserService {
             .expect("user repository mutex poisoned");
         let mut user = repository.get_user(user_code)?;
         user.role_codes = unique_preserving_order(role_codes);
-        user.updated_at = DEFAULT_TIMESTAMP.into();
+        user.updated_at = current_timestamp();
         repository.replace_role_codes(&user)?;
         let updated = user.clone();
         drop(repository);
@@ -849,7 +849,7 @@ impl UserService {
             .expect("user repository mutex poisoned");
         let mut user = repository.get_user(user_code)?;
         user.space_codes = unique_preserving_order(space_codes);
-        user.updated_at = DEFAULT_TIMESTAMP.into();
+        user.updated_at = current_timestamp();
         repository.replace_space_codes(&user)?;
         let updated = user.clone();
         drop(repository);
@@ -879,7 +879,7 @@ impl UserService {
 
         user.password_hash = password_hash;
         user.password_reset_required = true;
-        user.updated_at = DEFAULT_TIMESTAMP.into();
+        user.updated_at = current_timestamp();
         repository.record_password_reset(&user, reset_id)?;
 
         let result = PasswordResetResult {

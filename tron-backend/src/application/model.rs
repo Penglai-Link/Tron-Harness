@@ -21,10 +21,9 @@ use crate::{
         },
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceStatus},
     },
-    shared::id::SnowflakeId,
+    shared::{id::SnowflakeId, time::current_timestamp},
 };
 
-const DEFAULT_TIMESTAMP: &str = "2026-05-20T00:00:00Z";
 const DEFAULT_TIMEOUT_MS: u64 = 5_000;
 const MASKED_API_KEY_VALUE: &str = "*****";
 
@@ -179,48 +178,44 @@ impl ModelService {
         let spec = normalize_model_spec(command, false, true)?;
         let models = self.all_models()?;
         ensure_platform_display_name_unique(&models, &spec.display_name, None)?;
+        let assignments = self.all_platform_default_assignments()?;
+        let defaults_by_type = resolve_platform_defaults(&models, &assignments);
 
         let id = self.next_id()?;
-        let model = Model {
-            id: SnowflakeId::new(id),
-            scope_kind: ModelScopeKind::Platform,
-            workspace_code: None,
-            model_code: build_model_code(id),
-            display_name: spec.display_name,
-            vendor: spec.vendor,
-            protocol: spec.protocol,
-            model_type: spec.model_type,
-            model_capabilities: spec.model_capabilities,
-            base_url: spec.base_url,
-            api_path: spec.api_path,
-            api_key_ref: spec.api_key_ref,
-            model_name: spec.model_name,
-            enabled: spec.enabled,
-            description: spec.description,
-            thinking_enabled: spec.thinking_enabled,
-            structured_output_enabled: spec.structured_output_enabled,
-            temperature: spec.temperature,
-            max_tokens: spec.max_tokens,
-            top_p: spec.top_p,
-            timeout_ms: spec.timeout_ms,
-            max_retries: spec.max_retries,
-            last_verified_at: None,
-            last_verify_status: None,
-            last_verify_message: None,
-            source_kind: ModelSourceKind::Platform,
-            source_model_code: None,
-            allow_inheritance: None,
-            created_at: DEFAULT_TIMESTAMP.into(),
-            updated_at: DEFAULT_TIMESTAMP.into(),
-        };
+        let model = build_platform_model_from_spec(spec, id, build_model_code(id));
 
         self.repository
             .lock()
             .expect("model repository mutex poisoned")
             .create_model(&model)?;
 
-        let defaults_by_type = self.platform_default_map()?;
-        Ok(build_platform_view(model, &defaults_by_type))
+        if model.enabled && !defaults_by_type.contains_key(&model.model_type) {
+            self.repository
+                .lock()
+                .expect("model repository mutex poisoned")
+                .upsert_platform_default_assignment(&PlatformDefaultModelAssignment {
+                    model_type: model.model_type,
+                    model_code: model.model_code.clone(),
+                    updated_at: current_timestamp(),
+                })?;
+        }
+
+        let next_defaults_by_type = self.platform_default_map()?;
+        Ok(build_platform_view(model, &next_defaults_by_type))
+    }
+
+    pub async fn verify_platform_model_create_draft(
+        &self,
+        command: ModelCommand,
+    ) -> Result<ModelView, ModelError> {
+        let spec = normalize_model_spec(command, false, true)?;
+        let models = self.all_models()?;
+        ensure_platform_display_name_unique(&models, &spec.display_name, None)?;
+        let assignments = self.all_platform_default_assignments()?;
+        let defaults_by_type = resolve_platform_defaults(&models, &assignments);
+        let preview = build_platform_model_from_spec(spec, 0, String::new());
+        let verified = self.verify_model_preview(preview).await?;
+        Ok(build_platform_view(verified, &defaults_by_type))
     }
 
     pub fn duplicate_platform_model(&self, model_code: &str) -> Result<ModelView, ModelError> {
@@ -256,8 +251,8 @@ impl ModelService {
             source_kind: ModelSourceKind::Platform,
             source_model_code: None,
             allow_inheritance: None,
-            created_at: DEFAULT_TIMESTAMP.into(),
-            updated_at: DEFAULT_TIMESTAMP.into(),
+            created_at: current_timestamp(),
+            updated_at: current_timestamp(),
         };
 
         self.repository
@@ -352,7 +347,7 @@ impl ModelService {
         let assignment = PlatformDefaultModelAssignment {
             model_type: record.model_type,
             model_code: record.model_code.clone(),
-            updated_at: DEFAULT_TIMESTAMP.into(),
+            updated_at: current_timestamp(),
         };
         self.repository
             .lock()
@@ -448,38 +443,12 @@ impl ModelService {
         )?;
 
         let id = self.next_id()?;
-        let model = Model {
-            id: SnowflakeId::new(id),
-            scope_kind: ModelScopeKind::Workspace,
-            workspace_code: Some(workspace.workspace_code.clone()),
-            model_code: build_model_code(id),
-            display_name: spec.display_name,
-            vendor: spec.vendor,
-            protocol: spec.protocol,
-            model_type: spec.model_type,
-            model_capabilities: spec.model_capabilities,
-            base_url: spec.base_url,
-            api_path: spec.api_path,
-            api_key_ref: spec.api_key_ref,
-            model_name: spec.model_name,
-            enabled: spec.enabled,
-            description: spec.description,
-            thinking_enabled: spec.thinking_enabled,
-            structured_output_enabled: spec.structured_output_enabled,
-            temperature: spec.temperature,
-            max_tokens: spec.max_tokens,
-            top_p: spec.top_p,
-            timeout_ms: spec.timeout_ms,
-            max_retries: spec.max_retries,
-            last_verified_at: None,
-            last_verify_status: None,
-            last_verify_message: None,
-            source_kind: ModelSourceKind::WorkspaceLocal,
-            source_model_code: None,
-            allow_inheritance: Some(spec.allow_inheritance.unwrap_or(true)),
-            created_at: DEFAULT_TIMESTAMP.into(),
-            updated_at: DEFAULT_TIMESTAMP.into(),
-        };
+        let model = build_workspace_local_model_from_spec(
+            &workspace.workspace_code,
+            spec,
+            id,
+            build_model_code(id),
+        );
 
         self.repository
             .lock()
@@ -487,6 +456,35 @@ impl ModelService {
             .create_model(&model)?;
 
         self.get_workspace_model(&workspace.workspace_code, &model.model_code)
+    }
+
+    pub async fn verify_workspace_model_create_draft(
+        &self,
+        workspace_code: &str,
+        command: ModelCommand,
+    ) -> Result<ModelView, ModelError> {
+        let workspace = self.active_workspace_detail(workspace_code)?;
+        let spec = normalize_model_spec(command, true, true)?;
+        let catalog_state = self.resolve_workspace_catalog_state(&workspace)?;
+        ensure_workspace_catalog_display_name_unique(
+            &catalog_state.records,
+            &workspace.workspace_code,
+            &spec.display_name,
+            None,
+        )?;
+        let preview =
+            build_workspace_local_model_from_spec(&workspace.workspace_code, spec, 0, String::new());
+        let verified = self.verify_model_preview(preview).await?;
+        Ok(build_workspace_effective_view(
+            &workspace,
+            verified.model_code.as_str(),
+            &verified,
+            ModelViewSourceKind::Local,
+            None,
+            verified.enabled,
+            verified.allow_inheritance,
+            &verified,
+        ))
     }
 
     pub fn duplicate_workspace_model(
@@ -731,7 +729,7 @@ impl ModelService {
             workspace_code: workspace.workspace_code.clone(),
             model_type: record.view.model_type,
             model_code: record.view.model_code.clone(),
-            updated_at: DEFAULT_TIMESTAMP.into(),
+            updated_at: current_timestamp(),
         };
         self.repository
             .lock()
@@ -761,7 +759,7 @@ impl ModelService {
             .ok_or(ModelError::StorageFailure)?;
 
         owned.allow_inheritance = Some(command.allow_inheritance);
-        owned.updated_at = DEFAULT_TIMESTAMP.into();
+        owned.updated_at = current_timestamp();
         self.repository
             .lock()
             .expect("model repository mutex poisoned")
@@ -832,7 +830,7 @@ impl ModelService {
         let models = self.all_models()?;
         let mut platform = find_platform_model(&models, model_code)?.clone();
         platform.enabled = enabled;
-        platform.updated_at = DEFAULT_TIMESTAMP.into();
+        platform.updated_at = current_timestamp();
         self.repository
             .lock()
             .expect("model repository mutex poisoned")
@@ -860,7 +858,7 @@ impl ModelService {
                     .current_owned_record
                     .ok_or(ModelError::StorageFailure)?;
                 owned.enabled = enabled;
-                owned.updated_at = DEFAULT_TIMESTAMP.into();
+                owned.updated_at = current_timestamp();
                 self.repository
                     .lock()
                     .expect("model repository mutex poisoned")
@@ -876,7 +874,7 @@ impl ModelService {
                     .current_owned_record
                     .ok_or(ModelError::StorageFailure)?;
                 owned.enabled = enabled;
-                owned.updated_at = DEFAULT_TIMESTAMP.into();
+                owned.updated_at = current_timestamp();
                 self.repository
                     .lock()
                     .expect("model repository mutex poisoned")
@@ -1867,7 +1865,7 @@ fn update_model_from_spec(
     model.timeout_ms = spec.timeout_ms;
     model.max_retries = spec.max_retries;
     model.allow_inheritance = allow_inheritance;
-    model.updated_at = DEFAULT_TIMESTAMP.into();
+    model.updated_at = current_timestamp();
     model
 }
 
@@ -2014,8 +2012,8 @@ fn duplicate_workspace_source_model(
         source_kind: ModelSourceKind::WorkspaceLocal,
         source_model_code: None,
         allow_inheritance: Some(source.allow_inheritance.unwrap_or(true)),
-        created_at: DEFAULT_TIMESTAMP.into(),
-        updated_at: DEFAULT_TIMESTAMP.into(),
+        created_at: current_timestamp(),
+        updated_at: current_timestamp(),
     }
 }
 
@@ -2059,8 +2057,8 @@ fn workspace_status_patch_model(
         source_kind: ModelSourceKind::WorkspaceStatusPatch,
         source_model_code: Some(source_slot_code.to_string()),
         allow_inheritance: None,
-        created_at: DEFAULT_TIMESTAMP.into(),
-        updated_at: DEFAULT_TIMESTAMP.into(),
+        created_at: current_timestamp(),
+        updated_at: current_timestamp(),
     }
 }
 
@@ -2094,7 +2092,7 @@ fn update_workspace_status_patch_model(
     patch.source_kind = ModelSourceKind::WorkspaceStatusPatch;
     patch.source_model_code = Some(source_slot_code.to_string());
     patch.allow_inheritance = None;
-    patch.updated_at = DEFAULT_TIMESTAMP.into();
+    patch.updated_at = current_timestamp();
     patch
 }
 
@@ -2138,8 +2136,8 @@ fn workspace_override_model(
         source_kind: ModelSourceKind::WorkspaceOverride,
         source_model_code: Some(source_slot_code.to_string()),
         allow_inheritance: None,
-        created_at: DEFAULT_TIMESTAMP.into(),
-        updated_at: DEFAULT_TIMESTAMP.into(),
+        created_at: current_timestamp(),
+        updated_at: current_timestamp(),
     }
 }
 
@@ -2178,7 +2176,7 @@ fn update_workspace_override_model(
     existing.source_kind = ModelSourceKind::WorkspaceOverride;
     existing.source_model_code = Some(source_slot_code.to_string());
     existing.allow_inheritance = None;
-    existing.updated_at = DEFAULT_TIMESTAMP.into();
+    existing.updated_at = current_timestamp();
     existing
 }
 
@@ -2197,11 +2195,86 @@ fn masked_api_key_ref(value: &str) -> String {
 }
 
 fn apply_verify_outcome_to_model(mut model: Model, outcome: VerifyOutcome) -> Model {
-    model.last_verified_at = Some(DEFAULT_TIMESTAMP.into());
+    model.last_verified_at = Some(current_timestamp());
     model.last_verify_status = Some(outcome.status);
     model.last_verify_message = Some(outcome.message);
-    model.updated_at = DEFAULT_TIMESTAMP.into();
+    model.updated_at = current_timestamp();
     model
+}
+
+fn build_platform_model_from_spec(spec: NormalizedModelSpec, id: i64, model_code: String) -> Model {
+    Model {
+        id: SnowflakeId::new(id),
+        scope_kind: ModelScopeKind::Platform,
+        workspace_code: None,
+        model_code,
+        display_name: spec.display_name,
+        vendor: spec.vendor,
+        protocol: spec.protocol,
+        model_type: spec.model_type,
+        model_capabilities: spec.model_capabilities,
+        base_url: spec.base_url,
+        api_path: spec.api_path,
+        api_key_ref: spec.api_key_ref,
+        model_name: spec.model_name,
+        enabled: spec.enabled,
+        description: spec.description,
+        thinking_enabled: spec.thinking_enabled,
+        structured_output_enabled: spec.structured_output_enabled,
+        temperature: spec.temperature,
+        max_tokens: spec.max_tokens,
+        top_p: spec.top_p,
+        timeout_ms: spec.timeout_ms,
+        max_retries: spec.max_retries,
+        last_verified_at: None,
+        last_verify_status: None,
+        last_verify_message: None,
+        source_kind: ModelSourceKind::Platform,
+        source_model_code: None,
+        allow_inheritance: None,
+        created_at: current_timestamp(),
+        updated_at: current_timestamp(),
+    }
+}
+
+fn build_workspace_local_model_from_spec(
+    workspace_code: &str,
+    spec: NormalizedModelSpec,
+    id: i64,
+    model_code: String,
+) -> Model {
+    Model {
+        id: SnowflakeId::new(id),
+        scope_kind: ModelScopeKind::Workspace,
+        workspace_code: Some(workspace_code.to_string()),
+        model_code,
+        display_name: spec.display_name,
+        vendor: spec.vendor,
+        protocol: spec.protocol,
+        model_type: spec.model_type,
+        model_capabilities: spec.model_capabilities,
+        base_url: spec.base_url,
+        api_path: spec.api_path,
+        api_key_ref: spec.api_key_ref,
+        model_name: spec.model_name,
+        enabled: spec.enabled,
+        description: spec.description,
+        thinking_enabled: spec.thinking_enabled,
+        structured_output_enabled: spec.structured_output_enabled,
+        temperature: spec.temperature,
+        max_tokens: spec.max_tokens,
+        top_p: spec.top_p,
+        timeout_ms: spec.timeout_ms,
+        max_retries: spec.max_retries,
+        last_verified_at: None,
+        last_verify_status: None,
+        last_verify_message: None,
+        source_kind: ModelSourceKind::WorkspaceLocal,
+        source_model_code: None,
+        allow_inheritance: Some(spec.allow_inheritance.unwrap_or(true)),
+        created_at: current_timestamp(),
+        updated_at: current_timestamp(),
+    }
 }
 
 fn default_verify_path(protocol: ModelProtocol, model_type: ModelType) -> &'static str {

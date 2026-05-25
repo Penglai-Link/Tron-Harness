@@ -8,12 +8,15 @@ use crate::{
         RegistrySkill, SkillError, SkillManagedBy, SkillSourceType, SkillUpdateStatus,
         WorkspaceSkillBinding,
     },
+    shared::time::{
+        option_timestamp_from_millis,
+        option_timestamp_to_millis,
+        timestamp_from_millis,
+        timestamp_to_millis,
+    },
 };
 
 use super::migrations::SKILL_REGISTRY_MIGRATION;
-
-const DEFAULT_TIMESTAMP: &str = "2026-05-19T00:00:00Z";
-const DEFAULT_EPOCH_MS: i64 = 1_779_148_800_000;
 
 pub struct SqliteSkillRegistryRepository {
     connection: Connection,
@@ -69,11 +72,11 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepository {
                     declared_version: row.get(4)?,
                     update_status: update_status_from_storage(&row.get::<_, String>(6)?)?,
                     managed_by: managed_by_from_storage(&row.get::<_, String>(7)?)?,
-                    last_checked_at: option_millis_to_timestamp(row.get(8)?),
-                    last_updated_at: option_millis_to_timestamp(row.get(9)?),
+                    last_checked_at: option_timestamp_from_millis(row.get(8)?),
+                    last_updated_at: option_timestamp_from_millis(row.get(9)?),
                     last_error: row.get(10)?,
-                    created_at: millis_to_timestamp(row.get(11)?),
-                    updated_at: millis_to_timestamp(row.get(12)?),
+                    created_at: timestamp_from_millis(row.get(11)?),
+                    updated_at: timestamp_from_millis(row.get(12)?),
                 })
             })
             .map_err(storage_error)?
@@ -154,8 +157,8 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepository {
                         workspace_code: row.get(0)?,
                         skill_name: row.get(1)?,
                         enabled: row.get::<_, i64>(2)? != 0,
-                        created_at: millis_to_timestamp(row.get(3)?),
-                        updated_at: millis_to_timestamp(row.get(4)?),
+                        created_at: timestamp_from_millis(row.get(3)?),
+                        updated_at: timestamp_from_millis(row.get(4)?),
                     })
                 })
                 .map_err(storage_error)?
@@ -168,8 +171,8 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepository {
                         workspace_code: row.get(0)?,
                         skill_name: row.get(1)?,
                         enabled: row.get::<_, i64>(2)? != 0,
-                        created_at: millis_to_timestamp(row.get(3)?),
-                        updated_at: millis_to_timestamp(row.get(4)?),
+                        created_at: timestamp_from_millis(row.get(3)?),
+                        updated_at: timestamp_from_millis(row.get(4)?),
                     })
                 })
                 .map_err(storage_error)?
@@ -263,22 +266,6 @@ fn ensure_workspace_skill_binding_enabled_column(
             .map_err(storage_error)?;
     }
     Ok(())
-}
-
-fn timestamp_to_millis(_value: &str) -> i64 {
-    DEFAULT_EPOCH_MS
-}
-
-fn option_timestamp_to_millis(value: Option<&str>) -> Option<i64> {
-    value.map(timestamp_to_millis)
-}
-
-fn millis_to_timestamp(_value: i64) -> String {
-    DEFAULT_TIMESTAMP.into()
-}
-
-fn option_millis_to_timestamp(value: Option<i64>) -> Option<String> {
-    value.map(millis_to_timestamp)
 }
 
 fn source_type_to_storage(value: SkillSourceType) -> &'static str {

@@ -52,6 +52,7 @@ export const shell = {
     items: {
       general: "General",
       models: "Models",
+      skillCenter: "Skill Center",
     },
     navigation: "Configuration",
     title: "Settings",

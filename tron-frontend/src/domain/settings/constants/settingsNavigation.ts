@@ -1,4 +1,5 @@
 import {
+  Package,
   Settings2,
   Sparkles,
 } from "lucide-react";
@@ -15,5 +16,11 @@ export const settingsNavigation = [
     href: "/settings/models",
     icon: Sparkles,
     translationKey: "shell:settings.items.models",
+  },
+  {
+    label: "Skill Center",
+    href: "/settings/skills",
+    icon: Package,
+    translationKey: "shell:settings.items.skillCenter",
   },
 ] as const;

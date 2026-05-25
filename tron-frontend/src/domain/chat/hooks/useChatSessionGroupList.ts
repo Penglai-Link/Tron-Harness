@@ -4,6 +4,7 @@ import { chatApiEndpoints } from "@/domain/chat/api";
 
 export function useChatSessionGroupList() {
   return useServiceQuery({
+    apiInitialData: () => [],
     domain: "chat",
     endpoint: chatApiEndpoints.listChatSessionGroups,
     mockData: () => getChatSessionGroups(),

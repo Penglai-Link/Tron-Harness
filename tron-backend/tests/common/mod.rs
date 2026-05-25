@@ -1,4 +1,10 @@
-use std::sync::Arc;
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use axum::{
     Json, Router,
@@ -11,8 +17,27 @@ use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tower::ServiceExt;
 use tron_backend::{
+    adapters::outbound::persistence::{
+        SqliteAppRepository, SqliteRoleRepository, SqliteUserRepository, SqliteVariableRepository,
+        SqliteWorkspaceRepository,
+    },
     app::build_router,
+    application::{
+        app::AppRepository,
+        role::RoleRepository,
+        user::UserRepository,
+        variable::VariableRepository,
+        workspace::WorkspaceRepository,
+    },
     config::{AppConfig, AuthConfig, GitHubOAuthConfig},
+    domain::{
+        app::{App, AppRuntimeRole, AppStatus, AppTag},
+        role::seeded_roles,
+        user::{ListUsersQuery, PhoneNumber, User, UserSourceType, UserStatus},
+        variable::Variable,
+        workspace::{Workspace, WorkspaceRoleAccess, WorkspaceStatus, WorkspaceUserAccess},
+    },
+    shared::id::SnowflakeId,
 };
 
 pub const AUTH_EMAIL: &str = "auth.operator@tron.ai";
@@ -23,6 +48,8 @@ const GITHUB_TEST_CLIENT_ID: &str = "github-client-id";
 const GITHUB_TEST_CLIENT_SECRET: &str = "github-client-secret";
 const GITHUB_TEST_ACCESS_TOKEN: &str = "github-access-token";
 pub const GITHUB_TEST_CODE: &str = "github-test-code";
+const FIXTURE_TIMESTAMP: &str = "2026-05-16T00:00:00Z";
+static TEST_DB_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Clone)]
 struct GitHubMockState {
@@ -69,11 +96,21 @@ pub struct GitHubMockServer {
 }
 
 pub fn app() -> Router {
-    build_router(AppConfig::default())
+    build_router(prepared_config(AppConfig::default()))
 }
 
 pub fn app_with_config(config: AppConfig) -> Router {
-    build_router(config)
+    build_router(prepared_config(config))
+}
+
+pub fn prepared_config(mut config: AppConfig) -> AppConfig {
+    if config.database_url == ":memory:" {
+        config.database_url = temp_database_path("integration")
+            .to_string_lossy()
+            .into_owned();
+    }
+    seed_default_fixture_data(&config.database_url);
+    config
 }
 
 pub async fn github_mock_server() -> GitHubMockServer {
@@ -131,6 +168,536 @@ pub fn github_oauth_config(server: &GitHubMockServer) -> AppConfig {
         ..config.auth
     };
     config
+}
+
+fn seed_default_fixture_data(database_url: &str) {
+    seed_roles(database_url);
+    seed_users(database_url);
+    seed_workspaces(database_url);
+    seed_apps(database_url);
+    seed_variables(database_url);
+}
+
+fn seed_roles(database_url: &str) {
+    let mut repository =
+        SqliteRoleRepository::connect(database_url).expect("role test repository should connect");
+    if repository
+        .list_roles()
+        .expect("role fixtures should load")
+        .is_empty()
+    {
+        repository
+            .replace_roles(&seeded_roles())
+            .expect("role fixtures should seed");
+    }
+}
+
+fn seed_users(database_url: &str) {
+    let mut repository =
+        SqliteUserRepository::connect(database_url).expect("user test repository should connect");
+    let query = ListUsersQuery {
+        page: None,
+        current: Some(1),
+        size: Some(1),
+        status: None,
+        search: None,
+        role_code: None,
+        space_code: None,
+        include_archived: Some(true),
+    };
+    if repository
+        .list_users(query)
+        .expect("user fixtures should load")
+        .total
+        == 0
+    {
+        for user in seeded_users() {
+            repository
+                .insert_user(&user)
+                .expect("user fixtures should seed");
+        }
+    }
+}
+
+fn seed_workspaces(database_url: &str) {
+    let mut repository = SqliteWorkspaceRepository::connect(database_url)
+        .expect("workspace test repository should connect");
+    if repository
+        .list_workspaces()
+        .expect("workspace fixtures should load")
+        .is_empty()
+    {
+        for workspace in seeded_workspaces() {
+            repository
+                .create_workspace(&workspace)
+                .expect("workspace fixtures should seed");
+        }
+        repository
+            .replace_user_access("TRON_CORE", &seeded_workspace_user_access())
+            .expect("workspace user access fixtures should seed");
+        repository
+            .replace_role_access("PLATFORM", &seeded_workspace_role_access())
+            .expect("workspace role access fixtures should seed");
+    }
+}
+
+fn seed_apps(database_url: &str) {
+    let mut repository =
+        SqliteAppRepository::connect(database_url).expect("app test repository should connect");
+    if repository
+        .list_apps()
+        .expect("app fixtures should load")
+        .is_empty()
+    {
+        for (app, tags) in seeded_apps() {
+            repository
+                .create_app(&app)
+                .expect("app fixtures should seed");
+            repository
+                .replace_app_tags(&app.app_code, &tags)
+                .expect("app tag fixtures should seed");
+        }
+    }
+}
+
+fn seed_variables(database_url: &str) {
+    let mut repository = SqliteVariableRepository::connect(database_url)
+        .expect("variable test repository should connect");
+    if repository
+        .list_variables()
+        .expect("variable fixtures should load")
+        .is_empty()
+    {
+        for variable in seeded_variables() {
+            repository
+                .create_variable(&variable)
+                .expect("variable fixtures should seed");
+        }
+    }
+}
+
+fn seeded_users() -> Vec<User> {
+    vec![
+        seeded_user(
+            734_102_998_871_252_992,
+            "USR-0001",
+            "alex.johnson",
+            "Alex",
+            "Johnson",
+            "Alex Johnson",
+            "alex.johnson@tron.ai",
+            UserStatus::Active,
+            vec!["DEVELOPER", "VIEWER"],
+            vec!["PLATFORM", "DATA"],
+        ),
+        seeded_user(
+            734_103_002_743_185_408,
+            "USR-0002",
+            "maya.singh",
+            "Maya",
+            "Singh",
+            "Maya Singh",
+            "maya.singh@tron.ai",
+            UserStatus::Active,
+            vec!["VIEWER", "DEVELOPER"],
+            vec!["ENTERPRISE", "DATA"],
+        ),
+        seeded_user(
+            734_103_002_743_185_409,
+            "USR-0007",
+            "sam.viewer",
+            "Sam",
+            "Viewer",
+            "Sam Viewer",
+            "sam.viewer@tron.ai",
+            UserStatus::Active,
+            vec!["VIEWER"],
+            vec!["SUPPORT", "PLATFORM"],
+        ),
+        seeded_user(
+            734_103_002_743_185_410,
+            "USR-0009",
+            "archived.restore",
+            "Archived",
+            "Restore",
+            "Archived Restore",
+            "archived.restore@tron.ai",
+            UserStatus::Archived,
+            vec!["DEVELOPER", "VIEWER"],
+            vec!["DATA", "SUPPORT"],
+        ),
+        seeded_user(
+            734_103_002_743_185_411,
+            "USR-1001",
+            "reset.target",
+            "Reset",
+            "Target",
+            "Reset Target",
+            "reset.target@tron.ai",
+            UserStatus::Active,
+            vec!["ADMIN", "DEVELOPER"],
+            vec!["PLATFORM", "ENTERPRISE"],
+        ),
+        seeded_user(
+            9_007_199_254_740_993,
+            "USR-LARGE-ID",
+            "large.id",
+            "Large",
+            "Identifier",
+            "Large Identifier",
+            "large.id@tron.ai",
+            UserStatus::Active,
+            vec!["WORKSPACE_ADMIN", "DEVELOPER"],
+            vec!["ENTERPRISE", "PLATFORM"],
+        ),
+        seeded_user(
+            734_103_002_743_185_412,
+            "USR-ARCHIVED",
+            "archived.only",
+            "Archived",
+            "Only",
+            "Archived Only",
+            "archived.only@tron.ai",
+            UserStatus::Archived,
+            vec!["VIEWER"],
+            vec!["SUPPORT", "DATA"],
+        ),
+        seeded_auth_user(
+            734_103_002_743_185_500,
+            "USR-AUTH-0001",
+            AUTH_LOGIN,
+            "Auth",
+            "Operator",
+            "Auth Operator",
+            AUTH_EMAIL,
+            UserStatus::Active,
+        ),
+        seeded_auth_user(
+            734_103_002_743_185_501,
+            "USR-AUTH-ARCHIVED",
+            ARCHIVED_LOGIN,
+            "Archived",
+            "Auth",
+            "Archived Auth",
+            "archived.auth@tron.ai",
+            UserStatus::Archived,
+        ),
+    ]
+}
+
+fn seeded_user(
+    id: i64,
+    user_code: &str,
+    username: &str,
+    first_name: &str,
+    last_name: &str,
+    display_name: &str,
+    email: &str,
+    status: UserStatus,
+    role_codes: Vec<&str>,
+    space_codes: Vec<&str>,
+) -> User {
+    User {
+        id: SnowflakeId::new(id),
+        user_code: user_code.into(),
+        source_type: UserSourceType::Internal,
+        username: username.into(),
+        first_name: first_name.into(),
+        last_name: last_name.into(),
+        display_name: display_name.into(),
+        email: email.into(),
+        phone: Some(PhoneNumber {
+            country_code: "+1".into(),
+            number: "5550100".into(),
+        }),
+        avatar_url: None,
+        locale: "en-US".into(),
+        timezone: "America/Los_Angeles".into(),
+        status,
+        role_codes: role_codes.into_iter().map(str::to_owned).collect(),
+        space_codes: space_codes.into_iter().map(str::to_owned).collect(),
+        password_hash: "$2b$04$wzYH5I9Aw4f3ZV5h9tczhOJtT5QxQfyeZDJmW5hE4d1tij8nS0V9G".into(),
+        password_reset_required: false,
+        last_active_at: Some("2026-05-11T08:30:00Z".into()),
+        created_at: "2026-05-11T08:00:00Z".into(),
+        updated_at: "2026-05-11T08:00:00Z".into(),
+        archived_at: (status == UserStatus::Archived).then(|| "2026-05-11T08:00:00Z".into()),
+    }
+}
+
+fn seeded_auth_user(
+    id: i64,
+    user_code: &str,
+    username: &str,
+    first_name: &str,
+    last_name: &str,
+    display_name: &str,
+    email: &str,
+    status: UserStatus,
+) -> User {
+    let mut user = seeded_user(
+        id,
+        user_code,
+        username,
+        first_name,
+        last_name,
+        display_name,
+        email,
+        status,
+        vec!["ADMIN", "DEVELOPER"],
+        vec!["PLATFORM", "DATA"],
+    );
+    user.password_hash = bcrypt::hash(AUTH_PASSWORD, 4)
+        .expect("auth seed password hash should be generated");
+    user
+}
+
+fn seeded_workspaces() -> Vec<Workspace> {
+    vec![
+        Workspace {
+            id: SnowflakeId::new(734_400_000_000_000_001),
+            workspace_code: "ENTERPRISE".into(),
+            name: "Enterprise".into(),
+            description: Some("Global governance workspace".into()),
+            parent_workspace_code: None,
+            status: WorkspaceStatus::Active,
+            created_at: FIXTURE_TIMESTAMP.into(),
+            updated_at: FIXTURE_TIMESTAMP.into(),
+            archived_at: None,
+        },
+        Workspace {
+            id: SnowflakeId::new(734_400_000_000_000_002),
+            workspace_code: "PLATFORM".into(),
+            name: "Platform".into(),
+            description: Some("Core platform runtime workspace".into()),
+            parent_workspace_code: Some("ENTERPRISE".into()),
+            status: WorkspaceStatus::Active,
+            created_at: FIXTURE_TIMESTAMP.into(),
+            updated_at: FIXTURE_TIMESTAMP.into(),
+            archived_at: None,
+        },
+        Workspace {
+            id: SnowflakeId::new(734_400_000_000_000_003),
+            workspace_code: "TRON_CORE".into(),
+            name: "Tron Core".into(),
+            description: Some("Main Tron console workspace".into()),
+            parent_workspace_code: Some("PLATFORM".into()),
+            status: WorkspaceStatus::Active,
+            created_at: FIXTURE_TIMESTAMP.into(),
+            updated_at: FIXTURE_TIMESTAMP.into(),
+            archived_at: None,
+        },
+        Workspace {
+            id: SnowflakeId::new(734_400_000_000_000_004),
+            workspace_code: "COMPLIANCE".into(),
+            name: "Compliance".into(),
+            description: Some("Compliance evidence workspace".into()),
+            parent_workspace_code: None,
+            status: WorkspaceStatus::Active,
+            created_at: FIXTURE_TIMESTAMP.into(),
+            updated_at: FIXTURE_TIMESTAMP.into(),
+            archived_at: None,
+        },
+    ]
+}
+
+fn seeded_workspace_user_access() -> Vec<WorkspaceUserAccess> {
+    vec![WorkspaceUserAccess {
+        user_code: "USR-AUTH-0001".into(),
+        is_owner: true,
+        granted_at: FIXTURE_TIMESTAMP.into(),
+    }]
+}
+
+fn seeded_workspace_role_access() -> Vec<WorkspaceRoleAccess> {
+    vec![WorkspaceRoleAccess {
+        role_code: "WORKSPACE_ADMIN".into(),
+        granted_at: FIXTURE_TIMESTAMP.into(),
+    }]
+}
+
+fn seeded_apps() -> Vec<(App, Vec<AppTag>)> {
+    vec![
+        (
+            App {
+                id: SnowflakeId::new(734_900_000_000_000_001),
+                app_code: "APP-TRON-CONSOLE".into(),
+                workspace_code: "TRON_CORE".into(),
+                name: "Tron Console".into(),
+                description: Some("Primary operator-facing frontend.".into()),
+                local_directory: "/workspace/tron/tron-frontend".into(),
+                runtime_role: AppRuntimeRole::Frontend,
+                repository_url: Some("https://github.com/clouds3n/tron-console".into()),
+                default_branch: Some("master".into()),
+                status: AppStatus::Active,
+                created_at: "2026-05-19T00:00:00Z".into(),
+                updated_at: "2026-05-19T00:00:00Z".into(),
+                archived_at: None,
+            },
+            vec![
+                AppTag {
+                    app_code: "APP-TRON-CONSOLE".into(),
+                    tag: "Operator".into(),
+                    linked_at: "2026-05-19T00:00:00Z".into(),
+                },
+                AppTag {
+                    app_code: "APP-TRON-CONSOLE".into(),
+                    tag: "React".into(),
+                    linked_at: "2026-05-19T00:00:00Z".into(),
+                },
+            ],
+        ),
+        (
+            App {
+                id: SnowflakeId::new(734_900_000_000_000_002),
+                app_code: "APP-TRON-API".into(),
+                workspace_code: "TRON_CORE".into(),
+                name: "Tron API".into(),
+                description: Some("Core backend serving task and admin workflows.".into()),
+                local_directory: "/workspace/tron/tron-backend".into(),
+                runtime_role: AppRuntimeRole::Backend,
+                repository_url: Some("https://github.com/clouds3n/tron-backend".into()),
+                default_branch: Some("master".into()),
+                status: AppStatus::Active,
+                created_at: "2026-05-19T00:00:00Z".into(),
+                updated_at: "2026-05-19T00:00:00Z".into(),
+                archived_at: None,
+            },
+            vec![
+                AppTag {
+                    app_code: "APP-TRON-API".into(),
+                    tag: "Rust".into(),
+                    linked_at: "2026-05-19T00:00:00Z".into(),
+                },
+                AppTag {
+                    app_code: "APP-TRON-API".into(),
+                    tag: "Core".into(),
+                    linked_at: "2026-05-19T00:00:00Z".into(),
+                },
+            ],
+        ),
+        (
+            App {
+                id: SnowflakeId::new(734_900_000_000_000_003),
+                app_code: "APP-COMPLIANCE-API".into(),
+                workspace_code: "COMPLIANCE".into(),
+                name: "Compliance API".into(),
+                description: Some("Backend used by regulated reporting workflows.".into()),
+                local_directory: "/workspace/apps/compliance-api".into(),
+                runtime_role: AppRuntimeRole::Backend,
+                repository_url: Some("https://github.com/clouds3n/compliance-api".into()),
+                default_branch: Some("master".into()),
+                status: AppStatus::Active,
+                created_at: "2026-05-19T00:00:00Z".into(),
+                updated_at: "2026-05-19T00:00:00Z".into(),
+                archived_at: None,
+            },
+            vec![AppTag {
+                app_code: "APP-COMPLIANCE-API".into(),
+                tag: "Audit".into(),
+                linked_at: "2026-05-19T00:00:00Z".into(),
+            }],
+        ),
+        (
+            App {
+                id: SnowflakeId::new(734_900_000_000_000_004),
+                app_code: "APP-TRON-LEGACY".into(),
+                workspace_code: "TRON_CORE".into(),
+                name: "Legacy Console".into(),
+                description: Some("Archived frontend kept for historical reference.".into()),
+                local_directory: "/workspace/tron/legacy-console".into(),
+                runtime_role: AppRuntimeRole::Frontend,
+                repository_url: None,
+                default_branch: None,
+                status: AppStatus::Archived,
+                created_at: "2026-05-19T00:00:00Z".into(),
+                updated_at: "2026-05-19T00:00:00Z".into(),
+                archived_at: Some("2026-05-19T00:00:00Z".into()),
+            },
+            vec![AppTag {
+                app_code: "APP-TRON-LEGACY".into(),
+                tag: "Legacy".into(),
+                linked_at: "2026-05-19T00:00:00Z".into(),
+            }],
+        ),
+    ]
+}
+
+fn seeded_variables() -> Vec<Variable> {
+    vec![
+        Variable {
+            id: SnowflakeId::new(734_500_000_000_000_001),
+            workspace_code: "ENTERPRISE".into(),
+            key: "DEFAULT_REGION".into(),
+            value: "us-east-1".into(),
+            description: Some("Shared default deployment region.".into()),
+            created_at: "2026-05-18T00:00:00Z".into(),
+            updated_at: "2026-05-18T00:00:00Z".into(),
+        },
+        Variable {
+            id: SnowflakeId::new(734_500_000_000_000_002),
+            workspace_code: "ENTERPRISE".into(),
+            key: "ROUTER_TIMEOUT_MS".into(),
+            value: "800".into(),
+            description: Some("Root timeout for interactive routing.".into()),
+            created_at: "2026-05-18T00:00:00Z".into(),
+            updated_at: "2026-05-18T00:00:00Z".into(),
+        },
+        Variable {
+            id: SnowflakeId::new(734_500_000_000_000_003),
+            workspace_code: "PLATFORM".into(),
+            key: "OPENAI_API_BASE_URL".into(),
+            value: "https://api.openai.com/v1".into(),
+            description: Some("Shared OpenAI gateway base URL.".into()),
+            created_at: "2026-05-18T00:00:00Z".into(),
+            updated_at: "2026-05-18T00:00:00Z".into(),
+        },
+        Variable {
+            id: SnowflakeId::new(734_500_000_000_000_004),
+            workspace_code: "PLATFORM".into(),
+            key: "ROUTER_TIMEOUT_MS".into(),
+            value: "600".into(),
+            description: Some("Platform override for interactive latency.".into()),
+            created_at: "2026-05-18T00:00:00Z".into(),
+            updated_at: "2026-05-18T00:00:00Z".into(),
+        },
+        Variable {
+            id: SnowflakeId::new(734_500_000_000_000_005),
+            workspace_code: "TRON_CORE".into(),
+            key: "OPENAI_API_KEY".into(),
+            value: "sk-tron-core-demo".into(),
+            description: Some("Workspace secret used by the demo workspace.".into()),
+            created_at: "2026-05-18T00:00:00Z".into(),
+            updated_at: "2026-05-18T00:00:00Z".into(),
+        },
+        Variable {
+            id: SnowflakeId::new(734_500_000_000_000_006),
+            workspace_code: "TRON_CORE".into(),
+            key: "ROUTER_TIMEOUT_MS".into(),
+            value: "400".into(),
+            description: Some("Tron Core override for agent console flows.".into()),
+            created_at: "2026-05-18T00:00:00Z".into(),
+            updated_at: "2026-05-18T00:00:00Z".into(),
+        },
+        Variable {
+            id: SnowflakeId::new(734_500_000_000_000_007),
+            workspace_code: "COMPLIANCE".into(),
+            key: "AUDIT_RETENTION_DAYS".into(),
+            value: "365".into(),
+            description: Some("Retention period for compliance exports.".into()),
+            created_at: "2026-05-18T00:00:00Z".into(),
+            updated_at: "2026-05-18T00:00:00Z".into(),
+        },
+    ]
+}
+
+fn temp_database_path(test_name: &str) -> std::path::PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time should be after Unix epoch")
+        .as_nanos();
+    let sequence = TEST_DB_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    std::env::temp_dir().join(format!("tron-tests-{test_name}-{nanos}-{sequence}.sqlite3"))
 }
 
 pub async fn request(

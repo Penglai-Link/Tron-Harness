@@ -1,6 +1,9 @@
 import {
   lazy,
   Suspense,
+  useEffect,
+  useMemo,
+  useState,
   type ReactNode,
 } from "react";
 import {
@@ -26,6 +29,8 @@ import {
   SettingsShell,
   ThemeProvider,
   ToastProvider,
+  type ConsoleShellConfig,
+  ConsoleShellConfigContext,
   TronShell,
   tronNavigation,
 } from "@/shared";
@@ -158,6 +163,16 @@ function PublicRoutePage({ pageId }: { pageId: string }) {
 function AppRoutePage() {
   const { pathname, search } = useLocation();
   const resolved = resolveAppRoute(pathname, search);
+  const [pageShellConfig, setPageShellConfig] = useState<ConsoleShellConfig>({});
+  const shellConfigController = useMemo(() => ({
+    resetConfig: () => setPageShellConfig({}),
+    setConfig: (config: ConsoleShellConfig) => setPageShellConfig(config),
+  }), []);
+
+  useEffect(() => {
+    setPageShellConfig({});
+  }, [resolved?.route.pageId]);
+
   if (resolved) {
     const { Component, route } = resolved;
     if (route.layout === "settings") {
@@ -170,11 +185,20 @@ function AppRoutePage() {
       );
     }
     return (
-      <TronShell activeItem={route.activeNav} userMenuContent={<AuthUserMenuPanel />}>
-        <SuspendedRoute>
-          <Component />
-        </SuspendedRoute>
-      </TronShell>
+      <ConsoleShellConfigContext.Provider value={shellConfigController}>
+        <TronShell
+          activeItem={route.activeNav}
+          contentClassName={pageShellConfig.contentClassName}
+          rightPanel={pageShellConfig.rightPanel}
+          searchPlaceholder={pageShellConfig.searchPlaceholder}
+          topbarActions={pageShellConfig.topbarActions}
+          userMenuContent={<AuthUserMenuPanel />}
+        >
+          <SuspendedRoute>
+            <Component />
+          </SuspendedRoute>
+        </TronShell>
+      </ConsoleShellConfigContext.Provider>
     );
   }
 
@@ -282,6 +306,30 @@ function RoutedApp() {
         element={(
           <ProtectedRoute>
             <Navigate replace to="/settings/models" />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/skills/installed"
+        element={(
+          <ProtectedRoute>
+            <Navigate replace to="/settings/skills" />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/skills/installed/new"
+        element={(
+          <ProtectedRoute>
+            <Navigate replace to="/settings/skills/sync" />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/skills/new"
+        element={(
+          <ProtectedRoute>
+            <Navigate replace to="/settings/skills/sync" />
           </ProtectedRoute>
         )}
       />

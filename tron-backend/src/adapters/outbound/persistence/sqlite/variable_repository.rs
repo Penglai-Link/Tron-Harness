@@ -5,13 +5,16 @@ use rusqlite::{Connection, params};
 use crate::{
     application::variable::VariableRepository,
     domain::variable::{Variable, VariableError},
-    shared::id::SnowflakeId,
+    shared::{
+        id::SnowflakeId,
+        time::{
+            timestamp_from_millis,
+            timestamp_to_millis,
+        },
+    },
 };
 
 use super::migrations::VARIABLES_MIGRATION;
-
-const DEFAULT_TIMESTAMP: &str = "2026-05-18T00:00:00Z";
-const DEFAULT_EPOCH_MS: i64 = 1_779_062_400_000;
 
 pub struct SqliteVariableRepository {
     connection: Connection,
@@ -34,7 +37,6 @@ impl SqliteVariableRepository {
 
         let mut repository = Self { connection };
         repository.apply_migrations()?;
-        repository.seed_if_empty()?;
         Ok(repository)
     }
 
@@ -44,89 +46,6 @@ impl SqliteVariableRepository {
             .map_err(storage_error)
     }
 
-    fn seed_if_empty(&mut self) -> Result<(), VariableError> {
-        let count: i64 = self
-            .connection
-            .query_row("SELECT COUNT(*) FROM workspace_variables", [], |row| {
-                row.get(0)
-            })
-            .map_err(storage_error)?;
-        if count > 0 {
-            return Ok(());
-        }
-
-        let variables = [
-            Variable {
-                id: SnowflakeId::new(734_500_000_000_000_001),
-                workspace_code: "ENTERPRISE".into(),
-                key: "DEFAULT_REGION".into(),
-                value: "us-east-1".into(),
-                description: Some("Shared default deployment region.".into()),
-                created_at: DEFAULT_TIMESTAMP.into(),
-                updated_at: DEFAULT_TIMESTAMP.into(),
-            },
-            Variable {
-                id: SnowflakeId::new(734_500_000_000_000_002),
-                workspace_code: "ENTERPRISE".into(),
-                key: "ROUTER_TIMEOUT_MS".into(),
-                value: "800".into(),
-                description: Some("Root timeout for interactive routing.".into()),
-                created_at: DEFAULT_TIMESTAMP.into(),
-                updated_at: DEFAULT_TIMESTAMP.into(),
-            },
-            Variable {
-                id: SnowflakeId::new(734_500_000_000_000_003),
-                workspace_code: "PLATFORM".into(),
-                key: "OPENAI_API_BASE_URL".into(),
-                value: "https://api.openai.com/v1".into(),
-                description: Some("Shared OpenAI gateway base URL.".into()),
-                created_at: DEFAULT_TIMESTAMP.into(),
-                updated_at: DEFAULT_TIMESTAMP.into(),
-            },
-            Variable {
-                id: SnowflakeId::new(734_500_000_000_000_004),
-                workspace_code: "PLATFORM".into(),
-                key: "ROUTER_TIMEOUT_MS".into(),
-                value: "600".into(),
-                description: Some("Platform override for interactive latency.".into()),
-                created_at: DEFAULT_TIMESTAMP.into(),
-                updated_at: DEFAULT_TIMESTAMP.into(),
-            },
-            Variable {
-                id: SnowflakeId::new(734_500_000_000_000_005),
-                workspace_code: "TRON_CORE".into(),
-                key: "OPENAI_API_KEY".into(),
-                value: "sk-tron-core-demo".into(),
-                description: Some("Workspace secret used by the demo workspace.".into()),
-                created_at: DEFAULT_TIMESTAMP.into(),
-                updated_at: DEFAULT_TIMESTAMP.into(),
-            },
-            Variable {
-                id: SnowflakeId::new(734_500_000_000_000_006),
-                workspace_code: "TRON_CORE".into(),
-                key: "ROUTER_TIMEOUT_MS".into(),
-                value: "400".into(),
-                description: Some("Tron Core override for agent console flows.".into()),
-                created_at: DEFAULT_TIMESTAMP.into(),
-                updated_at: DEFAULT_TIMESTAMP.into(),
-            },
-            Variable {
-                id: SnowflakeId::new(734_500_000_000_000_007),
-                workspace_code: "COMPLIANCE".into(),
-                key: "AUDIT_RETENTION_DAYS".into(),
-                value: "365".into(),
-                description: Some("Retention period for compliance exports.".into()),
-                created_at: DEFAULT_TIMESTAMP.into(),
-                updated_at: DEFAULT_TIMESTAMP.into(),
-            },
-        ];
-
-        for variable in &variables {
-            self.create_variable(variable)?;
-        }
-
-        Ok(())
-    }
 }
 
 impl VariableRepository for SqliteVariableRepository {
@@ -147,8 +66,8 @@ impl VariableRepository for SqliteVariableRepository {
                     key: row.get(2)?,
                     value: row.get(3)?,
                     description: row.get(4)?,
-                    created_at: millis_to_timestamp(row.get(5)?),
-                    updated_at: millis_to_timestamp(row.get(6)?),
+                    created_at: timestamp_from_millis(row.get(5)?),
+                    updated_at: timestamp_from_millis(row.get(6)?),
                 })
             })
             .map_err(storage_error)?
@@ -233,14 +152,6 @@ fn ensure_database_parent(database_url: &str) -> Result<(), VariableError> {
         fs::create_dir_all(parent).map_err(|_| VariableError::StorageFailure)?;
     }
     Ok(())
-}
-
-fn timestamp_to_millis(_value: &str) -> i64 {
-    DEFAULT_EPOCH_MS
-}
-
-fn millis_to_timestamp(_value: i64) -> String {
-    DEFAULT_TIMESTAMP.into()
 }
 
 fn storage_error(_error: rusqlite::Error) -> VariableError {

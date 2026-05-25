@@ -92,7 +92,7 @@ export function PromptsPage() {
         actions={
           <>
             <Button variant="secondary" onClick={() => setNotice(`${filtered.length} prompts exported`)}>Bulk Export</Button>
-            <Button onClick={() => setNotice("New prompt flow opened")}><Plus size={16} aria-hidden="true" />New Prompt</Button>
+            <Button onClick={() => setNotice("New prompt flow opened")}><Plus size={16} aria-hidden="true" />New</Button>
           </>
         }
       />

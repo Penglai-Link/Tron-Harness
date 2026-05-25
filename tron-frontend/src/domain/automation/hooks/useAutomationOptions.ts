@@ -8,9 +8,20 @@ import { getAutomationOptions } from "@/domain/automation/mock/data";
 import type { AutomationOptions } from "@/domain/automation/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
+function emptyAutomationOptions(): AutomationOptions {
+  return {
+    defaultStatus: "Active",
+    executionStatuses: [],
+    statuses: [],
+    timezones: [],
+  };
+}
+
 export function useAutomationOptions(): AutomationOptions {
   const dataSource = getServiceDataSource("automation");
-  const [options, setOptions] = useState(() => getAutomationOptions());
+  const [options, setOptions] = useState(() => (
+    dataSource === "api" ? emptyAutomationOptions() : getAutomationOptions()
+  ));
 
   useEffect(() => {
     if (dataSource !== "api") {
@@ -23,8 +34,8 @@ export function useAutomationOptions(): AutomationOptions {
       .then(setOptions)
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        console.warn("[automation] Falling back to mock automation options.", error);
-        setOptions(getAutomationOptions());
+        console.warn("[automation] Automation options request failed.", error);
+        setOptions(emptyAutomationOptions());
       });
 
     return () => controller.abort();

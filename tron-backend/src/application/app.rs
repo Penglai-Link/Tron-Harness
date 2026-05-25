@@ -13,10 +13,9 @@ use crate::{
         },
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceStatus},
     },
-    shared::id::SnowflakeId,
+    shared::{id::SnowflakeId, time::current_timestamp},
 };
 
-const DEFAULT_TIMESTAMP: &str = "2026-05-19T00:00:00Z";
 const GENERATED_APP_CODE_PREFIX: &str = "APP-";
 
 #[derive(Debug, Clone)]
@@ -153,8 +152,8 @@ impl AppService {
             repository_url,
             default_branch,
             status: AppStatus::Active,
-            created_at: DEFAULT_TIMESTAMP.into(),
-            updated_at: DEFAULT_TIMESTAMP.into(),
+            created_at: current_timestamp(),
+            updated_at: current_timestamp(),
             archived_at: None,
         };
         let tag_rows = tag_rows(&app_code, &tags);
@@ -193,7 +192,7 @@ impl AppService {
         app.runtime_role = command.runtime_role;
         app.repository_url = optional_trimmed(command.repository_url);
         app.default_branch = optional_trimmed(command.default_branch);
-        app.updated_at = DEFAULT_TIMESTAMP.into();
+        app.updated_at = current_timestamp();
         let tags = normalized_tags(command.tags);
 
         {
@@ -212,8 +211,8 @@ impl AppService {
         let mut app = self.get_app_record(app_code)?;
         if app.status != AppStatus::Archived {
             app.status = AppStatus::Archived;
-            app.archived_at = Some(DEFAULT_TIMESTAMP.into());
-            app.updated_at = DEFAULT_TIMESTAMP.into();
+            app.archived_at = Some(current_timestamp());
+            app.updated_at = current_timestamp();
             self.repository
                 .lock()
                 .expect("app repository mutex poisoned")
@@ -232,7 +231,7 @@ impl AppService {
             self.active_workspace_detail(&app.workspace_code)?;
             app.status = AppStatus::Active;
             app.archived_at = None;
-            app.updated_at = DEFAULT_TIMESTAMP.into();
+            app.updated_at = current_timestamp();
             self.repository
                 .lock()
                 .expect("app repository mutex poisoned")
@@ -404,7 +403,7 @@ fn tag_rows(app_code: &str, tags: &[String]) -> Vec<AppTag> {
         .map(|tag| AppTag {
             app_code: app_code.to_string(),
             tag: tag.clone(),
-            linked_at: DEFAULT_TIMESTAMP.into(),
+            linked_at: current_timestamp(),
         })
         .collect()
 }

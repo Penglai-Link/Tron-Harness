@@ -4,7 +4,7 @@ use rusqlite::{Connection, params};
 
 use crate::{
     application::role::RoleRepository,
-    domain::role::{Role, RoleError, RoleKind, RoleManagedBy, seeded_roles},
+    domain::role::{Role, RoleError, RoleKind, RoleManagedBy},
 };
 
 use super::migrations::{ROLE_PERMISSIONS_MIGRATION, ROLES_MIGRATION};
@@ -30,7 +30,6 @@ impl SqliteRoleRepository {
 
         let mut repository = Self { connection };
         repository.apply_migrations()?;
-        repository.seed_if_empty()?;
         Ok(repository)
     }
 
@@ -41,17 +40,6 @@ impl SqliteRoleRepository {
         self.connection
             .execute_batch(ROLE_PERMISSIONS_MIGRATION)
             .map_err(storage_error)
-    }
-
-    fn seed_if_empty(&mut self) -> Result<(), RoleError> {
-        let count: i64 = self
-            .connection
-            .query_row("SELECT COUNT(*) FROM roles", [], |row| row.get(0))
-            .map_err(storage_error)?;
-        if count == 0 {
-            self.replace_roles(&seeded_roles())?;
-        }
-        Ok(())
     }
 
     fn permission_codes(&self, role_id: i64) -> Result<BTreeMap<String, Vec<String>>, RoleError> {

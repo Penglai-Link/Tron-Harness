@@ -4,6 +4,7 @@ import { dashboardApiEndpoints } from "@/domain/dashboard/api";
 
 export function useDashboardOverview() {
   return useServiceQuery({
+    apiInitialData: () => ({ activities: [], metrics: [] }),
     domain: "dashboard",
     endpoint: dashboardApiEndpoints.getDashboardOverview,
     mockData: () => getDashboardData(),

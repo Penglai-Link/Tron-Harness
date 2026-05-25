@@ -8,7 +8,7 @@ use crate::app::AppState;
 use super::handler::{
     create_platform_model, delete_platform_model, disable_platform_model, duplicate_platform_model,
     enable_platform_model, get_platform_model, list_platform_models, patch_platform_model,
-    set_platform_default, verify_platform_model,
+    set_platform_default, verify_platform_model, verify_platform_model_create_draft,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -16,6 +16,10 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/api/v1/admin/platform/models",
             get(list_platform_models).post(create_platform_model),
+        )
+        .route(
+            "/api/v1/admin/platform/models/verify",
+            post(verify_platform_model_create_draft),
         )
         .route(
             "/api/v1/admin/platform/models/{model_code}",

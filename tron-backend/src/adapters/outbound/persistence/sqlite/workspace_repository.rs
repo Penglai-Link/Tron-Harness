@@ -8,12 +8,16 @@ use crate::{
         Workspace, WorkspaceError, WorkspaceRoleAccess, WorkspaceStatus, WorkspaceUserAccess,
         workspace_status_from_storage, workspace_status_to_storage,
     },
-    shared::id::SnowflakeId,
+    shared::{
+        id::SnowflakeId,
+        time::{
+            timestamp_from_millis,
+            timestamp_to_millis,
+        },
+    },
 };
 
 use super::migrations::{WORKSPACE_ACCESS_GRANTS_MIGRATION, WORKSPACES_MIGRATION};
-
-const DEFAULT_TIMESTAMP: &str = "2026-05-16T00:00:00Z";
 
 pub struct SqliteWorkspaceRepository {
     connection: Connection,
@@ -36,7 +40,6 @@ impl SqliteWorkspaceRepository {
 
         let mut repository = Self { connection };
         repository.apply_migrations()?;
-        repository.seed_if_empty()?;
         Ok(repository)
     }
 
@@ -49,84 +52,6 @@ impl SqliteWorkspaceRepository {
             .map_err(storage_error)
     }
 
-    fn seed_if_empty(&mut self) -> Result<(), WorkspaceError> {
-        let count: i64 = self
-            .connection
-            .query_row("SELECT COUNT(*) FROM workspaces", [], |row| row.get(0))
-            .map_err(storage_error)?;
-        if count > 0 {
-            return Ok(());
-        }
-
-        let workspaces = [
-            Workspace {
-                id: SnowflakeId::new(734_400_000_000_000_001),
-                workspace_code: "ENTERPRISE".into(),
-                name: "Enterprise".into(),
-                description: Some("Global governance workspace".into()),
-                parent_workspace_code: None,
-                status: WorkspaceStatus::Active,
-                created_at: DEFAULT_TIMESTAMP.into(),
-                updated_at: DEFAULT_TIMESTAMP.into(),
-                archived_at: None,
-            },
-            Workspace {
-                id: SnowflakeId::new(734_400_000_000_000_002),
-                workspace_code: "PLATFORM".into(),
-                name: "Platform".into(),
-                description: Some("Core platform runtime workspace".into()),
-                parent_workspace_code: Some("ENTERPRISE".into()),
-                status: WorkspaceStatus::Active,
-                created_at: DEFAULT_TIMESTAMP.into(),
-                updated_at: DEFAULT_TIMESTAMP.into(),
-                archived_at: None,
-            },
-            Workspace {
-                id: SnowflakeId::new(734_400_000_000_000_003),
-                workspace_code: "TRON_CORE".into(),
-                name: "Tron Core".into(),
-                description: Some("Main Tron console workspace".into()),
-                parent_workspace_code: Some("PLATFORM".into()),
-                status: WorkspaceStatus::Active,
-                created_at: DEFAULT_TIMESTAMP.into(),
-                updated_at: DEFAULT_TIMESTAMP.into(),
-                archived_at: None,
-            },
-            Workspace {
-                id: SnowflakeId::new(734_400_000_000_000_004),
-                workspace_code: "COMPLIANCE".into(),
-                name: "Compliance".into(),
-                description: Some("Compliance evidence workspace".into()),
-                parent_workspace_code: None,
-                status: WorkspaceStatus::Active,
-                created_at: DEFAULT_TIMESTAMP.into(),
-                updated_at: DEFAULT_TIMESTAMP.into(),
-                archived_at: None,
-            },
-        ];
-
-        for workspace in &workspaces {
-            self.create_workspace(workspace)?;
-        }
-
-        self.replace_user_access(
-            "TRON_CORE",
-            &[WorkspaceUserAccess {
-                user_code: "USR-AUTH-0001".into(),
-                is_owner: true,
-                granted_at: DEFAULT_TIMESTAMP.into(),
-            }],
-        )?;
-        self.replace_role_access(
-            "PLATFORM",
-            &[WorkspaceRoleAccess {
-                role_code: "WORKSPACE_ADMIN".into(),
-                granted_at: DEFAULT_TIMESTAMP.into(),
-            }],
-        )?;
-
-        Ok(())
-    }
 }
 
 impl WorkspaceRepository for SqliteWorkspaceRepository {
@@ -149,9 +74,9 @@ impl WorkspaceRepository for SqliteWorkspaceRepository {
                     parent_workspace_code: row.get(4)?,
                     status: workspace_status_from_storage(&row.get::<_, String>(5)?)
                         .map_err(|_| rusqlite::Error::InvalidQuery)?,
-                    created_at: millis_to_timestamp(row.get(6)?),
-                    updated_at: millis_to_timestamp(row.get(7)?),
-                    archived_at: row.get::<_, Option<i64>>(8)?.map(millis_to_timestamp),
+                    created_at: timestamp_from_millis(row.get(6)?),
+                    updated_at: timestamp_from_millis(row.get(7)?),
+                    archived_at: row.get::<_, Option<i64>>(8)?.map(timestamp_from_millis),
                 })
             })
             .map_err(storage_error)?
@@ -240,7 +165,7 @@ impl WorkspaceRepository for SqliteWorkspaceRepository {
                 Ok(WorkspaceUserAccess {
                     user_code: row.get(0)?,
                     is_owner: row.get::<_, i64>(1)? == 1,
-                    granted_at: millis_to_timestamp(row.get(2)?),
+                    granted_at: timestamp_from_millis(row.get(2)?),
                 })
             })
             .map_err(storage_error)?
@@ -297,7 +222,7 @@ impl WorkspaceRepository for SqliteWorkspaceRepository {
             .query_map([workspace_code], |row| {
                 Ok(WorkspaceRoleAccess {
                     role_code: row.get(0)?,
-                    granted_at: millis_to_timestamp(row.get(1)?),
+                    granted_at: timestamp_from_millis(row.get(1)?),
                 })
             })
             .map_err(storage_error)?
@@ -403,22 +328,6 @@ fn ensure_database_parent(database_url: &str) -> Result<(), WorkspaceError> {
         fs::create_dir_all(parent).map_err(|_| WorkspaceError::StorageFailure)?;
     }
     Ok(())
-}
-
-fn timestamp_to_millis(value: &str) -> i64 {
-    match value {
-        "2026-05-11T08:00:00Z" => 1_778_457_600_000,
-        "2026-05-11T08:30:00Z" => 1_778_459_400_000,
-        _ => 1_778_889_600_000,
-    }
-}
-
-fn millis_to_timestamp(value: i64) -> String {
-    match value {
-        1_778_457_600_000 => "2026-05-11T08:00:00Z".into(),
-        1_778_459_400_000 => "2026-05-11T08:30:00Z".into(),
-        _ => DEFAULT_TIMESTAMP.into(),
-    }
 }
 
 fn storage_error(_error: rusqlite::Error) -> WorkspaceError {

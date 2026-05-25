@@ -4,6 +4,7 @@ import { taskApiEndpoints } from "@/domain/task/api";
 
 export function useTaskQuickReference() {
   return useServiceQuery({
+    apiInitialData: () => ({ tips: [], variables: [] }),
     domain: "task",
     endpoint: taskApiEndpoints.getTaskQuickReference,
     mockData: () => getTaskQuickReference(),

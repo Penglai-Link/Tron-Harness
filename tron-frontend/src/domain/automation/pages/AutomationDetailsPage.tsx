@@ -5,11 +5,11 @@ import {
   type ReactNode,
 } from "react";
 import {
-  Link,
   useSearchParams,
 } from "react-router";
 import {
   Archive,
+  Edit3,
   Maximize2,
   Pause,
   Play,
@@ -397,6 +397,20 @@ export function AutomationDetailsPage() {
                 {archiveBusy ? "Archiving..." : "Archive"}
               </Button>
             )}
+            {editing ? (
+              <>
+                <Button variant="secondary" onClick={resetDraft}>Cancel</Button>
+                <Button disabled={!detailDirty || saving || archived} aria-busy={saving} onClick={() => void saveDetail()}>
+                  <Save size={15} aria-hidden="true" />
+                  {saving ? "Saving..." : "Save"}
+                </Button>
+              </>
+            ) : (
+              <Button disabled={archived} variant="secondary" onClick={() => setEditing(true)}>
+                <Edit3 size={15} aria-hidden="true" />
+                Edit
+              </Button>
+            )}
           </>
         )}
       />
@@ -407,20 +421,6 @@ export function AutomationDetailsPage() {
               <div>
                 <h2 className="text-lg font-semibold text-[var(--color-on-surface)]">Core definition</h2>
               </div>
-              {editing ? (
-                <div className="flex gap-2">
-                  <Button variant="secondary" onClick={resetDraft}>Cancel</Button>
-                  <Button disabled={!detailDirty || saving || archived} aria-busy={saving} onClick={saveDetail}>
-                    <Save size={15} aria-hidden="true" />
-                    {saving ? "Saving..." : "Save"}
-                  </Button>
-                </div>
-              ) : (
-                <Button disabled={archived} variant="secondary" onClick={() => setEditing(true)}>
-                  <Save size={15} aria-hidden="true" />
-                  Edit
-                </Button>
-              )}
             </div>
             <div className="grid gap-4 lg:grid-cols-2">
               <Field label="Automation name">
@@ -584,9 +584,6 @@ export function AutomationDetailsPage() {
             <DetailField label="Updated" value={formatTimestamp(automation.updatedAt)} />
             <DetailField label="Archived at" value={formatTimestamp(automation.archivedAt)} />
             <DetailField label="Previous status" value={<ReadValue>{automation.previousStatus}</ReadValue>} />
-            <Link className="inline-flex text-sm font-medium text-[var(--color-primary)] hover:underline" to="/automations">
-              Back to automations
-            </Link>
           </SurfaceCard>
         </div>
       </div>

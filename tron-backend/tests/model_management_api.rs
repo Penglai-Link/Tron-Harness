@@ -484,6 +484,34 @@ async fn first_created_platform_model_becomes_default_until_explicitly_changed()
     let first_image_model_code =
         create_platform_model(&router, "Vision First", "gpt-image-1", "RESPONSES", "IMAGE").await;
 
+    let connection =
+        Connection::open(&database_url).expect("platform default test db should reopen");
+    let explicit_defaults = {
+        let mut statement = connection
+            .prepare(
+                "SELECT model_type, model_code
+                 FROM platform_default_models
+                 ORDER BY model_type ASC, model_code ASC",
+            )
+            .expect("platform default assignment query should prepare");
+        statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .expect("platform default assignment query should execute")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("platform default assignments should read")
+    };
+    assert_eq!(
+        explicit_defaults,
+        vec![
+            ("IMAGE".to_string(), first_image_model_code.clone()),
+            ("TEXT".to_string(), first_text_model_code.clone()),
+        ],
+        "creating the first enabled platform model of each type should persist an explicit default assignment",
+    );
+    drop(connection);
+
     let platform_list_response =
         authenticated_request(&router, Method::GET, "/api/v1/admin/platform/models", None).await;
     assert_eq!(platform_list_response.status(), StatusCode::OK);
@@ -1481,6 +1509,90 @@ async fn verify_platform_draft_uses_unsaved_payload_without_persisting() {
 }
 
 #[tokio::test]
+async fn verify_platform_create_draft_uses_unsaved_payload_without_persisting() {
+    let database_url = temp_database_url("model-verify-platform-create-draft-preview");
+    let config = AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let router = app_with_config(config);
+    let server = verify_mock_server().await;
+
+    let verify_response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/admin/platform/models/verify",
+        Some(json!({
+            "displayName": "Platform Create Draft Verify",
+            "vendor": "OpenAI",
+            "protocol": "RESPONSES",
+            "modelType": "TEXT",
+            "modelCapabilities": ["TEXT_GENERATION"],
+            "baseUrl": format!("{}/v1", server.base_url),
+            "apiPath": "/responses",
+            "apiKeyRef": "sk-platform-create-draft-preview",
+            "modelName": "platform-create-draft-verify",
+            "enabled": true,
+            "description": "Create draft verify only",
+            "thinkingEnabled": true,
+            "structuredOutputEnabled": true,
+            "temperature": 0.2,
+            "maxTokens": 1024,
+            "topP": 1.0,
+            "timeoutMs": 1000,
+            "maxRetries": 0
+        })),
+    )
+    .await;
+    assert_eq!(verify_response.status(), StatusCode::OK);
+    let verify_payload = response_json(verify_response).await;
+    assert_eq!(
+        verify_payload["data"]["displayName"],
+        json!("Platform Create Draft Verify")
+    );
+    assert_eq!(
+        verify_payload["data"]["modelName"],
+        json!("platform-create-draft-verify")
+    );
+    assert_eq!(
+        verify_payload["data"]["lastVerifyStatus"],
+        json!("SUCCEEDED")
+    );
+
+    let list_response =
+        authenticated_request(&router, Method::GET, "/api/v1/admin/platform/models", None).await;
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_payload = response_json(list_response).await;
+    let contains_draft = list_payload["data"]
+        .as_array()
+        .expect("platform list should return an array")
+        .iter()
+        .any(|record| record["displayName"] == json!("Platform Create Draft Verify"));
+    assert!(
+        !contains_draft,
+        "create-draft verify must not persist a platform model"
+    );
+
+    let captures = server
+        .captures
+        .lock()
+        .expect("verify captures mutex poisoned")
+        .clone();
+    let capture = captures
+        .iter()
+        .find(|capture| capture.body["model"] == json!("platform-create-draft-verify"))
+        .expect("platform create draft verify should send the unsaved model payload");
+    assert_eq!(capture.path, "/v1/responses");
+    assert_eq!(
+        capture.authorization.as_deref(),
+        Some("Bearer sk-platform-create-draft-preview"),
+        "create-draft verify should send the current draft api key",
+    );
+
+    server.task.abort();
+}
+
+#[tokio::test]
 async fn verify_workspace_draft_uses_unsaved_payload_without_persisting() {
     let database_url = temp_database_url("model-verify-workspace-draft-preview");
     let config = AppConfig {
@@ -1582,6 +1694,97 @@ async fn verify_workspace_draft_uses_unsaved_payload_without_persisting() {
         capture.authorization.as_deref(),
         Some("Bearer sk-workspace-draft-preview"),
         "workspace draft verify should preserve the saved upstream api key when the draft leaves it blank",
+    );
+
+    server.task.abort();
+}
+
+#[tokio::test]
+async fn verify_workspace_create_draft_uses_unsaved_payload_without_persisting() {
+    let database_url = temp_database_url("model-verify-workspace-create-draft-preview");
+    let config = AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let router = app_with_config(config);
+    let server = verify_mock_server().await;
+
+    let verify_response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/models/workspaces/TRON_CORE/verify",
+        Some(json!({
+            "displayName": "Workspace Create Draft Verify",
+            "vendor": "OpenAI",
+            "protocol": "RESPONSES",
+            "modelType": "TEXT",
+            "modelCapabilities": ["TEXT_GENERATION"],
+            "baseUrl": format!("{}/v1", server.base_url),
+            "apiPath": "/responses",
+            "apiKeyRef": "sk-workspace-create-draft-preview",
+            "modelName": "workspace-create-draft-verify",
+            "enabled": true,
+            "description": "Workspace create draft verify only",
+            "thinkingEnabled": true,
+            "structuredOutputEnabled": true,
+            "temperature": 0.2,
+            "maxTokens": 1024,
+            "topP": 1.0,
+            "timeoutMs": 1000,
+            "maxRetries": 0,
+            "allowInheritance": true
+        })),
+    )
+    .await;
+    assert_eq!(verify_response.status(), StatusCode::OK);
+    let verify_payload = response_json(verify_response).await;
+    assert_eq!(verify_payload["data"]["sourceKind"], json!("LOCAL"));
+    assert_eq!(
+        verify_payload["data"]["displayName"],
+        json!("Workspace Create Draft Verify")
+    );
+    assert_eq!(
+        verify_payload["data"]["modelName"],
+        json!("workspace-create-draft-verify")
+    );
+    assert_eq!(
+        verify_payload["data"]["lastVerifyStatus"],
+        json!("SUCCEEDED")
+    );
+
+    let catalog_response = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/models/workspaces/TRON_CORE",
+        None,
+    )
+    .await;
+    assert_eq!(catalog_response.status(), StatusCode::OK);
+    let catalog_payload = response_json(catalog_response).await;
+    let contains_draft = catalog_payload["data"]["records"]
+        .as_array()
+        .expect("workspace catalog should return records")
+        .iter()
+        .any(|record| record["displayName"] == json!("Workspace Create Draft Verify"));
+    assert!(
+        !contains_draft,
+        "create-draft verify must not persist a workspace model"
+    );
+
+    let captures = server
+        .captures
+        .lock()
+        .expect("verify captures mutex poisoned")
+        .clone();
+    let capture = captures
+        .iter()
+        .find(|capture| capture.body["model"] == json!("workspace-create-draft-verify"))
+        .expect("workspace create draft verify should send the unsaved model payload");
+    assert_eq!(capture.path, "/v1/responses");
+    assert_eq!(
+        capture.authorization.as_deref(),
+        Some("Bearer sk-workspace-create-draft-preview"),
+        "workspace create-draft verify should send the current draft api key",
     );
 
     server.task.abort();

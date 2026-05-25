@@ -3,7 +3,6 @@ mod automation_repository;
 mod migrations;
 mod model_repository;
 mod role_repository;
-mod seed;
 mod skill_repository;
 mod storage_mapping;
 mod task_repository;

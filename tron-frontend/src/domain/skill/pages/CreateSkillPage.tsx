@@ -18,7 +18,6 @@ import {
   PageHeader,
   SurfaceCard,
   TextInput,
-  TronShell,
   useToast,
 } from "@/shared";
 
@@ -459,13 +458,13 @@ export function CreateSkillPage() {
   }
 
   return (
-    <TronShell activeItem="Skills" searchPlaceholder="Search skills...">
+    <>
       <PageHeader
-        breadcrumbs={[{ label: "Skills", href: "/skills" }, { label: "Skill Center", href: "/skills/installed" }, { label: "Sync" }]}
+        breadcrumbs={[{ label: "Skill Center", href: "/settings/skills" }, { label: "Sync" }]}
         title="Sync Skills"
         actions={(
           <>
-            <Button variant="secondary" disabled={installing} onClick={() => navigate("/skills/installed")}>
+            <Button variant="secondary" disabled={installing} onClick={() => navigate("/settings/skills")}>
               Cancel
             </Button>
             <Button
@@ -636,6 +635,6 @@ export function CreateSkillPage() {
           </SurfaceCard>
         </div>
       </div>
-    </TronShell>
+    </>
   );
 }

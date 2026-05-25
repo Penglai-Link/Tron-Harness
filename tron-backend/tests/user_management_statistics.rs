@@ -327,10 +327,10 @@ struct TestFixture {
 impl TestFixture {
     fn new(test_name: &str) -> Self {
         let database_path = temp_database_path(test_name);
-        let config = AppConfig {
+        let config = common::prepared_config(AppConfig {
             database_url: database_path.to_string_lossy().into_owned(),
             ..AppConfig::default()
-        };
+        });
 
         let _router = build_router(config.clone());
 

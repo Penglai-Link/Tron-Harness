@@ -13,6 +13,7 @@ import { normalizeModelCapabilities } from "@/domain/model/constants/modelPageOp
 export const modelApiEndpoints = {
   listPlatformModels: "GET /api/v1/admin/platform/models",
   createPlatformModel: "POST /api/v1/admin/platform/models",
+  verifyPlatformModelDraft: "POST /api/v1/admin/platform/models/verify",
   getPlatformModel: "GET /api/v1/admin/platform/models/{modelCode}",
   updatePlatformModel: "PATCH /api/v1/admin/platform/models/{modelCode}",
   verifyPlatformModel: "POST /api/v1/admin/platform/models/{modelCode}/verify",
@@ -24,6 +25,7 @@ export const modelApiEndpoints = {
   listWorkspaceModels: "GET /api/v1/models/workspaces/{workspaceCode}",
   listWorkspaceSelectOptions: "GET /api/v1/models/workspaces/{workspaceCode}/select-options",
   createWorkspaceModel: "POST /api/v1/models/workspaces/{workspaceCode}",
+  verifyWorkspaceModelDraft: "POST /api/v1/models/workspaces/{workspaceCode}/verify",
   getWorkspaceModel: "GET /api/v1/models/workspaces/{workspaceCode}/{modelCode}",
   updateWorkspaceModel: "PATCH /api/v1/models/workspaces/{workspaceCode}/{modelCode}",
   verifyWorkspaceModel: "POST /api/v1/models/workspaces/{workspaceCode}/{modelCode}/verify",
@@ -95,8 +97,20 @@ export function fetchPlatformModels(signal?: AbortSignal) {
     .then((records) => records.map((record) => sanitizeModelRecord(record)));
 }
 
+export function fetchPlatformModel(modelCode: string, signal?: AbortSignal) {
+  return requestApi<ModelRecord>(modelApiEndpoints.getPlatformModel, {
+    pathParams: { modelCode },
+    signal,
+  }).then((record) => sanitizeModelRecord(record));
+}
+
 export function createPlatformModel(payload: ModelMutationPayload) {
   return requestApi<ModelRecord>(modelApiEndpoints.createPlatformModel, { body: payload })
+    .then((record) => sanitizeModelRecord(record));
+}
+
+export function verifyPlatformModelDraft(payload: ModelMutationPayload) {
+  return requestApi<ModelRecord>(modelApiEndpoints.verifyPlatformModelDraft, { body: payload })
     .then((record) => sanitizeModelRecord(record));
 }
 
@@ -163,6 +177,16 @@ export function createWorkspaceModel(
   payload: ModelMutationPayload,
 ) {
   return requestApi<ModelRecord>(modelApiEndpoints.createWorkspaceModel, {
+    body: payload,
+    pathParams: { workspaceCode },
+  }).then((record) => sanitizeModelRecord(record));
+}
+
+export function verifyWorkspaceModelDraft(
+  workspaceCode: string,
+  payload: ModelMutationPayload,
+) {
+  return requestApi<ModelRecord>(modelApiEndpoints.verifyWorkspaceModelDraft, {
     body: payload,
     pathParams: { workspaceCode },
   }).then((record) => sanitizeModelRecord(record));

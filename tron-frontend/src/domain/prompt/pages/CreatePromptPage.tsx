@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router";
 import {
   Code2,
   Layers3,
@@ -61,6 +62,7 @@ function KeyValue({ label, value }: { label: string; value: string }) {
 
 
 export function CreatePromptPage() {
+  const navigate = useNavigate();
   const variables = usePromptVariableList();
   const [tab, setTab] = useState("prompts");
   const [navItem, setNavItem] = useState("Library");
@@ -81,13 +83,16 @@ export function CreatePromptPage() {
         title="Create New Prompt"
         actions={
           <>
+            <Button variant="secondary" onClick={() => navigate("/prompts")}>
+              Cancel
+            </Button>
             <Button variant="secondary" onClick={() => setNotice("Prompt test queued")}>
               <Play size={15} />
               Test Prompt
             </Button>
             <Button onClick={() => setNotice("Prompt saved")}>
               <Save size={15} />
-              Save Prompt
+              Save
             </Button>
           </>
         }

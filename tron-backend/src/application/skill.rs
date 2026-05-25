@@ -22,8 +22,10 @@ use crate::{
         },
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceStatus},
     },
+    shared::time::current_timestamp,
 };
 
+#[cfg(test)]
 const DEFAULT_TIMESTAMP: &str = "2026-05-19T00:00:00Z";
 
 #[derive(Debug, Clone, Default)]
@@ -515,8 +517,8 @@ impl SkillRegistryService {
             workspace_code: workspace_code.clone(),
             skill_name: skill_name.clone(),
             enabled,
-            created_at: DEFAULT_TIMESTAMP.into(),
-            updated_at: DEFAULT_TIMESTAMP.into(),
+            created_at: current_timestamp(),
+            updated_at: current_timestamp(),
         };
         self.repository
             .lock()
@@ -665,20 +667,20 @@ impl SkillRegistryService {
                 update_status,
                 managed_by,
                 last_checked_at: if checked || updated {
-                    Some(DEFAULT_TIMESTAMP.into())
+                    Some(current_timestamp())
                 } else {
                     existing_skill.and_then(|skill| skill.last_checked_at.clone())
                 },
                 last_updated_at: if updated {
-                    Some(DEFAULT_TIMESTAMP.into())
+                    Some(current_timestamp())
                 } else {
                     existing_skill.and_then(|skill| skill.last_updated_at.clone())
                 },
                 last_error: None,
                 created_at: existing_skill
                     .map(|skill| skill.created_at.clone())
-                    .unwrap_or_else(|| DEFAULT_TIMESTAMP.into()),
-                updated_at: DEFAULT_TIMESTAMP.into(),
+                    .unwrap_or_else(current_timestamp),
+                updated_at: current_timestamp(),
             };
             self.repository
                 .lock()

@@ -19,10 +19,9 @@ use crate::{
     shared::{
         event_bus::{BusEventDraft, EventBusHandle},
         id::SnowflakeId,
+        time::current_timestamp,
     },
 };
-
-const DEFAULT_TIMESTAMP: &str = "2026-05-16T00:00:00Z";
 
 #[derive(Debug, Clone)]
 pub struct CreateTaskCommand {
@@ -200,8 +199,8 @@ impl TaskService {
             source_type: command.source_type,
             source_url: optional_source_url(command.source_url),
             progress: 0,
-            created_at: DEFAULT_TIMESTAMP.into(),
-            updated_at: DEFAULT_TIMESTAMP.into(),
+            created_at: current_timestamp(),
+            updated_at: current_timestamp(),
             archived_at: None,
         };
         {
@@ -254,7 +253,7 @@ impl TaskService {
         if let Some(source_url) = command.source_url {
             task.source_url = optional_source_url(source_url);
         }
-        task.updated_at = DEFAULT_TIMESTAMP.into();
+        task.updated_at = current_timestamp();
         let assignees = command
             .assignee_user_codes
             .map(|codes| self.validated_assignees(&task.workspace_code, codes))
@@ -307,7 +306,7 @@ impl TaskService {
         } else {
             command.progress.unwrap_or(task.progress).min(100)
         };
-        task.updated_at = DEFAULT_TIMESTAMP.into();
+        task.updated_at = current_timestamp();
         self.repository
             .lock()
             .expect("task repository mutex poisoned")
@@ -329,8 +328,8 @@ impl TaskService {
             }
             task.previous_status = Some(task.status);
             task.status = TaskStatus::Archived;
-            task.archived_at = Some(DEFAULT_TIMESTAMP.into());
-            task.updated_at = DEFAULT_TIMESTAMP.into();
+            task.archived_at = Some(current_timestamp());
+            task.updated_at = current_timestamp();
             self.repository
                 .lock()
                 .expect("task repository mutex poisoned")
@@ -351,7 +350,7 @@ impl TaskService {
                 .unwrap_or_else(|| task_default_status_for_role(task_role));
             task.previous_status = None;
             task.archived_at = None;
-            task.updated_at = DEFAULT_TIMESTAMP.into();
+            task.updated_at = current_timestamp();
             self.repository
                 .lock()
                 .expect("task repository mutex poisoned")
@@ -643,7 +642,7 @@ impl TaskService {
                 }
                 Ok(TaskUserAssignment {
                     user_code,
-                    assigned_at: DEFAULT_TIMESTAMP.into(),
+                    assigned_at: current_timestamp(),
                 })
             })
             .collect()
@@ -687,7 +686,7 @@ fn normalized_code_links(codes: Vec<String>) -> Vec<TaskCodeLink> {
         .filter(|code| unique.insert(code.clone()))
         .map(|code| TaskCodeLink {
             code,
-            linked_at: DEFAULT_TIMESTAMP.into(),
+            linked_at: current_timestamp(),
         })
         .collect()
 }

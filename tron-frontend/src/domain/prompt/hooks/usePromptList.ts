@@ -4,6 +4,7 @@ import { promptApiEndpoints } from "@/domain/prompt/api";
 
 export function usePromptList() {
   return useServiceQuery({
+    apiInitialData: () => [],
     domain: "prompt",
     endpoint: promptApiEndpoints.listPrompts,
     mockData: () => listPrompts(),

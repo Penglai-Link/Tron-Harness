@@ -1,4 +1,8 @@
 import { create } from "zustand";
+import {
+  createJSONStorage,
+  persist,
+} from "zustand/middleware";
 
 import {
   defaultPrimarySpaceId,
@@ -22,45 +26,59 @@ interface AppShellState {
   toggleUtilityPanel: (panel: string) => void;
 }
 
-export const useAppShellStore = create<AppShellState>((set) => ({
-  agentOpen: false,
-  openSections: { Core: true },
-  selectedPrimarySpaceId: defaultPrimarySpaceId,
-  selectedSecondarySpaceId: defaultSecondarySpaceId,
-  sidebarCollapsed: false,
-  utilityPanel: null,
-  closeFloatingPanels: () => set({ utilityPanel: null }),
-  ensureSectionOpen: (sectionLabel) =>
-    set((state) => {
-      if (!sectionLabel || state.openSections[sectionLabel]) {
-        return state;
-      }
-
-      return {
-        openSections: {
-          ...state.openSections,
-          [sectionLabel]: true,
-        },
-      };
-    }),
-  selectPrimarySpace: (primarySpaceId, secondarySpaceId) =>
-    set({
-      selectedPrimarySpaceId: primarySpaceId,
-      selectedSecondarySpaceId: secondarySpaceId,
+export const useAppShellStore = create<AppShellState>()(
+  persist(
+    (set) => ({
+      agentOpen: false,
+      openSections: { Core: true },
+      selectedPrimarySpaceId: defaultPrimarySpaceId,
+      selectedSecondarySpaceId: defaultSecondarySpaceId,
+      sidebarCollapsed: false,
       utilityPanel: null,
+      closeFloatingPanels: () => set({ utilityPanel: null }),
+      ensureSectionOpen: (sectionLabel) =>
+        set((state) => {
+          if (!sectionLabel || state.openSections[sectionLabel]) {
+            return state;
+          }
+
+          return {
+            openSections: {
+              ...state.openSections,
+              [sectionLabel]: true,
+            },
+          };
+        }),
+      selectPrimarySpace: (primarySpaceId, secondarySpaceId) =>
+        set({
+          selectedPrimarySpaceId: primarySpaceId,
+          selectedSecondarySpaceId: secondarySpaceId,
+          utilityPanel: null,
+        }),
+      setAgentOpen: (agentOpen) => set({ agentOpen }),
+      setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+      toggleAgent: () => set((state) => ({ agentOpen: !state.agentOpen })),
+      toggleSection: (sectionLabel) =>
+        set((state) => ({
+          openSections: {
+            ...state.openSections,
+            [sectionLabel]: !state.openSections[sectionLabel],
+          },
+        })),
+      toggleUtilityPanel: (panel) =>
+        set((state) => ({
+          utilityPanel: state.utilityPanel === panel ? null : panel,
+        })),
     }),
-  setAgentOpen: (agentOpen) => set({ agentOpen }),
-  setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
-  toggleAgent: () => set((state) => ({ agentOpen: !state.agentOpen })),
-  toggleSection: (sectionLabel) =>
-    set((state) => ({
-      openSections: {
-        ...state.openSections,
-        [sectionLabel]: !state.openSections[sectionLabel],
-      },
-    })),
-  toggleUtilityPanel: (panel) =>
-    set((state) => ({
-      utilityPanel: state.utilityPanel === panel ? null : panel,
-    })),
-}));
+    {
+      name: "tron-app-shell",
+      partialize: (state) => ({
+        openSections: state.openSections,
+        selectedPrimarySpaceId: state.selectedPrimarySpaceId,
+        selectedSecondarySpaceId: state.selectedSecondarySpaceId,
+        sidebarCollapsed: state.sidebarCollapsed,
+      }),
+      storage: createJSONStorage(() => localStorage),
+    },
+  ),
+);

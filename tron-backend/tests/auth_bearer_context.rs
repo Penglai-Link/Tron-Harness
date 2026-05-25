@@ -13,7 +13,7 @@ use tron_backend::{
     config::AppConfig,
 };
 
-use common::{AUTH_LOGIN, app, authenticated_bearer_token, request_with_headers, response_json};
+use common::{AUTH_LOGIN, app, authenticated_bearer_token, prepared_config, request_with_headers, response_json};
 
 #[tokio::test]
 async fn protected_admin_routes_accept_authorization_bearer_tokens() {
@@ -44,7 +44,7 @@ async fn auth_middleware_injects_current_user_context_for_protected_handlers() {
     let access_token = authenticated_bearer_token(&login_app).await;
     let authorization = format!("Bearer {access_token}");
 
-    let state = AppState::new(AppConfig::default());
+    let state = AppState::new(prepared_config(AppConfig::default()));
     let router = Router::new()
         .route("/protected", get(protected_identity))
         .route_layer(middleware::from_fn_with_state(

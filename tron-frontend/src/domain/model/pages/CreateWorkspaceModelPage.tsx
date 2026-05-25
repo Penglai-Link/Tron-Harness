@@ -6,7 +6,7 @@ import {
 import { useNavigate } from "react-router";
 import {
   Save,
-  Zap,
+  ShieldCheck,
 } from "lucide-react";
 
 import { Button } from "@/shared/ui/Button";
@@ -21,7 +21,7 @@ import {
 import {
   createWorkspaceModel,
   fetchWorkspaceModelCatalog,
-  verifyWorkspaceModel,
+  verifyWorkspaceModelDraft,
 } from "@/domain/model/api";
 import {
   ModelFormFields,
@@ -32,7 +32,7 @@ import {
 import {
   createWorkspaceModelRecord,
   getWorkspaceModelCatalog,
-  verifyWorkspaceModelRecord,
+  verifyWorkspaceModelCreateDraftRecord,
 } from "@/domain/model/mock";
 import type { ModelRecord } from "@/domain/model/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
@@ -106,32 +106,33 @@ export function CreateWorkspaceModelPage() {
       return;
     }
 
-    setSubmitting(true);
-    setVerifying(Boolean(options?.verifyAfterCreate));
+    const verifyAfterCreate = Boolean(options?.verifyAfterCreate);
+    setSubmitting(!verifyAfterCreate);
+    setVerifying(verifyAfterCreate);
     try {
       const payload = modelFormToPayload(form, apiKeyRef, {
         enabled: true,
         allowInheritance,
       });
+      if (verifyAfterCreate) {
+        const verified = dataSource === "api"
+          ? await verifyWorkspaceModelDraft(activeWorkspaceCode, payload)
+          : verifyWorkspaceModelCreateDraftRecord(activeWorkspaceCode, payload);
+        toast.success(`${verified.displayName} verified`);
+        return;
+      }
+
       const saved = dataSource === "api"
         ? await createWorkspaceModel(activeWorkspaceCode, payload)
         : createWorkspaceModelRecord(activeWorkspaceCode, payload);
-      toast.success(`${saved.displayName} created`);
-
-      if (options?.verifyAfterCreate) {
-        try {
-          const verified = dataSource === "api"
-            ? await verifyWorkspaceModel(activeWorkspaceCode, saved.modelCode)
-            : verifyWorkspaceModelRecord(activeWorkspaceCode, saved.modelCode);
-          toast.success(`${verified.displayName} verified`);
-        } catch (error) {
-          toast.error(error instanceof Error ? error.message : "Verify failed");
-        }
+      if (!verifyAfterCreate) {
+        toast.success(`${saved.displayName} created`);
       }
-
       navigate(`/models/detail?modelCode=${encodeURIComponent(saved.modelCode)}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Workspace model could not be created");
+      toast.error(error instanceof Error
+        ? error.message
+        : (verifyAfterCreate ? "Verify failed" : "Workspace model could not be created"));
     } finally {
       setSubmitting(false);
       setVerifying(false);
@@ -152,8 +153,8 @@ export function CreateWorkspaceModelPage() {
               aria-busy={verifying}
               onClick={() => void saveModel({ verifyAfterCreate: true })}
             >
-              <Zap size={16} aria-hidden="true" />
-              {verifying ? "Creating + Verifying..." : "Create and Verify"}
+              <ShieldCheck size={16} aria-hidden="true" />
+              {verifying ? "Verifying..." : "Verify"}
             </Button>
             <Button
               disabled={!activeWorkspaceCode || loading || submitting || verifying || !form.displayName.trim()}
@@ -161,7 +162,7 @@ export function CreateWorkspaceModelPage() {
               onClick={() => void saveModel()}
             >
               <Save size={16} aria-hidden="true" />
-              {submitting ? "Creating..." : "Create Workspace Model"}
+              {submitting ? "Saving..." : "Save"}
             </Button>
           </>
         )}

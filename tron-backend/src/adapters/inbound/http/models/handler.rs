@@ -43,6 +43,20 @@ pub async fn create_workspace_model(
     }
 }
 
+pub async fn verify_workspace_model_create_draft(
+    State(models): State<ModelService>,
+    Path(workspace_code): Path<String>,
+    Json(request): Json<ModelRequest>,
+) -> Response {
+    match models
+        .verify_workspace_model_create_draft(&workspace_code, request.into())
+        .await
+    {
+        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Err(error) => model_error_response(error),
+    }
+}
+
 pub async fn get_workspace_model(
     State(models): State<ModelService>,
     Path((workspace_code, model_code)): Path<(String, String)>,

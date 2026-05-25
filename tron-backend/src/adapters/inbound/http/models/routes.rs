@@ -9,7 +9,7 @@ use super::handler::{
     create_workspace_model, delete_workspace_model, disable_workspace_model,
     duplicate_workspace_model, enable_workspace_model, get_workspace_model, list_select_options,
     list_workspace_models, patch_workspace_model, set_allow_inheritance, set_workspace_default,
-    verify_workspace_model,
+    verify_workspace_model, verify_workspace_model_create_draft,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -17,6 +17,10 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/api/v1/models/workspaces/{workspace_code}",
             get(list_workspace_models).post(create_workspace_model),
+        )
+        .route(
+            "/api/v1/models/workspaces/{workspace_code}/verify",
+            post(verify_workspace_model_create_draft),
         )
         .route(
             "/api/v1/models/workspaces/{workspace_code}/select-options",

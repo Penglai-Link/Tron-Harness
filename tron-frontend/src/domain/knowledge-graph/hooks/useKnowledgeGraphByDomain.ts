@@ -4,6 +4,7 @@ import { knowledgeGraphApiEndpoints } from "@/domain/knowledge-graph/api";
 
 export function useKnowledgeGraphByDomain(domain = "customer-support") {
   return useServiceQuery({
+    apiInitialData: () => ({ domainLabel: "", entities: [] }),
     domain: "knowledge-graph",
     endpoint: knowledgeGraphApiEndpoints.getKnowledgeGraph,
     mockData: () => getGraphData(domain),

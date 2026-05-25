@@ -98,15 +98,6 @@ function SearchField({
   );
 }
 
-function InspectorStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl bg-[var(--color-surface-container-low)] px-4 py-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{label}</p>
-      <p className="mt-2 text-base font-semibold text-[var(--color-on-surface)]">{value}</p>
-    </div>
-  );
-}
-
 function DetailField({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -135,6 +126,8 @@ function matchesVariableSearch(record: VariableRecord, search: string) {
     record.description ?? "",
     record.sourceLabel,
     record.sourceWorkspaceCode,
+    record.shadowedWorkspaceName ?? "",
+    record.shadowedWorkspaceCode ?? "",
     record.shadowedLabel ?? "",
   ].join(" ").toLowerCase();
   return value.includes(search.trim().toLowerCase());
@@ -145,6 +138,28 @@ function formFromVariable(record: VariableRecord): VariableFormState {
     description: record.description ?? "",
     key: record.key,
     value: record.value,
+  };
+}
+
+function getInheritedWorkspace(record: VariableRecord) {
+  if (record.sourceKind === "Local") {
+    return null;
+  }
+
+  if (record.sourceKind === "Override") {
+    if (record.shadowedLabel || record.shadowedWorkspaceName || record.shadowedWorkspaceCode) {
+      return {
+        code: record.shadowedWorkspaceCode,
+        label: record.shadowedLabel?.trim() || record.shadowedWorkspaceName?.trim() || record.shadowedWorkspaceCode || "Workspace",
+      };
+    }
+
+    return null;
+  }
+
+  return {
+    code: record.sourceWorkspaceCode,
+    label: record.sourceLabel?.trim() || record.sourceWorkspaceName?.trim() || record.sourceWorkspaceCode || "Workspace",
   };
 }
 
@@ -188,9 +203,6 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
 
   const filteredVariables = variables.filter((record) => matchesVariableSearch(record, search));
   const pagination = useTablePagination(filteredVariables);
-  const localCount = variables.filter((record) => record.sourceKind === "Local").length;
-  const inheritedCount = variables.filter((record) => record.sourceKind === "Inherited").length;
-  const overrideCount = variables.filter((record) => record.sourceKind === "Override").length;
 
   function resetToSelected() {
     setPanelMode("selected");
@@ -301,18 +313,11 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
             </Button>
             <Button variant="secondary" onClick={beginCreate}>
               <Plus size={16} aria-hidden="true" />
-              New Variable
+              New
             </Button>
           </>
         )}
       />
-
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <InspectorStat label="Effective" value={String(variables.length)} />
-        <InspectorStat label="Local" value={String(localCount)} />
-        <InspectorStat label="Inherited" value={String(inheritedCount)} />
-        <InspectorStat label="Overrides" value={String(overrideCount)} />
-      </div>
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <SurfaceCard className="p-0">
@@ -355,17 +360,34 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
               {
                 id: "sourceKind",
                 header: "Source",
-                render: (row) => <Badge tone={getVariableSourceTone(row.sourceKind)}>{row.sourceKind}</Badge>,
+                render: (row) => (
+                  <Badge tone={getVariableSourceTone(row.sourceKind)}>{row.sourceKind}</Badge>
+                ),
               },
               {
-                id: "sourceWorkspace",
-                header: "Workspace",
-                render: (row) => (
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{row.sourceWorkspaceName}</p>
-                    <p className="truncate text-[12px] text-[var(--color-on-surface-variant)]">{row.sourceWorkspaceCode}</p>
-                  </div>
-                ),
+                id: "inheritedFrom",
+                header: "Inherited From",
+                render: (row) => {
+                  const inheritedWorkspace = getInheritedWorkspace(row);
+                  if (!inheritedWorkspace) {
+                    return (
+                      <span className="text-[13px] text-[var(--color-on-surface-variant)]">-</span>
+                    );
+                  }
+
+                  return (
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-[var(--color-on-surface)]">
+                        {inheritedWorkspace.label}
+                      </p>
+                      {inheritedWorkspace.code ? (
+                        <p className="mt-1 truncate text-[13px] text-[var(--color-on-surface-variant)]">
+                          {inheritedWorkspace.code}
+                        </p>
+                      ) : null}
+                    </div>
+                  );
+                },
               },
               {
                 id: "updatedAt",
@@ -435,7 +457,7 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
               <div className="flex flex-wrap items-center gap-2">
                 <Button disabled={submitting} aria-busy={submitting} onClick={() => void saveVariable()}>
                   <Save size={16} aria-hidden="true" />
-                  {submitting ? "Saving..." : panelMode === "override" ? "Override" : "Create"}
+                  {submitting ? "Saving..." : "Save"}
                 </Button>
                 <Button variant="secondary" onClick={resetToSelected}>
                   <X size={16} aria-hidden="true" />

@@ -6,7 +6,7 @@ import {
 import { useNavigate } from "react-router";
 import {
   Save,
-  Zap,
+  ShieldCheck,
 } from "lucide-react";
 
 import { Button } from "@/shared/ui/Button";
@@ -19,7 +19,7 @@ import {
 import {
   createPlatformModel,
   fetchPlatformModels,
-  verifyPlatformModel,
+  verifyPlatformModelDraft,
   type ModelMutationPayload,
 } from "@/domain/model/api";
 import {
@@ -31,7 +31,7 @@ import {
 import {
   createPlatformModelRecord,
   listPlatformModelsMock,
-  verifyPlatformModelRecord,
+  verifyPlatformModelCreateDraftRecord,
 } from "@/domain/model/mock";
 import type { ModelRecord } from "@/domain/model/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
@@ -94,26 +94,30 @@ export function CreatePlatformModelPage() {
       return;
     }
 
-    setSubmitting(true);
-    setVerifying(Boolean(options?.verifyAfterCreate));
+    const verifyAfterCreate = Boolean(options?.verifyAfterCreate);
+    setSubmitting(!verifyAfterCreate);
+    setVerifying(verifyAfterCreate);
     try {
+      const payload = platformPayload(form, apiKeyRef, true);
+      if (verifyAfterCreate) {
+        const verified = dataSource === "api"
+          ? await verifyPlatformModelDraft(payload)
+          : verifyPlatformModelCreateDraftRecord(payload);
+        toast.success(`${verified.displayName} verified`);
+        return;
+      }
+
       const saved = dataSource === "api"
-        ? await createPlatformModel(platformPayload(form, apiKeyRef, true))
-        : createPlatformModelRecord(platformPayload(form, apiKeyRef, true));
-      toast.success(`${saved.displayName} created`);
-      if (options?.verifyAfterCreate) {
-        try {
-          const verified = dataSource === "api"
-            ? await verifyPlatformModel(saved.modelCode)
-            : verifyPlatformModelRecord(saved.modelCode);
-          toast.success(`${verified.displayName} verified`);
-        } catch (error) {
-          toast.error(error instanceof Error ? error.message : "Verify failed");
-        }
+        ? await createPlatformModel(payload)
+        : createPlatformModelRecord(payload);
+      if (!verifyAfterCreate) {
+        toast.success(`${saved.displayName} created`);
       }
       navigate(`/settings/models/detail?modelCode=${encodeURIComponent(saved.modelCode)}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Platform model could not be created");
+      toast.error(error instanceof Error
+        ? error.message
+        : (verifyAfterCreate ? "Verify failed" : "Platform model could not be created"));
     } finally {
       setSubmitting(false);
       setVerifying(false);
@@ -134,8 +138,8 @@ export function CreatePlatformModelPage() {
               aria-busy={verifying}
               onClick={() => void saveModel({ verifyAfterCreate: true })}
             >
-              <Zap size={16} aria-hidden="true" />
-              {verifying ? "Creating + Verifying..." : "Create and Verify"}
+              <ShieldCheck size={16} aria-hidden="true" />
+              {verifying ? "Verifying..." : "Verify"}
             </Button>
             <Button
               disabled={loading || submitting || verifying || !form.displayName.trim()}
@@ -143,7 +147,7 @@ export function CreatePlatformModelPage() {
               onClick={() => void saveModel()}
             >
               <Save size={16} aria-hidden="true" />
-              {submitting ? "Creating..." : "Create Platform Model"}
+              {submitting ? "Saving..." : "Save"}
             </Button>
           </>
         )}

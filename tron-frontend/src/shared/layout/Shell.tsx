@@ -58,6 +58,19 @@ interface TronShellProps {
 }
 
 const TronShellFrameContext = createContext(false);
+export interface ConsoleShellConfig {
+  contentClassName?: string;
+  rightPanel?: ReactNode;
+  searchPlaceholder?: string;
+  topbarActions?: ReactNode;
+}
+
+interface ConsoleShellConfigController {
+  resetConfig: () => void;
+  setConfig: (config: ConsoleShellConfig) => void;
+}
+
+export const ConsoleShellConfigContext = createContext<ConsoleShellConfigController | null>(null);
 
 interface WorkspaceTreeNode {
   children: WorkspaceTreeNode[];
@@ -141,6 +154,7 @@ export function TronShell({
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const shellFrameMounted = useContext(TronShellFrameContext);
+  const shellConfigController = useContext(ConsoleShellConfigContext);
   const agentOpen = useAppShellStore((state) => state.agentOpen);
   const closeFloatingPanels = useAppShellStore((state) => state.closeFloatingPanels);
   const ensureSectionOpen = useAppShellStore((state) => state.ensureSectionOpen);
@@ -283,6 +297,28 @@ export function TronShell({
   useEffect(() => {
     setExpandedWorkspaceCodes(defaultExpandedWorkspaceCodes);
   }, [defaultExpandedWorkspaceCodes]);
+
+  useEffect(() => {
+    if (!shellFrameMounted || !shellConfigController) {
+      return;
+    }
+
+    shellConfigController.setConfig({
+      contentClassName,
+      rightPanel,
+      searchPlaceholder,
+      topbarActions,
+    });
+
+    return () => shellConfigController.resetConfig();
+  }, [
+    contentClassName,
+    rightPanel,
+    searchPlaceholder,
+    shellConfigController,
+    shellFrameMounted,
+    topbarActions,
+  ]);
 
   useEffect(() => {
     setMobileSidebarOpen(false);

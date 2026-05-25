@@ -1,11 +1,10 @@
 import { useState } from "react";
 import {
-  Link,
+  useNavigate,
   useSearchParams,
 } from "react-router";
 import {
   Archive,
-  ArrowLeft,
   Pencil,
   RotateCcw,
 } from "lucide-react";
@@ -39,6 +38,7 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 export function AppDetailsPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const toast = useToast();
   const dataSource = getServiceDataSource("app");
   const appCode = searchParams.get("appCode") ?? "";
@@ -76,8 +76,8 @@ export function AppDetailsPage() {
     return (
       <TronShell activeItem="Apps" searchPlaceholder="Search apps, repositories, and tags...">
         <PageHeader
+          breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: appCode || "Loading" }]}
           title="App Detail"
-          actions={<Button asChild variant="secondary"><Link to="/apps"><ArrowLeft size={16} aria-hidden="true" />Back to Apps</Link></Button>}
         />
         <SurfaceCard>
           <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Loading app detail</h2>
@@ -91,8 +91,8 @@ export function AppDetailsPage() {
     return (
       <TronShell activeItem="Apps" searchPlaceholder="Search apps, repositories, and tags...">
         <PageHeader
+          breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: appCode || "Not Found" }]}
           title="App Detail"
-          actions={<Button asChild variant="secondary"><Link to="/apps"><ArrowLeft size={16} aria-hidden="true" />Back to Apps</Link></Button>}
         />
         <SurfaceCard>
           <h2 className="text-base font-semibold text-[var(--color-on-surface)]">App not found</h2>
@@ -109,12 +109,7 @@ export function AppDetailsPage() {
         title={app.name}
         actions={(
           <>
-            <Button asChild type="button" variant="secondary">
-              <Link to="/apps"><ArrowLeft size={15} aria-hidden="true" />Back</Link>
-            </Button>
-            <Button asChild type="button" variant="secondary">
-              <Link to={`/apps/edit?appCode=${encodeURIComponent(app.appCode)}`}><Pencil size={15} aria-hidden="true" />Edit</Link>
-            </Button>
+            <Button type="button" variant="secondary" onClick={() => navigate(`/apps/edit?appCode=${encodeURIComponent(app.appCode)}`)}><Pencil size={15} aria-hidden="true" />Edit</Button>
             {app.status === "Archived" ? (
               <Button type="button" disabled={updatingLifecycle} variant="secondary" onClick={() => void handleLifecycle("restore")}>
                 <RotateCcw size={15} aria-hidden="true" />

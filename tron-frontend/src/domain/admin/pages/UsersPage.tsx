@@ -188,7 +188,7 @@ export function UsersPage() {
 
   return (
     <TronShell activeItem="Users" searchPlaceholder="Search users...">
-      <PageHeader title="Users" actions={<><Button variant="secondary" disabled={exporting} aria-busy={exporting} onClick={() => void handleExport()}><Download size={16} aria-hidden="true" />{exporting ? "Exporting..." : "Export"}</Button><Button onClick={() => navigate("/admin/users/new")}><UserPlus size={16} aria-hidden="true" />Add User</Button></>} />
+      <PageHeader title="Users" actions={<><Button variant="secondary" disabled={exporting} aria-busy={exporting} onClick={() => void handleExport()}><Download size={16} aria-hidden="true" />{exporting ? "Exporting..." : "Export"}</Button><Button onClick={() => navigate("/admin/users/new")}><UserPlus size={16} aria-hidden="true" />New</Button></>} />
       <div className="mb-5 grid gap-4 lg:grid-cols-2 2xl:grid-cols-4">
         <MetricCard label="Users" value={String(statistics.totalUsers)} trend="Persisted user records" icon={<ShieldCheck size={18} aria-hidden="true" />} />
         <MetricCard label="Active" value={String(statistics.activeUsers)} trend="Active status count" />

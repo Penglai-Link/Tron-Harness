@@ -122,11 +122,6 @@ export function WorkspaceModelDetailsPage() {
       && record.displayName === form.displayName.trim()
     ))
     : false;
-  const formDirty = selectedRecord
-    ? JSON.stringify(form) !== JSON.stringify(modelFormFromRecord(selectedRecord))
-      || allowInheritance !== (selectedRecord.allowInheritance ?? true)
-      || apiKeyDirty
-    : false;
   const verifyStatusRecord = verifyPreview ?? selectedRecord;
 
   async function refreshWorkspaceModels() {
@@ -239,7 +234,7 @@ export function WorkspaceModelDetailsPage() {
       title: "Verify",
     });
     try {
-      const payload = formDirty
+      const payload = editing
         ? modelFormToPayload(form, apiKeyInputRef.current?.value.trim() ?? "", {
           enabled: selectedRecord.enabled,
           allowInheritance: editableLocal ? allowInheritance : undefined,
@@ -352,76 +347,71 @@ export function WorkspaceModelDetailsPage() {
       <PageHeader
         breadcrumbs={[{ label: "Models", href: "/models" }, { label: selectedRecord.displayName }]}
         title={selectedRecord.displayName}
+        actions={editing ? (
+          <>
+            <Button
+              variant="secondary"
+              disabled={submitting || verifying || !form.displayName.trim()}
+              aria-busy={verifying}
+              onClick={() => void runVerify()}
+            >
+              <ShieldCheck size={16} aria-hidden="true" />
+              {verifying ? "Verifying..." : "Verify"}
+            </Button>
+            <Button variant="secondary" disabled={submitting || verifying} onClick={resetDraft}>
+              <X size={16} aria-hidden="true" />
+              Cancel
+            </Button>
+            <Button
+              disabled={submitting || verifying || !form.displayName.trim()}
+              aria-busy={submitting}
+              onClick={() => void saveModel()}
+            >
+              <Save size={16} aria-hidden="true" />
+              {submitting ? "Saving..." : "Save"}
+            </Button>
+          </>
+        ) : (
+          <>
+            {editableDefinition ? (
+              <Button variant="secondary" onClick={() => setEditing(true)}>
+                <Edit3 size={16} aria-hidden="true" />
+                Edit
+              </Button>
+            ) : null}
+            {verifiableRecord ? (
+              <Button variant="secondary" disabled={verifying} aria-busy={verifying} onClick={() => void runVerify()}>
+                <ShieldCheck size={16} aria-hidden="true" />
+                {verifying ? "Verifying..." : "Verify"}
+              </Button>
+            ) : null}
+            {toggleableRecord ? (
+              <Button variant="secondary" disabled={submitting} onClick={() => void toggleEnabled()}>
+                <Zap size={16} aria-hidden="true" />
+                {selectedRecord.enabled ? "Disable" : "Enable"}
+              </Button>
+            ) : null}
+            {removableRecord ? (
+              <Button variant="ghost" disabled={deleting} aria-busy={deleting} onClick={() => void removeModel()}>
+                <Trash2 size={16} aria-hidden="true" />
+                {deleting ? "Deleting..." : (selectedRecord.sourceKind === "OVERRIDE" ? "Revert" : "Delete")}
+              </Button>
+            ) : null}
+          </>
+        )}
       />
 
       <div className="max-w-5xl space-y-5">
         <VerifyStatusCard record={verifyStatusRecord} />
 
         <SurfaceCard className="space-y-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-3">
-              <ModelSourceBadge sourceKind={selectedRecord.sourceKind} label={selectedRecord.sourceLabel} />
-              <Badge tone={selectedRecord.enabled ? "success" : "neutral"}>{selectedRecord.enabled ? "Enabled" : "Disabled"}</Badge>
-              {selectedRecord.isDefault ? <Badge tone="accent">Default</Badge> : null}
-              <code className="rounded-md bg-[var(--color-surface-container-low)] px-2 py-1 text-[13px] text-[var(--color-on-surface-variant)]">
-                {selectedRecord.modelCode}
-              </code>
-            </div>
-
-            <div className="flex flex-wrap justify-end gap-2">
-              {editing ? (
-                <>
-                  <Button
-                    disabled={submitting || verifying || !form.displayName.trim()}
-                    aria-busy={submitting}
-                    onClick={() => void saveModel()}
-                  >
-                    <Save size={16} aria-hidden="true" />
-                    {submitting ? "Saving..." : "Save"}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    disabled={submitting || verifying || !form.displayName.trim()}
-                    aria-busy={verifying}
-                    onClick={() => void runVerify()}
-                  >
-                    <ShieldCheck size={16} aria-hidden="true" />
-                    {verifying ? "Verifying..." : "Verify"}
-                  </Button>
-                  <Button variant="secondary" disabled={submitting || verifying} onClick={resetDraft}>
-                    <X size={16} aria-hidden="true" />
-                    Cancel
-                  </Button>
-                </>
-              ) : (
-                <>
-                  {editableDefinition ? (
-                    <Button variant="secondary" onClick={() => setEditing(true)}>
-                      <Edit3 size={16} aria-hidden="true" />
-                      Edit
-                    </Button>
-                  ) : null}
-                  {verifiableRecord ? (
-                    <Button variant="secondary" disabled={verifying} aria-busy={verifying} onClick={() => void runVerify()}>
-                      <ShieldCheck size={16} aria-hidden="true" />
-                      {verifying ? "Verifying..." : "Verify"}
-                    </Button>
-                  ) : null}
-                  {toggleableRecord ? (
-                    <Button variant="secondary" disabled={submitting} onClick={() => void toggleEnabled()}>
-                      <Zap size={16} aria-hidden="true" />
-                      {selectedRecord.enabled ? "Disable" : "Enable"}
-                    </Button>
-                  ) : null}
-                  {removableRecord ? (
-                    <Button variant="ghost" disabled={deleting} aria-busy={deleting} onClick={() => void removeModel()}>
-                      <Trash2 size={16} aria-hidden="true" />
-                      {deleting ? "Deleting..." : (selectedRecord.sourceKind === "OVERRIDE" ? "Revert" : "Delete")}
-                    </Button>
-                  ) : null}
-                </>
-              )}
-            </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <ModelSourceBadge sourceKind={selectedRecord.sourceKind} label={selectedRecord.sourceLabel} />
+            <Badge tone={selectedRecord.enabled ? "success" : "neutral"}>{selectedRecord.enabled ? "Enabled" : "Disabled"}</Badge>
+            {selectedRecord.isDefault ? <Badge tone="accent">Default</Badge> : null}
+            <code className="rounded-md bg-[var(--color-surface-container-low)] px-2 py-1 text-[13px] text-[var(--color-on-surface-variant)]">
+              {selectedRecord.modelCode}
+            </code>
           </div>
 
           {editing ? (

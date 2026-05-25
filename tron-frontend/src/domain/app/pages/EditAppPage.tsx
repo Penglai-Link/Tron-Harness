@@ -4,14 +4,10 @@ import {
   useState,
 } from "react";
 import {
-  Link,
   useNavigate,
   useSearchParams,
 } from "react-router";
-import {
-  ArrowLeft,
-  Save,
-} from "lucide-react";
+import { Save } from "lucide-react";
 
 import { Button } from "@/shared/ui/Button";
 import {
@@ -82,8 +78,8 @@ export function EditAppPage() {
     return (
       <TronShell activeItem="Apps" searchPlaceholder="Search apps, repositories, and tags...">
         <PageHeader
+          breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: appCode || "Edit" }]}
           title="Edit App"
-          actions={<Button asChild variant="secondary"><Link to="/apps"><ArrowLeft size={16} aria-hidden="true" />Back to Apps</Link></Button>}
         />
         <SurfaceCard>
           <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Loading app detail</h2>
@@ -97,8 +93,8 @@ export function EditAppPage() {
     return (
       <TronShell activeItem="Apps" searchPlaceholder="Search apps, repositories, and tags...">
         <PageHeader
+          breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: appCode || "Not Found" }]}
           title="Edit App"
-          actions={<Button asChild variant="secondary"><Link to="/apps"><ArrowLeft size={16} aria-hidden="true" />Back to Apps</Link></Button>}
         />
         <SurfaceCard>
           <h2 className="text-base font-semibold text-[var(--color-on-surface)]">App not found</h2>
@@ -115,9 +111,7 @@ export function EditAppPage() {
         title={`Edit ${app.name}`}
         actions={(
           <>
-            <Button asChild type="button" variant="secondary">
-              <Link to={`/apps/detail?appCode=${encodeURIComponent(app.appCode)}`}><ArrowLeft size={15} aria-hidden="true" />Back</Link>
-            </Button>
+            <Button type="button" variant="secondary" onClick={() => navigate(`/apps/detail?appCode=${encodeURIComponent(app.appCode)}`)}>Cancel</Button>
             <Button type="submit" form="edit-app-form" disabled={submitting || !canSubmitAppForm(form) || app.status === "Archived"}>
               <Save size={15} aria-hidden="true" />
               {submitting ? "Saving..." : "Save"}
