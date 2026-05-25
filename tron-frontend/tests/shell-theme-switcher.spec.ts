@@ -381,3 +381,47 @@ test("dashboard inheritance map keeps descendant workspaces nested under their d
   });
   expect(nearestWorkspaceAncestor).toBe("ELITEFORGE");
 });
+
+test("sidebar groups knowledge and resource navigation under data", async ({ page }) => {
+  await routeThemeApi(page);
+  await signIn(page);
+
+  const navigation = page.getByRole("navigation", { name: "Tron primary navigation" });
+  const dataToggle = navigation.getByRole("button", { name: "Data" });
+  await dataToggle.click();
+  const dataSection = dataToggle.locator("xpath=ancestor::section[1]");
+  const agentOperationsSection = navigation.getByRole("button", { name: "Agent Operations" }).locator("xpath=ancestor::section[1]");
+
+  await expect(dataSection.getByRole("link", { name: "KnowledgeGraph" })).toBeVisible();
+  await expect(dataSection.getByRole("link", { name: "KnowledgeBase" })).toBeVisible();
+  await expect(dataSection.getByRole("link", { name: "Resources" })).toBeVisible();
+  await expect(agentOperationsSection.getByRole("link", { name: "Resources" })).toHaveCount(0);
+
+  await dataSection.getByRole("link", { name: "KnowledgeBase" }).click();
+  await expect(page).toHaveURL(/\/knowledge-base$/);
+  await expect(page.getByRole("heading", { name: "Knowledge Base" })).toBeVisible();
+});
+
+test("sidebar navigation still works after entering chats", async ({ page }) => {
+  await routeThemeApi(page);
+  await signIn(page);
+
+  await page.goto(`${frontendBaseUrl}/chats`);
+  await expect(page).toHaveURL(/\/chats\/8842-alpha$/);
+  await expect(page.getByRole("heading", { name: "Primary Investigation" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Dashboard" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("heading", { name: "Workspace Overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Primary Investigation" })).toHaveCount(0);
+
+  const dataToggle = page.getByRole("button", { name: "Data" });
+  const resourcesLink = page.getByRole("link", { name: "Resources" });
+  if (!(await resourcesLink.isVisible())) {
+    await dataToggle.click();
+  }
+  await resourcesLink.click();
+  await expect(page).toHaveURL(/\/resources$/);
+  await expect(page.getByRole("heading", { name: "Data & Assets" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Primary Investigation" })).toHaveCount(0);
+});

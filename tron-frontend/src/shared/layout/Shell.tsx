@@ -501,8 +501,8 @@ export function TronShell({
   return (
     <TronShellFrameContext.Provider value={true}>
     <WorkspaceSpacesContext.Provider value={workspaceSpacesValue}>
-    <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]">
-      <header className="fixed inset-x-0 top-0 z-50 h-14 bg-[var(--color-header-backdrop)] px-4 shadow-[0_10px_28px_rgba(15,23,42,0.045)] backdrop-blur sm:px-6">
+    <div className="isolate min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]">
+      <header className="fixed inset-x-0 top-0 z-[60] h-14 bg-[var(--color-header-backdrop)] px-4 shadow-[0_10px_28px_rgba(15,23,42,0.045)] backdrop-blur sm:px-6">
         <div className="flex h-full items-center justify-between gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <Button
@@ -630,7 +630,7 @@ export function TronShell({
           </div>
         ) : null}
         {agentOpen ? (
-          <section className="absolute right-4 top-[calc(100%+8px)] z-40 w-[min(320px,calc(100vw-2rem))] rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-4 text-sm shadow-[0_18px_50px_rgba(0,0,0,0.14)] sm:right-6">
+          <section className="absolute right-4 top-[calc(100%+8px)] z-[55] w-[min(320px,calc(100vw-2rem))] rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-4 text-sm shadow-[0_18px_50px_rgba(0,0,0,0.14)] sm:right-6">
             <p className="font-semibold">{t("shell:assistant.title")}</p>
             <p className="mt-2 text-[13px] leading-5 text-[var(--color-on-surface-variant)]">{t("shell:assistant.body")}</p>
             <button className="mt-3 h-8 rounded-lg bg-[var(--color-surface-container)] px-3 text-[13px] font-medium hover:bg-[var(--color-hover-surface)]" type="button" onClick={() => setAgentOpen(false)}>
@@ -643,13 +643,13 @@ export function TronShell({
       {mobileSidebarOpen ? (
         <>
           <button
-            className="fixed inset-x-0 bottom-0 top-14 z-30 bg-[var(--color-backdrop-scrim)] lg:hidden"
+            className="fixed inset-x-0 bottom-0 top-14 z-40 bg-[var(--color-backdrop-scrim)] lg:hidden"
             type="button"
             aria-label={t("common:actions.close")}
             onClick={closeMobileSidebar}
           />
           <aside
-            className="fixed bottom-0 left-0 top-14 z-40 flex w-[min(20rem,calc(100vw-1rem))] flex-col overflow-y-auto bg-[var(--color-elevated-surface)] px-3 py-4 shadow-[12px_0_34px_rgba(15,23,42,0.12),0_18px_45px_rgba(15,23,42,0.12)] lg:hidden"
+            className="fixed bottom-0 left-0 top-14 z-50 flex w-[min(20rem,calc(100vw-1rem))] flex-col overflow-y-auto bg-[var(--color-elevated-surface)] px-3 py-4 shadow-[12px_0_34px_rgba(15,23,42,0.12),0_18px_45px_rgba(15,23,42,0.12)] lg:hidden"
             id="tron-mobile-sidebar"
           >
             {renderSidebarContent(true)}
@@ -659,7 +659,7 @@ export function TronShell({
 
       <aside
         className={cn(
-          "fixed bottom-0 left-0 top-14 z-40 hidden flex-col overflow-y-auto bg-[var(--color-elevated-surface)] py-4 shadow-[10px_0_28px_rgba(15,23,42,0.04)] transition-[width] duration-200 lg:flex",
+          "fixed bottom-0 left-0 top-14 z-50 hidden flex-col overflow-y-auto bg-[var(--color-elevated-surface)] py-4 shadow-[10px_0_28px_rgba(15,23,42,0.04)] transition-[width] duration-200 lg:flex",
           sidebarCollapsed ? "w-[76px] px-2" : "w-[280px] px-3",
         )}
         data-collapsed={sidebarCollapsed}
@@ -667,10 +667,10 @@ export function TronShell({
         {renderSidebarContent()}
       </aside>
 
-      <section className={cn("min-w-0 pt-14 transition-[padding-left] duration-200", sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[280px]")}>
-        <div className={cn("grid min-h-[calc(100vh-3.5rem)] grid-cols-1", rightPanel ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "")}>
-          <main className={cn("min-w-0 px-6 py-6", contentClassName)}>{children}</main>
-          {rightPanel ? <aside className="border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-5 py-6">{rightPanel}</aside> : null}
+      <section className={cn("relative z-0 min-w-0 pt-14 transition-[padding-left] duration-200", sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[280px]")}>
+        <div className={cn("relative z-0 grid min-h-[calc(100vh-3.5rem)] grid-cols-1", rightPanel ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "")}>
+          <main className={cn("relative z-0 min-w-0 overflow-x-hidden px-6 py-6", contentClassName)}>{children}</main>
+          {rightPanel ? <aside className="relative z-0 border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-5 py-6">{rightPanel}</aside> : null}
         </div>
       </section>
 

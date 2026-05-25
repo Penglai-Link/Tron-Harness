@@ -1,4 +1,7 @@
-import { useState } from "react";
+import {
+  useMemo,
+  useState,
+} from "react";
 import {
   Gauge,
   Pause,
@@ -72,7 +75,7 @@ export function ObservabilityPage() {
   const [notice, setNotice] = useState("");
   const tracePagination = useTablePagination(data.traces);
 
-  const rightPanel = inspectorOpen ? (
+  const rightPanel = useMemo(() => (inspectorOpen ? (
     <InspectorPanel title="Inspector">
       <div className="flex items-center justify-between">
         <Badge tone="success">agent-router-04</Badge>
@@ -102,7 +105,7 @@ export function ObservabilityPage() {
       </div>
       <Notice value={notice} />
     </InspectorPanel>
-  ) : undefined;
+  ) : undefined), [inspectorOpen, inspectorTab, notice]);
 
   useConsoleShellConfig({ rightPanel });
 

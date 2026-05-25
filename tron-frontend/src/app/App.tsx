@@ -73,6 +73,22 @@ function resolveActiveItem(pathname: string) {
   return tronNavigation.flatMap((section) => section.items).find((item) => item.href === pathname)?.label ?? "Dashboard";
 }
 
+function isConsoleShellConfigEqual(left: ConsoleShellConfig, right: ConsoleShellConfig) {
+  return (
+    left.contentClassName === right.contentClassName
+    && left.rightPanel === right.rightPanel
+    && left.searchPlaceholder === right.searchPlaceholder
+    && left.topbarActions === right.topbarActions
+  );
+}
+
+function isConsoleShellConfigEmpty(config: ConsoleShellConfig) {
+  return !config.contentClassName
+    && !config.rightPanel
+    && !config.searchPlaceholder
+    && !config.topbarActions;
+}
+
 function HomePage() {
   const { t } = useTranslation("home");
 
@@ -161,12 +177,16 @@ function AppRoutePage() {
   const resolved = resolveAppRoute(pathname, search);
   const [pageShellConfig, setPageShellConfig] = useState<ConsoleShellConfig>({});
   const shellConfigController = useMemo(() => ({
-    resetConfig: () => setPageShellConfig({}),
-    setConfig: (config: ConsoleShellConfig) => setPageShellConfig(config),
+    resetConfig: () => {
+      setPageShellConfig((current) => (isConsoleShellConfigEmpty(current) ? current : {}));
+    },
+    setConfig: (config: ConsoleShellConfig) => {
+      setPageShellConfig((current) => (isConsoleShellConfigEqual(current, config) ? current : config));
+    },
   }), []);
 
   useEffect(() => {
-    setPageShellConfig({});
+    setPageShellConfig((current) => (isConsoleShellConfigEmpty(current) ? current : {}));
   }, [resolved?.route.pageId]);
 
   if (resolved) {

@@ -26,6 +26,7 @@ export const routePages: Record<string, RoutePageComponent> = {
   "chats.execution": lazy(() => import("@/domain/chat/pages/ChatSessionExecutionPage").then((module) => ({ default: module.ChatSessionExecutionPage }))),
   "chats.reasoning": lazy(() => import("@/domain/chat/pages/ChatSessionReasoningPage").then((module) => ({ default: module.ChatSessionReasoningPage }))),
   "dashboard.index": lazy(() => import("@/domain/dashboard/pages/DashboardPage").then((module) => ({ default: module.DashboardPage }))),
+  "knowledgeBase.index": lazy(() => import("@/domain/knowledge-base/pages/KnowledgeBasePage").then((module) => ({ default: module.KnowledgeBasePage }))),
   "knowledgeGraph.domainFiltering": lazy(() => import("@/domain/knowledge-graph/pages/KnowledgeGraphDomainPage").then((module) => ({ default: module.KnowledgeGraphDomainPage }))),
   "knowledgeGraph.index": lazy(() => import("@/domain/knowledge-graph/pages/KnowledgeGraphPage").then((module) => ({ default: module.KnowledgeGraphPage }))),
   "memory.details": lazy(() => import("@/domain/memory/pages/MemoryDetailsPage").then((module) => ({ default: module.MemoryDetailsPage }))),

@@ -1,4 +1,7 @@
-import { useState } from "react";
+import {
+  useMemo,
+  useState,
+} from "react";
 import {
   Bot,
   CircleCheck,
@@ -56,7 +59,7 @@ function ChatSessionPage({ variant }: { variant: "reasoning" | "execution" }) {
   const [inspectorTab, setInspectorTab] = useState("info");
   const [composer, setComposer] = useState("");
   const [notice, setNotice] = useState("");
-  const rightPanel = (
+  const rightPanel = useMemo(() => (
     <InspectorPanel title="Utility Hub">
       <SegmentedTabs value={inspectorTab} onValueChange={setInspectorTab} items={[{ label: "Info", value: "info" }, { label: "Tools", value: "tools" }, { label: "Files", value: "files" }]} />
       <SurfaceCard className="rounded-xl p-4 shadow-none">
@@ -80,13 +83,13 @@ function ChatSessionPage({ variant }: { variant: "reasoning" | "execution" }) {
         )}
       </SurfaceCard>
     </InspectorPanel>
-  );
+  ), [inspectorTab]);
 
   useConsoleShellConfig({ rightPanel });
 
   return (
     <>
-      <div className="grid h-[calc(100vh-65px)] min-h-[720px] grid-cols-[260px_minmax(0,1fr)] bg-white">
+      <div className="relative z-0 grid h-[calc(100vh-3.5rem)] min-h-[720px] min-w-0 max-w-full grid-cols-[260px_minmax(0,1fr)] overflow-hidden bg-white">
         <aside className="border-r border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)]">
           <div className="flex items-center justify-between border-b border-[var(--color-outline-variant)] p-4">
             <h2 className="text-lg font-semibold">Sessions</h2>

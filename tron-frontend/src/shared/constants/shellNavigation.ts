@@ -39,7 +39,6 @@ export const tronNavigation: TronNavSection[] = [
       { label: "Prompts", href: "/prompts", icon: ScrollText, translationKey: "shell:nav.items.prompts" },
       { label: "Models", href: "/models", icon: Sparkles, translationKey: "shell:nav.items.models" },
       { label: "Skills", href: "/skills", icon: Wrench, translationKey: "shell:nav.items.skills" },
-      { label: "Resources", href: "/resources", icon: PackageOpen, translationKey: "shell:nav.items.resources" },
     ],
   },
   {
@@ -47,7 +46,9 @@ export const tronNavigation: TronNavSection[] = [
     translationKey: "shell:nav.sections.data",
     items: [
       { label: "Memory", href: "/memory", icon: Database, translationKey: "shell:nav.items.memory" },
-      { label: "Graph", href: "/knowledge-graph", icon: Network, translationKey: "shell:nav.items.graph" },
+      { label: "KnowledgeGraph", href: "/knowledge-graph", icon: Network, translationKey: "shell:nav.items.knowledgeGraph" },
+      { label: "KnowledgeBase", href: "/knowledge-base", icon: PackageOpen, translationKey: "shell:nav.items.knowledgeBase" },
+      { label: "Resources", href: "/resources", icon: PackageOpen, translationKey: "shell:nav.items.resources" },
       { label: "Variables", href: "/variables", icon: KeyRound, translationKey: "shell:nav.items.variables" },
       { label: "Observability", href: "/observability", icon: Gauge, translationKey: "shell:nav.items.observability" },
     ],
