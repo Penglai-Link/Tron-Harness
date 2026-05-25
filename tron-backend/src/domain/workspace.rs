@@ -153,6 +153,7 @@ pub struct WorkspaceSwitcherPrimarySpace {
 pub struct WorkspaceSwitcherSecondarySpace {
     pub workspace_code: String,
     pub primary_workspace_code: String,
+    pub parent_workspace_code: Option<String>,
     pub label: String,
     pub name: String,
     pub description: Option<String>,

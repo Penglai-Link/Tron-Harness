@@ -38,6 +38,11 @@ import { WorkspaceSpacesContext } from "@/shared/hooks/useWorkspaceSpaces";
 import { Button } from "@/shared/ui/Button";
 import { useLocale } from "@/i18n";
 import { useAppShellStore } from "@/store/appShellStore";
+import {
+  buildWorkspaceTree,
+  findWorkspaceNodePath,
+  type WorkspaceTreeNode,
+} from "@/shared/lib/workspaceTree";
 import { cn } from "@/shared/lib/utils";
 import { useTheme } from "@/shared/theme/ThemeProvider";
 import { SelectInput } from "@/shared/ui/Forms";
@@ -70,6 +75,8 @@ interface ConsoleShellConfigController {
   setConfig: (config: ConsoleShellConfig) => void;
 }
 
+type WorkspaceSwitcherTreeNode = WorkspaceTreeNode<WorkspaceSwitcherData["secondarySpaces"][number]>;
+
 export const ConsoleShellConfigContext = createContext<ConsoleShellConfigController | null>(null);
 
 export function useConsoleShellConfig(config: ConsoleShellConfig) {
@@ -91,58 +98,8 @@ export function useConsoleShellConfig(config: ConsoleShellConfig) {
   ]);
 }
 
-interface WorkspaceTreeNode {
-  children: WorkspaceTreeNode[];
-  space: WorkspaceSwitcherData["secondarySpaces"][number];
-}
-
 function sectionHasActiveItem(section: TronNavSection, activeItem?: string) {
   return Boolean(activeItem && section.items.some((item) => item.label === activeItem));
-}
-
-function buildWorkspaceTree(secondarySpaces: WorkspaceSwitcherData["secondarySpaces"]) {
-  const roots: WorkspaceTreeNode[] = [];
-  const stack: WorkspaceTreeNode[] = [];
-
-  secondarySpaces.forEach((space) => {
-    const node: WorkspaceTreeNode = {
-      children: [],
-      space,
-    };
-
-    while (stack.length && stack.at(-1)!.space.depth >= space.depth) {
-      stack.pop();
-    }
-
-    if (stack.length) {
-      stack.at(-1)!.children.push(node);
-    } else {
-      roots.push(node);
-    }
-
-    stack.push(node);
-  });
-
-  return roots;
-}
-
-function findWorkspaceNodePath(nodes: WorkspaceTreeNode[], targetWorkspaceCode?: string): WorkspaceTreeNode[] {
-  if (!targetWorkspaceCode) {
-    return [];
-  }
-
-  for (const node of nodes) {
-    if (node.space.workspaceCode === targetWorkspaceCode) {
-      return [node];
-    }
-
-    const childPath = findWorkspaceNodePath(node.children, targetWorkspaceCode);
-    if (childPath.length) {
-      return [node, ...childPath];
-    }
-  }
-
-  return [];
 }
 
 function compactWorkspacePath(label: string) {
@@ -408,7 +365,7 @@ export function TronShell({
     ));
   }
 
-  function renderWorkspaceTreeNode(node: WorkspaceTreeNode, nestingLevel = 0): ReactNode {
+  function renderWorkspaceTreeNode(node: WorkspaceSwitcherTreeNode, nestingLevel = 0): ReactNode {
     const { space } = node;
     const workspacePathLabel = compactWorkspacePath(space.label);
     const hasChildren = node.children.length > 0;

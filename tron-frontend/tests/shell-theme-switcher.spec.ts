@@ -112,11 +112,17 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
   });
 }
 
-async function routeThemeApi(page: Page) {
+async function routeThemeApi(
+  page: Page,
+  options: {
+    workspaceSwitcherData?: ReturnType<typeof getWorkspaceSwitcherMock>;
+  } = {},
+) {
   let currentSession: typeof authUser | null = null;
   let hasRefreshSession = false;
   let currentAccessToken = "";
   let nextAccessTokenId = 1;
+  const workspaceSwitcherData = options.workspaceSwitcherData ?? getWorkspaceSwitcherMock();
 
   function issueGrant(session: typeof authUser) {
     currentSession = session;
@@ -186,7 +192,22 @@ async function routeThemeApi(page: Page) {
       return;
     }
 
-    await fulfillJson(route, successEnvelope(getWorkspaceSwitcherMock()));
+    await fulfillJson(route, successEnvelope(workspaceSwitcherData));
+  });
+
+  await page.route("**/api/v1/dashboard/overview", async (route) => {
+    if (
+      !currentSession
+      || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
+    ) {
+      await fulfillJson(route, unauthorizedEnvelope(), 401);
+      return;
+    }
+
+    await fulfillJson(route, successEnvelope({
+      activities: [],
+      metrics: [],
+    }));
   });
 
   await page.route("**/api/v1/admin/platform/models", async (route) => {
@@ -284,4 +305,79 @@ test("opens the full-screen settings page, switches settings sections, and persi
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe("light");
   await expect.poll(() => page.evaluate((storageKey) => window.localStorage.getItem(storageKey), themeStorageKey)).toBe("light");
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(253, 248, 248)");
+});
+
+test("dashboard inheritance map keeps descendant workspaces nested under their direct parent", async ({ page }) => {
+  const workspaceSwitcherData = {
+    primarySpaces: [
+      {
+        workspaceCode: "INDUSTRIAL",
+        name: "工业互联网",
+        description: "工业互联网总部空间",
+        status: "Active" as const,
+        childCount: 1,
+      },
+    ],
+    secondarySpaces: [
+      {
+        workspaceCode: "ELITEFORGE",
+        primaryWorkspaceCode: "INDUSTRIAL",
+        parentWorkspaceCode: "INDUSTRIAL",
+        label: "工业互联网 / 璀璨工坊",
+        name: "璀璨工坊",
+        description: "私有云环境",
+        status: "Active" as const,
+        depth: 2,
+        childCount: 1,
+        effectiveUserCount: 0,
+      },
+      {
+        workspaceCode: "ONLINE_DOCS",
+        primaryWorkspaceCode: "INDUSTRIAL",
+        parentWorkspaceCode: "ELITEFORGE",
+        label: "工业互联网 / 璀璨工坊 / 在线文档",
+        name: "在线文档",
+        description: "知识协同工作区",
+        status: "Active" as const,
+        depth: 3,
+        childCount: 0,
+        effectiveUserCount: 0,
+      },
+    ],
+  };
+
+  await routeThemeApi(page, { workspaceSwitcherData });
+  await page.addInitScript((snapshot) => {
+    window.localStorage.setItem("tron-app-shell", JSON.stringify({
+      state: {
+        openSections: { Core: true },
+        selectedPrimarySpaceId: "INDUSTRIAL",
+        selectedSecondarySpaceId: "ONLINE_DOCS",
+        sidebarCollapsed: false,
+        workspaceSwitcherSnapshot: snapshot,
+      },
+      version: 0,
+    }));
+  }, workspaceSwitcherData);
+  await signIn(page);
+
+  const eliteforgeNode = page.locator('[data-workspace-code="ELITEFORGE"]');
+  const onlineDocsNode = page.locator('[data-workspace-code="ONLINE_DOCS"]');
+
+  await expect(eliteforgeNode).toContainText("璀璨工坊");
+  await expect(onlineDocsNode).toContainText("在线文档");
+  await expect(eliteforgeNode.locator('[data-workspace-code="ONLINE_DOCS"]')).toHaveCount(1);
+
+  const nearestWorkspaceAncestor = await onlineDocsNode.evaluate((node) => {
+    let current = node.parentElement;
+    while (current) {
+      if (current.hasAttribute("data-workspace-code")) {
+        return current.getAttribute("data-workspace-code");
+      }
+      current = current.parentElement;
+    }
+
+    return null;
+  });
+  expect(nearestWorkspaceAncestor).toBe("ELITEFORGE");
 });

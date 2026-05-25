@@ -1,4 +1,7 @@
-import { useState } from "react";
+import {
+  useMemo,
+  useState,
+} from "react";
 import {
   Bot,
   CheckCircle2,
@@ -15,16 +18,23 @@ import {
   Zap,
 } from "lucide-react";
 
-import { Button } from "@/shared/ui/Button";
 import {
   MetricCard,
   PageHeader,
   SurfaceCard,
   useWorkspaceSpaces,
 } from "@/shared";
-
-import { cn } from "@/shared/lib/utils";
 import { useDashboardOverview } from "@/domain/dashboard/hooks";
+import {
+  buildWorkspaceTree,
+  type WorkspaceTreeNode,
+} from "@/shared/lib/workspaceTree";
+import { cn } from "@/shared/lib/utils";
+import type {
+  PrimarySpace,
+  SecondarySpace,
+} from "@/shared/types/WorkspaceSpace";
+import { Button } from "@/shared/ui/Button";
 
 function DashboardContent() {
   const { activities, metrics } = useDashboardOverview();
@@ -32,9 +42,12 @@ function DashboardContent() {
   const [expanded, setExpanded] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const primaryName = selectedPrimarySpace?.name ?? "Enterprise";
-  const primaryMeta = selectedPrimarySpace
-    ? `${selectedPrimarySpace.status} · ${selectedPrimarySpace.childCount} child spaces · ${selectedPrimarySpace.description ?? "No description"}`
-    : "Active · 0 child spaces · No description";
+  const primaryMeta = formatPrimarySpaceMeta(selectedPrimarySpace);
+  const selectedWorkspaceCode = selectedSecondarySpace?.workspaceCode;
+  const workspaceTree = useMemo(
+    () => buildWorkspaceTree(secondarySpaces),
+    [secondarySpaces],
+  );
 
   return (
     <>
@@ -68,36 +81,21 @@ function DashboardContent() {
             </Button>
           </div>
           <div className={cn("text-sm", expanded ? "min-h-[360px]" : "min-h-[260px]")}>
-            <TreeNode title={primaryName} meta={primaryMeta} root />
-            <div className="relative mt-4 pl-12">
-              {secondarySpaces.length ? (
-                <>
-                  <span className="absolute bottom-7 left-[17px] top-0 w-px bg-[var(--color-outline-variant)]" aria-hidden="true" />
-                  {secondarySpaces.map((space) => {
-                  const active = space.workspaceCode === selectedSecondarySpace?.workspaceCode;
-                  return (
-                    <div className="relative pb-3 last:pb-0" key={space.workspaceCode}>
-                      <span className={cn("absolute left-[-30px] top-6 h-px w-8", active ? "bg-[var(--color-primary)]" : "bg-[var(--color-outline-variant)]")} aria-hidden="true" />
-                      <span
-                        className={cn(
-                          "absolute left-[-37px] top-[18px] size-4 rounded-full border-2 bg-white",
-                          active ? "border-[var(--color-primary)]" : "border-[var(--color-outline-variant)]",
-                        )}
-                        aria-hidden="true"
-                      />
-                      <TreeNode
-                        active={active}
-                        title={`${space.name}${active ? " (Current)" : ""}`}
-                        meta={`${space.label} · ${space.effectiveUserCount} effective users · ${space.childCount} child spaces · ${space.status}`}
-                      />
-                    </div>
-                  );
-                  })}
-                </>
-              ) : (
-                <p className="rounded-lg bg-[var(--color-surface-container-low)] p-3 text-[13px] text-[var(--color-on-surface-variant)]">No secondary spaces configured for this primary space.</p>
-              )}
-            </div>
+            <TreeNode
+              active={!selectedWorkspaceCode}
+              title={`${primaryName}${!selectedWorkspaceCode ? " (Current)" : ""}`}
+              meta={primaryMeta}
+              root
+            />
+            {workspaceTree.length ? (
+              <WorkspaceTreeBranch nodes={workspaceTree} selectedWorkspaceCode={selectedWorkspaceCode} />
+            ) : (
+              <div className="relative mt-4 pl-12">
+                <p className="rounded-lg bg-[var(--color-surface-container-low)] p-3 text-[13px] text-[var(--color-on-surface-variant)]">
+                  No secondary spaces configured for this primary space.
+                </p>
+              </div>
+            )}
           </div>
           <p className="mt-3 text-[13px] text-[var(--color-on-surface-variant)]">{expanded ? "Expanded map controls are visible." : "Current navigation context."}</p>
         </SurfaceCard>
@@ -125,6 +123,75 @@ function DashboardContent() {
         </SurfaceCard>
       </div>
     </>
+  );
+}
+
+function formatPrimarySpaceMeta(primarySpace?: PrimarySpace) {
+  if (!primarySpace) {
+    return "Active · 0 child spaces · No description";
+  }
+
+  return [
+    primarySpace.status,
+    `${primarySpace.childCount} ${primarySpace.childCount === 1 ? "child space" : "child spaces"}`,
+    primarySpace.description ?? "No description",
+  ].join(" · ");
+}
+
+function formatSecondarySpaceMeta(space: SecondarySpace) {
+  const parts = [
+    `${space.effectiveUserCount} ${space.effectiveUserCount === 1 ? "effective user" : "effective users"}`,
+    `${space.childCount} ${space.childCount === 1 ? "child space" : "child spaces"}`,
+    space.status,
+  ];
+
+  if (space.description) {
+    parts.push(space.description);
+  }
+
+  return parts.join(" · ");
+}
+
+function WorkspaceTreeBranch({
+  nodes,
+  selectedWorkspaceCode,
+}: {
+  nodes: WorkspaceTreeNode<SecondarySpace>[];
+  selectedWorkspaceCode?: string;
+}) {
+  return (
+    <div className="relative mt-4 pl-12">
+      <span className="absolute bottom-7 left-[17px] top-0 w-px bg-[var(--color-outline-variant)]" aria-hidden="true" />
+      {nodes.map((node) => {
+        const active = node.space.workspaceCode === selectedWorkspaceCode;
+
+        return (
+          <div
+            className="relative pb-3 last:pb-0"
+            data-workspace-code={node.space.workspaceCode}
+            data-workspace-depth={node.space.depth}
+            key={node.space.workspaceCode}
+          >
+            <span className={cn("absolute left-[-30px] top-6 h-px w-8", active ? "bg-[var(--color-primary)]" : "bg-[var(--color-outline-variant)]")} aria-hidden="true" />
+            <span
+              className={cn(
+                "absolute left-[-37px] top-[18px] size-4 rounded-full border-2 bg-white",
+                active ? "border-[var(--color-primary)]" : "border-[var(--color-outline-variant)]",
+              )}
+              aria-hidden="true"
+            />
+            <TreeNode
+              active={active}
+              title={`${node.space.name}${active ? " (Current)" : ""}`}
+              meta={formatSecondarySpaceMeta(node.space)}
+            />
+            {node.children.length ? (
+              <WorkspaceTreeBranch nodes={node.children} selectedWorkspaceCode={selectedWorkspaceCode} />
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

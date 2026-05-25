@@ -113,6 +113,7 @@ async fn workspace_switcher_returns_root_groups_and_selectable_descendants() {
         .find(|item| item["workspaceCode"] == "TRON_CORE")
         .expect("workspace switcher should include selectable descendants");
     assert_eq!(tron_core["primaryWorkspaceCode"], json!("ENTERPRISE"));
+    assert_eq!(tron_core["parentWorkspaceCode"], json!("PLATFORM"));
     assert_eq!(
         tron_core["label"],
         json!("Enterprise / Platform / Tron Core")

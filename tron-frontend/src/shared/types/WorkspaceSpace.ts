@@ -21,6 +21,7 @@ export interface PrimarySpace {
 export interface SecondarySpace {
   workspaceCode: string;
   primaryWorkspaceCode: string;
+  parentWorkspaceCode?: string | null;
   label: string;
   name: string;
   description: string | null;

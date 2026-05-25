@@ -34,6 +34,7 @@ export const secondarySpaceMocks: SecondarySpace[] = [
   {
     workspaceCode: "ENTERPRISE",
     primaryWorkspaceCode: "ENTERPRISE",
+    parentWorkspaceCode: null,
     label: "Enterprise",
     name: "Enterprise",
     description: "Global governance and shared AI resource policy.",
@@ -45,6 +46,7 @@ export const secondarySpaceMocks: SecondarySpace[] = [
   {
     workspaceCode: "PLATFORM",
     primaryWorkspaceCode: "ENTERPRISE",
+    parentWorkspaceCode: "ENTERPRISE",
     label: "Enterprise / Platform",
     name: "Platform",
     description: "Agent runtime governance and admin operations.",
@@ -56,6 +58,7 @@ export const secondarySpaceMocks: SecondarySpace[] = [
   {
     workspaceCode: "TRON_CORE",
     primaryWorkspaceCode: "ENTERPRISE",
+    parentWorkspaceCode: "PLATFORM",
     label: "Enterprise / Platform / Tron Core",
     name: "Tron Core",
     description: "Main Tron console workspace.",
@@ -67,6 +70,7 @@ export const secondarySpaceMocks: SecondarySpace[] = [
   {
     workspaceCode: "COMPLIANCE",
     primaryWorkspaceCode: "COMPLIANCE",
+    parentWorkspaceCode: null,
     label: "Compliance",
     name: "Compliance",
     description: "Audit, retention, permission, and regulated resource controls.",

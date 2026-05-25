@@ -1058,6 +1058,7 @@ fn collect_workspace_switcher_secondary(
     acc.push(WorkspaceSwitcherSecondarySpace {
         workspace_code: node.workspace_code.clone(),
         primary_workspace_code: primary_workspace_code.to_string(),
+        parent_workspace_code: node.parent_workspace_code.clone(),
         label: lineage_names.join(" / "),
         name: node.name.clone(),
         description: node.description.clone(),
