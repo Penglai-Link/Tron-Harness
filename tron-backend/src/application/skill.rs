@@ -1208,7 +1208,7 @@ fn normalized_search(value: Option<String>) -> Option<String> {
 fn workspace_lineage(workspace: &WorkspaceDetail) -> Vec<LineageEntry> {
     let mut labels = Vec::new();
     workspace
-        .lineage
+        .path
         .iter()
         .map(|item| {
             labels.push(item.name.clone());

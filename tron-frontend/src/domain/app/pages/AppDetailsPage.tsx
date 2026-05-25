@@ -13,7 +13,6 @@ import { Button } from "@/shared/ui/Button";
 import {
   PageHeader,
   SurfaceCard,
-  TronShell,
   useToast,
 } from "@/shared";
 
@@ -74,7 +73,7 @@ export function AppDetailsPage() {
 
   if (loading && !app) {
     return (
-      <TronShell activeItem="Apps" searchPlaceholder="Search apps, repositories, and tags...">
+      <>
         <PageHeader
           breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: appCode || "Loading" }]}
           title="App Detail"
@@ -83,13 +82,13 @@ export function AppDetailsPage() {
           <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Loading app detail</h2>
           <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">Retrieving {appCode} from the app detail endpoint.</p>
         </SurfaceCard>
-      </TronShell>
+      </>
     );
   }
 
   if (!app) {
     return (
-      <TronShell activeItem="Apps" searchPlaceholder="Search apps, repositories, and tags...">
+      <>
         <PageHeader
           breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: appCode || "Not Found" }]}
           title="App Detail"
@@ -98,12 +97,12 @@ export function AppDetailsPage() {
           <h2 className="text-base font-semibold text-[var(--color-on-surface)]">App not found</h2>
           <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{appCode ? `No app matches ${appCode}.` : "No app was requested."}</p>
         </SurfaceCard>
-      </TronShell>
+      </>
     );
   }
 
   return (
-    <TronShell activeItem="Apps" searchPlaceholder="Search apps, repositories, and tags...">
+    <>
       <PageHeader
         breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: app.appCode }]}
         title={app.name}
@@ -156,6 +155,6 @@ export function AppDetailsPage() {
           </div>
         </SurfaceCard>
       </div>
-    </TronShell>
+    </>
   );
 }

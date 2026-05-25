@@ -13,20 +13,11 @@ import { Button } from "@/shared/ui/Button";
 import {
   Field,
   SelectInput,
-  TronShell,
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
 import { useKnowledgeGraphByDomain } from "@/domain/knowledge-graph/hooks";
 import type { GraphEntity } from "@/domain/knowledge-graph/model";
-
-function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
-  return (
-    <TronShell activeItem={activeItem} searchPlaceholder="Search Tron...">
-      {children}
-    </TronShell>
-  );
-}
 
 function Notice({ value }: { value: string }) {
   return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
@@ -43,7 +34,7 @@ function GraphPage({ domainFiltering = false }: { domainFiltering?: boolean }) {
   const selected = graph.entities.find((entity) => entity.id === selectedId) ?? graph.entities[0];
 
   return (
-    <RoutePageShell activeItem="Graph">
+    <>
       <div className="grid min-h-[720px] overflow-hidden rounded-xl border border-[var(--color-outline-variant)] bg-white xl:grid-cols-[300px_minmax(520px,1fr)_320px]">
         <aside className="border-r border-[var(--color-outline-variant)] bg-white">
           <div className="border-b border-[var(--color-outline-variant)] p-4">
@@ -87,7 +78,7 @@ function GraphPage({ domainFiltering = false }: { domainFiltering?: boolean }) {
         <GraphCanvas entities={graph.entities} selected={selected} setSelectedId={setSelectedId} setInspectorOpen={setInspectorOpen} setZoom={setZoom} zoom={zoom} />
         {inspectorOpen ? <GraphInspector selected={selected} onClose={() => setInspectorOpen(false)} /> : null}
       </div>
-    </RoutePageShell>
+    </>
   );
 }
 

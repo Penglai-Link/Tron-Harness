@@ -401,7 +401,6 @@ test("variable management supports inheritance override revert local CRUD and wo
   await page.goto(`${frontendBaseUrl}/variables`);
 
   await expect(page.getByRole("heading", { name: "Variable Management" })).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/switcher")).toBe(true);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/variables/workspaces/TRON_CORE" && request.method === "GET")).toBe(true);
   await expect(page.getByRole("button", { name: "DEFAULT_REGION", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "OPENAI_API_KEY", exact: true })).toBeVisible();

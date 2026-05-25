@@ -16,6 +16,7 @@ import { Button } from "@/shared/ui/Button";
 import {
   DataTable,
   PageHeader,
+  useDismissibleLayer,
   useToast,
 } from "@/shared";
 
@@ -47,6 +48,7 @@ interface RowMenuState {
   left: number;
   modelCode: string;
   top: number;
+  triggerElement: HTMLButtonElement;
 }
 
 export function PlatformModelsPage() {
@@ -58,7 +60,6 @@ export function PlatformModelsPage() {
   const [rowBusyCode, setRowBusyCode] = useState("");
   const [openRowMenu, setOpenRowMenu] = useState<RowMenuState | null>(null);
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
-  const rowMenuOpenedAtRef = useRef(0);
 
   const openMenuRow = openRowMenu
     ? records.find((record) => record.modelCode === openRowMenu.modelCode) ?? null
@@ -102,39 +103,12 @@ export function PlatformModelsPage() {
     };
   }, [dataSource, toast]);
 
-  useEffect(() => {
-    if (!openRowMenu) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (rowMenuRef.current?.contains(target)) return;
-      const trigger = document.querySelector<HTMLButtonElement>(
-        `[data-platform-model-menu-trigger="${openRowMenu.modelCode}"]`,
-      );
-      if (trigger?.contains(target)) return;
-      setOpenRowMenu(null);
-    };
-
-    const handleViewportChange = () => {
-      if (Date.now() - rowMenuOpenedAtRef.current < 150) return;
-      setOpenRowMenu(null);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpenRowMenu(null);
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportChange, true);
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportChange, true);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [openRowMenu]);
+  useDismissibleLayer({
+    onDismiss: () => setOpenRowMenu(null),
+    open: openRowMenu !== null,
+    popupRef: rowMenuRef,
+    triggerElement: openRowMenu?.triggerElement,
+  });
 
   function toggleRowMenu(row: ModelRecord, trigger: HTMLButtonElement) {
     if (rowBusyCode === row.modelCode) return;
@@ -159,8 +133,8 @@ export function PlatformModelsPage() {
       modelCode: row.modelCode,
       left,
       top,
+      triggerElement: trigger,
     });
-    rowMenuOpenedAtRef.current = Date.now();
   }
 
   async function handleToggleEnabled(row: ModelRecord) {

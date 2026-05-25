@@ -974,7 +974,7 @@ impl ModelService {
         let models = self.all_models()?;
         let workspace_assignments = self.all_workspace_default_assignments()?;
         let platform_assignments = self.all_platform_default_assignments()?;
-        let lineage = workspace_lineage(workspace);
+        let lineage = workspace_path_entries(workspace);
         let lineage_map: HashMap<_, _> = lineage
             .iter()
             .map(|entry| (entry.code.clone(), entry.clone()))
@@ -1469,7 +1469,7 @@ fn workspace_provider(
     EffectiveProvider {
         model: model.clone(),
         workspace: Some(workspace.clone()),
-        workspace_path: workspace_lineage_path(lineage, workspace.code.as_str()),
+        workspace_path: workspace_path_to_workspace(lineage, workspace.code.as_str()),
     }
 }
 
@@ -1481,7 +1481,7 @@ fn platform_provider(model: &Model) -> EffectiveProvider {
     }
 }
 
-fn workspace_lineage_path(lineage: &[LineageEntry], workspace_code: &str) -> Vec<LineageEntry> {
+fn workspace_path_to_workspace(lineage: &[LineageEntry], workspace_code: &str) -> Vec<LineageEntry> {
     let Some(index) = lineage
         .iter()
         .position(|entry| entry.code == workspace_code)
@@ -1694,7 +1694,7 @@ fn resolve_effective_workspace_defaults(
     let mut workspace_resolution_order = vec![workspace.workspace_code.clone()];
     workspace_resolution_order.extend(
         workspace
-            .lineage
+            .path
             .iter()
             .rev()
             .filter(|entry| entry.workspace_code != workspace.workspace_code)
@@ -2355,9 +2355,9 @@ fn truncate_message(value: &str) -> String {
     format!("{truncated}...")
 }
 
-fn workspace_lineage(workspace: &WorkspaceDetail) -> Vec<LineageEntry> {
+fn workspace_path_entries(workspace: &WorkspaceDetail) -> Vec<LineageEntry> {
     workspace
-        .lineage
+        .path
         .iter()
         .map(|item| LineageEntry {
             code: item.workspace_code.clone(),

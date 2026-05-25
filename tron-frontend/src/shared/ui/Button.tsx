@@ -1,14 +1,20 @@
-import { Slot } from "@radix-ui/react-slot";
 import {
   cva,
   type VariantProps,
 } from "class-variance-authority";
 
-import type { ButtonHTMLAttributes } from "react";
+import type {
+  AnchorHTMLAttributes,
+  ButtonHTMLAttributes,
+} from "react";
+import {
+  Link,
+  type LinkProps,
+} from "react-router";
 
 import { cn } from "@/shared/lib/utils";
 
-const buttonVariants = cva(
+export const buttonVariants = cva(
   "inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium tracking-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
@@ -30,12 +36,20 @@ const buttonVariants = cva(
   },
 );
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
-  asChild?: boolean;
+export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {}
+
+export interface LinkButtonProps extends LinkProps, VariantProps<typeof buttonVariants> {}
+
+export interface AnchorButtonProps extends AnchorHTMLAttributes<HTMLAnchorElement>, VariantProps<typeof buttonVariants> {}
+
+export function Button({ className, size, variant, ...props }: ButtonProps) {
+  return <button className={cn(buttonVariants({ className, size, variant }))} {...props} />;
 }
 
-export function Button({ asChild = false, className, size, variant, ...props }: ButtonProps) {
-  const Comp = asChild ? Slot : "button";
+export function LinkButton({ className, size, variant, ...props }: LinkButtonProps) {
+  return <Link className={cn(buttonVariants({ className, size, variant }))} {...props} />;
+}
 
-  return <Comp className={cn(buttonVariants({ className, size, variant }))} {...props} />;
+export function AnchorButton({ className, size, variant, ...props }: AnchorButtonProps) {
+  return <a className={cn(buttonVariants({ className, size, variant }))} {...props} />;
 }

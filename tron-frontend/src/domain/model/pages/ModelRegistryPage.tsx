@@ -21,6 +21,7 @@ import {
   SelectInput,
   SurfaceCard,
   TextInput,
+  useDismissibleLayer,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -59,6 +60,7 @@ interface RowMenuState {
   left: number;
   modelCode: string;
   top: number;
+  triggerElement: HTMLButtonElement;
 }
 
 export function ModelRegistryPage() {
@@ -77,7 +79,6 @@ export function ModelRegistryPage() {
   const [protocolFilter, setProtocolFilter] = useState("ALL");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
-  const rowMenuOpenedAtRef = useRef(0);
 
   const records = catalog?.records ?? [];
   const openMenuRow = openRowMenu
@@ -213,39 +214,12 @@ export function ModelRegistryPage() {
     void refreshWorkspaceModels();
   }, [activeWorkspaceCode]);
 
-  useEffect(() => {
-    if (!openRowMenu) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (rowMenuRef.current?.contains(target)) return;
-      const trigger = document.querySelector<HTMLButtonElement>(
-        `[data-workspace-model-menu-trigger="${openRowMenu.modelCode}"]`,
-      );
-      if (trigger?.contains(target)) return;
-      setOpenRowMenu(null);
-    };
-
-    const handleViewportChange = () => {
-      if (Date.now() - rowMenuOpenedAtRef.current < 150) return;
-      setOpenRowMenu(null);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpenRowMenu(null);
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportChange, true);
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportChange, true);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [openRowMenu]);
+  useDismissibleLayer({
+    onDismiss: () => setOpenRowMenu(null),
+    open: openRowMenu !== null,
+    popupRef: rowMenuRef,
+    triggerElement: openRowMenu?.triggerElement,
+  });
 
   function hasRowActions(row: ModelRecord) {
     return row.workspaceCode === activeWorkspaceCode;
@@ -276,8 +250,8 @@ export function ModelRegistryPage() {
       modelCode: row.modelCode,
       left,
       top,
+      triggerElement: trigger,
     });
-    rowMenuOpenedAtRef.current = Date.now();
   }
 
   async function handleSetDefault(row: ModelRecord) {

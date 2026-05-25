@@ -77,7 +77,7 @@ pub struct WorkspaceDetail {
     pub parent_workspace_code: Option<String>,
     pub depth: usize,
     pub status: WorkspaceStatus,
-    pub lineage: Vec<WorkspaceLineageItem>,
+    pub path: Vec<WorkspaceLineageItem>,
     pub children: Vec<WorkspaceTreeNode>,
     pub direct_user_count: usize,
     pub role_grant_count: usize,

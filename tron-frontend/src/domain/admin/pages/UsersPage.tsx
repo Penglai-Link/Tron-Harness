@@ -17,7 +17,10 @@ import {
 } from "react-router";
 
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import {
+  Button,
+  LinkButton,
+} from "@/shared/ui/Button";
 import {
   DataTable,
   MetricCard,
@@ -25,7 +28,6 @@ import {
   SelectInput,
   TablePagination,
   TextInput,
-  TronShell,
   useToast,
 } from "@/shared";
 
@@ -187,7 +189,7 @@ export function UsersPage() {
   }
 
   return (
-    <TronShell activeItem="Users" searchPlaceholder="Search users...">
+    <>
       <PageHeader title="Users" actions={<><Button variant="secondary" disabled={exporting} aria-busy={exporting} onClick={() => void handleExport()}><Download size={16} aria-hidden="true" />{exporting ? "Exporting..." : "Export"}</Button><Button onClick={() => navigate("/admin/users/new")}><UserPlus size={16} aria-hidden="true" />New</Button></>} />
       <div className="mb-5 grid gap-4 lg:grid-cols-2 2xl:grid-cols-4">
         <MetricCard label="Users" value={String(statistics.totalUsers)} trend="Persisted user records" icon={<ShieldCheck size={18} aria-hidden="true" />} />
@@ -245,7 +247,9 @@ export function UsersPage() {
               const showRestore = row.status === "Archived";
               return (
                 <div className="relative flex justify-end gap-1">
-                  <Button asChild size="icon" variant="ghost" aria-label={`View ${row.displayName} details`}><Link to={userDetailPath(row.userCode)}><Eye size={16} aria-hidden="true" /></Link></Button>
+                  <LinkButton size="icon" to={userDetailPath(row.userCode)} variant="ghost" aria-label={`View ${row.displayName} details`}>
+                    <Eye size={16} aria-hidden="true" />
+                  </LinkButton>
                   <Button size="icon" variant="ghost" aria-label={`Open actions for ${row.displayName}`} disabled={isProcessing} onClick={() => setOpenRowMenu((current) => (current === row.userCode ? null : row.userCode))}>
                     <MoreHorizontal size={16} aria-hidden="true" />
                   </Button>
@@ -261,6 +265,6 @@ export function UsersPage() {
           },
         ]}
       />
-    </TronShell>
+    </>
   );
 }

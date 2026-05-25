@@ -12,7 +12,6 @@ import {
   SelectInput,
   TablePagination,
   TextInput,
-  TronShell,
   useTablePagination,
 } from "@/shared";
 
@@ -35,7 +34,7 @@ export function AuditLogsPage() {
   const auditPagination = useTablePagination(filteredRows);
 
   return (
-    <TronShell activeItem="Audit Logs" searchPlaceholder="Search users, roles, logs...">
+    <>
       <PageHeader
         title="Users & Roles"
         actions={
@@ -70,6 +69,6 @@ export function AuditLogsPage() {
           { id: "ip", header: "IP Address", align: "right", render: (row) => <span className="font-mono text-[13px]">{row.ipAddress}</span> },
         ]}
       />
-    </TronShell>
+    </>
   );
 }

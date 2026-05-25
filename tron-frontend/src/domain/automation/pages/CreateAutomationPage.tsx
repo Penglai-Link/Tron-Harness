@@ -17,7 +17,6 @@ import {
   SurfaceCard,
   TextArea,
   TextInput,
-  TronShell,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -96,7 +95,7 @@ export function CreateAutomationPage() {
   }
 
   return (
-    <TronShell activeItem="Automations" searchPlaceholder="Search automations...">
+    <>
       <PageHeader
         breadcrumbs={[{ label: "Automations", href: "/automations" }, { label: "New" }]}
         title="Create Automation"
@@ -180,6 +179,6 @@ export function CreateAutomationPage() {
           </div>
         </div>
       ) : null}
-    </TronShell>
+    </>
   );
 }

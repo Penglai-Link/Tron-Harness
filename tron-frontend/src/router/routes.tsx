@@ -14,6 +14,11 @@ export type AppPageArchetype =
 
 export type AppRouteLayout = "console" | "settings";
 
+export interface AppRouteShellConfig {
+  contentClassName?: string;
+  searchPlaceholder?: string;
+}
+
 export interface AppRoute {
   pageId: string;
   route: string;
@@ -22,44 +27,45 @@ export interface AppRoute {
   archetype: AppPageArchetype;
   layout?: AppRouteLayout;
   settingsNav?: string;
+  shellConfig?: AppRouteShellConfig;
 }
 
 export const appRoutes: AppRoute[] = [
   { pageId: "models.new", route: "/models/new", activeNav: "Models", title: "Create Workspace Model", archetype: "form" },
   { pageId: "models.detail", route: "/models/detail", activeNav: "Models", title: "Workspace Model Detail", archetype: "detail" },
-  { pageId: "apps.index", route: "/apps", activeNav: "Apps", title: "App Management", archetype: "data-table" },
-  { pageId: "apps.new", route: "/apps/new", activeNav: "Apps", title: "Create App", archetype: "form" },
-  { pageId: "apps.detail", route: "/apps/detail", activeNav: "Apps", title: "App Detail", archetype: "detail" },
-  { pageId: "apps.edit", route: "/apps/edit", activeNav: "Apps", title: "Edit App", archetype: "form" },
-  { pageId: "admin.auditLogs", route: "/admin/audit-logs", activeNav: "Audit Logs", title: "Audit Logs", archetype: "data-table" },
-  { pageId: "automations.index", route: "/automations", activeNav: "Automations", title: "Automations", archetype: "split-pane" },
-  { pageId: "chats.reasoning", route: "/chats/8842-alpha", activeNav: "Chats", title: "Chat Sessions", archetype: "chat" },
-  { pageId: "chats.execution", route: "/chats/8842-alpha?variant=execution", activeNav: "Chats", title: "Chat Session Detail", archetype: "chat" },
-  { pageId: "automations.new", route: "/automations/new", activeNav: "Automations", title: "Create Automation", archetype: "form" },
-  { pageId: "automations.detail", route: "/automations/detail", activeNav: "Automations", title: "Automation Detail", archetype: "detail" },
-  { pageId: "prompts.new", route: "/prompts/new", activeNav: "Prompts", title: "Create New Prompt", archetype: "form-inspector" },
-  { pageId: "skills.bind", route: "/skills/bind", activeNav: "Skills", title: "Bind Skill", archetype: "form-inspector" },
-  { pageId: "tasks.new", route: "/tasks/new", activeNav: "Tasks", title: "Create Task", archetype: "form" },
-  { pageId: "dashboard.index", route: "/dashboard", activeNav: "Dashboard", title: "Dashboard", archetype: "dashboard" },
-  { pageId: "knowledgeGraph.index", route: "/knowledge-graph", activeNav: "Graph", title: "Knowledge Graph", archetype: "graph" },
-  { pageId: "knowledgeGraph.domainFiltering", route: "/knowledge-graph/domain-filtering", activeNav: "Graph", title: "Knowledge Graph Domain Filtering", archetype: "graph" },
+  { pageId: "apps.index", route: "/apps", activeNav: "Apps", title: "App Management", archetype: "data-table", shellConfig: { searchPlaceholder: "Search apps, repositories, and tags..." } },
+  { pageId: "apps.new", route: "/apps/new", activeNav: "Apps", title: "Create App", archetype: "form", shellConfig: { searchPlaceholder: "Search apps, repositories, and tags..." } },
+  { pageId: "apps.detail", route: "/apps/detail", activeNav: "Apps", title: "App Detail", archetype: "detail", shellConfig: { searchPlaceholder: "Search apps, repositories, and tags..." } },
+  { pageId: "apps.edit", route: "/apps/edit", activeNav: "Apps", title: "Edit App", archetype: "form", shellConfig: { searchPlaceholder: "Search apps, repositories, and tags..." } },
+  { pageId: "admin.auditLogs", route: "/admin/audit-logs", activeNav: "Audit Logs", title: "Audit Logs", archetype: "data-table", shellConfig: { searchPlaceholder: "Search users, roles, logs..." } },
+  { pageId: "automations.index", route: "/automations", activeNav: "Automations", title: "Automations", archetype: "split-pane", shellConfig: { searchPlaceholder: "Search automations..." } },
+  { pageId: "chats.reasoning", route: "/chats/8842-alpha", activeNav: "Chats", title: "Chat Sessions", archetype: "chat", shellConfig: { contentClassName: "!p-0", searchPlaceholder: "Search tasks..." } },
+  { pageId: "chats.execution", route: "/chats/8842-alpha?variant=execution", activeNav: "Chats", title: "Chat Session Detail", archetype: "chat", shellConfig: { contentClassName: "!p-0", searchPlaceholder: "Search tasks..." } },
+  { pageId: "automations.new", route: "/automations/new", activeNav: "Automations", title: "Create Automation", archetype: "form", shellConfig: { searchPlaceholder: "Search automations..." } },
+  { pageId: "automations.detail", route: "/automations/detail", activeNav: "Automations", title: "Automation Detail", archetype: "detail", shellConfig: { searchPlaceholder: "Search automations..." } },
+  { pageId: "prompts.new", route: "/prompts/new", activeNav: "Prompts", title: "Create New Prompt", archetype: "form-inspector", shellConfig: { searchPlaceholder: "Search prompts..." } },
+  { pageId: "skills.bind", route: "/skills/bind", activeNav: "Skills", title: "Bind Skill", archetype: "form-inspector", shellConfig: { searchPlaceholder: "Search installed skills..." } },
+  { pageId: "tasks.new", route: "/tasks/new", activeNav: "Tasks", title: "Create Task", archetype: "form", shellConfig: { searchPlaceholder: "Search tasks..." } },
+  { pageId: "dashboard.index", route: "/dashboard", activeNav: "Dashboard", title: "Dashboard", archetype: "dashboard", shellConfig: { searchPlaceholder: "Search Tron..." } },
+  { pageId: "knowledgeGraph.index", route: "/knowledge-graph", activeNav: "Graph", title: "Knowledge Graph", archetype: "graph", shellConfig: { searchPlaceholder: "Search Tron..." } },
+  { pageId: "knowledgeGraph.domainFiltering", route: "/knowledge-graph/domain-filtering", activeNav: "Graph", title: "Knowledge Graph Domain Filtering", archetype: "graph", shellConfig: { searchPlaceholder: "Search Tron..." } },
   { pageId: "auth.login", route: "/login", activeNav: "Login", title: "Login", archetype: "auth" },
-  { pageId: "agent.main", route: "/agent", activeNav: "Main Agent", title: "Main Agent", archetype: "chat" },
-  { pageId: "memory.index", route: "/memory", activeNav: "Memory", title: "Memory Repository", archetype: "data-table" },
-  { pageId: "memory.details", route: "/memory/details", activeNav: "Memory", title: "Memory Details", archetype: "split-pane" },
+  { pageId: "agent.main", route: "/agent", activeNav: "Main Agent", title: "Main Agent", archetype: "chat", shellConfig: { searchPlaceholder: "Search Tron..." } },
+  { pageId: "memory.index", route: "/memory", activeNav: "Memory", title: "Memory Repository", archetype: "data-table", shellConfig: { searchPlaceholder: "Search Tron..." } },
+  { pageId: "memory.details", route: "/memory/details", activeNav: "Memory", title: "Memory Details", archetype: "split-pane", shellConfig: { searchPlaceholder: "Search Tron..." } },
   { pageId: "models.index", route: "/models", activeNav: "Models", title: "Model Registry", archetype: "data-table" },
-  { pageId: "observability.index", route: "/observability", activeNav: "Observability", title: "Observability Dashboard", archetype: "dashboard" },
-  { pageId: "prompts.index", route: "/prompts", activeNav: "Prompts", title: "Prompt Management", archetype: "split-pane" },
-  { pageId: "resources.index", route: "/resources", activeNav: "Resources", title: "Resources", archetype: "data-table" },
-  { pageId: "admin.roles", route: "/admin/roles", activeNav: "Roles", title: "Role Matrix", archetype: "permission-grid" },
-  { pageId: "admin.workspace", route: "/admin/workspace", activeNav: "Workspace", title: "Workspace Management", archetype: "split-pane" },
-  { pageId: "admin.userDetails", route: "/admin/users/detail", activeNav: "Users", title: "User Detail", archetype: "detail" },
-  { pageId: "admin.usersNew", route: "/admin/users/new", activeNav: "Users", title: "Create User", archetype: "form" },
-  { pageId: "skills.index", route: "/skills", activeNav: "Skills", title: "Workspace Skills", archetype: "split-pane" },
-  { pageId: "tasks.detail", route: "/tasks/detail", activeNav: "Tasks", title: "Task Details", archetype: "detail" },
-  { pageId: "tasks.index", route: "/tasks", activeNav: "Tasks", title: "Task Management", archetype: "kanban" },
-  { pageId: "admin.users", route: "/admin/users", activeNav: "Users", title: "Users", archetype: "data-table" },
-  { pageId: "variables.index", route: "/variables", activeNav: "Variables", title: "Variable Management", archetype: "split-pane" },
+  { pageId: "observability.index", route: "/observability", activeNav: "Observability", title: "Observability Dashboard", archetype: "dashboard", shellConfig: { searchPlaceholder: "Search traces, agents, metrics..." } },
+  { pageId: "prompts.index", route: "/prompts", activeNav: "Prompts", title: "Prompt Management", archetype: "split-pane", shellConfig: { searchPlaceholder: "Search anything..." } },
+  { pageId: "resources.index", route: "/resources", activeNav: "Resources", title: "Resources", archetype: "data-table", shellConfig: { searchPlaceholder: "Search resources..." } },
+  { pageId: "admin.roles", route: "/admin/roles", activeNav: "Roles", title: "Role Matrix", archetype: "permission-grid", shellConfig: { searchPlaceholder: "Search users or roles..." } },
+  { pageId: "admin.workspace", route: "/admin/workspace", activeNav: "Workspace", title: "Workspace Management", archetype: "split-pane", shellConfig: { searchPlaceholder: "Search workspaces..." } },
+  { pageId: "admin.userDetails", route: "/admin/users/detail", activeNav: "Users", title: "User Detail", archetype: "detail", shellConfig: { searchPlaceholder: "Search users..." } },
+  { pageId: "admin.usersNew", route: "/admin/users/new", activeNav: "Users", title: "Create User", archetype: "form", shellConfig: { searchPlaceholder: "Search users..." } },
+  { pageId: "skills.index", route: "/skills", activeNav: "Skills", title: "Workspace Skills", archetype: "split-pane", shellConfig: { searchPlaceholder: "Search installed skills..." } },
+  { pageId: "tasks.detail", route: "/tasks/detail", activeNav: "Tasks", title: "Task Details", archetype: "detail", shellConfig: { searchPlaceholder: "Search task context..." } },
+  { pageId: "tasks.index", route: "/tasks", activeNav: "Tasks", title: "Task Management", archetype: "kanban", shellConfig: { searchPlaceholder: "Search tasks..." } },
+  { pageId: "admin.users", route: "/admin/users", activeNav: "Users", title: "Users", archetype: "data-table", shellConfig: { searchPlaceholder: "Search users..." } },
+  { pageId: "variables.index", route: "/variables", activeNav: "Variables", title: "Variable Management", archetype: "split-pane", shellConfig: { searchPlaceholder: "Search variables..." } },
   { pageId: "variables.details", route: "/variables/details", activeNav: "Variables", title: "Variable Details", archetype: "split-pane" },
   { pageId: "settings.general", route: "/settings/general", activeNav: "Settings", title: "General Settings", archetype: "settings", layout: "settings", settingsNav: "General" },
   { pageId: "settings.models", route: "/settings/models", activeNav: "Settings", title: "Platform Models", archetype: "settings", layout: "settings", settingsNav: "Models" },

@@ -29,7 +29,6 @@ import {
   TextArea,
   TextInput,
   ToggleSwitch,
-  TronShell,
   useToast,
 } from "@/shared";
 
@@ -781,7 +780,7 @@ export function WorkspaceManagementPage() {
   }
 
   return (
-    <TronShell activeItem="Workspace" searchPlaceholder="Search workspaces...">
+    <>
       <PageHeader
         title="Workspace Management"
         actions={(
@@ -958,7 +957,7 @@ export function WorkspaceManagementPage() {
                       <DetailField label="Created" value={formatTimestamp(detail.createdAt)} />
                       <DetailField label="Archived" value={formatTimestamp(detail.archivedAt)} />
                     </div>
-                    <DetailField label="Lineage" value={detail.lineage.map((item) => item.name).join(" / ")} />
+                    <DetailField label="Path" value={detail.path.map((item) => item.name).join(" / ")} />
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Child Workspaces</p>
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -1206,6 +1205,6 @@ export function WorkspaceManagementPage() {
           </SurfaceCard>
         </div>
       </div>
-    </TronShell>
+    </>
   );
 }

@@ -128,7 +128,7 @@ export interface WorkspaceDetailRecord {
   parentWorkspaceCode: string | null;
   depth: number;
   status: WorkspaceStatus;
-  lineage: WorkspaceLineageItem[];
+  path: WorkspaceLineageItem[];
   children: WorkspaceTreeNodeRecord[];
   directUserCount: number;
   roleGrantCount: number;

@@ -15,7 +15,7 @@ import {
   PageHeader,
   SurfaceCard,
   TablePagination,
-  TronShell,
+  useConsoleShellConfig,
   useTablePagination,
 } from "@/shared";
 
@@ -104,8 +104,10 @@ export function ObservabilityPage() {
     </InspectorPanel>
   ) : undefined;
 
+  useConsoleShellConfig({ rightPanel });
+
   return (
-    <TronShell activeItem="Observability" searchPlaceholder="Search traces, agents, metrics..." rightPanel={rightPanel}>
+    <>
       <PageHeader
         title="Observability Dashboard"
         actions={
@@ -153,6 +155,6 @@ export function ObservabilityPage() {
           { id: "status", header: "Status", render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },
         ]}
       />
-    </TronShell>
+    </>
   );
 }

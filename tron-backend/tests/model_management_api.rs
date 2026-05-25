@@ -609,12 +609,10 @@ async fn workspace_catalog_uses_platform_model_codes_and_removed_restore_routes_
         Some(json!({ "sourceModelCode": source_model_code.clone() })),
     )
     .await;
-    assert!(
-        matches!(
-            removed_restore_response.status(),
-            StatusCode::NOT_FOUND | StatusCode::METHOD_NOT_ALLOWED
-        ),
-        "deprecated explicit restore route must no longer succeed",
+    assert_eq!(
+        removed_restore_response.status(),
+        StatusCode::GONE,
+        "deprecated explicit restore route should now fail through an explicit tombstone route",
     );
 
     let catalog_response = authenticated_request(

@@ -18,7 +18,6 @@ import {
   TablePagination,
   TextArea,
   TextInput,
-  TronShell,
   useTablePagination,
 } from "@/shared";
 
@@ -86,7 +85,7 @@ export function PromptsPage() {
   const promptPagination = useTablePagination(filtered);
 
   return (
-    <TronShell activeItem="Prompts" searchPlaceholder="Search anything...">
+    <>
       <PageHeader
         title="Prompt Management"
         actions={
@@ -126,6 +125,6 @@ export function PromptsPage() {
         </SurfaceCard>
         <PromptInspector prompt={selected} notice={notice} setNotice={setNotice} />
       </div>
-    </TronShell>
+    </>
   );
 }

@@ -26,7 +26,6 @@ import {
   SurfaceCard,
   TextArea,
   TextInput,
-  TronShell,
   useToast,
 } from "@/shared";
 import { cn } from "@/shared/lib/utils";
@@ -450,7 +449,7 @@ export function TaskDetailsPage() {
   }
 
   return (
-    <TronShell activeItem="Tasks" searchPlaceholder="Search task context...">
+    <>
       <PageHeader
         breadcrumbs={breadcrumbs}
         title="Task Details"
@@ -725,6 +724,6 @@ export function TaskDetailsPage() {
           </div>
         </div>
       ) : null}
-    </TronShell>
+    </>
   );
 }

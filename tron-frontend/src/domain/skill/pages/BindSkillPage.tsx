@@ -17,7 +17,6 @@ import {
   PageHeader,
   SurfaceCard,
   TextInput,
-  TronShell,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -281,7 +280,7 @@ export function BindSkillPage() {
   }
 
   return (
-    <TronShell activeItem="Skills" searchPlaceholder="Search installed skills...">
+    <>
       <PageHeader
         breadcrumbs={[{ label: "Skills", href: "/skills" }, { label: "Install" }]}
         title="Install Skills"
@@ -383,6 +382,6 @@ export function BindSkillPage() {
           </SurfaceCard>
         </div>
       </div>
-    </TronShell>
+    </>
   );
 }

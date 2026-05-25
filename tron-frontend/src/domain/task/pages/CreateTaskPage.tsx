@@ -17,7 +17,6 @@ import {
   SurfaceCard,
   TextArea,
   TextInput,
-  TronShell,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -127,7 +126,7 @@ export function CreateTaskPage() {
   }
 
   return (
-    <TronShell activeItem="Tasks" searchPlaceholder="Search tasks...">
+    <>
       <PageHeader
         breadcrumbs={[{ label: "Tasks", href: "/tasks" }, { label: "New" }]}
         title="Create Task"
@@ -267,6 +266,6 @@ export function CreateTaskPage() {
           </div>
         </div>
       ) : null}
-    </TronShell>
+    </>
   );
 }

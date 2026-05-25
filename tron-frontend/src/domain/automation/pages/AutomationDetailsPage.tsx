@@ -31,7 +31,6 @@ import {
   TablePagination,
   TextArea,
   TextInput,
-  TronShell,
   useToast,
 } from "@/shared";
 import { cn } from "@/shared/lib/utils";
@@ -340,7 +339,7 @@ export function AutomationDetailsPage() {
   }
 
   return (
-    <TronShell activeItem="Automations" searchPlaceholder="Search automations...">
+    <>
       <PageHeader
         breadcrumbs={[
           { label: "Automations", href: "/automations" },
@@ -625,6 +624,6 @@ export function AutomationDetailsPage() {
           </div>
         </div>
       ) : null}
-    </TronShell>
+    </>
   );
 }

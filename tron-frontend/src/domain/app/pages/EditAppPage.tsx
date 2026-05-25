@@ -13,7 +13,6 @@ import { Button } from "@/shared/ui/Button";
 import {
   PageHeader,
   SurfaceCard,
-  TronShell,
   useToast,
 } from "@/shared";
 
@@ -76,7 +75,7 @@ export function EditAppPage() {
 
   if (loading && !app) {
     return (
-      <TronShell activeItem="Apps" searchPlaceholder="Search apps, repositories, and tags...">
+      <>
         <PageHeader
           breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: appCode || "Edit" }]}
           title="Edit App"
@@ -85,13 +84,13 @@ export function EditAppPage() {
           <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Loading app detail</h2>
           <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">Preparing the app editor for {appCode}.</p>
         </SurfaceCard>
-      </TronShell>
+      </>
     );
   }
 
   if (!app) {
     return (
-      <TronShell activeItem="Apps" searchPlaceholder="Search apps, repositories, and tags...">
+      <>
         <PageHeader
           breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: appCode || "Not Found" }]}
           title="Edit App"
@@ -100,12 +99,12 @@ export function EditAppPage() {
           <h2 className="text-base font-semibold text-[var(--color-on-surface)]">App not found</h2>
           <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{appCode ? `No app matches ${appCode}.` : "No app was requested."}</p>
         </SurfaceCard>
-      </TronShell>
+      </>
     );
   }
 
   return (
-    <TronShell activeItem="Apps" searchPlaceholder="Search apps, repositories, and tags...">
+    <>
       <PageHeader
         breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: app.appCode, href: `/apps/detail?appCode=${encodeURIComponent(app.appCode)}` }, { label: "Edit" }]}
         title={`Edit ${app.name}`}
@@ -128,6 +127,6 @@ export function EditAppPage() {
           <AppFormFields disabled={submitting || app.status === "Archived"} form={form} onChange={updateForm} />
         </form>
       </SurfaceCard>
-    </TronShell>
+    </>
   );
 }

@@ -23,7 +23,7 @@ import {
   SurfaceCard,
   TablePagination,
   TextInput,
-  TronShell,
+  useDismissibleLayer,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -131,6 +131,7 @@ interface RowMenuState {
   automationCode: string;
   left: number;
   top: number;
+  triggerElement: HTMLButtonElement;
 }
 
 export function AutomationsPage() {
@@ -181,36 +182,12 @@ export function AutomationsPage() {
     setOpenRowMenu(null);
   }, [current, debouncedSearch, size, statusFilter, activeWorkspaceCode]);
 
-  useEffect(() => {
-    if (!openRowMenu) return;
-
-    const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (rowMenuRef.current?.contains(target)) return;
-      const trigger = document.querySelector<HTMLButtonElement>(
-        `[data-automation-menu-trigger="${openRowMenu.automationCode}"]`,
-      );
-      if (trigger?.contains(target)) return;
-      setOpenRowMenu(null);
-    };
-
-    const handleViewportChange = () => setOpenRowMenu(null);
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpenRowMenu(null);
-    };
-
-    document.addEventListener("mousedown", handlePointerDown);
-    window.addEventListener("resize", handleViewportChange);
-    window.addEventListener("scroll", handleViewportChange, true);
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.removeEventListener("mousedown", handlePointerDown);
-      window.removeEventListener("resize", handleViewportChange);
-      window.removeEventListener("scroll", handleViewportChange, true);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [openRowMenu]);
+  useDismissibleLayer({
+    onDismiss: () => setOpenRowMenu(null),
+    open: openRowMenu !== null,
+    popupRef: rowMenuRef,
+    triggerElement: openRowMenu?.triggerElement,
+  });
 
   function toggleRowMenu(row: AutomationListItem, trigger: HTMLButtonElement) {
     if (rowBusyKey.includes(`:${row.automationCode}`)) return;
@@ -235,6 +212,7 @@ export function AutomationsPage() {
       automationCode: row.automationCode,
       left,
       top,
+      triggerElement: trigger,
     });
   }
 
@@ -304,7 +282,7 @@ export function AutomationsPage() {
   }
 
   return (
-    <TronShell activeItem="Automations" searchPlaceholder="Search automations...">
+    <>
       <PageHeader
         title="Automations"
         actions={
@@ -515,6 +493,6 @@ export function AutomationsPage() {
           document.body,
         )
         : null}
-    </TronShell>
+    </>
   );
 }

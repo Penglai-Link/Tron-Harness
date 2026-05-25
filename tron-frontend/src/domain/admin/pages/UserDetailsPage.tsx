@@ -24,7 +24,6 @@ import {
   PageHeader,
   SurfaceCard,
   TextInput,
-  TronShell,
   useToast,
 } from "@/shared";
 
@@ -266,7 +265,7 @@ export function UserDetailsPage() {
 
   if (requestedUserCode !== null && detailLoading && !user) {
     return (
-      <TronShell activeItem="Users" searchPlaceholder="Search users...">
+      <>
         <PageHeader
           breadcrumbs={[{ label: "Users", href: "/admin/users" }, { label: requestedUserCode || "Loading" }]}
           title="User Detail"
@@ -275,7 +274,7 @@ export function UserDetailsPage() {
           <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Loading user detail</h2>
           <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">Retrieving {requestedUserCode} from the user detail endpoint.</p>
         </SurfaceCard>
-      </TronShell>
+      </>
     );
   }
 
@@ -285,7 +284,7 @@ export function UserDetailsPage() {
       : "No user record was requested.";
 
     return (
-      <TronShell activeItem="Users" searchPlaceholder="Search users...">
+      <>
         <PageHeader
           breadcrumbs={[{ label: "Users", href: "/admin/users" }, { label: requestedUserCode || "Not Found" }]}
           title="User Detail"
@@ -294,7 +293,7 @@ export function UserDetailsPage() {
           <h2 className="text-base font-semibold text-[var(--color-on-surface)]">User not found</h2>
           <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{notFoundMessage}</p>
         </SurfaceCard>
-      </TronShell>
+      </>
     );
   }
 
@@ -495,7 +494,7 @@ export function UserDetailsPage() {
   const readOnlyInputClass = "cursor-not-allowed bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]";
 
   return (
-    <TronShell activeItem="Users" searchPlaceholder="Search users...">
+    <>
       <PageHeader
         breadcrumbs={detailBreadcrumbs}
         title={user.displayName}
@@ -711,6 +710,6 @@ export function UserDetailsPage() {
           </SurfaceCard>
         </div>
       </div>
-    </TronShell>
+    </>
   );
 }

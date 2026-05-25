@@ -219,8 +219,8 @@ impl WorkspaceService {
         let direct_counts = self.direct_user_counts(&workspaces)?;
         let role_counts = self.role_grant_counts(&workspaces)?;
         let effective_counts = self.effective_user_counts(&workspaces)?;
-        let lineage = build_lineage(&workspaces, &workspace.workspace_code)?;
-        let depth = lineage.len();
+        let path = build_workspace_path(&workspaces, &workspace.workspace_code)?;
+        let depth = path.len();
         let children = build_child_summaries(
             &workspaces,
             &workspace.workspace_code,
@@ -238,7 +238,7 @@ impl WorkspaceService {
             parent_workspace_code: workspace.parent_workspace_code.clone(),
             depth,
             status: workspace.status,
-            lineage,
+            path,
             children,
             direct_user_count: *direct_counts.get(&workspace.workspace_code).unwrap_or(&0),
             role_grant_count: *role_counts.get(&workspace.workspace_code).unwrap_or(&0),
@@ -271,7 +271,7 @@ impl WorkspaceService {
             if parent.status == WorkspaceStatus::Archived {
                 return Err(WorkspaceError::ArchivedMutationDenied);
             }
-            let parent_depth = build_lineage(&workspaces, parent_code)?.len();
+            let parent_depth = build_workspace_path(&workspaces, parent_code)?.len();
             if parent_depth >= 3 {
                 return Err(WorkspaceError::InvalidHierarchy);
             }
@@ -380,7 +380,7 @@ impl WorkspaceService {
             if parent.status == WorkspaceStatus::Archived {
                 return Err(WorkspaceError::ArchivedMutationDenied);
             }
-            let parent_depth = build_lineage(&workspaces, parent_code)?.len();
+            let parent_depth = build_workspace_path(&workspaces, parent_code)?.len();
             let subtree_height = subtree_height(&workspaces, workspace_code, 1);
             if parent_depth + subtree_height > 3 {
                 return Err(WorkspaceError::InvalidHierarchy);
@@ -914,26 +914,26 @@ fn find_workspace<'a>(
         .ok_or(WorkspaceError::NotFound)
 }
 
-fn build_lineage(
+fn build_workspace_path(
     workspaces: &[Workspace],
     workspace_code: &str,
 ) -> Result<Vec<WorkspaceLineageItem>, WorkspaceError> {
-    let mut lineage = Vec::new();
+    let mut path = Vec::new();
     let mut current = Some(workspace_code.to_string());
     while let Some(code) = current {
         let workspace = find_workspace(workspaces, &code)?;
-        lineage.push(WorkspaceLineageItem {
+        path.push(WorkspaceLineageItem {
             workspace_code: workspace.workspace_code.clone(),
             name: workspace.name.clone(),
             depth: 0,
         });
         current = workspace.parent_workspace_code.clone();
     }
-    lineage.reverse();
-    for (index, item) in lineage.iter_mut().enumerate() {
+    path.reverse();
+    for (index, item) in path.iter_mut().enumerate() {
         item.depth = index + 1;
     }
-    Ok(lineage)
+    Ok(path)
 }
 
 fn generate_workspace_code(workspaces: &[Workspace]) -> Result<String, WorkspaceError> {

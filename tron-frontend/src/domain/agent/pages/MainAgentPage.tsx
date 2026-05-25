@@ -14,19 +14,10 @@ import {
   MetricCard,
   SurfaceCard,
   TextArea,
-  TronShell,
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
 import { useMainAgentMessageList } from "@/domain/agent/hooks";
-
-function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
-  return (
-    <TronShell activeItem={activeItem} searchPlaceholder="Search Tron...">
-      {children}
-    </TronShell>
-  );
-}
 
 export function MainAgentPage() {
   const messages = useMainAgentMessageList();
@@ -36,8 +27,7 @@ export function MainAgentPage() {
   const [status, setStatus] = useState("Executing... 0.8s");
 
   return (
-    <RoutePageShell activeItem="Dashboard">
-      <div className="relative min-h-[760px]">
+    <div className="relative min-h-[760px]">
         <div className="grid gap-4 opacity-55 lg:grid-cols-3">
           <MetricCard label="System Health" value="99.98%" trend="All services operational" />
           <MetricCard label="Active Agents" value="42" trend="+3 since last hour" />
@@ -94,6 +84,5 @@ export function MainAgentPage() {
           <Button className="fixed bottom-6 right-6 z-50" onClick={() => setOpen(true)}><Bot size={16} />Open Main Agent</Button>
         )}
       </div>
-    </RoutePageShell>
   );
 }

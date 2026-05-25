@@ -72,6 +72,25 @@ interface ConsoleShellConfigController {
 
 export const ConsoleShellConfigContext = createContext<ConsoleShellConfigController | null>(null);
 
+export function useConsoleShellConfig(config: ConsoleShellConfig) {
+  const shellConfigController = useContext(ConsoleShellConfigContext);
+
+  useEffect(() => {
+    if (!shellConfigController) {
+      return;
+    }
+
+    shellConfigController.setConfig(config);
+    return () => shellConfigController.resetConfig();
+  }, [
+    config.contentClassName,
+    config.rightPanel,
+    config.searchPlaceholder,
+    config.topbarActions,
+    shellConfigController,
+  ]);
+}
+
 interface WorkspaceTreeNode {
   children: WorkspaceTreeNode[];
   space: WorkspaceSwitcherData["secondarySpaces"][number];
@@ -130,15 +149,6 @@ function compactWorkspacePath(label: string) {
   return label.replace(/\s*\/\s*/g, "/");
 }
 
-function InlineTronShellContent({ children, contentClassName, rightPanel }: TronShellProps) {
-  return (
-    <div className={cn("-mx-6 -my-6 grid min-h-[calc(100vh-3.5rem)] grid-cols-1", rightPanel ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "")}>
-      <main className={cn("min-w-0 px-6 py-6", contentClassName)}>{children}</main>
-      {rightPanel ? <aside className="border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-5 py-6">{rightPanel}</aside> : null}
-    </div>
-  );
-}
-
 export function TronShell({
   activeItem = "Dashboard",
   children,
@@ -168,14 +178,12 @@ export function TronShell({
   const toggleUtilityPanel = useAppShellStore((state) => state.toggleUtilityPanel);
   const utilityPanel = useAppShellStore((state) => state.utilityPanel);
   const selectPrimarySpaceInStore = useAppShellStore((state) => state.selectPrimarySpace);
+  const syncSelectedWorkspace = useAppShellStore((state) => state.syncSelectedWorkspace);
+  const setWorkspaceSwitcherSnapshot = useAppShellStore((state) => state.setWorkspaceSwitcherSnapshot);
+  const workspaceSwitcher = useAppShellStore((state) => state.workspaceSwitcherSnapshot);
   const dataSource = getServiceDataSource("admin");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
-  const [workspaceSwitcher, setWorkspaceSwitcher] = useState<WorkspaceSwitcherData>(() => (
-    dataSource === "api"
-      ? { primarySpaces: [], secondarySpaces: [] }
-      : getWorkspaceSwitcherMock()
-  ));
   const workspaceSwitcherControllerRef = useRef<AbortController | null>(null);
   const workspaceSwitcherRequestSequenceRef = useRef(0);
   const [expandedWorkspaceCodes, setExpandedWorkspaceCodes] = useState<string[]>([]);
@@ -235,7 +243,7 @@ export function TronShell({
       workspaceSwitcherControllerRef.current?.abort();
       workspaceSwitcherControllerRef.current = null;
       workspaceSwitcherRequestSequenceRef.current += 1;
-      setWorkspaceSwitcher(getWorkspaceSwitcherMock());
+      setWorkspaceSwitcherSnapshot(getWorkspaceSwitcherMock());
       setWorkspaceSwitcherLoading(false);
       return;
     }
@@ -250,7 +258,7 @@ export function TronShell({
     try {
       const data = await fetchWorkspaceSwitcher(controller.signal);
       if (requestId !== workspaceSwitcherRequestSequenceRef.current || controller.signal.aborted) return;
-      setWorkspaceSwitcher(data);
+      setWorkspaceSwitcherSnapshot(data);
     } catch (error: unknown) {
       if (requestId !== workspaceSwitcherRequestSequenceRef.current || controller.signal.aborted) return;
       if (isUnauthorizedApiError(error)) return;
@@ -263,13 +271,16 @@ export function TronShell({
         setWorkspaceSwitcherLoading(false);
       }
     }
-  }, [dataSource]);
+  }, [dataSource, setWorkspaceSwitcherSnapshot]);
 
   useEffect(() => {
-    void refreshWorkspaceSwitcher();
+    if (dataSource !== "api") {
+      setWorkspaceSwitcherSnapshot(getWorkspaceSwitcherMock());
+      return () => workspaceSwitcherControllerRef.current?.abort();
+    }
 
     return () => workspaceSwitcherControllerRef.current?.abort();
-  }, [refreshWorkspaceSwitcher]);
+  }, [dataSource, setWorkspaceSwitcherSnapshot]);
 
   useEffect(() => {
     const activeSection = tronNavigation.find((section) => sectionHasActiveItem(section, activeItem));
@@ -285,13 +296,13 @@ export function TronShell({
       return;
     }
 
-    selectPrimarySpaceInStore(effectivePrimarySpaceId, effectiveSecondarySpaceId);
+    syncSelectedWorkspace(effectivePrimarySpaceId, effectiveSecondarySpaceId);
   }, [
     effectivePrimarySpaceId,
     effectiveSecondarySpaceId,
-    selectPrimarySpaceInStore,
     selectedPrimarySpaceId,
     selectedSecondarySpaceId,
+    syncSelectedWorkspace,
   ]);
 
   useEffect(() => {
@@ -365,7 +376,9 @@ export function TronShell({
 
   function handleWorkspaceSwitcherClick() {
     setAgentOpen(false);
-    void refreshWorkspaceSwitcher();
+    if (utilityPanel !== "workspace") {
+      void refreshWorkspaceSwitcher();
+    }
     toggleUtilityPanel("workspace");
   }
 
@@ -525,7 +538,7 @@ export function TronShell({
   }
 
   if (shellFrameMounted) {
-    return <InlineTronShellContent activeItem={activeItem} contentClassName={contentClassName} rightPanel={rightPanel}>{children}</InlineTronShellContent>;
+    return <>{children}</>;
   }
 
   return (

@@ -10,7 +10,6 @@ import {
   PageHeader,
   SurfaceCard,
   TextInput,
-  TronShell,
   useToast,
 } from "@/shared";
 import { Button } from "@/shared/ui/Button";
@@ -133,7 +132,7 @@ export function CreateUserPage() {
   }
 
   return (
-    <TronShell activeItem="Users" searchPlaceholder="Search users...">
+    <>
       <PageHeader
         breadcrumbs={[{ label: "Users", href: "/admin/users" }, { label: "New" }]}
         title="Create User"
@@ -180,6 +179,6 @@ export function CreateUserPage() {
           </div>
         </form>
       </SurfaceCard>
-    </TronShell>
+    </>
   );
 }

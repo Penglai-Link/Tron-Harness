@@ -16,7 +16,6 @@ import {
   SegmentedTabs,
   SurfaceCard,
   TablePagination,
-  TronShell,
   useTablePagination,
 } from "@/shared";
 
@@ -26,14 +25,6 @@ import {
   defaultMemoryFilters,
   memoryStrategyTabs,
 } from "@/domain/memory/constants";
-
-function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
-  return (
-    <TronShell activeItem={activeItem} searchPlaceholder="Search Tron...">
-      {children}
-    </TronShell>
-  );
-}
 
 function SmallStatus({ children, tone = "neutral" }: { children: React.ReactNode; tone?: "neutral" | "accent" | "success" | "warning" | "error" }) {
   return <Badge tone={tone}>{children}</Badge>;
@@ -74,7 +65,7 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
   );
 
   return (
-    <RoutePageShell activeItem="Memory">
+    <>
       <PageHeader
         title="Memory Repository"
         actions={<><Button variant="secondary" onClick={() => setNotice("Import data drawer opened")}><Upload size={16} />Import Data</Button><Button onClick={() => setNotice("Index sync queued")}><RefreshCw size={16} />Sync Indices</Button></>}
@@ -100,7 +91,7 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
         </div>
       </SurfaceCard>
       {details ? <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">{table}<MemoryInspector fragment={selected} /></div> : table}
-    </RoutePageShell>
+    </>
   );
 }
 

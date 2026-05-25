@@ -415,7 +415,7 @@ function detailRecord(nodes: WorkspaceNode[], workspaceCode: string, directUserG
     parentWorkspaceCode: node.parentWorkspaceCode,
     depth: node.depth,
     status: node.status,
-    lineage: buildLineage(nodes, workspaceCode),
+    path: buildLineage(nodes, workspaceCode),
     children,
     directUserCount: (directUserGrants[node.workspaceCode] ?? []).length,
     roleGrantCount: (roleGrants[node.workspaceCode] ?? []).length,
@@ -730,7 +730,7 @@ test("workspace management page supports hierarchy and separated access grants",
       .filter((node) => node.status === "Active")
       .map((node) => ({
         workspaceCode: node.workspaceCode,
-        label: getWorkspaceOrThrow(node.workspaceCode).lineage.map((item) => item.name).join(" / "),
+        label: getWorkspaceOrThrow(node.workspaceCode).path.map((item) => item.name).join(" / "),
         name: node.name,
         description: node.description,
         parentWorkspaceCode: node.parentWorkspaceCode,
@@ -755,8 +755,8 @@ test("workspace management page supports hierarchy and separated access grants",
         const detail = getWorkspaceOrThrow(node.workspaceCode);
         return {
           workspaceCode: node.workspaceCode,
-          primaryWorkspaceCode: detail.lineage[0]?.workspaceCode ?? node.workspaceCode,
-          label: detail.lineage.map((item) => item.name).join(" / "),
+          primaryWorkspaceCode: detail.path[0]?.workspaceCode ?? node.workspaceCode,
+          label: detail.path.map((item) => item.name).join(" / "),
           name: node.name,
           description: node.description,
           depth: node.depth,
@@ -1001,14 +1001,14 @@ test("workspace management page supports hierarchy and separated access grants",
 
   await expect(page.getByRole("heading", { name: "Workspace Management" })).toBeVisible();
   await expect(page.getByText("Platform", { exact: true }).first()).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/switcher")).toBe(true);
 
-  const primarySpaceToggle = page.locator("header").getByRole("button", { name: /Enterprise/ }).first();
-  await primarySpaceToggle.click();
-  const primarySpacePanel = page.locator("div").filter({ has: page.getByText("Primary spaces", { exact: true }) }).last();
-  await expect(primarySpacePanel).toBeVisible();
-  await primarySpacePanel.getByRole("button", { name: /Compliance/ }).click();
-  await expect(page.locator("header").getByRole("button", { name: /Compliance/ }).first()).toBeVisible();
+  const workspaceSelectorTrigger = page.locator("header button[aria-haspopup='dialog']").first();
+  await workspaceSelectorTrigger.click();
+  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/switcher")).toBe(true);
+  const workspaceSelectorPanel = page.locator("#tron-workspace-selector-panel");
+  await expect(workspaceSelectorPanel).toBeVisible();
+  await workspaceSelectorPanel.getByRole("button", { name: /Compliance/ }).click();
+  await expect(workspaceSelectorTrigger).toHaveText(/Compliance/);
 
   const workspaceUrl = page.url();
   const searchBox = page.getByRole("searchbox", { name: "Search workspaces" });
@@ -1058,18 +1058,18 @@ test("workspace management page supports hierarchy and separated access grants",
   await expect(page).toHaveURL(workspaceUrl);
   await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Platform");
 
-  await page.getByRole("button", { name: "Create Root", exact: true }).click();
+  await page.getByRole("button", { name: "New", exact: true }).first().click();
   await page.getByRole("textbox", { name: "Workspace name" }).fill("Risk");
   await page.getByRole("textbox", { name: "Workspace description" }).fill("Risk governance workspace");
-  await page.getByRole("textbox", { name: "Workspace name" }).locator("xpath=ancestor::section[1]").getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("textbox", { name: "Workspace name" }).locator("xpath=ancestor::section[1]").getByRole("button", { name: "Save", exact: true }).click();
   await expect(sharedToastMessage(page, "Workspace WS-0000000000000001 created")).toBeVisible();
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces" && request.method === "POST")).toBe(true);
   await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk");
 
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("tab", { name: "Create", exact: true }).click();
   await page.getByRole("textbox", { name: "Workspace name" }).fill("Risk Review");
   await page.getByRole("textbox", { name: "Workspace description" }).fill("Child workspace for risk reviews");
-  await page.getByRole("textbox", { name: "Workspace name" }).locator("xpath=ancestor::section[1]").getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("textbox", { name: "Workspace name" }).locator("xpath=ancestor::section[1]").getByRole("button", { name: "Save", exact: true }).click();
   await expect(sharedToastMessage(page, "Workspace WS-0000000000000002 created")).toBeVisible();
   await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk Review");
 

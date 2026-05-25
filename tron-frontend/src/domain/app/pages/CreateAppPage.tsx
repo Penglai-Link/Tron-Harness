@@ -9,7 +9,6 @@ import { Button } from "@/shared/ui/Button";
 import {
   PageHeader,
   SurfaceCard,
-  TronShell,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -60,7 +59,7 @@ export function CreateAppPage() {
   }
 
   return (
-    <TronShell activeItem="Apps" searchPlaceholder="Search apps, repositories, and tags...">
+    <>
       <PageHeader
         breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: "New" }]}
         title="Create App"
@@ -77,6 +76,6 @@ export function CreateAppPage() {
           </div>
         </form>
       </SurfaceCard>
-    </TronShell>
+    </>
   );
 }

@@ -18,7 +18,6 @@ import {
   SelectInput,
   SurfaceCard,
   TextInput,
-  TronShell,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -200,8 +199,7 @@ export function TasksKanbanPage() {
   }), [boardScale]);
 
   return (
-    <TronShell activeItem="Tasks" searchPlaceholder="Search tasks...">
-      <div className="flex min-h-[calc(100vh-6.5rem)] flex-col">
+    <div className="flex min-h-[calc(100vh-6.5rem)] flex-col">
         <PageHeader
           title="Task Management"
           actions={
@@ -214,7 +212,7 @@ export function TasksKanbanPage() {
                 refresh();
                 toast.success("Task board refreshed");
               }}><RefreshCcw size={16} aria-hidden="true" />Refresh</Button>
-              <Button onClick={() => navigate("/tasks/new")}><Plus size={16} aria-hidden="true" />New</Button>
+              <Button onClick={() => navigate("/tasks/new")}><Plus size={16} aria-hidden="true" />Create Task</Button>
             </>
           }
         />
@@ -241,6 +239,7 @@ export function TasksKanbanPage() {
           {columns.map((column) => (
             <section
               className="flex shrink-0 flex-col rounded-lg bg-[var(--color-surface-container)]"
+              data-task-kanban-column={column.status}
               key={column.status}
               style={{
                 gap: `${boardLayout.columnGap}px`,
@@ -249,7 +248,7 @@ export function TasksKanbanPage() {
               }}
             >
               <div className="flex items-center justify-between border-b-2 border-[var(--color-outline-variant)] px-1 py-1">
-                <span className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{column.title}</span>
+                <h2 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{column.title}</h2>
                 <span className="rounded bg-[var(--color-surface-container-high)] px-2 text-[11px]">{column.tasks.length}</span>
               </div>
               <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
@@ -269,8 +268,7 @@ export function TasksKanbanPage() {
               </div>
             </section>
           ))}
-        </div>
       </div>
-    </TronShell>
+    </div>
   );
 }

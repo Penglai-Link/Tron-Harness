@@ -19,7 +19,6 @@ import {
   SurfaceCard,
   TextArea,
   TextInput,
-  TronShell,
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
@@ -77,7 +76,7 @@ export function CreatePromptPage() {
   };
 
   return (
-    <TronShell activeItem="Prompts" searchPlaceholder="Search prompts...">
+    <>
       <PageHeader
         breadcrumbs={[{ label: "Prompts", href: "/prompts" }, { label: "New" }]}
         title="Create New Prompt"
@@ -205,6 +204,6 @@ export function CreatePromptPage() {
             </SurfaceCard>
           </div>
         </div>
-    </TronShell>
+    </>
   );
 }

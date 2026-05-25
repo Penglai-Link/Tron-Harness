@@ -12,7 +12,10 @@ import {
 
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import {
+  AnchorButton,
+  Button,
+} from "@/shared/ui/Button";
 import {
   Field,
   PageHeader,
@@ -619,12 +622,10 @@ export function CreateSkillPage() {
                         </div>
 
                         {candidate.detailUrl ? (
-                          <Button asChild size="sm" variant="secondary">
-                            <a href={candidate.detailUrl} target="_blank" rel="noreferrer">
-                              <ExternalLink size={15} aria-hidden="true" />
-                              Open
-                            </a>
-                          </Button>
+                          <AnchorButton href={candidate.detailUrl} rel="noreferrer" size="sm" target="_blank" variant="secondary">
+                            <ExternalLink size={15} aria-hidden="true" />
+                            Open
+                          </AnchorButton>
                         ) : null}
                       </div>
                     </div>

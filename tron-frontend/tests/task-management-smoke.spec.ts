@@ -559,7 +559,7 @@ test("task management supports kanban search create detail updates subtasks arch
 
   await page.goto(`${frontendBaseUrl}/tasks`);
   const taskHeader = page.locator("header").filter({ has: page.getByRole("heading", { name: "Task Management" }) });
-  const kanbanColumnTitles = page.locator("main main > div.flex > section > div > span:first-child");
+  const kanbanColumnTitles = page.locator("[data-task-kanban-column] h2");
   await expect(taskHeader.getByText("Kanban", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Refresh$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Sync$/ })).toHaveCount(0);
@@ -597,7 +597,7 @@ test("task management supports kanban search create detail updates subtasks arch
   }).toBe(true);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/kanban" && request.searchParams.priority === "High" && request.searchParams.workspaceCode === "TRON_CORE" && request.searchParams.taskType === "Bug")).toBe(true);
 
-  await page.getByRole("button", { name: /Create Task/ }).click();
+  await page.getByRole("button", { name: /^Create Task$/ }).click();
   await expect(page.getByRole("heading", { name: "Create Task" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create Task" })).toHaveCount(0);
@@ -701,7 +701,7 @@ test("task management supports kanban search create detail updates subtasks arch
   await descriptionFullscreenEditor.getByLabel("Task detail description fullscreen").fill("## Playwright Notes Updated\n- Fullscreen edit path");
   await descriptionFullscreenEditor.getByRole("button", { name: "Close description fullscreen" }).click();
   await expect(descriptionFullscreenEditor).toHaveCount(0);
-  await page.getByRole("button", { name: "Save Details" }).click();
+  await page.getByRole("button", { name: "Save" }).click();
   await expect(toast(page, /Task TSK-PW-0001 details saved/)).toBeVisible();
   await expect(page.getByLabel("Task description markdown").getByText("Playwright Notes Updated", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Task description markdown").getByRole("listitem").filter({ hasText: "Fullscreen edit path" })).toBeVisible();
@@ -898,18 +898,21 @@ test("workspace switcher refreshes from the API on every header click", async ({
 
   const workspaceButton = page.locator("header button[aria-busy]").first();
   const switcherRequestCount = () => requests.filter((request) => request.pathname === "/api/v1/admin/workspaces/switcher").length;
-  await expect.poll(switcherRequestCount).toBeGreaterThan(0);
-  const initialRequestCount = switcherRequestCount();
-  await expect(workspaceButton).toContainText(`Enterprise Live ${initialRequestCount}`);
+  await expect(workspaceButton).toContainText("Enterprise/Platform/Tron Core");
+  await expect.poll(switcherRequestCount).toBe(0);
 
   await workspaceButton.click();
-  await expect.poll(switcherRequestCount).toBe(initialRequestCount + 1);
-  await expect(workspaceButton).toContainText(`Enterprise Live ${initialRequestCount + 1}`);
+  await expect.poll(switcherRequestCount).toBe(1);
+  await expect(workspaceButton).toContainText("Enterprise Live 1");
   await expect(page.locator("#tron-workspace-selector-panel")).toBeVisible();
 
   await workspaceButton.click();
-  await expect.poll(switcherRequestCount).toBe(initialRequestCount + 2);
-  await expect(workspaceButton).toContainText(`Enterprise Live ${initialRequestCount + 2}`);
+  await expect(page.locator("#tron-workspace-selector-panel")).toHaveCount(0);
+  await expect.poll(switcherRequestCount).toBe(1);
+
+  await workspaceButton.click();
+  await expect.poll(switcherRequestCount).toBe(2);
+  await expect(workspaceButton).toContainText("Enterprise Live 2");
 });
 
 test("topbar workspace selector exposes the full hierarchy and updates the selected path", async ({ page }) => {
@@ -997,12 +1000,11 @@ test("topbar workspace selector exposes the full hierarchy and updates the selec
 
   const workspaceTrigger = page.locator("#tron-workspace-trigger");
   const switcherRequestCount = () => requests.filter((request) => request.pathname === "/api/v1/admin/workspaces/switcher").length;
-  await expect.poll(switcherRequestCount).toBeGreaterThan(0);
-  const initialRequestCount = switcherRequestCount();
+  await expect.poll(switcherRequestCount).toBe(0);
 
   await expect(workspaceTrigger).toContainText("Enterprise/Platform/Tron Core");
   await workspaceTrigger.click();
-  await expect.poll(switcherRequestCount).toBe(initialRequestCount + 1);
+  await expect.poll(switcherRequestCount).toBe(1);
 
   const selector = page.locator("#tron-workspace-selector-panel");
   await expect(selector).toBeVisible();
@@ -1027,20 +1029,20 @@ test("topbar workspace selector exposes the full hierarchy and updates the selec
 
   const requestCountBeforeReopen = switcherRequestCount();
   await workspaceTrigger.click();
-  await expect.poll(switcherRequestCount).toBeGreaterThan(requestCountBeforeReopen);
+  await expect.poll(switcherRequestCount).toBe(requestCountBeforeReopen + 1);
   await selector.getByRole("button", { name: "Enterprise/Platform/Tron Core", exact: true }).click();
   await expect(workspaceTrigger).toContainText("Enterprise/Platform/Tron Core");
   await expect(workspaceTrigger).not.toContainText("Enterprise / Platform / Tron Core");
 
   const requestCountBeforeComplianceOpen = switcherRequestCount();
   await workspaceTrigger.click();
-  await expect.poll(switcherRequestCount).toBeGreaterThan(requestCountBeforeComplianceOpen);
+  await expect.poll(switcherRequestCount).toBe(requestCountBeforeComplianceOpen + 1);
   await selector.getByRole("button", { name: "Compliance", exact: true }).click();
   await expect(workspaceTrigger).toContainText("Compliance");
 
   const requestCountBeforeRiskOpsOpen = switcherRequestCount();
   await workspaceTrigger.click();
-  await expect.poll(switcherRequestCount).toBeGreaterThan(requestCountBeforeRiskOpsOpen);
+  await expect.poll(switcherRequestCount).toBe(requestCountBeforeRiskOpsOpen + 1);
   await expect(selector.getByRole("button", { name: "Compliance/Risk Ops", exact: true })).toBeVisible();
   await selector.getByRole("button", { name: "Compliance/Risk Ops", exact: true }).click();
   await expect(workspaceTrigger).toContainText("Compliance/Risk Ops");
@@ -1135,13 +1137,12 @@ test("workspace switcher keeps a generic label when the API returns no spaces", 
 
   const workspaceButton = page.locator("header button[aria-busy]").first();
   const switcherRequestCount = () => requests.filter((request) => request.pathname === "/api/v1/admin/workspaces/switcher").length;
-  await expect.poll(switcherRequestCount).toBeGreaterThan(0);
-  const initialRequestCount = switcherRequestCount();
-  await expect(workspaceButton).toContainText("Workspace");
-  await expect(workspaceButton).not.toContainText("Enterprise Workspace");
+  await expect.poll(switcherRequestCount).toBe(0);
+  await expect(workspaceButton).toContainText("Enterprise/Platform/Tron Core");
 
   await workspaceButton.click();
-  await expect.poll(switcherRequestCount).toBe(initialRequestCount + 1);
+  await expect.poll(switcherRequestCount).toBe(1);
+  await expect(workspaceButton).toContainText("Workspace");
   await expect(page.getByText("No primary spaces available.")).toBeVisible();
   await expect(page.getByText("Enterprise Workspace")).toHaveCount(0);
 });

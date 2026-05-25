@@ -1,10 +1,10 @@
 import {
   type CSSProperties,
-  type KeyboardEvent,
   type MouseEvent,
   type SyntheticEvent,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
@@ -26,7 +26,7 @@ import {
   SelectInput,
   TablePagination,
   TextInput,
-  TronShell,
+  useDismissibleLayer,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -56,6 +56,7 @@ type StatusFilter = "Active" | "Archived" | "All";
 type OpenRowMenuState = {
   anchorRect: DOMRect;
   appCode: string;
+  triggerElement: HTMLButtonElement;
 };
 
 const ACTION_MENU_GAP = 8;
@@ -131,6 +132,7 @@ export function AppsPage() {
   const [size, setSize] = useState(15);
   const [openRowMenu, setOpenRowMenu] = useState<OpenRowMenuState | null>(null);
   const [pendingLifecycleCode, setPendingLifecycleCode] = useState<string | null>(null);
+  const rowMenuRef = useRef<HTMLDivElement | null>(null);
   const query = useMemo(() => ({
     current,
     includeArchived: status === "All",
@@ -165,41 +167,12 @@ export function AppsPage() {
     }
   }, [current, pageCount]);
 
-  useEffect(() => {
-    if (!openRowMenu) {
-      return undefined;
-    }
-
-    function closeMenu() {
-      setOpenRowMenu(null);
-    }
-
-    function handlePointerDown(event: globalThis.MouseEvent) {
-      const target = event.target;
-      if (target instanceof Node && document.querySelector("[data-app-actions-menu]")?.contains(target)) {
-        return;
-      }
-      closeMenu();
-    }
-
-    function handleKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.key === "Escape") {
-        closeMenu();
-      }
-    }
-
-    window.addEventListener("resize", closeMenu);
-    window.addEventListener("scroll", closeMenu, true);
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("resize", closeMenu);
-      window.removeEventListener("scroll", closeMenu, true);
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [openRowMenu]);
+  useDismissibleLayer({
+    onDismiss: () => setOpenRowMenu(null),
+    open: openRowMenu !== null,
+    popupRef: rowMenuRef,
+    triggerElement: openRowMenu?.triggerElement,
+  });
 
   const openMenuApp = useMemo(
     () => (openRowMenu ? page.records.find((app) => app.appCode === openRowMenu.appCode) ?? null : null),
@@ -234,7 +207,7 @@ export function AppsPage() {
   }
 
   return (
-    <TronShell activeItem="Apps" searchPlaceholder="Search apps, repositories, and tags...">
+    <>
       <PageHeader
         title="App Management"
         actions={(
@@ -389,7 +362,15 @@ export function AppsPage() {
                   isOpen={openRowMenu?.appCode === app.appCode}
                   onToggleOpen={(event) => {
                     const anchorRect = event.currentTarget.getBoundingClientRect();
-                    setOpenRowMenu((currentMenu) => (currentMenu?.appCode === app.appCode ? null : { appCode: app.appCode, anchorRect }));
+                    setOpenRowMenu((currentMenu) => (
+                      currentMenu?.appCode === app.appCode
+                        ? null
+                        : {
+                          appCode: app.appCode,
+                          anchorRect,
+                          triggerElement: event.currentTarget,
+                        }
+                    ));
                   }}
                 />
               ),
@@ -401,6 +382,7 @@ export function AppsPage() {
           <div
             className="z-50 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface-strong)] p-2 shadow-[0_12px_28px_rgba(0,0,0,0.18)]"
             data-app-actions-menu
+            ref={rowMenuRef}
             role="menu"
             aria-label={`Actions for ${openMenuApp.name}`}
             style={getActionMenuStyle(openRowMenu.anchorRect)}
@@ -471,6 +453,6 @@ export function AppsPage() {
           document.body,
         )
         : null}
-    </TronShell>
+    </>
   );
 }

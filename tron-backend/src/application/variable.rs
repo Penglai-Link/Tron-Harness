@@ -226,7 +226,7 @@ impl VariableService {
         key: &str,
     ) -> bool {
         let lineage_codes: HashMap<_, _> = workspace
-            .lineage
+            .path
             .iter()
             .map(|item| (item.workspace_code.as_str(), ()))
             .collect();
@@ -370,7 +370,7 @@ fn optional_trimmed(value: Option<String>) -> Option<String> {
 fn workspace_lineage(workspace: &WorkspaceDetail) -> Vec<LineageEntry> {
     let mut labels = Vec::new();
     workspace
-        .lineage
+        .path
         .iter()
         .map(|item| {
             labels.push(item.name.clone());

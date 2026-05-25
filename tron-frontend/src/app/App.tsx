@@ -40,7 +40,7 @@ import {
   resolveAuthRedirect,
 } from "@/domain/auth/model";
 
-import { Button } from "@/shared/ui/Button";
+import { LinkButton } from "@/shared/ui/Button";
 
 import { appRoutes } from "@/router/routes";
 import { routePages } from "@/router/pageRegistry";
@@ -91,18 +91,14 @@ function HomePage() {
             {t("description")}
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Button asChild>
-              <Link to="/design-standard">
-                {t("cta.designStandard")}
-                <ArrowRight size={16} aria-hidden="true" />
-              </Link>
-            </Button>
-            <Button asChild variant="secondary">
-              <Link to="/shared-shell-preview">
-                {t("cta.sharedShell")}
-                <ArrowRight size={16} aria-hidden="true" />
-              </Link>
-            </Button>
+            <LinkButton to="/design-standard">
+              {t("cta.designStandard")}
+              <ArrowRight size={16} aria-hidden="true" />
+            </LinkButton>
+            <LinkButton to="/shared-shell-preview" variant="secondary">
+              {t("cta.sharedShell")}
+              <ArrowRight size={16} aria-hidden="true" />
+            </LinkButton>
           </div>
         </div>
       </section>
@@ -175,6 +171,10 @@ function AppRoutePage() {
 
   if (resolved) {
     const { Component, route } = resolved;
+    const effectiveShellConfig = {
+      ...route.shellConfig,
+      ...pageShellConfig,
+    };
     if (route.layout === "settings") {
       return (
         <SettingsShell activeItem={route.settingsNav ?? route.title} items={settingsNavigation}>
@@ -188,10 +188,10 @@ function AppRoutePage() {
       <ConsoleShellConfigContext.Provider value={shellConfigController}>
         <TronShell
           activeItem={route.activeNav}
-          contentClassName={pageShellConfig.contentClassName}
-          rightPanel={pageShellConfig.rightPanel}
-          searchPlaceholder={pageShellConfig.searchPlaceholder}
-          topbarActions={pageShellConfig.topbarActions}
+          contentClassName={effectiveShellConfig.contentClassName}
+          rightPanel={effectiveShellConfig.rightPanel}
+          searchPlaceholder={effectiveShellConfig.searchPlaceholder}
+          topbarActions={effectiveShellConfig.topbarActions}
           userMenuContent={<AuthUserMenuPanel />}
         >
           <SuspendedRoute>

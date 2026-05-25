@@ -23,7 +23,6 @@ import { Button } from "@/shared/ui/Button";
 import {
   TablePagination,
   TextInput,
-  TronShell,
   useTablePagination,
 } from "@/shared";
 
@@ -100,8 +99,7 @@ export function ResourcesPage() {
   };
 
   return (
-    <TronShell activeItem="Resources" searchPlaceholder="Search resources...">
-        <div className="flex min-h-[calc(100vh-3.5rem)] flex-col gap-6">
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col gap-6">
           <section className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="text-3xl font-semibold leading-tight">Data &amp; Assets</h1>
@@ -205,8 +203,7 @@ export function ResourcesPage() {
             </div>
           </section>
 
-          <p className="sr-only" aria-live="polite">{notice}</p>
-        </div>
-    </TronShell>
+      <p className="sr-only" aria-live="polite">{notice}</p>
+    </div>
   );
 }

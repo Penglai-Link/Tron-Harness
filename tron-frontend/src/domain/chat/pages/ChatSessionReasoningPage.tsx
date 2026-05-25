@@ -18,7 +18,7 @@ import {
   SegmentedTabs,
   SurfaceCard,
   TextArea,
-  TronShell,
+  useConsoleShellConfig,
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
@@ -56,38 +56,36 @@ function ChatSessionPage({ variant }: { variant: "reasoning" | "execution" }) {
   const [inspectorTab, setInspectorTab] = useState("info");
   const [composer, setComposer] = useState("");
   const [notice, setNotice] = useState("");
+  const rightPanel = (
+    <InspectorPanel title="Utility Hub">
+      <SegmentedTabs value={inspectorTab} onValueChange={setInspectorTab} items={[{ label: "Info", value: "info" }, { label: "Tools", value: "tools" }, { label: "Files", value: "files" }]} />
+      <SurfaceCard className="rounded-xl p-4 shadow-none">
+        {inspectorTab === "info" ? (
+          <div className="space-y-3">
+            <KeyValue label="Active Model" value="tron-opus-v2" />
+            <KeyValue label="Tokens Used" value="14,285" />
+            <KeyValue label="Agents" value="3 active" />
+          </div>
+        ) : inspectorTab === "tools" ? (
+          <div className="space-y-2 text-sm">
+            <p>QueryTelemetry</p>
+            <p>CodeSearch</p>
+            <p>BuildRunner</p>
+          </div>
+        ) : (
+          <div className="space-y-2 text-sm">
+            <p>auth/token_validator.go</p>
+            <p>deployments/pr-1042.log</p>
+          </div>
+        )}
+      </SurfaceCard>
+    </InspectorPanel>
+  );
+
+  useConsoleShellConfig({ rightPanel });
 
   return (
-    <TronShell
-      activeItem="Chats"
-      searchPlaceholder="Search tasks..."
-      contentClassName="!p-0"
-      rightPanel={
-        <InspectorPanel title="Utility Hub">
-          <SegmentedTabs value={inspectorTab} onValueChange={setInspectorTab} items={[{ label: "Info", value: "info" }, { label: "Tools", value: "tools" }, { label: "Files", value: "files" }]} />
-          <SurfaceCard className="rounded-xl p-4 shadow-none">
-            {inspectorTab === "info" ? (
-              <div className="space-y-3">
-                <KeyValue label="Active Model" value="tron-opus-v2" />
-                <KeyValue label="Tokens Used" value="14,285" />
-                <KeyValue label="Agents" value="3 active" />
-              </div>
-            ) : inspectorTab === "tools" ? (
-              <div className="space-y-2 text-sm">
-                <p>QueryTelemetry</p>
-                <p>CodeSearch</p>
-                <p>BuildRunner</p>
-              </div>
-            ) : (
-              <div className="space-y-2 text-sm">
-                <p>auth/token_validator.go</p>
-                <p>deployments/pr-1042.log</p>
-              </div>
-            )}
-          </SurfaceCard>
-        </InspectorPanel>
-      }
-    >
+    <>
       <div className="grid h-[calc(100vh-65px)] min-h-[720px] grid-cols-[260px_minmax(0,1fr)] bg-white">
         <aside className="border-r border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)]">
           <div className="flex items-center justify-between border-b border-[var(--color-outline-variant)] p-4">
@@ -151,7 +149,7 @@ function ChatSessionPage({ variant }: { variant: "reasoning" | "execution" }) {
           </div>
         </section>
       </div>
-    </TronShell>
+    </>
   );
 }
 

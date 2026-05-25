@@ -320,12 +320,12 @@ function findWorkspaceNode(workspaceCode: string, records: WorkspaceTreeNodeReco
   return flattenWorkspaceTree(records).find((item) => item.workspaceCode === workspaceCode) ?? null;
 }
 
-function buildLineage(workspaceCode: string, records: WorkspaceTreeNodeRecord[] = workspaceNodes): WorkspaceLineageItem[] {
+function buildWorkspacePath(workspaceCode: string, records: WorkspaceTreeNodeRecord[] = workspaceNodes): WorkspaceLineageItem[] {
   const flat = flattenWorkspaceTree(records);
-  const lineage: WorkspaceLineageItem[] = [];
+  const path: WorkspaceLineageItem[] = [];
   let current = flat.find((item) => item.workspaceCode === workspaceCode) ?? null;
   while (current) {
-    lineage.push({
+    path.push({
       workspaceCode: current.workspaceCode,
       name: current.name,
       depth: current.depth,
@@ -334,7 +334,7 @@ function buildLineage(workspaceCode: string, records: WorkspaceTreeNodeRecord[] 
       ? flat.find((item) => item.workspaceCode === current?.parentWorkspaceCode) ?? null
       : null;
   }
-  return lineage.reverse();
+  return path.reverse();
 }
 
 function getWorkspaceTimestamp(workspaceCode: string) {
@@ -590,7 +590,7 @@ export function getWorkspaceDetail(workspaceCode: string): WorkspaceDetailRecord
     parentWorkspaceCode: node.parentWorkspaceCode,
     depth: node.depth,
     status: node.status,
-    lineage: buildLineage(workspaceCode),
+    path: buildWorkspacePath(workspaceCode),
     children: node.children,
     directUserCount: node.directUserCount,
     roleGrantCount: node.roleGrantCount,

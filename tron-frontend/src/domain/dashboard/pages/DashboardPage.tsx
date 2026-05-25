@@ -20,20 +20,11 @@ import {
   MetricCard,
   PageHeader,
   SurfaceCard,
-  TronShell,
   useWorkspaceSpaces,
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
 import { useDashboardOverview } from "@/domain/dashboard/hooks";
-
-function RoutePageShell({ activeItem, children }: { activeItem: string; children: React.ReactNode }) {
-  return (
-    <TronShell activeItem={activeItem} searchPlaceholder="Search Tron...">
-      {children}
-    </TronShell>
-  );
-}
 
 function DashboardContent() {
   const { activities, metrics } = useDashboardOverview();
@@ -189,9 +180,5 @@ function TreeNode({ active, meta, root, title }: { active?: boolean; meta: strin
 }
 
 export function DashboardPage() {
-  return (
-    <RoutePageShell activeItem="Dashboard">
-      <DashboardContent />
-    </RoutePageShell>
-  );
+  return <DashboardContent />;
 }

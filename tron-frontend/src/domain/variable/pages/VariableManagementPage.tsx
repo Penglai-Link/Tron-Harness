@@ -24,7 +24,6 @@ import {
   TablePagination,
   TextArea,
   TextInput,
-  TronShell,
   useTablePagination,
   useToast,
   useWorkspaceSpaces,
@@ -302,7 +301,7 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
       : selectedVariable?.key ?? "Select a Variable";
 
   return (
-    <TronShell activeItem="Variables" searchPlaceholder="Search variables...">
+    <>
       <PageHeader
         title="Variable Management"
         actions={(
@@ -544,6 +543,6 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
           )}
         </SurfaceCard>
       </div>
-    </TronShell>
+    </>
   );
 }

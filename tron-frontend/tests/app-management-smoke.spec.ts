@@ -406,7 +406,7 @@ test("app management supports workspace list create detail edit archive restore 
   await expect(page.getByText("https://github.com/clouds3n/playwright-runtime")).toBeVisible();
   await expect.poll(() => requests.some((request) => request.method === "POST" && request.pathname === "/api/v1/apps/workspaces/TRON_CORE" && (request.body as Partial<AppRecord> | null)?.runtimeRole === "Backend" && (request.body as Partial<AppRecord> | null)?.localDirectory === "/workspace/apps/playwright-runtime")).toBe(true);
 
-  await page.getByRole("link", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Edit" }).click();
   await expect(page.getByRole("heading", { name: "Edit Playwright Runtime" })).toBeVisible();
   await page.getByLabel("App name").fill("Playwright Runtime Updated");
   await page.getByLabel("Local directory").fill("/workspace/tron/playwright-runtime");
@@ -427,7 +427,7 @@ test("app management supports workspace list create detail edit archive restore 
   await expect(page.getByText("Archived", { exact: true })).toBeVisible();
   await expect.poll(() => requests.some((request) => request.method === "POST" && request.pathname === "/api/v1/apps/APP-PW-0001/archive")).toBe(true);
 
-  await page.getByRole("link", { name: "Back" }).click();
+  await page.getByLabel("Breadcrumb").getByRole("link", { name: "Apps" }).click();
   await expect(page).toHaveURL(/\/apps$/);
   await page.getByLabel("App status filter").selectOption("Archived");
   await expect(page.getByText("Playwright Runtime Updated", { exact: true })).toBeVisible();
@@ -436,7 +436,7 @@ test("app management supports workspace list create detail edit archive restore 
   await page.getByRole("button", { name: "Restore" }).first().click();
   await expect.poll(() => requests.some((request) => request.method === "POST" && request.pathname === "/api/v1/apps/APP-PW-0001/restore")).toBe(true);
 
-  await page.getByRole("link", { name: "Back" }).click();
+  await page.getByLabel("Breadcrumb").getByRole("link", { name: "Apps" }).click();
   await expect(page).toHaveURL(/\/apps$/);
   await expect(page.getByText("Playwright Runtime Updated", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Open actions for Playwright Runtime Updated" }).click();

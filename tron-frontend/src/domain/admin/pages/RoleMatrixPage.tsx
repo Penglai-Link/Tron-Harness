@@ -21,7 +21,6 @@ import {
   SurfaceCard,
   TextInput,
   ToggleSwitch,
-  TronShell,
   useToast,
 } from "@/shared";
 
@@ -586,10 +585,7 @@ export function RoleMatrixPage() {
   }
 
   return (
-    <TronShell
-      activeItem="Roles"
-      searchPlaceholder="Search users or roles..."
-    >
+    <>
       <PageHeader
         title="Users & Roles"
         actions={
@@ -814,6 +810,6 @@ export function RoleMatrixPage() {
           <span>{dataSource === "api" ? "Saved drafts persist through the backend role catalog." : "Saved drafts persist in this browser for mock mode."}</span>
         </div>
       </SurfaceCard>
-    </TronShell>
+    </>
   );
 }

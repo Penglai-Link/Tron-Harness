@@ -25,7 +25,6 @@ import {
   PageHeader,
   SurfaceCard,
   TextInput,
-  TronShell,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -449,7 +448,7 @@ export function SkillsPage() {
   }
 
   return (
-    <TronShell activeItem="Skills" searchPlaceholder="Search installed skills...">
+    <>
       <PageHeader
         title="Skills"
         actions={(
@@ -792,6 +791,6 @@ export function SkillsPage() {
           </div>
         </div>
       ) : null}
-    </TronShell>
+    </>
   );
 }

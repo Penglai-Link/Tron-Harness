@@ -5,7 +5,10 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use crate::{application::model::ModelService, response::ApiResponse};
+use crate::{
+    application::model::ModelService,
+    response::ApiResponse,
+};
 
 use super::{
     error_mapper::model_error_response,
@@ -30,6 +33,17 @@ pub async fn list_select_options(
         Ok(records) => Json(ApiResponse::success(records)).into_response(),
         Err(error) => model_error_response(error),
     }
+}
+
+pub async fn restore_workspace_model_from_platform_deprecated() -> Response {
+    (
+        StatusCode::GONE,
+        Json(ApiResponse::error(
+            "MODEL_ROUTE_GONE",
+            "workspace model restore from platform has been removed",
+        )),
+    )
+        .into_response()
 }
 
 pub async fn create_workspace_model(
