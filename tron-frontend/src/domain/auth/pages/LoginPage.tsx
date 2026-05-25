@@ -6,6 +6,7 @@ import {
 } from "react";
 import {
   ArrowRight,
+  LoaderCircle,
   LockKeyhole,
   Orbit,
 } from "lucide-react";
@@ -51,6 +52,8 @@ export function LoginPage() {
   const [providerError, setProviderError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [oauthProviders, setOauthProviders] = useState<Array<{ code: string; name: string }>>([]);
+  const [oauthSubmittingProviderCode, setOauthSubmittingProviderCode] = useState<string | null>(null);
+  const authBusy = submitting || oauthSubmittingProviderCode !== null;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -82,9 +85,10 @@ export function LoginPage() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting) return;
+    if (authBusy) return;
 
     setSubmitting(true);
+    setOauthSubmittingProviderCode(null);
     setFormError(null);
 
     try {
@@ -114,7 +118,21 @@ export function LoginPage() {
   }
 
   function handleOAuth2SignIn(providerCode: string) {
-    window.location.assign(buildOAuth2AuthorizeUrl(providerCode, redirectTarget));
+    if (authBusy) {
+      return;
+    }
+
+    setFormError(null);
+    setOauthSubmittingProviderCode(providerCode);
+
+    try {
+      window.location.assign(buildOAuth2AuthorizeUrl(providerCode, redirectTarget));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t("auth:providerUnavailable");
+      setOauthSubmittingProviderCode(null);
+      setProviderError(message);
+      toast.error(message);
+    }
   }
 
   const pixelBlastProps = theme === "matrix-dark"
@@ -185,6 +203,7 @@ export function LoginPage() {
             <Field label={t("auth:fields.usernameOrEmail")} error={formError ?? undefined}>
               <TextInput
                 autoComplete="username"
+                disabled={authBusy}
                 placeholder={t("auth:usernamePlaceholder")}
                 value={login}
                 onChange={(event) => setLogin(event.target.value)}
@@ -193,15 +212,17 @@ export function LoginPage() {
             <Field label={t("auth:fields.password")}>
               <TextInput
                 autoComplete="current-password"
+                disabled={authBusy}
                 placeholder={t("auth:passkeyPlaceholder")}
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
               />
             </Field>
-            <Button className="w-full" disabled={submitting} type="submit">
+            <Button className="w-full" disabled={authBusy} aria-busy={submitting} type="submit">
+              {submitting ? <LoaderCircle className="animate-spin" size={16} aria-hidden="true" /> : null}
               {submitting ? t("auth:signingIn") : t("common:actions.signIn")}
-              <ArrowRight size={16} aria-hidden="true" />
+              {!submitting ? <ArrowRight size={16} aria-hidden="true" /> : null}
             </Button>
           </form>
 
@@ -227,21 +248,27 @@ export function LoginPage() {
                 {t("auth:noExternalProviders")}
               </div>
             ) : null}
-            {oauthProviders.map((provider) => (
-              <Button
-                className="w-full justify-between"
-                key={provider.code}
-                type="button"
-                variant="secondary"
-                onClick={() => handleOAuth2SignIn(provider.code)}
-              >
-                <span className="flex items-center gap-2">
-                  <Orbit size={16} aria-hidden="true" />
-                  {provider.name}
-                </span>
-                <ArrowRight size={16} aria-hidden="true" />
-              </Button>
-            ))}
+            {oauthProviders.map((provider) => {
+              const providerSubmitting = oauthSubmittingProviderCode === provider.code;
+
+              return (
+                <Button
+                  className="w-full justify-between"
+                  disabled={authBusy}
+                  aria-busy={providerSubmitting}
+                  key={provider.code}
+                  type="button"
+                  variant="secondary"
+                  onClick={() => handleOAuth2SignIn(provider.code)}
+                >
+                  <span className="flex items-center gap-2">
+                    {providerSubmitting ? <LoaderCircle className="animate-spin" size={16} aria-hidden="true" /> : <Orbit size={16} aria-hidden="true" />}
+                    {provider.name}
+                  </span>
+                  {providerSubmitting ? <LoaderCircle className="animate-spin" size={16} aria-hidden="true" /> : <ArrowRight size={16} aria-hidden="true" />}
+                </Button>
+              );
+            })}
           </div>
         </section>
       </section>
