@@ -22,10 +22,14 @@
 
 ## GREEN Evidence
 
+### Evolution note
+
+- Superseded by the 2026-05-26 browser-comment evolution recorded in `reports/test-report.md`: desktop route entry now defaults collapsed with only the right-edge open control; opening reveals the 360px panel; the collapse handle is centered on the sidebar boundary; expanded state is not persisted across route entry.
+
 ### AC-RCS-01
 
-- Desktop shell right-panel route (`/shared-shell-preview`) renders the existing `Resource Pattern` right content in a 360px sidebar.
-- Collapse removes the right sidebar content from the layout, restores main content width, shows only a fixed right-edge reopen control, and persists `rightSidebarCollapsed: true` under `tron-app-shell`.
+- Desktop shell right-panel route (`/shared-shell-preview`) provides the existing `Resource Pattern` right content behind a default-collapsed right-edge open control.
+- Opening reveals the 360px sidebar; collapse removes the right sidebar content from the layout, restores main content width, and shows only a fixed right-edge reopen control.
 - Reopen restores the sidebar content.
 
 ### AC-RCS-02
@@ -36,9 +40,9 @@
 
 ### AC-RCS-03
 
-- Chat keeps its shell `Utility Hub` right panel.
-- Observability keeps its shell `Inspector` right panel, and closing the inspector removes stale right-sidebar controls.
-- Shared Shell Preview keeps its shell `Resource Pattern` right panel.
+- Chat keeps its shell `Utility Hub` right panel after opening the default-collapsed sidebar.
+- Observability keeps its shell `Inspector` right panel after opening the default-collapsed sidebar, and closing the inspector removes stale right-sidebar controls.
+- Shared Shell Preview keeps its shell `Resource Pattern` right panel after opening the default-collapsed sidebar.
 - Dashboard and Settings show no right-sidebar controls.
 
 ## Commands

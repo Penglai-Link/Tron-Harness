@@ -13,7 +13,7 @@
 - feature_name: Right Context Sidebar
 - status: approved
 - owner: clouds3n
-- source_request: Add a conditional right sidebar that behaves like the left sidebar, collapses out of layout on desktop, uses a mobile drawer, excludes global configuration pages, and migrates existing local right inspectors into the shared shell contract.
+- source_request: Add a conditional right sidebar that defaults collapsed, behaves like the left sidebar after opening, collapses out of layout on desktop, uses a mobile drawer, excludes global configuration pages, and migrates existing local right inspectors into the shared shell contract.
 - main_agent: Codex lead agent
 - dependency_features: `shell-theme-switcher`, `shared-ui-feedback`
 - dependency_contracts: existing `TronShell`, `ConsoleShellConfig`, `useConsoleShellConfig`, Zustand `appShellStore`, shell i18n resources, existing page modules with local contextual right panels
@@ -22,7 +22,7 @@
 
 Create a shell-level right context sidebar for console pages. A page should provide contextual content through the existing shell configuration contract, while the shell owns placement, collapse behavior, mobile drawer behavior, and accessibility controls.
 
-The sidebar appears only when a console page provides contextual content. Desktop collapse removes the right sidebar from layout and leaves only a right-edge open control. Mobile presents the same content as a right overlay drawer. Settings and global configuration pages do not participate.
+The sidebar appears only when a console page provides contextual content. Desktop starts collapsed with only a right-edge open control, expands on demand, and collapse removes the right sidebar from layout. Mobile presents the same content as a right overlay drawer. Settings and global configuration pages do not participate.
 
 Existing pages that already render a local right-side contextual inspector should migrate that inspector into the shell-level contract. The migration must preserve page behavior and must not add new domain content.
 
@@ -41,15 +41,15 @@ This feature is frontend-only. It changes the shared console shell, shell state 
 - The existing `rightPanel` shell contract is the correct extension point for contextual right-side content.
 - Local right inspectors that explain a selected row, entity, task, skill, variable, app, or knowledge item are contextual content and should move to the shell-level sidebar.
 - Settings pages remain on `SettingsShell` and do not need a right sidebar.
-- Browser-local persistence is sufficient for right sidebar collapsed state.
+- Desktop right sidebar state should reset to collapsed when entering a route with contextual right content; expanded state is not a durable preference.
 - Mobile drawer open state should be local shell state and should reset on route changes.
 - No backend state or API contract is required.
 
 ## In Scope
 
-- Add a persisted right sidebar collapsed state to `appShellStore`.
+- Add right sidebar collapsed state to `appShellStore` without persisting the expanded preference.
 - Update `TronShell` desktop layout so the right sidebar expands at the existing right-panel width and collapses fully out of layout.
-- Render a right-edge open control when a page has right content and the desktop right sidebar is collapsed.
+- Render a right-edge open control when a page has right content and the desktop right sidebar is in its default collapsed state.
 - Render right content as a mobile overlay drawer with backdrop, close button, Escape close, and route-change reset.
 - Add shell i18n labels for opening, collapsing, and closing the right sidebar.
 - Preserve current shell right-panel users: Chat reasoning, Chat execution, Observability, and Shared Shell Preview.
@@ -84,7 +84,7 @@ Bounded context:
 Entities:
 
 - `RightSidebarContent`: page-owned React content passed through shell configuration.
-- `RightSidebarCollapsed`: persisted desktop shell preference.
+- `RightSidebarCollapsed`: desktop shell state that defaults to collapsed on route entry and is not persisted as an expanded preference.
 - `RightSidebarDrawerOpen`: shell-local mobile state.
 - `LocalInspector`: existing page-owned right contextual panel before migration.
 
@@ -93,7 +93,7 @@ Policies:
 - Pages own what appears inside the sidebar.
 - The shell owns where and how the sidebar appears.
 - A page without right content produces no right sidebar controls.
-- Collapsed desktop state applies only while right content exists.
+- Collapsed desktop state applies only while right content exists and resets to collapsed on route entry.
 - Mobile drawer state resets on route change.
 - Local inspector migrations keep domain interaction state in the page and only move presentation placement into the shell.
 
@@ -113,7 +113,7 @@ Current shell right-panel users:
 - `tron-frontend/src/domain/observability/pages/ObservabilityPage.tsx`
 - `tron-frontend/src/domain/shared-shell/pages/SharedShellPreviewPage.tsx`
 
-Local inspector migration candidates:
+Implemented local inspector migrations:
 
 - `tron-frontend/src/domain/knowledge-graph/pages/KnowledgeGraphPage.tsx`
 - `tron-frontend/src/domain/knowledge-graph/pages/KnowledgeGraphDomainPage.tsx`
@@ -131,12 +131,13 @@ Local inspector migration candidates:
 
 ## Repository Findings
 
-- `TronShell` already accepts `rightPanel` and renders it as a fixed 360px right column inside the shell grid.
+- `TronShell` accepts `rightPanel` and owns desktop default-collapsed placement, centered boundary collapse/reopen controls, and mobile drawer placement.
 - `useConsoleShellConfig` lets pages provide dynamic shell content without static route metadata.
-- `appShellStore` already persists left sidebar collapsed state under `tron-app-shell`.
+- `appShellStore` persists left sidebar collapsed state under `tron-app-shell`, while right sidebar expanded state remains route-entry local and defaults collapsed.
 - Mobile left navigation already uses overlay/backdrop behavior that can guide the right drawer implementation.
-- Several pages still render local right-side contextual inspectors in their own grid layouts, so migration needs page-group slices.
-- `VariableDetailsPage` delegates to `VariableManagementPage` with `routeVariant="details"`, but `VariableManagementPage` currently does not consume the prop; migration planning should account for that inconsistency.
+- The implemented page inventory uses shell `rightPanel` for existing shell users, graph/memory inspectors, and representative management/detail inspectors.
+- Settings and global configuration routes remain excluded from the right context sidebar contract.
+- `VariableDetailsPage` delegates to `VariableManagementPage`; both routes share the shell sidebar placement contract.
 - The frontend i18n folder currently exposes only `en-US`, so new shell labels should follow the existing resource shape.
 
 ## Feature Decomposition

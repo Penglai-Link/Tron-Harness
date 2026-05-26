@@ -22,6 +22,10 @@
 
 ## GREEN Evidence
 
+### Evolution note
+
+- Superseded by the 2026-05-26 browser-comment evolution recorded in `reports/test-report.md`: migrated management/detail routes still provide shell right-panel content, but desktop entry now starts default-collapsed; evidence opens the right sidebar before content assertions.
+
 Representative routes and interactions validated using `CMD-FE-RIGHT-SIDEBAR-BROWSER`:
 
 - `/tasks/detail?taskCode=...`
@@ -37,13 +41,13 @@ Representative routes and interactions validated using `CMD-FE-RIGHT-SIDEBAR-BRO
   - Selected `Code Review Guidelines`, opened `Run Test Preview`, got preview confirmation.
   - Closed inspector through right sidebar action, verified inspector removed, selected another prompt (`LLM Router System`) and verified it reappeared.
 - `/variables/details` and `/variables`
-  - Confirmed `Variable Studio` sidebar presence.
-  - Selected a variable row and verified selected key reflected in sidebar heading.
+  - Opened the default-collapsed sidebar and confirmed variable context content remains shell-owned.
+  - Selected a variable row and verified selected key reflected as compact secondary text.
 - `/knowledge-base`
   - Confirmed sidebar heading `Selected KnowledgeBase`, selected `Operations SOP Library`, verified sidebar updated.
 - `/skills`
-  - Confirmed `Skill Detail` heading in shell sidebar.
-  - Clicked first available row when present and verified sidebar heading remains in detail mode.
+  - Opened the default-collapsed sidebar and confirmed migrated context renders in the shell right sidebar.
+  - Clicked first available row when present and verified detail mode remains available.
 - `/settings/skills`
   - Confirmed settings exclusion by asserting no right sidebar controls and no shell controls on settings route (as required by AC-RCS-05 note).
 

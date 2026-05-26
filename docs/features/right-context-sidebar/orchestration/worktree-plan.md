@@ -41,6 +41,7 @@
 | AC-RCS-01, AC-RCS-02, AC-RCS-03 | spawn | frontend/shell-foundation | default hybrid behavior-changing shell slice; shared `Shell.tsx` work should be isolated before page migrations | frontend/shell-foundation | done |
 | AC-RCS-04 | spawn | frontend/graph-memory-migration | default hybrid behavior-changing migration slice after shell contract is stable | frontend/graph-memory-migration | done |
 | AC-RCS-05 | spawn | frontend/management-migration | default hybrid behavior-changing migration slice after shell contract is stable and graph/memory pattern is known | frontend/management-migration | done |
+| AC-RCS-01, AC-RCS-05 | solo | lead-agent | trivial targeted browser-comment evolution in already-integrated shared shell/container files; spawning would add merge overhead without disjoint write scope | base worktree | done |
 
 ## Branch And Path Rules
 

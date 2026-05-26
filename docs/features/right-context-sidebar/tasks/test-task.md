@@ -13,7 +13,7 @@ Verification must produce concrete browser evidence for each AC. Slow browser co
 
 ## Task Rows
 
-- AC-RCS-01 | phase: verify | owner: test | scope: `tron-frontend/tests/right-context-sidebar.spec.ts` desktop collapse, full-width recovery, right-edge reopen, and persistence checks | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: done.
+- AC-RCS-01 | phase: verify | owner: test | scope: `tron-frontend/tests/right-context-sidebar.spec.ts` desktop default-collapsed entry, centered boundary handle, full-width recovery, and right-edge reopen checks | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: done.
 - AC-RCS-02 | phase: verify | owner: test | scope: `tron-frontend/tests/right-context-sidebar.spec.ts` mobile drawer open and close paths | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: done.
 - AC-RCS-03 | phase: verify | owner: test | scope: `tron-frontend/tests/right-context-sidebar.spec.ts`, `tron-frontend/tests/shell-theme-switcher.spec.ts`, `tron-frontend/tests/shared-ui-feedback.spec.ts` rightPanel regression and exclusion checks | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: done.
 - AC-RCS-04 | phase: verify | owner: test | scope: graph and memory routes in `tron-frontend/tests/right-context-sidebar.spec.ts` | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: done.
@@ -26,11 +26,12 @@ Verification must produce concrete browser evidence for each AC. Slow browser co
 - AC-RCS-04 focused browser verification passed in the base worktree after graph and memory migration integration.
 - AC-RCS-05 browser verification is owned by `frontend/management-migration`.
 - AC-RCS-05 focused browser verification passed in the base worktree after management migration integration.
+- Browser-comment evolution verification passed in the base worktree after default-collapsed entry and centered boundary handle updates.
 
 ## Integration Notes
 
 - Test fixtures should reuse existing mock routing style from current frontend smoke specs.
-- Browser evidence must include visible right sidebar or drawer state, collapse/reopen clicks, and route-specific context assertions.
+- Browser evidence must include default-collapsed route entry, explicit open clicks before right content assertions, visible right sidebar or drawer state, collapse/reopen clicks, and route-specific context assertions.
 - AC-RCS-05 verification waits for AC-RCS-04 integration so selectors and assertions follow the first migrated inspector pattern.
 
 ## Open Decisions

@@ -13,11 +13,11 @@ Behavior-changing implementation should run in bounded AC slices after execution
 
 ## Task Rows
 
-- AC-RCS-01 | phase: tdd | owner: frontend | scope: `tron-frontend/src/shared/layout/Shell.tsx`, `tron-frontend/src/store/appShellStore.ts`, `tron-frontend/src/i18n/locales/en-US/shell.ts` desktop right sidebar state and controls | command_ref: CMD-FE-CHECK | status: done.
+- AC-RCS-01 | phase: tdd | owner: frontend | scope: `tron-frontend/src/shared/layout/Shell.tsx`, `tron-frontend/src/store/appShellStore.ts`, `tron-frontend/src/i18n/locales/en-US/shell.ts` desktop right sidebar default-collapsed state, boundary handle placement, and controls | command_ref: CMD-FE-CHECK | status: done.
 - AC-RCS-02 | phase: tdd | owner: frontend | scope: `tron-frontend/src/shared/layout/Shell.tsx` mobile right drawer open, close, backdrop, Escape, and route reset behavior | command_ref: CMD-FE-CHECK | status: done.
 - AC-RCS-03 | phase: tdd | owner: frontend | scope: current shell right-panel routes, no-panel console routes, and settings route exclusion | command_ref: CMD-FE-CHECK | status: done.
 - AC-RCS-04 | phase: tdd | owner: frontend | scope: `tron-frontend/src/domain/knowledge-graph/pages/*`, `tron-frontend/src/domain/memory/pages/*` local inspector migration | command_ref: CMD-FE-CHECK | status: done.
-- AC-RCS-05 | phase: tdd | owner: frontend | scope: task detail, automation detail, app detail, prompts, variables, skills, installed skills, and knowledge base local inspector migration | command_ref: CMD-FE-CHECK | status: done.
+- AC-RCS-05 | phase: tdd | owner: frontend | scope: task detail, automation detail, app detail, prompts, variables, skills, installed skills, and knowledge base local inspector migration into the shell sidebar | command_ref: CMD-FE-CHECK | status: done.
 
 ## Worktree Notes
 
@@ -27,6 +27,7 @@ Behavior-changing implementation should run in bounded AC slices after execution
 - AC-RCS-04 integrated from `frontend/graph-memory-migration` at merge commit `3b76629`.
 - AC-RCS-05 dispatched to `frontend/management-migration` with Codex runtime `019e625d-dc11-79d2-a264-033738da4c71`.
 - AC-RCS-05 integrated from `frontend/management-migration` at merge commit `46ed2a2`.
+- AC-RCS-01 visual polish evolution was applied by the lead in the base worktree after browser-comment feedback because the affected shell files were already integrated and tightly coupled.
 
 ## Integration Notes
 

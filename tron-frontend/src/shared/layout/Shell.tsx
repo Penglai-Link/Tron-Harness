@@ -13,6 +13,8 @@ import {
   Bell,
   Bot,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CircleUserRound,
   PanelLeftClose,
   PanelLeftOpen,
@@ -298,6 +300,12 @@ export function TronShell({
     setMobileSidebarOpen(false);
     setRightDrawerOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    if (hasRightPanel) {
+      setRightSidebarCollapsed(true);
+    }
+  }, [hasRightPanel, pathname, setRightSidebarCollapsed]);
 
   useEffect(() => {
     if (!hasRightPanel) {
@@ -742,21 +750,20 @@ export function TronShell({
           <main className={cn("relative z-0 min-w-0 overflow-x-hidden px-6 py-6", contentClassName)}>{children}</main>
           {showDesktopRightSidebar ? (
             <aside
-              className="relative z-0 hidden border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-5 py-6 lg:block"
+              className="relative z-10 hidden border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-5 py-6 lg:block"
               data-testid="tron-right-sidebar"
             >
-              <div className="mb-4 flex justify-end">
-                <Button
-                  size="icon"
-                  type="button"
-                  variant="ghost"
-                  aria-label={t("shell:aria.collapseRightSidebar")}
-                  data-testid="tron-right-sidebar-collapse"
-                  onClick={() => setRightSidebarCollapsed(true)}
-                >
-                  <PanelRightClose size={17} aria-hidden="true" />
-                </Button>
-              </div>
+              <Button
+                className="absolute -left-[13px] top-1/2 z-20 h-11 w-6 -translate-y-1/2 rounded-full border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-0 text-[var(--color-on-surface-variant)] shadow-[0_10px_24px_rgba(15,23,42,0.10)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
+                size="icon"
+                type="button"
+                variant="ghost"
+                aria-label={t("shell:aria.collapseRightSidebar")}
+                data-testid="tron-right-sidebar-collapse"
+                onClick={() => setRightSidebarCollapsed(true)}
+              >
+                <ChevronRight size={15} strokeWidth={2.4} aria-hidden="true" />
+              </Button>
               {rightPanel}
             </aside>
           ) : null}
@@ -765,15 +772,15 @@ export function TronShell({
 
       {hasRightPanel && rightSidebarCollapsed ? (
         <Button
-          className="fixed right-3 top-1/2 z-30 hidden -translate-y-1/2 rounded-full shadow-[0_12px_30px_rgba(15,23,42,0.14)] lg:inline-flex"
+          className="fixed right-0 top-1/2 z-30 hidden h-11 w-6 -translate-y-1/2 rounded-l-full rounded-r-none border border-r-0 border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-0 text-[var(--color-on-surface-variant)] shadow-[0_10px_24px_rgba(15,23,42,0.10)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] lg:inline-flex"
           size="icon"
           type="button"
-          variant="secondary"
+          variant="ghost"
           aria-label={t("shell:aria.openRightSidebar")}
           data-testid="tron-right-sidebar-reopen"
           onClick={() => setRightSidebarCollapsed(false)}
         >
-          <PanelRightOpen size={17} aria-hidden="true" />
+          <ChevronLeft size={15} strokeWidth={2.4} aria-hidden="true" />
         </Button>
       ) : null}
 

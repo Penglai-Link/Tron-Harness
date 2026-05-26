@@ -35,6 +35,17 @@ interface AppShellState {
 
 const defaultWorkspaceSwitcherSnapshot = getEmptyWorkspaceSwitcher();
 
+function migrateAppShellState(persistedState: unknown) {
+  if (!persistedState || typeof persistedState !== "object") {
+    return persistedState;
+  }
+
+  return {
+    ...persistedState,
+    rightSidebarCollapsed: true,
+  };
+}
+
 export const useAppShellStore = create<AppShellState>()(
   persist(
     (set) => ({
@@ -42,7 +53,7 @@ export const useAppShellStore = create<AppShellState>()(
       openSections: { Core: true },
       selectedPrimarySpaceId: defaultPrimarySpaceId,
       selectedSecondarySpaceId: defaultSecondarySpaceId,
-      rightSidebarCollapsed: false,
+      rightSidebarCollapsed: true,
       sidebarCollapsed: false,
       utilityPanel: null,
       workspaceSwitcherSnapshot: defaultWorkspaceSwitcherSnapshot,
@@ -89,12 +100,13 @@ export const useAppShellStore = create<AppShellState>()(
         })),
     }),
     {
+      version: 3,
       name: "tron-app-shell",
+      migrate: migrateAppShellState,
       partialize: (state) => ({
         openSections: state.openSections,
         selectedPrimarySpaceId: state.selectedPrimarySpaceId,
         selectedSecondarySpaceId: state.selectedSecondarySpaceId,
-        rightSidebarCollapsed: state.rightSidebarCollapsed,
         sidebarCollapsed: state.sidebarCollapsed,
         workspaceSwitcherSnapshot: state.workspaceSwitcherSnapshot,
       }),

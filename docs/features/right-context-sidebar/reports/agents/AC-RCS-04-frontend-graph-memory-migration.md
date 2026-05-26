@@ -25,17 +25,21 @@
 
 ## GREEN Evidence
 
+### Evolution note
+
+- Superseded by the 2026-05-26 browser-comment evolution recorded in `reports/test-report.md`: graph and memory routes still provide shell right-panel content, but desktop entry now starts default-collapsed; evidence opens the right sidebar before asserting `Node Inspector` or memory details.
+
 ### Graph pages
 
-- Visited `/knowledge-graph` (desktop, 1440x900). `tron-right-sidebar` rendered with shell heading `Node Inspector`, showing selected entity `Customer_0192`.
+- Visited `/knowledge-graph` (desktop, 1440x900), opened the default-collapsed right sidebar, and verified `tron-right-sidebar` rendered `Node Inspector` context showing selected entity `Customer_0192`.
 - Selected entity switch (`Order_TXN_55`) updated `tron-right-sidebar` content.
 - Collapsing and reopening the right sidebar preserved selected graph context.
-- Visiting `/knowledge-graph/domain-filtering` confirmed domain-filtering controls remained present and inspector context continued to render in shell.
+- Visiting `/knowledge-graph/domain-filtering`, opening the default-collapsed right sidebar, confirmed domain-filtering controls remained present and inspector context continued to render in shell.
 - `KnowledgeGraphDomainPage` no longer renders a third local inspector column; the AC-RCS-04 test asserted the domain graph container has a single `aside` column and shell-owned `Node Inspector` updates with entity selection (`Customer_0192` -> `Order_TXN_56`).
 
 ### Memory pages
 
-- Visited `/memory` and `/memory/details`. Shell sidebar rendered memory inspector context instead of local right grid inspector.
+- Visited `/memory` and `/memory/details`, opened the default-collapsed right sidebar, and verified shell sidebar rendered memory inspector context instead of local right grid inspector.
 - Default selected fragment (`mem-1`) content was visible on `/memory` in shell.
 - Selecting `System default tone ...` and `Project Alpha ...` rows updated shell context text in-place.
 - Collapsing and reopening the right sidebar preserved the selected fragment context across reopen.
