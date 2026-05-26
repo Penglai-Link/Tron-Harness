@@ -362,9 +362,18 @@ test("AC-RCS-04: graph and memory inspectors render in shell right sidebar and p
   await expect(rightSidebar(page)).toBeVisible();
 
   await page.goto(`${frontendBaseUrl}/knowledge-graph/domain-filtering`);
-  await expect(page.getByRole("heading", { name: "Entities" })).toBeVisible();
+  const domainGraphLayout = page.locator("aside", { has: page.getByRole("heading", { name: "Entities" }) }).locator("xpath=..");
+  await expect(domainGraphLayout.locator("> aside")).toHaveCount(1);
+  await expect(domainGraphLayout.locator("aside").filter({ has: page.getByRole("heading", { name: "Node Inspector" }) })).toHaveCount(0);
+  await expect(rightSidebar(page)).toBeVisible();
+  await expect(rightSidebar(page).getByRole("heading", { name: "Node Inspector" })).toBeVisible();
+  await expect(rightSidebar(page).getByText("Customer_0192")).toBeVisible();
   await expect(page.locator("aside").filter({ hasText: "Domain" }).locator("select")).toHaveCount(1);
   await expect(page.locator("aside").filter({ has: page.getByRole("heading", { name: "Entities" }) }).getByRole("button", { name: /Customer_0192/ })).toBeVisible();
+
+  await page.locator("aside").filter({ has: page.getByRole("heading", { name: "Entities" }) }).getByRole("button", { name: /Order_TXN_56/ }).click();
+  await expect(rightSidebar(page).getByText("Order_TXN_56")).toBeVisible();
+  await expect(rightSidebar(page).getByRole("heading", { name: "Node Inspector" })).toBeVisible();
 
   await page.goto(`${frontendBaseUrl}/memory`);
   await expect(rightSidebar(page).getByRole("button", { name: "Edit Fragment" })).toBeVisible();

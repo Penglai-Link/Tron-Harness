@@ -25,7 +25,7 @@ function Notice({ value }: { value: string }) {
   return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
-function GraphPage({ domainFiltering = false }: { domainFiltering?: boolean }) {
+export function GraphPage({ domainFiltering = false }: { domainFiltering?: boolean }) {
   const [domain, setDomain] = useState("customer-support");
   const [query, setQuery] = useState("");
   const [inspectorOpen, setInspectorOpen] = useState(true);

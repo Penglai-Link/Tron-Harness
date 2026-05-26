@@ -3,10 +3,15 @@
 ## Changed Paths
 
 - `tron-frontend/src/domain/knowledge-graph/pages/KnowledgeGraphPage.tsx`
+- `tron-frontend/src/domain/knowledge-graph/pages/KnowledgeGraphDomainPage.tsx`
 - `tron-frontend/src/domain/memory/pages/MemoryPage.tsx`
 - `tron-frontend/src/domain/memory/pages/MemoryDetailsPage.tsx`
 - `tron-frontend/tests/right-context-sidebar.spec.ts`
 - `docs/features/right-context-sidebar/reports/agents/AC-RCS-04-frontend-graph-memory-migration.md`
+
+## Review note
+
+- Lead review identified a gap: `KnowledgeGraphDomainPage.tsx` was still using a legacy local `GraphInspector` with a 3-column grid. This was fixed by reusing the shell-integrated `GraphPage` and routing `domainFiltering` through the shared shell-bound inspector path.
 
 ## RED Evidence
 
@@ -26,6 +31,7 @@
 - Selected entity switch (`Order_TXN_55`) updated `tron-right-sidebar` content.
 - Collapsing and reopening the right sidebar preserved selected graph context.
 - Visiting `/knowledge-graph/domain-filtering` confirmed domain-filtering controls remained present and inspector context continued to render in shell.
+- `KnowledgeGraphDomainPage` no longer renders a third local inspector column; the AC-RCS-04 test asserted the domain graph container has a single `aside` column and shell-owned `Node Inspector` updates with entity selection (`Customer_0192` -> `Order_TXN_56`).
 
 ### Memory pages
 
