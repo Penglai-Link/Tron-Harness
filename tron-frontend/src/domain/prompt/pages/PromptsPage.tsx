@@ -12,9 +12,11 @@ import { Button } from "@/shared/ui/Button";
 import {
   DataTable,
   Field,
+  InspectorPanel,
   PageHeader,
   SearchField,
   SurfaceCard,
+  useConsoleShellConfig,
   TablePagination,
   TextArea,
   TextInput,
@@ -31,17 +33,16 @@ function Notice({ value }: { value: string }) {
   return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
-function PromptInspector({ prompt, notice, setNotice }: { prompt: PromptRecord; notice: string; setNotice: (value: string) => void }) {
+function PromptInspector({ onClose, prompt, notice, setNotice }: { onClose: () => void; prompt: PromptRecord; notice: string; setNotice: (value: string) => void }) {
   const pt = useLocaleText();
   const [variables, setVariables] = useState(prompt.variables);
   return (
-    <SurfaceCard>
+    <InspectorPanel title="Prompt Details">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-xl font-semibold">{pt("Prompt Details")}</h2>
           <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{prompt.name}</p>
         </div>
-        <Button size="icon" variant="ghost" aria-label={pt("Close prompt details")} onClick={() => setNotice(pt("Prompt detail panel closed"))}><X size={16} aria-hidden="true" /></Button>
+        <Button size="icon" variant="ghost" aria-label={pt("Close prompt details")} onClick={onClose}><X size={16} aria-hidden="true" /></Button>
       </div>
       <div className="mt-5 rounded-lg bg-[var(--color-surface-container-low)] p-4">
         <pre className="whitespace-pre-wrap text-[13px] leading-6">{prompt.body}</pre>
@@ -63,7 +64,7 @@ function PromptInspector({ prompt, notice, setNotice }: { prompt: PromptRecord; 
         <Button onClick={() => setNotice(pt("Preview ran for {{name}}", { name: prompt.name }))}>{pt("Run Test Preview")}</Button>
         <Notice value={notice} />
       </div>
-    </SurfaceCard>
+    </InspectorPanel>
   );
 }
 
@@ -77,6 +78,26 @@ export function PromptsPage() {
   const selected = prompts.find((prompt) => prompt.id === selectedId) ?? prompts[0];
   const filtered = prompts.filter((prompt) => (category === "All" || prompt.category === category) && prompt.name.toLowerCase().includes(query.toLowerCase()));
   const promptPagination = useTablePagination(filtered);
+  const [promptPanelOpen, setPromptPanelOpen] = useState(true);
+
+  useConsoleShellConfig({
+    rightPanel: selected && promptPanelOpen ? (
+      <PromptInspector
+        onClose={() => {
+          setPromptPanelOpen(false);
+          setNotice(pt("Prompt detail panel closed"));
+        }}
+        notice={notice}
+        prompt={selected}
+        setNotice={setNotice}
+      />
+    ) : undefined,
+  });
+
+  function selectPrompt(promptId: string) {
+    setSelectedId(promptId);
+    setPromptPanelOpen(true);
+  }
 
   return (
     <>
@@ -89,7 +110,7 @@ export function PromptsPage() {
           </>
         }
       />
-      <div className="grid min-h-[760px] gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="mt-5">
         <SurfaceCard className="p-0">
           <div className="border-b border-[var(--color-outline-variant)] px-5 pt-4">
             <div className="flex flex-wrap gap-1">
@@ -110,15 +131,14 @@ export function PromptsPage() {
             rowKey={(row) => row.id}
             pagination={<TablePagination itemLabel={pt("prompts")} {...promptPagination.paginationProps} />}
             columns={[
-              { id: "name", header: pt("Name"), render: (row) => <button className="font-medium text-[var(--color-primary)]" type="button" onClick={() => setSelectedId(row.id)}>{row.name}</button> },
+              { id: "name", header: pt("Name"), render: (row) => <button className="font-medium text-[var(--color-primary)]" type="button" onClick={() => selectPrompt(row.id)}>{row.name}</button> },
               { id: "category", header: pt("Category"), render: (row) => <Badge>{pt(row.category)}</Badge> },
               { id: "inheritance", header: pt("Inheritance"), render: (row) => pt(row.inheritance) },
               { id: "updated", header: pt("Last Updated"), render: (row) => row.updated },
-              { id: "actions", header: pt("Actions"), align: "right", render: (row) => <Button size="icon" variant="ghost" aria-label={pt("Select {{name}}", { name: row.name })} onClick={() => setSelectedId(row.id)}><MoreHorizontal size={16} aria-hidden="true" /></Button> },
+              { id: "actions", header: pt("Actions"), align: "right", render: (row) => <Button size="icon" variant="ghost" aria-label={pt("Select {{name}}", { name: row.name })} onClick={() => selectPrompt(row.id)}><MoreHorizontal size={16} aria-hidden="true" /></Button> },
             ]}
           />
         </SurfaceCard>
-        <PromptInspector prompt={selected} notice={notice} setNotice={setNotice} />
       </div>
     </>
   );

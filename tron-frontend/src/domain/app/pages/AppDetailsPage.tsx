@@ -11,8 +11,10 @@ import {
 
 import { Button } from "@/shared/ui/Button";
 import {
+  InspectorPanel,
   PageHeader,
   SurfaceCard,
+  useConsoleShellConfig,
   useToast,
 } from "@/shared";
 
@@ -43,6 +45,31 @@ export function AppDetailsPage() {
   const appCode = searchParams.get("appCode") ?? "";
   const { app, loading, refresh } = useAppDetail(appCode);
   const [updatingLifecycle, setUpdatingLifecycle] = useState(false);
+  const rightPanel = app ? (
+    <InspectorPanel title="App Metadata">
+      <div className="space-y-5">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Metadata</p>
+          <div className="mt-2 space-y-3 text-sm">
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Created</span><span className="font-medium">{formatAppTimestamp(app.createdAt)}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Updated</span><span className="font-medium">{formatAppTimestamp(app.updatedAt)}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Archived At</span><span className="font-medium">{appArchivedLabel(app.archivedAt)}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Identifier</span><span className="font-medium">{app.id}</span></div>
+          </div>
+        </div>
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Local Repository</p>
+          <div className="mt-2 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3 text-sm">
+            <p>{app.localDirectory}</p>
+            <p className="mt-2 text-[var(--color-on-surface-variant)]">{app.repositoryUrl ?? "Not set"}</p>
+            <p className="mt-2 text-[var(--color-on-surface-variant)]">{app.defaultBranch ?? "Not set"}</p>
+          </div>
+        </div>
+      </div>
+    </InspectorPanel>
+  ) : undefined;
+
+  useConsoleShellConfig({ rightPanel });
 
   async function handleLifecycle(action: "archive" | "restore") {
     if (!app) return;
@@ -123,38 +150,28 @@ export function AppDetailsPage() {
           </>
         )}
       />
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <SurfaceCard>
-          <div className="mb-5 flex flex-wrap items-center gap-2">
-            <AppRuntimeRoleBadge runtimeRole={app.runtimeRole} />
-            <AppStatusBadge status={app.status} />
+      <SurfaceCard>
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <AppRuntimeRoleBadge runtimeRole={app.runtimeRole} />
+          <AppStatusBadge status={app.status} />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <AppDetailField label="App Code" value={app.appCode} />
+          <AppDetailField label="Local Directory" value={app.localDirectory} />
+          <AppDetailField label="Repository URL" value={app.repositoryUrl ?? "Not set"} />
+          <AppDetailField label="Default Branch" value={app.defaultBranch ?? "Not set"} />
+        </div>
+        <div className="mt-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Description</p>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--color-on-surface)]">{app.description ?? "No description provided."}</p>
+        </div>
+        <div className="mt-5">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Tags</p>
+          <div className="mt-2">
+            <AppTagList tags={app.tags} />
           </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <AppDetailField label="App Code" value={app.appCode} />
-            <AppDetailField label="Local Directory" value={app.localDirectory} />
-            <AppDetailField label="Repository URL" value={app.repositoryUrl ?? "Not set"} />
-            <AppDetailField label="Default Branch" value={app.defaultBranch ?? "Not set"} />
-          </div>
-          <div className="mt-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Description</p>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--color-on-surface)]">{app.description ?? "No description provided."}</p>
-          </div>
-          <div className="mt-5">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Tags</p>
-            <div className="mt-2">
-              <AppTagList tags={app.tags} />
-            </div>
-          </div>
-        </SurfaceCard>
-        <SurfaceCard className="self-start">
-          <div className="grid gap-4">
-            <AppDetailField label="Created" value={formatAppTimestamp(app.createdAt)} />
-            <AppDetailField label="Updated" value={formatAppTimestamp(app.updatedAt)} />
-            <AppDetailField label="Archived At" value={appArchivedLabel(app.archivedAt)} />
-            <AppDetailField label="Identifier" value={app.id} />
-          </div>
-        </SurfaceCard>
-      </div>
+        </div>
+      </SurfaceCard>
     </>
   );
 }

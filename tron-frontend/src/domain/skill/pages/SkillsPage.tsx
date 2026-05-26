@@ -21,11 +21,13 @@ import { Button } from "@/shared/ui/Button";
 import {
   DataTable,
   DetailField,
+  InspectorPanel,
   MarkdownContent,
   PageHeader,
   SearchField,
   SurfaceCard,
   TablePagination,
+  useConsoleShellConfig,
   useLocaleFormatters,
   useTablePagination,
   useToast,
@@ -353,6 +355,166 @@ export function SkillsPage() {
     }
   }
 
+  const rightPanel = (
+    <InspectorPanel title={pageT("detail.label", "Skill Detail")}>
+      <div>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--color-on-surface)]">
+          {(selectedSkill?.skillName ?? selectedSkillName) || pageT("detail.select", "Select a Skill")}
+        </h2>
+      </div>
+
+      {detailLoading ? (
+        <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
+          {pageT("detail.loading", "Loading skill detail...")}
+        </div>
+      ) : !selectedSkill ? (
+        <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
+          {pageT("detail.empty", "No bound skill is selected.")}
+        </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedSkill.sourceType ? (
+              <Badge tone={getSourceTone(selectedSkill.sourceType)}>
+                {selectedSkill.sourceType}
+              </Badge>
+            ) : null}
+            {selectedSkill.updateStatus ? (
+              <Badge tone={getUpdateTone(selectedSkill.updateStatus)}>
+                {selectedSkill.updateStatus}
+              </Badge>
+            ) : null}
+            {selectedSkill.registryState !== "Present" ? (
+              <Badge tone={getRegistryStateTone(selectedSkill.registryState)}>
+                {selectedSkill.registryState}
+              </Badge>
+            ) : null}
+            <Badge tone={getWorkspaceSourceTone(selectedSkill.sourceKind)}>
+              {selectedSkill.sourceKind}
+            </Badge>
+            <Badge tone={selectedSkill.enabled ? "success" : "neutral"}>
+              {selectedSkill.enabled ? "Enabled" : "Disabled"}
+            </Badge>
+          </div>
+
+          <div className="grid gap-4 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
+            <DetailField label="Source" value={selectedSkill.sourceRef ?? "Unavailable"} />
+            <DetailField label="Registry Path" value={selectedSkill.registryPath ?? "Unavailable"} />
+            <DetailField
+              label="Version"
+              value={selectedSkill.declaredVersion ?? (selectedSkill.registryState === "Deleted" ? "Deleted" : "Unspecified")}
+            />
+            <DetailField
+              label="Registry State"
+              value={selectedSkill.registryState}
+            />
+            <DetailField
+              label="Workspace Source"
+              value={selectedSkill.sourceKind}
+            />
+            <DetailField
+              label="Resolved From"
+              value={selectedSkill.sourceLabel ?? "No workspace binding"}
+            />
+            {selectedSkill.shadowedLabel ? (
+              <DetailField
+                label="Shadowed Ancestor"
+                value={selectedSkill.shadowedLabel}
+              />
+            ) : null}
+            <DetailField
+              label="Last Checked"
+              value={selectedSkill.lastCheckedAt ? formatDateTime(selectedSkill.lastCheckedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notChecked", "Not checked")}
+            />
+            <DetailField
+              label="Last Updated"
+              value={selectedSkill.lastUpdatedAt ? formatDateTime(selectedSkill.lastUpdatedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notChecked", "Not checked")}
+            />
+          </div>
+
+          {selectedSkill.registryState === "Deleted" ? (
+            <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-[var(--color-error-container)] p-4 text-sm text-[var(--color-on-error-container)]">
+              <div className="flex min-w-0 items-start gap-2">
+                <CircleAlert size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-medium">The registry copy for this skill is missing.</p>
+                  <p className="mt-1 text-[var(--color-on-error-container)]/90">
+                    Restore it from Skill Center, then return here and click Refresh to recover this workspace binding.
+                  </p>
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                  onClick={() => navigate("/settings/skills")}
+                >
+                  <Package size={14} aria-hidden="true" />
+                  Skill Center
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {selectedSkill.lastError ? (
+            <div className="flex items-start gap-2 rounded-2xl bg-[var(--color-error-container)] p-4 text-sm text-[var(--color-on-error-container)]">
+              <CircleAlert size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
+              <span>{selectedSkill.lastError}</span>
+            </div>
+          ) : null}
+
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
+              Files
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {selectedSkill.files.map((file) => (
+                <Badge key={file.path} tone={file.isMarkdown ? "accent" : "neutral"}>
+                  {file.path}
+                </Badge>
+              ))}
+              {!selectedSkill.files.length ? (
+                <span className="text-sm text-[var(--color-on-surface-variant)]">
+                  No files discovered.
+                </span>
+              ) : null}
+            </div>
+          </div>
+
+          <div>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
+                SKILL.md Preview
+              </p>
+              <Button
+                size="sm"
+                type="button"
+                variant="ghost"
+                aria-label="Open skill markdown fullscreen"
+                onClick={() => setSkillMarkdownFullscreenOpen(true)}
+              >
+                <Maximize2 size={14} aria-hidden="true" />
+                Fullscreen
+              </Button>
+            </div>
+            <div className="mt-2 max-h-[24rem] overflow-y-auto overscroll-y-contain rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-4 py-3">
+              <MarkdownContent
+                ariaLabel="Skill markdown preview"
+                className="max-w-none pr-1"
+                content={selectedSkill.skillMarkdown}
+              />
+            </div>
+          </div>
+        </>
+      )}
+    </InspectorPanel>
+  );
+
+  useConsoleShellConfig({
+    rightPanel,
+  });
+
   return (
     <>
       <PageHeader
@@ -376,7 +538,7 @@ export function SkillsPage() {
         )}
       />
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="mt-5">
         <SurfaceCard className="p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] p-4">
             <div className="min-w-[16rem] flex-1">
@@ -510,163 +672,6 @@ export function SkillsPage() {
               },
             ]}
           />
-        </SurfaceCard>
-
-        <SurfaceCard className="space-y-5">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">
-              {pageT("detail.label", "Skill Detail")}
-            </p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--color-on-surface)]">
-              {(selectedSkill?.skillName ?? selectedSkillName) || pageT("detail.select", "Select a Skill")}
-            </h2>
-          </div>
-
-          {detailLoading ? (
-            <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
-              {pageT("detail.loading", "Loading skill detail...")}
-            </div>
-          ) : !selectedSkill ? (
-            <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
-              {pageT("detail.empty", "No bound skill is selected.")}
-            </div>
-          ) : (
-            <>
-              <div className="flex flex-wrap items-center gap-2">
-                {selectedSkill.sourceType ? (
-                  <Badge tone={getSourceTone(selectedSkill.sourceType)}>
-                    {selectedSkill.sourceType}
-                  </Badge>
-                ) : null}
-                {selectedSkill.updateStatus ? (
-                  <Badge tone={getUpdateTone(selectedSkill.updateStatus)}>
-                    {selectedSkill.updateStatus}
-                  </Badge>
-                ) : null}
-                {selectedSkill.registryState !== "Present" ? (
-                  <Badge tone={getRegistryStateTone(selectedSkill.registryState)}>
-                    {selectedSkill.registryState}
-                  </Badge>
-                ) : null}
-                <Badge tone={getWorkspaceSourceTone(selectedSkill.sourceKind)}>
-                  {selectedSkill.sourceKind}
-                </Badge>
-                <Badge tone={selectedSkill.enabled ? "success" : "neutral"}>
-                  {selectedSkill.enabled ? "Enabled" : "Disabled"}
-                </Badge>
-              </div>
-
-              <div className="grid gap-4 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
-                <DetailField label="Source" value={selectedSkill.sourceRef ?? "Unavailable"} />
-                <DetailField label="Registry Path" value={selectedSkill.registryPath ?? "Unavailable"} />
-                <DetailField
-                  label="Version"
-                  value={selectedSkill.declaredVersion ?? (selectedSkill.registryState === "Deleted" ? "Deleted" : "Unspecified")}
-                />
-                <DetailField
-                  label="Registry State"
-                  value={selectedSkill.registryState}
-                />
-                <DetailField
-                  label="Workspace Source"
-                  value={selectedSkill.sourceKind}
-                />
-                <DetailField
-                  label="Resolved From"
-                  value={selectedSkill.sourceLabel ?? "No workspace binding"}
-                />
-                {selectedSkill.shadowedLabel ? (
-                  <DetailField
-                    label="Shadowed Ancestor"
-                    value={selectedSkill.shadowedLabel}
-                  />
-                ) : null}
-                <DetailField
-                  label="Last Checked"
-                  value={selectedSkill.lastCheckedAt ? formatDateTime(selectedSkill.lastCheckedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notChecked", "Not checked")}
-                />
-                <DetailField
-                  label="Last Updated"
-                  value={selectedSkill.lastUpdatedAt ? formatDateTime(selectedSkill.lastUpdatedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notChecked", "Not checked")}
-                />
-              </div>
-
-              {selectedSkill.registryState === "Deleted" ? (
-                <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-[var(--color-error-container)] p-4 text-sm text-[var(--color-on-error-container)]">
-                  <div className="flex min-w-0 items-start gap-2">
-                    <CircleAlert size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
-                    <div>
-                      <p className="font-medium">The registry copy for this skill is missing.</p>
-                      <p className="mt-1 text-[var(--color-on-error-container)]/90">
-                        Restore it from Skill Center, then return here and click Refresh to recover this workspace binding.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Button
-                      size="sm"
-                      type="button"
-                      variant="secondary"
-                      onClick={() => navigate("/settings/skills")}
-                    >
-                      <Package size={14} aria-hidden="true" />
-                      Skill Center
-                    </Button>
-                  </div>
-                </div>
-              ) : null}
-
-              {selectedSkill.lastError ? (
-                <div className="flex items-start gap-2 rounded-2xl bg-[var(--color-error-container)] p-4 text-sm text-[var(--color-on-error-container)]">
-                  <CircleAlert size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
-                  <span>{selectedSkill.lastError}</span>
-                </div>
-              ) : null}
-
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                  Files
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {selectedSkill.files.map((file) => (
-                    <Badge key={file.path} tone={file.isMarkdown ? "accent" : "neutral"}>
-                      {file.path}
-                    </Badge>
-                  ))}
-                  {!selectedSkill.files.length ? (
-                    <span className="text-sm text-[var(--color-on-surface-variant)]">
-                      No files discovered.
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-
-              <div>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                    SKILL.md Preview
-                  </p>
-                  <Button
-                    size="sm"
-                    type="button"
-                    variant="ghost"
-                    aria-label="Open skill markdown fullscreen"
-                    onClick={() => setSkillMarkdownFullscreenOpen(true)}
-                  >
-                    <Maximize2 size={14} aria-hidden="true" />
-                    Fullscreen
-                  </Button>
-                </div>
-                <div className="mt-2 max-h-[24rem] overflow-y-auto overscroll-y-contain rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-4 py-3">
-                  <MarkdownContent
-                    ariaLabel="Skill markdown preview"
-                    className="max-w-none pr-1"
-                    content={selectedSkill.skillMarkdown}
-                  />
-                </div>
-              </div>
-            </>
-          )}
         </SurfaceCard>
       </div>
       {skillMarkdownFullscreenOpen && selectedSkill ? (

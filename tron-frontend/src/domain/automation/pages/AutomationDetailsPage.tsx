@@ -25,6 +25,7 @@ import {
   DataTable,
   DetailField,
   Field,
+  InspectorPanel,
   MarkdownContent,
   PageHeader,
   SurfaceCard,
@@ -32,6 +33,7 @@ import {
   TextArea,
   TextInput,
   useToast,
+  useConsoleShellConfig,
 } from "@/shared";
 
 import {
@@ -57,9 +59,17 @@ import {
 } from "@/domain/automation/mock/data";
 import type {
   AutomationExecutionListItem,
+  AutomationDetailData,
   AutomationOperationalStatus,
 } from "@/domain/automation/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+
+interface AutomationSubtask {
+  progress: number;
+  status: string;
+  taskCode: string;
+  title: string;
+}
 
 function formatTimestamp(value?: string | null) {
   if (!value) return "Not available";
@@ -75,6 +85,43 @@ function ReadValue({ children }: { children: ReactNode }) {
       {children || <span className="text-[var(--color-on-surface-variant)]">None</span>}
     </div>
   );
+}
+
+function ProgressBar({ value }: { value: number }) {
+  return (
+    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
+      <div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
+    </div>
+  );
+}
+
+function resolveSubtasks(automation: AutomationDetailData & { subtasks?: unknown }): AutomationSubtask[] {
+  if (!Array.isArray(automation.subtasks)) {
+    return [];
+  }
+
+  return automation.subtasks
+    .filter((entry) => {
+      return Boolean(
+        typeof entry === "object"
+        && entry !== null
+        && "taskCode" in entry
+        && "title" in entry
+      );
+    })
+    .map((entry) => {
+      const candidate = entry as Record<string, unknown>;
+      return {
+        progress: Number(candidate.progress ?? 0),
+        status: String(candidate.status ?? ""),
+        taskCode: String(candidate.taskCode ?? ""),
+        title: String(candidate.title ?? ""),
+      };
+    });
+}
+
+function statusLabel(status: string) {
+  return status || "Unknown";
 }
 
 function executionPageBounds(page: number, pageSize: number, total: number, visible: number) {
@@ -105,6 +152,7 @@ export function AutomationDetailsPage() {
     size: 15,
     total: 0,
   };
+  const executionPageRecords = Array.isArray(executionPageState.records) ? executionPageState.records : [];
   const toast = useToast();
   const dataSource = getServiceDataSource("automation");
   const [name, setName] = useState(automation.name);
@@ -160,9 +208,59 @@ export function AutomationDetailsPage() {
     executionPageState.current,
     executionPageState.size,
     executionPageState.total,
-    executionPageState.records.length,
+    executionPageRecords.length,
   );
+  const subtasks = resolveSubtasks(automation);
   const executionInitialLoading = executionsLoading && executionPageState.total === 0;
+  const rightPanel = (
+    <InspectorPanel title="Automation Details">
+      <div className="space-y-5">
+        <div className="space-y-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Latest execution rollup</p>
+          <DetailField
+            label="Last result"
+            value={automation.lastExecutionStatus ? <Badge tone={getAutomationExecutionStatusTone(automation.lastExecutionStatus)}>{automation.lastExecutionStatus}</Badge> : "Never executed"}
+          />
+          <DetailField label="Summary" value={<ReadValue>{automation.lastExecutionSummary}</ReadValue>} />
+          <DetailField label="Execution code" value={<ReadValue>{automation.lastExecutionCode}</ReadValue>} />
+          <DetailField label="Last started" value={formatTimestamp(automation.lastStartedAt)} />
+          <DetailField label="Last finished" value={formatTimestamp(automation.lastFinishedAt)} />
+          <DetailField label="Next run" value={formatTimestamp(automation.nextRunAt)} />
+        </div>
+        <div className="space-y-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Metadata</p>
+          <DetailField label="Automation code" value={<ReadValue>{automation.automationCode}</ReadValue>} />
+          <DetailField label="Timezone" value={<ReadValue>{automation.timezone}</ReadValue>} />
+          <DetailField label="Created" value={formatTimestamp(automation.createdAt)} />
+          <DetailField label="Updated" value={formatTimestamp(automation.updatedAt)} />
+          <DetailField label="Archived at" value={formatTimestamp(automation.archivedAt)} />
+          <DetailField label="Previous status" value={<ReadValue>{automation.previousStatus}</ReadValue>} />
+        </div>
+        {subtasks.length ? (
+          <div className="space-y-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Subtasks</p>
+            <div className="space-y-2">
+              {subtasks.map((item) => (
+                <div className="rounded-lg border border-[var(--color-outline-variant)] p-3" key={item.taskCode}>
+                  <div className="text-xs font-mono text-[var(--color-on-surface-variant)]">{item.taskCode}</div>
+                  <div className="mt-1 text-sm font-medium">{item.title}</div>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <span className="text-xs text-[var(--color-on-surface-variant)]">{statusLabel(item.status)}</span>
+                    <span className="text-xs text-[var(--color-on-surface-variant)]">{item.progress}%</span>
+                  </div>
+                  <div className="mt-2"><ProgressBar value={item.progress} /></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--color-on-surface-variant)]">No active subtasks.</p>
+        )}
+      </div>
+    </InspectorPanel>
+  );
+
+  useConsoleShellConfig({ rightPanel });
 
   function resetDraft() {
     setName(automation.name);
@@ -353,179 +451,154 @@ export function AutomationDetailsPage() {
           </>
         )}
       />
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-5">
-          <SurfaceCard>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-semibold text-[var(--color-on-surface)]">Core definition</h2>
-              </div>
+      <div className="space-y-5">
+        <SurfaceCard>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--color-on-surface)]">Core definition</h2>
             </div>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Field label="Automation name">
-                <TextInput aria-label="Automation name" disabled={!editing || archived} value={name} onChange={(event) => setName(event.target.value)} />
-              </Field>
-              <Field label="Workspace">
-                <TextInput aria-label="Workspace code" disabled value={automation.workspaceCode} />
-              </Field>
-              <Field label="Cron expression">
-                <TextInput aria-label="Cron expression" className="font-mono" disabled={!editing || archived} value={cronExpression} onChange={(event) => setCronExpression(event.target.value)} />
-              </Field>
-              <Field label="Scheduler expression">
-                <TextInput aria-label="Scheduler expression" className="font-mono" disabled value={automation.schedulerExpression} />
-              </Field>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Field label="Automation name">
+              <TextInput aria-label="Automation name" disabled={!editing || archived} value={name} onChange={(event) => setName(event.target.value)} />
+            </Field>
+            <Field label="Workspace">
+              <TextInput aria-label="Workspace code" disabled value={automation.workspaceCode} />
+            </Field>
+            <Field label="Cron expression">
+              <TextInput aria-label="Cron expression" className="font-mono" disabled={!editing || archived} value={cronExpression} onChange={(event) => setCronExpression(event.target.value)} />
+            </Field>
+            <Field label="Scheduler expression">
+              <TextInput aria-label="Scheduler expression" className="font-mono" disabled value={automation.schedulerExpression} />
+            </Field>
+          </div>
+          <div className="mt-4">
+            <Field label="Description">
+              <TextArea
+                aria-label="Automation description"
+                className="min-h-24"
+                disabled={!editing || archived}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+              />
+            </Field>
+          </div>
+          <div className="mt-5 grid gap-1.5 border-t border-[var(--color-outline-variant)] pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Prompt body</span>
+              <Button size="sm" type="button" variant="ghost" onClick={() => setPromptFullscreenOpen(true)}>
+                <Maximize2 size={15} aria-hidden="true" />
+                Fullscreen
+              </Button>
             </div>
-            <div className="mt-4">
-              <Field label="Description">
-                <TextArea
-                  aria-label="Automation description"
-                  className="min-h-24"
-                  disabled={!editing || archived}
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                />
-              </Field>
-            </div>
-            <div className="mt-5 grid gap-1.5 border-t border-[var(--color-outline-variant)] pt-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Prompt body</span>
-                <Button size="sm" type="button" variant="ghost" onClick={() => setPromptFullscreenOpen(true)}>
-                  <Maximize2 size={15} aria-hidden="true" />
-                  Fullscreen
-                </Button>
-              </div>
-              {editing ? (
-                <TextArea
-                  aria-label="Automation prompt"
-                  className="min-h-80 w-full"
-                  disabled={archived}
-                  value={prompt}
-                  onChange={(event) => setPrompt(event.target.value)}
-                />
-              ) : (
-                <MarkdownContent
-                  ariaLabel="Automation prompt preview"
-                  className="max-h-80 overflow-y-auto pr-2"
-                  content={automation.prompt}
-                />
-              )}
-            </div>
-          </SurfaceCard>
-          <SurfaceCard>
-            <div className="mb-4">
-              <div>
-                <h2 className="text-lg font-semibold text-[var(--color-on-surface)]">Execution instances</h2>
-              </div>
-            </div>
-            {executionInitialLoading ? (
-              <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)]">
-                <div className="border-b border-[var(--color-outline-variant)] px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                  Loading execution history...
-                </div>
-                <div className="flex min-h-48 items-center justify-center px-5 py-8">
-                  <div className="h-1.5 w-32 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
-                    <div className="h-full w-1/2 animate-pulse rounded-full bg-[var(--color-primary)]" />
-                  </div>
-                </div>
-              </div>
+            {editing ? (
+              <TextArea
+                aria-label="Automation prompt"
+                className="min-h-80 w-full"
+                disabled={archived}
+                value={prompt}
+                onChange={(event) => setPrompt(event.target.value)}
+              />
             ) : (
+              <MarkdownContent
+                ariaLabel="Automation prompt preview"
+                className="max-h-80 overflow-y-auto pr-2"
+                content={automation.prompt}
+              />
+            )}
+          </div>
+        </SurfaceCard>
+        <SurfaceCard>
+          <div className="mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-[var(--color-on-surface)]">Execution instances</h2>
+            </div>
+          </div>
+          {executionInitialLoading ? (
+            <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)]">
+              <div className="border-b border-[var(--color-outline-variant)] px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
+                Loading execution history...
+              </div>
+              <div className="flex min-h-48 items-center justify-center px-5 py-8">
+                <div className="h-1.5 w-32 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
+                  <div className="h-full w-1/2 animate-pulse rounded-full bg-[var(--color-primary)]" />
+                </div>
+              </div>
+            </div>
+          ) : (
               <DataTable<AutomationExecutionListItem>
                 variant="embedded"
                 emptyState="No execution history has been recorded yet."
                 rowKey={(row) => row.executionCode}
-                rows={executionPageState.records}
-                pagination={(
-                  <TablePagination
-                    endItem={executionBounds.end}
-                    itemLabel="executions"
-                    page={executionPageState.current}
-                    pageCount={executionPageCount}
-                    pageSize={executionPageState.size}
-                    startItem={executionBounds.start}
-                    totalItems={executionPageState.total}
-                    onPageChange={(page) => setExecutionCurrent(Math.min(executionPageCount, Math.max(1, page)))}
-                    onPageSizeChange={(pageSize) => {
-                      setExecutionCurrent(1);
-                      setExecutionSize(pageSize);
-                    }}
-                  />
-                )}
-                columns={[
-                  {
-                    header: "Execution",
-                    id: "execution",
-                    render: (row) => (
-                      <div className="space-y-1">
-                        <p className="font-mono text-[13px] text-[var(--color-on-surface)]">{row.executionCode}</p>
-                        <p className="text-xs text-[var(--color-on-surface-variant)]">{formatTimestamp(row.createdAt)}</p>
-                      </div>
-                    ),
-                  },
-                  {
-                    header: "Trigger",
-                    id: "trigger",
-                    render: (row) => (
-                      <Badge tone={row.triggerSource === "Manual" ? "accent" : "neutral"}>
-                        {row.triggerSource}
-                      </Badge>
-                    ),
-                  },
-                  {
-                    header: "Status",
-                    id: "status",
-                    render: (row) => (
-                      <Badge tone={getAutomationExecutionStatusTone(row.status)}>
-                        {row.status}
-                      </Badge>
-                    ),
-                  },
-                  {
-                    header: "Started",
-                    id: "started",
-                    render: (row) => formatTimestamp(row.startedAt),
-                  },
-                  {
-                    header: "Finished",
-                    id: "finished",
-                    render: (row) => formatTimestamp(row.finishedAt),
-                  },
-                  {
-                    header: "Summary",
-                    id: "summary",
-                    render: (row) => (
-                      <span className="max-w-[28rem] whitespace-pre-wrap text-sm text-[var(--color-on-surface-variant)]">
-                        {row.summary ?? "No summary"}
-                      </span>
-                    ),
-                  },
-                ]}
-              />
-            )}
-          </SurfaceCard>
-        </div>
-        <div className="space-y-5">
-          <SurfaceCard className="space-y-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Latest execution rollup</p>
-            <DetailField
-              label="Last result"
-              value={automation.lastExecutionStatus ? <Badge tone={getAutomationExecutionStatusTone(automation.lastExecutionStatus)}>{automation.lastExecutionStatus}</Badge> : "Never executed"}
+                rows={executionPageRecords}
+              pagination={(
+                <TablePagination
+                  endItem={executionBounds.end}
+                  itemLabel="executions"
+                  page={executionPageState.current}
+                  pageCount={executionPageCount}
+                  pageSize={executionPageState.size}
+                  startItem={executionBounds.start}
+                  totalItems={executionPageState.total}
+                  onPageChange={(page) => setExecutionCurrent(Math.min(executionPageCount, Math.max(1, page)))}
+                  onPageSizeChange={(pageSize) => {
+                    setExecutionCurrent(1);
+                    setExecutionSize(pageSize);
+                  }}
+                />
+              )}
+              columns={[
+                {
+                  header: "Execution",
+                  id: "execution",
+                  render: (row) => (
+                    <div className="space-y-1">
+                      <p className="font-mono text-[13px] text-[var(--color-on-surface)]">{row.executionCode}</p>
+                      <p className="text-xs text-[var(--color-on-surface-variant)]">{formatTimestamp(row.createdAt)}</p>
+                    </div>
+                  ),
+                },
+                {
+                  header: "Trigger",
+                  id: "trigger",
+                  render: (row) => (
+                    <Badge tone={row.triggerSource === "Manual" ? "accent" : "neutral"}>
+                      {row.triggerSource}
+                    </Badge>
+                  ),
+                },
+                {
+                  header: "Status",
+                  id: "status",
+                  render: (row) => (
+                    <Badge tone={getAutomationExecutionStatusTone(row.status)}>
+                      {row.status}
+                    </Badge>
+                  ),
+                },
+                {
+                  header: "Started",
+                  id: "started",
+                  render: (row) => formatTimestamp(row.startedAt),
+                },
+                {
+                  header: "Finished",
+                  id: "finished",
+                  render: (row) => formatTimestamp(row.finishedAt),
+                },
+                {
+                  header: "Summary",
+                  id: "summary",
+                  render: (row) => (
+                    <span className="max-w-[28rem] whitespace-pre-wrap text-sm text-[var(--color-on-surface-variant)]">
+                      {row.summary ?? "No summary"}
+                    </span>
+                  ),
+                },
+              ]}
             />
-            <DetailField label="Summary" value={<ReadValue>{automation.lastExecutionSummary}</ReadValue>} />
-            <DetailField label="Execution code" value={<ReadValue>{automation.lastExecutionCode}</ReadValue>} />
-            <DetailField label="Last started" value={formatTimestamp(automation.lastStartedAt)} />
-            <DetailField label="Last finished" value={formatTimestamp(automation.lastFinishedAt)} />
-            <DetailField label="Next run" value={formatTimestamp(automation.nextRunAt)} />
-          </SurfaceCard>
-          <SurfaceCard className="space-y-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Metadata</p>
-            <DetailField label="Automation code" value={<ReadValue>{automation.automationCode}</ReadValue>} />
-            <DetailField label="Timezone" value={<ReadValue>{automation.timezone}</ReadValue>} />
-            <DetailField label="Created" value={formatTimestamp(automation.createdAt)} />
-            <DetailField label="Updated" value={formatTimestamp(automation.updatedAt)} />
-            <DetailField label="Archived at" value={formatTimestamp(automation.archivedAt)} />
-            <DetailField label="Previous status" value={<ReadValue>{automation.previousStatus}</ReadValue>} />
-          </SurfaceCard>
-        </div>
+          )}
+        </SurfaceCard>
       </div>
       {promptFullscreenOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
