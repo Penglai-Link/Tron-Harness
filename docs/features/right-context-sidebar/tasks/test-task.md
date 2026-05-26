@@ -16,12 +16,13 @@ Verification must produce concrete browser evidence for each AC. Slow browser co
 - AC-RCS-01 | phase: verify | owner: test | scope: `tron-frontend/tests/right-context-sidebar.spec.ts` desktop collapse, full-width recovery, right-edge reopen, and persistence checks | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: done.
 - AC-RCS-02 | phase: verify | owner: test | scope: `tron-frontend/tests/right-context-sidebar.spec.ts` mobile drawer open and close paths | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: done.
 - AC-RCS-03 | phase: verify | owner: test | scope: `tron-frontend/tests/right-context-sidebar.spec.ts`, `tron-frontend/tests/shell-theme-switcher.spec.ts`, `tron-frontend/tests/shared-ui-feedback.spec.ts` rightPanel regression and exclusion checks | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: done.
-- AC-RCS-04 | phase: verify | owner: test | scope: graph and memory routes in `tron-frontend/tests/right-context-sidebar.spec.ts` | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: ready.
+- AC-RCS-04 | phase: verify | owner: test | scope: graph and memory routes in `tron-frontend/tests/right-context-sidebar.spec.ts` | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: in_progress.
 - AC-RCS-05 | phase: verify | owner: test | scope: migrated detail and management routes in `tron-frontend/tests/right-context-sidebar.spec.ts` | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: ready.
 
 ## Worktree Notes
 
 - AC-RCS-01 through AC-RCS-03 browser verification passed in the base worktree after shell foundation integration.
+- AC-RCS-04 browser verification is owned by `frontend/graph-memory-migration`.
 
 ## Integration Notes
 
