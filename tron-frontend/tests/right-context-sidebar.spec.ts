@@ -392,3 +392,91 @@ test("AC-RCS-04: graph and memory inspectors render in shell right sidebar and p
   await page.getByRole("button", { name: /Project Alpha requires strict adherence to security protocols./ }).click();
   await expect(rightSidebar(page).getByText("Project Alpha requires strict adherence to security protocols outlined in doc-4A.")).toBeVisible();
 });
+
+test("AC-RCS-05: management inspectors render in shell right sidebar and preserve page actions", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await routeAuthApi(page);
+
+  await signIn(page, "/tasks/detail?taskCode=TSK-SEED-FEATURE");
+  await expect(rightSidebar(page).locator("h2", { hasText: "Task Metadata" }).first()).toBeVisible();
+  await expect(page.locator("p.font-mono", { hasText: "TSK-SEED-FEATURE" }).first()).toBeVisible();
+  await page.goto(`${frontendBaseUrl}/tasks/detail?taskCode=TSK-SEED-BUG`);
+  await expect(page).toHaveURL(/taskCode=TSK-SEED-BUG$/);
+  await expect(rightSidebar(page).locator("h2", { hasText: "Task Metadata" }).first()).toBeVisible();
+  await expect(page.locator("p.font-mono", { hasText: "TSK-SEED-BUG" }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Edit Details" }).click();
+  await expect(page.getByRole("textbox", { name: "Task detail title" })).toHaveValue("Fix task board workflow regression");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(rightSidebar(page).locator("h2", { hasText: "Task Metadata" }).first()).toBeVisible();
+  await page.getByTestId("tron-right-sidebar-collapse").click();
+  await expect(rightSidebar(page)).toHaveCount(0);
+  await expect(rightReopenControl(page)).toBeVisible();
+  await rightReopenControl(page).click();
+  await expect(rightSidebar(page).locator("h2", { hasText: "Task Metadata" }).first()).toBeVisible();
+  await expect(page.locator("p.font-mono", { hasText: "TSK-SEED-BUG" }).first()).toBeVisible();
+
+  await page.goto(`${frontendBaseUrl}/automations/detail?automationCode=AUT-734600000000000001`);
+  await expect(rightSidebar(page).locator("h2", { hasText: "Automation Details" })).toBeVisible();
+  await expect(rightSidebar(page).locator("p", { hasText: "Automation code" })).toBeVisible();
+  await page.getByRole("heading", { name: "Execution instances" }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole("columnheader", { name: "Execution" })).toBeVisible();
+
+  await page.goto(`${frontendBaseUrl}/apps/detail?appCode=APP-TRON-CONSOLE`);
+  await expect(rightSidebar(page).getByRole("heading", { name: "App Metadata" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tron Console" })).toBeVisible();
+  await page.getByTestId("tron-right-sidebar-collapse").click();
+  await rightReopenControl(page).click();
+  await expect(rightSidebar(page).getByText("Identifier")).toBeVisible();
+
+  await page.goto(`${frontendBaseUrl}/prompts`);
+  await expect(rightSidebar(page).getByRole("heading", { name: "Prompt Details" })).toBeVisible();
+  await expect(rightSidebar(page).getByRole("button", { name: "Run Test Preview" })).toBeVisible();
+  await page.getByRole("row", { hasText: "Code Review Guidelines" })
+    .getByRole("button", { name: "Code Review Guidelines", exact: true })
+    .click();
+  await expect(rightSidebar(page).getByText("Code Review Guidelines")).toBeVisible();
+  await page.getByRole("button", { name: "Run Test Preview" }).click();
+  await expect(page.getByText("Preview ran for Code Review Guidelines")).toBeVisible();
+  await page.getByRole("button", { name: /Close prompt details/ }).click();
+  await expect(rightSidebar(page).getByRole("heading", { name: "Prompt Details" })).toHaveCount(0);
+  await page.getByRole("row", { hasText: "LLM Router System" })
+    .getByRole("button", { name: "LLM Router System", exact: true })
+    .click();
+  await expect(rightSidebar(page).getByText("LLM Router System")).toBeVisible();
+
+  await page.getByTestId("tron-right-sidebar-collapse").click();
+  await rightReopenControl(page).click();
+  await expect(rightSidebar(page).getByText("LLM Router System")).toBeVisible();
+
+  await page.goto(`${frontendBaseUrl}/variables/details`);
+  await expect(rightSidebar(page).getByRole("heading", { name: "Variable Studio" })).toBeVisible();
+  await page.locator("tbody tr").first().click();
+  await expect(rightSidebar(page).getByRole("heading", { name: "Variable Studio" })).toBeVisible();
+
+  await page.goto(`${frontendBaseUrl}/variables`);
+  await expect(rightSidebar(page).getByRole("heading", { name: "Variable Studio" })).toBeVisible();
+  const firstVariableRow = page.locator("tbody tr").first();
+  const variableKey = (await firstVariableRow.locator("td").first().textContent())?.trim();
+  await firstVariableRow.click();
+  if (variableKey) {
+    await expect(rightSidebar(page).locator("h2", { hasText: variableKey })).toBeVisible();
+  }
+
+  await page.goto(`${frontendBaseUrl}/knowledge-base`);
+  await expect(rightSidebar(page).getByRole("heading", { name: "Selected KnowledgeBase" })).toBeVisible();
+  await expect(rightSidebar(page).getByText("Tron Product Manuals")).toBeVisible();
+  await page.locator("tbody tr").filter({ hasText: "Operations SOP Library" }).click();
+  await expect(rightSidebar(page).getByText("Operations SOP Library")).toBeVisible();
+
+  await page.goto(`${frontendBaseUrl}/skills`);
+  await expect(rightSidebar(page).getByRole("heading", { name: "Skill Detail" })).toBeVisible();
+  const skillRows = page.locator("tbody tr");
+  const skillRowsCount = await skillRows.count();
+  if (skillRowsCount > 0) {
+    await skillRows.first().click();
+    await expect(rightSidebar(page).getByRole("heading", { name: "Skill Detail" })).toBeVisible();
+  }
+
+  await page.goto(`${frontendBaseUrl}/settings/skills`);
+  await expectNoRightSidebarControls(page);
+});

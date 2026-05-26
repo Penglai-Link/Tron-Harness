@@ -11,20 +11,22 @@ import {
 import {
   Edit3,
   Maximize2,
+  X,
   Plus,
   Save,
-  X,
 } from "lucide-react";
 
 import { Button } from "@/shared/ui/Button";
 import {
   Field,
+  InspectorPanel,
   MarkdownContent,
   PageHeader,
   SelectInput,
   SurfaceCard,
   TextArea,
   TextInput,
+  useConsoleShellConfig,
   useToast,
 } from "@/shared";
 
@@ -183,6 +185,62 @@ export function TaskDetailsPage() {
     || taskType !== task.taskType
     || sourceType !== task.sourceType
     || sourceUrl !== (task.sourceUrl ?? "");
+
+  const rightPanel = (
+    <InspectorPanel title="Task Metadata">
+      <SurfaceCard className="space-y-5 p-2">
+        <div>
+          <h3 className="mb-3 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Task Metadata</h3>
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Workspace</span><span className="font-medium">{task.workspaceCode}</span></div>
+            <div className="flex justify-between gap-3">
+              <span className="text-[var(--color-on-surface-variant)]">Parent</span>
+              {task.parent ? (
+                <Link className="text-right font-medium text-[var(--color-primary)] hover:underline" to={taskDetailHref(task.parent.taskCode)}>
+                  {task.parent.taskCode}
+                </Link>
+              ) : (
+                <span className="font-medium">None</span>
+              )}
+            </div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Created</span><span className="font-medium">{task.createdAt}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Updated</span><span className="font-medium">{task.updatedAt}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Archived At</span><span className="font-medium">{task.archivedAt ?? "Not archived"}</span></div>
+          </div>
+        </div>
+
+        <div>
+          <h3 className="mb-3 border-b border-[var(--color-outline-variant)] pb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Subtasks</h3>
+          <div className="space-y-2">
+            {task.subtasks.map((item) => (
+              <Link className="block rounded-lg border border-[var(--color-outline-variant)] p-3 hover:border-[var(--color-primary)]" key={item.taskCode} to={taskDetailHref(item.taskCode)}>
+                <div className="font-mono text-[11px] text-[var(--color-on-surface-variant)]">{item.taskCode}</div>
+                <div className="mt-1 text-sm font-medium">{item.title}</div>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <span className="text-xs text-[var(--color-on-surface-variant)]">{statusLabel(item.status)}</span>
+                  <span className="text-xs text-[var(--color-on-surface-variant)]">{item.progress}%</span>
+                </div>
+                <div className="mt-2"><ProgressBar value={item.progress} /></div>
+              </Link>
+            ))}
+            {!task.subtasks.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">No active subtasks.</p> : null}
+          </div>
+            {!archived ? (
+              <>
+                <div className="mt-4">
+                  <Field label="New Subtask Title">
+                    <TextInput aria-label="New subtask title" value={childTitle} onChange={(event) => setChildTitle(event.target.value)} />
+                  </Field>
+                </div>
+                <Button className="mt-3 w-full" disabled={!childTitle.trim()} variant="secondary" onClick={addSubtask}><Plus size={14} aria-hidden="true" />Add Subtask</Button>
+              </>
+            ) : null}
+        </div>
+      </SurfaceCard>
+    </InspectorPanel>
+  );
+
+  useConsoleShellConfig({ rightPanel });
   const breadcrumbs = [
     { label: "Tasks", href: "/tasks" },
     ...(task.parent ? [{ label: task.parent.taskCode, href: taskDetailHref(task.parent.taskCode) }] : []),
@@ -425,8 +483,7 @@ export function TaskDetailsPage() {
           </>
         }
       />
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-5">
+      <div className="space-y-5">
           <SurfaceCard>
             <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -588,55 +645,6 @@ export function TaskDetailsPage() {
               )}
             </div>
           </SurfaceCard>
-        </div>
-        <aside className="space-y-5">
-          <SurfaceCard>
-            <h3 className="mb-3 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Task Metadata</h3>
-            <div className="space-y-3 text-sm">
-              <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Workspace</span><span className="font-medium">{task.workspaceCode}</span></div>
-              <div className="flex justify-between gap-3">
-                <span className="text-[var(--color-on-surface-variant)]">Parent</span>
-                {task.parent ? (
-                  <Link className="text-right font-medium text-[var(--color-primary)] hover:underline" to={taskDetailHref(task.parent.taskCode)}>
-                    {task.parent.taskCode}
-                  </Link>
-                ) : (
-                  <span className="font-medium">None</span>
-                )}
-              </div>
-              <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Created</span><span className="font-medium">{task.createdAt}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Updated</span><span className="font-medium">{task.updatedAt}</span></div>
-              <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Archived At</span><span className="font-medium">{task.archivedAt ?? "Not archived"}</span></div>
-            </div>
-          </SurfaceCard>
-          <SurfaceCard>
-            <h3 className="mb-3 border-b border-[var(--color-outline-variant)] pb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Subtasks</h3>
-            <div className="space-y-2">
-              {task.subtasks.map((item) => (
-                <Link className="block rounded-lg border border-[var(--color-outline-variant)] p-3 hover:border-[var(--color-primary)]" key={item.taskCode} to={taskDetailHref(item.taskCode)}>
-                  <div className="font-mono text-[11px] text-[var(--color-on-surface-variant)]">{item.taskCode}</div>
-                  <div className="mt-1 text-sm font-medium">{item.title}</div>
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <span className="text-xs text-[var(--color-on-surface-variant)]">{statusLabel(item.status)}</span>
-                    <span className="text-xs text-[var(--color-on-surface-variant)]">{item.progress}%</span>
-                  </div>
-                  <div className="mt-2"><ProgressBar value={item.progress} /></div>
-                </Link>
-              ))}
-              {!task.subtasks.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">No active subtasks.</p> : null}
-            </div>
-            {!archived ? (
-              <>
-                <div className="mt-4">
-                  <Field label="New Subtask Title">
-                    <TextInput aria-label="New subtask title" value={childTitle} onChange={(event) => setChildTitle(event.target.value)} />
-                  </Field>
-                </div>
-                <Button className="mt-3 w-full" disabled={!childTitle.trim()} variant="secondary" onClick={addSubtask}><Plus size={14} aria-hidden="true" />Add Subtask</Button>
-              </>
-            ) : null}
-          </SurfaceCard>
-        </aside>
       </div>
       {descriptionFullscreenOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">

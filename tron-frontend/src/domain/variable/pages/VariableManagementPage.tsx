@@ -23,6 +23,7 @@ import {
   DataTable,
   DetailField,
   Field,
+  InspectorPanel,
   PageHeader,
   SearchField,
   SelectInput,
@@ -32,6 +33,7 @@ import {
   TextInput,
   useTablePagination,
   useToast,
+  useConsoleShellConfig,
   useWorkspaceSpaces,
 } from "@/shared";
 
@@ -364,6 +366,157 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
       ? `Override ${selectedVariable?.key ?? "Variable"}`
       : selectedVariable?.key ?? "Select a Variable";
 
+  const rightPanel = (
+    <InspectorPanel title="Variable Studio">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--color-on-surface)]">{inspectorTitle}</h2>
+          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
+            {panelMode === "create"
+              ? `Create a local variable directly under ${activeWorkspaceLabel}.`
+              : panelMode === "override"
+                ? `Create a local copy in ${activeWorkspaceLabel} without mutating the ancestor workspace.`
+                : activeWorkspaceDescription}
+          </p>
+        </div>
+        {selectedVariable && panelMode === "selected" ? <Badge tone={getVariableSourceTone(selectedVariable.sourceKind)}>{selectedVariable.sourceKind}</Badge> : null}
+      </div>
+
+      {!activeWorkspaceCode ? (
+        <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
+          Select a workspace from the shell switcher to load its effective variable catalog.
+        </div>
+      ) : panelMode === "create" || panelMode === "override" ? (
+        <>
+          <div className="grid gap-4">
+            <Field label="Workspace">
+              <div className="min-h-10 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm text-[var(--color-on-surface)]">
+                {activeWorkspaceLabel}
+              </div>
+            </Field>
+            <Field label="Variable Key">
+              <TextInput
+                aria-label="Variable key"
+                disabled={panelMode === "override"}
+                value={form.key}
+                onChange={(event) => setForm((current) => ({ ...current, key: event.target.value }))}
+              />
+            </Field>
+            <Field
+              label="Variable Value"
+              hint={panelMode === "override" ? "Start from the inherited value, then save a local override." : "Value is stored exactly as entered; no data typing is applied."}
+            >
+              <TextArea
+                aria-label="Variable value"
+                className="min-h-32 font-mono"
+                value={form.value}
+                onChange={(event) => setForm((current) => ({ ...current, value: event.target.value }))}
+              />
+            </Field>
+            <Field label="Description" hint="Optional operator-facing note about how this variable is used.">
+              <TextArea
+                aria-label="Variable description"
+                className="min-h-24"
+                value={form.description}
+                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+              />
+            </Field>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button disabled={submitting} aria-busy={submitting} onClick={() => void saveVariable()}>
+              <Save size={16} aria-hidden="true" />
+              {submitting ? "Saving..." : "Save"}
+            </Button>
+            <Button variant="secondary" onClick={resetToSelected}>
+              <X size={16} aria-hidden="true" />
+              Cancel
+            </Button>
+          </div>
+        </>
+      ) : !selectedVariable ? (
+        <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
+          Choose a variable from the table or create a new one in the current workspace.
+        </div>
+      ) : selectedVariable.sourceKind === "Inherited" ? (
+        <>
+          <div className="grid gap-4 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
+            <DetailField label="Current Workspace" value={activeWorkspaceLabel} />
+            <DetailField label="Inherited From" value={`${selectedVariable.sourceLabel} (${selectedVariable.sourceWorkspaceCode})`} />
+            <DetailField label="Updated" value={formatTimestamp(selectedVariable.updatedAt)} />
+            <DetailField label="Value" value={selectedVariable.value} />
+            <DetailField label="Description" value={selectedVariable.description ?? "No description"} />
+          </div>
+          <div className="rounded-2xl bg-[var(--color-surface-container-low)] p-4 text-sm text-[var(--color-on-surface-variant)]">
+            This value is inherited from an ancestor workspace. Creating an override keeps the parent value intact and writes a local copy into {activeWorkspaceLabel}.
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={beginOverride}>
+              <ChevronRight size={16} aria-hidden="true" />
+              Override
+            </Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="grid gap-4">
+            <Field label="Workspace">
+              <div className="min-h-10 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm text-[var(--color-on-surface)]">
+                {activeWorkspaceLabel}
+              </div>
+            </Field>
+            <Field label="Variable Key" hint="Renaming is intentionally disabled so overrides remain stable by key.">
+              <TextInput aria-label="Variable key" disabled value={form.key} />
+            </Field>
+            <Field
+              label="Variable Value"
+              hint={selectedVariable.sourceKind === "Override" && selectedVariable.shadowedLabel
+                ? `This local value overrides ${selectedVariable.shadowedLabel}.`
+                : "Value is scoped to the current workspace only."}
+            >
+              <TextArea
+                aria-label="Variable value"
+                className="min-h-32 font-mono"
+                value={form.value}
+                onChange={(event) => setForm((current) => ({ ...current, value: event.target.value }))}
+              />
+            </Field>
+            <Field label="Description" hint="Optional operator-facing note about how this variable is used.">
+              <TextArea
+                aria-label="Variable description"
+                className="min-h-24"
+                value={form.description}
+                onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+              />
+            </Field>
+          </div>
+          <div className="grid gap-4 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
+            <DetailField label="Source Workspace" value={`${selectedVariable.sourceLabel} (${selectedVariable.sourceWorkspaceCode})`} />
+            <DetailField label="Updated" value={formatTimestamp(selectedVariable.updatedAt)} />
+            {selectedVariable.shadowedLabel ? <DetailField label="Shadowed Ancestor" value={`${selectedVariable.shadowedLabel} (${selectedVariable.shadowedWorkspaceCode})`} /> : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button disabled={submitting} aria-busy={submitting} onClick={() => void saveVariable()}>
+              <Save size={16} aria-hidden="true" />
+              {submitting ? "Saving..." : "Save"}
+            </Button>
+            <Button variant="secondary" disabled={deleting} aria-busy={deleting} onClick={() => void removeVariable()}>
+              {selectedVariable.sourceKind === "Override" ? <Undo2 size={16} aria-hidden="true" /> : <Trash2 size={16} aria-hidden="true" />}
+              {deleting ? "Working..." : selectedVariable.sourceKind === "Override" ? "Revert" : "Delete"}
+            </Button>
+            <Button variant="secondary" onClick={beginCreate}>
+              <Plus size={16} aria-hidden="true" />
+              New
+            </Button>
+          </div>
+        </>
+      )}
+    </InspectorPanel>
+  );
+
+  useConsoleShellConfig({
+    rightPanel,
+  });
+
   return (
     <>
       <PageHeader
@@ -382,7 +535,7 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
         )}
       />
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="mt-5">
         <SurfaceCard className="p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] p-4">
             <div className="min-w-[16rem] flex-1">
@@ -420,10 +573,7 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
                       row.key === selectedKey ? "text-[var(--color-primary)]" : "text-[var(--color-on-surface)]",
                     )}
                     type="button"
-                    onClick={() => {
-                      setSelectedKey(row.key);
-                      setPanelMode("selected");
-                    }}
+                    onClick={() => selectVariable(row)}
                   >
                     {row.key}
                   </button>
@@ -507,152 +657,6 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
               },
             ]}
           />
-        </SurfaceCard>
-
-        <SurfaceCard className="space-y-5">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Variable Studio</p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--color-on-surface)]">{inspectorTitle}</h2>
-              <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
-                {panelMode === "create"
-                  ? `Create a local variable directly under ${activeWorkspaceLabel}.`
-                  : panelMode === "override"
-                    ? `Create a local copy in ${activeWorkspaceLabel} without mutating the ancestor workspace.`
-                    : activeWorkspaceDescription}
-              </p>
-            </div>
-            {selectedVariable && panelMode === "selected" ? <Badge tone={getVariableSourceTone(selectedVariable.sourceKind)}>{selectedVariable.sourceKind}</Badge> : null}
-          </div>
-
-          {!activeWorkspaceCode ? (
-            <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
-              Select a workspace from the shell switcher to load its effective variable catalog.
-            </div>
-          ) : panelMode === "create" || panelMode === "override" ? (
-            <>
-              <div className="grid gap-4">
-                <Field label="Workspace">
-                  <div className="min-h-10 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm text-[var(--color-on-surface)]">
-                    {activeWorkspaceLabel}
-                  </div>
-                </Field>
-                <Field label="Variable Key">
-                  <TextInput
-                    aria-label="Variable key"
-                    disabled={panelMode === "override"}
-                    value={form.key}
-                    onChange={(event) => setForm((current) => ({ ...current, key: event.target.value }))}
-                  />
-                </Field>
-                <Field
-                  label="Variable Value"
-                  hint={panelMode === "override" ? "Start from the inherited value, then save a local override." : "Value is stored exactly as entered; no data typing is applied."}
-                >
-                  <TextArea
-                    aria-label="Variable value"
-                    className="min-h-32 font-mono"
-                    value={form.value}
-                    onChange={(event) => setForm((current) => ({ ...current, value: event.target.value }))}
-                  />
-                </Field>
-                <Field label="Description" hint="Optional operator-facing note about how this variable is used.">
-                  <TextArea
-                    aria-label="Variable description"
-                    className="min-h-24"
-                    value={form.description}
-                    onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-                  />
-                </Field>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button disabled={submitting} aria-busy={submitting} onClick={() => void saveVariable()}>
-                  <Save size={16} aria-hidden="true" />
-                  {submitting ? "Saving..." : "Save"}
-                </Button>
-                <Button variant="secondary" onClick={resetToSelected}>
-                  <X size={16} aria-hidden="true" />
-                  Cancel
-                </Button>
-              </div>
-            </>
-          ) : !selectedVariable ? (
-            <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
-              Choose a variable from the table or create a new one in the current workspace.
-            </div>
-          ) : selectedVariable.sourceKind === "Inherited" ? (
-            <>
-              <div className="grid gap-4 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
-                <DetailField label="Current Workspace" value={activeWorkspaceLabel} />
-                <DetailField label="Inherited From" value={`${selectedVariable.sourceLabel} (${selectedVariable.sourceWorkspaceCode})`} />
-                <DetailField label="Updated" value={formatTimestamp(selectedVariable.updatedAt)} />
-                <DetailField label="Value" value={selectedVariable.value} />
-                <DetailField label="Description" value={selectedVariable.description ?? "No description"} />
-              </div>
-              <div className="rounded-2xl bg-[var(--color-surface-container-low)] p-4 text-sm text-[var(--color-on-surface-variant)]">
-                This value is inherited from an ancestor workspace. Creating an override keeps the parent value intact and writes a local copy into {activeWorkspaceLabel}.
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button onClick={beginOverride}>
-                  <ChevronRight size={16} aria-hidden="true" />
-                  Override
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="grid gap-4">
-                <Field label="Workspace">
-                  <div className="min-h-10 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm text-[var(--color-on-surface)]">
-                    {activeWorkspaceLabel}
-                  </div>
-                </Field>
-                <Field label="Variable Key" hint="Renaming is intentionally disabled so overrides remain stable by key.">
-                  <TextInput aria-label="Variable key" disabled value={form.key} />
-                </Field>
-                <Field
-                  label="Variable Value"
-                  hint={selectedVariable.sourceKind === "Override" && selectedVariable.shadowedLabel
-                    ? `This local value overrides ${selectedVariable.shadowedLabel}.`
-                    : "Value is scoped to the current workspace only."}
-                >
-                  <TextArea
-                    aria-label="Variable value"
-                    className="min-h-32 font-mono"
-                    value={form.value}
-                    onChange={(event) => setForm((current) => ({ ...current, value: event.target.value }))}
-                  />
-                </Field>
-                <Field label="Description" hint="Optional operator-facing note about how this variable is used.">
-                  <TextArea
-                    aria-label="Variable description"
-                    className="min-h-24"
-                    value={form.description}
-                    onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
-                  />
-                </Field>
-              </div>
-              <div className="grid gap-4 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
-                <DetailField label="Source Workspace" value={`${selectedVariable.sourceLabel} (${selectedVariable.sourceWorkspaceCode})`} />
-                <DetailField label="Updated" value={formatTimestamp(selectedVariable.updatedAt)} />
-                {selectedVariable.shadowedLabel ? <DetailField label="Shadowed Ancestor" value={`${selectedVariable.shadowedLabel} (${selectedVariable.shadowedWorkspaceCode})`} /> : null}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button disabled={submitting} aria-busy={submitting} onClick={() => void saveVariable()}>
-                  <Save size={16} aria-hidden="true" />
-                  {submitting ? "Saving..." : "Save"}
-                </Button>
-                <Button variant="secondary" disabled={deleting} aria-busy={deleting} onClick={() => void removeVariable()}>
-                  {selectedVariable.sourceKind === "Override" ? <Undo2 size={16} aria-hidden="true" /> : <Trash2 size={16} aria-hidden="true" />}
-                  {deleting ? "Working..." : selectedVariable.sourceKind === "Override" ? "Revert" : "Delete"}
-                </Button>
-                <Button variant="secondary" onClick={beginCreate}>
-                  <Plus size={16} aria-hidden="true" />
-                  New
-                </Button>
-              </div>
-            </>
-          )}
         </SurfaceCard>
       </div>
       {openRowMenu && openMenuVariable

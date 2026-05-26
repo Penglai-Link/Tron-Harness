@@ -11,12 +11,14 @@ import { listKnowledgeBases } from "@/domain/knowledge-base/mock/data";
 import type { KnowledgeBaseRecord } from "@/domain/knowledge-base/model/KnowledgeBaseModel";
 import {
   DataTable,
+  InspectorPanel,
   MetricCard,
   PageHeader,
   SurfaceCard,
   TablePagination,
   TextInput,
   useTablePagination,
+  useConsoleShellConfig,
 } from "@/shared";
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
@@ -61,6 +63,44 @@ export function KnowledgeBasePage() {
   const documentCount = knowledgeBases.reduce((total, knowledgeBase) => total + knowledgeBase.documentCount, 0);
   const sourceCount = knowledgeBases.reduce((total, knowledgeBase) => total + knowledgeBase.sourceCount, 0);
   const indexingCount = knowledgeBases.filter((knowledgeBase) => knowledgeBase.status === "Indexing").length;
+
+  useConsoleShellConfig({
+    rightPanel: (
+      <InspectorPanel title="Selected KnowledgeBase">
+        <div>
+          <p className="text-2xl font-semibold">{selectedKnowledgeBase.name}</p>
+          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{selectedKnowledgeBase.ownerWorkspace}</p>
+        </div>
+
+        <div className="grid gap-3 rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-surface-container-low)] p-4 text-sm">
+          <InspectorRow label="Retrieval Profile" value={selectedKnowledgeBase.retrievalProfile} />
+          <InspectorRow label="Chunk Profile" value={selectedKnowledgeBase.chunkProfile} />
+          <InspectorRow label="Embedding Footprint" value={selectedKnowledgeBase.embeddingFootprint} />
+          <InspectorRow
+            label="Sync Lag"
+            value={selectedKnowledgeBase.syncLagMinutes === 999 ? "Draft" : `${selectedKnowledgeBase.syncLagMinutes} min`}
+          />
+        </div>
+
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Operational Notes</p>
+          <div className="mt-3 space-y-2 text-sm text-[var(--color-on-surface-variant)]">
+            <p>Use this catalog for traditional RAG corpora that need predictable chunking, metadata filters, and controlled refresh windows.</p>
+            <p>KnowledgeGraph stays focused on entity relationships. Resources remains the broader asset inventory for files, connectors, and raw sources.</p>
+          </div>
+        </div>
+
+        <div className="mt-auto flex gap-2">
+          <Button className="flex-1" variant="secondary" onClick={() => setNotice(`Ingestion policy opened for ${selectedKnowledgeBase.name}.`)}>
+            Review Policy
+          </Button>
+          <Button className="flex-1" onClick={() => setNotice(`Sync job started for ${selectedKnowledgeBase.name}.`)}>
+            Reindex Now
+          </Button>
+        </div>
+      </InspectorPanel>
+    ),
+  });
 
   return (
     <>
@@ -138,98 +178,65 @@ export function KnowledgeBasePage() {
         </div>
       </SurfaceCard>
 
-      <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.35fr)_380px]">
-        <DataTable
-          title="KnowledgeBase Catalog"
-          rows={pagination.visibleItems}
-          rowKey={(knowledgeBase) => knowledgeBase.id}
-          onRowClick={(knowledgeBase) => setSelectedId(knowledgeBase.id)}
-          rowClassName={(knowledgeBase) => (
-            knowledgeBase.id === selectedKnowledgeBase.id ? "bg-[var(--color-surface-container-low)]" : undefined
-          )}
-          toolbar={(
-            <span className="text-[13px] text-[var(--color-on-surface-variant)]">
-              {filteredKnowledgeBases.length} visible libraries
-            </span>
-          )}
-          columns={[
-            {
-              id: "name",
-              header: "Knowledge Base",
-              render: (knowledgeBase) => (
-                <div>
-                  <p className="font-medium">{knowledgeBase.name}</p>
-                  <p className="text-[13px] text-[var(--color-on-surface-variant)]">{knowledgeBase.ownerWorkspace}</p>
-                </div>
-              ),
-            },
-            {
-              id: "corpus",
-              header: "Corpus",
-              render: (knowledgeBase) => (
-                <div>
-                  <p>{knowledgeBase.documentCount.toLocaleString()} docs</p>
-                  <p className="text-[13px] text-[var(--color-on-surface-variant)]">{knowledgeBase.sourceCount} sources</p>
-                </div>
-              ),
-            },
-            {
-              id: "chunking",
-              header: "Chunking",
-              render: (knowledgeBase) => knowledgeBase.chunkProfile,
-            },
-            {
-              id: "retrieval",
-              header: "Retrieval",
-              render: (knowledgeBase) => knowledgeBase.retrievalProfile,
-            },
-            {
-              id: "freshness",
-              header: "Freshness",
-              render: (knowledgeBase) => knowledgeBase.freshness,
-            },
-            {
-              id: "status",
-              header: "Status",
-              render: (knowledgeBase) => <Badge tone={statusTone(knowledgeBase.status)}>{knowledgeBase.status}</Badge>,
-            },
-          ]}
-          pagination={<TablePagination itemLabel="knowledge bases" {...pagination.paginationProps} />}
-        />
-
-        <SurfaceCard className="flex flex-col gap-5">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Selected KnowledgeBase</p>
-            <h2 className="mt-2 text-2xl font-semibold">{selectedKnowledgeBase.name}</h2>
-            <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{selectedKnowledgeBase.ownerWorkspace}</p>
-          </div>
-
-          <div className="grid gap-3 rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-surface-container-low)] p-4 text-sm">
-            <InspectorRow label="Retrieval Profile" value={selectedKnowledgeBase.retrievalProfile} />
-            <InspectorRow label="Chunk Profile" value={selectedKnowledgeBase.chunkProfile} />
-            <InspectorRow label="Embedding Footprint" value={selectedKnowledgeBase.embeddingFootprint} />
-            <InspectorRow
-              label="Sync Lag"
-              value={selectedKnowledgeBase.syncLagMinutes === 999 ? "Draft" : `${selectedKnowledgeBase.syncLagMinutes} min`}
-            />
-          </div>
-
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Operational Notes</p>
-            <div className="mt-3 space-y-2 text-sm text-[var(--color-on-surface-variant)]">
-              <p>Use this catalog for traditional RAG corpora that need predictable chunking, metadata filters, and controlled refresh windows.</p>
-              <p>KnowledgeGraph stays focused on entity relationships. Resources remains the broader asset inventory for files, connectors, and raw sources.</p>
-            </div>
-          </div>
-
-          <div className="mt-auto flex gap-2">
-            <Button className="flex-1" variant="secondary" onClick={() => setNotice(`Ingestion policy opened for ${selectedKnowledgeBase.name}.`)}>
-              Review Policy
-            </Button>
-            <Button className="flex-1" onClick={() => setNotice(`Sync job started for ${selectedKnowledgeBase.name}.`)}>
-              Reindex Now
-            </Button>
-          </div>
+      <div className="mt-5">
+        <SurfaceCard className="p-0">
+          <DataTable
+            title="KnowledgeBase Catalog"
+            rows={pagination.visibleItems}
+            rowKey={(knowledgeBase) => knowledgeBase.id}
+            onRowClick={(knowledgeBase) => setSelectedId(knowledgeBase.id)}
+            rowClassName={(knowledgeBase) => (
+              knowledgeBase.id === selectedKnowledgeBase.id ? "bg-[var(--color-surface-container-low)]" : undefined
+            )}
+            toolbar={(
+              <span className="text-[13px] text-[var(--color-on-surface-variant)]">
+                {filteredKnowledgeBases.length} visible libraries
+              </span>
+            )}
+            columns={[
+              {
+                id: "name",
+                header: "Knowledge Base",
+                render: (knowledgeBase) => (
+                  <div>
+                    <p className="font-medium">{knowledgeBase.name}</p>
+                    <p className="text-[13px] text-[var(--color-on-surface-variant)]">{knowledgeBase.ownerWorkspace}</p>
+                  </div>
+                ),
+              },
+              {
+                id: "corpus",
+                header: "Corpus",
+                render: (knowledgeBase) => (
+                  <div>
+                    <p>{knowledgeBase.documentCount.toLocaleString()} docs</p>
+                    <p className="text-[13px] text-[var(--color-on-surface-variant)]">{knowledgeBase.sourceCount} sources</p>
+                  </div>
+                ),
+              },
+              {
+                id: "chunking",
+                header: "Chunking",
+                render: (knowledgeBase) => knowledgeBase.chunkProfile,
+              },
+              {
+                id: "retrieval",
+                header: "Retrieval",
+                render: (knowledgeBase) => knowledgeBase.retrievalProfile,
+              },
+              {
+                id: "freshness",
+                header: "Freshness",
+                render: (knowledgeBase) => knowledgeBase.freshness,
+              },
+              {
+                id: "status",
+                header: "Status",
+                render: (knowledgeBase) => <Badge tone={statusTone(knowledgeBase.status)}>{knowledgeBase.status}</Badge>,
+              },
+            ]}
+            pagination={<TablePagination itemLabel="knowledge bases" {...pagination.paginationProps} />}
+          />
         </SurfaceCard>
       </div>
 
