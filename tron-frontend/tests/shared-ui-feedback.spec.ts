@@ -3,6 +3,7 @@ import {
   test,
   type Locator,
   type Page,
+  type Route,
 } from "@playwright/test";
 import {
   existsSync,
@@ -26,6 +27,21 @@ let frontendProcess: ChildProcessWithoutNullStreams | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
 
+const authUser = {
+  authMethod: "internal",
+  authenticated: true,
+  provider: null,
+  user: {
+    displayName: "Auth Operator",
+    email: "auth.operator@tron.ai",
+    roleCodes: ["ADMIN", "DEVELOPER"],
+    spaceCodes: ["PLATFORM", "TRON_CORE"],
+    status: "Active",
+    userCode: "USR-AUTH-0001",
+    username: "auth.operator",
+  },
+};
+
 function delay(ms: number) {
   return new Promise((resolveDelay) => {
     setTimeout(resolveDelay, ms);
@@ -46,6 +62,89 @@ function source(pathFromFrontendRoot: string): string {
 function sourceIfExists(pathFromFrontendRoot: string): string {
   const absolutePath = resolve(frontendRoot, pathFromFrontendRoot);
   return existsSync(absolutePath) ? readFileSync(absolutePath, "utf8") : "";
+}
+
+function successEnvelope(data: unknown) {
+  return {
+    code: "SUCCESS",
+    message: "ok",
+    data,
+  };
+}
+
+function unauthorizedEnvelope(code = "AUTH_UNAUTHORIZED", message = "authentication required") {
+  return {
+    code,
+    message,
+    data: {},
+  };
+}
+
+async function fulfillJson(route: Route, data: unknown, status = 200) {
+  await route.fulfill({
+    status,
+    contentType: "application/json",
+    body: JSON.stringify(data),
+  });
+}
+
+async function routeAuthApi(page: Page) {
+  let currentSession: typeof authUser | null = null;
+  let hasRefreshSession = false;
+  let currentAccessToken = "";
+  let nextAccessTokenId = 1;
+
+  function issueGrant(session: typeof authUser) {
+    currentSession = session;
+    hasRefreshSession = true;
+    currentAccessToken = `test-access-token-${nextAccessTokenId++}`;
+
+    return successEnvelope({
+      accessToken: currentAccessToken,
+      tokenType: "Bearer",
+      expiresIn: 900,
+      session,
+    });
+  }
+
+  await page.route("**/api/v1/auth/providers", async (route) => {
+    await fulfillJson(route, successEnvelope({
+      providers: [
+        { code: "internal", name: "Internal Account", type: "internal" },
+      ],
+    }));
+  });
+
+  await page.route("**/api/v1/auth/session", async (route) => {
+    if (
+      !currentSession
+      || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
+    ) {
+      await fulfillJson(route, unauthorizedEnvelope(), 401);
+      return;
+    }
+
+    await fulfillJson(route, successEnvelope(currentSession));
+  });
+
+  await page.route("**/api/v1/auth/login", async (route) => {
+    const body = route.request().postDataJSON() as { login?: string; password?: string };
+    if (body.login === "auth.operator" && body.password === "TronAuthPass123!") {
+      await fulfillJson(route, issueGrant(authUser));
+      return;
+    }
+
+    await fulfillJson(route, unauthorizedEnvelope("AUTH_INVALID_CREDENTIALS", "invalid credentials"), 401);
+  });
+
+  await page.route("**/api/v1/auth/refresh", async (route) => {
+    if (!currentSession || !hasRefreshSession) {
+      await fulfillJson(route, unauthorizedEnvelope("AUTH_REFRESH_INVALID", "invalid refresh session"), 401);
+      return;
+    }
+
+    await fulfillJson(route, issueGrant(currentSession));
+  });
 }
 
 async function reservePort() {
@@ -104,7 +203,13 @@ async function stopFrontend() {
 }
 
 async function openSharedShellPreview(page: Page) {
+  await routeAuthApi(page);
   await page.goto(`${frontendBaseUrl}/shared-shell-preview`);
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fshared-shell-preview$/);
+  await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
+  await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
+  await page.getByRole("button", { name: /sign in/i }).click();
+  await expect(page).toHaveURL(/\/shared-shell-preview$/);
   await expect(page.getByRole("heading", { name: "Workspace console foundation" })).toBeVisible();
 }
 

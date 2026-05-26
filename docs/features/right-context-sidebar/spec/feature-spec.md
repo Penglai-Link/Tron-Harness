@@ -11,7 +11,7 @@
 
 - feature_slug: right-context-sidebar
 - feature_name: Right Context Sidebar
-- status: waiting_human_decision
+- status: approved
 - owner: clouds3n
 - source_request: Add a conditional right sidebar that behaves like the left sidebar, collapses out of layout on desktop, uses a mobile drawer, excludes global configuration pages, and migrates existing local right inspectors into the shared shell contract.
 - main_agent: Codex lead agent
@@ -25,6 +25,12 @@ Create a shell-level right context sidebar for console pages. A page should prov
 The sidebar appears only when a console page provides contextual content. Desktop collapse removes the right sidebar from layout and leaves only a right-edge open control. Mobile presents the same content as a right overlay drawer. Settings and global configuration pages do not participate.
 
 Existing pages that already render a local right-side contextual inspector should migrate that inspector into the shell-level contract. The migration must preserve page behavior and must not add new domain content.
+
+## Product Source Slices
+
+- approved_brainstorm: `docs/brainstorm/right-context-sidebar/2026-05-26-10-12-25.md`
+- approved_prd: `docs/brainstorm/right-context-sidebar/prd.typ`
+- selected_feature: shell-level right context sidebar with migrated local contextual inspectors
 
 ## Scope Boundary
 

@@ -3,7 +3,7 @@
 ## Execution Contract
 
 - feature_slug: right-context-sidebar
-- status: in_progress
+- status: done
 - execution_mode: hybrid
 - canonical_report_target: reports/test-report.md
 
@@ -17,7 +17,7 @@ Verification must produce concrete browser evidence for each AC. Slow browser co
 - AC-RCS-02 | phase: verify | owner: test | scope: `tron-frontend/tests/right-context-sidebar.spec.ts` mobile drawer open and close paths | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: done.
 - AC-RCS-03 | phase: verify | owner: test | scope: `tron-frontend/tests/right-context-sidebar.spec.ts`, `tron-frontend/tests/shell-theme-switcher.spec.ts`, `tron-frontend/tests/shared-ui-feedback.spec.ts` rightPanel regression and exclusion checks | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: done.
 - AC-RCS-04 | phase: verify | owner: test | scope: graph and memory routes in `tron-frontend/tests/right-context-sidebar.spec.ts` | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: done.
-- AC-RCS-05 | phase: verify | owner: test | scope: migrated detail and management routes in `tron-frontend/tests/right-context-sidebar.spec.ts` | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: in_progress.
+- AC-RCS-05 | phase: verify | owner: test | scope: migrated detail and management routes in `tron-frontend/tests/right-context-sidebar.spec.ts` | command_ref: CMD-FE-RIGHT-SIDEBAR-BROWSER | status: done.
 
 ## Worktree Notes
 
@@ -25,6 +25,7 @@ Verification must produce concrete browser evidence for each AC. Slow browser co
 - AC-RCS-04 browser verification is owned by `frontend/graph-memory-migration`.
 - AC-RCS-04 focused browser verification passed in the base worktree after graph and memory migration integration.
 - AC-RCS-05 browser verification is owned by `frontend/management-migration`.
+- AC-RCS-05 focused browser verification passed in the base worktree after management migration integration.
 
 ## Integration Notes
 

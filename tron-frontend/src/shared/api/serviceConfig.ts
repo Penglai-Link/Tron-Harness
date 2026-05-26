@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type DependencyList,
 } from "react";
@@ -110,22 +111,25 @@ function resolveEndpoint(endpoint: string, params?: EndpointParams) {
 export function useServiceQuery<T>({ apiInitialData, domain, endpoint, mockData, params, deps = [], select = selectApiData<T> }: ServiceQueryOptions<T>): T {
   const dataSource = getServiceDataSource(domain);
   const shouldUseApiInitialData = dataSource === "api" && apiInitialData !== undefined;
-  const mockValue = useMemo(
-    () => (shouldUseApiInitialData ? undefined : mockData()),
+  const apiInitialDataRef = useRef(apiInitialData);
+  const mockDataRef = useRef(mockData);
+  const selectRef = useRef(select);
+
+  apiInitialDataRef.current = apiInitialData;
+  mockDataRef.current = mockData;
+  selectRef.current = select;
+
+  const initialValue = useMemo(
+    () => (shouldUseApiInitialData ? apiInitialDataRef.current?.() : mockDataRef.current()) as T,
     [shouldUseApiInitialData, ...deps],
   );
-  const apiInitialValue = useMemo(
-    () => (apiInitialData ? apiInitialData() : undefined),
-    [apiInitialData],
-  );
-  const initialValue = (shouldUseApiInitialData ? apiInitialValue : mockValue) as T;
   const [data, setData] = useState<T>(initialValue);
   const paramsKey = JSON.stringify(params ?? {});
   const request = useMemo(() => resolveEndpoint(endpoint, params), [endpoint, paramsKey]);
 
   useEffect(() => {
-    setData((shouldUseApiInitialData ? apiInitialValue : mockValue) as T);
-  }, [apiInitialValue, mockValue, shouldUseApiInitialData]);
+    setData(initialValue);
+  }, [initialValue]);
 
   useEffect(() => {
     if (dataSource !== "api") return;
@@ -148,16 +152,16 @@ export function useServiceQuery<T>({ apiInitialData, domain, endpoint, mockData,
         return response.json() as Promise<T>;
       })
       .then((payload) => {
-        setData(select(payload));
+        setData(selectRef.current(payload));
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         console.warn(`[services] API request failed for ${domain}.`, error);
-        if (shouldUseApiInitialData) setData(apiInitialValue as T);
+        if (shouldUseApiInitialData) setData(initialValue);
       });
 
     return () => controller.abort();
-  }, [apiInitialValue, dataSource, domain, mockValue, request.method, request.url, select, shouldUseApiInitialData]);
+  }, [dataSource, domain, initialValue, request.method, request.url, shouldUseApiInitialData]);
 
   return data;
 }

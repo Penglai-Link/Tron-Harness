@@ -10,7 +10,7 @@
 - execution_mode: hybrid
 - main_branch: feature/clouds3n/right-context-sidebar/base
 - main_worktree_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/right-context-sidebar/base
-- status: in_progress
+- status: complete
 
 ## Repository State
 
@@ -32,7 +32,7 @@
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | frontend | shell-foundation | 019e6235-9c0d-7b52-9a94-28a33838474d | Bohr | AC-RCS-01, AC-RCS-02, AC-RCS-03 | tdd | feature/clouds3n/right-context-sidebar/frontend/shell-foundation | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/right-context-sidebar/frontend/shell-foundation | feature/clouds3n/right-context-sidebar/base | done |
 | frontend | graph-memory-migration | 019e6250-af5a-7e03-adc1-ad1680251253 | Mill | AC-RCS-04 | tdd | feature/clouds3n/right-context-sidebar/frontend/graph-memory-migration | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/right-context-sidebar/frontend/graph-memory-migration | feature/clouds3n/right-context-sidebar/base | done |
-| frontend | management-migration | 019e625d-dc11-79d2-a264-033738da4c71 | Ramanujan | AC-RCS-05 | tdd | feature/clouds3n/right-context-sidebar/frontend/management-migration | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/right-context-sidebar/frontend/management-migration | feature/clouds3n/right-context-sidebar/base | in_progress |
+| frontend | management-migration | 019e625d-dc11-79d2-a264-033738da4c71 | Ramanujan | AC-RCS-05 | tdd | feature/clouds3n/right-context-sidebar/frontend/management-migration | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/right-context-sidebar/frontend/management-migration | feature/clouds3n/right-context-sidebar/base | done |
 
 ## Dispatch Decisions
 
@@ -40,7 +40,7 @@
 | --- | --- | --- | --- | --- | --- |
 | AC-RCS-01, AC-RCS-02, AC-RCS-03 | spawn | frontend/shell-foundation | default hybrid behavior-changing shell slice; shared `Shell.tsx` work should be isolated before page migrations | frontend/shell-foundation | done |
 | AC-RCS-04 | spawn | frontend/graph-memory-migration | default hybrid behavior-changing migration slice after shell contract is stable | frontend/graph-memory-migration | done |
-| AC-RCS-05 | spawn | frontend/management-migration | default hybrid behavior-changing migration slice after shell contract is stable and graph/memory pattern is known | frontend/management-migration | in_progress |
+| AC-RCS-05 | spawn | frontend/management-migration | default hybrid behavior-changing migration slice after shell contract is stable and graph/memory pattern is known | frontend/management-migration | done |
 
 ## Branch And Path Rules
 
@@ -54,7 +54,7 @@
 - Create each worker branch from the current base branch.
 - `frontend/shell-foundation` merged at `2b20064`; base validation passed for focused browser and frontend check commands.
 - `frontend/graph-memory-migration` merged at `3b76629`; base validation passed for focused browser and frontend check commands.
-- Create or refresh migration worker branches only after shell foundation is integrated.
+- `frontend/management-migration` merged at `46ed2a2`; base validation passed for focused browser and frontend check commands.
 - Merge migration workers back into the base branch one at a time.
 
 ## Conflict Rules

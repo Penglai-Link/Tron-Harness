@@ -481,6 +481,6 @@ test("sidebar navigation still works after entering chats", async ({ page }) => 
   }
   await resourcesLink.click();
   await expect(page).toHaveURL(/\/resources$/);
-  await expect(page.getByRole("heading", { name: "Data & Assets" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Resources" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Primary Investigation" })).toHaveCount(0);
 });
