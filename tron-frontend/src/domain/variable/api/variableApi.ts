@@ -1,8 +1,15 @@
 import { requestApi } from "@/shared/api/httpClient";
 
-import type { VariableRecord } from "@/domain/variable/model";
+import type {
+  PlatformVariableRecord,
+  VariableRecord,
+} from "@/domain/variable/model";
 
 export const variableApiEndpoints = {
+  listPlatformVariables: "GET /api/v1/admin/platform/variables",
+  createPlatformVariable: "POST /api/v1/admin/platform/variables",
+  updatePlatformVariable: "PATCH /api/v1/admin/platform/variables/{variableKey}",
+  deletePlatformVariable: "DELETE /api/v1/admin/platform/variables/{variableKey}",
   listVariables: "GET /api/v1/variables/workspaces/{workspaceCode}",
   createVariable: "POST /api/v1/variables/workspaces/{workspaceCode}",
   updateVariable: "PATCH /api/v1/variables/workspaces/{workspaceCode}/{variableKey}",
@@ -27,6 +34,31 @@ export interface UpdateVariablePayload {
 export interface VariableMutationResult {
   key: string;
   workspaceCode: string;
+}
+
+export function fetchPlatformVariables(signal?: AbortSignal) {
+  return requestApi<PlatformVariableRecord[]>(variableApiEndpoints.listPlatformVariables, {
+    signal,
+  });
+}
+
+export function createPlatformVariable(payload: CreateVariablePayload) {
+  return requestApi<PlatformVariableRecord>(variableApiEndpoints.createPlatformVariable, {
+    body: payload,
+  });
+}
+
+export function updatePlatformVariable(variableKey: string, payload: UpdateVariablePayload) {
+  return requestApi<PlatformVariableRecord>(variableApiEndpoints.updatePlatformVariable, {
+    body: payload,
+    pathParams: { variableKey },
+  });
+}
+
+export function deletePlatformVariable(variableKey: string) {
+  return requestApi<VariableMutationResult>(variableApiEndpoints.deletePlatformVariable, {
+    pathParams: { variableKey },
+  });
 }
 
 export function fetchVariableCatalog(

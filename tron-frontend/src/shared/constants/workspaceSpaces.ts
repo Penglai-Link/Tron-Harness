@@ -8,6 +8,13 @@ import type {
 export const defaultPrimarySpaceId = "ENTERPRISE";
 export const defaultSecondarySpaceId = "TRON_CORE";
 
+export function getEmptyWorkspaceSwitcher(): WorkspaceSwitcherData {
+  return {
+    primarySpaces: [],
+    secondarySpaces: [],
+  };
+}
+
 export const workspaceSpaceApiContracts = {
   listWorkspaceOptions: "GET /api/v1/admin/workspaces/options",
   getWorkspaceSwitcher: "GET /api/v1/admin/workspaces/switcher",

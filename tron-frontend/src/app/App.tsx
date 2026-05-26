@@ -175,6 +175,7 @@ function PublicRoutePage({ pageId }: { pageId: string }) {
 function AppRoutePage() {
   const { pathname, search } = useLocation();
   const resolved = resolveAppRoute(pathname, search);
+  const routeRenderKey = `${pathname}${search}`;
   const [pageShellConfig, setPageShellConfig] = useState<ConsoleShellConfig>({});
   const shellConfigController = useMemo(() => ({
     resetConfig: () => {
@@ -199,7 +200,7 @@ function AppRoutePage() {
       return (
         <SettingsShell activeItem={route.settingsNav ?? route.title} items={settingsNavigation}>
           <SuspendedRoute>
-            <Component />
+            <Component key={routeRenderKey} />
           </SuspendedRoute>
         </SettingsShell>
       );
@@ -215,7 +216,7 @@ function AppRoutePage() {
           userMenuContent={<AuthUserMenuPanel />}
         >
           <SuspendedRoute>
-            <Component />
+            <Component key={routeRenderKey} />
           </SuspendedRoute>
         </TronShell>
       </ConsoleShellConfigContext.Provider>

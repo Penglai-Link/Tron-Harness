@@ -50,6 +50,99 @@ async fn list_variables_returns_effective_catalog_with_inherited_and_override_so
 }
 
 #[tokio::test]
+async fn platform_variables_are_inherited_by_workspace_catalogs() {
+    let database_url = temp_database_url("variable-platform-inheritance");
+    let config = AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let router = app_with_config(config);
+
+    let platform_create = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/admin/platform/variables",
+        Some(json!({
+            "key": "GLOBAL_LLM_TIMEOUT_MS",
+            "value": "1200",
+            "description": "Platform default timeout"
+        })),
+    )
+    .await;
+    assert_eq!(platform_create.status(), StatusCode::CREATED);
+    let platform_json = response_json(platform_create).await;
+    assert_eq!(platform_json["data"]["key"], json!("GLOBAL_LLM_TIMEOUT_MS"));
+
+    let list_response = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/variables/workspaces/TRON_CORE",
+        None,
+    )
+    .await;
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_json = response_json(list_response).await;
+    let records = list_json["data"]
+        .as_array()
+        .expect("workspace variable list should return records");
+    let inherited = records
+        .iter()
+        .find(|item| item["key"] == "GLOBAL_LLM_TIMEOUT_MS")
+        .expect("workspace should inherit platform variables");
+    assert_eq!(inherited["value"], json!("1200"));
+    assert_eq!(inherited["sourceKind"], json!("Inherited"));
+    assert_eq!(inherited["sourceLabel"], json!("Platform Configuration"));
+    assert_eq!(inherited["sourceWorkspaceCode"], json!("PLATFORM"));
+
+    let override_response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/variables/workspaces/TRON_CORE",
+        Some(json!({
+            "key": "GLOBAL_LLM_TIMEOUT_MS",
+            "value": "600",
+            "description": "Workspace timeout override"
+        })),
+    )
+    .await;
+    assert_eq!(override_response.status(), StatusCode::CREATED);
+    let override_json = response_json(override_response).await;
+    assert_eq!(override_json["data"]["sourceKind"], json!("Override"));
+    assert_eq!(
+        override_json["data"]["shadowedLabel"],
+        json!("Platform Configuration")
+    );
+
+    let delete_response = authenticated_request(
+        &router,
+        Method::DELETE,
+        "/api/v1/variables/workspaces/TRON_CORE/GLOBAL_LLM_TIMEOUT_MS",
+        None,
+    )
+    .await;
+    assert_eq!(delete_response.status(), StatusCode::OK);
+
+    let fallback_response = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/variables/workspaces/TRON_CORE",
+        None,
+    )
+    .await;
+    let fallback_json = response_json(fallback_response).await;
+    let fallback_records = fallback_json["data"]
+        .as_array()
+        .expect("workspace variable list should remain readable");
+    let fallback = fallback_records
+        .iter()
+        .find(|item| item["key"] == "GLOBAL_LLM_TIMEOUT_MS")
+        .expect("deleting workspace override should reveal platform value");
+    assert_eq!(fallback["value"], json!("1200"));
+    assert_eq!(fallback["sourceKind"], json!("Inherited"));
+    assert_eq!(fallback["sourceLabel"], json!("Platform Configuration"));
+}
+
+#[tokio::test]
 async fn create_override_and_delete_falls_back_to_inherited_value() {
     let database_url = temp_database_url("variable-override-fallback");
     let config = AppConfig {

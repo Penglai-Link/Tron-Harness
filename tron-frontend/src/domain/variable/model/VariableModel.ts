@@ -13,3 +13,12 @@ export interface VariableRecord {
   shadowedLabel: string | null;
   updatedAt: string;
 }
+
+export interface PlatformVariableRecord {
+  id: string;
+  key: string;
+  value: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

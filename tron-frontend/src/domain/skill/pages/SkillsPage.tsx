@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
   CircleAlert,
@@ -10,21 +11,23 @@ import {
   Maximize2,
   Package,
   RefreshCcw,
-  Search,
   Unlink2,
   X,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
   DataTable,
+  DetailField,
+  MarkdownContent,
   PageHeader,
+  SearchField,
   SurfaceCard,
-  TextInput,
+  TablePagination,
+  useLocaleFormatters,
+  useTablePagination,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -44,101 +47,6 @@ import type {
   WorkspaceSkillDetail,
   WorkspaceSkillRecord,
 } from "@/domain/skill/model";
-
-function SearchField({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="relative">
-      <Search
-        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]"
-        size={15}
-        aria-hidden="true"
-      />
-      <TextInput
-        aria-label="Filter workspace skills"
-        className="h-9 w-full pl-9"
-        placeholder="Filter workspace skills..."
-        type="search"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </div>
-  );
-}
-
-function DetailField({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-        {label}
-      </p>
-      <p className="mt-1 break-words text-sm font-medium text-[var(--color-on-surface)]">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function MarkdownContent({
-  ariaLabel,
-  className,
-  content,
-}: {
-  ariaLabel?: string;
-  className?: string;
-  content?: string | null;
-}) {
-  const value = content?.trim();
-
-  if (!value) {
-    return (
-      <div
-        aria-label={ariaLabel}
-        className={cn(
-          "min-h-6 py-1 text-sm leading-6 text-[var(--color-on-surface)]",
-          className,
-        )}
-      >
-        <span className="text-[var(--color-on-surface-variant)]">None</span>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      aria-label={ariaLabel}
-      className={cn(
-        "min-h-6 py-1 text-sm leading-7 text-[var(--color-on-surface)]",
-        "[&_a]:text-[var(--color-primary)] [&_a]:underline-offset-2 hover:[&_a]:underline",
-        "[&_blockquote]:mb-3 [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--color-outline-variant)] [&_blockquote]:pl-4 [&_blockquote]:text-[var(--color-on-surface-variant)]",
-        "[&_code]:font-mono [&_code]:text-[13px]",
-        "[&_h1]:mb-4 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight",
-        "[&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:leading-tight",
-        "[&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:leading-tight",
-        "[&_hr]:my-4 [&_hr]:border-[var(--color-outline-variant)]",
-        "[&_li]:mb-1",
-        "[&_ol]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5",
-        "[&_p]:mb-3 [&_p:last-child]:mb-0",
-        "[&_p_code]:rounded [&_p_code]:bg-[var(--color-surface-container-lowest)] [&_p_code]:px-1.5 [&_p_code]:py-0.5",
-        "[&_pre]:mb-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-[var(--color-surface-container-lowest)] [&_pre]:p-3",
-        "[&_pre_code]:bg-transparent [&_pre_code]:p-0",
-        "[&_table]:mb-3 [&_table]:w-full [&_table]:border-collapse [&_table]:overflow-hidden [&_table]:rounded-lg",
-        "[&_tbody_tr]:border-b [&_tbody_tr]:border-[var(--color-outline-variant)] [&_tbody_tr:last-child]:border-b-0",
-        "[&_td]:px-3 [&_td]:py-2 [&_td]:align-top",
-        "[&_th]:border-b [&_th]:border-[var(--color-outline-variant)] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold",
-        "[&_ul]:mb-3 [&_ul]:list-disc [&_ul]:pl-5",
-        className,
-      )}
-    >
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
-    </div>
-  );
-}
 
 function getWorkspaceSourceTone(sourceKind: SkillWorkspaceSourceKind) {
   switch (sourceKind) {
@@ -193,14 +101,6 @@ function getUpdateTone(updateStatus: SkillUpdateStatus) {
   }
 }
 
-function formatTimestamp(value?: string | null) {
-  if (!value) return "Not checked";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
 function BindingSwitch({
   checked,
   disabled,
@@ -238,7 +138,9 @@ function BindingSwitch({
 
 export function SkillsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation(["pages", "common"]);
   const toast = useToast();
+  const { formatDateTime, formatNumber } = useLocaleFormatters();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspaceCode =
     selectedSecondarySpace?.workspaceCode
@@ -247,7 +149,7 @@ export function SkillsPage() {
   const activeWorkspaceLabel =
     selectedSecondarySpace?.label
     ?? selectedPrimarySpace?.name
-    ?? "No workspace selected";
+    ?? t("pages:skills.workspace.unselected", { defaultValue: "No workspace selected" });
   const [skills, setSkills] = useState<WorkspaceSkillRecord[]>([]);
   const [selectedSkillName, setSelectedSkillName] = useState("");
   const [selectedSkill, setSelectedSkill] = useState<WorkspaceSkillDetail | null>(null);
@@ -259,6 +161,10 @@ export function SkillsPage() {
   const [bindingSkillName, setBindingSkillName] = useState("");
   const [skillMarkdownFullscreenOpen, setSkillMarkdownFullscreenOpen] = useState(false);
   const detailRequestIdRef = useRef(0);
+  const pagination = useTablePagination(skills);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:skills.${key}`, { defaultValue, ...options })
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -280,7 +186,7 @@ export function SkillsPage() {
       setSkills(records);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Workspace skills could not be loaded";
+        error instanceof Error ? error.message : pageT("errors.load", "Workspace skills could not be loaded");
       toast.error(message);
     } finally {
       setLoading(false);
@@ -323,7 +229,7 @@ export function SkillsPage() {
           return;
         }
         const message =
-          error instanceof Error ? error.message : "Skill detail could not be loaded";
+          error instanceof Error ? error.message : pageT("errors.detail", "Skill detail could not be loaded");
         toast.error(message);
       })
       .finally(() => {
@@ -352,14 +258,14 @@ export function SkillsPage() {
 
   async function handleRefresh() {
     if (!activeWorkspaceCode) {
-      toast.error("Select a workspace in the shell header before refreshing skills");
+      toast.error(pageT("errors.selectWorkspaceRefresh", "Select a workspace in the shell header before refreshing skills"));
       return;
     }
 
     setRefreshing(true);
     try {
       await refreshWorkspaceSkills(activeWorkspaceCode);
-      toast.success("Workspace skills refreshed");
+      toast.success(pageT("messages.refreshed", "Workspace skills refreshed"));
       await loadWorkspaceSkills();
       if (selectedSkillName) {
         const detail = await fetchWorkspaceSkill(activeWorkspaceCode, selectedSkillName);
@@ -369,7 +275,7 @@ export function SkillsPage() {
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Workspace refresh failed";
+        error instanceof Error ? error.message : pageT("errors.refresh", "Workspace refresh failed");
       toast.error(message);
     } finally {
       setRefreshing(false);
@@ -378,7 +284,7 @@ export function SkillsPage() {
 
   async function handleToggleBinding(skill: WorkspaceSkillRecord) {
     if (!activeWorkspaceCode) {
-      toast.error("Select a workspace in the shell header before enabling skills");
+      toast.error(pageT("errors.selectWorkspaceEnable", "Select a workspace in the shell header before enabling skills"));
       return;
     }
 
@@ -394,15 +300,15 @@ export function SkillsPage() {
         await unbindWorkspaceSkill(activeWorkspaceCode, skill.skillName);
         toast.success(
           shouldRevertInherited
-            ? `${skill.skillName} reverted to inherited setting in ${activeWorkspaceCode}`
-            : `${skill.skillName} removed from ${activeWorkspaceCode}`,
+            ? pageT("messages.reverted", "{{name}} reverted to inherited setting in {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode })
+            : pageT("messages.removed", "{{name}} removed from {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode }),
         );
       } else {
         await bindWorkspaceSkill(activeWorkspaceCode, skill.skillName, desiredEnabled);
         toast.success(
           desiredEnabled
-            ? `${skill.skillName} enabled in ${activeWorkspaceCode}`
-            : `${skill.skillName} disabled in ${activeWorkspaceCode}`,
+            ? pageT("messages.enabled", "{{name}} enabled in {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode })
+            : pageT("messages.disabled", "{{name}} disabled in {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode }),
         );
       }
       await loadWorkspaceSkills();
@@ -412,7 +318,7 @@ export function SkillsPage() {
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Workspace binding could not be updated";
+        error instanceof Error ? error.message : pageT("errors.updateBinding", "Workspace binding could not be updated");
       toast.error(message);
     } finally {
       setBindingSkillName("");
@@ -421,18 +327,18 @@ export function SkillsPage() {
 
   async function handleUnbind(skill: WorkspaceSkillRecord) {
     if (!activeWorkspaceCode) {
-      toast.error("Select a workspace in the shell header before unbinding skills");
+      toast.error(pageT("errors.selectWorkspaceUnbind", "Select a workspace in the shell header before unbinding skills"));
       return;
     }
     if (!canUnbindSkill(skill.sourceKind)) {
-      toast.info("Inherited skills cannot be unbound from this workspace");
+      toast.info(pageT("messages.inheritedInfo", "Inherited skills cannot be unbound from this workspace"));
       return;
     }
 
     setBindingSkillName(skill.skillName);
     try {
       await unbindWorkspaceSkill(activeWorkspaceCode, skill.skillName);
-      toast.success(`${skill.skillName} unbound from ${activeWorkspaceCode}`);
+      toast.success(pageT("messages.unbound", "{{name}} unbound from {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode }));
       await loadWorkspaceSkills();
       if (selectedSkillName === skill.skillName) {
         const detail = await fetchWorkspaceSkill(activeWorkspaceCode, skill.skillName).catch(() => null);
@@ -440,7 +346,7 @@ export function SkillsPage() {
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Workspace binding could not be removed";
+        error instanceof Error ? error.message : pageT("errors.removeBinding", "Workspace binding could not be removed");
       toast.error(message);
     } finally {
       setBindingSkillName("");
@@ -450,7 +356,7 @@ export function SkillsPage() {
   return (
     <>
       <PageHeader
-        title="Skills"
+        title={pageT("title", "Skills")}
         actions={(
           <>
             <Button
@@ -460,11 +366,11 @@ export function SkillsPage() {
               onClick={() => void handleRefresh()}
             >
               <RefreshCcw size={16} aria-hidden="true" />
-              {refreshing ? "Refreshing..." : "Refresh"}
+              {refreshing ? pageT("actions.refreshing", "Refreshing...") : t("common:actions.refresh")}
             </Button>
             <Button disabled={!activeWorkspaceCode} onClick={() => navigate("/skills/bind")}>
               <Link2 size={16} aria-hidden="true" />
-              Install
+              {pageT("actions.install", "Install")}
             </Button>
           </>
         )}
@@ -474,14 +380,21 @@ export function SkillsPage() {
         <SurfaceCard className="p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] p-4">
             <div className="min-w-[16rem] flex-1">
-              <SearchField value={searchInput} onChange={setSearchInput} />
+              <SearchField
+                ariaLabel={pageT("search.ariaLabel", "Filter workspace skills")}
+                clearLabel={pageT("search.clear", "Clear workspace skill search")}
+                placeholder={pageT("search.placeholder", "Filter workspace skills...")}
+                value={searchInput}
+                onChange={setSearchInput}
+              />
             </div>
-            {loading ? <Badge tone="accent">Loading</Badge> : null}
+            {loading ? <Badge tone="accent">{pageT("loading.badge", "Loading")}</Badge> : null}
           </div>
           <DataTable<WorkspaceSkillRecord>
-            className="rounded-t-none border-0 bg-transparent"
+            variant="embedded"
             onRowClick={(row) => setSelectedSkillName(row.skillName)}
-            rows={skills}
+            rows={pagination.visibleItems}
+            pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "skills")} {...pagination.paginationProps} />}
             rowKey={(row) => row.skillName}
             rowClassName={(row) => (
               row.skillName === selectedSkillName
@@ -490,18 +403,18 @@ export function SkillsPage() {
             )}
             emptyState={(
               <div className="space-y-2">
-                <p>No workspace skills match the current filters.</p>
+                <p>{pageT("emptyState.title", "No workspace skills match the current filters.")}</p>
                 <p className="text-xs">
                   {activeWorkspaceCode
-                    ? `Install synced skills to ${activeWorkspaceLabel} to see them here.`
-                    : "Select a workspace in the shell header to view bound skills."}
+                    ? pageT("emptyState.withWorkspace", "Install synced skills to {{workspace}} to see them here.", { workspace: activeWorkspaceLabel })
+                    : pageT("emptyState.withoutWorkspace", "Select a workspace in the shell header to view bound skills.")}
                 </p>
               </div>
             )}
             columns={[
               {
                 id: "skillName",
-                header: "Skill",
+                header: pageT("columns.skill", "Skill"),
                 render: (row) => (
                   <div
                     className={cn(
@@ -525,41 +438,41 @@ export function SkillsPage() {
               },
               {
                 id: "version",
-                header: "Version",
-                render: (row) => row.declaredVersion ?? (row.registryState === "Deleted" ? "Deleted" : "Unspecified"),
+                header: pageT("columns.version", "Version"),
+                render: (row) => row.declaredVersion ?? (row.registryState === "Deleted" ? pageT("status.deleted", "Deleted") : pageT("status.unspecified", "Unspecified")),
               },
               {
                 id: "sourceType",
-                header: "Source",
+                header: pageT("columns.source", "Source"),
                 render: (row) => (
                   row.sourceType ? (
                     <Badge tone={getSourceTone(row.sourceType)}>{row.sourceType}</Badge>
                   ) : (
-                    <Badge tone="error">Deleted</Badge>
+                    <Badge tone="error">{pageT("status.deleted", "Deleted")}</Badge>
                   )
                 ),
               },
               {
                 id: "updateStatus",
-                header: "Update",
+                header: pageT("columns.update", "Update"),
                 render: (row) => (
                   row.updateStatus ? (
                     <Badge tone={getUpdateTone(row.updateStatus)}>{row.updateStatus}</Badge>
                   ) : (
-                    <Badge tone="neutral">Unknown</Badge>
+                    <Badge tone="neutral">{pageT("status.unknown", "Unknown")}</Badge>
                   )
                 ),
               },
               {
                 id: "workspace",
-                header: "Workspace",
+                header: pageT("columns.workspace", "Workspace"),
                 render: (row) => (
                   <Badge tone={getWorkspaceSourceTone(row.sourceKind)}>{row.sourceKind}</Badge>
                 ),
               },
               {
                 id: "enabled",
-                header: "Enabled",
+                header: pageT("columns.enabled", "Enabled"),
                 render: (row) => (
                   <BindingSwitch
                     checked={row.enabled}
@@ -571,7 +484,7 @@ export function SkillsPage() {
               },
               {
                 id: "action",
-                header: "Action",
+                header: pageT("columns.action", "Action"),
                 render: (row) => (
                   canUnbindSkill(row.sourceKind) ? (
                     <Button
@@ -586,11 +499,11 @@ export function SkillsPage() {
                       }}
                     >
                       <Unlink2 size={14} aria-hidden="true" />
-                      Uninstall
+                      {pageT("actions.uninstall", "Uninstall")}
                     </Button>
                   ) : (
                     <span className="text-xs text-[var(--color-on-surface-variant)]">
-                      Inherited
+                      {pageT("status.inherited", "Inherited")}
                     </span>
                   )
                 ),
@@ -602,20 +515,20 @@ export function SkillsPage() {
         <SurfaceCard className="space-y-5">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">
-              Skill Detail
+              {pageT("detail.label", "Skill Detail")}
             </p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--color-on-surface)]">
-              {(selectedSkill?.skillName ?? selectedSkillName) || "Select a Skill"}
+              {(selectedSkill?.skillName ?? selectedSkillName) || pageT("detail.select", "Select a Skill")}
             </h2>
           </div>
 
           {detailLoading ? (
             <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
-              Loading skill detail...
+              {pageT("detail.loading", "Loading skill detail...")}
             </div>
           ) : !selectedSkill ? (
             <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
-              No bound skill is selected.
+              {pageT("detail.empty", "No bound skill is selected.")}
             </div>
           ) : (
             <>
@@ -670,11 +583,11 @@ export function SkillsPage() {
                 ) : null}
                 <DetailField
                   label="Last Checked"
-                  value={formatTimestamp(selectedSkill.lastCheckedAt)}
+                  value={selectedSkill.lastCheckedAt ? formatDateTime(selectedSkill.lastCheckedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notChecked", "Not checked")}
                 />
                 <DetailField
                   label="Last Updated"
-                  value={formatTimestamp(selectedSkill.lastUpdatedAt)}
+                  value={selectedSkill.lastUpdatedAt ? formatDateTime(selectedSkill.lastUpdatedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notChecked", "Not checked")}
                 />
               </div>
 

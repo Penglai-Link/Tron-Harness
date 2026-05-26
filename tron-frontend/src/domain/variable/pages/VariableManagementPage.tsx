@@ -1,13 +1,16 @@
 import {
   useEffect,
+  useMemo,
+  useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   ChevronRight,
+  MoreHorizontal,
   Plus,
   RefreshCcw,
   Save,
-  Search,
   Trash2,
   Undo2,
   X,
@@ -18,8 +21,11 @@ import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
   DataTable,
+  DetailField,
   Field,
   PageHeader,
+  SearchField,
+  SelectInput,
   SurfaceCard,
   TablePagination,
   TextArea,
@@ -46,6 +52,16 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 type PanelMode = "create" | "override" | "selected";
 type RouteVariant = "details" | "standard";
+type VariableSourceFilter = VariableRecord["sourceKind"] | "All";
+
+const variableSourceFilters = ["All", "Local", "Inherited", "Override"] as const satisfies readonly VariableSourceFilter[];
+
+interface RowMenuState {
+  key: string;
+  left: number;
+  top: number;
+  triggerElement: HTMLButtonElement;
+}
 
 interface VariableFormState {
   description: string;
@@ -59,51 +75,6 @@ function emptyForm(): VariableFormState {
     key: "",
     value: "",
   };
-}
-
-function SearchField({
-  onChange,
-  placeholder,
-  value,
-}: {
-  onChange: (value: string) => void;
-  placeholder: string;
-  value: string;
-}) {
-  return (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
-      <TextInput
-        aria-label="Search variables"
-        className={cn("h-9 w-full pl-9", value ? "pr-9" : undefined)}
-        placeholder={placeholder}
-        type="search"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      {value ? (
-        <Button
-          aria-label="Clear variable search"
-          className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
-          size="icon"
-          type="button"
-          variant="ghost"
-          onClick={() => onChange("")}
-        >
-          <X size={14} aria-hidden="true" />
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
-function DetailField({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{label}</p>
-      <p className="mt-1 break-words text-sm font-medium text-[var(--color-on-surface)]">{value}</p>
-    </div>
-  );
 }
 
 function formatTimestamp(value: string) {
@@ -172,11 +143,15 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
   const activeWorkspaceDescription = activeWorkspace?.description ?? "Use the shell workspace switcher to choose a variable scope.";
   const { loading, refresh, variables } = useVariableCatalog(activeWorkspaceCode);
   const [search, setSearch] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<VariableSourceFilter>("All");
   const [selectedKey, setSelectedKey] = useState("");
   const [panelMode, setPanelMode] = useState<PanelMode>("selected");
   const [form, setForm] = useState<VariableFormState>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [rowBusyKey, setRowBusyKey] = useState("");
+  const [openRowMenu, setOpenRowMenu] = useState<RowMenuState | null>(null);
+  const rowMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!variables.length) {
@@ -190,6 +165,9 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
   }, [panelMode, selectedKey, variables]);
 
   const selectedVariable = variables.find((record) => record.key === selectedKey);
+  const openMenuVariable = openRowMenu
+    ? variables.find((record) => record.key === openRowMenu.key) ?? null
+    : null;
 
   useEffect(() => {
     if (panelMode !== "selected") return;
@@ -200,8 +178,33 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
     setForm(formFromVariable(selectedVariable));
   }, [panelMode, selectedVariable]);
 
-  const filteredVariables = variables.filter((record) => matchesVariableSearch(record, search));
+  const filteredVariables = useMemo(() => variables.filter((record) => {
+    const matchesSource = sourceFilter === "All" || record.sourceKind === sourceFilter;
+    return matchesSource && matchesVariableSearch(record, search);
+  }), [search, sourceFilter, variables]);
   const pagination = useTablePagination(filteredVariables);
+
+  useEffect(() => {
+    if (!openRowMenu) return undefined;
+
+    const handleDocumentClick = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (rowMenuRef.current?.contains(target)) return;
+      if (openRowMenu.triggerElement.contains(target)) return;
+      setOpenRowMenu(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenRowMenu(null);
+    };
+
+    document.addEventListener("click", handleDocumentClick);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("click", handleDocumentClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openRowMenu]);
 
   function resetToSelected() {
     setPanelMode("selected");
@@ -221,6 +224,45 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
     if (!selectedVariable) return;
     setPanelMode("override");
     setForm(formFromVariable(selectedVariable));
+  }
+
+  function selectVariable(record: VariableRecord) {
+    setSelectedKey(record.key);
+    setPanelMode("selected");
+  }
+
+  function beginOverrideFor(record: VariableRecord) {
+    setSelectedKey(record.key);
+    setPanelMode("override");
+    setForm(formFromVariable(record));
+    setOpenRowMenu(null);
+  }
+
+  function toggleRowMenu(row: VariableRecord, trigger: HTMLButtonElement) {
+    if (rowBusyKey === row.key) return;
+    if (openRowMenu?.key === row.key) {
+      setOpenRowMenu(null);
+      return;
+    }
+
+    const menuWidth = 144;
+    const estimatedMenuHeight = 112;
+    const rect = trigger.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(12, rect.right - menuWidth),
+      window.innerWidth - menuWidth - 12,
+    );
+    const top = Math.min(
+      Math.max(12, rect.bottom + 8),
+      window.innerHeight - estimatedMenuHeight - 12,
+    );
+
+    setOpenRowMenu({
+      key: row.key,
+      left,
+      top,
+      triggerElement: trigger,
+    });
   }
 
   async function saveVariable() {
@@ -294,6 +336,28 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
     }
   }
 
+  async function removeVariableRow(record: VariableRecord) {
+    if (!activeWorkspaceCode || rowBusyKey === record.key || record.sourceKind === "Inherited") return;
+    setRowBusyKey(record.key);
+    setOpenRowMenu(null);
+    try {
+      if (dataSource === "api") {
+        await deleteVariable(activeWorkspaceCode, record.key);
+      } else {
+        deleteVariableRecord(activeWorkspaceCode, record.key);
+      }
+      toast.success(record.sourceKind === "Override" ? `${record.key} reverted to inherited value` : `${record.key} deleted`);
+      setSelectedKey((current) => (current === record.key ? "" : current));
+      setPanelMode("selected");
+      refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Variable could not be removed";
+      toast.error(message);
+    } finally {
+      setRowBusyKey("");
+    }
+  }
+
   const inspectorTitle = panelMode === "create"
     ? "Create Variable"
     : panelMode === "override"
@@ -324,9 +388,22 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
             <div className="min-w-[16rem] flex-1">
               <SearchField placeholder="Filter effective variables..." value={search} onChange={setSearch} />
             </div>
+            <SelectInput
+              aria-label="Filter variables by source"
+              className="h-9 w-full sm:w-44"
+              value={sourceFilter}
+              onChange={(event) => setSourceFilter(event.target.value as VariableSourceFilter)}
+            >
+              {variableSourceFilters.map((source) => (
+                <option key={source} value={source}>
+                  {source === "All" ? "All Sources" : source}
+                </option>
+              ))}
+            </SelectInput>
             {loading ? <Badge tone="accent">Loading</Badge> : null}
           </div>
           <DataTable<VariableRecord>
+            variant="embedded"
             rows={pagination.visibleItems}
             rowKey={(row) => row.key}
             pagination={<TablePagination itemLabel="variables" {...pagination.paginationProps} />}
@@ -335,6 +412,7 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
               {
                 id: "key",
                 header: "Key",
+                width: "18%",
                 render: (row) => (
                   <button
                     className={cn(
@@ -354,11 +432,13 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
               {
                 id: "value",
                 header: "Value",
+                width: "22%",
                 render: (row) => <span className="block max-w-[20rem] truncate font-mono text-[13px]">{row.value}</span>,
               },
               {
                 id: "sourceKind",
                 header: "Source",
+                width: "14%",
                 render: (row) => (
                   <Badge tone={getVariableSourceTone(row.sourceKind)}>{row.sourceKind}</Badge>
                 ),
@@ -366,6 +446,7 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
               {
                 id: "inheritedFrom",
                 header: "Inherited From",
+                width: "22%",
                 render: (row) => {
                   const inheritedWorkspace = getInheritedWorkspace(row);
                   if (!inheritedWorkspace) {
@@ -391,7 +472,38 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
               {
                 id: "updatedAt",
                 header: "Updated",
+                width: "16%",
                 render: (row) => formatTimestamp(row.updatedAt),
+              },
+              {
+                align: "right",
+                cellClassName: "w-16",
+                header: "Actions",
+                headerClassName: "w-16",
+                id: "actions",
+                width: "8%",
+                render: (row) => {
+                  const isMenuOpen = openRowMenu?.key === row.key;
+                  const isBusy = rowBusyKey === row.key;
+
+                  return (
+                    <div className="flex justify-end">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`Open actions for ${row.key}`}
+                        aria-expanded={isMenuOpen}
+                        disabled={isBusy}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleRowMenu(row, event.currentTarget);
+                        }}
+                      >
+                        <MoreHorizontal size={16} aria-hidden="true" />
+                      </Button>
+                    </div>
+                  );
+                },
               },
             ]}
           />
@@ -543,6 +655,53 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
           )}
         </SurfaceCard>
       </div>
+      {openRowMenu && openMenuVariable
+        ? createPortal(
+          <div
+            ref={rowMenuRef}
+            style={{ left: openRowMenu.left, top: openRowMenu.top }}
+            className="fixed z-[80] w-36 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-2 text-left text-sm shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
+            role="menu"
+            aria-label={`Actions for ${openMenuVariable.key}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]"
+              onClick={() => {
+                setOpenRowMenu(null);
+                selectVariable(openMenuVariable);
+              }}
+            >
+              Edit
+            </button>
+            {openMenuVariable.sourceKind === "Inherited" ? (
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]"
+                onClick={() => beginOverrideFor(openMenuVariable)}
+              >
+                Override
+              </button>
+            ) : (
+              <button
+                type="button"
+                role="menuitem"
+                className="block w-full rounded-lg px-3 py-2 text-left text-[var(--color-error)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={rowBusyKey === openMenuVariable.key}
+                onClick={() => {
+                  void removeVariableRow(openMenuVariable);
+                }}
+              >
+                {openMenuVariable.sourceKind === "Override" ? "Revert" : "Delete"}
+              </button>
+            )}
+          </div>,
+          document.body,
+        )
+        : null}
     </>
   );
 }

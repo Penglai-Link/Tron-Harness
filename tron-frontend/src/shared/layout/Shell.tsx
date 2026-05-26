@@ -32,6 +32,7 @@ import { tronNavigation } from "@/shared/constants/shellNavigation";
 import {
   defaultPrimarySpaceId,
   defaultSecondarySpaceId,
+  getEmptyWorkspaceSwitcher,
   getWorkspaceSwitcherMock,
 } from "@/shared/constants/workspaceSpaces";
 import { WorkspaceSpacesContext } from "@/shared/hooks/useWorkspaceSpaces";
@@ -210,6 +211,7 @@ export function TronShell({
     workspaceSwitcherControllerRef.current?.abort();
     const controller = new AbortController();
     workspaceSwitcherControllerRef.current = controller;
+    setWorkspaceSwitcherSnapshot(getEmptyWorkspaceSwitcher());
     setWorkspaceSwitcherLoading(true);
 
     try {
@@ -231,13 +233,9 @@ export function TronShell({
   }, [dataSource, setWorkspaceSwitcherSnapshot]);
 
   useEffect(() => {
-    if (dataSource !== "api") {
-      setWorkspaceSwitcherSnapshot(getWorkspaceSwitcherMock());
-      return () => workspaceSwitcherControllerRef.current?.abort();
-    }
-
+    void refreshWorkspaceSwitcher();
     return () => workspaceSwitcherControllerRef.current?.abort();
-  }, [dataSource, setWorkspaceSwitcherSnapshot]);
+  }, [refreshWorkspaceSwitcher]);
 
   useEffect(() => {
     const activeSection = tronNavigation.find((section) => sectionHasActiveItem(section, activeItem));
@@ -551,7 +549,7 @@ export function TronShell({
               aria-label={t("shell:aria.openSystemSettings")}
               onClick={() => {
                 closeFloatingPanels();
-                navigate("/settings", { state: { from: `${pathname}${search}` } });
+                navigate("/settings/general", { state: { from: `${pathname}${search}` } });
               }}
             >
               <Settings2 size={17} aria-hidden="true" />

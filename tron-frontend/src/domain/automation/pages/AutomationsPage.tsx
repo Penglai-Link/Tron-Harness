@@ -10,8 +10,6 @@ import {
   MoreHorizontal,
   Plus,
   RefreshCcw,
-  Search,
-  X,
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
@@ -19,11 +17,13 @@ import { Button } from "@/shared/ui/Button";
 import {
   DataTable,
   PageHeader,
+  SearchField,
   SelectInput,
   SurfaceCard,
   TablePagination,
-  TextInput,
   useDismissibleLayer,
+  useLocaleFormatters,
+  useLocaleText,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -53,52 +53,6 @@ import type {
 } from "@/domain/automation/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
-function SearchField({
-  className,
-  inputClassName,
-  onChange,
-  value,
-}: {
-  className?: string;
-  inputClassName?: string;
-  onChange: (value: string) => void;
-  value: string;
-}) {
-  return (
-    <div className={cn("relative", className)}>
-      <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
-      <TextInput
-        aria-label="Search automations"
-        className={cn("h-9 w-full pl-9", value ? "pr-9" : undefined, inputClassName)}
-        placeholder="Filter by code, name, description, or latest result..."
-        type="search"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      {value ? (
-        <Button
-          aria-label="Clear automation search"
-          className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
-          size="icon"
-          type="button"
-          variant="ghost"
-          onClick={() => onChange("")}
-        >
-          <X size={14} aria-hidden="true" />
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
-function formatTimestamp(value?: string | null, fallback = "Not available") {
-  if (!value) return fallback;
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
 function pageBounds(page: number, pageSize: number, total: number, visible: number) {
   if (!total || !visible) return { end: 0, start: 0 };
   const start = (page - 1) * pageSize + 1;
@@ -113,7 +67,7 @@ function StatisticCard({
   value,
 }: {
   label: string;
-  value: number;
+  value: string;
 }) {
   return (
     <SurfaceCard className="p-4">
@@ -136,6 +90,8 @@ interface RowMenuState {
 
 export function AutomationsPage() {
   const navigate = useNavigate();
+  const pt = useLocaleText();
+  const { formatDateTime, formatNumber } = useLocaleFormatters();
   const toast = useToast();
   const dataSource = getServiceDataSource("automation");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
@@ -161,6 +117,10 @@ export function AutomationsPage() {
   const bounds = pageBounds(page.current, page.size, page.total, page.records.length);
   const activeCount = page.records.filter((item) => item.status === "Active").length;
   const pausedCount = page.records.filter((item) => item.status === "Paused").length;
+  const formatTimestamp = (value?: string | null, fallback = "Not available") => (value ? formatDateTime(value, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }) : pt(fallback));
   const openMenuRow = openRowMenu
     ? page.records.find((item) => item.automationCode === openRowMenu.automationCode) ?? null
     : null;
@@ -226,10 +186,10 @@ export function AutomationsPage() {
       const updated = dataSource === "api"
         ? await executeAutomation(row.automationCode)
         : executeMockAutomation(row.automationCode);
-      toast.success(`Manual execution recorded for ${updated.automationCode}`);
+      toast.success(pt("Manual execution recorded for {{code}}", { code: updated.automationCode }));
       refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Automation execution could not be recorded");
+      toast.error(error instanceof Error ? error.message : pt("Automation execution could not be recorded"));
     } finally {
       setRowBusyKey("");
     }
@@ -246,10 +206,10 @@ export function AutomationsPage() {
       const updated = dataSource === "api"
         ? await updateAutomationStatus(row.automationCode, { status })
         : updateMockAutomationStatus(row.automationCode, { status });
-      toast.success(`Automation ${updated.automationCode} ${status === "Active" ? "activated" : "paused"}`);
+      toast.success(pt("Automation {{code}} {{status}}", { code: updated.automationCode, status: status === "Active" ? pt("activated") : pt("paused") }));
       refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Automation status could not be updated");
+      toast.error(error instanceof Error ? error.message : pt("Automation status could not be updated"));
     } finally {
       setRowBusyKey("");
     }
@@ -266,16 +226,16 @@ export function AutomationsPage() {
         const result = dataSource === "api"
           ? await restoreAutomation(row.automationCode)
           : restoreMockAutomation(row.automationCode);
-        toast.success(`Automation ${result.automationCode} restored to ${result.status}`);
+        toast.success(pt("Automation {{code}} restored to {{status}}", { code: result.automationCode, status: pt(result.status) }));
       } else {
         const result = dataSource === "api"
           ? await archiveAutomation(row.automationCode)
           : archiveMockAutomation(row.automationCode);
-        toast.success(`Automation ${result.automationCode} archived`);
+        toast.success(pt("Automation {{code}} archived", { code: result.automationCode }));
       }
       refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Automation lifecycle update failed");
+      toast.error(error instanceof Error ? error.message : pt("Automation lifecycle update failed"));
     } finally {
       setRowBusyKey("");
     }
@@ -284,58 +244,60 @@ export function AutomationsPage() {
   return (
     <>
       <PageHeader
-        title="Automations"
+        title={pt("Automations")}
         actions={
           <>
             <Button variant="secondary" onClick={() => {
               refresh();
-              toast.success("Automation list refreshed");
+              toast.success(pt("Automation list refreshed"));
             }}
             >
               <RefreshCcw size={15} aria-hidden="true" />
-              Refresh
+              {pt("Refresh")}
             </Button>
             <Button disabled={!activeWorkspaceCode} onClick={() => navigate("/automations/new")}>
               <Plus size={15} aria-hidden="true" />
-              New
+              {pt("New")}
             </Button>
           </>
         }
       />
       <section className="mb-4 grid gap-3 md:grid-cols-3">
-        <StatisticCard label="In Scope" value={page.total} />
-        <StatisticCard label="Active" value={activeCount} />
-        <StatisticCard label="Paused" value={pausedCount} />
+        <StatisticCard label={pt("In Scope")} value={formatNumber(page.total)} />
+        <StatisticCard label={pt("Active")} value={formatNumber(activeCount)} />
+        <StatisticCard label={pt("Paused")} value={formatNumber(pausedCount)} />
       </section>
       <DataTable<AutomationListItem>
-        emptyState={activeWorkspaceCode ? "No automations match the current filters." : "Choose a workspace in the shell header before managing automations."}
+        emptyState={activeWorkspaceCode ? pt("No automations match the current filters.") : pt("Choose a workspace in the shell header before managing automations.")}
         onRowClick={(row) => navigate(`/automations/detail?automationCode=${encodeURIComponent(row.automationCode)}`)}
         rows={page.records}
         rowKey={(row) => row.automationCode}
         toolbar={
           <>
             <SearchField
+              ariaLabel={pt("Search automations")}
               className="min-w-0 grow basis-full sm:basis-0"
+              placeholder={pt("Filter by code, name, description, or latest result...")}
               value={searchInput}
               onChange={setSearchInput}
             />
             <SelectInput
               className="h-9 w-full sm:w-44"
-              aria-label="Automation status filter"
+              aria-label={pt("Automation status filter")}
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as AutomationStatus | "")}
             >
-              <option value="">All active states</option>
-              <option value="Active">Active</option>
-              <option value="Paused">Paused</option>
-              <option value="Archived">Archived</option>
+              <option value="">{pt("All active states")}</option>
+              <option value="Active">{pt("Active")}</option>
+              <option value="Paused">{pt("Paused")}</option>
+              <option value="Archived">{pt("Archived")}</option>
             </SelectInput>
           </>
         }
         pagination={(
           <TablePagination
             endItem={bounds.end}
-            itemLabel="automations"
+            itemLabel={pt("automations")}
             page={page.current}
             pageCount={totalPages}
             pageSize={page.size}
@@ -350,49 +312,49 @@ export function AutomationsPage() {
         )}
         columns={[
           {
-            header: "Automation",
+            header: pt("Automation"),
             id: "name",
             render: (row) => (
               <div className="space-y-1">
                 <p className="font-medium text-[var(--color-on-surface)]">{row.name}</p>
-                <p className="max-w-[28rem] text-sm leading-6 text-[var(--color-on-surface-variant)]">{row.description ?? "No description"}</p>
+                <p className="max-w-[28rem] text-sm leading-6 text-[var(--color-on-surface-variant)]">{row.description ?? pt("No description")}</p>
               </div>
             ),
           },
           {
-            header: "Schedule",
+            header: pt("Schedule"),
             id: "schedule",
             render: (row) => (
               <div className="space-y-1">
                 <p className="font-mono text-[13px] text-[var(--color-on-surface)]">{row.cronExpression}</p>
-                <p className="text-sm text-[var(--color-on-surface-variant)]">Next: {formatTimestamp(row.nextRunAt, "Not scheduled")}</p>
+                <p className="text-sm text-[var(--color-on-surface-variant)]">{pt("Next: {{value}}", { value: formatTimestamp(row.nextRunAt, "Not scheduled") })}</p>
               </div>
             ),
           },
           {
-            header: "Latest result",
+            header: pt("Latest result"),
             id: "latest",
             render: (row) => (
               <div>
                 {row.lastExecutionStatus ? (
                   <Badge tone={getAutomationExecutionStatusTone(row.lastExecutionStatus)}>
-                    {row.lastExecutionStatus}
+                    {pt(row.lastExecutionStatus)}
                   </Badge>
                 ) : (
-                  <Badge tone="neutral">Never run</Badge>
+                  <Badge tone="neutral">{pt("Never run")}</Badge>
                 )}
               </div>
             ),
           },
           {
-            header: "Status",
+            header: pt("Status"),
             id: "status",
             render: (row) => (
-              <Badge tone={getAutomationStatusTone(row.status)}>{row.status}</Badge>
+              <Badge tone={getAutomationStatusTone(row.status)}>{pt(row.status)}</Badge>
             ),
           },
           {
-            header: "Updated",
+            header: pt("Updated"),
             id: "updated",
             render: (row) => (
               <span className="text-sm text-[var(--color-on-surface-variant)]">{formatTimestamp(row.updatedAt)}</span>
@@ -400,7 +362,7 @@ export function AutomationsPage() {
           },
           {
             align: "right",
-            header: "Actions",
+            header: pt("Actions"),
             id: "actions",
             render: (row) => {
               const isMenuOpen = openRowMenu?.automationCode === row.automationCode;
@@ -411,7 +373,7 @@ export function AutomationsPage() {
                   <Button
                     size="icon"
                     variant="ghost"
-                    aria-label={`Open actions for ${row.name}`}
+                    aria-label={pt("Open actions for {{name}}", { name: row.name })}
                     aria-expanded={isMenuOpen}
                     data-automation-menu-trigger={row.automationCode}
                     disabled={isBusy}
@@ -435,7 +397,7 @@ export function AutomationsPage() {
             style={{ left: openRowMenu.left, top: openRowMenu.top }}
             className="fixed z-[80] w-44 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-2 text-left text-sm shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
             role="menu"
-            aria-label={`Actions for ${openMenuRow.name}`}
+            aria-label={pt("Actions for {{name}}", { name: openMenuRow.name })}
           >
             {openMenuRow.status !== "Archived" ? (
               <button
@@ -447,7 +409,7 @@ export function AutomationsPage() {
                   void handleExecute(openMenuRow);
                 }}
               >
-                Run
+                {pt("Run")}
               </button>
             ) : null}
             {openMenuRow.status !== "Archived" ? (
@@ -460,7 +422,7 @@ export function AutomationsPage() {
                   void handleStatusToggle(openMenuRow);
                 }}
               >
-                {openMenuRow.status === "Active" ? "Pause" : "Activate"}
+                {openMenuRow.status === "Active" ? pt("Pause") : pt("Activate")}
               </button>
             ) : null}
             {openMenuRow.status !== "Archived" ? (
@@ -473,7 +435,7 @@ export function AutomationsPage() {
                   void handleArchive(openMenuRow);
                 }}
               >
-                Archive
+                {pt("Archive")}
               </button>
             ) : null}
             {openMenuRow.status === "Archived" ? (
@@ -486,7 +448,7 @@ export function AutomationsPage() {
                   void handleArchive(openMenuRow);
                 }}
               >
-                Restore
+                {pt("Restore")}
               </button>
             ) : null}
           </div>,

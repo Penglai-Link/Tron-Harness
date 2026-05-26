@@ -11,17 +11,17 @@ import {
   RefreshCcw,
   RotateCcw,
   Save,
-  Search,
   Trash2,
-  X,
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import { cn } from "@/shared/lib/utils";
 import {
+  DetailField,
   Field,
   PageHeader,
+  SearchField,
   SelectInput,
   SegmentedTabs,
   SurfaceCard,
@@ -29,6 +29,8 @@ import {
   TextArea,
   TextInput,
   ToggleSwitch,
+  useLocaleFormatters,
+  useLocaleText,
   useToast,
 } from "@/shared";
 
@@ -103,57 +105,6 @@ const workspaceInspectorTabs = [
   { label: "Create", value: "create" },
 ] satisfies ReadonlyArray<{ label: string; value: WorkspaceInspectorTab }>;
 
-function SearchField({
-  onChange,
-  onClear,
-  placeholder,
-  value,
-}: {
-  onChange: (value: string) => void;
-  onClear?: () => void;
-  placeholder: string;
-  value: string;
-}) {
-  return (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
-      <TextInput
-        aria-label="Search workspaces"
-        className={cn("h-9 w-full pl-9", value ? "pr-9" : undefined)}
-        placeholder={placeholder}
-        role="searchbox"
-        type="text"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-      {value ? (
-        <Button
-          aria-label="Clear workspace search"
-          className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
-          size="icon"
-          type="button"
-          variant="ghost"
-          onClick={() => {
-            onChange("");
-            onClear?.();
-          }}
-        >
-          <X size={14} aria-hidden="true" />
-        </Button>
-      ) : null}
-    </div>
-  );
-}
-
-function DetailField({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{label}</p>
-      <p className="mt-1 break-words text-sm font-medium text-[var(--color-on-surface)]">{value}</p>
-    </div>
-  );
-}
-
 function InspectorStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl bg-[var(--color-surface-container-low)] px-4 py-3">
@@ -163,30 +114,23 @@ function InspectorStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function emptyPage<T>(): AdminPage<T> {
+function emptyPage<T>(current = 1, size = ACCESS_PAGE_SIZE): AdminPage<T> {
   return {
-    current: 1,
-    size: ACCESS_PAGE_SIZE,
+    current,
+    size,
     total: 0,
     records: [],
   };
 }
 
-function pagedRecords<T>(records: T[]): AdminPage<T> {
+function pagedRecords<T>(records: T[], current = 1, size = ACCESS_PAGE_SIZE): AdminPage<T> {
+  const startIndex = Math.max(0, (current - 1) * size);
   return {
-    current: 1,
-    size: ACCESS_PAGE_SIZE,
+    current,
+    size,
     total: records.length,
-    records,
+    records: records.slice(startIndex, startIndex + size),
   };
-}
-
-function formatTimestamp(value: string | null) {
-  if (!value) return "Never";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
 }
 
 function rootValueToParent(value: string) {
@@ -270,6 +214,8 @@ function TreeNode({
   record: WorkspaceTreeNodeRecord;
   selectedWorkspaceCode: string | null;
 }) {
+  const pt = useLocaleText();
+  const { formatNumber } = useLocaleFormatters();
   const hasChildren = record.children.length > 0;
   const expanded = expandedCodes.has(record.workspaceCode);
   const selected = selectedWorkspaceCode === record.workspaceCode;
@@ -288,7 +234,7 @@ function TreeNode({
           <Button
             size="icon"
             variant="ghost"
-            aria-label={`Toggle ${record.workspaceCode} children`}
+            aria-label={pt("Toggle {{code}} children", { code: record.workspaceCode })}
             className="size-7 shrink-0 text-[var(--color-on-surface-variant)]"
             onClick={() => onToggle(record.workspaceCode)}
           >
@@ -301,7 +247,7 @@ function TreeNode({
           className="min-w-0 flex-1 rounded-md px-1 py-0.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
           type="button"
           aria-current={selected ? "true" : undefined}
-          aria-label={`Select workspace ${record.workspaceCode}`}
+          aria-label={pt("Select workspace {{code}}", { code: record.workspaceCode })}
           onClick={() => onSelect(record.workspaceCode)}
         >
           <div className="flex min-w-0 items-center gap-2">
@@ -311,18 +257,18 @@ function TreeNode({
                 "size-1.5 rounded-full",
                 record.status === "Active" ? "bg-[var(--color-success)]" : "bg-[var(--color-warning)]",
               )} />
-              {record.status}
+              {pt(record.status)}
             </span>
           </div>
           <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[12px] text-[var(--color-on-surface-variant)]">
             <span className="truncate font-mono">{record.workspaceCode}</span>
-            {record.childCount ? <span className="shrink-0">· {record.childCount} {record.childCount === 1 ? "child" : "children"}</span> : null}
+            {record.childCount ? <span className="shrink-0">· {record.childCount === 1 ? pt("{{count}} child", { count: formatNumber(record.childCount) }) : pt("{{count}} children", { count: formatNumber(record.childCount) })}</span> : null}
           </div>
         </button>
         <Button
           size="icon"
           variant="ghost"
-          aria-label={`Create child workspace under ${record.workspaceCode}`}
+          aria-label={pt("Create child workspace under {{code}}", { code: record.workspaceCode })}
           className="size-7 shrink-0 text-[var(--color-on-surface-variant)] opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100"
           onClick={() => onPrepareCreate(record.workspaceCode)}
         >
@@ -349,6 +295,8 @@ function TreeNode({
 }
 
 export function WorkspaceManagementPage() {
+  const pt = useLocaleText();
+  const { formatDateTime, formatNumber } = useLocaleFormatters();
   const toast = useToast();
   const isApiMode = getServiceDataSource("admin") === "api";
   const users = useUserList({ current: 1, size: 200, status: "All" });
@@ -372,6 +320,8 @@ export function WorkspaceManagementPage() {
   const [userAccessPage, setUserAccessPage] = useState<AdminPage<WorkspaceUserAccessRecord>>(emptyPage());
   const [roleAccessRecords, setRoleAccessRecords] = useState<WorkspaceRoleAccessRecord[]>([]);
   const [effectiveUserPage, setEffectiveUserPage] = useState<AdminPage<WorkspaceEffectiveUserRecord>>(emptyPage());
+  const [effectiveUserCurrent, setEffectiveUserCurrent] = useState(1);
+  const [effectiveUserSize, setEffectiveUserSize] = useState(ACCESS_PAGE_SIZE);
   const [directUserDrafts, setDirectUserDrafts] = useState<WorkspaceUserAccessRecord[]>([]);
   const [roleDrafts, setRoleDrafts] = useState<WorkspaceRoleAccessRecord[]>([]);
   const [nextDirectUserCode, setNextDirectUserCode] = useState("");
@@ -386,6 +336,14 @@ export function WorkspaceManagementPage() {
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
   const [savingUsers, setSavingUsers] = useState(false);
   const [savingRoles, setSavingRoles] = useState(false);
+  const localizedInspectorTabs = useMemo(
+    () => workspaceInspectorTabs.map((item) => ({ ...item, label: pt(item.label) })),
+    [pt],
+  );
+  const formatTimestamp = (value: string | null) => (value ? formatDateTime(value, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }) : pt("Never"));
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -433,7 +391,7 @@ export function WorkspaceManagementPage() {
         }
       } catch (error) {
         if (controller.signal.aborted || cancelled) return;
-        const message = error instanceof Error ? error.message : "Workspace tree could not be loaded";
+        const message = error instanceof Error ? error.message : pt("Workspace tree could not be loaded");
         toast.error(message);
       } finally {
         if (!cancelled) setTreeLoading(false);
@@ -448,13 +406,17 @@ export function WorkspaceManagementPage() {
   }, [debouncedSearch, isApiMode, searchClearVersion, statusFilter, toast, workspaceDataVersion]);
 
   useEffect(() => {
+    setEffectiveUserCurrent(1);
+  }, [selectedWorkspaceCode]);
+
+  useEffect(() => {
     if (!selectedWorkspaceCode) {
       setDetail(null);
       setDetailForm({ name: "", description: "" });
       setMoveParentWorkspaceCode(ROOT_PARENT_VALUE);
       setUserAccessPage(emptyPage());
       setRoleAccessRecords([]);
-      setEffectiveUserPage(emptyPage());
+      setEffectiveUserPage(emptyPage(effectiveUserCurrent, effectiveUserSize));
       setDirectUserDrafts([]);
       setRoleDrafts([]);
       return;
@@ -472,7 +434,9 @@ export function WorkspaceManagementPage() {
           isApiMode ? fetchWorkspaceDetail(workspaceCode, controller.signal) : Promise.resolve(getWorkspaceDetail(workspaceCode)),
           isApiMode ? fetchWorkspaceUserAccess(workspaceCode, { current: 1, size: ACCESS_PAGE_SIZE }, controller.signal) : Promise.resolve(pagedRecords(getWorkspaceUserAccess(workspaceCode))),
           isApiMode ? fetchWorkspaceRoleAccess(workspaceCode, controller.signal) : Promise.resolve(getWorkspaceRoleAccess(workspaceCode)),
-          isApiMode ? fetchWorkspaceEffectiveUsers(workspaceCode, { current: 1, size: ACCESS_PAGE_SIZE }, controller.signal) : Promise.resolve(pagedRecords(getWorkspaceEffectiveUsers(workspaceCode))),
+          isApiMode
+            ? fetchWorkspaceEffectiveUsers(workspaceCode, { current: effectiveUserCurrent, size: effectiveUserSize }, controller.signal)
+            : Promise.resolve(pagedRecords(getWorkspaceEffectiveUsers(workspaceCode), effectiveUserCurrent, effectiveUserSize)),
         ]);
         if (cancelled || controller.signal.aborted) return;
 
@@ -480,7 +444,7 @@ export function WorkspaceManagementPage() {
           setDetail(null);
           setUserAccessPage(emptyPage());
           setRoleAccessRecords([]);
-          setEffectiveUserPage(emptyPage());
+          setEffectiveUserPage(emptyPage(effectiveUserCurrent, effectiveUserSize));
           setDirectUserDrafts([]);
           setRoleDrafts([]);
           return;
@@ -499,7 +463,7 @@ export function WorkspaceManagementPage() {
         setRoleDrafts(nextRoleAccessRecords);
       } catch (error) {
         if (cancelled || controller.signal.aborted) return;
-        const message = error instanceof Error ? error.message : "Workspace detail could not be loaded";
+        const message = error instanceof Error ? error.message : pt("Workspace detail could not be loaded");
         toast.error(message);
       } finally {
         if (!cancelled) setDetailLoading(false);
@@ -511,7 +475,7 @@ export function WorkspaceManagementPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [isApiMode, selectedWorkspaceCode, toast, workspaceDataVersion]);
+  }, [effectiveUserCurrent, effectiveUserSize, isApiMode, selectedWorkspaceCode, toast, workspaceDataVersion]);
 
   const selectedTreeNode = useMemo(
     () => findWorkspaceNode(catalogTree, selectedWorkspaceCode),
@@ -532,6 +496,11 @@ export function WorkspaceManagementPage() {
       .map((role) => role.code as UserRoleCode)
       .filter((roleCode) => !selectedRoleCodes.has(roleCode));
   }, [roleCatalog, roleDrafts]);
+  const effectiveUserPageCount = Math.max(1, Math.ceil(effectiveUserPage.total / effectiveUserPage.size));
+  const effectiveUserStartItem = effectiveUserPage.total ? (effectiveUserPage.current - 1) * effectiveUserPage.size + 1 : 0;
+  const effectiveUserEndItem = effectiveUserStartItem
+    ? effectiveUserStartItem + effectiveUserPage.records.length - 1
+    : 0;
   const createParentOptions = useMemo(
     () => flattenWorkspaceTree(catalogTree).filter((record) => record.status === "Active" && record.depth < 3),
     [catalogTree],
@@ -605,9 +574,9 @@ export function WorkspaceManagementPage() {
       });
       setInspectorTab("overview");
       refreshWorkspaceData();
-      toast.success(`Workspace ${created.workspaceCode} created`);
+      toast.success(pt("Workspace {{code}} created", { code: created.workspaceCode }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Workspace could not be created";
+      const message = error instanceof Error ? error.message : pt("Workspace could not be created");
       toast.error(message);
     } finally {
       setCreatingWorkspace(false);
@@ -635,9 +604,9 @@ export function WorkspaceManagementPage() {
         description: updated.description ?? "",
       });
       refreshWorkspaceData();
-      toast.success(`Workspace ${updated.workspaceCode} updated`);
+      toast.success(pt("Workspace {{code}} updated", { code: updated.workspaceCode }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Workspace metadata could not be saved";
+      const message = error instanceof Error ? error.message : pt("Workspace metadata could not be saved");
       toast.error(message);
     } finally {
       setSavingMetadata(false);
@@ -658,9 +627,9 @@ export function WorkspaceManagementPage() {
       setDetail(moved);
       setMoveParentWorkspaceCode(parentToRootValue(moved.parentWorkspaceCode));
       refreshWorkspaceData();
-      toast.success(`Workspace ${moved.workspaceCode} moved`);
+      toast.success(pt("Workspace {{code}} moved", { code: moved.workspaceCode }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Workspace could not be moved";
+      const message = error instanceof Error ? error.message : pt("Workspace could not be moved");
       toast.error(message);
     } finally {
       setMovingWorkspace(false);
@@ -685,9 +654,11 @@ export function WorkspaceManagementPage() {
         );
 
       refreshWorkspaceData();
-      toast.success(`${result.workspaceCode ?? detail.workspaceCode} ${action}d`);
+      toast.success(action === "archive"
+        ? pt("Workspace {{code}} archived", { code: result.workspaceCode ?? detail.workspaceCode })
+        : pt("Workspace {{code}} restored", { code: result.workspaceCode ?? detail.workspaceCode }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : `Workspace could not be ${action}d`;
+      const message = error instanceof Error ? error.message : action === "archive" ? pt("Workspace could not be archived") : pt("Workspace could not be restored");
       toast.error(message);
     } finally {
       setLifecycleLoading(false);
@@ -745,9 +716,9 @@ export function WorkspaceManagementPage() {
       setUserAccessPage(nextUsers);
       setDirectUserDrafts(nextUsers.records);
       refreshWorkspaceData();
-      toast.success("Direct user access updated");
+      toast.success(pt("Direct user access updated"));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Direct user access could not be saved";
+      const message = error instanceof Error ? error.message : pt("Direct user access could not be saved");
       toast.error(message);
     } finally {
       setSavingUsers(false);
@@ -770,9 +741,9 @@ export function WorkspaceManagementPage() {
       setRoleAccessRecords(nextRoles);
       setRoleDrafts(nextRoles);
       refreshWorkspaceData();
-      toast.success("Role access updated");
+      toast.success(pt("Role access updated"));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Role access could not be saved";
+      const message = error instanceof Error ? error.message : pt("Role access could not be saved");
       toast.error(message);
     } finally {
       setSavingRoles(false);
@@ -782,16 +753,16 @@ export function WorkspaceManagementPage() {
   return (
     <>
       <PageHeader
-        title="Workspace Management"
+        title={pt("Workspace Management")}
         actions={(
           <>
             <Button variant="secondary" disabled={treeLoading} aria-busy={treeLoading} onClick={refreshWorkspaceData}>
               <RefreshCcw size={16} aria-hidden="true" />
-              {treeLoading ? "Refreshing..." : "Refresh"}
+              {treeLoading ? pt("Refreshing...") : pt("Refresh")}
             </Button>
             <Button variant="secondary" onClick={() => prepareCreate(null)}>
               <Plus size={16} aria-hidden="true" />
-              New
+              {pt("New")}
             </Button>
           </>
         )}
@@ -801,16 +772,16 @@ export function WorkspaceManagementPage() {
         <SurfaceCard className="flex min-h-[28rem] flex-col space-y-4 xl:sticky xl:top-20 xl:h-[calc(100vh-6.5rem)]">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Workspace Tree</h2>
+              <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pt("Workspace Tree")}</h2>
             </div>
-            {treeLoading ? <Badge tone="accent">Loading</Badge> : null}
+            {treeLoading ? <Badge tone="accent">{pt("Loading")}</Badge> : null}
           </div>
           <div className="grid gap-3">
-            <SearchField placeholder="Filter workspaces..." value={searchInput} onChange={setSearchInput} onClear={clearWorkspaceSearch} />
-            <SelectInput aria-label="Filter workspaces by status" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as WorkspaceStatusFilter)}>
-              <option value="All">All Status</option>
+            <SearchField ariaLabel={pt("Search workspaces")} placeholder={pt("Filter workspaces...")} value={searchInput} onChange={setSearchInput} onClear={clearWorkspaceSearch} />
+            <SelectInput aria-label={pt("Filter workspaces by status")} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as WorkspaceStatusFilter)}>
+              <option value="All">{pt("All Status")}</option>
               {adminUserStatusOptions.map((status) => (
-                <option key={status} value={status}>{status}</option>
+                <option key={status} value={status}>{pt(status)}</option>
               ))}
             </SelectInput>
           </div>
@@ -827,7 +798,7 @@ export function WorkspaceManagementPage() {
               />
             )) : (
               <div className="rounded-xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
-                No workspaces match the current filters.
+                {pt("No workspaces match the current filters.")}
               </div>
             )}
           </div>
@@ -837,31 +808,31 @@ export function WorkspaceManagementPage() {
           <SurfaceCard className="space-y-6">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Workspace Studio</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">{pt("Workspace Studio")}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-3">
                   <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-on-surface)]">
-                    {inspectorTab === "create" ? "Create Workspace" : detail ? detail.name : "Select a Workspace"}
+                    {inspectorTab === "create" ? pt("Create Workspace") : detail ? detail.name : pt("Select a Workspace")}
                   </h2>
-                  {detail && inspectorTab !== "create" ? <Badge tone={getStatusTone(detail.status)}>{detail.status}</Badge> : null}
+                  {detail && inspectorTab !== "create" ? <Badge tone={getStatusTone(detail.status)}>{pt(detail.status)}</Badge> : null}
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {detail ? (
                   <Button variant="secondary" onClick={() => prepareCreate(detail.workspaceCode)}>
                     <Plus size={16} aria-hidden="true" />
-                    New
+                    {pt("New")}
                   </Button>
                 ) : null}
               </div>
             </div>
 
             <div className="flex flex-col gap-4 border-t border-[var(--color-outline-variant)] pt-4 xl:flex-row xl:items-center xl:justify-between">
-              <SegmentedTabs value={inspectorTab} onValueChange={(value) => setInspectorTab(value as WorkspaceInspectorTab)} items={workspaceInspectorTabs} />
+              <SegmentedTabs value={inspectorTab} onValueChange={(value) => setInspectorTab(value as WorkspaceInspectorTab)} items={localizedInspectorTabs} />
               {detail && inspectorTab !== "create" ? (
                 <div className="grid gap-3 sm:grid-cols-3 xl:max-w-[28rem] xl:grid-cols-3">
-                  <InspectorStat label="Direct Users" value={String(detail.directUserCount)} />
-                  <InspectorStat label="Role Grants" value={String(detail.roleGrantCount)} />
-                  <InspectorStat label="Effective Users" value={String(detail.effectiveUserCount)} />
+                  <InspectorStat label={pt("Direct Users")} value={formatNumber(detail.directUserCount)} />
+                  <InspectorStat label={pt("Role Grants")} value={formatNumber(detail.roleGrantCount)} />
+                  <InspectorStat label={pt("Effective Users")} value={formatNumber(detail.effectiveUserCount)} />
                 </div>
               ) : null}
             </div>
@@ -870,34 +841,34 @@ export function WorkspaceManagementPage() {
               <section className="space-y-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h3 className="text-base font-semibold text-[var(--color-on-surface)]">Create Workspace</h3>
-                    <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">Use the selected tree context when you need a child, or keep it root-level for a new top branch.</p>
+                    <h3 className="text-base font-semibold text-[var(--color-on-surface)]">{pt("Create Workspace")}</h3>
+                    <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{pt("Use the selected tree context when you need a child, or keep it root-level for a new top branch.")}</p>
                   </div>
                   {rootValueToParent(createForm.parentWorkspaceCode)
-                    ? <Badge tone="accent">Child of {rootValueToParent(createForm.parentWorkspaceCode)}</Badge>
-                    : <Badge tone="neutral">Root workspace</Badge>}
+                    ? <Badge tone="accent">{pt("Child of {{code}}", { code: rootValueToParent(createForm.parentWorkspaceCode) ?? "" })}</Badge>
+                    : <Badge tone="neutral">{pt("Root workspace")}</Badge>}
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="Parent workspace">
+                  <Field label={pt("Parent workspace")}>
                     <SelectInput value={createForm.parentWorkspaceCode} onChange={(event) => setCreateForm((current) => ({ ...current, parentWorkspaceCode: event.target.value }))}>
-                      <option value={ROOT_PARENT_VALUE}>Root workspace</option>
+                      <option value={ROOT_PARENT_VALUE}>{pt("Root workspace")}</option>
                       {createParentOptions.map((record) => (
                         <option key={record.workspaceCode} value={record.workspaceCode}>
-                          {record.name} ({record.workspaceCode}) · Level {record.depth}
+                          {pt("{{name}} ({{code}}) · Level {{depth}}", { code: record.workspaceCode, depth: formatNumber(record.depth), name: record.name })}
                         </option>
                       ))}
                     </SelectInput>
                   </Field>
-                  <Field label="Workspace name">
+                  <Field label={pt("Workspace name")}>
                     <TextInput
-                      aria-label="Workspace name"
+                      aria-label={pt("Workspace name")}
                       value={createForm.name}
                       onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))}
                     />
                   </Field>
-                  <Field label="Description">
+                  <Field label={pt("Description")}>
                     <TextArea
-                      aria-label="Workspace description"
+                      aria-label={pt("Workspace description")}
                       className="min-h-24"
                       value={createForm.description}
                       onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))}
@@ -907,42 +878,42 @@ export function WorkspaceManagementPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <Button disabled={creatingWorkspace} aria-busy={creatingWorkspace} onClick={() => void handleCreateWorkspace()}>
                     <Plus size={16} aria-hidden="true" />
-                    {creatingWorkspace ? "Saving..." : "Save"}
+                    {creatingWorkspace ? pt("Saving...") : pt("Save")}
                   </Button>
                   {selectedWorkspaceCode ? (
                     <Button variant="secondary" onClick={() => prepareCreate(selectedWorkspaceCode)}>
                       <Plus size={16} aria-hidden="true" />
-                      Use
+                      {pt("Use")}
                     </Button>
                   ) : null}
                 </div>
               </section>
             ) : detailLoading && !detail ? (
               <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
-                Loading workspace detail...
+                {pt("Loading workspace detail...")}
               </div>
             ) : !detail ? (
               <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
-                Select a workspace from the tree to open the inspector.
+                {pt("Select a workspace from the tree to open the inspector.")}
               </div>
             ) : inspectorTab === "overview" ? (
               <section className="space-y-5">
                 <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
                   <div className="space-y-4">
-                    <Field label="Name">
+                    <Field label={pt("Name")}>
                       <TextInput value={detailForm.name} onChange={(event) => setDetailForm((current) => ({ ...current, name: event.target.value }))} />
                     </Field>
-                    <Field label="Move parent" hint={`Resulting workspace depth: level ${movePreviewDepth}.`}>
+                    <Field label={pt("Move parent")} hint={pt("Resulting workspace depth: level {{depth}}.", { depth: formatNumber(movePreviewDepth) })}>
                       <SelectInput value={moveParentWorkspaceCode} onChange={(event) => setMoveParentWorkspaceCode(event.target.value)}>
-                        <option value={ROOT_PARENT_VALUE}>Root workspace</option>
+                        <option value={ROOT_PARENT_VALUE}>{pt("Root workspace")}</option>
                         {moveParentOptions.map((record) => (
                           <option key={record.workspaceCode} value={record.workspaceCode}>
-                            {record.name} ({record.workspaceCode}) · Level {record.depth}
+                            {pt("{{name}} ({{code}}) · Level {{depth}}", { code: record.workspaceCode, depth: formatNumber(record.depth), name: record.name })}
                           </option>
                         ))}
                       </SelectInput>
                     </Field>
-                    <Field label="Description">
+                    <Field label={pt("Description")}>
                       <TextArea
                         className="min-h-40"
                         value={detailForm.description}
@@ -952,14 +923,14 @@ export function WorkspaceManagementPage() {
                   </div>
                   <div className="space-y-4 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
                     <div className="grid gap-4 sm:grid-cols-2">
-                      <DetailField label="Workspace Code" value={detail.workspaceCode} />
-                      <DetailField label="Depth" value={`Level ${detail.depth}`} />
-                      <DetailField label="Created" value={formatTimestamp(detail.createdAt)} />
-                      <DetailField label="Archived" value={formatTimestamp(detail.archivedAt)} />
+                      <DetailField label={pt("Workspace Code")} value={detail.workspaceCode} />
+                      <DetailField label={pt("Depth")} value={pt("Level {{depth}}", { depth: formatNumber(detail.depth) })} />
+                      <DetailField label={pt("Created")} value={formatTimestamp(detail.createdAt)} />
+                      <DetailField label={pt("Archived")} value={formatTimestamp(detail.archivedAt)} />
                     </div>
-                    <DetailField label="Path" value={detail.path.map((item) => item.name).join(" / ")} />
+                    <DetailField label={pt("Path")} value={detail.path.map((item) => item.name).join(" / ")} />
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Child Workspaces</p>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pt("Child Workspaces")}</p>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {detail.children.length ? detail.children.map((child) => (
                           <button
@@ -970,7 +941,7 @@ export function WorkspaceManagementPage() {
                           >
                             {child.name} ({child.workspaceCode})
                           </button>
-                        )) : <span className="text-sm text-[var(--color-on-surface-variant)]">No child workspaces.</span>}
+                        )) : <span className="text-sm text-[var(--color-on-surface-variant)]">{pt("No child workspaces.")}</span>}
                       </div>
                     </div>
                   </div>
@@ -978,21 +949,21 @@ export function WorkspaceManagementPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <Button disabled={savingMetadata || detail.status === "Archived"} aria-busy={savingMetadata} onClick={() => void handleSaveMetadata()}>
                     <Save size={16} aria-hidden="true" />
-                    {savingMetadata ? "Saving..." : "Save"}
+                    {savingMetadata ? pt("Saving...") : pt("Save")}
                   </Button>
                   <Button variant="secondary" disabled={movingWorkspace || detail.status === "Archived"} aria-busy={movingWorkspace} onClick={() => void handleMoveWorkspace()}>
                     <FolderTree size={16} aria-hidden="true" />
-                    {movingWorkspace ? "Moving..." : "Move"}
+                    {movingWorkspace ? pt("Moving...") : pt("Move")}
                   </Button>
                   {detail.status === "Active" ? (
                     <Button variant="secondary" disabled={lifecycleLoading} aria-busy={lifecycleLoading} onClick={() => void handleWorkspaceLifecycle("archive")}>
                       <Trash2 size={16} aria-hidden="true" />
-                      {lifecycleLoading ? "Archiving..." : "Archive"}
+                      {lifecycleLoading ? pt("Archiving...") : pt("Archive")}
                     </Button>
                   ) : (
                     <Button variant="secondary" disabled={lifecycleLoading} aria-busy={lifecycleLoading} onClick={() => void handleWorkspaceLifecycle("restore")}>
                       <RotateCcw size={16} aria-hidden="true" />
-                      {lifecycleLoading ? "Restoring..." : "Restore"}
+                      {lifecycleLoading ? pt("Restoring...") : pt("Restore")}
                     </Button>
                   )}
                 </div>
@@ -1003,9 +974,9 @@ export function WorkspaceManagementPage() {
                   <section className="space-y-4 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
                     <div className="flex flex-wrap items-end justify-between gap-4">
                       <div className="min-w-[16rem] flex-1">
-                        <Field label="Direct User Access">
-                          <SelectInput aria-label="Add direct user access" value={nextDirectUserCode} onChange={(event) => setNextDirectUserCode(event.target.value)}>
-                            <option value="">Select a user</option>
+                        <Field label={pt("Direct User Access")}>
+                          <SelectInput aria-label={pt("Add direct user access")} value={nextDirectUserCode} onChange={(event) => setNextDirectUserCode(event.target.value)}>
+                            <option value="">{pt("Select a user")}</option>
                             {availableDirectUsers.map((user) => (
                               <option key={user.userCode} value={user.userCode}>
                                 {user.displayName} ({user.userCode})
@@ -1016,7 +987,7 @@ export function WorkspaceManagementPage() {
                       </div>
                       <Button className="shrink-0" variant="secondary" disabled={!nextDirectUserCode} onClick={addDirectUserGrant}>
                         <Plus size={16} aria-hidden="true" />
-                        Add
+                        {pt("Add")}
                       </Button>
                     </div>
 
@@ -1024,11 +995,11 @@ export function WorkspaceManagementPage() {
                       <table className="w-full min-w-[28rem] border-collapse text-left text-sm">
                         <thead>
                           <tr className="bg-[var(--color-surface-container-low)] text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                            <th className="px-4 py-3">User</th>
-                            <th className="px-4 py-3">Email</th>
-                            <th className="px-4 py-3">Owner</th>
-                            <th className="px-4 py-3">Granted</th>
-                            <th className="px-4 py-3 text-right">Actions</th>
+                            <th className="px-4 py-3">{pt("User")}</th>
+                            <th className="px-4 py-3">{pt("Email")}</th>
+                            <th className="px-4 py-3">{pt("Owner")}</th>
+                            <th className="px-4 py-3">{pt("Granted")}</th>
+                            <th className="px-4 py-3 text-right">{pt("Actions")}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1042,7 +1013,7 @@ export function WorkspaceManagementPage() {
                               <td className="px-4 py-3">
                                 <ToggleSwitch
                                   checked={record.isOwner}
-                                  label={record.isOwner ? "Owner" : "Member"}
+                                  label={record.isOwner ? pt("Owner") : pt("Member")}
                                   onCheckedChange={(checked) => setDirectUserDrafts((current) => current.map((item) => (
                                     item.userCode === record.userCode ? { ...item, isOwner: checked } : item
                                   )))}
@@ -1053,7 +1024,7 @@ export function WorkspaceManagementPage() {
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  aria-label={`Remove direct grant for ${record.displayName}`}
+                                  aria-label={pt("Remove direct grant for {{name}}", { name: record.displayName })}
                                   onClick={() => setDirectUserDrafts((current) => current.filter((item) => item.userCode !== record.userCode))}
                                 >
                                   <Trash2 size={16} aria-hidden="true" />
@@ -1063,7 +1034,7 @@ export function WorkspaceManagementPage() {
                           )) : (
                             <tr>
                               <td className="px-4 py-6 text-center text-sm text-[var(--color-on-surface-variant)]" colSpan={5}>
-                                No direct user grants configured.
+                                {pt("No direct user grants configured.")}
                               </td>
                             </tr>
                           )}
@@ -1074,7 +1045,7 @@ export function WorkspaceManagementPage() {
                     <div className="flex justify-end">
                       <Button disabled={savingUsers} aria-busy={savingUsers} onClick={() => void handleSaveDirectUsers()}>
                         <Save size={16} aria-hidden="true" />
-                        {savingUsers ? "Saving..." : "Save"}
+                        {savingUsers ? pt("Saving...") : pt("Save")}
                       </Button>
                     </div>
                   </section>
@@ -1082,12 +1053,12 @@ export function WorkspaceManagementPage() {
                   <section className="space-y-4 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
                     <div className="flex flex-wrap items-end justify-between gap-4">
                       <div className="min-w-[16rem] flex-1">
-                        <Field label="Role Access">
-                          <SelectInput aria-label="Add workspace role access" value={nextRoleCode} onChange={(event) => setNextRoleCode(event.target.value as UserRoleCode | "")}>
-                            <option value="">Select a role</option>
+                        <Field label={pt("Role Access")}>
+                          <SelectInput aria-label={pt("Add workspace role access")} value={nextRoleCode} onChange={(event) => setNextRoleCode(event.target.value as UserRoleCode | "")}>
+                            <option value="">{pt("Select a role")}</option>
                             {availableRoleOptions.map((roleCode) => (
                               <option key={roleCode} value={roleCode}>
-                                {getAdminUserRoleLabel(roleCode)} ({roleCode})
+                                {pt("{{name}} ({{code}})", { code: roleCode, name: pt(getAdminUserRoleLabel(roleCode)) })}
                               </option>
                             ))}
                           </SelectInput>
@@ -1095,7 +1066,7 @@ export function WorkspaceManagementPage() {
                       </div>
                       <Button className="shrink-0" variant="secondary" disabled={!nextRoleCode} onClick={addRoleGrant}>
                         <Plus size={16} aria-hidden="true" />
-                        Add
+                        {pt("Add")}
                       </Button>
                     </div>
 
@@ -1103,26 +1074,26 @@ export function WorkspaceManagementPage() {
                       <table className="w-full min-w-[28rem] border-collapse text-left text-sm">
                         <thead>
                           <tr className="bg-[var(--color-surface-container-low)] text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                            <th className="px-4 py-3">Role</th>
-                            <th className="px-4 py-3">Matched Users</th>
-                            <th className="px-4 py-3">Granted</th>
-                            <th className="px-4 py-3 text-right">Actions</th>
+                            <th className="px-4 py-3">{pt("Role")}</th>
+                            <th className="px-4 py-3">{pt("Matched Users")}</th>
+                            <th className="px-4 py-3">{pt("Granted")}</th>
+                            <th className="px-4 py-3 text-right">{pt("Actions")}</th>
                           </tr>
                         </thead>
                         <tbody>
                           {roleDrafts.length ? roleDrafts.map((record) => (
                             <tr className="border-t border-[var(--color-outline-variant)]" key={record.roleCode}>
                               <td className="px-4 py-3">
-                                <div className="font-medium text-[var(--color-on-surface)]">{record.roleName}</div>
+                                <div className="font-medium text-[var(--color-on-surface)]">{pt(record.roleName)}</div>
                                 <div className="text-[12px] text-[var(--color-on-surface-variant)]">{record.roleCode}</div>
                               </td>
-                              <td className="px-4 py-3 text-[var(--color-on-surface-variant)]">{record.matchedUserCount}</td>
+                              <td className="px-4 py-3 text-[var(--color-on-surface-variant)]">{formatNumber(record.matchedUserCount)}</td>
                               <td className="px-4 py-3 text-[var(--color-on-surface-variant)]">{formatTimestamp(record.grantedAt)}</td>
                               <td className="px-4 py-3 text-right">
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  aria-label={`Remove role grant for ${record.roleCode}`}
+                                  aria-label={pt("Remove role grant for {{code}}", { code: record.roleCode })}
                                   onClick={() => setRoleDrafts((current) => current.filter((item) => item.roleCode !== record.roleCode))}
                                 >
                                   <Trash2 size={16} aria-hidden="true" />
@@ -1132,7 +1103,7 @@ export function WorkspaceManagementPage() {
                           )) : (
                             <tr>
                               <td className="px-4 py-6 text-center text-sm text-[var(--color-on-surface-variant)]" colSpan={4}>
-                                No role grants configured.
+                                {pt("No role grants configured.")}
                               </td>
                             </tr>
                           )}
@@ -1143,7 +1114,7 @@ export function WorkspaceManagementPage() {
                     <div className="flex justify-end">
                       <Button disabled={savingRoles} aria-busy={savingRoles} onClick={() => void handleSaveRoleAccess()}>
                         <Save size={16} aria-hidden="true" />
-                        {savingRoles ? "Saving..." : "Save"}
+                        {savingRoles ? pt("Saving...") : pt("Save")}
                       </Button>
                     </div>
                   </section>
@@ -1152,20 +1123,20 @@ export function WorkspaceManagementPage() {
                 <section className="space-y-4 border-t border-[var(--color-outline-variant)] pt-5">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h4 className="text-base font-semibold text-[var(--color-on-surface)]">Effective Access Users</h4>
-                      <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">The derived union of direct-user and role-based access for the selected workspace.</p>
+                      <h4 className="text-base font-semibold text-[var(--color-on-surface)]">{pt("Effective Access Users")}</h4>
+                      <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{pt("The derived union of direct-user and role-based access for the selected workspace.")}</p>
                     </div>
-                    <Badge tone="accent">{effectiveUserPage.total} users</Badge>
+                    <Badge tone="accent">{pt("{{count}} users", { count: formatNumber(effectiveUserPage.total) })}</Badge>
                   </div>
                   <div className="overflow-x-auto rounded-xl border border-[var(--color-outline-variant)]">
                     <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
                       <thead>
                         <tr className="bg-[var(--color-surface-container-low)] text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                          <th className="px-4 py-3">User</th>
-                          <th className="px-4 py-3">Email</th>
-                          <th className="px-4 py-3">Access Source</th>
-                          <th className="px-4 py-3">Matched Roles</th>
-                          <th className="px-4 py-3">Owner</th>
+                          <th className="px-4 py-3">{pt("User")}</th>
+                          <th className="px-4 py-3">{pt("Email")}</th>
+                          <th className="px-4 py-3">{pt("Access Source")}</th>
+                          <th className="px-4 py-3">{pt("Matched Roles")}</th>
+                          <th className="px-4 py-3">{pt("Owner")}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1176,14 +1147,14 @@ export function WorkspaceManagementPage() {
                               <div className="text-[12px] text-[var(--color-on-surface-variant)]">{row.userCode}</div>
                             </td>
                             <td className="px-4 py-3 text-[var(--color-on-surface-variant)]">{row.email}</td>
-                            <td className="px-4 py-3"><Badge tone={sourceTone(row.source)}>{row.source}</Badge></td>
-                            <td className="px-4 py-3 text-[var(--color-on-surface-variant)]">{row.matchedRoleCodes.length ? row.matchedRoleCodes.map(getAdminUserRoleLabel).join(", ") : "Direct grant only"}</td>
-                            <td className="px-4 py-3 text-[var(--color-on-surface-variant)]">{row.isOwner ? "Yes" : "No"}</td>
+                            <td className="px-4 py-3"><Badge tone={sourceTone(row.source)}>{pt(row.source)}</Badge></td>
+                            <td className="px-4 py-3 text-[var(--color-on-surface-variant)]">{row.matchedRoleCodes.length ? row.matchedRoleCodes.map((roleCode) => pt(getAdminUserRoleLabel(roleCode))).join(", ") : pt("Direct grant only")}</td>
+                            <td className="px-4 py-3 text-[var(--color-on-surface-variant)]">{row.isOwner ? pt("Yes") : pt("No")}</td>
                           </tr>
                         )) : (
                           <tr>
                             <td className="px-4 py-8 text-center text-sm text-[var(--color-on-surface-variant)]" colSpan={5}>
-                              No effective users match the current grants.
+                              {pt("No effective users match the current grants.")}
                             </td>
                           </tr>
                         )}
@@ -1191,13 +1162,18 @@ export function WorkspaceManagementPage() {
                     </table>
                   </div>
                   <TablePagination
-                    endItem={effectiveUserPage.total ? effectiveUserPage.total : 0}
-                    itemLabel="users"
+                    endItem={effectiveUserEndItem}
+                    itemLabel={pt("users")}
                     page={effectiveUserPage.current}
-                    pageCount={1}
+                    pageCount={effectiveUserPageCount}
                     pageSize={effectiveUserPage.size}
-                    startItem={effectiveUserPage.total ? 1 : 0}
+                    startItem={effectiveUserStartItem}
                     totalItems={effectiveUserPage.total}
+                    onPageChange={setEffectiveUserCurrent}
+                    onPageSizeChange={(pageSize) => {
+                      setEffectiveUserCurrent(1);
+                      setEffectiveUserSize(pageSize);
+                    }}
                   />
                 </section>
               </section>

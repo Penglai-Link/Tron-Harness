@@ -307,6 +307,65 @@ test("opens the full-screen settings page, switches settings sections, and persi
   await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(253, 248, 248)");
 });
 
+test("loads workspace selector data from api after sign in", async ({ page }) => {
+  const workspaceSwitcherData = {
+    primarySpaces: [
+      {
+        workspaceCode: "INDUSTRIAL",
+        name: "工业互联网",
+        description: "工业互联网总部空间",
+        status: "Active" as const,
+        childCount: 1,
+      },
+    ],
+    secondarySpaces: [
+      {
+        workspaceCode: "INDUSTRIAL",
+        primaryWorkspaceCode: "INDUSTRIAL",
+        parentWorkspaceCode: null,
+        label: "工业互联网",
+        name: "工业互联网",
+        description: "工业互联网总部空间",
+        status: "Active" as const,
+        depth: 1,
+        childCount: 1,
+        effectiveUserCount: 0,
+      },
+      {
+        workspaceCode: "ELITEFORGE",
+        primaryWorkspaceCode: "INDUSTRIAL",
+        parentWorkspaceCode: "INDUSTRIAL",
+        label: "工业互联网 / 璀璨工坊",
+        name: "璀璨工坊",
+        description: "私有云环境",
+        status: "Active" as const,
+        depth: 2,
+        childCount: 1,
+        effectiveUserCount: 0,
+      },
+    ],
+  };
+
+  await routeThemeApi(page, { workspaceSwitcherData });
+  await page.addInitScript((snapshot) => {
+    window.localStorage.setItem("tron-app-shell", JSON.stringify({
+      state: {
+        openSections: { Core: true },
+        selectedPrimarySpaceId: "ENTERPRISE",
+        selectedSecondarySpaceId: "TRON_CORE",
+        sidebarCollapsed: false,
+        workspaceSwitcherSnapshot: snapshot,
+      },
+      version: 0,
+    }));
+  }, getWorkspaceSwitcherMock());
+  await signIn(page);
+
+  const workspaceTrigger = page.locator("#tron-workspace-trigger");
+  await expect(workspaceTrigger).toContainText("工业互联网/璀璨工坊");
+  await expect(workspaceTrigger).not.toContainText("Enterprise/Platform/Tron Core");
+});
+
 test("dashboard inheritance map keeps descendant workspaces nested under their direct parent", async ({ page }) => {
   const workspaceSwitcherData = {
     primarySpaces: [

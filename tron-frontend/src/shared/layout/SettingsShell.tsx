@@ -1,4 +1,7 @@
-import type { ReactNode } from "react";
+import {
+  useEffect,
+  type ReactNode,
+} from "react";
 import {
   ArrowLeft,
   type LucideIcon,
@@ -26,9 +29,18 @@ interface SettingsShellProps {
   items: readonly SettingsNavItem[];
 }
 
+const settingsReturnToStorageKey = "tron.settings.returnTo";
+
 function resolveReturnTo(state: unknown) {
   if (state && typeof state === "object" && "from" in state && typeof state.from === "string" && state.from.length > 0) {
     return state.from;
+  }
+
+  if (typeof window !== "undefined") {
+    const storedReturnTo = window.sessionStorage.getItem(settingsReturnToStorageKey);
+    if (storedReturnTo) {
+      return storedReturnTo;
+    }
   }
 
   return "/dashboard";
@@ -38,6 +50,12 @@ export function SettingsShell({ activeItem, children, items }: SettingsShellProp
   const { t } = useTranslation(["common", "shell"]);
   const location = useLocation();
   const returnTo = resolveReturnTo(location.state);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && returnTo !== "/dashboard") {
+      window.sessionStorage.setItem(settingsReturnToStorageKey, returnTo);
+    }
+  }, [returnTo]);
 
   return (
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]">
@@ -77,7 +95,7 @@ export function SettingsShell({ activeItem, children, items }: SettingsShellProp
                       : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]",
                   )}
                   to={item.href}
-                  state={location.state}
+                  state={{ from: returnTo }}
                   aria-current={selected ? "page" : undefined}
                 >
                   {Icon ? <Icon size={16} aria-hidden="true" /> : null}

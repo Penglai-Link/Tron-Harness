@@ -54,6 +54,7 @@ export const shell = {
       general: "General",
       models: "Models",
       skillCenter: "Skill Center",
+      variables: "Variables",
     },
     navigation: "Configuration",
     title: "Settings",

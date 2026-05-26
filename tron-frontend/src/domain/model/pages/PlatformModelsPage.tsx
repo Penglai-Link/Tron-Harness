@@ -4,6 +4,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
   MoreHorizontal,
@@ -16,7 +17,9 @@ import { Button } from "@/shared/ui/Button";
 import {
   DataTable,
   PageHeader,
+  TablePagination,
   useDismissibleLayer,
+  useTablePagination,
   useToast,
 } from "@/shared";
 
@@ -53,6 +56,7 @@ interface RowMenuState {
 
 export function PlatformModelsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation(["common", "pages"]);
   const toast = useToast();
   const dataSource = getServiceDataSource("model");
   const [records, setRecords] = useState<ModelRecord[]>([]);
@@ -64,6 +68,10 @@ export function PlatformModelsPage() {
   const openMenuRow = openRowMenu
     ? records.find((record) => record.modelCode === openRowMenu.modelCode) ?? null
     : null;
+  const pagination = useTablePagination(records);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:settingsPlatformModels.${key}`, { defaultValue, ...options })
+  );
 
   async function refreshPlatformModels() {
     setLoading(true);
@@ -73,7 +81,7 @@ export function PlatformModelsPage() {
         : listPlatformModelsMock();
       setRecords(nextRecords);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Platform models could not be loaded");
+      toast.error(error instanceof Error ? error.message : pageT("errors.load", "Platform models could not be loaded"));
     } finally {
       setLoading(false);
     }
@@ -90,7 +98,7 @@ export function PlatformModelsPage() {
           : listPlatformModelsMock();
         if (active) setRecords(nextRecords);
       } catch (error) {
-        if (active) toast.error(error instanceof Error ? error.message : "Platform models could not be loaded");
+        if (active) toast.error(error instanceof Error ? error.message : pageT("errors.load", "Platform models could not be loaded"));
       } finally {
         if (active) setLoading(false);
       }
@@ -148,10 +156,17 @@ export function PlatformModelsPage() {
           ? await disablePlatformModel(row.modelCode)
           : await enablePlatformModel(row.modelCode))
         : setPlatformModelEnabled(row.modelCode, !row.enabled);
-      toast.success(`${updated.displayName} ${updated.enabled ? "enabled" : "disabled"}`);
+      toast.success(pageT(
+        "messages.toggleStatus",
+        "{{name}} {{status}}",
+        {
+          name: updated.displayName,
+          status: updated.enabled ? pageT("status.enabledLower", "enabled") : pageT("status.disabledLower", "disabled"),
+        },
+      ));
       await refreshPlatformModels();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Status update failed");
+      toast.error(error instanceof Error ? error.message : pageT("errors.updateStatus", "Status update failed"));
     } finally {
       setRowBusyCode("");
     }
@@ -168,10 +183,10 @@ export function PlatformModelsPage() {
       } else {
         deletePlatformModelRecord(row.modelCode);
       }
-      toast.success(`${row.displayName} deleted`);
+      toast.success(pageT("messages.deleted", "{{name}} deleted", { name: row.displayName }));
       await refreshPlatformModels();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Platform model could not be deleted");
+      toast.error(error instanceof Error ? error.message : pageT("errors.delete", "Platform model could not be deleted"));
     } finally {
       setRowBusyCode("");
     }
@@ -186,10 +201,10 @@ export function PlatformModelsPage() {
       const duplicated = dataSource === "api"
         ? await duplicatePlatformModel(row.modelCode)
         : duplicatePlatformModelRecord(row.modelCode);
-      toast.success(`${duplicated.displayName} created`);
+      toast.success(pageT("messages.created", "{{name}} created", { name: duplicated.displayName }));
       navigate(`/settings/models/detail?modelCode=${encodeURIComponent(duplicated.modelCode)}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Platform model could not be duplicated");
+      toast.error(error instanceof Error ? error.message : pageT("errors.duplicate", "Platform model could not be duplicated"));
     } finally {
       setRowBusyCode("");
     }
@@ -199,8 +214,8 @@ export function PlatformModelsPage() {
     if (rowBusyCode === row.modelCode) return;
     setRowBusyCode(row.modelCode);
     setOpenRowMenu(null);
-    const verifyingToastId = toast.info(`Verifying connectivity for ${row.displayName}...`, {
-      title: "Verify",
+    const verifyingToastId = toast.info(pageT("messages.verifying", "Verifying connectivity for {{name}}...", { name: row.displayName }), {
+      title: pageT("actions.verify", "Verify"),
       durationMs: 0,
     });
 
@@ -208,10 +223,10 @@ export function PlatformModelsPage() {
       const verified = dataSource === "api"
         ? await verifyPlatformModel(row.modelCode)
         : verifyPlatformModelRecord(row.modelCode);
-      toast.success(`${verified.displayName} verified`);
+      toast.success(pageT("messages.verified", "{{name}} verified", { name: verified.displayName }));
       await refreshPlatformModels();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Verify failed");
+      toast.error(error instanceof Error ? error.message : pageT("errors.verify", "Verify failed"));
     } finally {
       toast.dismiss(verifyingToastId);
       setRowBusyCode("");
@@ -229,10 +244,10 @@ export function PlatformModelsPage() {
       } else {
         setPlatformDefaultRecord(row.modelCode);
       }
-      toast.success(`${row.displayName} set as default`);
+      toast.success(pageT("messages.default", "{{name}} set as default", { name: row.displayName }));
       await refreshPlatformModels();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Default model could not be updated");
+      toast.error(error instanceof Error ? error.message : pageT("errors.default", "Default model could not be updated"));
     } finally {
       setRowBusyCode("");
     }
@@ -241,29 +256,30 @@ export function PlatformModelsPage() {
   return (
     <>
       <PageHeader
-        title="Platform Models"
+        title={pageT("title", "Platform Models")}
         actions={(
           <>
             <Button variant="secondary" disabled={loading} onClick={() => void refreshPlatformModels()}>
               <RefreshCcw size={16} aria-hidden="true" />
-              {loading ? "Refreshing..." : "Refresh"}
+              {loading ? pageT("actions.refreshing", "Refreshing...") : t("common:actions.refresh")}
             </Button>
             <Button onClick={() => navigate("/settings/models/new")}>
               <Plus size={16} aria-hidden="true" />
-              New
+              {pageT("actions.new", "New")}
             </Button>
           </>
         )}
       />
 
       <DataTable<ModelRecord>
-        rows={records}
+        rows={pagination.visibleItems}
+        pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "models")} {...pagination.paginationProps} />}
         rowKey={(row) => row.modelCode}
         onRowClick={(row) => navigate(`/settings/models/detail?modelCode=${encodeURIComponent(row.modelCode)}`)}
         columns={[
           {
             id: "displayName",
-            header: "Display Name",
+            header: pageT("columns.displayName", "Display Name"),
             render: (row) => (
               <div>
                 <p className="font-medium text-[var(--color-on-surface)]">{row.displayName}</p>
@@ -273,32 +289,32 @@ export function PlatformModelsPage() {
           },
           {
             id: "vendor",
-            header: "Vendor",
+            header: pageT("columns.vendor", "Vendor"),
             render: (row) => row.vendor,
           },
           {
             id: "protocol",
-            header: "Protocol",
+            header: pageT("columns.protocol", "Protocol"),
             render: (row) => formatModelProtocol(row.protocol, row.modelType),
           },
           {
             id: "type",
-            header: "Type",
+            header: pageT("columns.type", "Type"),
             render: (row) => formatModelCapabilities(row.modelCapabilities, row.modelType),
           },
           {
             id: "status",
-            header: "Status",
+            header: pageT("columns.status", "Status"),
             render: (row) => (
               <div className="flex flex-wrap gap-2">
-                <Badge tone={row.enabled ? "success" : "neutral"}>{row.enabled ? "Enabled" : "Disabled"}</Badge>
-                {row.isDefault ? <Badge tone="accent">Default</Badge> : null}
+                <Badge tone={row.enabled ? "success" : "neutral"}>{row.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</Badge>
+                {row.isDefault ? <Badge tone="accent">{pageT("status.default", "Default")}</Badge> : null}
               </div>
             ),
           },
           {
             align: "right",
-            header: "Actions",
+            header: pageT("columns.actions", "Actions"),
             headerClassName: "w-24",
             id: "actions",
             cellClassName: "w-24",
@@ -311,7 +327,7 @@ export function PlatformModelsPage() {
                   <Button
                     size="icon"
                     variant="ghost"
-                    aria-label={`Open actions for ${row.displayName}`}
+                    aria-label={pageT("aria.openActions", "Open actions for {{name}}", { name: row.displayName })}
                     aria-expanded={isMenuOpen}
                     data-platform-model-menu-trigger={row.modelCode}
                     disabled={isBusy}
@@ -327,7 +343,7 @@ export function PlatformModelsPage() {
             },
           },
         ]}
-        emptyState="No platform models yet."
+        emptyState={pageT("emptyState", "No platform models yet.")}
       />
       {openRowMenu && openMenuRow
         ? createPortal(
@@ -336,7 +352,7 @@ export function PlatformModelsPage() {
             style={{ left: openRowMenu.left, top: openRowMenu.top }}
             className="fixed z-[80] w-44 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-2 text-left text-sm shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
             role="menu"
-            aria-label={`Actions for ${openMenuRow.displayName}`}
+            aria-label={pageT("aria.menu", "Actions for {{name}}", { name: openMenuRow.displayName })}
           >
             <button
               type="button"
@@ -347,7 +363,7 @@ export function PlatformModelsPage() {
                 void handleToggleEnabled(openMenuRow);
               }}
             >
-              {openMenuRow.enabled ? "Disable" : "Enable"}
+              {openMenuRow.enabled ? pageT("actions.disable", "Disable") : pageT("actions.enable", "Enable")}
             </button>
             {openMenuRow.enabled && !openMenuRow.isDefault ? (
               <button
@@ -359,7 +375,7 @@ export function PlatformModelsPage() {
                   void handleSetDefault(openMenuRow);
                 }}
               >
-                Set Default
+                {pageT("actions.setDefault", "Set Default")}
               </button>
             ) : null}
             <button
@@ -371,7 +387,7 @@ export function PlatformModelsPage() {
                 void handleVerify(openMenuRow);
               }}
             >
-              Verify
+              {pageT("actions.verify", "Verify")}
             </button>
             <button
               type="button"
@@ -382,7 +398,7 @@ export function PlatformModelsPage() {
                 void handleDuplicate(openMenuRow);
               }}
             >
-              Copy
+              {pageT("actions.copy", "Copy")}
             </button>
             <button
               type="button"
@@ -393,7 +409,7 @@ export function PlatformModelsPage() {
                 navigate(`/settings/models/detail?modelCode=${encodeURIComponent(openMenuRow.modelCode)}`);
               }}
             >
-              Edit
+              {pageT("actions.edit", "Edit")}
             </button>
             <button
               type="button"
@@ -404,7 +420,7 @@ export function PlatformModelsPage() {
                 void handleDelete(openMenuRow);
               }}
             >
-              Delete
+              {pageT("actions.delete", "Delete")}
             </button>
           </div>,
           document.body,

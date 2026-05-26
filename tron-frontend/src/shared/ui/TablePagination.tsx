@@ -2,7 +2,9 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
+import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
 import { Button } from "@/shared/ui/Button";
 import {
   SelectInput,
@@ -36,34 +38,48 @@ export function TablePagination({
   startItem,
   totalItems,
 }: TablePaginationProps) {
+  const { t } = useTranslation("common");
+  const { formatNumber } = useLocaleFormatters();
   const canGoPrevious = Boolean(onPageChange) && page > 1;
   const canGoNext = Boolean(onPageChange) && page < pageCount;
+  const startLabel = formatNumber(startItem);
+  const endLabel = formatNumber(endItem);
+  const totalLabel = formatNumber(totalItems);
+  const pageCountLabel = formatNumber(pageCount);
 
   return (
     <div className="flex w-full flex-wrap items-center justify-between gap-3">
       <span>
-        {totalItems ? `${startItem}-${endItem}` : "0"} of {totalItems} {itemLabel} visible
+        {totalItems
+          ? t("pagination.range", {
+            defaultValue: "{{start}}-{{end}} of {{total}} {{itemLabel}} visible",
+            end: endLabel,
+            itemLabel,
+            start: startLabel,
+            total: totalLabel,
+          })
+          : formatNumber(0)}
       </span>
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2">
-          <span className="text-[12px] text-[var(--color-on-surface-variant)]">Rows</span>
+          <span className="text-[12px] text-[var(--color-on-surface-variant)]">{t("pagination.rows")}</span>
           <SelectInput
-            aria-label="Rows per page"
+            aria-label={t("pagination.rowsPerPage")}
             className="h-9 w-20"
             disabled={!onPageSizeChange}
             value={pageSize}
             onChange={(event) => onPageSizeChange?.(Number(event.target.value))}
           >
-            {pageSizeOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+            {pageSizeOptions.map((item) => <option key={item} value={item}>{formatNumber(item)}</option>)}
           </SelectInput>
         </label>
-        <Button size="icon" variant="secondary" aria-label="Previous page" disabled={!canGoPrevious} onClick={() => onPageChange?.(page - 1)}>
+        <Button size="icon" variant="secondary" aria-label={t("pagination.previousPage")} disabled={!canGoPrevious} onClick={() => onPageChange?.(page - 1)}>
           <ChevronLeft size={14} aria-hidden="true" />
         </Button>
         <label className="flex items-center gap-2">
-          <span className="text-[12px] text-[var(--color-on-surface-variant)]">Page</span>
+          <span className="text-[12px] text-[var(--color-on-surface-variant)]">{t("pagination.page")}</span>
           <TextInput
-            aria-label="Go to page"
+            aria-label={t("pagination.goToPage")}
             className="h-9 w-16 text-center"
             disabled={!onPageChange}
             max={pageCount}
@@ -72,9 +88,9 @@ export function TablePagination({
             value={page}
             onChange={(event) => onPageChange?.(Number(event.target.value) || 1)}
           />
-          <span className="text-[12px] text-[var(--color-on-surface-variant)]">of {pageCount}</span>
+          <span className="text-[12px] text-[var(--color-on-surface-variant)]">{t("pagination.of")} {pageCountLabel}</span>
         </label>
-        <Button size="icon" variant="secondary" aria-label="Next page" disabled={!canGoNext} onClick={() => onPageChange?.(page + 1)}>
+        <Button size="icon" variant="secondary" aria-label={t("pagination.nextPage")} disabled={!canGoNext} onClick={() => onPageChange?.(page + 1)}>
           <ChevronRight size={14} aria-hidden="true" />
         </Button>
       </div>

@@ -7,7 +7,7 @@ import {
 import {
   defaultPrimarySpaceId,
   defaultSecondarySpaceId,
-  getWorkspaceSwitcherMock,
+  getEmptyWorkspaceSwitcher,
 } from "@/shared/constants/workspaceSpaces";
 import type { WorkspaceSwitcherData } from "@/shared/types/WorkspaceSpace";
 
@@ -31,7 +31,7 @@ interface AppShellState {
   toggleUtilityPanel: (panel: string) => void;
 }
 
-const defaultWorkspaceSwitcherSnapshot = getWorkspaceSwitcherMock();
+const defaultWorkspaceSwitcherSnapshot = getEmptyWorkspaceSwitcher();
 
 export const useAppShellStore = create<AppShellState>()(
   persist(

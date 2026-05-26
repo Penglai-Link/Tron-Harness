@@ -5,6 +5,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
   MoreHorizontal,
@@ -20,8 +21,10 @@ import {
   PageHeader,
   SelectInput,
   SurfaceCard,
+  TablePagination,
   TextInput,
   useDismissibleLayer,
+  useTablePagination,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -65,6 +68,7 @@ interface RowMenuState {
 
 export function ModelRegistryPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation(["common", "pages"]);
   const toast = useToast();
   const dataSource = getServiceDataSource("model");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
@@ -189,6 +193,10 @@ export function ModelRegistryPage() {
       return haystack.includes(normalizedSearch);
     });
   }, [protocolFilter, records, searchQuery, statusFilter, typeFilter]);
+  const pagination = useTablePagination(filteredRecords);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:modelRegistry.${key}`, { defaultValue, ...options })
+  );
 
   async function refreshWorkspaceModels() {
     if (!activeWorkspaceCode) {
@@ -434,10 +442,11 @@ export function ModelRegistryPage() {
         </SurfaceCard>
 
         <DataTable<ModelRecord>
-          rows={filteredRecords}
-          rowKey={(row) => row.modelCode}
-          onRowClick={(row) => navigate(`/models/detail?modelCode=${encodeURIComponent(row.modelCode)}`)}
-          columns={[
+        rows={pagination.visibleItems}
+        pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "models")} {...pagination.paginationProps} />}
+        rowKey={(row) => row.modelCode}
+        onRowClick={(row) => navigate(`/models/detail?modelCode=${encodeURIComponent(row.modelCode)}`)}
+        columns={[
             {
               id: "displayName",
               header: "Display Name",

@@ -1,4 +1,8 @@
-import type { VariableRecord, VariableSourceKind } from "@/domain/variable/model";
+import type {
+  PlatformVariableRecord,
+  VariableRecord,
+  VariableSourceKind,
+} from "@/domain/variable/model";
 import { workspaceOptionMocks } from "@/shared/constants/workspaceSpaces";
 
 interface VariableSeed {
@@ -63,6 +67,25 @@ const mockVariables: VariableSeed[] = [
   },
 ];
 
+const mockPlatformVariables: PlatformVariableRecord[] = [
+  {
+    id: "734500000000100001",
+    key: "GLOBAL_LLM_TIMEOUT_MS",
+    value: "1200",
+    description: "Platform-wide default timeout for LLM requests.",
+    createdAt: now,
+    updatedAt: now,
+  },
+  {
+    id: "734500000000100002",
+    key: "DEFAULT_REGION",
+    value: "us-east-1",
+    description: "Global platform deployment region.",
+    createdAt: now,
+    updatedAt: now,
+  },
+];
+
 export interface VariableWritePayload {
   description?: string | null;
   key: string;
@@ -75,6 +98,21 @@ export function listVariableCatalog(workspaceCode: string): VariableRecord[] {
   if (!currentWorkspace) return [];
 
   const resolved = new Map<string, VariableRecord>();
+  for (const variable of mockPlatformVariables) {
+    resolved.set(variable.key, {
+      key: variable.key,
+      value: variable.value,
+      description: variable.description,
+      sourceKind: "Inherited",
+      sourceWorkspaceCode: "PLATFORM",
+      sourceWorkspaceName: "Platform Configuration",
+      sourceLabel: "Platform Configuration",
+      shadowedWorkspaceCode: null,
+      shadowedWorkspaceName: null,
+      shadowedLabel: null,
+      updatedAt: variable.updatedAt,
+    });
+  }
   for (const workspace of lineage) {
     const workspaceVariables = mockVariables
       .filter((variable) => variable.workspaceCode === workspace.workspaceCode)
@@ -101,6 +139,46 @@ export function listVariableCatalog(workspaceCode: string): VariableRecord[] {
   }
 
   return [...resolved.values()].sort((left, right) => left.key.localeCompare(right.key));
+}
+
+export function listPlatformVariableRecords() {
+  return mockPlatformVariables
+    .map((variable) => ({ ...variable }))
+    .sort((left, right) => left.key.localeCompare(right.key));
+}
+
+export function createPlatformVariableRecord(payload: VariableWritePayload) {
+  const key = payload.key.trim();
+  if (!key) throw new Error("Variable key is required");
+  if (mockPlatformVariables.some((variable) => variable.key === key)) {
+    throw new Error("Variable key already exists in platform variables");
+  }
+  const record: PlatformVariableRecord = {
+    id: (734500000000100000n + BigInt(mockPlatformVariables.length + 1)).toString(),
+    key,
+    value: payload.value,
+    description: normalizeDescription(payload.description),
+    createdAt: now,
+    updatedAt: now,
+  };
+  mockPlatformVariables.push(record);
+  return { ...record };
+}
+
+export function updatePlatformVariableRecord(key: string, payload: Omit<VariableWritePayload, "key">) {
+  const existing = mockPlatformVariables.find((variable) => variable.key === key);
+  if (!existing) throw new Error("Variable was not found");
+  existing.value = payload.value;
+  existing.description = normalizeDescription(payload.description);
+  existing.updatedAt = now;
+  return { ...existing };
+}
+
+export function deletePlatformVariableRecord(key: string) {
+  const existingIndex = mockPlatformVariables.findIndex((variable) => variable.key === key);
+  if (existingIndex < 0) throw new Error("Variable was not found");
+  mockPlatformVariables.splice(existingIndex, 1);
+  return { key, workspaceCode: "PLATFORM" };
 }
 
 export function createVariableRecord(workspaceCode: string, payload: VariableWritePayload) {

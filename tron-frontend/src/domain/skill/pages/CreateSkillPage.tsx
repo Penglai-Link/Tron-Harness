@@ -17,10 +17,11 @@ import {
   Button,
 } from "@/shared/ui/Button";
 import {
+  DetailField,
   Field,
   PageHeader,
+  SearchField,
   SurfaceCard,
-  TextInput,
   useToast,
 } from "@/shared";
 
@@ -114,28 +115,20 @@ function SearchInput({
         ))}
       </div>
       <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]"
-            size={15}
-            aria-hidden="true"
-          />
-          <TextInput
-            aria-label={mode === "repo" ? "Repository source" : "Search skills marketplace"}
-            className="w-full pl-9"
-            placeholder={activeOption.placeholder}
-            type="search"
-            value={value}
-            disabled={disabled}
-            onChange={(event) => onChange(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                onSubmit();
-              }
-            }}
-          />
-        </div>
+        <SearchField
+          ariaLabel={mode === "repo" ? "Repository source" : "Search skills marketplace"}
+          className="flex-1"
+          disabled={disabled}
+          placeholder={activeOption.placeholder}
+          value={value}
+          onChange={onChange}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              onSubmit();
+            }
+          }}
+        />
         <Button variant="secondary" disabled={disabled || loading || !value.trim()} aria-busy={loading} onClick={onSubmit}>
           <Search size={16} aria-hidden="true" />
           {loading ? "Searching..." : activeOption.buttonLabel}
@@ -219,19 +212,6 @@ function CandidateCard({
         </div>
       </div>
     </label>
-  );
-}
-
-function DetailField({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-        {label}
-      </p>
-      <p className="mt-1 break-words text-sm font-medium text-[var(--color-on-surface)]">
-        {value}
-      </p>
-    </div>
   );
 }
 

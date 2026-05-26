@@ -30,6 +30,8 @@ pub(super) const APPS_MIGRATION: &str =
 pub(super) const VARIABLES_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260518_0009_create_variable_management_variables.sql"
 );
+pub(super) const PLATFORM_VARIABLES_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260525_0016_create_platform_variables.sql");
 pub(super) const MODELS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260520_0012_create_model_management_models.sql");
 pub(super) const MODEL_CAPABILITIES_MIGRATION: &str =

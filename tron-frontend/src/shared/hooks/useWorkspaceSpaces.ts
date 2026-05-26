@@ -4,23 +4,19 @@ import {
 } from "react";
 
 import {
-  defaultPrimarySpaceId,
-  defaultSecondarySpaceId,
-  getWorkspaceSwitcherMock,
-  getSecondarySpaceMocks,
+  getEmptyWorkspaceSwitcher,
 } from "@/shared/constants/workspaceSpaces";
 import type { WorkspaceSpacesContextValue } from "@/shared/types/WorkspaceSpace";
 
-const defaultSwitcher = getWorkspaceSwitcherMock();
-const defaultSecondarySpaces = getSecondarySpaceMocks(defaultPrimarySpaceId).filter((space) => space.depth > 1);
+const emptySwitcher = getEmptyWorkspaceSwitcher();
 
 export const WorkspaceSpacesContext = createContext<WorkspaceSpacesContextValue>({
-  primarySpaces: defaultSwitcher.primarySpaces,
-  secondarySpaces: defaultSecondarySpaces,
-  selectedPrimarySpace: defaultSwitcher.primarySpaces.find((space) => space.workspaceCode === defaultPrimarySpaceId),
-  selectedPrimarySpaceId: defaultPrimarySpaceId,
-  selectedSecondarySpace: defaultSecondarySpaces.find((space) => space.workspaceCode === defaultSecondarySpaceId) ?? defaultSecondarySpaces[0],
-  selectedSecondarySpaceId: defaultSecondarySpaceId,
+  primarySpaces: emptySwitcher.primarySpaces,
+  secondarySpaces: emptySwitcher.secondarySpaces,
+  selectedPrimarySpace: undefined,
+  selectedPrimarySpaceId: "",
+  selectedSecondarySpace: undefined,
+  selectedSecondarySpaceId: "",
 });
 
 export function useWorkspaceSpaces() {

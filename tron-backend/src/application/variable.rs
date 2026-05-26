@@ -7,7 +7,7 @@ use crate::{
     application::workspace::WorkspaceService,
     domain::{
         variable::{
-            EffectiveVariable, Variable, VariableCatalogQuery, VariableError,
+            EffectiveVariable, PlatformVariable, Variable, VariableCatalogQuery, VariableError,
             VariableMutationResult, VariableSourceKind, validate_variable_key,
         },
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceStatus},
@@ -30,10 +30,20 @@ pub struct UpdateVariableCommand {
 
 pub trait VariableRepository: Send {
     fn list_variables(&mut self) -> Result<Vec<Variable>, VariableError>;
+    fn list_platform_variables(&mut self) -> Result<Vec<PlatformVariable>, VariableError>;
     fn next_id(&mut self) -> Result<i64, VariableError>;
     fn create_variable(&mut self, variable: &Variable) -> Result<(), VariableError>;
+    fn create_platform_variable(
+        &mut self,
+        variable: &PlatformVariable,
+    ) -> Result<(), VariableError>;
     fn update_variable(&mut self, variable: &Variable) -> Result<(), VariableError>;
+    fn update_platform_variable(
+        &mut self,
+        variable: &PlatformVariable,
+    ) -> Result<(), VariableError>;
     fn delete_variable(&mut self, workspace_code: &str, key: &str) -> Result<bool, VariableError>;
+    fn delete_platform_variable(&mut self, key: &str) -> Result<bool, VariableError>;
 }
 
 #[derive(Clone)]
@@ -82,6 +92,89 @@ impl VariableService {
             records.retain(|record| matches_search(record, &search));
         }
         Ok(records)
+    }
+
+    pub fn list_platform_variables(&self) -> Result<Vec<PlatformVariable>, VariableError> {
+        self.all_platform_variables()
+    }
+
+    pub fn create_platform_variable(
+        &self,
+        command: CreateVariableCommand,
+    ) -> Result<PlatformVariable, VariableError> {
+        let key = normalized_key(command.key)?;
+        let platform_variables = self.all_platform_variables()?;
+        if platform_variables
+            .iter()
+            .any(|variable| variable.key == key)
+        {
+            return Err(VariableError::DuplicateKey);
+        }
+
+        let id = self
+            .repository
+            .lock()
+            .expect("variable repository mutex poisoned")
+            .next_id()?;
+        let variable = PlatformVariable {
+            id: SnowflakeId::new(id),
+            key,
+            value: command.value,
+            description: optional_trimmed(command.description),
+            created_at: current_timestamp(),
+            updated_at: current_timestamp(),
+        };
+        self.repository
+            .lock()
+            .expect("variable repository mutex poisoned")
+            .create_platform_variable(&variable)?;
+        Ok(variable)
+    }
+
+    pub fn update_platform_variable(
+        &self,
+        variable_key: &str,
+        command: UpdateVariableCommand,
+    ) -> Result<PlatformVariable, VariableError> {
+        let key = normalized_key(variable_key.to_owned())?;
+        let Some(existing) = self
+            .all_platform_variables()?
+            .into_iter()
+            .find(|variable| variable.key == key)
+        else {
+            return Err(VariableError::NotFound);
+        };
+
+        let mut updated = existing;
+        updated.value = command.value;
+        updated.description = optional_trimmed(command.description);
+        updated.updated_at = current_timestamp();
+
+        self.repository
+            .lock()
+            .expect("variable repository mutex poisoned")
+            .update_platform_variable(&updated)?;
+        Ok(updated)
+    }
+
+    pub fn delete_platform_variable(
+        &self,
+        variable_key: &str,
+    ) -> Result<VariableMutationResult, VariableError> {
+        let key = normalized_key(variable_key.to_owned())?;
+        let deleted = self
+            .repository
+            .lock()
+            .expect("variable repository mutex poisoned")
+            .delete_platform_variable(&key)?;
+        if !deleted {
+            return Err(VariableError::NotFound);
+        }
+
+        Ok(VariableMutationResult {
+            key,
+            workspace_code: "PLATFORM".to_string(),
+        })
     }
 
     pub fn create_variable(
@@ -208,6 +301,13 @@ impl VariableService {
             .list_variables()
     }
 
+    fn all_platform_variables(&self) -> Result<Vec<PlatformVariable>, VariableError> {
+        self.repository
+            .lock()
+            .expect("variable repository mutex poisoned")
+            .list_platform_variables()
+    }
+
     fn effective_variable(
         &self,
         workspace_code: &str,
@@ -232,7 +332,10 @@ impl VariableService {
             .collect();
         variables.iter().any(|variable| {
             variable.key == key && lineage_codes.contains_key(variable.workspace_code.as_str())
-        })
+        }) || self
+            .all_platform_variables()
+            .map(|variables| variables.iter().any(|variable| variable.key == key))
+            .unwrap_or(false)
     }
 
     fn resolve_variables(
@@ -256,6 +359,28 @@ impl VariableService {
         }
 
         let mut resolved_by_key = BTreeMap::<String, ResolvedVariable>::new();
+        for variable in self.all_platform_variables()? {
+            resolved_by_key.insert(
+                variable.key.clone(),
+                ResolvedVariable {
+                    source_kind: VariableSourceKind::Inherited,
+                    source_label: "Platform Configuration".to_string(),
+                    source_workspace_name: "Platform Configuration".to_string(),
+                    shadowed_label: None,
+                    shadowed_workspace_code: None,
+                    shadowed_workspace_name: None,
+                    variable: Variable {
+                        id: variable.id,
+                        workspace_code: "PLATFORM".to_string(),
+                        key: variable.key,
+                        value: variable.value,
+                        description: variable.description,
+                        created_at: variable.created_at,
+                        updated_at: variable.updated_at,
+                    },
+                },
+            );
+        }
         for entry in &lineage {
             let Some(workspace_variables) = variables_by_workspace.get_mut(&entry.code) else {
                 continue;

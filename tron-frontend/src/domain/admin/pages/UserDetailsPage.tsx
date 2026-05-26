@@ -20,6 +20,7 @@ import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import { cn } from "@/shared/lib/utils";
 import {
+  DetailField,
   Field,
   PageHeader,
   SurfaceCard,
@@ -111,15 +112,6 @@ function makeProfileForm(user: UserRecord): UserProfileFormState {
     phoneNumber: user.phone?.number ?? "",
     timezone: user.timezone,
   };
-}
-
-function DetailField({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{label}</p>
-      <p className="mt-1 break-words text-sm font-medium text-[var(--color-on-surface)]">{value}</p>
-    </div>
-  );
 }
 
 function AssignmentChips({

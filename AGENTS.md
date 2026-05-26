@@ -37,3 +37,6 @@ Pagable response body format:
 
 ## What's more
 If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
+
+<!-- Review note: `tron-frontend/src/shared/ui/DataTable.tsx` silently renders a disabled fallback paginator when callers omit `pagination`, and multiple pages currently rely on that fallback instead of wiring live pagination state. -->
+<!-- Review note: frontend i18n currently ships only `en-US` resources even though project docs require both `en-US` and `zh-CN` from the first production-ready implementation. -->

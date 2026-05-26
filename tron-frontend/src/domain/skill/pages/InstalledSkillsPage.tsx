@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
   CircleAlert,
@@ -10,21 +11,23 @@ import {
   Plus,
   RefreshCcw,
   RefreshCw,
-  Search,
   Trash2,
   X,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
   DataTable,
+  DetailField,
+  MarkdownContent,
   PageHeader,
+  SearchField,
   SurfaceCard,
-  TextInput,
+  TablePagination,
+  useLocaleFormatters,
+  useTablePagination,
   useToast,
 } from "@/shared";
 
@@ -41,101 +44,6 @@ import type {
   SkillSourceType,
   SkillUpdateStatus,
 } from "@/domain/skill/model";
-
-function SearchField({
-  value,
-  onChange,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <div className="relative">
-      <Search
-        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]"
-        size={15}
-        aria-hidden="true"
-      />
-      <TextInput
-        aria-label="Filter installed skills"
-        className="h-9 w-full pl-9"
-        placeholder="Filter installed skills..."
-        type="search"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </div>
-  );
-}
-
-function DetailField({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-        {label}
-      </p>
-      <p className="mt-1 break-words text-sm font-medium text-[var(--color-on-surface)]">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function MarkdownContent({
-  ariaLabel,
-  className,
-  content,
-}: {
-  ariaLabel?: string;
-  className?: string;
-  content?: string | null;
-}) {
-  const value = content?.trim();
-
-  if (!value) {
-    return (
-      <div
-        aria-label={ariaLabel}
-        className={cn(
-          "min-h-6 py-1 text-sm leading-6 text-[var(--color-on-surface)]",
-          className,
-        )}
-      >
-        <span className="text-[var(--color-on-surface-variant)]">None</span>
-      </div>
-    );
-  }
-
-  return (
-    <div
-      aria-label={ariaLabel}
-      className={cn(
-        "min-h-6 py-1 text-sm leading-7 text-[var(--color-on-surface)]",
-        "[&_a]:text-[var(--color-primary)] [&_a]:underline-offset-2 hover:[&_a]:underline",
-        "[&_blockquote]:mb-3 [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--color-outline-variant)] [&_blockquote]:pl-4 [&_blockquote]:text-[var(--color-on-surface-variant)]",
-        "[&_code]:font-mono [&_code]:text-[13px]",
-        "[&_h1]:mb-4 [&_h1]:text-2xl [&_h1]:font-semibold [&_h1]:leading-tight",
-        "[&_h2]:mb-3 [&_h2]:text-xl [&_h2]:font-semibold [&_h2]:leading-tight",
-        "[&_h3]:mb-2 [&_h3]:text-lg [&_h3]:font-semibold [&_h3]:leading-tight",
-        "[&_hr]:my-4 [&_hr]:border-[var(--color-outline-variant)]",
-        "[&_li]:mb-1",
-        "[&_ol]:mb-3 [&_ol]:list-decimal [&_ol]:pl-5",
-        "[&_p]:mb-3 [&_p:last-child]:mb-0",
-        "[&_p_code]:rounded [&_p_code]:bg-[var(--color-surface-container-lowest)] [&_p_code]:px-1.5 [&_p_code]:py-0.5",
-        "[&_pre]:mb-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-[var(--color-surface-container-lowest)] [&_pre]:p-3",
-        "[&_pre_code]:bg-transparent [&_pre_code]:p-0",
-        "[&_table]:mb-3 [&_table]:w-full [&_table]:border-collapse [&_table]:overflow-hidden [&_table]:rounded-lg",
-        "[&_tbody_tr]:border-b [&_tbody_tr]:border-[var(--color-outline-variant)] [&_tbody_tr:last-child]:border-b-0",
-        "[&_td]:px-3 [&_td]:py-2 [&_td]:align-top",
-        "[&_th]:border-b [&_th]:border-[var(--color-outline-variant)] [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold",
-        "[&_ul]:mb-3 [&_ul]:list-disc [&_ul]:pl-5",
-        className,
-      )}
-    >
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
-    </div>
-  );
-}
 
 function getSourceTone(sourceType: SkillSourceType) {
   switch (sourceType) {
@@ -164,17 +72,11 @@ function getUpdateTone(updateStatus: SkillUpdateStatus) {
   }
 }
 
-function formatTimestamp(value?: string | null) {
-  if (!value) return "Not checked";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
 export function InstalledSkillsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation(["pages", "common"]);
   const toast = useToast();
+  const { formatDateTime, formatNumber } = useLocaleFormatters();
   const [skills, setSkills] = useState<RegistrySkillRecord[]>([]);
   const [selectedSkillName, setSelectedSkillName] = useState("");
   const [selectedSkill, setSelectedSkill] = useState<RegistrySkillDetail | null>(null);
@@ -187,6 +89,10 @@ export function InstalledSkillsPage() {
   const [uninstallTarget, setUninstallTarget] = useState<RegistrySkillRecord | null>(null);
   const [skillMarkdownFullscreenOpen, setSkillMarkdownFullscreenOpen] = useState(false);
   const detailRequestIdRef = useRef(0);
+  const pagination = useTablePagination(skills);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:installedSkills.${key}`, { defaultValue, ...options })
+  );
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -204,7 +110,7 @@ export function InstalledSkillsPage() {
       setSkills(records);
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Installed skills could not be loaded";
+        error instanceof Error ? error.message : pageT("errors.load", "Installed skills could not be loaded");
       toast.error(message);
     } finally {
       setLoading(false);
@@ -254,7 +160,7 @@ export function InstalledSkillsPage() {
           return;
         }
         const message =
-          error instanceof Error ? error.message : "Skill detail could not be loaded";
+          error instanceof Error ? error.message : pageT("errors.detail", "Skill detail could not be loaded");
         toast.error(message);
       })
       .finally(() => {
@@ -305,10 +211,10 @@ export function InstalledSkillsPage() {
     try {
       if (mode === "refresh") {
         const result = await rescanRegistrySkills();
-        toast.success(`Discovered ${result.discoveredCount} installed skills`);
+        toast.success(pageT("messages.discovered", "Discovered {{count}} installed skills", { count: formatNumber(result.discoveredCount) }));
       } else {
         await updateRegistrySkills();
-        toast.success("Registry skills updated");
+        toast.success(pageT("messages.updated", "Registry skills updated"));
       }
       await loadRegistry();
       if (selectedSkillName) {
@@ -319,7 +225,7 @@ export function InstalledSkillsPage() {
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Registry operation failed";
+        error instanceof Error ? error.message : pageT("errors.registry", "Registry operation failed");
       toast.error(message);
     } finally {
       setSyncing(null);
@@ -335,18 +241,26 @@ export function InstalledSkillsPage() {
       setUninstallTarget(null);
       if (result.removedBindingsCount > 0) {
         toast.success(
-          `${skill.skillName} uninstalled and removed from ${result.removedBindingsCount} workspace binding${result.removedBindingsCount === 1 ? "" : "s"}`,
+          pageT("messages.uninstalledRemoved", "{{name}} uninstalled and removed from {{count}} workspace binding{{suffix}}", {
+            name: skill.skillName,
+            count: formatNumber(result.removedBindingsCount),
+            suffix: result.removedBindingsCount === 1 ? "" : "s",
+          }),
         );
       } else if (result.keptBindingsCount > 0) {
         toast.success(
-          `${skill.skillName} uninstalled. ${result.keptBindingsCount} workspace binding${result.keptBindingsCount === 1 ? "" : "s"} remain and will show as deleted.`,
+          pageT("messages.uninstalledKept", "{{name}} uninstalled. {{count}} workspace binding{{suffix}} remain and will show as deleted.", {
+            name: skill.skillName,
+            count: formatNumber(result.keptBindingsCount),
+            suffix: result.keptBindingsCount === 1 ? "" : "s",
+          }),
         );
       } else {
-        toast.success(`${skill.skillName} uninstalled`);
+        toast.success(pageT("messages.uninstalled", "{{name}} uninstalled", { name: skill.skillName }));
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Skill uninstall failed";
+        error instanceof Error ? error.message : pageT("errors.uninstall", "Skill uninstall failed");
       toast.error(message);
     } finally {
       setUninstallingSkillName("");
@@ -356,7 +270,7 @@ export function InstalledSkillsPage() {
   return (
     <>
       <PageHeader
-        title="Skill Center"
+        title={pageT("title", "Skill Center")}
         actions={(
           <>
             <Button
@@ -366,11 +280,11 @@ export function InstalledSkillsPage() {
               onClick={() => void handleRegistrySync("update")}
             >
               <RefreshCw size={16} aria-hidden="true" />
-              {syncing === "update" ? "Updating..." : "Update"}
+              {syncing === "update" ? pageT("actions.updating", "Updating...") : pageT("actions.update", "Update")}
             </Button>
             <Button onClick={() => navigate("/settings/skills/sync")}>
               <Plus size={16} aria-hidden="true" />
-              Sync
+              {pageT("actions.sync", "Sync")}
             </Button>
           </>
         )}
@@ -380,7 +294,13 @@ export function InstalledSkillsPage() {
         <SurfaceCard className="p-0">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] p-4">
             <div className="min-w-[16rem] flex-1">
-              <SearchField value={searchInput} onChange={setSearchInput} />
+              <SearchField
+                ariaLabel={pageT("search.ariaLabel", "Filter installed skills")}
+                clearLabel={pageT("search.clear", "Clear installed skill search")}
+                placeholder={pageT("search.placeholder", "Filter installed skills...")}
+                value={searchInput}
+                onChange={setSearchInput}
+              />
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -392,15 +312,16 @@ export function InstalledSkillsPage() {
                 onClick={() => void handleRegistrySync("refresh")}
               >
                 <RefreshCcw size={16} aria-hidden="true" />
-                {syncing === "refresh" ? "Refreshing..." : "Refresh"}
+                {syncing === "refresh" ? pageT("actions.refreshing", "Refreshing...") : t("common:actions.refresh")}
               </Button>
-              {loading ? <Badge tone="accent">Loading</Badge> : null}
+              {loading ? <Badge tone="accent">{pageT("loading.badge", "Loading")}</Badge> : null}
             </div>
           </div>
           <DataTable<RegistrySkillRecord>
-            className="rounded-t-none border-0 bg-transparent"
+            variant="embedded"
             onRowClick={(row) => setSelectedSkillName(row.skillName)}
-            rows={skills}
+            rows={pagination.visibleItems}
+            pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "skills")} {...pagination.paginationProps} />}
             rowKey={(row) => row.skillName}
             rowClassName={(row) => (
               row.skillName === selectedSkillName
@@ -409,14 +330,14 @@ export function InstalledSkillsPage() {
             )}
             emptyState={(
               <div className="space-y-2">
-                <p>No installed skills match the current filters.</p>
-                <p className="text-xs">Use “Sync” to search `skills.sh` and add one to the local registry.</p>
+                <p>{pageT("emptyState.title", "No installed skills match the current filters.")}</p>
+                <p className="text-xs">{pageT("emptyState.body", "Use “Sync” to search `skills.sh` and add one to the local registry.")}</p>
               </div>
             )}
             columns={[
               {
                 id: "skillName",
-                header: "Skill",
+                header: pageT("columns.skill", "Skill"),
                 render: (row) => (
                   <div
                     className={cn(
@@ -435,33 +356,33 @@ export function InstalledSkillsPage() {
               },
               {
                 id: "version",
-                header: "Version",
-                render: (row) => row.declaredVersion ?? "Unspecified",
+                header: pageT("columns.version", "Version"),
+                render: (row) => row.declaredVersion ?? pageT("status.unspecified", "Unspecified"),
               },
               {
                 id: "sourceType",
-                header: "Source",
+                header: pageT("columns.source", "Source"),
                 render: (row) => (
                   <Badge tone={getSourceTone(row.sourceType)}>{row.sourceType}</Badge>
                 ),
               },
               {
                 id: "updateStatus",
-                header: "Update",
+                header: pageT("columns.update", "Update"),
                 render: (row) => (
                   <Badge tone={getUpdateTone(row.updateStatus)}>{row.updateStatus}</Badge>
                 ),
               },
               {
                 id: "enabledWorkspaceCount",
-                header: "Workspaces",
+                header: pageT("columns.workspaces", "Workspaces"),
                 headerClassName: "w-20",
                 cellClassName: "w-20",
-                render: (row) => String(row.enabledWorkspaceCount),
+                render: (row) => formatNumber(row.enabledWorkspaceCount),
               },
               {
                 id: "action",
-                header: "Action",
+                header: pageT("columns.action", "Action"),
                 align: "right",
                 render: (row) => {
                   const uninstalling = uninstallingSkillName === row.skillName;
@@ -479,7 +400,7 @@ export function InstalledSkillsPage() {
                         }}
                       >
                         <Trash2 size={14} aria-hidden="true" />
-                        {uninstalling ? "Uninstalling..." : "Uninstall"}
+                        {uninstalling ? pageT("actions.uninstalling", "Uninstalling...") : pageT("actions.uninstall", "Uninstall")}
                       </Button>
                     </div>
                   );
@@ -492,22 +413,22 @@ export function InstalledSkillsPage() {
         <SurfaceCard className="space-y-5">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">
-              Skill Detail
+              {pageT("detail.label", "Skill Detail")}
             </p>
             <h2 className="mt-2 text-2xl font-semibold">
-              {selectedSkillName || "Select a Skill"}
+              {selectedSkillName || pageT("detail.select", "Select a Skill")}
             </h2>
           </div>
 
           {!selectedSkillName && !detailLoading ? (
             <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] px-5 py-6 text-sm text-[var(--color-on-surface-variant)]">
-              Select an installed skill to review its source, files, and markdown preview.
+              {pageT("detail.empty", "Select an installed skill to review its source, files, and markdown preview.")}
             </div>
           ) : null}
 
           {detailLoading ? (
             <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] px-5 py-6 text-sm text-[var(--color-on-surface-variant)]">
-              Loading skill detail...
+              {pageT("detail.loading", "Loading skill detail...")}
             </div>
           ) : null}
 
@@ -528,8 +449,8 @@ export function InstalledSkillsPage() {
                   <DetailField label="Source" value={selectedSkill.sourceRef} />
                   <DetailField label="Registry Path" value={selectedSkill.registryPath} />
                   <DetailField label="Version" value={selectedSkill.declaredVersion ?? "Unspecified"} />
-                  <DetailField label="Last Checked" value={formatTimestamp(selectedSkill.lastCheckedAt)} />
-                  <DetailField label="Last Updated" value={formatTimestamp(selectedSkill.lastUpdatedAt)} />
+                  <DetailField label="Last Checked" value={selectedSkill.lastCheckedAt ? formatDateTime(selectedSkill.lastCheckedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notChecked", "Not checked")} />
+                  <DetailField label="Last Updated" value={selectedSkill.lastUpdatedAt ? formatDateTime(selectedSkill.lastUpdatedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notChecked", "Not checked")} />
                   <DetailField label="Enabled Workspaces" value={String(selectedSkill.enabledWorkspaceCount)} />
                 </div>
               </div>

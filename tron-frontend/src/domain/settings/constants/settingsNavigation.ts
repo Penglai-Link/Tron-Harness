@@ -1,4 +1,5 @@
 import {
+  KeyRound,
   Package,
   Settings2,
   Sparkles,
@@ -16,6 +17,12 @@ export const settingsNavigation = [
     href: "/settings/models",
     icon: Sparkles,
     translationKey: "shell:settings.items.models",
+  },
+  {
+    label: "Variables",
+    href: "/settings/variables",
+    icon: KeyRound,
+    translationKey: "shell:settings.items.variables",
   },
   {
     label: "Skill Center",

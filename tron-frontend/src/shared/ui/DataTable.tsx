@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
-import { TablePagination } from "@/shared/ui/TablePagination";
 import { cn } from "@/shared/lib/utils";
 
 export interface DataTableColumn<T> {
@@ -10,6 +10,7 @@ export interface DataTableColumn<T> {
   headerClassName?: string;
   id: string;
   render: (row: T) => ReactNode;
+  width?: string;
 }
 
 interface DataTableProps<T> {
@@ -17,12 +18,13 @@ interface DataTableProps<T> {
   columns: DataTableColumn<T>[];
   emptyState?: ReactNode;
   onRowClick?: (row: T, index: number) => void;
-  pagination?: ReactNode;
+  pagination: ReactNode;
   rowKey: (row: T, index: number) => string;
   rowClassName?: (row: T) => string | undefined;
   rows: T[];
   title?: string;
   toolbar?: ReactNode;
+  variant?: "default" | "embedded";
 }
 
 export function DataTable<T>({
@@ -36,11 +38,21 @@ export function DataTable<T>({
   rows,
   title,
   toolbar,
+  variant = "default",
 }: DataTableProps<T>) {
+  const { t } = useTranslation("common");
   const hasHeader = title || toolbar;
 
   return (
-    <section className={cn("overflow-hidden rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]", className)}>
+    <section
+      className={cn(
+        "overflow-hidden",
+        variant === "default"
+          ? "rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]"
+          : "rounded-none border-0 bg-transparent",
+        className,
+      )}
+    >
       {hasHeader && (
         <div
           className={cn(
@@ -63,6 +75,13 @@ export function DataTable<T>({
       )}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+          {columns.some((column) => column.width) ? (
+            <colgroup>
+              {columns.map((column) => (
+                <col key={column.id} style={column.width ? { width: column.width } : undefined} />
+              ))}
+            </colgroup>
+          ) : null}
           <thead>
             <tr className="border-b border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
               {columns.map((column) => (
@@ -117,7 +136,7 @@ export function DataTable<T>({
             ) : (
               <tr>
                 <td className="px-5 py-8 text-center text-sm text-[var(--color-on-surface-variant)]" colSpan={columns.length}>
-                  {emptyState ?? "No records match the current filters."}
+                  {emptyState ?? t("table.empty")}
                 </td>
               </tr>
             )}
@@ -125,16 +144,7 @@ export function DataTable<T>({
         </table>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-outline-variant)] px-5 py-3 text-[13px] text-[var(--color-on-surface-variant)]">
-        {pagination ?? (
-          <TablePagination
-            endItem={rows.length}
-            page={1}
-            pageCount={1}
-            pageSize={15}
-            startItem={rows.length ? 1 : 0}
-            totalItems={rows.length}
-          />
-        )}
+        {pagination}
       </div>
     </section>
   );

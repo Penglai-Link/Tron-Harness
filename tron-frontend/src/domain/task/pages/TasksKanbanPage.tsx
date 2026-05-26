@@ -8,16 +8,15 @@ import { useNavigate } from "react-router";
 import {
   Plus,
   RefreshCcw,
-  Search,
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
   PageHeader,
+  SearchField,
   SelectInput,
   SurfaceCard,
-  TextInput,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -61,15 +60,6 @@ function presetScaleFactor(preset: BoardScalePreset) {
 
 function clampBoardScale(value: number) {
   return Math.min(1, Math.max(BOARD_MIN_SCALE, value));
-}
-
-function SearchField({ placeholder, value, onChange }: { placeholder: string; value: string; onChange: (value: string) => void }) {
-  return (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
-      <TextInput aria-label="Search tasks" className="w-full pl-9" placeholder={placeholder} type="search" value={value} onChange={(event) => onChange(event.target.value)} />
-    </div>
-  );
 }
 
 function ProgressBar({ value }: { value: number }) {

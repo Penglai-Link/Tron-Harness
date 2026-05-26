@@ -7,7 +7,8 @@ use crate::{
         inbound::http::{
             admin::{
                 models::routes::routes as admin_model_routes, roles::routes as role_routes,
-                users::routes as user_routes, workspaces::routes as workspace_routes,
+                users::routes as user_routes, variables::routes::routes as admin_variable_routes,
+                workspaces::routes as workspace_routes,
             },
             apps::routes::routes as app_routes,
             auth::{require_auth, routes as auth_routes},
@@ -21,9 +22,8 @@ use crate::{
             crypto::BcryptPasswordHasher,
             persistence::{
                 SqliteAppRepository, SqliteAutomationRepository, SqliteModelRepository,
-                SqliteRoleRepository,
-                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteUserRepository,
-                SqliteVariableRepository, SqliteWorkspaceRepository,
+                SqliteRoleRepository, SqliteSkillRegistryRepository, SqliteTaskRepository,
+                SqliteUserRepository, SqliteVariableRepository, SqliteWorkspaceRepository,
             },
         },
     },
@@ -261,6 +261,7 @@ pub fn build_router(config: AppConfig) -> Router {
     let state = AppState::new(config);
     let protected_routes = user_routes()
         .merge(admin_model_routes())
+        .merge(admin_variable_routes())
         .merge(role_routes())
         .merge(model_routes())
         .merge(workspace_routes())
