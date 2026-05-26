@@ -334,3 +334,52 @@ test("AC-RCS-03: shell right-panel pages retain content and no-panel pages show 
   await expect(page.locator("#tron-workspace-trigger")).toHaveCount(0);
   await expectNoRightSidebarControls(page);
 });
+
+test("AC-RCS-04: graph and memory inspectors render in shell right sidebar and preserve selected context", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await routeAuthApi(page);
+  await signIn(page, "/knowledge-graph");
+
+  await expect(page.getByRole("heading", { name: "Entities" })).toBeVisible();
+  await expect(rightSidebar(page)).toBeVisible();
+  await expect(rightSidebar(page).getByRole("heading", { name: "Node Inspector" })).toBeVisible();
+  await expect(rightSidebar(page).getByText("Customer_0192")).toBeVisible();
+
+  await page.locator("aside").filter({ has: page.getByRole("heading", { name: "Entities" }) }).getByRole("button", { name: /Order_TXN_55/ }).click();
+  await expect(rightSidebar(page).getByText("Order_TXN_55")).toBeVisible();
+  await expect(rightSidebar(page).getByText("Transaction")).toBeVisible();
+
+  await page.getByTestId("tron-right-sidebar-collapse").click();
+  await expect(rightSidebar(page)).toHaveCount(0);
+  await expect(rightReopenControl(page)).toBeVisible();
+  await rightReopenControl(page).click();
+  await expect(rightSidebar(page)).toBeVisible();
+  await expect(rightSidebar(page).getByText("Order_TXN_55")).toBeVisible();
+
+  await page.getByTestId("tron-right-sidebar-collapse").click();
+  await expect(rightReopenControl(page)).toBeVisible();
+  await rightReopenControl(page).click();
+  await expect(rightSidebar(page)).toBeVisible();
+
+  await page.goto(`${frontendBaseUrl}/knowledge-graph/domain-filtering`);
+  await expect(page.getByRole("heading", { name: "Entities" })).toBeVisible();
+  await expect(page.locator("aside").filter({ hasText: "Domain" }).locator("select")).toHaveCount(1);
+  await expect(page.locator("aside").filter({ has: page.getByRole("heading", { name: "Entities" }) }).getByRole("button", { name: /Customer_0192/ })).toBeVisible();
+
+  await page.goto(`${frontendBaseUrl}/memory`);
+  await expect(rightSidebar(page).getByRole("button", { name: "Edit Fragment" })).toBeVisible();
+  await expect(rightSidebar(page).getByText("User prefers terse, direct responses without conversational filler.")).toBeVisible();
+  await page.getByRole("button", { name: /System default tone set to professional and helpful./ }).click();
+  await expect(rightSidebar(page).getByText("System default tone set to professional and helpful.")).toBeVisible();
+  await page.getByTestId("tron-right-sidebar-collapse").click();
+  await expect(rightReopenControl(page)).toBeVisible();
+  await expect(rightSidebar(page)).toHaveCount(0);
+  await rightReopenControl(page).click();
+  await expect(rightSidebar(page).getByText("System default tone set to professional and helpful.")).toBeVisible();
+
+  await page.goto(`${frontendBaseUrl}/memory/details`);
+  await expect(rightSidebar(page).getByRole("button", { name: "Edit Fragment" })).toBeVisible();
+  await expect(rightSidebar(page).getByText("System default tone set to professional and helpful.", { exact: false })).toHaveCount(0);
+  await page.getByRole("button", { name: /Project Alpha requires strict adherence to security protocols./ }).click();
+  await expect(rightSidebar(page).getByText("Project Alpha requires strict adherence to security protocols outlined in doc-4A.")).toBeVisible();
+});

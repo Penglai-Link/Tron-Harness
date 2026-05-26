@@ -12,10 +12,12 @@ import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
   DataTable,
+  InspectorPanel,
   PageHeader,
   SegmentedTabs,
   SurfaceCard,
   TablePagination,
+  useConsoleShellConfig,
   useTablePagination,
 } from "@/shared";
 
@@ -34,12 +36,13 @@ function Notice({ value }: { value: string }) {
   return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
-function MemoryRepository({ details = false }: { details?: boolean }) {
+function MemoryRepository() {
   const fragments = useMemoryFragmentList();
   const [strategy, setStrategy] = useState("hybrid");
   const [query, setQuery] = useState("");
   const [filters, setFilters] = useState<string[]>([...defaultMemoryFilters]);
   const [selectedId, setSelectedId] = useState("mem-1");
+  const [inspectorOpen, setInspectorOpen] = useState(true);
   const [notice, setNotice] = useState("");
   const visible = fragments.filter((fragment) => fragment.content.toLowerCase().includes(query.toLowerCase()) || fragment.namespace.toLowerCase().includes(query.toLowerCase()));
   const memoryPagination = useTablePagination(visible);
@@ -52,7 +55,10 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
       rowKey={(row) => row.id}
       toolbar={<span className="text-[13px] text-[var(--color-on-surface-variant)]">{visible.length} matching fragments</span>}
       columns={[
-        { id: "content", header: "Content Snippet", render: (row) => <button className="max-w-[380px] truncate text-left" type="button" onClick={() => setSelectedId(row.id)}>{row.content}</button> },
+        { id: "content", header: "Content Snippet", render: (row) => <button className="max-w-[380px] truncate text-left" type="button" onClick={() => {
+          setSelectedId(row.id);
+          setInspectorOpen(true);
+        }}>{row.content}</button> },
         { id: "namespace", header: "Namespace", render: (row) => row.namespace },
         { id: "entity", header: "Entity", render: (row) => <span className="font-mono">{row.entity}</span> },
         { id: "source", header: "Source", render: (row) => row.source },
@@ -63,6 +69,9 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
       pagination={<TablePagination itemLabel="fragments" {...memoryPagination.paginationProps} />}
     />
   );
+  const rightPanel = inspectorOpen ? <MemoryInspector fragment={selected} onClose={() => setInspectorOpen(false)} /> : undefined;
+
+  useConsoleShellConfig({ rightPanel });
 
   return (
     <>
@@ -90,18 +99,21 @@ function MemoryRepository({ details = false }: { details?: boolean }) {
           <Button size="sm" variant="ghost" onClick={() => setFilters((current) => [...current, `Strategy: ${strategy}`])}><Plus size={14} />Add Filter</Button>
         </div>
       </SurfaceCard>
-      {details ? <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_400px]">{table}<MemoryInspector fragment={selected} /></div> : table}
+      {table}
     </>
   );
 }
 
-function MemoryInspector({ fragment }: { fragment: MemoryFragment }) {
+function MemoryInspector({ fragment, onClose }: { fragment: MemoryFragment; onClose: () => void }) {
   const [status, setStatus] = useState("Selected");
   return (
-    <SurfaceCard className="flex flex-col p-0">
+    <InspectorPanel title="Memory Details">
       <div className="flex items-center justify-between border-b border-[var(--color-outline-variant)] p-5">
         <h2 className="text-xl font-semibold">Memory Details</h2>
-        <Button size="icon" variant="ghost" onClick={() => setStatus("Inspector closed")}><X size={16} /></Button>
+        <Button size="icon" variant="ghost" onClick={() => {
+          setStatus("Inspector closed");
+          onClose();
+        }}><X size={16} /></Button>
       </div>
       <div className="space-y-6 p-5">
         <section><h3 className="mb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Content Snippet</h3><div className="rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm leading-6">{fragment.content} This includes removing pleasantries and preserving information density.</div></section>
@@ -113,7 +125,7 @@ function MemoryInspector({ fragment }: { fragment: MemoryFragment }) {
         <Button className="flex-1" variant="secondary" onClick={() => setStatus("Edit mode enabled")}>Edit Fragment</Button>
         <Button className="flex-1" onClick={() => setStatus("Fragment invalidated")}>Invalidate</Button>
       </div>
-    </SurfaceCard>
+    </InspectorPanel>
   );
 }
 
@@ -122,5 +134,5 @@ function Meta({ label, value }: { label: string; value: string }) {
 }
 
 export function MemoryDetailsPage() {
-  return <MemoryRepository details />;
+  return <MemoryRepository />;
 }
