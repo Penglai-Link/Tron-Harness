@@ -12,7 +12,9 @@ import {
 import { Button } from "@/shared/ui/Button";
 import {
   Field,
+  InspectorPanel,
   SelectInput,
+  useConsoleShellConfig,
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
@@ -23,7 +25,7 @@ function Notice({ value }: { value: string }) {
   return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
 }
 
-function GraphPage({ domainFiltering = false }: { domainFiltering?: boolean }) {
+export function GraphPage({ domainFiltering = false }: { domainFiltering?: boolean }) {
   const [domain, setDomain] = useState("customer-support");
   const [query, setQuery] = useState("");
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -32,10 +34,13 @@ function GraphPage({ domainFiltering = false }: { domainFiltering?: boolean }) {
   const visibleEntities = graph.entities.filter((entity) => entity.label.toLowerCase().includes(query.toLowerCase()) || entity.type.toLowerCase().includes(query.toLowerCase()));
   const [selectedId, setSelectedId] = useState("customer-0192");
   const selected = graph.entities.find((entity) => entity.id === selectedId) ?? graph.entities[0];
+  const rightPanel = inspectorOpen ? <GraphInspector selected={selected} onClose={() => setInspectorOpen(false)} /> : undefined;
+
+  useConsoleShellConfig({ rightPanel });
 
   return (
     <>
-      <div className="grid min-h-[720px] overflow-hidden rounded-xl border border-[var(--color-outline-variant)] bg-white xl:grid-cols-[300px_minmax(520px,1fr)_320px]">
+      <div className="grid min-h-[720px] overflow-hidden rounded-xl border border-[var(--color-outline-variant)] bg-white xl:grid-cols-[300px_minmax(520px,1fr)]">
         <aside className="border-r border-[var(--color-outline-variant)] bg-white">
           <div className="border-b border-[var(--color-outline-variant)] p-4">
             <h1 className="text-xl font-semibold">Entities</h1>
@@ -76,7 +81,6 @@ function GraphPage({ domainFiltering = false }: { domainFiltering?: boolean }) {
           </div>
         </aside>
         <GraphCanvas entities={graph.entities} selected={selected} setSelectedId={setSelectedId} setInspectorOpen={setInspectorOpen} setZoom={setZoom} zoom={zoom} />
-        {inspectorOpen ? <GraphInspector selected={selected} onClose={() => setInspectorOpen(false)} /> : null}
       </div>
     </>
   );
@@ -121,7 +125,7 @@ function GraphInspector({ onClose, selected }: { onClose: () => void; selected: 
   const [notice, setNotice] = useState("");
 
   return (
-    <aside className="border-l border-[var(--color-outline-variant)] bg-white">
+    <InspectorPanel title="Node Inspector">
       <div className="flex items-start justify-between border-b border-[var(--color-outline-variant)] p-4">
         <div>
           <h2 className="text-xl font-semibold">{selected.label}</h2>
@@ -155,7 +159,7 @@ function GraphInspector({ onClose, selected }: { onClose: () => void; selected: 
         <Button className="w-full" onClick={() => setNotice(`Editing ${selected.label}`)}>Edit Entity</Button>
         <Notice value={notice} />
       </div>
-    </aside>
+    </InspectorPanel>
   );
 }
 
