@@ -1,4 +1,7 @@
-import { useState } from "react";
+import {
+  useMemo,
+  useState,
+} from "react";
 import {
   Database,
   Plus,
@@ -69,7 +72,10 @@ function MemoryRepository() {
       pagination={<TablePagination itemLabel="fragments" {...memoryPagination.paginationProps} />}
     />
   );
-  const rightPanel = inspectorOpen ? <MemoryInspector fragment={selected} onClose={() => setInspectorOpen(false)} /> : undefined;
+  const rightPanel = useMemo(
+    () => (inspectorOpen ? <MemoryInspector fragment={selected} onClose={() => setInspectorOpen(false)} /> : undefined),
+    [inspectorOpen, selected],
+  );
 
   useConsoleShellConfig({ rightPanel });
 

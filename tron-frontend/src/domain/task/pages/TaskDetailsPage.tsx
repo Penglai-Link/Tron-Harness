@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -133,7 +134,7 @@ export function TaskDetailsPage() {
   const archived = status === "Archived" || task.status === "Archived" || Boolean(task.archivedAt);
   const taskRole = inferTaskRole(task.taskType, task.parentTaskCode);
   const availableStatuses = options.statusRules[taskRole];
-  const availableAppCodeSet = new Set(appOptions.map((app) => app.appCode));
+  const availableAppCodeSet = useMemo(() => new Set(appOptions.map((app) => app.appCode)), [appOptions]);
   const legacyAppCodes = selectedAppCodes.filter((code) => !availableAppCodeSet.has(code));
 
   useEffect(() => {
@@ -186,7 +187,7 @@ export function TaskDetailsPage() {
     || sourceType !== task.sourceType
     || sourceUrl !== (task.sourceUrl ?? "");
 
-  const rightPanel = (
+  const rightPanel = useMemo(() => (
     <InspectorPanel title="Task Metadata">
       <SurfaceCard className="space-y-5 p-2">
         <div>
@@ -238,7 +239,15 @@ export function TaskDetailsPage() {
         </div>
       </SurfaceCard>
     </InspectorPanel>
-  );
+  ), [
+    archived,
+    assigneeUserCodes,
+    availableAppCodeSet,
+    childTitle,
+    dataSource,
+    selectedAppCodes,
+    task,
+  ]);
 
   useConsoleShellConfig({ rightPanel });
   const breadcrumbs = [

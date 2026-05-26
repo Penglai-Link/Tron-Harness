@@ -63,44 +63,43 @@ export function KnowledgeBasePage() {
   const documentCount = knowledgeBases.reduce((total, knowledgeBase) => total + knowledgeBase.documentCount, 0);
   const sourceCount = knowledgeBases.reduce((total, knowledgeBase) => total + knowledgeBase.sourceCount, 0);
   const indexingCount = knowledgeBases.filter((knowledgeBase) => knowledgeBase.status === "Indexing").length;
+  const rightPanel = useMemo(() => (
+    <InspectorPanel title="Selected KnowledgeBase">
+      <div>
+        <p className="text-2xl font-semibold">{selectedKnowledgeBase.name}</p>
+        <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{selectedKnowledgeBase.ownerWorkspace}</p>
+      </div>
 
-  useConsoleShellConfig({
-    rightPanel: (
-      <InspectorPanel title="Selected KnowledgeBase">
-        <div>
-          <p className="text-2xl font-semibold">{selectedKnowledgeBase.name}</p>
-          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{selectedKnowledgeBase.ownerWorkspace}</p>
-        </div>
+      <div className="grid gap-3 rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-surface-container-low)] p-4 text-sm">
+        <InspectorRow label="Retrieval Profile" value={selectedKnowledgeBase.retrievalProfile} />
+        <InspectorRow label="Chunk Profile" value={selectedKnowledgeBase.chunkProfile} />
+        <InspectorRow label="Embedding Footprint" value={selectedKnowledgeBase.embeddingFootprint} />
+        <InspectorRow
+          label="Sync Lag"
+          value={selectedKnowledgeBase.syncLagMinutes === 999 ? "Draft" : `${selectedKnowledgeBase.syncLagMinutes} min`}
+        />
+      </div>
 
-        <div className="grid gap-3 rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-surface-container-low)] p-4 text-sm">
-          <InspectorRow label="Retrieval Profile" value={selectedKnowledgeBase.retrievalProfile} />
-          <InspectorRow label="Chunk Profile" value={selectedKnowledgeBase.chunkProfile} />
-          <InspectorRow label="Embedding Footprint" value={selectedKnowledgeBase.embeddingFootprint} />
-          <InspectorRow
-            label="Sync Lag"
-            value={selectedKnowledgeBase.syncLagMinutes === 999 ? "Draft" : `${selectedKnowledgeBase.syncLagMinutes} min`}
-          />
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Operational Notes</p>
+        <div className="mt-3 space-y-2 text-sm text-[var(--color-on-surface-variant)]">
+          <p>Use this catalog for traditional RAG corpora that need predictable chunking, metadata filters, and controlled refresh windows.</p>
+          <p>KnowledgeGraph stays focused on entity relationships. Resources remains the broader asset inventory for files, connectors, and raw sources.</p>
         </div>
+      </div>
 
-        <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Operational Notes</p>
-          <div className="mt-3 space-y-2 text-sm text-[var(--color-on-surface-variant)]">
-            <p>Use this catalog for traditional RAG corpora that need predictable chunking, metadata filters, and controlled refresh windows.</p>
-            <p>KnowledgeGraph stays focused on entity relationships. Resources remains the broader asset inventory for files, connectors, and raw sources.</p>
-          </div>
-        </div>
+      <div className="mt-auto flex gap-2">
+        <Button className="flex-1" variant="secondary" onClick={() => setNotice(`Ingestion policy opened for ${selectedKnowledgeBase.name}.`)}>
+          Review Policy
+        </Button>
+        <Button className="flex-1" onClick={() => setNotice(`Sync job started for ${selectedKnowledgeBase.name}.`)}>
+          Reindex Now
+        </Button>
+      </div>
+    </InspectorPanel>
+  ), [selectedKnowledgeBase]);
 
-        <div className="mt-auto flex gap-2">
-          <Button className="flex-1" variant="secondary" onClick={() => setNotice(`Ingestion policy opened for ${selectedKnowledgeBase.name}.`)}>
-            Review Policy
-          </Button>
-          <Button className="flex-1" onClick={() => setNotice(`Sync job started for ${selectedKnowledgeBase.name}.`)}>
-            Reindex Now
-          </Button>
-        </div>
-      </InspectorPanel>
-    ),
-  });
+  useConsoleShellConfig({ rightPanel });
 
   return (
     <>

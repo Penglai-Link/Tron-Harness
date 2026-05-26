@@ -1,5 +1,7 @@
 import {
   useEffect,
+  useCallback,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -164,9 +166,9 @@ export function SkillsPage() {
   const [skillMarkdownFullscreenOpen, setSkillMarkdownFullscreenOpen] = useState(false);
   const detailRequestIdRef = useRef(0);
   const pagination = useTablePagination(skills);
-  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+  const pageT = useCallback((key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:skills.${key}`, { defaultValue, ...options })
-  );
+  ), [t]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -355,7 +357,7 @@ export function SkillsPage() {
     }
   }
 
-  const rightPanel = (
+  const rightPanel = useMemo(() => (
     <InspectorPanel title={pageT("detail.label", "Skill Detail")}>
       <div>
         <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--color-on-surface)]">
@@ -509,11 +511,9 @@ export function SkillsPage() {
         </>
       )}
     </InspectorPanel>
-  );
+  ), [detailLoading, formatDateTime, navigate, pageT, selectedSkill, selectedSkillName]);
 
-  useConsoleShellConfig({
-    rightPanel,
-  });
+  useConsoleShellConfig({ rightPanel });
 
   return (
     <>

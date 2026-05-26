@@ -1,4 +1,7 @@
-import { useState } from "react";
+import {
+  useMemo,
+  useState,
+} from "react";
 import {
   useNavigate,
   useSearchParams,
@@ -45,7 +48,7 @@ export function AppDetailsPage() {
   const appCode = searchParams.get("appCode") ?? "";
   const { app, loading, refresh } = useAppDetail(appCode);
   const [updatingLifecycle, setUpdatingLifecycle] = useState(false);
-  const rightPanel = app ? (
+  const rightPanel = useMemo(() => (app ? (
     <InspectorPanel title="App Metadata">
       <div className="space-y-5">
         <div>
@@ -67,7 +70,7 @@ export function AppDetailsPage() {
         </div>
       </div>
     </InspectorPanel>
-  ) : undefined;
+  ) : undefined), [app]);
 
   useConsoleShellConfig({ rightPanel });
 

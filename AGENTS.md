@@ -43,3 +43,4 @@ If you encounter anything counterintuitive, surprising or confusing in this proj
 <!-- Review note: `tron-frontend/src/domain/variable/pages/VariableDetailsPage.tsx` passes `routeVariant="details"`, but `VariableManagementPage` currently does not consume that prop. -->
 <!-- Review note: frontend mock data mode does not cover auth; direct protected-route visual checks still proxy `/api/v1/auth/*` to `127.0.0.1:8080`, so in-app browser verification needs a backend or explicit auth interception. -->
 <!-- Review note: `useServiceQuery` callers often pass inline `apiInitialData` factories; treating those factory references as hook dependencies caused API-mode pages to enter a maximum-update-depth loop. -->
+<!-- Review note: shell page config stores `rightPanel` by React node reference; page-level right panels must be memoized before `useConsoleShellConfig` registration or route renders can loop through parent shell state updates. -->

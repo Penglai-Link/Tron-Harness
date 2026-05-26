@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -210,9 +211,9 @@ export function AutomationDetailsPage() {
     executionPageState.total,
     executionPageRecords.length,
   );
-  const subtasks = resolveSubtasks(automation);
+  const subtasks = useMemo(() => resolveSubtasks(automation), [automation]);
   const executionInitialLoading = executionsLoading && executionPageState.total === 0;
-  const rightPanel = (
+  const rightPanel = useMemo(() => (
     <InspectorPanel title="Automation Details">
       <div className="space-y-5">
         <div className="space-y-4">
@@ -258,7 +259,7 @@ export function AutomationDetailsPage() {
         )}
       </div>
     </InspectorPanel>
-  );
+  ), [automation, subtasks]);
 
   useConsoleShellConfig({ rightPanel });
 

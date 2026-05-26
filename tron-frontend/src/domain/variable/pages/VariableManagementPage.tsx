@@ -366,7 +366,7 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
       ? `Override ${selectedVariable?.key ?? "Variable"}`
       : selectedVariable?.key ?? "Select a Variable";
 
-  const rightPanel = (
+  const rightPanel = useMemo(() => (
     <InspectorPanel title="Variable Studio">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -511,11 +511,19 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
         </>
       )}
     </InspectorPanel>
-  );
+  ), [
+    activeWorkspaceCode,
+    activeWorkspaceDescription,
+    activeWorkspaceLabel,
+    deleting,
+    form,
+    inspectorTitle,
+    panelMode,
+    selectedVariable,
+    submitting,
+  ]);
 
-  useConsoleShellConfig({
-    rightPanel,
-  });
+  useConsoleShellConfig({ rightPanel });
 
   return (
     <>

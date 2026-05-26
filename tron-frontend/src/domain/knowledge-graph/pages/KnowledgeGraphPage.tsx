@@ -1,4 +1,7 @@
-import { useState } from "react";
+import {
+  useMemo,
+  useState,
+} from "react";
 import {
   Database,
   Maximize2,
@@ -34,7 +37,10 @@ export function GraphPage({ domainFiltering = false }: { domainFiltering?: boole
   const visibleEntities = graph.entities.filter((entity) => entity.label.toLowerCase().includes(query.toLowerCase()) || entity.type.toLowerCase().includes(query.toLowerCase()));
   const [selectedId, setSelectedId] = useState("customer-0192");
   const selected = graph.entities.find((entity) => entity.id === selectedId) ?? graph.entities[0];
-  const rightPanel = inspectorOpen ? <GraphInspector selected={selected} onClose={() => setInspectorOpen(false)} /> : undefined;
+  const rightPanel = useMemo(
+    () => (inspectorOpen ? <GraphInspector selected={selected} onClose={() => setInspectorOpen(false)} /> : undefined),
+    [inspectorOpen, selected],
+  );
 
   useConsoleShellConfig({ rightPanel });
 

@@ -1,4 +1,7 @@
-import { useState } from "react";
+import {
+  useMemo,
+  useState,
+} from "react";
 import {
   Copy,
   Filter,
@@ -79,20 +82,19 @@ export function PromptsPage() {
   const filtered = prompts.filter((prompt) => (category === "All" || prompt.category === category) && prompt.name.toLowerCase().includes(query.toLowerCase()));
   const promptPagination = useTablePagination(filtered);
   const [promptPanelOpen, setPromptPanelOpen] = useState(true);
+  const rightPanel = useMemo(() => (selected && promptPanelOpen ? (
+    <PromptInspector
+      onClose={() => {
+        setPromptPanelOpen(false);
+        setNotice(pt("Prompt detail panel closed"));
+      }}
+      notice={notice}
+      prompt={selected}
+      setNotice={setNotice}
+    />
+  ) : undefined), [notice, promptPanelOpen, pt, selected]);
 
-  useConsoleShellConfig({
-    rightPanel: selected && promptPanelOpen ? (
-      <PromptInspector
-        onClose={() => {
-          setPromptPanelOpen(false);
-          setNotice(pt("Prompt detail panel closed"));
-        }}
-        notice={notice}
-        prompt={selected}
-        setNotice={setNotice}
-      />
-    ) : undefined,
-  });
+  useConsoleShellConfig({ rightPanel });
 
   function selectPrompt(promptId: string) {
     setSelectedId(promptId);
