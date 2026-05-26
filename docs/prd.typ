@@ -39,6 +39,8 @@
 
 == Key Requirements
 - Every non-auth management route must require a valid authenticated session and preserve shell state during internal navigation.
+- Authenticated users without assigned workspace spaces must be stopped on a dedicated authorization-request page and must not operate shell navigation or business pages until a responsible owner grants space access.
+- A fresh deployment must initialize one platform administrator account with the fixed `ADMIN` platform role and root workspace access so the first owner can assign spaces; that platform administrator must not be trapped by the no-space authorization page.
 - Workspace context must be first-class: selected workspace drives visible apps, tasks, automations, effective users, and inherited AI configuration.
 - Core registries must support operator-safe list, search, pagination, lifecycle controls, and consistent feedback patterns.
 - User and role administration must be stable enough to back login, assignment, workspace grants, and task assignee selection from one shared source of truth.
@@ -56,7 +58,7 @@
 - Audit and activity ledger: shared because admin, workflow, and automation mutations eventually need a common compliance trail; consumers: Features 2, 4, 5, 6; decision: defer
 
 == Feature Inventory
-1. Console Access and Identity: goal establish secure operator access and protected shell bootstrap; in scope login, OAuth callback, current-session bootstrap, logout, bearer-token protected APIs, refresh-cookie session renewal; out of scope signup, MFA, invitation acceptance, external IdP admin UI; depends on stable user and role directory
+1. Console Access and Identity: goal establish secure operator access and protected shell bootstrap; in scope login, OAuth callback, current-session bootstrap, logout, bearer-token protected APIs, refresh-cookie session renewal, bootstrap platform admin initialization, and no-space authorization blocking; out of scope signup, MFA, invitation acceptance, external IdP admin UI; depends on stable user and role directory
 2. Administration and Workspace Governance: goal let admins manage people, roles, and hierarchical workspaces from one control plane; in scope user directory, create/detail flows, role matrix catalog, workspace tree CRUD, workspace access grants, effective-user inspection, workspace switcher projections; out of scope billing, per-workspace custom role systems, advanced compliance policy; depends on Feature 1
 3. AI Asset Registry: goal let each workspace control effective AI configuration without duplicating everything locally; in scope platform and workspace model management, prompt registry, skill registry and bind/install flows, variables, resources, inheritance-aware source states; out of scope marketplace sync, external package governance, automatic runtime synthesis; depends on Feature 2
 4. Workspace Delivery Workflow: goal support practical planning and delivery inside the selected workspace; in scope app registry CRUD, task kanban, task detail, parent-child tasks, assignee validation, app-to-task binding, role-aware status flows; out of scope external import, execution engine orchestration, strict downstream runtime enforcement beyond current registry validation; depends on Feature 2

@@ -208,14 +208,7 @@ async fn task_app_codes_must_reference_active_apps_in_the_same_workspace() {
         assert_eq!(response_json(response).await["code"], "TASK_APP_INVALID");
     }
 
-    let created = create_task(
-        &router,
-        "TRON_CORE",
-        None,
-        "Valid app selection",
-        "Feature",
-    )
-    .await;
+    let created = create_task(&router, "TRON_CORE", None, "Valid app selection", "Feature").await;
     let task_code = created["data"]["taskCode"].as_str().unwrap().to_owned();
 
     let updated = authenticated_request(

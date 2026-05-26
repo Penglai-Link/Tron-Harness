@@ -9,3 +9,4 @@ pub use sqlite::SqliteTaskRepository;
 pub use sqlite::SqliteUserRepository;
 pub use sqlite::SqliteVariableRepository;
 pub use sqlite::SqliteWorkspaceRepository;
+pub use sqlite::bootstrap_platform_admin;

@@ -16,6 +16,7 @@ Only split into multiple workers when contracts are stable, write scopes are dis
 
 - AC-AUTH-06 | phase: tdd | owner: lead | scope: tron-backend/src/adapters/outbound/persistence/sqlite/*; tron-backend/tests/auth_session_persistence.rs | command_ref: CMD-BE-TEST | status: done.
 - AC-AUTH-07 | phase: support | owner: lead | scope: tron-backend/src/adapters/outbound/persistence/sqlite/*; tron-backend/src/adapters/inbound/http/auth/* | command_ref: CMD-BE-TEST | status: done.
+- AC-AUTH-10 | phase: tdd | owner: lead | scope: tron-backend/migrations/20260526_0017_bootstrap_platform_admin.sql; tron-backend/src/adapters/outbound/persistence/sqlite/bootstrap.rs; tron-backend/tests/bootstrap_admin.rs | command_ref: CMD-BE-BOOTSTRAP-ADMIN | status: done.
 
 ## Worktree Notes
 

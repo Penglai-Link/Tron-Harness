@@ -1,6 +1,4 @@
-use chrono::{
-    SecondsFormat, TimeZone, Utc,
-};
+use chrono::{SecondsFormat, TimeZone, Utc};
 
 pub fn current_timestamp() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)

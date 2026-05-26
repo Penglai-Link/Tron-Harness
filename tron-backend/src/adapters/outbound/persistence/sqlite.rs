@@ -1,5 +1,6 @@
 mod app_repository;
 mod automation_repository;
+mod bootstrap;
 mod migrations;
 mod model_repository;
 mod role_repository;
@@ -12,6 +13,7 @@ mod workspace_repository;
 
 pub use app_repository::SqliteAppRepository;
 pub use automation_repository::SqliteAutomationRepository;
+pub use bootstrap::bootstrap_platform_admin;
 pub use model_repository::SqliteModelRepository;
 pub use role_repository::SqliteRoleRepository;
 pub use skill_repository::SqliteSkillRegistryRepository;

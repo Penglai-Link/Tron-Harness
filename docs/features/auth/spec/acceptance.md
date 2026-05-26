@@ -10,6 +10,8 @@
 - AC-AUTH-06 [must] [database] Refresh sessions and OAuth2 identity links persist only opaque or hashed identifiers without storing plaintext session secrets; proof: `tron-backend/tests/auth_session_persistence.rs` plus migrations `20260515_0004` and `20260515_0005` passed on 2026-05-15.
 - AC-AUTH-07 [must] [security] Archived users, bad passwords, invalid refresh tokens, and mismatched OAuth2 state are rejected with stable auth error codes; proof: `tron-backend/tests/auth_security_boundary.rs` passed on 2026-05-15.
 - AC-AUTH-08 [should] [regression] Protected shell and admin routes survive idle expiry, reload, logout, and refresh-session loss without regressing the operator flow; proof: `tron-frontend/tests/auth-smoke.spec.ts` passed 4 auth lifecycle scenarios on 2026-05-22.
+- AC-AUTH-09 [must] [interaction] Authenticated users without assigned workspace spaces see an authorization-request page instead of shell or business content; proof: `tron-frontend/tests/auth-smoke.spec.ts` passed on 2026-05-26.
+- AC-AUTH-10 [must] [database] Empty production databases bootstrap a platform admin account with `ADMIN` role and root workspace access, while platform admins bypass the no-space authorization page; proof: `tron-backend/tests/bootstrap_admin.rs` and `tron-frontend/tests/auth-smoke.spec.ts` passed on 2026-05-26.
 
 ## Open Decisions
 

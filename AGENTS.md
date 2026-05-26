@@ -2,7 +2,8 @@
 
 ## Instructions
 
-- Always use `Makefile` first.
+- Always use `Makefile` first to bulid,test and cleanup.
+- Use different port when already in use
 
 ## API
 

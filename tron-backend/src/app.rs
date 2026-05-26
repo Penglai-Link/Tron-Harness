@@ -24,6 +24,7 @@ use crate::{
                 SqliteAppRepository, SqliteAutomationRepository, SqliteModelRepository,
                 SqliteRoleRepository, SqliteSkillRegistryRepository, SqliteTaskRepository,
                 SqliteUserRepository, SqliteVariableRepository, SqliteWorkspaceRepository,
+                bootstrap_platform_admin,
             },
         },
     },
@@ -111,6 +112,8 @@ impl AppState {
                 event_bus.clone(),
             )
         };
+        bootstrap_platform_admin(&config.database_url)
+            .expect("bootstrap platform admin data should initialize");
         let apps = if config.database_url == ":memory:" {
             GLOBAL_APP_SERVICE
                 .get_or_init(|| build_app_service(":memory:", workspaces.clone()))

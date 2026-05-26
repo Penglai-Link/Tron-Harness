@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type DependencyList,
 } from "react";
@@ -11,6 +12,7 @@ import {
   type EndpointParams,
   parseEndpoint,
 } from "@/shared/api/httpClient";
+import { useToast } from "@/shared/ui/Toast";
 
 export type ServiceDataSource = "mock" | "api";
 
@@ -108,24 +110,28 @@ function resolveEndpoint(endpoint: string, params?: EndpointParams) {
 }
 
 export function useServiceQuery<T>({ apiInitialData, domain, endpoint, mockData, params, deps = [], select = selectApiData<T> }: ServiceQueryOptions<T>): T {
+  const toast = useToast();
   const dataSource = getServiceDataSource(domain);
   const shouldUseApiInitialData = dataSource === "api" && apiInitialData !== undefined;
+  const shouldUseMockData = dataSource === "mock";
+  const lastFailureToastKey = useRef<string | null>(null);
   const mockValue = useMemo(
-    () => (shouldUseApiInitialData ? undefined : mockData()),
-    [shouldUseApiInitialData, ...deps],
+    () => (shouldUseMockData ? mockData() : undefined),
+    [shouldUseMockData, ...deps],
   );
   const apiInitialValue = useMemo(
-    () => (apiInitialData ? apiInitialData() : undefined),
-    [apiInitialData],
+    () => (shouldUseApiInitialData ? apiInitialData?.() : undefined),
+    [shouldUseApiInitialData, ...deps],
   );
-  const initialValue = (shouldUseApiInitialData ? apiInitialValue : mockValue) as T;
+  const initialValue = (dataSource === "api" ? apiInitialValue : mockValue) as T;
   const [data, setData] = useState<T>(initialValue);
   const paramsKey = JSON.stringify(params ?? {});
   const request = useMemo(() => resolveEndpoint(endpoint, params), [endpoint, paramsKey]);
 
   useEffect(() => {
-    setData((shouldUseApiInitialData ? apiInitialValue : mockValue) as T);
-  }, [apiInitialValue, mockValue, shouldUseApiInitialData]);
+    lastFailureToastKey.current = null;
+    setData((dataSource === "api" ? apiInitialValue : mockValue) as T);
+  }, [apiInitialValue, dataSource, mockValue]);
 
   useEffect(() => {
     if (dataSource !== "api") return;
@@ -148,16 +154,24 @@ export function useServiceQuery<T>({ apiInitialData, domain, endpoint, mockData,
         return response.json() as Promise<T>;
       })
       .then((payload) => {
+        lastFailureToastKey.current = null;
         setData(select(payload));
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        console.warn(`[services] API request failed for ${domain}.`, error);
-        if (shouldUseApiInitialData) setData(apiInitialValue as T);
+        const message = error instanceof Error
+          ? error.message
+          : `[services] API request failed for ${domain}.`;
+        const toastKey = `${request.method} ${request.url}: ${message}`;
+        if (lastFailureToastKey.current === toastKey) return;
+        lastFailureToastKey.current = toastKey;
+        toast.error(message, {
+          title: "API request failed",
+        });
       });
 
     return () => controller.abort();
-  }, [apiInitialValue, dataSource, domain, mockValue, request.method, request.url, select, shouldUseApiInitialData]);
+  }, [dataSource, domain, request.method, request.url, select, toast]);
 
   return data;
 }

@@ -3,6 +3,7 @@ import {
   Suspense,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -22,6 +23,7 @@ import {
 } from "react-router";
 import {
   AuthUserMenuPanel,
+  NoWorkspaceAccessPage,
   useAuthSession,
   useBootstrapAuthSession,
 } from "@/domain/auth";
@@ -33,6 +35,7 @@ import {
   ConsoleShellConfigContext,
   TronShell,
   tronNavigation,
+  useToast,
 } from "@/shared";
 import { AUTH_CALLBACK_PATH } from "@/domain/auth/constants";
 import {
@@ -71,6 +74,10 @@ const appRoutePaths = Array.from(
 
 function resolveActiveItem(pathname: string) {
   return tronNavigation.flatMap((section) => section.items).find((item) => item.href === pathname)?.label ?? "Dashboard";
+}
+
+function isAdministrationRoute(pathname: string) {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
 }
 
 function isConsoleShellConfigEqual(left: ConsoleShellConfig, right: ConsoleShellConfig) {
@@ -174,8 +181,13 @@ function PublicRoutePage({ pageId }: { pageId: string }) {
 
 function AppRoutePage() {
   const { pathname, search } = useLocation();
+  const { session } = useAuthSession();
+  const toast = useToast();
   const resolved = resolveAppRoute(pathname, search);
   const routeRenderKey = `${pathname}${search}`;
+  const isAdmin = session?.user.roleCodes.includes("ADMIN") ?? false;
+  const blocksAdministrationRoute = isAdministrationRoute(pathname) && !isAdmin;
+  const blockedAdministrationToastPath = useRef<string | null>(null);
   const [pageShellConfig, setPageShellConfig] = useState<ConsoleShellConfig>({});
   const shellConfigController = useMemo(() => ({
     resetConfig: () => {
@@ -189,6 +201,26 @@ function AppRoutePage() {
   useEffect(() => {
     setPageShellConfig((current) => (isConsoleShellConfigEmpty(current) ? current : {}));
   }, [resolved?.route.pageId]);
+
+  useEffect(() => {
+    if (!blocksAdministrationRoute) {
+      blockedAdministrationToastPath.current = null;
+      return;
+    }
+
+    if (blockedAdministrationToastPath.current === pathname) {
+      return;
+    }
+
+    blockedAdministrationToastPath.current = pathname;
+    toast.warning("Only Admin role users can access administration pages.", {
+      title: "Access restricted",
+    });
+  }, [blocksAdministrationRoute, pathname, toast]);
+
+  if (blocksAdministrationRoute) {
+    return <Navigate replace to="/dashboard" />;
+  }
 
   if (resolved) {
     const { Component, route } = resolved;
@@ -212,6 +244,7 @@ function AppRoutePage() {
           contentClassName={effectiveShellConfig.contentClassName}
           rightPanel={effectiveShellConfig.rightPanel}
           searchPlaceholder={effectiveShellConfig.searchPlaceholder}
+          roleCodes={session?.user.roleCodes}
           topbarActions={effectiveShellConfig.topbarActions}
           userMenuContent={<AuthUserMenuPanel />}
         >
@@ -232,9 +265,10 @@ function AppRoutePage() {
 
 function ConsoleFallbackRoutePage() {
   const { pathname } = useLocation();
+  const { session } = useAuthSession();
 
   return (
-    <TronShell activeItem={resolveActiveItem(pathname)} userMenuContent={<AuthUserMenuPanel />}>
+    <TronShell activeItem={resolveActiveItem(pathname)} roleCodes={session?.user.roleCodes} userMenuContent={<AuthUserMenuPanel />}>
       <ConsoleFallbackPage />
     </TronShell>
   );
@@ -242,7 +276,8 @@ function ConsoleFallbackRoutePage() {
 
 function ProtectedRoute({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const { status } = useAuthSession();
+  const { session, status } = useAuthSession();
+  const isPlatformAdmin = session?.user.roleCodes.includes("ADMIN") ?? false;
 
   if (status === "checking") {
     return <RouteLoadingFallback fullScreen />;
@@ -250,6 +285,10 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
 
   if (status === "unauthenticated") {
     return <Navigate replace to={buildLoginUrl(`${location.pathname}${location.search}`)} />;
+  }
+
+  if (!session?.authenticated || (!isPlatformAdmin && session.user.spaceCodes.length === 0)) {
+    return session ? <NoWorkspaceAccessPage session={session} /> : <RouteLoadingFallback fullScreen />;
   }
 
   return <>{children}</>;

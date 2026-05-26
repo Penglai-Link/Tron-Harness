@@ -8,9 +8,9 @@ use crate::app::AppState;
 use super::handler::{
     create_workspace_model, delete_workspace_model, disable_workspace_model,
     duplicate_workspace_model, enable_workspace_model, get_workspace_model, list_select_options,
-    list_workspace_models, patch_workspace_model,
-    restore_workspace_model_from_platform_deprecated, set_allow_inheritance,
-    set_workspace_default, verify_workspace_model, verify_workspace_model_create_draft,
+    list_workspace_models, patch_workspace_model, restore_workspace_model_from_platform_deprecated,
+    set_allow_inheritance, set_workspace_default, verify_workspace_model,
+    verify_workspace_model_create_draft,
 };
 
 pub fn routes() -> Router<AppState> {

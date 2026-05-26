@@ -10,10 +10,7 @@ use crate::{
     },
     shared::{
         id::SnowflakeId,
-        time::{
-            timestamp_from_millis,
-            timestamp_to_millis,
-        },
+        time::{timestamp_from_millis, timestamp_to_millis},
     },
 };
 
@@ -51,7 +48,6 @@ impl SqliteWorkspaceRepository {
             .execute_batch(WORKSPACE_ACCESS_GRANTS_MIGRATION)
             .map_err(storage_error)
     }
-
 }
 
 impl WorkspaceRepository for SqliteWorkspaceRepository {

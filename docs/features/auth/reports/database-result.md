@@ -2,7 +2,7 @@
 
 ## Summary
 
-Auth persistence is complete. SQLite now stores refresh sessions and OAuth2 identity links as additive auth tables, and all session material that must survive requests is stored as opaque or hashed values instead of plaintext secrets.
+Auth persistence is complete. SQLite now stores refresh sessions and OAuth2 identity links as additive auth tables, all session material that must survive requests is stored as opaque or hashed values instead of plaintext secrets, and startup bootstraps the first platform admin plus root workspace grants when those rows are absent.
 
 ## Evidence Rows
 
@@ -14,21 +14,27 @@ Auth persistence is complete. SQLite now stores refresh sessions and OAuth2 iden
 - AC-AUTH-06 | red: the schema had no durable auth refresh-session or OAuth2 identity-link storage. | green: added SQLite migrations `20260515_0004_create_auth_refresh_sessions.sql` and `20260515_0005_create_user_oauth_identities.sql`; hashed refresh storage and identity persistence were verified by tests. | command_ref: CMD-BE-TEST | browser: clicks=none_persistence_focus; inputs=internal login and OAuth2 callback persistence scenarios; network=SQLite writes inserted `auth_refresh_sessions` and `user_oauth_identities` rows while stored `refresh_token_hash` differed from the cookie value; feedback=plaintext refresh tokens were never persisted and provider subject linkage survived callback flow; artifacts=`tron-backend/tests/auth_session_persistence.rs`, `tron-backend/migrations/20260515_0004_create_auth_refresh_sessions.sql`, `tron-backend/migrations/20260515_0005_create_user_oauth_identities.sql` | status: done.
 - AC-AUTH-07 | red: invalid-password, archived-user, bad-refresh, and OAuth2-state rejection paths had no stable error mapping. | green: stable auth error codes now cover invalid credentials, inactive users, refresh invalidation, and OAuth2 state mismatch; `rtk make be-test` passed. | command_ref: CMD-BE-TEST | browser: clicks=security rejection contract exercised in backend integration tests; inputs=auth operator username with wrong password, archived auth username with valid password, invalid refresh cookie, and mismatched OAuth2 state; network=auth responses returned `AUTH_INVALID_CREDENTIALS`, `AUTH_USER_INACTIVE`, `AUTH_REFRESH_INVALID`, and `AUTH_OAUTH2_STATE_INVALID`; feedback=no authenticated session was issued for any rejected path; artifacts=`tron-backend/tests/auth_security_boundary.rs`, `tron-backend/src/adapters/inbound/http/auth/error_mapper.rs` | status: done.
 - AC-AUTH-08 | red: adding route protection initially broke legacy user-management backend tests and frontend logout had no protected-route regression coverage. | green: admin routes now require auth, legacy backend tests authenticate through shared helpers, and Playwright proves sign-in, user-management access, avatar-menu profile disclosure, logout, and post-logout blocking; `rtk make be-test` and browser smoke both passed. | command_ref: CMD-BE-TEST | browser: clicks=anonymous visit `/admin/users`, Sign In, visible Users table, Open user menu, visible profile card, Log out, revisit `/admin/users`; inputs=auth operator username and `TronAuthPass123!`; network=`GET /api/v1/admin/users` and user statistic endpoints succeeded with session cookies and were blocked again after logout; feedback=existing user-management pages stayed usable after sign-in, the header kept identity hidden until the avatar menu opened, and logout still returned to login; artifacts=`tron-backend/tests/common/mod.rs`, `tron-backend/tests/auth_user_management_boundary.rs`, `tron-frontend/tests/auth-smoke.spec.ts` | status: done.
+- AC-AUTH-09 | red: authenticated users with no workspace assignment could still receive shell content from the frontend guard. | green: frontend guard blocks ordinary `spaceCodes=[]` sessions using the backend session payload, without adding new database requirements; browser smoke passed on 2026-05-26. | command_ref: CMD-FE-AUTH-BROWSER | browser: clicks=Sign In and direct visit `/admin/users`; inputs=unassigned operator session; network=login returned empty `spaceCodes`; feedback=authorization-request page rendered before shell content; artifacts=`tron-frontend/tests/auth-smoke.spec.ts` | status: done.
+- AC-AUTH-10 | red: an empty SQLite file had no durable first owner, fixed role assignment, or root workspace access for initial operation, and an existing username `admin` could be left without related grants. | green: added `20260526_0017_bootstrap_platform_admin.sql` and startup execution so missing bootstrap rows are inserted after repository migrations and missing grants are backfilled for an existing admin; `rtk cargo test --manifest-path tron-backend/Cargo.toml --test bootstrap_admin -- --nocapture` passed with 2 tests on 2026-05-26. | command_ref: CMD-BE-BOOTSTRAP-ADMIN | browser: clicks=none_database_focus; inputs=start app against an empty SQLite database then login as `admin`, and start app with pre-existing username `admin`; network=auth login returned `roleCodes=[ADMIN]`, `spaceCodes=[ENTERPRISE]`, and `passwordResetRequired=true`; feedback=database assertions verified `USR-ADMIN` or existing admin role assignment, active `ENTERPRISE` workspace, and owner access grant without duplicate admin users; artifacts=`tron-backend/migrations/20260526_0017_bootstrap_platform_admin.sql`, `tron-backend/src/adapters/outbound/persistence/sqlite/bootstrap.rs`, `tron-backend/tests/bootstrap_admin.rs` | status: done.
 
 ## Changed Paths
 
 - `tron-backend/migrations/20260515_0004_create_auth_refresh_sessions.sql`
 - `tron-backend/migrations/20260515_0005_create_user_oauth_identities.sql`
+- `tron-backend/migrations/20260526_0017_bootstrap_platform_admin.sql`
 - `tron-backend/src/adapters/outbound/persistence/sqlite/migrations.rs`
+- `tron-backend/src/adapters/outbound/persistence/sqlite/bootstrap.rs`
 - `tron-backend/src/adapters/outbound/persistence/sqlite/user_repository.rs`
 - `tron-backend/src/adapters/outbound/persistence/sqlite/seed.rs`
 - `tron-backend/tests/auth_session_persistence.rs`
+- `tron-backend/tests/bootstrap_admin.rs`
 
 ## Commands
 
-- `rtk make be-test` passed on 2026-05-15.
-- `rtk make fe-check` passed on 2026-05-15 for integrated auth guard behavior.
-- `rtk npm --prefix tron-frontend exec playwright -- test auth-smoke.spec.ts --reporter=line` passed with 2 tests on 2026-05-15.
+- `rtk make be-test` passed on 2026-05-26.
+- `rtk cargo test --manifest-path tron-backend/Cargo.toml --test bootstrap_admin -- --nocapture` passed with 2 tests on 2026-05-26.
+- `rtk make fe-check` passed on 2026-05-26 for integrated auth guard behavior.
+- `rtk npm --prefix tron-frontend exec playwright -- test auth-smoke --reporter=line` passed with 6 tests on 2026-05-26.
 
 ## Blockers
 

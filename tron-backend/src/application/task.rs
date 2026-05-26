@@ -175,10 +175,8 @@ impl TaskService {
         let task_role = infer_task_role(command.task_type, parent_task_code.as_deref());
         let assignees = self.validated_assignees(&workspace_code, command.assignee_user_codes)?;
         let agent_links = normalized_code_links(command.agent_codes);
-        let app_links = self.validated_app_links(
-            &workspace_code,
-            normalized_code_links(command.app_codes),
-        )?;
+        let app_links =
+            self.validated_app_links(&workspace_code, normalized_code_links(command.app_codes))?;
         let id = self
             .repository
             .lock()
@@ -261,7 +259,9 @@ impl TaskService {
         let agent_links = command.agent_codes.map(normalized_code_links);
         let app_links = command
             .app_codes
-            .map(|codes| self.validated_app_links(&task.workspace_code, normalized_code_links(codes)))
+            .map(|codes| {
+                self.validated_app_links(&task.workspace_code, normalized_code_links(codes))
+            })
             .transpose()?;
         {
             let mut repository = self

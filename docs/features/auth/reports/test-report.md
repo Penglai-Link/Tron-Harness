@@ -2,7 +2,7 @@
 
 ## Summary
 
-The auth test plan is complete. Backend integration, persistence, and security tests remain green, frontend typecheck and build pass, and the dedicated Playwright smoke now verifies protected-route redirect, internal login, GitHub OAuth entry, idle token renewal, expired-request recovery, user-management access, logout, and post-logout blocking end to end.
+The auth test plan is complete. Backend integration, persistence, bootstrap-admin, and security tests remain green, frontend typecheck and build pass, and the dedicated Playwright smoke now verifies protected-route redirect, internal login, no-space authorization blocking, platform-admin bypass, GitHub OAuth entry, idle token renewal, expired-request recovery, user-management access, logout, and post-logout blocking end to end.
 
 ## Evidence Rows
 
@@ -14,10 +14,13 @@ The auth test plan is complete. Backend integration, persistence, and security t
 - AC-AUTH-06 | red: the schema had no durable auth refresh-session or OAuth2 identity-link storage. | green: added SQLite migrations `20260515_0004_create_auth_refresh_sessions.sql` and `20260515_0005_create_user_oauth_identities.sql`; hashed refresh storage and identity persistence were verified by tests. | command_ref: CMD-BE-TEST | browser: clicks=none_persistence_focus; inputs=internal login and OAuth2 callback persistence scenarios; network=SQLite writes inserted `auth_refresh_sessions` and `user_oauth_identities` rows while stored `refresh_token_hash` differed from the cookie value; feedback=plaintext refresh tokens were never persisted and provider subject linkage survived callback flow; artifacts=`tron-backend/tests/auth_session_persistence.rs`, `tron-backend/migrations/20260515_0004_create_auth_refresh_sessions.sql`, `tron-backend/migrations/20260515_0005_create_user_oauth_identities.sql` | status: done.
 - AC-AUTH-07 | red: invalid-password, archived-user, bad-refresh, and OAuth2-state rejection paths had no stable error mapping. | green: stable auth error codes now cover invalid credentials, inactive users, refresh invalidation, and OAuth2 state mismatch; `rtk make be-test` passed. | command_ref: CMD-BE-TEST | browser: clicks=security rejection contract exercised in backend integration tests; inputs=auth operator username with wrong password, archived auth username with valid password, invalid refresh cookie, and mismatched OAuth2 state; network=auth responses returned `AUTH_INVALID_CREDENTIALS`, `AUTH_USER_INACTIVE`, `AUTH_REFRESH_INVALID`, and `AUTH_OAUTH2_STATE_INVALID`; feedback=no authenticated session was issued for any rejected path; artifacts=`tron-backend/tests/auth_security_boundary.rs`, `tron-backend/src/adapters/inbound/http/auth/error_mapper.rs` | status: done.
 - AC-AUTH-08 | red: route protection initially covered reload and logout, but an idle tab could still let the next protected request fail straight into a login redirect. | green: Playwright now proves sign-in, idle renewal before expiry, first-401 refresh plus retry, bearer-only user-management access, avatar-menu profile disclosure, logout, and post-logout blocking; `rtk make fe-check` and browser smoke both passed. | command_ref: CMD-FE-AUTH-BROWSER | browser: clicks=Sign In, wait through a short access-token TTL, open `/admin/users`, force one protected-route 401, reload page, Open user menu, Log out, revisit `/admin/users`; inputs=auth operator username and `TronAuthPass123!`; network=`POST /api/v1/auth/refresh` renews idle access, a forced `GET /api/v1/admin/users` 401 is retried after refresh, reload rebuilds auth through the refresh cookie, and logout blocks subsequent protected requests again; feedback=the route stays usable through idle renewal and first-request recovery, reload preserves access, and logout still returns to login; artifacts=`tron-frontend/src/domain/auth/hooks/index.ts`, `tron-frontend/src/shared/api/httpClient.ts`, `tron-frontend/src/store/authStore.ts`, `tron-frontend/tests/auth-smoke.spec.ts` | status: done.
+- AC-AUTH-09 | red: the new unassigned-space smoke test failed because the protected route did not render `Workspace authorization required` for an authenticated `spaceCodes=[]` session. | green: the guard now renders the authorization-request page before shell or business content and Playwright passed with 5 auth-smoke tests on 2026-05-26. | command_ref: CMD-FE-AUTH-BROWSER | browser: clicks=Sign In, direct visit `/admin/users`, Log out; inputs=auth operator credentials receiving `Unassigned Operator` with empty `spaceCodes`; network=login returned an authenticated session but no admin users table or workspace selector became visible behind the guard; feedback=authorization page stayed visible on protected routes, account details were visible, shell navigation and workspace switching were absent, and logout returned to `/login`; artifacts=`tron-frontend/src/app/App.tsx`, `tron-frontend/src/domain/auth/pages/NoWorkspaceAccessPage.tsx`, `tron-frontend/tests/auth-smoke.spec.ts` | status: done.
+- AC-AUTH-10 | red: backend startup could not authenticate `admin` on an empty database, existing admin grants were not guaranteed, and frontend route protection blocked an `ADMIN` session when `spaceCodes=[]`. | green: backend bootstrap creates or backfills missing admin, role, root workspace, assignment, and grant rows idempotently, and frontend route protection bypasses the no-space page for `ADMIN`; bootstrap integration test and browser smoke passed on 2026-05-26. | command_ref: CMD-BE-BOOTSTRAP-ADMIN | browser: clicks=Sign In as `admin`; inputs=bootstrap admin credentials in backend test and mock admin credentials in Playwright; network=backend login returned `SUCCESS` with `roleCodes=[ADMIN]`, `spaceCodes=[ENTERPRISE]`, and `passwordResetRequired=true`, while frontend mock login returned `roleCodes=[ADMIN]` and `spaceCodes=[]`; feedback=admin dashboard rendered instead of authorization page and database assertions confirmed empty-database and existing-admin bootstrap rows; artifacts=`tron-backend/tests/bootstrap_admin.rs`, `tron-backend/migrations/20260526_0017_bootstrap_platform_admin.sql`, `tron-frontend/tests/auth-smoke.spec.ts` | status: done.
 
 ## Changed Paths
 
 - `tron-backend/tests/auth_*.rs`
+- `tron-backend/tests/bootstrap_admin.rs`
 - `tron-backend/tests/common/mod.rs`
 - `tron-frontend/tests/auth-smoke.spec.ts`
 - `tron-frontend/src/app/App.tsx`
@@ -25,9 +28,10 @@ The auth test plan is complete. Backend integration, persistence, and security t
 
 ## Commands
 
-- `rtk make be-test` remains the 2026-05-15 backend evidence because this evolution changed frontend-only auth lifecycle code.
-- `rtk make fe-check` passed on 2026-05-22.
-- `rtk npm --prefix tron-frontend exec playwright -- test auth-smoke --reporter=line` passed with 4 tests on 2026-05-22.
+- `rtk cargo test --manifest-path tron-backend/Cargo.toml --test bootstrap_admin -- --nocapture` passed with 2 tests on 2026-05-26.
+- `rtk make be-test` passed on 2026-05-26.
+- `rtk make fe-check` passed on 2026-05-26.
+- `rtk npm --prefix tron-frontend exec playwright -- test auth-smoke --reporter=line` passed with 6 tests on 2026-05-26.
 
 ## Blockers
 

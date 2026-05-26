@@ -55,6 +55,7 @@ export const tronNavigation: TronNavSection[] = [
   },
   {
     label: "Administration",
+    requiredRoleCodes: ["ADMIN"],
     translationKey: "shell:nav.sections.administration",
     items: [
       { label: "Users", href: "/admin/users", icon: UsersRound, translationKey: "shell:nav.items.users" },

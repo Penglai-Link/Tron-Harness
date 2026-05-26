@@ -2,7 +2,7 @@
 
 ## Summary
 
-Frontend auth is complete. The app keeps the access JWT in runtime memory, rebuilds that state from the backend refresh-cookie contract on page load or OAuth callback, silently renews access before idle expiry, retries the first expired protected request after a successful refresh, blocks anonymous access to protected routes, keeps redirect intent, exposes internal and GitHub OAuth login entry points, and provides an explicit logout path that returns the operator to `/login`.
+Frontend auth is complete. The app keeps the access JWT in runtime memory, rebuilds that state from the backend refresh-cookie contract on page load or OAuth callback, silently renews access before idle expiry, retries the first expired protected request after a successful refresh, blocks anonymous access to protected routes, blocks non-admin no-space users on an authorization-request page, lets platform admins continue, keeps redirect intent, exposes internal and GitHub OAuth login entry points, and provides an explicit logout path that returns the operator to `/login`.
 
 ## Evidence Rows
 
@@ -14,6 +14,8 @@ Frontend auth is complete. The app keeps the access JWT in runtime memory, rebui
 - AC-AUTH-06 | red: the schema had no durable auth refresh-session or OAuth2 identity-link storage. | green: added SQLite migrations `20260515_0004_create_auth_refresh_sessions.sql` and `20260515_0005_create_user_oauth_identities.sql`; hashed refresh storage and identity persistence were verified by tests. | command_ref: CMD-BE-TEST | browser: clicks=none_persistence_focus; inputs=internal login and OAuth2 callback persistence scenarios; network=SQLite writes inserted `auth_refresh_sessions` and `user_oauth_identities` rows while stored `refresh_token_hash` differed from the cookie value; feedback=plaintext refresh tokens were never persisted and provider subject linkage survived callback flow; artifacts=`tron-backend/tests/auth_session_persistence.rs`, `tron-backend/migrations/20260515_0004_create_auth_refresh_sessions.sql`, `tron-backend/migrations/20260515_0005_create_user_oauth_identities.sql` | status: done.
 - AC-AUTH-07 | red: invalid-password, archived-user, bad-refresh, and OAuth2-state rejection paths had no stable error mapping. | green: stable auth error codes now cover invalid credentials, inactive users, refresh invalidation, and OAuth2 state mismatch; `rtk make be-test` passed. | command_ref: CMD-BE-TEST | browser: clicks=security rejection contract exercised in backend integration tests; inputs=auth operator username with wrong password, archived auth username with valid password, invalid refresh cookie, and mismatched OAuth2 state; network=auth responses returned `AUTH_INVALID_CREDENTIALS`, `AUTH_USER_INACTIVE`, `AUTH_REFRESH_INVALID`, and `AUTH_OAUTH2_STATE_INVALID`; feedback=no authenticated session was issued for any rejected path; artifacts=`tron-backend/tests/auth_security_boundary.rs`, `tron-backend/src/adapters/inbound/http/auth/error_mapper.rs` | status: done.
 - AC-AUTH-08 | red: route protection initially covered reload and logout, but an idle tab could still keep an expiring access token until the next protected action bounced the operator to `/login` and risked losing in-progress work. | green: auth store and HTTP client now renew access before idle expiry, retry the first expired protected request after a refresh, and keep reload plus logout regressions green; `rtk make fe-check` and browser smoke both passed. | command_ref: CMD-FE-AUTH-BROWSER | browser: clicks=Sign In, wait through a short access-token TTL, open `/admin/users`, force one protected-route 401, reload page, Open user menu, Log out, revisit `/admin/users`; inputs=auth operator username and `TronAuthPass123!`; network=`POST /api/v1/auth/refresh` runs before idle expiry, a forced `GET /api/v1/admin/users` 401 is retried after refresh, stale-token retries reuse the newer bearer token already in memory, and reload still rebuilds auth through the refresh cookie; feedback=existing user-management pages stay usable after idle waits, the route does not bounce to `/login` on the first expired request, reload preserves access, and logout still returns to login; artifacts=`tron-frontend/src/domain/auth/hooks/index.ts`, `tron-frontend/src/shared/api/httpClient.ts`, `tron-frontend/src/store/authStore.ts`, `tron-frontend/tests/auth-smoke.spec.ts` | status: done.
+- AC-AUTH-09 | red: Playwright added an unassigned-space authenticated user and failed because `/dashboard` rendered without a `Workspace authorization required` page. | green: `ProtectedRoute` now stops `spaceCodes=[]` sessions before shell render and shows the authorization-request page with account details and logout; browser smoke passed with 5 tests on 2026-05-26. | command_ref: CMD-FE-AUTH-BROWSER | browser: clicks=Sign In, direct visit `/admin/users`, Log out; inputs=auth operator username and `TronAuthPass123!` returning a session for `Unassigned Operator`; network=`POST /api/v1/auth/login` returned an authenticated session with empty `spaceCodes`, no workspace switcher or admin users page content rendered after the guard, and logout called the auth session endpoint; feedback=`Workspace authorization required` stayed visible on `/dashboard` and `/admin/users`, `Unassigned Operator` account details were shown, primary navigation/workspace selector/table were absent, and logout returned to `/login`; artifacts=`tron-frontend/src/app/App.tsx`, `tron-frontend/src/domain/auth/pages/NoWorkspaceAccessPage.tsx`, `tron-frontend/tests/auth-smoke.spec.ts` | status: done.
+- AC-AUTH-10 | red: the platform-admin smoke user with `roleCodes=[ADMIN]` and no spaces was trapped on the same authorization-request page as ordinary unassigned users. | green: `ProtectedRoute` now bypasses the no-space page when the session includes the fixed `ADMIN` role while preserving the block for ordinary users; browser smoke passed with 6 tests on 2026-05-26. | command_ref: CMD-FE-AUTH-BROWSER | browser: clicks=Sign In as admin user; inputs=username `admin`, password from mock session; network=mock login returned `roleCodes=[ADMIN]` and `spaceCodes=[]`; feedback=`Workspace authorization required` was absent, dashboard content rendered, and normal protected shell behavior continued; artifacts=`tron-frontend/src/app/App.tsx`, `tron-frontend/tests/auth-smoke.spec.ts` | status: done.
 
 ## Changed Paths
 
@@ -22,17 +24,19 @@ Frontend auth is complete. The app keeps the access JWT in runtime memory, rebui
 - `tron-frontend/src/domain/auth/hooks/index.ts`
 - `tron-frontend/src/domain/auth/components/AuthTopbarActions.tsx`
 - `tron-frontend/src/domain/auth/pages/LoginPage.tsx`
+- `tron-frontend/src/domain/auth/pages/NoWorkspaceAccessPage.tsx`
 - `tron-frontend/src/domain/auth/pages/AuthCallbackPage.tsx`
 - `tron-frontend/src/shared/api/httpClient.ts`
 - `tron-frontend/src/shared/api/serviceConfig.ts`
 - `tron-frontend/src/store/authStore.ts`
 - `tron-frontend/tests/auth-smoke.spec.ts`
+- `tron-backend/tests/bootstrap_admin.rs`
 
 ## Commands
 
-- `rtk make fe-check` passed on 2026-05-22.
-- `rtk npm --prefix tron-frontend exec playwright -- test auth-smoke --reporter=line` passed with 4 tests on 2026-05-22.
-- `rtk make be-test` remains the 2026-05-15 backend session and middleware contract evidence for unchanged backend auth code.
+- `rtk make fe-check` passed on 2026-05-26.
+- `rtk npm --prefix tron-frontend exec playwright -- test auth-smoke --reporter=line` passed with 6 tests on 2026-05-26.
+- `rtk make be-test` passed on 2026-05-26 for the integrated backend auth and bootstrap contract.
 
 ## Blockers
 

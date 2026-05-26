@@ -13,7 +13,10 @@ use tron_backend::{
     config::AppConfig,
 };
 
-use common::{AUTH_LOGIN, app, authenticated_bearer_token, prepared_config, request_with_headers, response_json};
+use common::{
+    AUTH_LOGIN, app, authenticated_bearer_token, prepared_config, request_with_headers,
+    response_json,
+};
 
 #[tokio::test]
 async fn protected_admin_routes_accept_authorization_bearer_tokens() {

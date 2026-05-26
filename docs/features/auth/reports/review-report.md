@@ -2,7 +2,7 @@
 
 ## Summary
 
-Review is complete. The implementation keeps the access token in memory, reuses a shared HTTP client plus auth store for bearer auth, schedules silent renewal before idle expiry, retries stale protected requests without redundant refresh loops, narrows the first live external provider to GitHub OAuth, and preserves the existing user-management feature by enforcing auth at both the browser-routing and backend-route layers.
+Review is complete. The implementation keeps the access token in memory, reuses a shared HTTP client plus auth store for bearer auth, schedules silent renewal before idle expiry, retries stale protected requests without redundant refresh loops, narrows the first live external provider to GitHub OAuth, preserves the existing user-management feature by enforcing auth at both the browser-routing and backend-route layers, blocks ordinary no-space users, and bootstraps a first platform admin for empty deployments.
 
 ## Evidence Rows
 
@@ -14,12 +14,16 @@ Review is complete. The implementation keeps the access token in memory, reuses 
 - AC-AUTH-06 | red: the schema had no durable auth refresh-session or OAuth2 identity-link storage. | green: added SQLite migrations `20260515_0004_create_auth_refresh_sessions.sql` and `20260515_0005_create_user_oauth_identities.sql`; hashed refresh storage and identity persistence were verified by tests. | command_ref: CMD-BE-TEST | browser: clicks=none_persistence_focus; inputs=internal login and OAuth2 callback persistence scenarios; network=SQLite writes inserted `auth_refresh_sessions` and `user_oauth_identities` rows while stored `refresh_token_hash` differed from the cookie value; feedback=plaintext refresh tokens were never persisted and provider subject linkage survived callback flow; artifacts=`tron-backend/tests/auth_session_persistence.rs`, `tron-backend/migrations/20260515_0004_create_auth_refresh_sessions.sql`, `tron-backend/migrations/20260515_0005_create_user_oauth_identities.sql` | status: done.
 - AC-AUTH-07 | red: invalid-password, archived-user, bad-refresh, and OAuth2-state rejection paths had no stable error mapping. | green: stable auth error codes now cover invalid credentials, inactive users, refresh invalidation, and OAuth2 state mismatch; `rtk make be-test` passed. | command_ref: CMD-BE-TEST | browser: clicks=security rejection contract exercised in backend integration tests; inputs=auth operator username with wrong password, archived auth username with valid password, invalid refresh cookie, and mismatched OAuth2 state; network=auth responses returned `AUTH_INVALID_CREDENTIALS`, `AUTH_USER_INACTIVE`, `AUTH_REFRESH_INVALID`, and `AUTH_OAUTH2_STATE_INVALID`; feedback=no authenticated session was issued for any rejected path; artifacts=`tron-backend/tests/auth_security_boundary.rs`, `tron-backend/src/adapters/inbound/http/auth/error_mapper.rs` | status: done.
 - AC-AUTH-08 | red: reload and logout were covered, but idle expiry still let the next protected save or navigation bounce directly to `/login`. | green: admin routes now keep auth alive before idle expiry, recover the first expired-request 401 without leaving the route, and preserve the existing reload plus logout regressions; `rtk make fe-check` and browser smoke both passed. | command_ref: CMD-FE-AUTH-BROWSER | browser: clicks=Sign In, wait through a short access-token TTL, open `/admin/users`, force one protected-route 401, reload page, Open user menu, Log out, revisit `/admin/users`; inputs=auth operator username and `TronAuthPass123!`; network=`POST /api/v1/auth/refresh` renews idle access, stale protected requests retry with a newer in-memory bearer token or after a single refresh, and logout blocks later protected requests again; feedback=existing user-management pages stay usable after idle waits, the route does not bounce to `/login` on the first expired request, and logout still returns to login; artifacts=`tron-frontend/src/domain/auth/hooks/index.ts`, `tron-frontend/src/shared/api/httpClient.ts`, `tron-frontend/src/store/authStore.ts`, `tron-frontend/tests/auth-smoke.spec.ts` | status: done.
+- AC-AUTH-09 | red: protected routes rendered shell content for authenticated users whose session had no assigned spaces. | green: `ProtectedRoute` now renders a standalone authorization-request page before shell navigation or business pages for ordinary `spaceCodes=[]` sessions; browser smoke passed on 2026-05-26. | command_ref: CMD-FE-AUTH-BROWSER | browser: clicks=Sign In, direct visit `/admin/users`, Log out; inputs=unassigned operator credentials; network=login returned an authenticated session with empty `spaceCodes`; feedback=`Workspace authorization required` remained visible and shell navigation/workspace selector/table content stayed absent; artifacts=`tron-frontend/src/app/App.tsx`, `tron-frontend/src/domain/auth/pages/NoWorkspaceAccessPage.tsx`, `tron-frontend/tests/auth-smoke.spec.ts` | status: done.
+- AC-AUTH-10 | red: empty-database startup had no `admin` owner, existing admin grants were not guaranteed, and frontend blocked an `ADMIN` session with empty spaces. | green: bootstrap SQL and startup execution initialize or backfill missing platform admin data idempotently, and frontend route protection lets `ADMIN` bypass the no-space page; backend bootstrap test and browser smoke passed on 2026-05-26. | command_ref: CMD-BE-BOOTSTRAP-ADMIN | browser: clicks=Sign In as admin; inputs=`admin` with bootstrap or mock credentials; network=backend login returned `roleCodes=[ADMIN]`, root workspace access, and `passwordResetRequired=true`; feedback=admin was not trapped by `Workspace authorization required`; artifacts=`tron-backend/tests/bootstrap_admin.rs`, `tron-backend/migrations/20260526_0017_bootstrap_platform_admin.sql`, `tron-frontend/tests/auth-smoke.spec.ts` | status: done.
 
 ## Changed Paths
 
 - `docs/features/auth/*`
 - `tron-backend/src/adapters/inbound/http/auth/*`
 - `tron-backend/src/adapters/outbound/persistence/sqlite/*`
+- `tron-backend/migrations/20260526_0017_bootstrap_platform_admin.sql`
+- `tron-backend/tests/bootstrap_admin.rs`
 - `tron-frontend/src/app/App.tsx`
 - `tron-frontend/src/domain/auth/*`
 - `tron-frontend/src/shared/api/httpClient.ts`
@@ -27,9 +31,10 @@ Review is complete. The implementation keeps the access token in memory, reuses 
 
 ## Commands
 
-- `rtk make be-test` remains the 2026-05-15 backend evidence because this evolution changed frontend-only auth lifecycle code.
-- `rtk make fe-check` passed on 2026-05-22.
-- `rtk npm --prefix tron-frontend exec playwright -- test auth-smoke --reporter=line` passed with 4 tests on 2026-05-22.
+- `rtk cargo test --manifest-path tron-backend/Cargo.toml --test bootstrap_admin -- --nocapture` passed with 2 tests on 2026-05-26.
+- `rtk make be-test` passed on 2026-05-26.
+- `rtk make fe-check` passed on 2026-05-26.
+- `rtk npm --prefix tron-frontend exec playwright -- test auth-smoke --reporter=line` passed with 6 tests on 2026-05-26.
 
 ## Blockers
 

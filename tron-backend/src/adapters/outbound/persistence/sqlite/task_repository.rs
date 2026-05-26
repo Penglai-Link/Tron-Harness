@@ -13,9 +13,7 @@ use crate::{
     shared::{
         id::SnowflakeId,
         time::{
-            option_timestamp_from_millis,
-            option_timestamp_to_millis,
-            timestamp_from_millis,
+            option_timestamp_from_millis, option_timestamp_to_millis, timestamp_from_millis,
             timestamp_to_millis,
         },
     },

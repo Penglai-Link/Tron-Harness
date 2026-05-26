@@ -5,10 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use crate::{
-    application::model::ModelService,
-    response::ApiResponse,
-};
+use crate::{application::model::ModelService, response::ApiResponse};
 
 use super::{
     error_mapper::model_error_response,

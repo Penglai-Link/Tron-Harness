@@ -2,7 +2,7 @@
 
 ## Summary
 
-Solo auth execution on `feature/clouds3n/auth/base` is complete. The interrupted pass was recovered from the dirty root worktree earlier in the feature history, and the 2026-05-22 lifecycle evolution stayed in the mirrored Lite Spec base worktree while the lead carried docs, frontend, and verification changes locally without delegated worker branches.
+Solo auth execution on `feature/clouds3n/unassigned-space-authorization/base` is complete. The interrupted pass was recovered from the dirty root worktree earlier in the feature history, and the 2026-05-26 evolution stayed in the Lite Spec base branch while the lead carried docs, frontend guard, backend bootstrap, and verification changes locally without delegated worker branches.
 
 ## Evidence Rows
 
@@ -14,6 +14,8 @@ Solo auth execution on `feature/clouds3n/auth/base` is complete. The interrupted
 - AC-AUTH-06 | red: the schema had no durable auth refresh-session or OAuth2 identity-link storage. | green: added SQLite migrations `20260515_0004_create_auth_refresh_sessions.sql` and `20260515_0005_create_user_oauth_identities.sql`; hashed refresh storage and identity persistence were verified by tests. | command_ref: CMD-BE-TEST | browser: clicks=none_persistence_focus; inputs=internal login and OAuth2 callback persistence scenarios; network=SQLite writes inserted `auth_refresh_sessions` and `user_oauth_identities` rows while stored `refresh_token_hash` differed from the cookie value; feedback=plaintext refresh tokens were never persisted and provider subject linkage survived callback flow; artifacts=`tron-backend/tests/auth_session_persistence.rs`, `tron-backend/migrations/20260515_0004_create_auth_refresh_sessions.sql`, `tron-backend/migrations/20260515_0005_create_user_oauth_identities.sql` | status: done.
 - AC-AUTH-07 | red: invalid-password, archived-user, bad-refresh, and OAuth2-state rejection paths had no stable error mapping. | green: stable auth error codes now cover invalid credentials, inactive users, refresh invalidation, and OAuth2 state mismatch; `rtk make be-test` passed. | command_ref: CMD-BE-TEST | browser: clicks=security rejection contract exercised in backend integration tests; inputs=auth operator username with wrong password, archived auth username with valid password, invalid refresh cookie, and mismatched OAuth2 state; network=auth responses returned `AUTH_INVALID_CREDENTIALS`, `AUTH_USER_INACTIVE`, `AUTH_REFRESH_INVALID`, and `AUTH_OAUTH2_STATE_INVALID`; feedback=no authenticated session was issued for any rejected path; artifacts=`tron-backend/tests/auth_security_boundary.rs`, `tron-backend/src/adapters/inbound/http/auth/error_mapper.rs` | status: done.
 - AC-AUTH-08 | red: adding route protection initially broke legacy user-management backend tests and frontend logout had no protected-route regression coverage. | green: admin routes now require auth, legacy backend tests authenticate through shared helpers, and Playwright proves sign-in, user-management access, avatar-menu profile disclosure, logout, and post-logout blocking; `rtk make be-test` and browser smoke both passed. | command_ref: CMD-FE-AUTH-BROWSER | browser: clicks=anonymous visit `/admin/users`, Sign In, visible Users table, Open user menu, visible profile card, Log out, revisit `/admin/users`; inputs=auth operator username and `TronAuthPass123!`; network=`GET /api/v1/admin/users` and user statistic endpoints succeeded with session cookies and were blocked again after logout; feedback=existing user-management pages stayed usable after sign-in, the header kept identity hidden until the avatar menu opened, and logout still returned to login; artifacts=`tron-backend/tests/common/mod.rs`, `tron-backend/tests/auth_user_management_boundary.rs`, `tron-frontend/tests/auth-smoke.spec.ts` | status: done.
+- AC-AUTH-09 | red: the route guard allowed an authenticated user with no assigned spaces to operate protected pages. | green: ordinary `spaceCodes=[]` sessions now see the authorization-request page on protected routes, with shell navigation and business pages absent; browser smoke passed on 2026-05-26. | command_ref: CMD-FE-AUTH-BROWSER | browser: clicks=Sign In, direct visit `/admin/users`, Log out; inputs=unassigned operator credentials; network=login returned empty `spaceCodes`; feedback=authorization page appeared on `/dashboard` and `/admin/users`; artifacts=`tron-frontend/src/app/App.tsx`, `tron-frontend/src/domain/auth/pages/NoWorkspaceAccessPage.tsx`, `tron-frontend/tests/auth-smoke.spec.ts` | status: done.
+- AC-AUTH-10 | red: empty-deploy startup had no first platform administrator, existing admin grants were not guaranteed, and a role-only admin could be blocked by the no-space guard. | green: lead-owned backend and frontend changes initialize or backfill missing bootstrap admin data and bypass the no-space page for fixed `ADMIN` sessions; bootstrap test and browser smoke passed on 2026-05-26. | command_ref: CMD-BE-BOOTSTRAP-ADMIN | browser: clicks=Sign In as admin; inputs=admin credentials; network=bootstrap login returned `ADMIN`, root workspace access, and password-reset requirement; feedback=admin shell rendered rather than authorization page; artifacts=`tron-backend/tests/bootstrap_admin.rs`, `tron-backend/migrations/20260526_0017_bootstrap_platform_admin.sql`, `tron-frontend/tests/auth-smoke.spec.ts` | status: done.
 
 ## Changed Paths
 
@@ -24,9 +26,10 @@ Solo auth execution on `feature/clouds3n/auth/base` is complete. The interrupted
 
 ## Commands
 
-- `rtk make be-test` remains the 2026-05-15 backend evidence because this evolution changed frontend-only auth lifecycle code.
-- `rtk make fe-check` passed on 2026-05-22.
-- `rtk npm --prefix tron-frontend exec playwright -- test auth-smoke --reporter=line` passed with 4 tests on 2026-05-22.
+- `rtk cargo test --manifest-path tron-backend/Cargo.toml --test bootstrap_admin -- --nocapture` passed with 2 tests on 2026-05-26.
+- `rtk make be-test` passed on 2026-05-26.
+- `rtk make fe-check` passed on 2026-05-26.
+- `rtk npm --prefix tron-frontend exec playwright -- test auth-smoke --reporter=line` passed with 6 tests on 2026-05-26.
 
 ## Blockers
 

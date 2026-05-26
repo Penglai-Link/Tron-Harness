@@ -2,7 +2,7 @@
 
 ## Summary
 
-Backend auth is complete. Axum now exposes internal login, provider discovery, session inspection, refresh, logout, and GitHub OAuth App authorize or callback routes, all backed by JWT session material, SQLite refresh-session persistence, and existing user-management identity records. Protected APIs now accept only `Authorization: Bearer <access-jwt>`, auth grant responses return the access JWT in the response body, refresh state remains in `HttpOnly` cookies, and successful auth injects request-scoped operator context for downstream write handlers. The deterministic dev provider is disabled by default and retained only for controlled test scenarios.
+Backend auth is complete. Axum now exposes internal login, provider discovery, session inspection, refresh, logout, and GitHub OAuth App authorize or callback routes, all backed by JWT session material, SQLite refresh-session persistence, and existing user-management identity records. Protected APIs now accept only `Authorization: Bearer <access-jwt>`, auth grant responses return the access JWT in the response body, refresh state remains in `HttpOnly` cookies, and successful auth injects request-scoped operator context for downstream write handlers. Startup also bootstraps the first platform admin, fixed roles, and root workspace access when those rows are absent. The deterministic dev provider is disabled by default and retained only for controlled test scenarios.
 
 ## Evidence Rows
 
@@ -14,6 +14,8 @@ Backend auth is complete. Axum now exposes internal login, provider discovery, s
 - AC-AUTH-06 | red: the schema had no durable auth refresh-session or OAuth2 identity-link storage. | green: added SQLite migrations `20260515_0004_create_auth_refresh_sessions.sql` and `20260515_0005_create_user_oauth_identities.sql`; hashed refresh storage and identity persistence were verified by tests. | command_ref: CMD-BE-TEST | browser: clicks=none_persistence_focus; inputs=internal login and OAuth2 callback persistence scenarios; network=SQLite writes inserted `auth_refresh_sessions` and `user_oauth_identities` rows while stored `refresh_token_hash` differed from the cookie value; feedback=plaintext refresh tokens were never persisted and provider subject linkage survived callback flow; artifacts=`tron-backend/tests/auth_session_persistence.rs`, `tron-backend/migrations/20260515_0004_create_auth_refresh_sessions.sql`, `tron-backend/migrations/20260515_0005_create_user_oauth_identities.sql` | status: done.
 - AC-AUTH-07 | red: invalid-password, archived-user, bad-refresh, and OAuth2-state rejection paths had no stable error mapping. | green: stable auth error codes now cover invalid credentials, inactive users, refresh invalidation, and OAuth2 state mismatch; `rtk make be-test` passed. | command_ref: CMD-BE-TEST | browser: clicks=security rejection contract exercised in backend integration tests; inputs=auth operator username with wrong password, archived auth username with valid password, invalid refresh cookie, and mismatched OAuth2 state; network=auth responses returned `AUTH_INVALID_CREDENTIALS`, `AUTH_USER_INACTIVE`, `AUTH_REFRESH_INVALID`, and `AUTH_OAUTH2_STATE_INVALID`; feedback=no authenticated session was issued for any rejected path; artifacts=`tron-backend/tests/auth_security_boundary.rs`, `tron-backend/src/adapters/inbound/http/auth/error_mapper.rs` | status: done.
 - AC-AUTH-08 | red: adding route protection initially broke legacy user-management backend tests, frontend logout had no protected-route regression coverage, and protected admin APIs still depended on cookie-only session bootstrap. | green: admin routes now require auth, accept only bearer JWTs, rebuild browser auth state through refresh on reload, expose authenticated operator context to downstream save or update handlers, and keep the original logout regression green; `rtk make be-test` and browser smoke both passed. | command_ref: CMD-BE-TEST | browser: clicks=anonymous visit `/admin/users`, Sign In, visible Users table, reload page, Open user menu, visible profile card, Log out, revisit `/admin/users`; inputs=auth operator username and `TronAuthPass123!` plus protected admin requests with `Authorization: Bearer <access-jwt>` in backend tests; network=`POST /api/v1/auth/refresh` rebuilt the access token after reload, `GET /api/v1/admin/users` and user statistic endpoints succeeded with bearer JWTs only, and protected routes were blocked again after logout; feedback=existing user-management pages stayed usable after sign-in, reload silently rebuilt auth state, the header kept identity hidden until the avatar menu opened, and logout still returned to login; artifacts=`tron-backend/tests/common/mod.rs`, `tron-backend/tests/auth_user_management_boundary.rs`, `tron-backend/tests/auth_bearer_context.rs`, `tron-frontend/tests/auth-smoke.spec.ts` | status: done.
+- AC-AUTH-09 | red: the unassigned-space frontend session could still render protected shell routes without backend involvement. | green: backend session payload continues exposing `spaceCodes` and role data so the frontend can block unassigned users without changing bearer-auth middleware; browser smoke passed on 2026-05-26. | command_ref: CMD-FE-AUTH-BROWSER | browser: clicks=Sign In, direct visit `/admin/users`, Log out; inputs=unassigned operator credentials; network=login returned an authenticated session with `spaceCodes=[]`; feedback=frontend guard rendered the authorization-request page before any protected shell content; artifacts=`tron-frontend/tests/auth-smoke.spec.ts` | status: done.
+- AC-AUTH-10 | red: empty-database startup returned 401 for `admin` because no platform admin, root workspace, or owner grant was initialized, and an existing `admin` user could miss related grants. | green: startup executes idempotent bootstrap SQL after SQLite repositories initialize, creating missing fixed roles, role permissions, `ENTERPRISE` workspace, `admin` user when absent, `ADMIN` assignment, root workspace assignment, and owner grant; `rtk cargo test --manifest-path tron-backend/Cargo.toml --test bootstrap_admin -- --nocapture` passed with 2 tests on 2026-05-26. | command_ref: CMD-BE-BOOTSTRAP-ADMIN | browser: clicks=admin login path covered by backend request tests; inputs=username `admin` and bootstrap password `TronAdminPass123!`; network=`POST /api/v1/auth/login` returned `SUCCESS`, access token, `roleCodes=[ADMIN]`, `spaceCodes=[ENTERPRISE]`, and `passwordResetRequired=true`; feedback=database assertions found `USR-ADMIN` or existing admin user grants, `ENTERPRISE`, and owner grant rows without duplicate admin users; artifacts=`tron-backend/migrations/20260526_0017_bootstrap_platform_admin.sql`, `tron-backend/src/adapters/outbound/persistence/sqlite/bootstrap.rs`, `tron-backend/tests/bootstrap_admin.rs` | status: done.
 
 ## Changed Paths
 
@@ -30,16 +32,19 @@ Backend auth is complete. Axum now exposes internal login, provider discovery, s
 - `tron-backend/src/adapters/outbound/persistence/sqlite/*`
 - `tron-backend/migrations/20260515_0004_create_auth_refresh_sessions.sql`
 - `tron-backend/migrations/20260515_0005_create_user_oauth_identities.sql`
+- `tron-backend/migrations/20260526_0017_bootstrap_platform_admin.sql`
 - `tron-backend/tests/auth_*.rs`
+- `tron-backend/tests/bootstrap_admin.rs`
 - `tron-backend/tests/auth_bearer_context.rs`
 - `tron-backend/tests/common/mod.rs`
 
 ## Commands
 
-- `rtk make be-check` passed on 2026-05-15.
-- `rtk make be-test` passed on 2026-05-15.
-- `rtk make fe-check` passed on 2026-05-15 for the integrated frontend contract.
-- `cd tron-frontend && npx playwright test tests/auth-smoke.spec.ts` passed with 2 tests on 2026-05-15.
+- `rtk make be-check` passed on 2026-05-26.
+- `rtk make be-test` passed on 2026-05-26.
+- `rtk cargo test --manifest-path tron-backend/Cargo.toml --test bootstrap_admin -- --nocapture` passed with 2 tests on 2026-05-26.
+- `rtk make fe-check` passed on 2026-05-26 for the integrated frontend contract.
+- `rtk npm --prefix tron-frontend exec playwright -- test auth-smoke --reporter=line` passed with 6 tests on 2026-05-26.
 
 ## Blockers
 
