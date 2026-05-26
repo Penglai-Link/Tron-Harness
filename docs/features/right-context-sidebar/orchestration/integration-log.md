@@ -14,6 +14,7 @@
 | merge-shell-foundation | AC-RCS-01, AC-RCS-02, AC-RCS-03 | feature/clouds3n/right-context-sidebar/frontend/shell-foundation | feature/clouds3n/right-context-sidebar/base | Shell foundation worker merged at `2b20064` after RED/GREEN evidence and base verification. | done |
 | dispatch-graph-memory-migration | AC-RCS-04 | feature/clouds3n/right-context-sidebar/base | feature/clouds3n/right-context-sidebar/frontend/graph-memory-migration | Worker `019e6250-af5a-7e03-adc1-ad1680251253` started after shell foundation integration. | done |
 | merge-graph-memory-migration | AC-RCS-04 | feature/clouds3n/right-context-sidebar/frontend/graph-memory-migration | feature/clouds3n/right-context-sidebar/base | Graph and memory migration worker merged at `3b76629` after lead review gap fix and base verification. | done |
+| dispatch-management-migration | AC-RCS-05 | feature/clouds3n/right-context-sidebar/base | feature/clouds3n/right-context-sidebar/frontend/management-migration | Worker `019e625d-dc11-79d2-a264-033738da4c71` started after graph and memory migration integration. | in_progress |
 
 ## Conflict Log
 

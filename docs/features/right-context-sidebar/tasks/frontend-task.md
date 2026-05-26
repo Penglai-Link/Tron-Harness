@@ -17,7 +17,7 @@ Behavior-changing implementation should run in bounded AC slices after execution
 - AC-RCS-02 | phase: tdd | owner: frontend | scope: `tron-frontend/src/shared/layout/Shell.tsx` mobile right drawer open, close, backdrop, Escape, and route reset behavior | command_ref: CMD-FE-CHECK | status: done.
 - AC-RCS-03 | phase: tdd | owner: frontend | scope: current shell right-panel routes, no-panel console routes, and settings route exclusion | command_ref: CMD-FE-CHECK | status: done.
 - AC-RCS-04 | phase: tdd | owner: frontend | scope: `tron-frontend/src/domain/knowledge-graph/pages/*`, `tron-frontend/src/domain/memory/pages/*` local inspector migration | command_ref: CMD-FE-CHECK | status: done.
-- AC-RCS-05 | phase: tdd | owner: frontend | scope: task detail, automation detail, app detail, prompts, variables, skills, installed skills, and knowledge base local inspector migration | command_ref: CMD-FE-CHECK | status: ready.
+- AC-RCS-05 | phase: tdd | owner: frontend | scope: task detail, automation detail, app detail, prompts, variables, skills, installed skills, and knowledge base local inspector migration | command_ref: CMD-FE-CHECK | status: in_progress.
 
 ## Worktree Notes
 
@@ -25,6 +25,7 @@ Behavior-changing implementation should run in bounded AC slices after execution
 - AC-RCS-01 through AC-RCS-03 integrated from `frontend/shell-foundation` at merge commit `2b20064`.
 - AC-RCS-04 dispatched to `frontend/graph-memory-migration` with Codex runtime `019e6250-af5a-7e03-adc1-ad1680251253`.
 - AC-RCS-04 integrated from `frontend/graph-memory-migration` at merge commit `3b76629`.
+- AC-RCS-05 dispatched to `frontend/management-migration` with Codex runtime `019e625d-dc11-79d2-a264-033738da4c71`.
 
 ## Integration Notes
 
