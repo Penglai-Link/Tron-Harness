@@ -1,8 +1,11 @@
 export const shell = {
   aria: {
     closeNavigation: "Close navigation menu",
+    closeRightSidebar: "Close right sidebar",
     collapseSidebar: "Collapse sidebar",
+    collapseRightSidebar: "Collapse right sidebar",
     expandSidebar: "Expand sidebar",
+    openRightSidebar: "Open right sidebar",
     openNavigation: "Open navigation menu",
     openSystemSettings: "Open system settings",
     openUserMenu: "Open user menu",

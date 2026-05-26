@@ -16,7 +16,10 @@ import {
   CircleUserRound,
   PanelLeftClose,
   PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
   Settings2,
+  X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -129,7 +132,9 @@ export function TronShell({
   const openSections = useAppShellStore((state) => state.openSections);
   const selectedPrimarySpaceId = useAppShellStore((state) => state.selectedPrimarySpaceId);
   const selectedSecondarySpaceId = useAppShellStore((state) => state.selectedSecondarySpaceId);
+  const rightSidebarCollapsed = useAppShellStore((state) => state.rightSidebarCollapsed);
   const setAgentOpen = useAppShellStore((state) => state.setAgentOpen);
+  const setRightSidebarCollapsed = useAppShellStore((state) => state.setRightSidebarCollapsed);
   const setSidebarCollapsed = useAppShellStore((state) => state.setSidebarCollapsed);
   const sidebarCollapsed = useAppShellStore((state) => state.sidebarCollapsed);
   const toggleSection = useAppShellStore((state) => state.toggleSection);
@@ -141,6 +146,7 @@ export function TronShell({
   const workspaceSwitcher = useAppShellStore((state) => state.workspaceSwitcherSnapshot);
   const dataSource = getServiceDataSource("admin");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
   const workspaceSwitcherControllerRef = useRef<AbortController | null>(null);
   const workspaceSwitcherRequestSequenceRef = useRef(0);
@@ -195,6 +201,8 @@ export function TronShell({
     }),
     [effectivePrimarySpaceId, effectiveSecondarySpaceId, primarySpaces, secondarySpaces, selectedPrimarySpace, selectedSecondarySpace],
   );
+  const hasRightPanel = Boolean(rightPanel);
+  const showDesktopRightSidebar = hasRightPanel && !rightSidebarCollapsed;
 
   const refreshWorkspaceSwitcher = useCallback(async () => {
     if (dataSource !== "api") {
@@ -288,10 +296,17 @@ export function TronShell({
 
   useEffect(() => {
     setMobileSidebarOpen(false);
+    setRightDrawerOpen(false);
   }, [pathname]);
 
   useEffect(() => {
-    if (!mobileSidebarOpen) {
+    if (!hasRightPanel) {
+      setRightDrawerOpen(false);
+    }
+  }, [hasRightPanel]);
+
+  useEffect(() => {
+    if (!mobileSidebarOpen && !rightDrawerOpen) {
       return;
     }
 
@@ -299,6 +314,7 @@ export function TronShell({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setMobileSidebarOpen(false);
+        setRightDrawerOpen(false);
       }
     };
 
@@ -309,11 +325,12 @@ export function TronShell({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [mobileSidebarOpen]);
+  }, [mobileSidebarOpen, rightDrawerOpen]);
 
   function toggleMobileSidebar() {
     if (!mobileSidebarOpen) {
       closeFloatingPanels();
+      setRightDrawerOpen(false);
     }
 
     setMobileSidebarOpen((open) => !open);
@@ -322,6 +339,16 @@ export function TronShell({
   function closeMobileSidebar() {
     closeFloatingPanels();
     setMobileSidebarOpen(false);
+  }
+
+  function openRightDrawer() {
+    closeFloatingPanels();
+    setMobileSidebarOpen(false);
+    setRightDrawerOpen(true);
+  }
+
+  function closeRightDrawer() {
+    setRightDrawerOpen(false);
   }
 
   function handleSidebarNavigationClick() {
@@ -543,6 +570,21 @@ export function TronShell({
           </div>
           <div className="flex items-center gap-2">
             {topbarActions}
+            {hasRightPanel ? (
+              <Button
+                className="lg:hidden"
+                size="icon"
+                type="button"
+                variant="ghost"
+                aria-controls="tron-mobile-right-sidebar"
+                aria-expanded={rightDrawerOpen}
+                aria-label={rightDrawerOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
+                data-testid="tron-mobile-right-sidebar-toggle"
+                onClick={rightDrawerOpen ? closeRightDrawer : openRightDrawer}
+              >
+                {rightDrawerOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
+              </Button>
+            ) : null}
             <Button
               size="icon"
               variant="ghost"
@@ -655,6 +697,36 @@ export function TronShell({
         </>
       ) : null}
 
+      {hasRightPanel && rightDrawerOpen ? (
+        <>
+          <button
+            className="fixed inset-x-0 bottom-0 top-14 z-40 bg-[var(--color-backdrop-scrim)] lg:hidden"
+            type="button"
+            aria-label={t("shell:aria.closeRightSidebar")}
+            data-testid="tron-mobile-right-sidebar-backdrop"
+            onClick={closeRightDrawer}
+          />
+          <aside
+            className="fixed bottom-0 right-0 top-14 z-50 flex w-[min(22rem,calc(100vw-1rem))] flex-col overflow-y-auto border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-5 py-5 shadow-[-12px_0_34px_rgba(15,23,42,0.12),0_18px_45px_rgba(15,23,42,0.12)] lg:hidden"
+            data-testid="tron-mobile-right-sidebar"
+            id="tron-mobile-right-sidebar"
+          >
+            <div className="mb-4 flex justify-end">
+              <Button
+                size="icon"
+                type="button"
+                variant="ghost"
+                aria-label={t("shell:aria.closeRightSidebar")}
+                onClick={closeRightDrawer}
+              >
+                <X size={17} aria-hidden="true" />
+              </Button>
+            </div>
+            {rightPanel}
+          </aside>
+        </>
+      ) : null}
+
       <aside
         className={cn(
           "fixed bottom-0 left-0 top-14 z-50 hidden flex-col overflow-y-auto bg-[var(--color-elevated-surface)] py-4 shadow-[10px_0_28px_rgba(15,23,42,0.04)] transition-[width] duration-200 lg:flex",
@@ -666,11 +738,44 @@ export function TronShell({
       </aside>
 
       <section className={cn("relative z-0 min-w-0 pt-14 transition-[padding-left] duration-200", sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[280px]")}>
-        <div className={cn("relative z-0 grid min-h-[calc(100vh-3.5rem)] grid-cols-1", rightPanel ? "xl:grid-cols-[minmax(0,1fr)_360px]" : "")}>
+        <div className={cn("relative z-0 grid min-h-[calc(100vh-3.5rem)] grid-cols-1", showDesktopRightSidebar ? "lg:grid-cols-[minmax(0,1fr)_360px]" : "")}>
           <main className={cn("relative z-0 min-w-0 overflow-x-hidden px-6 py-6", contentClassName)}>{children}</main>
-          {rightPanel ? <aside className="relative z-0 border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-5 py-6">{rightPanel}</aside> : null}
+          {showDesktopRightSidebar ? (
+            <aside
+              className="relative z-0 hidden border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-5 py-6 lg:block"
+              data-testid="tron-right-sidebar"
+            >
+              <div className="mb-4 flex justify-end">
+                <Button
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                  aria-label={t("shell:aria.collapseRightSidebar")}
+                  data-testid="tron-right-sidebar-collapse"
+                  onClick={() => setRightSidebarCollapsed(true)}
+                >
+                  <PanelRightClose size={17} aria-hidden="true" />
+                </Button>
+              </div>
+              {rightPanel}
+            </aside>
+          ) : null}
         </div>
       </section>
+
+      {hasRightPanel && rightSidebarCollapsed ? (
+        <Button
+          className="fixed right-3 top-1/2 z-30 hidden -translate-y-1/2 rounded-full shadow-[0_12px_30px_rgba(15,23,42,0.14)] lg:inline-flex"
+          size="icon"
+          type="button"
+          variant="secondary"
+          aria-label={t("shell:aria.openRightSidebar")}
+          data-testid="tron-right-sidebar-reopen"
+          onClick={() => setRightSidebarCollapsed(false)}
+        >
+          <PanelRightOpen size={17} aria-hidden="true" />
+        </Button>
+      ) : null}
 
     </div>
     </WorkspaceSpacesContext.Provider>
