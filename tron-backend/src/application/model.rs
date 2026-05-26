@@ -472,8 +472,12 @@ impl ModelService {
             &spec.display_name,
             None,
         )?;
-        let preview =
-            build_workspace_local_model_from_spec(&workspace.workspace_code, spec, 0, String::new());
+        let preview = build_workspace_local_model_from_spec(
+            &workspace.workspace_code,
+            spec,
+            0,
+            String::new(),
+        );
         let verified = self.verify_model_preview(preview).await?;
         Ok(build_workspace_effective_view(
             &workspace,
@@ -1481,7 +1485,10 @@ fn platform_provider(model: &Model) -> EffectiveProvider {
     }
 }
 
-fn workspace_path_to_workspace(lineage: &[LineageEntry], workspace_code: &str) -> Vec<LineageEntry> {
+fn workspace_path_to_workspace(
+    lineage: &[LineageEntry],
+    workspace_code: &str,
+) -> Vec<LineageEntry> {
     let Some(index) = lineage
         .iter()
         .position(|entry| entry.code == workspace_code)

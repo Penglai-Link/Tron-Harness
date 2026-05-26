@@ -19,6 +19,7 @@ Only split into multiple workers when contracts are stable, write scopes are dis
 - AC-AUTH-05 | phase: tdd | owner: lead | scope: tron-backend/src/app.rs; tron-backend/src/adapters/inbound/http/auth/*; tron-backend/src/adapters/inbound/http/admin/*; tron-backend/src/application/user/service.rs; tron-backend/tests/auth_session_contract.rs; tron-backend/tests/auth_bearer_context.rs | command_ref: CMD-BE-TEST | status: done.
 - AC-AUTH-07 | phase: tdd | owner: lead | scope: tron-backend/src/adapters/inbound/http/auth/*; tron-backend/tests/auth_security_boundary.rs | command_ref: CMD-BE-TEST | status: done.
 - AC-AUTH-08 | phase: verify | owner: lead | scope: tron-backend/src/app.rs; tron-backend/src/adapters/inbound/http/admin/users/*; tron-backend/src/adapters/inbound/http/admin/roles/*; tron-backend/tests/auth_user_management_boundary.rs; tron-backend/tests/auth_bearer_context.rs | command_ref: CMD-BE-TEST | status: done.
+- AC-AUTH-10 | phase: tdd | owner: lead | scope: tron-backend/src/app.rs; tron-backend/src/adapters/outbound/persistence/sqlite/bootstrap.rs; tron-backend/src/adapters/outbound/persistence/sqlite/migrations.rs; tron-backend/migrations/20260526_0017_bootstrap_platform_admin.sql; tron-backend/tests/bootstrap_admin.rs | command_ref: CMD-BE-BOOTSTRAP-ADMIN | status: done.
 
 ## Worktree Notes
 

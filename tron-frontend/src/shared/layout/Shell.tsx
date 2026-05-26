@@ -63,6 +63,7 @@ interface TronShellProps {
   children: ReactNode;
   contentClassName?: string;
   rightPanel?: ReactNode;
+  roleCodes?: string[];
   searchPlaceholder?: string;
   topbarActions?: ReactNode;
   userMenuContent?: ReactNode;
@@ -117,6 +118,7 @@ export function TronShell({
   children,
   contentClassName,
   rightPanel,
+  roleCodes,
   searchPlaceholder,
   topbarActions,
   userMenuContent,
@@ -153,6 +155,20 @@ export function TronShell({
   const workspaceSwitcherControllerRef = useRef<AbortController | null>(null);
   const workspaceSwitcherRequestSequenceRef = useRef(0);
   const [expandedWorkspaceCodes, setExpandedWorkspaceCodes] = useState<string[]>([]);
+  const visibleNavigation = useMemo(
+    () => tronNavigation.filter((section) => {
+      if (!section.requiredRoleCodes?.length) {
+        return true;
+      }
+
+      if (!roleCodes) {
+        return true;
+      }
+
+      return section.requiredRoleCodes.some((roleCode) => roleCodes.includes(roleCode));
+    }),
+    [roleCodes],
+  );
 
   const primarySpaces = workspaceSwitcher.primarySpaces;
   const selectedPrimarySpace = primarySpaces.find((space) => space.workspaceCode === selectedPrimarySpaceId)
@@ -248,9 +264,9 @@ export function TronShell({
   }, [refreshWorkspaceSwitcher]);
 
   useEffect(() => {
-    const activeSection = tronNavigation.find((section) => sectionHasActiveItem(section, activeItem));
+    const activeSection = visibleNavigation.find((section) => sectionHasActiveItem(section, activeItem));
     ensureSectionOpen(activeSection?.label);
-  }, [activeItem, ensureSectionOpen]);
+  }, [activeItem, ensureSectionOpen, visibleNavigation]);
 
   useEffect(() => {
     if (!effectivePrimarySpaceId) {
@@ -475,7 +491,7 @@ export function TronShell({
     return (
       <>
         <nav className={cn("space-y-4", compact ? "space-y-2" : "")} aria-label={t("shell:aria.primaryNavigation")}>
-          {tronNavigation.map((section) => {
+          {visibleNavigation.map((section) => {
             const open = openSections[section.label];
             return (
               <section key={section.label}>

@@ -7,9 +7,8 @@ use crate::{
     application::workspace::WorkspaceService,
     domain::{
         app::{
-            App, AppDetail, AppError, AppLifecycleResult, AppListItem, AppListQuery,
-            AppOption, AppOptionQuery, AppRuntimeRole, AppStatus, AppTag, PagedAppRecords,
-            validate_app_code,
+            App, AppDetail, AppError, AppLifecycleResult, AppListItem, AppListQuery, AppOption,
+            AppOptionQuery, AppRuntimeRole, AppStatus, AppTag, PagedAppRecords, validate_app_code,
         },
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceStatus},
     },
@@ -46,7 +45,11 @@ pub trait AppRepository: Send {
     fn next_id(&mut self) -> Result<i64, AppError>;
     fn create_app(&mut self, app: &App) -> Result<(), AppError>;
     fn update_app(&mut self, app: &App) -> Result<(), AppError>;
-    fn replace_app_tags(&mut self, app_code: &str, tags: &[AppTag]) -> Result<Vec<AppTag>, AppError>;
+    fn replace_app_tags(
+        &mut self,
+        app_code: &str,
+        tags: &[AppTag],
+    ) -> Result<Vec<AppTag>, AppError>;
 }
 
 #[derive(Clone)]
@@ -72,7 +75,11 @@ impl AppService {
         let current = query.current.unwrap_or(1).max(1);
         let size = query.size.unwrap_or(15).clamp(1, 100);
         let mut records = self.filtered_apps(&workspace.workspace_code, &query)?;
-        records.sort_by(|left, right| left.name.cmp(&right.name).then(left.app_code.cmp(&right.app_code)));
+        records.sort_by(|left, right| {
+            left.name
+                .cmp(&right.name)
+                .then(left.app_code.cmp(&right.app_code))
+        });
         let total = records.len();
         let start = (current - 1) * size;
 
@@ -97,7 +104,11 @@ impl AppService {
             .into_iter()
             .filter(|app| app.workspace_code == workspace.workspace_code)
             .filter(|app| app.status == AppStatus::Active)
-            .filter(|app| query.runtime_role.map_or(true, |role| app.runtime_role == role))
+            .filter(|app| {
+                query
+                    .runtime_role
+                    .map_or(true, |role| app.runtime_role == role)
+            })
             .filter(|app| matches_search(app, &tags_by_code, search.as_deref()))
             .map(|app| AppOption {
                 app_code: app.app_code,
@@ -106,7 +117,11 @@ impl AppService {
                 runtime_role: app.runtime_role,
             })
             .collect::<Vec<_>>();
-        options.sort_by(|left, right| left.name.cmp(&right.name).then(left.app_code.cmp(&right.app_code)));
+        options.sort_by(|left, right| {
+            left.name
+                .cmp(&right.name)
+                .then(left.app_code.cmp(&right.app_code))
+        });
         Ok(options)
     }
 
@@ -170,7 +185,11 @@ impl AppService {
         self.get_app(&app_code)
     }
 
-    pub fn update_app(&self, app_code: &str, command: UpdateAppCommand) -> Result<AppDetail, AppError> {
+    pub fn update_app(
+        &self,
+        app_code: &str,
+        command: UpdateAppCommand,
+    ) -> Result<AppDetail, AppError> {
         let mut app = self.get_app_record(app_code)?;
         if app.status == AppStatus::Archived {
             return Err(AppError::ArchivedMutationDenied);
@@ -271,7 +290,11 @@ impl AppService {
                 None if query.include_archived.unwrap_or(false) => true,
                 None => app.status == AppStatus::Active,
             })
-            .filter(|app| query.runtime_role.map_or(true, |role| app.runtime_role == role))
+            .filter(|app| {
+                query
+                    .runtime_role
+                    .map_or(true, |role| app.runtime_role == role)
+            })
             .filter(|app| matches_search(app, &tags_by_code, search.as_deref()))
             .map(|app| self.list_item_from_app(app, &tags_by_code))
             .collect()
@@ -451,7 +474,9 @@ fn matches_search(
 
 fn map_workspace_error(error: WorkspaceError) -> AppError {
     match error {
-        WorkspaceError::NotFound | WorkspaceError::ArchivedMutationDenied => AppError::InvalidWorkspace,
+        WorkspaceError::NotFound | WorkspaceError::ArchivedMutationDenied => {
+            AppError::InvalidWorkspace
+        }
         _ => AppError::StorageFailure,
     }
 }

@@ -22,6 +22,8 @@ Only split into multiple workers when contracts are stable, write scopes are dis
 - AC-AUTH-06 | phase: review | owner: lead | scope: docs/features/auth/*; tron-backend/src/adapters/outbound/persistence/sqlite/*; tron-backend/tests/auth_session_persistence.rs | command_ref: none | status: done.
 - AC-AUTH-07 | phase: review | owner: lead | scope: docs/features/auth/*; tron-backend/src/adapters/inbound/http/auth/*; tron-backend/tests/auth_security_boundary.rs | command_ref: none | status: done.
 - AC-AUTH-08 | phase: review | owner: lead | scope: docs/features/auth/*; tron-frontend/src/app/App.tsx; tron-backend/src/app.rs; tron-frontend/tests/auth-smoke.spec.ts | command_ref: none | status: done.
+- AC-AUTH-09 | phase: review | owner: lead | scope: docs/features/auth/*; tron-frontend/src/app/App.tsx; tron-frontend/src/domain/auth/pages/NoWorkspaceAccessPage.tsx; tron-frontend/tests/auth-smoke.spec.ts | command_ref: none | status: done.
+- AC-AUTH-10 | phase: review | owner: lead | scope: docs/features/auth/*; tron-backend/src/app.rs; tron-backend/migrations/20260526_0017_bootstrap_platform_admin.sql; tron-backend/tests/bootstrap_admin.rs; tron-frontend/tests/auth-smoke.spec.ts | command_ref: none | status: done.
 
 ## Worktree Notes
 

@@ -43,3 +43,5 @@ pub(super) const MODEL_REMOVE_SEEDED_DATA_MIGRATION: &str =
     include_str!("../../../../../migrations/20260522_0015_remove_seeded_model_data.sql");
 pub(super) const SKILL_REGISTRY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260519_0011_create_skill_registry.sql");
+pub(super) const BOOTSTRAP_PLATFORM_ADMIN_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260526_0017_bootstrap_platform_admin.sql");

@@ -5,15 +5,13 @@ use rusqlite::{Connection, params};
 use crate::{
     application::app::AppRepository,
     domain::app::{
-        App, AppError, AppTag, app_runtime_role_from_storage,
-        app_runtime_role_to_storage, app_status_from_storage, app_status_to_storage,
+        App, AppError, AppTag, app_runtime_role_from_storage, app_runtime_role_to_storage,
+        app_status_from_storage, app_status_to_storage,
     },
     shared::{
         id::SnowflakeId,
         time::{
-            option_timestamp_from_millis,
-            option_timestamp_to_millis,
-            timestamp_from_millis,
+            option_timestamp_from_millis, option_timestamp_to_millis, timestamp_from_millis,
             timestamp_to_millis,
         },
     },
@@ -178,9 +176,11 @@ impl AppRepository for SqliteAppRepository {
     fn next_id(&mut self) -> Result<i64, AppError> {
         let max_id: i64 = self
             .connection
-            .query_row("SELECT max(id) FROM (SELECT id FROM apps UNION ALL SELECT id FROM app_tags)", [], |row| {
-                row.get::<_, Option<i64>>(0)
-            })
+            .query_row(
+                "SELECT max(id) FROM (SELECT id FROM apps UNION ALL SELECT id FROM app_tags)",
+                [],
+                |row| row.get::<_, Option<i64>>(0),
+            )
             .map_err(storage_error)?
             .unwrap_or(734_900_000_000_000_000);
         Ok(max_id + 1)
@@ -246,11 +246,18 @@ impl AppRepository for SqliteAppRepository {
         Ok(())
     }
 
-    fn replace_app_tags(&mut self, app_code: &str, tags: &[AppTag]) -> Result<Vec<AppTag>, AppError> {
+    fn replace_app_tags(
+        &mut self,
+        app_code: &str,
+        tags: &[AppTag],
+    ) -> Result<Vec<AppTag>, AppError> {
         let mut next_id = self.next_id()?;
         let transaction = self.connection.transaction().map_err(storage_error)?;
         transaction
-            .execute("DELETE FROM app_tags WHERE app_code = ?1", params![app_code])
+            .execute(
+                "DELETE FROM app_tags WHERE app_code = ?1",
+                params![app_code],
+            )
             .map_err(storage_error)?;
         for tag in tags {
             transaction
@@ -267,8 +274,12 @@ impl AppRepository for SqliteAppRepository {
             next_id += 1;
         }
         transaction.commit().map_err(storage_error)?;
-        self.list_app_tags()
-            .map(|records| records.into_iter().filter(|record| record.app_code == app_code).collect())
+        self.list_app_tags().map(|records| {
+            records
+                .into_iter()
+                .filter(|record| record.app_code == app_code)
+                .collect()
+        })
     }
 }
 

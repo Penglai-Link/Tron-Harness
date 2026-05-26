@@ -19,6 +19,8 @@ Only split into multiple workers when contracts are stable, write scopes are dis
 - AC-AUTH-08 | phase: tdd | owner: lead | scope: tron-frontend/src/app/App.tsx; tron-frontend/src/domain/auth/components/*; tron-frontend/src/domain/shared-shell/pages/SharedShellPreviewPage.tsx; tron-frontend/src/shared/layout/Shell.tsx; tron-frontend/tests/auth-smoke.spec.ts | command_ref: CMD-FE-AUTH-BROWSER | status: done.
 - AC-AUTH-04 | phase: tdd | owner: lead | scope: tron-frontend/src/domain/auth/pages/LoginPage.tsx; tron-frontend/src/i18n/locales/en-US/auth.ts; tron-backend/src/config.rs; tron-frontend/tests/auth-smoke.spec.ts | command_ref: CMD-FE-AUTH-BROWSER | status: done.
 - AC-AUTH-08 | phase: tdd | owner: lead | scope: tron-frontend/src/shared/api/httpClient.ts; tron-frontend/src/store/authStore.ts; tron-frontend/src/domain/auth/hooks/index.ts; tron-frontend/tests/auth-smoke.spec.ts | command_ref: CMD-FE-AUTH-BROWSER | status: done.
+- AC-AUTH-09 | phase: tdd | owner: lead | scope: tron-frontend/src/app/App.tsx; tron-frontend/src/domain/auth/pages/NoWorkspaceAccessPage.tsx; tron-frontend/src/domain/auth/index.ts; tron-frontend/src/i18n/locales/en-US/auth.ts; tron-frontend/tests/auth-smoke.spec.ts | command_ref: CMD-FE-AUTH-BROWSER | status: done.
+- AC-AUTH-10 | phase: tdd | owner: lead | scope: tron-frontend/src/app/App.tsx; tron-frontend/tests/auth-smoke.spec.ts | command_ref: CMD-FE-AUTH-BROWSER | status: done.
 
 ## Worktree Notes
 

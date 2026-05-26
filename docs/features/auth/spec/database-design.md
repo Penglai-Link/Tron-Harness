@@ -32,6 +32,10 @@
   - `display_name`: last provider display name snapshot.
   - `linked_at`, `updated_at`.
 - No plaintext access token, refresh token, or provider secret is stored in SQLite.
+- Add an idempotent bootstrap data migration for the first deployable platform operator.
+  - Fixed roles: `ADMIN`, `WORKSPACE_ADMIN`, `DEVELOPER`, and `VIEWER`.
+  - Root workspace: `ENTERPRISE`.
+  - Bootstrap user: username `admin`, role `ADMIN`, root workspace assignment, owner grant, and `password_reset_required=true`.
 
 ## Relationships And Cardinality
 
@@ -45,6 +49,7 @@
 - Add one migration for `auth_refresh_sessions`.
 - Add one migration for `user_oauth_identities`.
 - Seed one deterministic development auth fixture user with a known login password while preserving existing user-management seeds.
+- Run one startup-only, idempotent bootstrap SQL pass after user, role, and workspace repositories initialize; it must insert missing bootstrap rows, backfill missing related grants for an existing username `admin`, and leave existing user profile rows unchanged.
 - Keep migrations additive and backward-compatible with the current SQLite file layout.
 
 ## Query And Performance Plan
@@ -67,6 +72,7 @@
 - Add one active internal auth fixture with a documented known password for internal-login proof.
 - Add one archived auth fixture to prove archived-login rejection.
 - Add one deterministic development OAuth2 profile for proof, and verify that first-login GitHub profiles can auto-provision an internal user when no matching email exists.
+- Add startup proofs that an empty database creates a usable `admin`, and that an existing username `admin` receives missing `ADMIN`, root workspace, and owner grants without creating a duplicate user.
 
 ## Validation Commands
 

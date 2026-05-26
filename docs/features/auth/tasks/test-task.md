@@ -22,6 +22,8 @@ Only split into multiple workers when contracts are stable, write scopes are dis
 - AC-AUTH-06 | phase: verify | owner: lead | scope: tron-backend/tests/auth_session_persistence.rs | command_ref: CMD-BE-TEST | status: done.
 - AC-AUTH-07 | phase: verify | owner: lead | scope: tron-backend/tests/auth_security_boundary.rs | command_ref: CMD-BE-TEST | status: done.
 - AC-AUTH-08 | phase: verify | owner: lead | scope: tron-frontend/tests/auth-smoke.spec.ts; tron-backend/tests/auth_user_management_boundary.rs | command_ref: CMD-FE-AUTH-BROWSER | status: done.
+- AC-AUTH-09 | phase: verify | owner: lead | scope: tron-frontend/tests/auth-smoke.spec.ts | command_ref: CMD-FE-AUTH-BROWSER | status: done.
+- AC-AUTH-10 | phase: verify | owner: lead | scope: tron-backend/tests/bootstrap_admin.rs; tron-frontend/tests/auth-smoke.spec.ts | command_ref: CMD-BE-BOOTSTRAP-ADMIN | status: done.
 
 ## Worktree Notes
 

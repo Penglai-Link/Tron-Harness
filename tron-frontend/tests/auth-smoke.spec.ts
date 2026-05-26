@@ -43,6 +43,45 @@ const oauthUser = {
   },
 };
 
+const unassignedSpaceUser = {
+  ...authUser,
+  user: {
+    ...authUser.user,
+    displayName: "Unassigned Operator",
+    email: "unassigned.operator@tron.ai",
+    roleCodes: ["VIEWER"],
+    spaceCodes: [],
+    userCode: "USR-AUTH-0002",
+    username: "unassigned.operator",
+  },
+};
+
+const nonAdminUser = {
+  ...authUser,
+  user: {
+    ...authUser.user,
+    displayName: "Developer Operator",
+    email: "developer.operator@tron.ai",
+    roleCodes: ["DEVELOPER"],
+    spaceCodes: ["PLATFORM"],
+    userCode: "USR-DEVELOPER-0001",
+    username: "developer.operator",
+  },
+};
+
+const unassignedPlatformAdminUser = {
+  ...authUser,
+  user: {
+    ...authUser.user,
+    displayName: "Bootstrap Admin",
+    email: "admin@tron.ai",
+    roleCodes: ["ADMIN"],
+    spaceCodes: [],
+    userCode: "USR-ADMIN",
+    username: "admin",
+  },
+};
+
 function delay(ms: number) {
   return new Promise((resolveDelay) => {
     setTimeout(resolveDelay, ms);
@@ -123,6 +162,7 @@ async function routeAuthApi(
   options: {
     expireFirstAdminUsersRequest?: boolean;
     loginGrantExpiresIn?: number;
+    loginSession?: typeof authUser;
     onOAuth2Authorize?: (url: string) => void;
     onRefreshGrantIssued?: (count: number) => void;
     refreshGrantExpiresIn?: number;
@@ -172,7 +212,7 @@ async function routeAuthApi(
   await page.route("**/api/v1/auth/login", async (route) => {
     const body = route.request().postDataJSON() as { login?: string; password?: string };
     if (body.login === "auth.operator" && body.password === "TronAuthPass123!") {
-      await fulfillJson(route, issueGrant(authUser, options.loginGrantExpiresIn ?? 900));
+      await fulfillJson(route, issueGrant(options.loginSession ?? authUser, options.loginGrantExpiresIn ?? 900));
       return;
     }
 
@@ -278,6 +318,14 @@ async function routeAuthApi(
       return;
     }
 
+    if (currentSession.user.spaceCodes.length === 0) {
+      await fulfillJson(route, successEnvelope({
+        primarySpaces: [],
+        secondarySpaces: [],
+      }));
+      return;
+    }
+
     await fulfillJson(route, successEnvelope({
       primarySpaces: [
         {
@@ -367,6 +415,9 @@ test("redirects anonymous users to login, signs in, reaches user management, and
 
   await expect(page.getByRole("heading", { name: /users/i }).first()).toBeVisible();
   await expect(page.getByRole("table")).toContainText("Auth Operator");
+  const primaryNavigation = page.getByRole("navigation", { name: /tron primary navigation/i });
+  await expect(primaryNavigation.getByRole("button", { name: /administration/i })).toBeVisible();
+  await expect(primaryNavigation.getByRole("link", { name: /^Users$/i })).toBeVisible();
   const header = page.locator("header");
   await expect(header.getByText("auth.operator@tron.ai")).toHaveCount(0);
   await expect(header.getByRole("button", { name: /^log out$/i })).toHaveCount(0);
@@ -382,6 +433,78 @@ test("redirects anonymous users to login, signs in, reaches user management, and
 
   await page.goto(`${frontendBaseUrl}/settings/models`);
   await expect(page).toHaveURL(/\/login\?redirect=%2Fsettings%2Fmodels$/);
+});
+
+test("blocks authenticated users without assigned spaces on an authorization request page", async ({ page }) => {
+  await routeAuthApi(page, {
+    loginSession: unassignedSpaceUser,
+  });
+
+  await page.goto(`${frontendBaseUrl}/dashboard`);
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/);
+
+  await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
+  await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
+  await page.getByRole("button", { name: /sign in/i }).click();
+
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("heading", { name: /workspace authorization required/i })).toBeVisible();
+  await expect(page.getByText("Unassigned Operator")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: /tron primary navigation/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /open workspace selector/i })).toHaveCount(0);
+
+  await page.goto(`${frontendBaseUrl}/admin/users`);
+  await expect(page.getByRole("heading", { name: /workspace authorization required/i })).toBeVisible();
+  await expect(page.getByRole("table")).toHaveCount(0);
+
+  await page.getByRole("button", { name: /^log out$/i }).click();
+  await expect(page).toHaveURL(/\/login/);
+});
+
+test("allows platform admins to bypass the no-space authorization page", async ({ page }) => {
+  await routeAuthApi(page, {
+    loginSession: unassignedPlatformAdminUser,
+  });
+
+  await page.goto(`${frontendBaseUrl}/dashboard`);
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/);
+
+  await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
+  await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
+  await page.getByRole("button", { name: /sign in/i }).click();
+
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("heading", { name: /workspace authorization required/i })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: /tron primary navigation/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /open workspace selector/i })).toBeVisible();
+});
+
+test("hides administration navigation for non-admin users", async ({ page }) => {
+  await routeAuthApi(page, {
+    loginSession: nonAdminUser,
+  });
+
+  await page.goto(`${frontendBaseUrl}/dashboard`);
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/);
+
+  await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
+  await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
+  await page.getByRole("button", { name: /sign in/i }).click();
+
+  await expect(page).toHaveURL(/\/dashboard$/);
+  const primaryNavigation = page.getByRole("navigation", { name: /tron primary navigation/i });
+  await expect(primaryNavigation).toBeVisible();
+  await expect(primaryNavigation.getByRole("link", { name: /^Dashboard$/i })).toBeVisible();
+  await expect(primaryNavigation.getByRole("button", { name: /administration/i })).toHaveCount(0);
+  await expect(primaryNavigation.getByRole("link", { name: /^Users$/i })).toHaveCount(0);
+  await expect(primaryNavigation.getByRole("link", { name: /^Roles$/i })).toHaveCount(0);
+  await expect(primaryNavigation.getByRole("link", { name: /^Audit Logs$/i })).toHaveCount(0);
+  await expect(primaryNavigation.getByRole("link", { name: /^Workspace$/i })).toHaveCount(0);
+
+  await page.goto(`${frontendBaseUrl}/admin/users`);
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole("status").filter({ hasText: /access restricted/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /users/i })).toHaveCount(0);
 });
 
 test("supports oauth2 entry and lands on the intended protected route", async ({ page }) => {

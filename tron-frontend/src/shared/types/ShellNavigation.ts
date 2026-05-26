@@ -10,5 +10,6 @@ export interface TronNavItem {
 export interface TronNavSection {
   label: string;
   items: TronNavItem[];
+  requiredRoleCodes?: string[];
   translationKey: string;
 }

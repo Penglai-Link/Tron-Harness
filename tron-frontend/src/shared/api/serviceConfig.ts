@@ -12,6 +12,7 @@ import {
   type EndpointParams,
   parseEndpoint,
 } from "@/shared/api/httpClient";
+import { useToast } from "@/shared/ui/Toast";
 
 export type ServiceDataSource = "mock" | "api";
 
@@ -109,8 +110,10 @@ function resolveEndpoint(endpoint: string, params?: EndpointParams) {
 }
 
 export function useServiceQuery<T>({ apiInitialData, domain, endpoint, mockData, params, deps = [], select = selectApiData<T> }: ServiceQueryOptions<T>): T {
+  const toast = useToast();
   const dataSource = getServiceDataSource(domain);
-  const shouldUseApiInitialData = dataSource === "api" && apiInitialData !== undefined;
+  const shouldUseMockData = dataSource === "mock";
+  const lastFailureToastKey = useRef<string | null>(null);
   const apiInitialDataRef = useRef(apiInitialData);
   const mockDataRef = useRef(mockData);
   const selectRef = useRef(select);
@@ -120,14 +123,15 @@ export function useServiceQuery<T>({ apiInitialData, domain, endpoint, mockData,
   selectRef.current = select;
 
   const initialValue = useMemo(
-    () => (shouldUseApiInitialData ? apiInitialDataRef.current?.() : mockDataRef.current()) as T,
-    [shouldUseApiInitialData, ...deps],
+    () => (shouldUseMockData ? mockDataRef.current() : apiInitialDataRef.current?.()) as T,
+    [shouldUseMockData, ...deps],
   );
   const [data, setData] = useState<T>(initialValue);
   const paramsKey = JSON.stringify(params ?? {});
   const request = useMemo(() => resolveEndpoint(endpoint, params), [endpoint, paramsKey]);
 
   useEffect(() => {
+    lastFailureToastKey.current = null;
     setData(initialValue);
   }, [initialValue]);
 
@@ -152,16 +156,24 @@ export function useServiceQuery<T>({ apiInitialData, domain, endpoint, mockData,
         return response.json() as Promise<T>;
       })
       .then((payload) => {
+        lastFailureToastKey.current = null;
         setData(selectRef.current(payload));
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        console.warn(`[services] API request failed for ${domain}.`, error);
-        if (shouldUseApiInitialData) setData(initialValue);
+        const message = error instanceof Error
+          ? error.message
+          : `[services] API request failed for ${domain}.`;
+        const toastKey = `${request.method} ${request.url}: ${message}`;
+        if (lastFailureToastKey.current === toastKey) return;
+        lastFailureToastKey.current = toastKey;
+        toast.error(message, {
+          title: "API request failed",
+        });
       });
 
     return () => controller.abort();
-  }, [dataSource, domain, initialValue, request.method, request.url, shouldUseApiInitialData]);
+  }, [dataSource, domain, request.method, request.url, toast]);
 
   return data;
 }

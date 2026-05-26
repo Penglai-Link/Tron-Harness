@@ -8,20 +8,20 @@
 - main_codex_runtime_name: lead-agent
 - git_skill: eliteforge-git-feature-oriented-lite-spec
 - execution_mode: solo
-- main_branch: feature/clouds3n/auth/base
-- main_worktree_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/auth/base
+- main_branch: feature/clouds3n/unassigned-space-authorization/base
+- main_worktree_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/unassigned-space-authorization/base
 - status: complete
 
 ## Repository State
 
 - default_branch: master
 - base_ref: master
-- current_branch: feature/clouds3n/auth/base
-- note: the interrupted auth pass first surfaced on the root repository worktree while still on `master`; the current 2026-05-22 evolution runs in the mirrored `feature/clouds3n/auth/base` worktree and is bounded to frontend session lifecycle recovery, so no worker worktrees are planned for this slice.
+- current_branch: feature/clouds3n/unassigned-space-authorization/base
+- note: the 2026-05-26 evolution is bounded to a frontend protected-route guard, authorization-request page, and startup bootstrap admin initialization. Explorer subagents provided read-only context; implementation stayed solo because the AC slices touch tightly coupled auth, startup, and proof paths where worker worktree fan-out would not reduce risk or wall-clock materially.
 
 ## Multi-Agent Base Branch
 
-- branch: feature/clouds3n/auth/base
+- branch: feature/clouds3n/unassigned-space-authorization/base
 - base_ref: master
 - merge_strategy: lead-local commits on the main feature branch
 - conflict_owner: Main Agent
@@ -42,6 +42,8 @@
 | AC-AUTH-06 | solo | lead | trivial additive SQLite auth persistence slice with no delegation benefit | not_applicable | complete |
 | AC-AUTH-07 | solo | lead | trivial auth rejection and security-boundary slice kept in one lead-owned backend proof pass | not_applicable | complete |
 | AC-AUTH-08 | solo | lead | trivial frontend-only lifecycle regression slice covering idle renewal, stale-token retry, reload, and logout proof | not_applicable | complete |
+| AC-AUTH-09 | solo | lead | trivial bounded frontend-only protected-route guard and Playwright proof; explorer subagents were read-only and implementation write scope is tightly coupled | not_applicable | complete |
+| AC-AUTH-10 | solo | lead | trivial tightly coupled startup bootstrap plus route-guard exception slice spanning backend SQL, one integration test, and one browser proof | not_applicable | complete |
 
 ## Branch And Path Rules
 

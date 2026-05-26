@@ -23,11 +23,8 @@ use tron_backend::{
     },
     app::build_router,
     application::{
-        app::AppRepository,
-        role::RoleRepository,
-        user::UserRepository,
-        variable::VariableRepository,
-        workspace::WorkspaceRepository,
+        app::AppRepository, role::RoleRepository, user::UserRepository,
+        variable::VariableRepository, workspace::WorkspaceRepository,
     },
     config::{AppConfig, AuthConfig, GitHubOAuthConfig},
     domain::{
@@ -447,8 +444,8 @@ fn seeded_auth_user(
         vec!["ADMIN", "DEVELOPER"],
         vec!["PLATFORM", "DATA"],
     );
-    user.password_hash = bcrypt::hash(AUTH_PASSWORD, 4)
-        .expect("auth seed password hash should be generated");
+    user.password_hash =
+        bcrypt::hash(AUTH_PASSWORD, 4).expect("auth seed password hash should be generated");
     user
 }
 

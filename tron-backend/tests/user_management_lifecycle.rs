@@ -428,13 +428,8 @@ async fn archive_then_restore_transitions_user_status() {
         "TDD-UM-02 RED: restore transition endpoint is missing",
     );
 
-    let detail_response = request_with_config(
-        config,
-        Method::GET,
-        "/api/v1/admin/users/USR-0009",
-        None,
-    )
-    .await;
+    let detail_response =
+        request_with_config(config, Method::GET, "/api/v1/admin/users/USR-0009", None).await;
     assert_eq!(detail_response.status(), StatusCode::OK);
     let json = response_json(detail_response).await;
     assert_eq!(json["data"]["status"], "Active");

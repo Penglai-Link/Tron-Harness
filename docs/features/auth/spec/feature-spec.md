@@ -18,9 +18,15 @@
 - dependency_features: `user-management-model`
 - dependency_contracts: `AGENTS.md` uniform response envelope; existing `tron-frontend` route registry and shell; existing `tron-backend` user repository, bcrypt password model, and SQLite persistence
 
+## Product Source Slices
+
+- `docs/prd.typ#Feature: Console Access and Identity`
+- `docs/prd.typ#Key Requirements`
+- `docs/brainstorm/unassigned-space-authorization/2026-05-26-15-29-24.md#Decision`
+
 ## Requirement
 
-Create a real authentication feature for Tron so every non-auth page requires a valid JWT-backed session, internal operators can sign in with existing user-management accounts, protected backend APIs authenticate only through `Authorization: Bearer <access-jwt>`, refresh uses HttpOnly cookies only, the frontend silently renews access before idle expiry and retries the first expired-request 401 once after refresh, and enterprise OAuth2 sign-in, starting with GitHub OAuth, lands in the same session model without inventing a second user source.
+Create a real authentication feature for Tron so every non-auth page requires a valid JWT-backed session, internal operators can sign in with existing user-management accounts, protected backend APIs authenticate only through `Authorization: Bearer <access-jwt>`, refresh uses HttpOnly cookies only, the frontend silently renews access before idle expiry and retries the first expired-request 401 once after refresh, enterprise OAuth2 sign-in starts with GitHub OAuth and lands in the same session model without inventing a second user source, and first deployment has a bootstrap platform admin that can grant workspace access.
 
 ## Scope Boundary
 
@@ -31,7 +37,7 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 - Existing user-management users are the source of truth for internal operators.
 - Local development should stay usable on plain HTTP, so refresh-cookie security flags must remain configurable for the dev environment.
 - OAuth2 provider details can be driven by backend environment variables, with GitHub as the first live provider and any deterministic dev provider reserved for automated proof only.
-- Existing role and space assignments remain managed data, not API authorization gates, in this slice.
+- Existing role and space assignments remain managed data, not API authorization gates, except the frontend no-space guard and platform-admin bypass in this slice.
 
 ## In Scope
 
@@ -45,6 +51,8 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 - OAuth2 authorize and callback endpoints, with GitHub as the first live provider and provider-subject reuse, verified-email matching, or first-login internal-user auto-provision.
 - Persistent refresh-session storage and persistent OAuth2 identity links.
 - Frontend route guarding, login bootstrap, logout flow, callback completion page, and redirect preservation.
+- Dedicated authorization-request page for authenticated users whose session has no assigned workspace spaces, before any protected shell or business page renders.
+- Idempotent startup bootstrap for the `admin` platform administrator, fixed role catalog, root workspace access, and owner grant when the database lacks those rows.
 - Backend protection for user-management APIs that now require an authenticated session.
 
 ## Out Of Scope
@@ -79,6 +87,9 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
   - Frontend protected pages derive access from a freshly issued access token obtained via login, refresh, or OAuth callback bootstrap.
   - Protected backend routes accept only `Authorization: Bearer <access-jwt>`, and successful auth must expose the operator identity to downstream handlers.
   - Internal and OAuth2 login must converge on the same session and user payload.
+  - Authenticated users with an empty `spaceCodes` assignment list are not authorized to operate the console and must be stopped before protected shell routes render.
+  - Platform administrators with the fixed `ADMIN` role can bypass the no-space guard so an empty deployment still has an operator who can assign workspace access.
+  - Backend startup must create the bootstrap `admin` account and required role or workspace grants only when those rows are absent, without overwriting existing operator-managed data.
   - Refresh cookies are used only by auth lifecycle endpoints and must not be required by general business APIs.
   - First-time GitHub sign-in may auto-provision one internal user with minimal default assignments, and later sign-ins must reuse the durable provider subject link.
 - State transitions:
@@ -92,6 +103,7 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 - `/login`: login surface for internal credentials, GitHub OAuth provider actions, busy-state feedback, and visible failure feedback.
 - `/auth/callback`: transient callback route that finalizes OAuth2 login and resumes the intended protected destination.
 - Protected shell routes: every existing route except `/login` and `/auth/callback` waits for session bootstrap and redirects anonymous users.
+- No-space authorization page: any protected route renders a standalone authorization request page when the authenticated user has no assigned spaces, without primary navigation, workspace switcher, settings shortcuts, or page content.
 - Backend modules:
   - auth HTTP handlers, bearer-auth middleware, auth grant responses, and request auth context extractor.
   - auth application service, token codec, provider adapters, and persistence extensions.
@@ -106,6 +118,7 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 - The current auth delivery still mixes bearer and cookie access-token paths; the next evolution should remove access-token cookies entirely and keep only the refresh cookie for bootstrap or renewal.
 - Seeded users exist under `tron-backend/src/adapters/outbound/persistence/sqlite/seed.rs`, but the feature currently lacks any login contract or known auth fixture conventions.
 - The current frontend delivery refreshes only during bootstrap and marks the session unauthenticated on any protected-route 401, so long-lived admin forms can still lose in-progress edits unless access renewal and expired-request retry become proactive.
+- Startup already runs repository migrations while building `AppState`, so bootstrap initialization can execute after the user, role, and workspace tables exist and before protected routes are served.
 
 ## Open Decisions
 
