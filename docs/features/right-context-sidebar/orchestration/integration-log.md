@@ -11,6 +11,7 @@
 | event | ac_refs | source | target | summary | status |
 | --- | --- | --- | --- | --- | --- |
 | plan-created | AC-RCS-01, AC-RCS-02, AC-RCS-03, AC-RCS-04, AC-RCS-05 | docs/features/right-context-sidebar | feature/clouds3n/right-context-sidebar/base | Base worktree and dispatch plan created before behavior-changing work. | done |
+| merge-shell-foundation | AC-RCS-01, AC-RCS-02, AC-RCS-03 | feature/clouds3n/right-context-sidebar/frontend/shell-foundation | feature/clouds3n/right-context-sidebar/base | Shell foundation worker merged at `2b20064` after RED/GREEN evidence and base verification. | done |
 
 ## Conflict Log
 
@@ -18,7 +19,9 @@
 
 ## Validation After Integration
 
-- Pending implementation.
+- AC-RCS-01, AC-RCS-02, AC-RCS-03: `rtk make fe-install` passed in base after the initial focused browser command reported missing frontend dependencies.
+- AC-RCS-01, AC-RCS-02, AC-RCS-03: `rtk npm --prefix tron-frontend exec playwright -- test right-context-sidebar.spec.ts --reporter=line` passed in base with 3 tests.
+- AC-RCS-01, AC-RCS-02, AC-RCS-03: `rtk make fe-check` passed in base; Vite emitted the existing chunk-size warning.
 
 ## Blockers
 
