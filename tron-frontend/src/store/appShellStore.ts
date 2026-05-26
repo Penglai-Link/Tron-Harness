@@ -16,6 +16,7 @@ interface AppShellState {
   openSections: Record<string, boolean>;
   selectedPrimarySpaceId: string;
   selectedSecondarySpaceId: string;
+  rightSidebarCollapsed: boolean;
   sidebarCollapsed: boolean;
   utilityPanel: string | null;
   workspaceSwitcherSnapshot: WorkspaceSwitcherData;
@@ -24,6 +25,7 @@ interface AppShellState {
   selectPrimarySpace: (primarySpaceId: string, secondarySpaceId: string) => void;
   syncSelectedWorkspace: (primarySpaceId: string, secondarySpaceId: string) => void;
   setAgentOpen: (open: boolean) => void;
+  setRightSidebarCollapsed: (collapsed: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setWorkspaceSwitcherSnapshot: (snapshot: WorkspaceSwitcherData) => void;
   toggleAgent: () => void;
@@ -40,6 +42,7 @@ export const useAppShellStore = create<AppShellState>()(
       openSections: { Core: true },
       selectedPrimarySpaceId: defaultPrimarySpaceId,
       selectedSecondarySpaceId: defaultSecondarySpaceId,
+      rightSidebarCollapsed: false,
       sidebarCollapsed: false,
       utilityPanel: null,
       workspaceSwitcherSnapshot: defaultWorkspaceSwitcherSnapshot,
@@ -69,6 +72,7 @@ export const useAppShellStore = create<AppShellState>()(
           selectedSecondarySpaceId: secondarySpaceId,
         }),
       setAgentOpen: (agentOpen) => set({ agentOpen }),
+      setRightSidebarCollapsed: (rightSidebarCollapsed) => set({ rightSidebarCollapsed }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       setWorkspaceSwitcherSnapshot: (workspaceSwitcherSnapshot) => set({ workspaceSwitcherSnapshot }),
       toggleAgent: () => set((state) => ({ agentOpen: !state.agentOpen })),
@@ -90,6 +94,7 @@ export const useAppShellStore = create<AppShellState>()(
         openSections: state.openSections,
         selectedPrimarySpaceId: state.selectedPrimarySpaceId,
         selectedSecondarySpaceId: state.selectedSecondarySpaceId,
+        rightSidebarCollapsed: state.rightSidebarCollapsed,
         sidebarCollapsed: state.sidebarCollapsed,
         workspaceSwitcherSnapshot: state.workspaceSwitcherSnapshot,
       }),
