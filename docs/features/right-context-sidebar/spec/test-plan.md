@@ -2,9 +2,9 @@
 
 ## Test Plan Decision
 
-- status: waiting_human_decision
-- approved_by:
-- approved_at:
+- status: approved
+- approved_by: clouds3n
+- approved_at: 2026-05-26
 
 Valid statuses: `waiting_human_decision`, `approved`, `approved_with_defaults`.
 
@@ -33,4 +33,4 @@ Valid statuses: `waiting_human_decision`, `approved`, `approved_with_defaults`.
 
 ## Open Decisions
 
-- Approve or revise the proof plan before task breakdown.
+- None.
