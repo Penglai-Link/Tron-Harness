@@ -3,7 +3,7 @@
 ## Instructions
 
 - Always use `Makefile` first to bulid,test and cleanup.
-- Use different port when already in use
+- Use a different available port if the default port is already in use, and ensure the frontend and backend port configuration remains synchronized.
 
 ## API
 
