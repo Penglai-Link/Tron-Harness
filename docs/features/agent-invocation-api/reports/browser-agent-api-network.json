@@ -1,0 +1,177 @@
+{
+  "clicks": [
+    "clicked Development OAuth2 provider on /login",
+    "landed on protected /agent route after OAuth callback",
+    "clicked Apps navigation item",
+    "navigated back to /agent on same 127.0.0.1 origin"
+  ],
+  "inputs": [
+    "filled login field with auth.operator on /login",
+    "filled password field with masked dev credential on /login",
+    "filled first visible shell/page text field with agent runtime"
+  ],
+  "network": [
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/auth/api/index.ts",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/auth/api/authApi.ts",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/admin/api/index.ts",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/shared/api/httpClient.ts",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/shared/api/serviceConfig.ts",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/admin/api/adminApi.ts",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:5173/api/v1/auth/refresh",
+      "status": 401
+    },
+    {
+      "consoleError": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/api/v1/auth/providers",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/api/v1/auth/oauth2/authorize/dev?redirect=%2Fagent",
+      "status": 303
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/api/v1/auth/oauth2/callback/dev?code=dev-oauth2-code&state=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJwcm92aWRlciI6ImRldiIsInJlZGlyZWN0X3BhdGgiOiIvYWdlbnQiLCJub25jZSI6Im9hdXRoLXN0YXRlLTE3Nzk4MTc0NTU4NTY1MzkwMDAiLCJleHAiOjE3Nzk4MTc3NTUsImlhdCI6MTc3OTgxNzQ1NSwia2luZCI6Im9hdXRoX3N0YXRlIn0.HDOTp_7Al-_G76ScP5JLDlKFSJ3lLiv_ukLDcK-utXY",
+      "status": 303
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/auth/api/index.ts",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/auth/api/authApi.ts",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/shared/api/httpClient.ts",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/shared/api/serviceConfig.ts",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/admin/api/index.ts",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/admin/api/adminApi.ts",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:5173/api/v1/auth/refresh",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/agent/api/index.ts",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/agent/api/agentApi.ts",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/app/api/index.ts",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/app/api/appApi.ts",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/auth/api/index.ts",
+      "status": 304
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/auth/api/authApi.ts",
+      "status": 304
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/admin/api/index.ts",
+      "status": 304
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/shared/api/httpClient.ts",
+      "status": 304
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/shared/api/serviceConfig.ts",
+      "status": 304
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/admin/api/adminApi.ts",
+      "status": 304
+    },
+    {
+      "method": "POST",
+      "url": "http://127.0.0.1:5173/api/v1/auth/refresh",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/agent/api/index.ts",
+      "status": 304
+    },
+    {
+      "method": "GET",
+      "url": "http://127.0.0.1:5173/src/domain/agent/api/agentApi.ts",
+      "status": 304
+    }
+  ],
+  "feedback": [
+    "agentBodyHasMainAgent=true",
+    "agentBodyHasAuthOperator=false",
+    "appsHeadingObserved=true",
+    "finalUrl=http://127.0.0.1:5173/agent",
+    "finalBodyHasMainAgent=true",
+    "finalBodySnippet=Enterprise/Platform/Tron Core CORE Dashboard Apps Tasks Automations AGENT OPERATIONS DATA ADMINISTRATION SYSTEM HEALTH 99.98% All services operational ACTIVE AGENTS 42 +3 since last hour PENDING TASKS 1,204 Avg processing time: 1.2s THROUGHPUT ANALYTICS RECENT ACTIVITY Deployment triggered in us-east-1 Main Agent Workspace Coordinator Today, 14:02 Assess the current load on the primary clusters and re-allocate resources if we are nearing the 80% threshold. us-east-1-alpha is currently at 84% CPU utilization. I am preparing a scale-up sequence to add 3 standard nodes. REASONING PROCESS Fetch metrics for primary clusters. Evaluate CPU and Memory over last 15m. Calculate standard no"
+  ],
+  "screenshotPath": "/Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/agent-framework/base/docs/features/agent-invocation-api/reports/browser-agent-api-shell.png"
+}

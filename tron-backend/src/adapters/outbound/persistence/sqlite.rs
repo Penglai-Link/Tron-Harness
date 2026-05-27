@@ -1,3 +1,4 @@
+mod agent_repository;
 mod app_repository;
 mod automation_repository;
 mod bootstrap;
@@ -11,6 +12,7 @@ mod user_repository;
 mod variable_repository;
 mod workspace_repository;
 
+pub use agent_repository::SqliteAgentRunRepository;
 pub use app_repository::SqliteAppRepository;
 pub use automation_repository::SqliteAutomationRepository;
 pub use bootstrap::bootstrap_platform_admin;

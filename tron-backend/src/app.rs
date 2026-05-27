@@ -10,6 +10,7 @@ use crate::{
                 users::routes as user_routes, variables::routes::routes as admin_variable_routes,
                 workspaces::routes as workspace_routes,
             },
+            agents::routes::routes as agent_routes,
             apps::routes::routes as app_routes,
             auth::{require_auth, routes as auth_routes},
             automations::routes as automation_routes,
@@ -21,13 +22,14 @@ use crate::{
         outbound::{
             crypto::BcryptPasswordHasher,
             persistence::{
-                SqliteAppRepository, SqliteAutomationRepository, SqliteModelRepository,
-                SqliteRoleRepository, SqliteSkillRegistryRepository, SqliteTaskRepository,
-                SqliteUserRepository, SqliteVariableRepository, SqliteWorkspaceRepository,
-                bootstrap_platform_admin,
+                SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
+                SqliteModelRepository, SqliteRoleRepository, SqliteSkillRegistryRepository,
+                SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
+                SqliteWorkspaceRepository, bootstrap_platform_admin,
             },
         },
     },
+    application::agent::AgentRunHistoryService,
     application::app::AppService,
     application::automation::AutomationService,
     application::model::ModelService,
@@ -58,6 +60,7 @@ static GLOBAL_MODEL_SERVICE: OnceLock<ModelService> = OnceLock::new();
 pub struct AppState {
     pub config: AppConfig,
     pub agui_events: Arc<AguiEventSink>,
+    pub agent_runs: AgentRunHistoryService,
     pub apps: AppService,
     pub automations: AutomationService,
     pub event_bus: EventBusHandle,
@@ -176,10 +179,12 @@ impl AppState {
         } else {
             build_model_service(&config.database_url, workspaces.clone())
         };
+        let agent_runs = build_agent_run_history_service(&config.database_url);
 
         Self {
             config,
             agui_events,
+            agent_runs,
             apps,
             automations,
             event_bus,
@@ -260,6 +265,12 @@ impl FromRef<AppState> for ModelService {
     }
 }
 
+impl FromRef<AppState> for AgentRunHistoryService {
+    fn from_ref(state: &AppState) -> Self {
+        state.agent_runs.clone()
+    }
+}
+
 pub fn build_router(config: AppConfig) -> Router {
     let state = AppState::new(config);
     let protected_routes = user_routes()
@@ -270,6 +281,7 @@ pub fn build_router(config: AppConfig) -> Router {
         .merge(workspace_routes())
         .merge(automation_routes())
         .merge(app_routes())
+        .merge(agent_routes())
         .merge(task_routes())
         .merge(variable_routes())
         .merge(skill_routes())
@@ -360,4 +372,10 @@ fn build_model_service(database_url: &str, workspaces: WorkspaceService) -> Mode
     let repository = SqliteModelRepository::connect(database_url)
         .expect("model SQLite repository should initialize");
     ModelService::new(repository, workspaces)
+}
+
+fn build_agent_run_history_service(database_url: &str) -> AgentRunHistoryService {
+    let repository = SqliteAgentRunRepository::connect(database_url)
+        .expect("agent run SQLite repository should initialize");
+    AgentRunHistoryService::new(repository)
 }
