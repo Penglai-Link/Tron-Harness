@@ -46,3 +46,4 @@ If you encounter anything counterintuitive, surprising or confusing in this proj
 <!-- Review note: `useServiceQuery` callers often pass inline `apiInitialData` factories; treating those factory references as hook dependencies caused API-mode pages to enter a maximum-update-depth loop. -->
 <!-- Review note: shell page config stores `rightPanel` by React node reference; page-level right panels must be memoized before `useConsoleShellConfig` registration or route renders can loop through parent shell state updates. -->
 <!-- Review note: frontend OAuth2 login normalizes the loopback host to `127.0.0.1`; browser checks must stay on that host after callback because switching back to `localhost` loses auth cookies. -->
+<!-- Review note: `make fe-clean` removes `tron-frontend/vite.config.d.ts`; a subsequent `make fe-check` can fail with TS6305 until `tsc -b tsconfig.node.json --force` regenerates the node project outputs. -->
