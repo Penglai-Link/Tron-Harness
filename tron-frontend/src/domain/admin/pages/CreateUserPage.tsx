@@ -141,7 +141,7 @@ export function CreateUserPage() {
             <Button type="button" variant="secondary" onClick={() => navigate("/admin/users")}>Cancel</Button>
             <Button type="submit" form="create-user-form" disabled={submitting}>
               <UserPlus size={16} aria-hidden="true" />
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? "Creating..." : "Create User"}
             </Button>
           </>
         )}

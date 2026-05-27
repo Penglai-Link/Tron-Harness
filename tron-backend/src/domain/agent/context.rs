@@ -1,0 +1,78 @@
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use super::{AgentKind, AgentMessage, AgentModelConfig, ToolObservation};
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EffectiveVariable {
+    pub key: String,
+    pub value: String,
+    pub source: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EffectiveSkill {
+    pub skill_name: String,
+    pub description: String,
+    pub instruction: Option<String>,
+    pub tool_names: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EffectiveTool {
+    pub tool_name: String,
+    pub description: String,
+    pub input_schema: Value,
+    pub skill_name: Option<String>,
+    pub required_variable_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentExecutionScope {
+    pub app_code: Option<String>,
+    pub repository_url: Option<String>,
+    pub local_directory: Option<String>,
+    pub branch_name: Option<String>,
+    pub task_code: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRunLimits {
+    pub max_steps: u32,
+    pub max_tool_calls: u32,
+}
+
+impl Default for AgentRunLimits {
+    fn default() -> Self {
+        Self {
+            max_steps: 8,
+            max_tool_calls: 4,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRunContext {
+    pub conversation_code: Option<String>,
+    pub run_code: String,
+    pub workspace_code: String,
+    pub user_code: Option<String>,
+    pub request_id: Option<String>,
+    pub stream_key: Option<String>,
+    pub agent_kind: AgentKind,
+    pub model: AgentModelConfig,
+    pub variables: Vec<EffectiveVariable>,
+    pub skills: Vec<EffectiveSkill>,
+    pub tools: Vec<EffectiveTool>,
+    pub execution_scope: AgentExecutionScope,
+    pub limits: AgentRunLimits,
+    pub messages: Vec<AgentMessage>,
+    pub observations: Vec<ToolObservation>,
+    pub started_at: String,
+}

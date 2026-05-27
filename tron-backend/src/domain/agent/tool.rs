@@ -1,0 +1,131 @@
+use std::{
+    collections::HashMap,
+    error::Error,
+    fmt::{self, Display, Formatter},
+    sync::{Arc, Mutex},
+};
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+
+use super::AgentRunContext;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolRequest {
+    pub tool_name: String,
+    pub input: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolObservation {
+    pub tool_name: String,
+    pub output: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolError {
+    MissingTool(String),
+    UnauthorizedTool(String),
+    ExecutionFailed(String),
+}
+
+impl Display for ToolError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::MissingTool(tool) => write!(f, "tool `{tool}` is not registered"),
+            Self::UnauthorizedTool(tool) => write!(f, "tool `{tool}` is not allowed"),
+            Self::ExecutionFailed(message) => f.write_str(message),
+        }
+    }
+}
+
+impl Error for ToolError {}
+
+pub trait Tool: Send + Sync {
+    fn name(&self) -> &str;
+    fn execute(
+        &self,
+        request: ToolRequest,
+        context: &AgentRunContext,
+    ) -> Result<ToolObservation, ToolError>;
+}
+
+pub struct InProcessTool<F>
+where
+    F: Fn(ToolRequest) -> Result<ToolObservation, ToolError> + Send + Sync + 'static,
+{
+    name: String,
+    handler: F,
+}
+
+impl<F> InProcessTool<F>
+where
+    F: Fn(ToolRequest) -> Result<ToolObservation, ToolError> + Send + Sync + 'static,
+{
+    pub fn new(name: impl Into<String>, handler: F) -> Self {
+        Self {
+            name: name.into(),
+            handler,
+        }
+    }
+}
+
+impl<F> Tool for InProcessTool<F>
+where
+    F: Fn(ToolRequest) -> Result<ToolObservation, ToolError> + Send + Sync + 'static,
+{
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn execute(
+        &self,
+        request: ToolRequest,
+        _context: &AgentRunContext,
+    ) -> Result<ToolObservation, ToolError> {
+        (self.handler)(request)
+    }
+}
+
+#[derive(Default)]
+pub struct ToolRegistry {
+    tools: Mutex<HashMap<String, Arc<dyn Tool>>>,
+}
+
+impl ToolRegistry {
+    pub fn register(&self, tool: Arc<dyn Tool>) -> Result<(), ToolError> {
+        let name = tool.name().trim();
+        if name.is_empty() {
+            return Err(ToolError::ExecutionFailed("tool name is required".into()));
+        }
+        self.tools
+            .lock()
+            .expect("tool registry mutex poisoned")
+            .insert(name.to_string(), tool);
+        Ok(())
+    }
+
+    pub fn execute_allowed(
+        &self,
+        request: ToolRequest,
+        context: &AgentRunContext,
+    ) -> Result<ToolObservation, ToolError> {
+        if !context
+            .tools
+            .iter()
+            .any(|tool| tool.tool_name == request.tool_name)
+        {
+            return Err(ToolError::UnauthorizedTool(request.tool_name));
+        }
+        let tool = self
+            .tools
+            .lock()
+            .expect("tool registry mutex poisoned")
+            .get(&request.tool_name)
+            .cloned()
+            .ok_or_else(|| ToolError::MissingTool(request.tool_name.clone()))?;
+        tool.execute(request, context)
+    }
+}

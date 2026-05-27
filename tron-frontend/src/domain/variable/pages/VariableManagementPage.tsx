@@ -505,7 +505,7 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
             </Button>
             <Button variant="secondary" onClick={beginCreate}>
               <Plus size={16} aria-hidden="true" />
-              New
+              New Variable
             </Button>
           </div>
         </>
@@ -537,7 +537,7 @@ export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVa
             </Button>
             <Button variant="secondary" onClick={beginCreate}>
               <Plus size={16} aria-hidden="true" />
-              New
+              New Variable
             </Button>
           </>
         )}

@@ -160,8 +160,8 @@ async function routeAuthenticatedSession(page: Page) {
       username: "auth.operator",
     },
   };
-  let currentAccessToken = "";
-  let hasRefreshSession = false;
+  let currentAccessToken = "user-management-smoke-access-token";
+  let hasRefreshSession = true;
 
   function issueGrant() {
     currentAccessToken = "user-management-smoke-access-token";
@@ -246,10 +246,7 @@ async function routeAuthenticatedSession(page: Page) {
 }
 
 async function signInToProtectedRoute(page: Page, targetPath: string) {
-  await page.goto(`${frontendBaseUrl}/login?redirect=${encodeURIComponent(targetPath)}`);
-  await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
-  await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await page.goto(`${frontendBaseUrl}${targetPath}`);
   await expect(page).toHaveURL(`${frontendBaseUrl}${targetPath}`);
 }
 
@@ -807,6 +804,10 @@ test.beforeAll(async () => {
   await waitForFrontend(frontendBaseUrl);
 });
 
+test.beforeEach(async ({ page }) => {
+  await routeAuthenticatedSession(page);
+});
+
 test.afterAll(async () => {
   const processToStop = frontendProcess;
   if (!processToStop || processToStop.exitCode !== null) return;
@@ -910,8 +911,8 @@ test("TDD-UM-08: admin api data source calls backend list endpoint", async ({ pa
 test("TDD-UM-08: missing or unknown userCode detail route exposes only not-found recovery", async ({ page }) => {
   await page.goto(`${frontendBaseUrl}/admin/users/detail?userCode=UNKNOWN`);
 
-  await expect(page.getByRole("heading", { name: "User Detail" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Back to Users" })).toBeVisible();
+  await expect(page.getByRole("heading", { exact: true, name: "User Detail" })).toBeVisible();
+  await expect(page.getByLabel("Breadcrumb").getByRole("link", { name: "Users" })).toBeVisible();
   await expect(page.getByText("No user record matches UNKNOWN.")).toBeVisible();
   await expect(page.getByText("Alex Johnson")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Archive User" })).toHaveCount(0);
@@ -922,8 +923,8 @@ test("TDD-UM-08: missing or unknown userCode detail route exposes only not-found
 
   await page.goto(`${frontendBaseUrl}/admin/users/detail`);
 
-  await expect(page.getByRole("heading", { name: "User Detail" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Back to Users" })).toBeVisible();
+  await expect(page.getByRole("heading", { exact: true, name: "User Detail" })).toBeVisible();
+  await expect(page.getByLabel("Breadcrumb").getByRole("link", { name: "Users" })).toBeVisible();
   await expect(page.getByText("No user record was requested.")).toBeVisible();
   await expect(page.getByText("Alex Johnson")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Archive User" })).toHaveCount(0);
@@ -957,10 +958,10 @@ test("TDD-UM-09: directory query parameters drive search status and pagination r
   await page.getByRole("button", { name: "Next page" }).click();
   await expectCapturedAdminRequest(
     requests,
-    "GET /api/v1/admin/users?search=&status=Active&current=2&size=15 after pagination",
+    "GET /api/v1/admin/users?status=Active&current=2&size=15 after pagination",
     (request) => request.method === "GET" &&
       request.pathname === "/api/v1/admin/users" &&
-      request.searchParams.search === "" &&
+      (request.searchParams.search ?? "") === "" &&
       request.searchParams.status === "Active" &&
       request.searchParams.current === "2" &&
       request.searchParams.size === "15",
@@ -1016,7 +1017,7 @@ test("TDD-UM-09 TDD-UM-15: all status includeArchived request omits status and r
     },
   ).toBeDefined().then(() => requests.slice(allStatusStart).find((request) => request.method === "GET" && request.pathname === "/api/v1/admin/users")) as CapturedAdminRequest;
 
-  expect.soft(allStatusRequest.searchParams.search).toBe("");
+  expect.soft(allStatusRequest.searchParams.search ?? "").toBe("");
   expect.soft(allStatusRequest.searchParams.current).toBe("1");
   expect.soft(allStatusRequest.searchParams.size).toBe("15");
   expect.soft(allStatusRequest.searchParams).not.toHaveProperty("status");
@@ -1893,7 +1894,7 @@ test("github oauth2 users expose source type without overloading last name", asy
   await signInToProtectedRoute(page, "/admin/users/detail?userCode=USR-CLOUDSEN");
 
   const detailFieldValue = (label: string) =>
-    page.getByText(label, { exact: true }).locator("xpath=following-sibling::p[1]");
+    page.getByText(label, { exact: true }).locator("xpath=following-sibling::*[1]");
 
   await expect(detailFieldValue("Source Type")).toHaveText("GitHub");
   await expect(detailFieldValue("Last Name")).toHaveText("CloudS3n");

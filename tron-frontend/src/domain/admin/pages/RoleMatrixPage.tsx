@@ -581,7 +581,7 @@ export function RoleMatrixPage() {
               onClick={() => runDebouncedAction("header-add-role", addCustomRole)}
             >
               <Plus size={16} aria-hidden="true" />
-              New
+              Add Role
             </Button>
             <Button
               className={HEADER_ACTION_BUTTON_CLASS}
@@ -658,7 +658,7 @@ export function RoleMatrixPage() {
             <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">Search roles, focus domains, and edit permission grants directly from the matrix.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <SearchField placeholder="Search roles, codes, or descriptions..." value={query} onChange={setQuery} />
+            <SearchField ariaLabel="Search roles" placeholder="Search roles, codes, or descriptions..." value={query} onChange={setQuery} />
             <SelectInput aria-label="Filter by role type" className="h-9 min-w-36" value={roleType} onChange={(event) => setRoleType(event.target.value as RoleTypeFilter)}>
               {ROLE_TYPE_OPTIONS.map((option) => <option key={option}>{option}</option>)}
             </SelectInput>

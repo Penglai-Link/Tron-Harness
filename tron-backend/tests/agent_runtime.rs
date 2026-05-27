@@ -2,11 +2,13 @@ use std::{sync::Arc, time::Duration};
 
 use serde_json::json;
 use tron_backend::{
+    adapters::outbound::model::{chat_completions_request, embeddings_request, responses_request},
+    application::agent::{ModelClient, ReactAgentBuilder},
     domain::agent::{
         AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig, AgentModelProtocol,
         AgentRunContext, AgentRunLimits, EffectiveSkill, EffectiveTool, EffectiveVariable,
-        InProcessTool, ModelClient, ModelRequest, ModelResponse, ReactAgentBuilder, ToolError,
-        ToolObservation, ToolRegistry, ToolRequest,
+        InProcessTool, ModelRequest, ModelResponse, ToolError, ToolObservation, ToolRegistry,
+        ToolRequest,
     },
     shared::{
         event_bus::{BusRouteClass, EventBusConfig, EventBusRuntimeBuilder, RecordingEventSink},
@@ -251,15 +253,15 @@ async fn model_request_builders_use_frozen_model_config() {
         }],
     };
 
-    let chat = config.chat_completions_request(&request);
+    let chat = chat_completions_request(&config, &request);
     assert_eq!(chat["model"], json!("gpt-test"));
     assert_eq!(chat["tools"][0]["function"]["name"], json!("echo"));
 
-    let responses = config.responses_request(&request);
+    let responses = responses_request(&config, &request);
     assert_eq!(responses["model"], json!("gpt-test"));
     assert_eq!(responses["input"][0]["content"], json!("hi"));
 
-    let embeddings = config.embeddings_request("embed me");
+    let embeddings = embeddings_request(&config, "embed me");
     assert_eq!(embeddings["model"], json!("gpt-test"));
     assert_eq!(embeddings["input"], json!("embed me"));
 }

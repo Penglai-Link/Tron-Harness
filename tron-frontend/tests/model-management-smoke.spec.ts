@@ -16,6 +16,31 @@ let frontendProcess: ChildProcessWithoutNullStreams | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
 
+async function stopFrontend() {
+  const processToStop = frontendProcess;
+  if (!processToStop || processToStop.exitCode !== null || processToStop.signalCode !== null) return;
+
+  const processExited = new Promise((resolveProcess) => {
+    processToStop.once("exit", resolveProcess);
+  });
+  if (processToStop.pid) {
+    process.kill(-processToStop.pid, "SIGTERM");
+  } else {
+    processToStop.kill("SIGTERM");
+  }
+  await Promise.race([
+    processExited,
+    new Promise((resolveProcess) => setTimeout(resolveProcess, 5_000)),
+  ]);
+  if (processToStop.exitCode === null && processToStop.signalCode === null) {
+    if (processToStop.pid) {
+      process.kill(-processToStop.pid, "SIGKILL");
+    } else {
+      processToStop.kill("SIGKILL");
+    }
+  }
+}
+
 type ModelScopeKind = "PLATFORM" | "WORKSPACE";
 type ModelSourceKind = "PLATFORM" | "LOCAL" | "INHERITED" | "OVERRIDE";
 type ModelProtocol = "OPENAI_COMPATIBLE" | "RESPONSES" | "RERANK";
@@ -996,6 +1021,11 @@ function createMockState() {
       const defaults = resolveEffectivePlatformDefaults();
       return sortModelRecords(platformModels.map((model) => buildPlatformView(model, defaults)));
     },
+    getPlatformModel(modelCode: string) {
+      const record = platformModels.find((item) => item.modelCode === modelCode);
+      if (!record) throw new Error("model was not found");
+      return buildPlatformView(record, resolveEffectivePlatformDefaults());
+    },
     updatePlatformModel(modelCode: string, payload: Record<string, unknown>) {
       const record = platformModels.find((item) => item.modelCode === modelCode);
       if (!record) throw new Error("model was not found");
@@ -1212,6 +1242,9 @@ async function routeApi(page: Page, configure?: (state: ReturnType<typeof create
     if (platformMutationMatch) {
       const [, modelCode, action] = platformMutationMatch;
       try {
+        if (method === "GET" && !action) {
+          return fulfillJson(route, successEnvelope(state.getPlatformModel(modelCode)));
+        }
         if (method === "PATCH" && !action) {
           return fulfillJson(route, successEnvelope(state.updatePlatformModel(modelCode, payload ?? {})));
         }
@@ -1269,8 +1302,9 @@ async function openModelsPage(page: Page) {
 test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
-  frontendProcess = spawn("npm", ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port)], {
+  frontendProcess = spawn("npm", ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
     cwd: frontendRoot,
+    detached: true,
     env: {
       ...process.env,
       CI: "1",
@@ -1286,9 +1320,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  if (!frontendProcess || frontendProcess.killed) return;
-  frontendProcess.kill("SIGTERM");
-  await new Promise((resolveProcess) => frontendProcess?.once("exit", resolveProcess));
+  await stopFrontend();
 });
 
 test("workspace models show local and inherited source semantics with inherited-from lineage", async ({ page }) => {

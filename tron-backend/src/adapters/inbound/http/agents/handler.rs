@@ -28,6 +28,8 @@ pub async fn create_agent_run(
         state.skills.clone(),
         state.agent_runs.clone(),
         state.event_bus.clone(),
+        state.agent_model_client.clone(),
+        state.agent_tool_registry.clone(),
     );
     match service
         .invoke(request, Some(auth.user().user_code.clone()))

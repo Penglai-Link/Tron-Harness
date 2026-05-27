@@ -32,6 +32,37 @@ const authenticatedSession = {
     username: "auth.operator",
   },
 };
+const authenticatedGrant = {
+  accessToken: "role-matrix-token",
+  tokenType: "Bearer",
+  expiresIn: 900,
+  session: authenticatedSession,
+};
+
+async function stopFrontend() {
+  const processToStop = frontendProcess;
+  if (!processToStop || processToStop.exitCode !== null || processToStop.signalCode !== null) return;
+
+  const processExited = new Promise((resolveProcess) => {
+    processToStop.once("exit", resolveProcess);
+  });
+  if (processToStop.pid) {
+    process.kill(-processToStop.pid, "SIGTERM");
+  } else {
+    processToStop.kill("SIGTERM");
+  }
+  await Promise.race([
+    processExited,
+    new Promise((resolveProcess) => setTimeout(resolveProcess, 5_000)),
+  ]);
+  if (processToStop.exitCode === null && processToStop.signalCode === null) {
+    if (processToStop.pid) {
+      process.kill(-processToStop.pid, "SIGKILL");
+    } else {
+      processToStop.kill("SIGKILL");
+    }
+  }
+}
 
 const permissionDomainList = ["Workspace", "Models", "Tasks", "Memory", "Skills", "MCP"];
 type RoleCatalogRecord = {
@@ -255,6 +286,10 @@ async function routeAuthenticatedSession(page: Page) {
     await fulfillJson(route, successEnvelope(authenticatedSession));
   });
 
+  await page.route("**/api/v1/auth/refresh", async (route) => {
+    await fulfillJson(route, successEnvelope(authenticatedGrant));
+  });
+
   await page.route("**/api/v1/auth/logout", async (route) => {
     await fulfillJson(route, successEnvelope({ loggedOut: true }));
   });
@@ -339,9 +374,10 @@ test.beforeAll(async () => {
 
   frontendProcess = spawn(
     "npm",
-    ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port)],
+    ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
     {
       cwd: frontendRoot,
+      detached: true,
       env: {
         ...process.env,
         CI: "1",
@@ -359,10 +395,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  if (!frontendProcess || frontendProcess.killed) return;
-
-  frontendProcess.kill("SIGTERM");
-  await new Promise((resolveProcess) => frontendProcess?.once("exit", resolveProcess));
+  await stopFrontend();
 });
 
 test("role matrix interactions stay real across the simplified matrix workspace", async ({ page }) => {

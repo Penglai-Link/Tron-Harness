@@ -777,7 +777,7 @@ export function WorkspaceManagementPage() {
             {treeLoading ? <Badge tone="accent">{pt("Loading")}</Badge> : null}
           </div>
           <div className="grid gap-3">
-            <SearchField ariaLabel={pt("Search workspaces")} placeholder={pt("Filter workspaces...")} value={searchInput} onChange={setSearchInput} onClear={clearWorkspaceSearch} />
+            <SearchField ariaLabel={pt("Search workspaces")} clearLabel={pt("Clear workspace search")} placeholder={pt("Filter workspaces...")} value={searchInput} onChange={setSearchInput} onClear={clearWorkspaceSearch} />
             <SelectInput aria-label={pt("Filter workspaces by status")} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as WorkspaceStatusFilter)}>
               <option value="All">{pt("All Status")}</option>
               {adminUserStatusOptions.map((status) => (

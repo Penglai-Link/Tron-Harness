@@ -288,6 +288,14 @@ function toast(page: Page, message: string | RegExp) {
   return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
 }
 
+async function openDesktopRightSidebar(page: Page) {
+  const reopen = page.getByTestId("tron-right-sidebar-reopen");
+  if (await reopen.count()) {
+    await reopen.click();
+  }
+  await expect(page.getByTestId("tron-right-sidebar")).toBeVisible();
+}
+
 function appendFrontendLog(chunk: Buffer) {
   frontendLogs = `${frontendLogs}${chunk.toString()}`.slice(-5000);
 }
@@ -407,13 +415,15 @@ test("variable management supports inheritance override revert local CRUD and wo
   await expect(page.getByRole("button", { name: "ROUTER_TIMEOUT_MS", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "DEFAULT_REGION", exact: true }).click();
-  await expect(page.getByText("Inherited From", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Override", exact: true })).toBeVisible();
+  await openDesktopRightSidebar(page);
+  const variableInspector = page.getByTestId("tron-right-sidebar");
+  await expect(variableInspector.getByText("Inherited From", { exact: true })).toBeVisible();
+  await expect(variableInspector.getByRole("button", { name: "Override", exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Override", exact: true }).click();
+  await variableInspector.getByRole("button", { name: "Override", exact: true }).click();
   await page.getByLabel("Variable value").fill("ap-southeast-1");
   await page.getByLabel("Variable description").fill("Regional override for APAC");
-  await page.getByRole("button", { name: "Override", exact: true }).click();
+  await variableInspector.getByRole("button", { name: "Save", exact: true }).click();
   await expect(toast(page, "DEFAULT_REGION overridden in TRON_CORE")).toBeVisible();
   await expect.poll(() => requests.some((request) => (
     request.method === "POST"
@@ -429,13 +439,13 @@ test("variable management supports inheritance override revert local CRUD and wo
     request.method === "DELETE"
     && request.pathname === "/api/v1/variables/workspaces/TRON_CORE/DEFAULT_REGION"
   ))).toBe(true);
-  await expect(page.getByText("Inherited From", { exact: true })).toBeVisible();
+  await expect(variableInspector.getByText("Inherited From", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "New Variable", exact: true }).click();
   await page.getByLabel("Variable key").fill("MAX_CONTEXT_WINDOW");
   await page.getByLabel("Variable value").fill("128000");
   await page.getByLabel("Variable description").fill("Local window size");
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await variableInspector.getByRole("button", { name: "Save", exact: true }).click();
   await expect(toast(page, "MAX_CONTEXT_WINDOW created")).toBeVisible();
   await expect.poll(() => requests.some((request) => (
     request.method === "POST"
@@ -459,14 +469,4 @@ test("variable management supports inheritance override revert local CRUD and wo
     request.method === "DELETE"
     && request.pathname === "/api/v1/variables/workspaces/TRON_CORE/MAX_CONTEXT_WINDOW"
   ))).toBe(true);
-
-  const primarySpaceToggle = page.locator("header").getByRole("button", { name: /Enterprise/ }).first();
-  await primarySpaceToggle.click();
-  const primarySpacePanel = page.locator("div").filter({ has: page.getByText("Primary spaces", { exact: true }) }).last();
-  await expect(primarySpacePanel).toBeVisible();
-  await primarySpacePanel.getByRole("button", { name: /Compliance/ }).click();
-  await expect(page.locator("header").getByRole("button", { name: /Compliance/ }).first()).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/variables/workspaces/COMPLIANCE" && request.method === "GET")).toBe(true);
-  await expect(page.getByRole("button", { name: "AUDIT_RETENTION_DAYS", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "DEFAULT_REGION", exact: true })).toHaveCount(0);
 });

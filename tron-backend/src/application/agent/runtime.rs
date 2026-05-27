@@ -1,0 +1,267 @@
+use std::{future::Future, pin::Pin, sync::Arc};
+
+use crate::{
+    domain::agent::{
+        AgentError, AgentMessage, AgentModelConfig, AgentRunContext, AgentRunResult, ModelRequest,
+        ModelResponse, ToolRegistry, ToolRequest,
+    },
+    shared::event_bus::{BusEventDraft, BusOutcome, BusRequestRef, EventBusHandle, PublishOutcome},
+};
+
+pub trait ModelClient: Send + Sync {
+    fn generate<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>>;
+}
+
+pub struct ReactAgentBuilder {
+    model_client: Arc<dyn ModelClient>,
+    tool_registry: Arc<ToolRegistry>,
+    event_bus: EventBusHandle,
+}
+
+impl ReactAgentBuilder {
+    pub fn new(
+        model_client: Arc<dyn ModelClient>,
+        tool_registry: Arc<ToolRegistry>,
+        event_bus: EventBusHandle,
+    ) -> Self {
+        Self {
+            model_client,
+            tool_registry,
+            event_bus,
+        }
+    }
+
+    pub fn build(self) -> Result<ReactAgent, AgentError> {
+        Ok(ReactAgent {
+            model_client: self.model_client,
+            tool_registry: self.tool_registry,
+            event_bus: self.event_bus,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct ReactAgent {
+    model_client: Arc<dyn ModelClient>,
+    tool_registry: Arc<ToolRegistry>,
+    event_bus: EventBusHandle,
+}
+
+impl ReactAgent {
+    pub async fn run(&self, mut context: AgentRunContext) -> Result<AgentRunResult, AgentError> {
+        validate_context(&context)?;
+        self.publish(&context, "agent.run.started", BusOutcome::Started, None)?;
+        let mut step_count = 0;
+        let mut tool_calls = 0;
+
+        loop {
+            if step_count >= context.limits.max_steps {
+                self.publish(
+                    &context,
+                    "agent.run.failed",
+                    BusOutcome::Failure,
+                    Some("max_steps_exceeded"),
+                )?;
+                return Err(AgentError::MaxStepsExceeded);
+            }
+            step_count += 1;
+            let request = model_request_from_context(&context);
+            self.publish(
+                &context,
+                "agent.model.requested",
+                BusOutcome::Started,
+                Some("model_requested"),
+            )?;
+            let response = match self.model_client.generate(&context.model, &request).await {
+                Ok(response) => response,
+                Err(message) => {
+                    self.publish(
+                        &context,
+                        "agent.run.failed",
+                        BusOutcome::Failure,
+                        Some("model_failure"),
+                    )?;
+                    return Err(AgentError::ModelFailure(message));
+                }
+            };
+            self.publish(
+                &context,
+                "agent.model.responded",
+                BusOutcome::Completed,
+                Some("model_responded"),
+            )?;
+
+            match response {
+                ModelResponse::FinalOutput(output) => {
+                    self.publish(
+                        &context,
+                        "agent.output.created",
+                        BusOutcome::Completed,
+                        Some("output_created"),
+                    )?;
+                    self.publish(
+                        &context,
+                        "agent.run.completed",
+                        BusOutcome::Completed,
+                        Some("run_completed"),
+                    )?;
+                    return Ok(AgentRunResult {
+                        run_code: context.run_code,
+                        conversation_code: context.conversation_code,
+                        workspace_code: context.workspace_code,
+                        final_output: output,
+                        step_count,
+                        observations: context.observations,
+                    });
+                }
+                ModelResponse::ToolCall(call) => {
+                    if tool_calls >= context.limits.max_tool_calls {
+                        self.publish(
+                            &context,
+                            "agent.run.failed",
+                            BusOutcome::Failure,
+                            Some("max_tool_calls_exceeded"),
+                        )?;
+                        return Err(AgentError::MaxStepsExceeded);
+                    }
+                    tool_calls += 1;
+                    self.publish(
+                        &context,
+                        "agent.tool.selected",
+                        BusOutcome::Progress,
+                        Some(call.tool_name.as_str()),
+                    )?;
+                    self.publish(
+                        &context,
+                        "agent.tool.started",
+                        BusOutcome::Started,
+                        Some(call.tool_name.as_str()),
+                    )?;
+                    match self.tool_registry.execute_allowed(
+                        ToolRequest {
+                            tool_name: call.tool_name,
+                            input: call.input,
+                        },
+                        &context,
+                    ) {
+                        Ok(observation) => {
+                            self.publish(
+                                &context,
+                                "agent.tool.completed",
+                                BusOutcome::Completed,
+                                Some(observation.tool_name.as_str()),
+                            )?;
+                            context.messages.push(AgentMessage::tool(format!(
+                                "tool:{}",
+                                observation.tool_name
+                            )));
+                            context.observations.push(observation);
+                            self.publish(
+                                &context,
+                                "agent.observation.created",
+                                BusOutcome::Progress,
+                                Some("observation_created"),
+                            )?;
+                        }
+                        Err(error) => {
+                            self.publish(
+                                &context,
+                                "agent.tool.failed",
+                                BusOutcome::Failure,
+                                Some("tool_failed"),
+                            )?;
+                            self.publish(
+                                &context,
+                                "agent.run.failed",
+                                BusOutcome::Failure,
+                                Some("tool_failure"),
+                            )?;
+                            return Err(error.into());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn publish(
+        &self,
+        context: &AgentRunContext,
+        event_name: &'static str,
+        outcome: BusOutcome,
+        summary: Option<&str>,
+    ) -> Result<(), AgentError> {
+        let mut draft = BusEventDraft::agui(event_name, "agent_runtime")
+            .outcome(outcome)
+            .subject("agent_run", context.run_code.clone())
+            .attr("workspace_code", context.workspace_code.clone())
+            .attr("agent_kind", "react")
+            .attr("runtime_kind", "in_process")
+            .attr("model_code", context.model.model_code.clone());
+        if let Some(summary) = summary {
+            draft = draft.summary(summary);
+        }
+        if let Some(conversation_code) = &context.conversation_code {
+            draft = draft.attr("conversation_code", conversation_code.clone());
+        }
+        if let Some(user_code) = &context.user_code {
+            draft = draft.attr("user_code", user_code.clone());
+        }
+        if let Some(app_code) = &context.execution_scope.app_code {
+            draft = draft.attr("app_code", app_code.clone());
+        }
+        if let Some(task_code) = &context.execution_scope.task_code {
+            draft = draft.attr("task_code", task_code.clone());
+        }
+        if let Some(stream_key) = &context.stream_key {
+            draft = draft.request(BusRequestRef::with_stream_key(stream_key.clone()));
+        }
+
+        match self.event_bus.publish(draft) {
+            PublishOutcome::Disabled | PublishOutcome::Accepted { .. } => Ok(()),
+            outcome => Err(AgentError::EventPublishFailed(format!("{outcome:?}"))),
+        }
+    }
+}
+
+fn validate_context(context: &AgentRunContext) -> Result<(), AgentError> {
+    if context.run_code.trim().is_empty() {
+        return Err(AgentError::InvalidConfiguration(
+            "runCode is required".into(),
+        ));
+    }
+    if context.workspace_code.trim().is_empty() {
+        return Err(AgentError::InvalidConfiguration(
+            "workspaceCode is required".into(),
+        ));
+    }
+    if context.model.model_name.trim().is_empty() {
+        return Err(AgentError::InvalidConfiguration(
+            "modelName is required".into(),
+        ));
+    }
+    if context.limits.max_steps == 0 {
+        return Err(AgentError::InvalidConfiguration(
+            "maxSteps must be greater than zero".into(),
+        ));
+    }
+    Ok(())
+}
+
+fn model_request_from_context(context: &AgentRunContext) -> ModelRequest {
+    let mut messages = context.messages.clone();
+    for observation in &context.observations {
+        messages.push(AgentMessage::tool(format!(
+            "tool:{}",
+            observation.tool_name
+        )));
+    }
+    ModelRequest {
+        messages,
+        tools: context.tools.clone(),
+    }
+}

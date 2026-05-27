@@ -21,6 +21,7 @@ use crate::{
         },
         outbound::{
             crypto::BcryptPasswordHasher,
+            model::OpenAiCompatibleModelClient,
             persistence::{
                 SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
                 SqliteModelRepository, SqliteRoleRepository, SqliteSkillRegistryRepository,
@@ -29,7 +30,7 @@ use crate::{
             },
         },
     },
-    application::agent::AgentRunHistoryService,
+    application::agent::{AgentRunHistoryService, ModelClient},
     application::app::AppService,
     application::automation::AutomationService,
     application::model::ModelService,
@@ -40,6 +41,7 @@ use crate::{
     application::variable::VariableService,
     application::workspace::WorkspaceService,
     config::AppConfig,
+    domain::agent::ToolRegistry,
     health::health,
     shared::{
         event_bus::{AguiEventSink, EventBusHandle, EventBusRuntimeBuilder},
@@ -60,7 +62,9 @@ static GLOBAL_MODEL_SERVICE: OnceLock<ModelService> = OnceLock::new();
 pub struct AppState {
     pub config: AppConfig,
     pub agui_events: Arc<AguiEventSink>,
+    pub agent_model_client: Arc<dyn ModelClient>,
     pub agent_runs: AgentRunHistoryService,
+    pub agent_tool_registry: Arc<ToolRegistry>,
     pub apps: AppService,
     pub automations: AutomationService,
     pub event_bus: EventBusHandle,
@@ -82,6 +86,8 @@ impl AppState {
         )
         .register_sink(agui_events.clone())
         .build();
+        let agent_model_client = Arc::new(OpenAiCompatibleModelClient::default());
+        let agent_tool_registry = Arc::new(ToolRegistry::default());
         let users = if config.database_url == ":memory:" {
             GLOBAL_USER_SERVICE
                 .get_or_init(|| build_user_service(&config, event_bus.clone()))
@@ -184,7 +190,9 @@ impl AppState {
         Self {
             config,
             agui_events,
+            agent_model_client,
             agent_runs,
+            agent_tool_registry,
             apps,
             automations,
             event_bus,

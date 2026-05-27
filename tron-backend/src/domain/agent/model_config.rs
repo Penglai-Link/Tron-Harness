@@ -1,0 +1,19 @@
+use serde::{Deserialize, Serialize};
+
+use super::AgentModelProtocol;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentModelConfig {
+    pub model_code: String,
+    pub protocol: AgentModelProtocol,
+    pub base_url: String,
+    pub api_path: Option<String>,
+    pub api_key: String,
+    pub model_name: String,
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<u32>,
+    pub top_p: Option<f64>,
+    pub timeout_ms: Option<u64>,
+    pub max_retries: Option<u32>,
+}

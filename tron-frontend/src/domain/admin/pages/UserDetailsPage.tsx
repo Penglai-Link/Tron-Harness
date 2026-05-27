@@ -493,7 +493,7 @@ export function UserDetailsPage() {
         actions={isEditingProfile ? (
           <>
             <Button type="button" variant="secondary" disabled={savingProfile} onClick={() => setProfileForm(null)}>Cancel</Button>
-            <Button type="button" disabled={savingProfile} aria-busy={savingProfile} onClick={() => void saveProfile()}>{savingProfile ? "Saving..." : "Save"}</Button>
+            <Button type="button" disabled={savingProfile} aria-busy={savingProfile} onClick={() => void saveProfile()}>{savingProfile ? "Saving Profile..." : "Save Profile"}</Button>
           </>
         ) : (
           <>
