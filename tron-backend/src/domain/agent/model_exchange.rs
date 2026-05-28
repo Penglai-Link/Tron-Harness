@@ -24,6 +24,36 @@ pub enum ModelResponse {
     ToolCall(ToolCall),
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelStreamEvent {
+    pub kind: ModelStreamEventKind,
+    pub delta: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ModelStreamEventKind {
+    Text,
+    Reasoning,
+}
+
+impl ModelStreamEvent {
+    pub fn text_delta(delta: impl Into<String>) -> Self {
+        Self {
+            kind: ModelStreamEventKind::Text,
+            delta: delta.into(),
+        }
+    }
+
+    pub fn reasoning_delta(delta: impl Into<String>) -> Self {
+        Self {
+            kind: ModelStreamEventKind::Reasoning,
+            delta: delta.into(),
+        }
+    }
+}
+
 impl ModelResponse {
     pub fn final_output(output: impl Into<String>) -> Self {
         Self::FinalOutput(output.into())

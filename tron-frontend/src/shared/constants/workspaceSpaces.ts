@@ -5,9 +5,6 @@ import type {
   WorkspaceSwitcherData,
 } from "@/shared/types/WorkspaceSpace";
 
-export const defaultPrimarySpaceId = "ENTERPRISE";
-export const defaultSecondarySpaceId = "TRON_CORE";
-
 export function getEmptyWorkspaceSwitcher(): WorkspaceSwitcherData {
   return {
     primarySpaces: [],

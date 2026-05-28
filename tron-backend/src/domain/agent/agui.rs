@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::Serialize;
+use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,4 +34,11 @@ pub struct AgentAguiEvent {
     pub occurred_at: String,
     pub outcome: String,
     pub metadata: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentAguiProtocolEvent {
+    pub sse_event: String,
+    pub data: Value,
 }

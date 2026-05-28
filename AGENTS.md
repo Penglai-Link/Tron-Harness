@@ -48,3 +48,5 @@ If you encounter anything counterintuitive, surprising or confusing in this proj
 <!-- Review note: frontend OAuth2 login normalizes the loopback host to `127.0.0.1`; browser checks must stay on that host after callback because switching back to `localhost` loses auth cookies. -->
 <!-- Review note: `make fe-clean` removes `tron-frontend/vite.config.d.ts`; a subsequent `make fe-check` can fail with TS6305 until `tsc -b tsconfig.node.json --force` regenerates the node project outputs. -->
 <!-- Review note: running Playwright against the whole `tron-frontend/tests` directory can stay silent for minutes; explicit spec-file groups give reliable progress output and still cover all specs. -->
+<!-- Review note: `cargo fmt --manifest-path tron-backend/Cargo.toml --check` currently reports pre-existing formatting drift in `tron-backend/tests/chat_management_api.rs`; avoid broad formatting unless that churn is intentional. -->
+<!-- Review note: Vite keeps the proxy target from its start environment; if chat stream returns 404 while backend route exists, start a fresh frontend port with TRON_FRONTEND_API_PROXY_TARGET pointing at the active backend. -->

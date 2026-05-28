@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod app;
 pub mod automation;
+pub mod chat;
 pub mod model;
 pub mod role;
 pub mod skill;

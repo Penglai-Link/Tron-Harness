@@ -1,5 +1,8 @@
-mod openai_compatible_model_client;
+mod http_model_client;
+mod protocol_adapters;
 
-pub use openai_compatible_model_client::{
-    OpenAiCompatibleModelClient, chat_completions_request, embeddings_request, responses_request,
+pub use http_model_client::{HttpModelClient, ProviderClient, ReqwestProviderClient};
+pub use protocol_adapters::{
+    ChatCompletionsAdapter, EmbeddingsAdapter, ModelProtocolAdapter, ResponsesAdapter,
+    chat_completions_request, embeddings_request, responses_request,
 };

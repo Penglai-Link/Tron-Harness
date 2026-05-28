@@ -10,6 +10,6 @@ pub use agui_stream::{AgentAguiStreamError, AgentAguiStreamService};
 pub use dto::{AgentInvocationCommand, AgentInvocationResult};
 pub use error::AgentInvocationError;
 pub use history::AgentRunHistoryService;
-pub use invocation::AgentInvocationService;
+pub use invocation::{AgentInvocationService, generate_agent_run_code};
 pub use port::AgentRunHistoryRepository;
-pub use runtime::{ModelClient, ReactAgentBuilder};
+pub use runtime::{ModelClient, ModelStreamSink, ReactAgentBuilder};

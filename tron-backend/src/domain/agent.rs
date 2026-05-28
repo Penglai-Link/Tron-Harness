@@ -9,7 +9,9 @@ mod model_exchange;
 mod run;
 mod tool;
 
-pub use agui::{AgentAguiEvent, AgentAguiEventSnapshot, AgentAguiStreamState};
+pub use agui::{
+    AgentAguiEvent, AgentAguiEventSnapshot, AgentAguiProtocolEvent, AgentAguiStreamState,
+};
 pub use context::{
     AgentExecutionScope, AgentRunContext, AgentRunLimits, EffectiveSkill, EffectiveTool,
     EffectiveVariable,
@@ -21,6 +23,8 @@ pub use history::{
 pub use kind::{AgentKind, AgentModelProtocol, AgentRuntimeKind};
 pub use message::AgentMessage;
 pub use model_config::AgentModelConfig;
-pub use model_exchange::{ModelRequest, ModelResponse, ToolCall};
+pub use model_exchange::{
+    ModelRequest, ModelResponse, ModelStreamEvent, ModelStreamEventKind, ToolCall,
+};
 pub use run::{AgentRunResult, AgentRunStatus};
 pub use tool::{InProcessTool, Tool, ToolError, ToolObservation, ToolRegistry, ToolRequest};

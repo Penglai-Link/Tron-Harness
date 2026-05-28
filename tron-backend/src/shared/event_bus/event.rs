@@ -563,7 +563,11 @@ fn validate_attr_list(
     for attr in attrs {
         let key = bounded_required("attr_key", &attr.key, max_key_bytes)?;
         ensure_safe_key(&key)?;
-        let value = bounded_required("attr_value", &attr.value, max_value_bytes)?;
+        let value = if field == "payload" {
+            bounded_required_preserving_whitespace("attr_value", &attr.value, max_value_bytes)?
+        } else {
+            bounded_required("attr_value", &attr.value, max_value_bytes)?
+        };
         total_bytes += key.len() + value.len();
         validated.push(BusEventAttr { key, value });
     }
@@ -597,6 +601,24 @@ fn ensure_safe_key(key: &str) -> Result<(), BusEventValidationError> {
         return Err(BusEventValidationError::ForbiddenField("attr_key"));
     }
     Ok(())
+}
+
+fn bounded_required_preserving_whitespace(
+    field: &'static str,
+    value: &str,
+    max_bytes: usize,
+) -> Result<String, BusEventValidationError> {
+    if value.is_empty() {
+        return Err(BusEventValidationError::MissingField(field));
+    }
+    if value.len() > max_bytes {
+        return Err(BusEventValidationError::Oversize {
+            field,
+            actual: value.len(),
+            limit: max_bytes,
+        });
+    }
+    Ok(value.to_string())
 }
 
 fn attr_bytes(attrs: &[BusEventAttr]) -> usize {

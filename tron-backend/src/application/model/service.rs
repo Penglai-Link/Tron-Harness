@@ -11,6 +11,7 @@ use url::Url;
 use crate::{
     application::workspace::WorkspaceService,
     domain::{
+        agent::{AgentModelConfig, AgentModelProtocol},
         model::{
             Model, ModelCapability, ModelError, ModelMutationResult, ModelProtocol, ModelScopeKind,
             ModelSelectOption, ModelSourceKind, ModelType, ModelVerifyStatus, ModelView,
@@ -425,6 +426,57 @@ impl ModelService {
                 enabled: record.enabled,
             })
             .collect())
+    }
+
+    pub fn default_text_agent_model_config(
+        &self,
+        workspace_code: &str,
+    ) -> Result<Option<AgentModelConfig>, ModelError> {
+        self.resolve_text_agent_model_config(workspace_code, None)
+    }
+
+    pub fn text_agent_model_config(
+        &self,
+        workspace_code: &str,
+        model_code: Option<&str>,
+    ) -> Result<Option<AgentModelConfig>, ModelError> {
+        self.resolve_text_agent_model_config(workspace_code, model_code)
+    }
+
+    fn resolve_text_agent_model_config(
+        &self,
+        workspace_code: &str,
+        model_code: Option<&str>,
+    ) -> Result<Option<AgentModelConfig>, ModelError> {
+        let workspace = self.active_workspace_detail(workspace_code)?;
+        let catalog_state = self.resolve_workspace_catalog_state(&workspace)?;
+        let requested_model_code = model_code.map(str::trim).filter(|value| !value.is_empty());
+        let resolved_model_code = if let Some(model_code) = requested_model_code {
+            model_code
+        } else {
+            let Some(default_model_code) = catalog_state
+                .catalog
+                .defaults
+                .iter()
+                .find(|default| default.model_type == ModelType::Text)
+                .and_then(|default| default.model_code.as_deref())
+            else {
+                return Ok(None);
+            };
+            default_model_code
+        };
+        let Some(record) = catalog_state.records.iter().find(|record| {
+            record.view.model_code == resolved_model_code
+                && record.view.enabled
+                && record.view.model_type == ModelType::Text
+        }) else {
+            return Ok(None);
+        };
+
+        Ok(agent_model_config_from_view(
+            &record.view,
+            &record.definition_model.api_key_ref,
+        ))
     }
 
     pub fn create_workspace_model(
@@ -1356,6 +1408,27 @@ fn build_workspace_source_label(source_kind: ModelViewSourceKind) -> &'static st
         ModelViewSourceKind::Inherited => "Inherited",
         ModelViewSourceKind::Override => "Override",
     }
+}
+
+fn agent_model_config_from_view(view: &ModelView, api_key: &str) -> Option<AgentModelConfig> {
+    let protocol = match (view.protocol, view.model_type) {
+        (ModelProtocol::OpenAiCompatible, ModelType::Text) => AgentModelProtocol::ChatCompletions,
+        (ModelProtocol::Responses, ModelType::Text) => AgentModelProtocol::Responses,
+        _ => return None,
+    };
+    Some(AgentModelConfig {
+        model_code: view.model_code.clone(),
+        protocol,
+        base_url: view.base_url.clone(),
+        api_path: view.api_path.clone(),
+        api_key: api_key.to_string(),
+        model_name: view.model_name.clone(),
+        temperature: view.temperature,
+        max_tokens: view.max_tokens,
+        top_p: view.top_p,
+        timeout_ms: view.timeout_ms,
+        max_retries: view.max_retries,
+    })
 }
 
 fn build_workspace_effective_view(

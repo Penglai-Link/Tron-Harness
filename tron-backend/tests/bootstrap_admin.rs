@@ -48,7 +48,7 @@ async fn startup_bootstraps_platform_admin_when_database_is_empty() {
     );
     assert_eq!(
         login_json["data"]["session"]["user"]["spaceCodes"],
-        json!(["ENTERPRISE"])
+        json!([])
     );
     assert_eq!(
         login_json["data"]["session"]["user"]["passwordResetRequired"],
@@ -65,23 +65,17 @@ async fn startup_bootstraps_platform_admin_when_database_is_empty() {
         .expect("admin role assignment should be queryable");
     assert_eq!(admin_role_count, 1);
 
-    let enterprise_count: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM workspaces WHERE workspace_code = 'ENTERPRISE' AND status = 'active'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("enterprise workspace should be queryable");
-    assert_eq!(enterprise_count, 1);
+    let workspace_count: i64 = connection
+        .query_row("SELECT COUNT(*) FROM workspaces", [], |row| row.get(0))
+        .expect("workspaces should be queryable");
+    assert_eq!(workspace_count, 0);
 
     let owner_count: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM workspace_user_access WHERE workspace_code = 'ENTERPRISE' AND user_code = 'USR-ADMIN' AND is_owner = 1",
-            [],
-            |row| row.get(0),
-        )
-        .expect("enterprise owner grant should be queryable");
-    assert_eq!(owner_count, 1);
+        .query_row("SELECT COUNT(*) FROM workspace_user_access", [], |row| {
+            row.get(0)
+        })
+        .expect("workspace owner grants should be queryable");
+    assert_eq!(owner_count, 0);
 
     let _ = fs::remove_file(database_path);
 }
@@ -143,7 +137,7 @@ async fn startup_backfills_existing_admin_related_data() {
     );
     assert_eq!(
         login_json["data"]["session"]["user"]["spaceCodes"],
-        json!(["ENTERPRISE"])
+        json!([])
     );
 
     let connection =
@@ -167,13 +161,11 @@ async fn startup_backfills_existing_admin_related_data() {
     assert_eq!(existing_role_count, 1);
 
     let existing_owner_count: i64 = connection
-        .query_row(
-            "SELECT COUNT(*) FROM workspace_user_access WHERE workspace_code = 'ENTERPRISE' AND user_code = 'CUSTOM-ADMIN' AND is_owner = 1",
-            [],
-            |row| row.get(0),
-        )
-        .expect("existing admin owner grant should be queryable");
-    assert_eq!(existing_owner_count, 1);
+        .query_row("SELECT COUNT(*) FROM workspace_user_access", [], |row| {
+            row.get(0)
+        })
+        .expect("workspace owner grants should be queryable");
+    assert_eq!(existing_owner_count, 0);
 
     let _ = fs::remove_file(database_path);
 }

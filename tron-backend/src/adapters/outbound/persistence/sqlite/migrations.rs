@@ -47,3 +47,5 @@ pub(super) const BOOTSTRAP_PLATFORM_ADMIN_MIGRATION: &str =
     include_str!("../../../../../migrations/20260526_0017_bootstrap_platform_admin.sql");
 pub(super) const AGENT_RUN_HISTORY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260527_0017_create_agent_run_history.sql");
+pub(super) const CHAT_MANAGEMENT_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260527_0018_create_chat_management.sql");

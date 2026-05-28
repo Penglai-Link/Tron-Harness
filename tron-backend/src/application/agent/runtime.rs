@@ -3,10 +3,12 @@ use std::{future::Future, pin::Pin, sync::Arc};
 use crate::{
     domain::agent::{
         AgentError, AgentMessage, AgentModelConfig, AgentRunContext, AgentRunResult, ModelRequest,
-        ModelResponse, ToolRegistry, ToolRequest,
+        ModelResponse, ModelStreamEvent, ModelStreamEventKind, ToolRegistry, ToolRequest,
     },
     shared::event_bus::{BusEventDraft, BusOutcome, BusRequestRef, EventBusHandle, PublishOutcome},
 };
+
+pub type ModelStreamSink = Arc<dyn Fn(ModelStreamEvent) + Send + Sync>;
 
 pub trait ModelClient: Send + Sync {
     fn generate<'a>(
@@ -14,6 +16,23 @@ pub trait ModelClient: Send + Sync {
         config: &'a AgentModelConfig,
         request: &'a ModelRequest,
     ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>>;
+
+    fn generate_stream<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+        sink: ModelStreamSink,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        Box::pin(async move {
+            let response = self.generate(config, request).await?;
+            if let ModelResponse::FinalOutput(output) = &response
+                && !output.is_empty()
+            {
+                sink(ModelStreamEvent::text_delta(output.clone()));
+            }
+            Ok(response)
+        })
+    }
 }
 
 pub struct ReactAgentBuilder {
@@ -53,6 +72,22 @@ pub struct ReactAgent {
 
 impl ReactAgent {
     pub async fn run(&self, mut context: AgentRunContext) -> Result<AgentRunResult, AgentError> {
+        self.run_with_model(&mut context, None).await
+    }
+
+    pub async fn run_stream(
+        &self,
+        mut context: AgentRunContext,
+        sink: ModelStreamSink,
+    ) -> Result<AgentRunResult, AgentError> {
+        self.run_with_model(&mut context, Some(sink)).await
+    }
+
+    async fn run_with_model(
+        &self,
+        context: &mut AgentRunContext,
+        sink: Option<ModelStreamSink>,
+    ) -> Result<AgentRunResult, AgentError> {
         validate_context(&context)?;
         self.publish(&context, "agent.run.started", BusOutcome::Started, None)?;
         let mut step_count = 0;
@@ -76,7 +111,15 @@ impl ReactAgent {
                 BusOutcome::Started,
                 Some("model_requested"),
             )?;
-            let response = match self.model_client.generate(&context.model, &request).await {
+            let response_result = if let Some(sink) = sink.clone() {
+                let stream_sink = self.model_stream_event_sink(context, sink);
+                self.model_client
+                    .generate_stream(&context.model, &request, stream_sink)
+                    .await
+            } else {
+                self.model_client.generate(&context.model, &request).await
+            };
+            let response = match response_result {
                 Ok(response) => response,
                 Err(message) => {
                     self.publish(
@@ -110,12 +153,12 @@ impl ReactAgent {
                         Some("run_completed"),
                     )?;
                     return Ok(AgentRunResult {
-                        run_code: context.run_code,
-                        conversation_code: context.conversation_code,
-                        workspace_code: context.workspace_code,
+                        run_code: context.run_code.clone(),
+                        conversation_code: context.conversation_code.clone(),
+                        workspace_code: context.workspace_code.clone(),
                         final_output: output,
                         step_count,
-                        observations: context.observations,
+                        observations: context.observations.clone(),
                     });
                 }
                 ModelResponse::ToolCall(call) => {
@@ -225,6 +268,44 @@ impl ReactAgent {
             PublishOutcome::Disabled | PublishOutcome::Accepted { .. } => Ok(()),
             outcome => Err(AgentError::EventPublishFailed(format!("{outcome:?}"))),
         }
+    }
+
+    fn model_stream_event_sink(
+        &self,
+        context: &AgentRunContext,
+        sink: ModelStreamSink,
+    ) -> ModelStreamSink {
+        let event_bus = self.event_bus.clone();
+        let run_code = context.run_code.clone();
+        let workspace_code = context.workspace_code.clone();
+        let conversation_code = context.conversation_code.clone();
+        let stream_key = context.stream_key.clone();
+        let model_code = context.model.model_code.clone();
+        Arc::new(move |event: ModelStreamEvent| {
+            let event_name = match event.kind {
+                ModelStreamEventKind::Text => "agent.output.delta",
+                ModelStreamEventKind::Reasoning => "agent.reasoning.delta",
+            };
+            let mut draft = BusEventDraft::agui(event_name, "agent_runtime")
+                .outcome(BusOutcome::Progress)
+                .subject("agent_run", run_code.clone())
+                .attr("workspace_code", workspace_code.clone())
+                .attr("agent_kind", "react")
+                .attr("runtime_kind", "in_process")
+                .attr("model_code", model_code.clone())
+                .payload_field(
+                    "delta_json",
+                    serde_json::to_string(&event.delta).unwrap_or_else(|_| "\"\"".into()),
+                );
+            if let Some(conversation_code) = &conversation_code {
+                draft = draft.attr("conversation_code", conversation_code.clone());
+            }
+            if let Some(stream_key) = &stream_key {
+                draft = draft.request(BusRequestRef::with_stream_key(stream_key.clone()));
+            }
+            let _ = event_bus.publish(draft);
+            sink(event);
+        })
     }
 }
 

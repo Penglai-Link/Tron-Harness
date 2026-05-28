@@ -14,6 +14,7 @@ use crate::{
             apps::routes::routes as app_routes,
             auth::{require_auth, routes as auth_routes},
             automations::routes as automation_routes,
+            chats::routes::routes as chat_routes,
             models::routes::routes as model_routes,
             skills::routes::routes as skill_routes,
             tasks::routes as task_routes,
@@ -21,18 +22,19 @@ use crate::{
         },
         outbound::{
             crypto::BcryptPasswordHasher,
-            model::OpenAiCompatibleModelClient,
+            model::HttpModelClient,
             persistence::{
                 SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
-                SqliteModelRepository, SqliteRoleRepository, SqliteSkillRegistryRepository,
-                SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
-                SqliteWorkspaceRepository, bootstrap_platform_admin,
+                SqliteChatRepository, SqliteModelRepository, SqliteRoleRepository,
+                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteUserRepository,
+                SqliteVariableRepository, SqliteWorkspaceRepository, bootstrap_platform_admin,
             },
         },
     },
     application::agent::{AgentRunHistoryService, ModelClient},
     application::app::AppService,
     application::automation::AutomationService,
+    application::chat::ChatService,
     application::model::ModelService,
     application::role::RoleService,
     application::skill::SkillRegistryService,
@@ -57,6 +59,7 @@ static GLOBAL_TASK_SERVICE: OnceLock<TaskService> = OnceLock::new();
 static GLOBAL_VARIABLE_SERVICE: OnceLock<VariableService> = OnceLock::new();
 static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
 static GLOBAL_MODEL_SERVICE: OnceLock<ModelService> = OnceLock::new();
+static GLOBAL_CHAT_SERVICE: OnceLock<ChatService> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct AppState {
@@ -67,6 +70,7 @@ pub struct AppState {
     pub agent_tool_registry: Arc<ToolRegistry>,
     pub apps: AppService,
     pub automations: AutomationService,
+    pub chats: ChatService,
     pub event_bus: EventBusHandle,
     pub roles: RoleService,
     pub tasks: TaskService,
@@ -86,7 +90,7 @@ impl AppState {
         )
         .register_sink(agui_events.clone())
         .build();
-        let agent_model_client = Arc::new(OpenAiCompatibleModelClient::default());
+        let agent_model_client = Arc::new(HttpModelClient::default());
         let agent_tool_registry = Arc::new(ToolRegistry::default());
         let users = if config.database_url == ":memory:" {
             GLOBAL_USER_SERVICE
@@ -186,6 +190,13 @@ impl AppState {
             build_model_service(&config.database_url, workspaces.clone())
         };
         let agent_runs = build_agent_run_history_service(&config.database_url);
+        let chats = if config.database_url == ":memory:" {
+            GLOBAL_CHAT_SERVICE
+                .get_or_init(|| build_chat_service(":memory:"))
+                .clone()
+        } else {
+            build_chat_service(&config.database_url)
+        };
 
         Self {
             config,
@@ -195,6 +206,7 @@ impl AppState {
             agent_tool_registry,
             apps,
             automations,
+            chats,
             event_bus,
             models,
             skills,
@@ -255,6 +267,12 @@ impl FromRef<AppState> for AutomationService {
     }
 }
 
+impl FromRef<AppState> for ChatService {
+    fn from_ref(state: &AppState) -> Self {
+        state.chats.clone()
+    }
+}
+
 impl FromRef<AppState> for VariableService {
     fn from_ref(state: &AppState) -> Self {
         state.variables.clone()
@@ -288,6 +306,7 @@ pub fn build_router(config: AppConfig) -> Router {
         .merge(model_routes())
         .merge(workspace_routes())
         .merge(automation_routes())
+        .merge(chat_routes())
         .merge(app_routes())
         .merge(agent_routes())
         .merge(task_routes())
@@ -358,6 +377,12 @@ fn build_automation_service(
     let repository = SqliteAutomationRepository::connect(database_url)
         .expect("automation SQLite repository should initialize");
     AutomationService::with_event_bus(repository, workspaces, event_bus)
+}
+
+fn build_chat_service(database_url: &str) -> ChatService {
+    let repository = SqliteChatRepository::connect(database_url)
+        .expect("chat SQLite repository should initialize");
+    ChatService::new(repository)
 }
 
 fn build_variable_service(database_url: &str, workspaces: WorkspaceService) -> VariableService {

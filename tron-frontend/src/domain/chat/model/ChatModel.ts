@@ -1,13 +1,119 @@
+export type ChatSessionStatus = "ACTIVE" | "ARCHIVED";
+export type ChatMessageRole = "USER" | "ASSISTANT";
+export type ChatMessageChannel = "MAIN_AGENT" | "TASK_AGENT";
+
+export interface ChatSession {
+  id: number;
+  sessionCode: string;
+  workspaceCode: string;
+  userCode?: string | null;
+  appCode?: string | null;
+  taskCode?: string | null;
+  title: string;
+  status: ChatSessionStatus;
+  lastRunCode?: string | null;
+  lastRunStatus?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ChatSessionGroup {
-  task: string;
-  sessions: { id: string; title: string; active?: boolean }[];
+  taskCode?: string | null;
+  taskTitle: string;
+  sessions: ChatSession[];
+}
+
+export interface CreateChatSessionInput {
+  workspaceCode: string;
+  title?: string | null;
+  appCode?: string | null;
+  taskCode?: string | null;
+}
+
+export interface UpdateChatSessionInput {
+  title: string;
 }
 
 export interface ChatMessage {
-  id: string;
+  id: number;
+  messageCode: string;
+  sessionCode: string;
+  runCode?: string | null;
+  role: ChatMessageRole;
+  channel: ChatMessageChannel;
   actor: string;
-  time: string;
-  body: string;
-  kind: "user" | "agent" | "tool" | "code";
-  meta?: string;
+  content: string;
+  createdAt: string;
+}
+
+export interface ChatRunSummary {
+  runCode: string;
+  conversationCode?: string | null;
+  workspaceCode: string;
+  status: "COMPLETED";
+  finalOutput: string;
+  stepCount: number;
+}
+
+export interface ChatSendResult {
+  session: ChatSession;
+  run: ChatRunSummary;
+  messages: ChatMessage[];
+}
+
+export interface SendChatMessageInput {
+  content: string;
+  workspaceCode: string;
+  appCode?: string | null;
+  taskCode?: string | null;
+  modelCode?: string | null;
+  model?: Record<string, unknown>;
+}
+
+export interface ChatAguiEvent {
+  id: string;
+  type: string;
+  eventName: string;
+  runCode?: string | null;
+  streamKey: string;
+  occurredAt: string;
+  outcome: string;
+  metadata: Record<string, string>;
+}
+
+export type ChatAguiStreamEventType =
+  | "RUN_STARTED"
+  | "RUN_FINISHED"
+  | "RUN_ERROR"
+  | "TEXT_MESSAGE_START"
+  | "TEXT_MESSAGE_CONTENT"
+  | "TEXT_MESSAGE_END"
+  | "REASONING_START"
+  | "REASONING_MESSAGE_START"
+  | "REASONING_MESSAGE_CONTENT"
+  | "REASONING_MESSAGE_END"
+  | "REASONING_END"
+  | "TOOL_CALL_START"
+  | "TOOL_CALL_ARGS"
+  | "TOOL_CALL_END"
+  | "TOOL_CALL_RESULT"
+  | "ACTIVITY_DELTA"
+  | string;
+
+export interface ChatAguiStreamEvent {
+  type: ChatAguiStreamEventType;
+  threadId?: string;
+  runId?: string;
+  messageId?: string;
+  role?: string;
+  delta?: string;
+  content?: string;
+  code?: string;
+  message?: string;
+  toolCallId?: string;
+  toolCallName?: string;
+  parentMessageId?: string;
+  timestamp?: number;
+  result?: ChatSendResult;
+  [key: string]: unknown;
 }

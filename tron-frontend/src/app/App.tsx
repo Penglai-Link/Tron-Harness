@@ -56,8 +56,7 @@ function resolveAppRoute(pathname: string, search: string) {
   const exactRoute = `${pathname}${search}`;
   const route =
     appRoutes.find((item) => item.route === exactRoute) ??
-    appRoutes.find((item) => item.route === pathname) ??
-    (pathname === "/chats" ? appRoutes.find((item) => item.route === "/chats/8842-alpha") : undefined);
+    appRoutes.find((item) => item.route === pathname);
 
   const Component = route ? routePages[route.pageId] : undefined;
 
@@ -342,14 +341,6 @@ function RoutedApp() {
             <SuspendedRoute fullScreen>
               <SharedShellPreviewPage />
             </SuspendedRoute>
-          </ProtectedRoute>
-        )}
-      />
-      <Route
-        path="/chats"
-        element={(
-          <ProtectedRoute>
-            <Navigate replace to="/chats/8842-alpha" />
           </ProtectedRoute>
         )}
       />

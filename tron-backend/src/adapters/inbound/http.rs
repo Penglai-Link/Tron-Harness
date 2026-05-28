@@ -3,6 +3,7 @@ pub mod agents;
 pub mod apps;
 pub mod auth;
 pub mod automations;
+pub mod chats;
 pub mod models;
 pub mod skills;
 pub mod tasks;

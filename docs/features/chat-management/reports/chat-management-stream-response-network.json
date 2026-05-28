@@ -1,0 +1,63 @@
+{
+  "promptToken": "STREAM-1779900239524",
+  "streamStatus": 200,
+  "streamContentType": "text/event-stream",
+  "streamDeltaCount": 6,
+  "done": true,
+  "error": null,
+  "sessionCode": "SESSION-735200000000000011",
+  "runCode": "RUN-1779900244778-FC8943DC8F8ABD59",
+  "assistantIncludesToken": true,
+  "assistantIncludesThinking": false,
+  "assistantLooksDuplicated": false,
+  "visibleAssistantCount": 2,
+  "bodyIsBlank": false,
+  "pageErrors": [
+    "error: Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+    "warning: THREE.Clock: This module has been deprecated. Please use THREE.Timer instead.",
+    "warning: THREE.Clock: This module has been deprecated. Please use THREE.Timer instead."
+  ],
+  "network": [
+    {
+      "url": "http://127.0.0.1:5175/api/v1/auth/refresh",
+      "status": 401,
+      "contentType": "application/json"
+    },
+    {
+      "url": "http://127.0.0.1:5175/api/v1/auth/providers",
+      "status": 200,
+      "contentType": "application/json"
+    },
+    {
+      "url": "http://127.0.0.1:5175/api/v1/auth/login",
+      "status": 200,
+      "contentType": "application/json"
+    },
+    {
+      "url": "http://127.0.0.1:5175/api/v1/models/workspaces/WS-C87ED739C5EEC54C",
+      "status": 200,
+      "contentType": "application/json"
+    },
+    {
+      "url": "http://127.0.0.1:5175/api/v1/chats/session-groups?workspaceCode=WS-C87ED739C5EEC54C",
+      "status": 200,
+      "contentType": "application/json"
+    },
+    {
+      "url": "http://127.0.0.1:5175/api/v1/models/workspaces/WS-C87ED739C5EEC54C",
+      "status": 200,
+      "contentType": "application/json"
+    },
+    {
+      "url": "http://127.0.0.1:5175/api/v1/chats/sessions/SESSION-735200000000000011/messages",
+      "status": 200,
+      "contentType": "application/json"
+    },
+    {
+      "url": "http://127.0.0.1:5175/api/v1/chats/sessions/SESSION-735200000000000011/messages/stream",
+      "status": 200,
+      "contentType": "text/event-stream"
+    }
+  ],
+  "assistantPreview": "This message containing STREAM-1779900239524 proves streaming chat works."
+}

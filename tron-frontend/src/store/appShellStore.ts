@@ -5,8 +5,6 @@ import {
 } from "zustand/middleware";
 
 import {
-  defaultPrimarySpaceId,
-  defaultSecondarySpaceId,
   getEmptyWorkspaceSwitcher,
 } from "@/shared/constants/workspaceSpaces";
 import type { WorkspaceSwitcherData } from "@/shared/types/WorkspaceSpace";
@@ -43,6 +41,9 @@ function migrateAppShellState(persistedState: unknown) {
   return {
     ...persistedState,
     rightSidebarCollapsed: true,
+    selectedPrimarySpaceId: "",
+    selectedSecondarySpaceId: "",
+    workspaceSwitcherSnapshot: defaultWorkspaceSwitcherSnapshot,
   };
 }
 
@@ -51,8 +52,8 @@ export const useAppShellStore = create<AppShellState>()(
     (set) => ({
       agentOpen: false,
       openSections: { Core: true },
-      selectedPrimarySpaceId: defaultPrimarySpaceId,
-      selectedSecondarySpaceId: defaultSecondarySpaceId,
+      selectedPrimarySpaceId: "",
+      selectedSecondarySpaceId: "",
       rightSidebarCollapsed: true,
       sidebarCollapsed: false,
       utilityPanel: null,
@@ -100,7 +101,7 @@ export const useAppShellStore = create<AppShellState>()(
         })),
     }),
     {
-      version: 3,
+      version: 4,
       name: "tron-app-shell",
       migrate: migrateAppShellState,
       partialize: (state) => ({

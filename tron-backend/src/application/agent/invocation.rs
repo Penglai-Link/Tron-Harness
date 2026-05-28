@@ -1,7 +1,6 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicU64, Ordering},
-};
+use std::sync::Arc;
+
+use rand::RngCore;
 
 use crate::{
     application::{
@@ -22,10 +21,8 @@ use crate::{
 
 use super::{
     AgentInvocationCommand, AgentInvocationError, AgentInvocationResult, AgentRunHistoryService,
-    ModelClient, ReactAgentBuilder,
+    ModelClient, ModelStreamSink, ReactAgentBuilder,
 };
-
-static RUN_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
 pub struct AgentInvocationService {
@@ -66,6 +63,24 @@ impl AgentInvocationService {
         &self,
         command: AgentInvocationCommand,
         user_code: Option<String>,
+    ) -> Result<AgentInvocationResult, AgentInvocationError> {
+        self.invoke_with_stream(command, user_code, None).await
+    }
+
+    pub async fn invoke_stream(
+        &self,
+        command: AgentInvocationCommand,
+        user_code: Option<String>,
+        sink: ModelStreamSink,
+    ) -> Result<AgentInvocationResult, AgentInvocationError> {
+        self.invoke_with_stream(command, user_code, Some(sink)).await
+    }
+
+    async fn invoke_with_stream(
+        &self,
+        command: AgentInvocationCommand,
+        user_code: Option<String>,
+        sink: Option<ModelStreamSink>,
     ) -> Result<AgentInvocationResult, AgentInvocationError> {
         let prompt = command
             .prompt
@@ -128,7 +143,7 @@ impl AgentInvocationService {
             })
             .collect::<Vec<_>>();
 
-        let run_code = format!("RUN-{}", RUN_SEQUENCE.fetch_add(1, Ordering::SeqCst));
+        let run_code = command.run_code.unwrap_or_else(generate_agent_run_code);
         let context = AgentRunContext {
             conversation_code: command.conversation_code.clone(),
             run_code: run_code.clone(),
@@ -169,7 +184,13 @@ impl AgentInvocationService {
         let app_code = context.execution_scope.app_code.clone();
         let task_code = context.execution_scope.task_code.clone();
 
-        match agent.run(context).await {
+        let result = if let Some(sink) = sink {
+            agent.run_stream(context, sink).await
+        } else {
+            agent.run(context).await
+        };
+
+        match result {
             Ok(result) => {
                 let finished_at = current_timestamp();
                 self.history
@@ -248,6 +269,12 @@ fn map_agent_error(error: AgentError) -> AgentInvocationError {
             AgentInvocationError::RuntimeFailed(message)
         }
     }
+}
+
+pub fn generate_agent_run_code() -> String {
+    let timestamp = chrono::Utc::now().timestamp_millis();
+    let mut rng = rand::rng();
+    format!("RUN-{timestamp}-{:016X}", rng.next_u64())
 }
 
 fn safe_preview(label: &str, value: &str) -> String {

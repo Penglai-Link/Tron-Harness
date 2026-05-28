@@ -5,6 +5,8 @@ use crate::domain::agent::{AgentModelConfig, AgentRunLimits, EffectiveTool};
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentInvocationCommand {
+    #[serde(skip)]
+    pub run_code: Option<String>,
     pub prompt: Option<String>,
     pub workspace_code: Option<String>,
     pub conversation_code: Option<String>,

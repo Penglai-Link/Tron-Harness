@@ -35,8 +35,6 @@ import { isUnauthorizedApiError } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { tronNavigation } from "@/shared/constants/shellNavigation";
 import {
-  defaultPrimarySpaceId,
-  defaultSecondarySpaceId,
   getEmptyWorkspaceSwitcher,
   getWorkspaceSwitcherMock,
 } from "@/shared/constants/workspaceSpaces";
@@ -172,7 +170,6 @@ export function TronShell({
 
   const primarySpaces = workspaceSwitcher.primarySpaces;
   const selectedPrimarySpace = primarySpaces.find((space) => space.workspaceCode === selectedPrimarySpaceId)
-    ?? primarySpaces.find((space) => space.workspaceCode === defaultPrimarySpaceId)
     ?? primarySpaces[0];
   const effectivePrimarySpaceId = selectedPrimarySpace?.workspaceCode ?? "";
   const currentPrimarySecondarySpaces = useMemo(
@@ -190,8 +187,6 @@ export function TronShell({
   );
   const selectedSecondarySpace = selectedSecondarySpaceId
     ? secondarySpaces.find((space) => space.workspaceCode === selectedSecondarySpaceId)
-      ?? secondarySpaces.find((space) => space.workspaceCode === defaultSecondarySpaceId)
-      ?? secondarySpaces[0]
     : undefined;
   const effectiveSecondarySpaceId = selectedSecondarySpace?.workspaceCode ?? "";
   const selectedWorkspaceNode = selectedSecondarySpace ?? currentPrimaryRootSpace;

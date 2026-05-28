@@ -36,6 +36,7 @@ export type ServiceDomain =
 interface ServiceQueryOptions<T> {
   apiInitialData?: () => T;
   domain: ServiceDomain;
+  enabled?: boolean;
   endpoint: string;
   mockData: () => T;
   params?: EndpointParams;
@@ -109,7 +110,7 @@ function resolveEndpoint(endpoint: string, params?: EndpointParams) {
   };
 }
 
-export function useServiceQuery<T>({ apiInitialData, domain, endpoint, mockData, params, deps = [], select = selectApiData<T> }: ServiceQueryOptions<T>): T {
+export function useServiceQuery<T>({ apiInitialData, domain, enabled = true, endpoint, mockData, params, deps = [], select = selectApiData<T> }: ServiceQueryOptions<T>): T {
   const toast = useToast();
   const dataSource = getServiceDataSource(domain);
   const shouldUseMockData = dataSource === "mock";
@@ -136,7 +137,7 @@ export function useServiceQuery<T>({ apiInitialData, domain, endpoint, mockData,
   }, [initialValue]);
 
   useEffect(() => {
-    if (dataSource !== "api") return;
+    if (dataSource !== "api" || !enabled) return;
 
     const controller = new AbortController();
     const accessToken = getApiAccessToken();
@@ -173,7 +174,7 @@ export function useServiceQuery<T>({ apiInitialData, domain, endpoint, mockData,
       });
 
     return () => controller.abort();
-  }, [dataSource, domain, request.method, request.url, toast]);
+  }, [dataSource, domain, enabled, request.method, request.url, toast]);
 
   return data;
 }

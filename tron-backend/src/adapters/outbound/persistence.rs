@@ -3,6 +3,7 @@ pub mod sqlite;
 pub use sqlite::SqliteAgentRunRepository;
 pub use sqlite::SqliteAppRepository;
 pub use sqlite::SqliteAutomationRepository;
+pub use sqlite::SqliteChatRepository;
 pub use sqlite::SqliteModelRepository;
 pub use sqlite::SqliteRoleRepository;
 pub use sqlite::SqliteSkillRegistryRepository;

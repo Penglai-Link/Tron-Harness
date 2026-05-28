@@ -39,6 +39,7 @@ export const appRoutes: AppRoute[] = [
   { pageId: "apps.edit", route: "/apps/edit", activeNav: "Apps", title: "Edit App", archetype: "form", shellConfig: { searchPlaceholder: "Search apps, repositories, and tags..." } },
   { pageId: "admin.auditLogs", route: "/admin/audit-logs", activeNav: "Audit Logs", title: "Audit Logs", archetype: "data-table", shellConfig: { searchPlaceholder: "Search users, roles, logs..." } },
   { pageId: "automations.index", route: "/automations", activeNav: "Automations", title: "Automations", archetype: "split-pane", shellConfig: { searchPlaceholder: "Search automations..." } },
+  { pageId: "chats.index", route: "/chats", activeNav: "Chats", title: "Chat Management", archetype: "chat", shellConfig: { contentClassName: "!p-0", searchPlaceholder: "Search sessions..." } },
   { pageId: "chats.reasoning", route: "/chats/8842-alpha", activeNav: "Chats", title: "Chat Sessions", archetype: "chat", shellConfig: { contentClassName: "!p-0", searchPlaceholder: "Search tasks..." } },
   { pageId: "chats.execution", route: "/chats/8842-alpha?variant=execution", activeNav: "Chats", title: "Chat Session Detail", archetype: "chat", shellConfig: { contentClassName: "!p-0", searchPlaceholder: "Search tasks..." } },
   { pageId: "automations.new", route: "/automations/new", activeNav: "Automations", title: "Create Automation", archetype: "form", shellConfig: { searchPlaceholder: "Search automations..." } },

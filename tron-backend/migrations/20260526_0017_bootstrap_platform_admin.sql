@@ -59,21 +59,6 @@ VALUES
     (734310000000000048, 734300000000000004, 'VIEWER', 'Skills', 'R', '2026-05-26T00:00:00Z'),
     (734310000000000049, 734300000000000004, 'VIEWER', 'MCP', 'R', '2026-05-26T00:00:00Z');
 
-INSERT OR IGNORE INTO workspaces (
-    id, workspace_code, name, description, parent_workspace_code, status, created_at, updated_at, archived_at
-)
-VALUES (
-    734400000000000001,
-    'ENTERPRISE',
-    'Enterprise',
-    'Global governance workspace.',
-    NULL,
-    'active',
-    1779753600000,
-    1779753600000,
-    NULL
-);
-
 INSERT OR IGNORE INTO users (
     id, user_code, username, first_name, last_name, display_name, email,
     phone_country_code, phone_number, avatar_url, locale, timezone, status,
@@ -119,33 +104,19 @@ WHERE users.username = 'admin'
       WHERE user_id = users.id AND role_code = 'ADMIN'
   );
 
-INSERT INTO user_space_assignments (id, user_id, user_code, space_code, assigned_at, assigned_by)
-SELECT
-    COALESCE((SELECT MAX(id) + 1 FROM user_space_assignments), 734200000000000003),
-    users.id,
-    users.user_code,
-    'ENTERPRISE',
-    1779753600000,
-    NULL
-FROM users
-WHERE users.username = 'admin'
-  AND NOT EXISTS (
-      SELECT 1 FROM user_space_assignments
-      WHERE user_id = users.id AND space_code = 'ENTERPRISE'
-  );
+DELETE FROM workspace_user_access
+WHERE workspace_code = 'ENTERPRISE'
+  AND user_code IN (SELECT user_code FROM users WHERE username = 'admin');
 
-INSERT INTO workspace_user_access (id, workspace_code, user_code, is_owner, created_at, updated_at)
-SELECT
-    COALESCE((SELECT MAX(id) + 1 FROM workspace_user_access), 734400000000000002),
-    'ENTERPRISE',
-    users.user_code,
-    1,
-    1779753600000,
-    1779753600000
-FROM users
-WHERE users.username = 'admin'
-  AND EXISTS (SELECT 1 FROM workspaces WHERE workspace_code = 'ENTERPRISE')
+DELETE FROM user_space_assignments
+WHERE space_code = 'ENTERPRISE'
+  AND user_code IN (SELECT user_code FROM users WHERE username = 'admin');
+
+DELETE FROM workspaces
+WHERE id = 734400000000000001
+  AND workspace_code = 'ENTERPRISE'
+  AND name = 'Enterprise'
   AND NOT EXISTS (
-      SELECT 1 FROM workspace_user_access
-      WHERE workspace_code = 'ENTERPRISE' AND user_code = users.user_code
+      SELECT 1 FROM workspaces AS child
+      WHERE child.parent_workspace_code = 'ENTERPRISE'
   );
