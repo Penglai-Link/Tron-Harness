@@ -7,6 +7,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
+import { createPortal } from "react-dom";
 import {
   CircleAlert,
   Link2,
@@ -31,6 +32,7 @@ import {
   TablePagination,
   useConsoleShellConfig,
   useLocaleFormatters,
+  useOpenRightSidebar,
   useTablePagination,
   useToast,
   useWorkspaceSpaces,
@@ -144,6 +146,7 @@ export function SkillsPage() {
   const navigate = useNavigate();
   const { t } = useTranslation(["pages", "common"]);
   const toast = useToast();
+  const openRightSidebar = useOpenRightSidebar();
   const { formatDateTime, formatNumber } = useLocaleFormatters();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspaceCode =
@@ -500,10 +503,10 @@ export function SkillsPage() {
                 Fullscreen
               </Button>
             </div>
-            <div className="mt-2 max-h-[24rem] overflow-y-auto overscroll-y-contain rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-4 py-3">
+            <div className="mt-2 max-h-[24rem] min-w-0 max-w-full overflow-x-hidden overflow-y-auto overscroll-y-contain rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-4 py-3">
               <MarkdownContent
                 ariaLabel="Skill markdown preview"
-                className="max-w-none pr-1"
+                className="max-w-full pr-1"
                 content={selectedSkill.skillMarkdown}
               />
             </div>
@@ -514,6 +517,11 @@ export function SkillsPage() {
   ), [detailLoading, formatDateTime, navigate, pageT, selectedSkill, selectedSkillName]);
 
   useConsoleShellConfig({ rightPanel });
+
+  function selectSkill(skillName: string) {
+    setSelectedSkillName(skillName);
+    openRightSidebar();
+  }
 
   return (
     <>
@@ -554,7 +562,7 @@ export function SkillsPage() {
           </div>
           <DataTable<WorkspaceSkillRecord>
             variant="embedded"
-            onRowClick={(row) => setSelectedSkillName(row.skillName)}
+            onRowClick={(row) => selectSkill(row.skillName)}
             rows={pagination.visibleItems}
             pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "skills")} {...pagination.paginationProps} />}
             rowKey={(row) => row.skillName}
@@ -674,10 +682,10 @@ export function SkillsPage() {
           />
         </SurfaceCard>
       </div>
-      {skillMarkdownFullscreenOpen && selectedSkill ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+      {skillMarkdownFullscreenOpen && selectedSkill ? createPortal(
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
           <div
-            className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
+            className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] min-w-0 max-w-full flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             role="dialog"
             aria-modal="true"
             aria-label="Skill markdown fullscreen preview"
@@ -699,7 +707,7 @@ export function SkillsPage() {
                 <X size={16} aria-hidden="true" />
               </Button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-5 py-4">
+            <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5 py-4">
               <MarkdownContent
                 ariaLabel="Skill markdown fullscreen"
                 className="max-w-none pr-1"
@@ -707,7 +715,8 @@ export function SkillsPage() {
               />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </>
   );

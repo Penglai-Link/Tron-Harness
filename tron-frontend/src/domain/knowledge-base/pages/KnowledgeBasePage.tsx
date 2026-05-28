@@ -19,6 +19,7 @@ import {
   TextInput,
   useTablePagination,
   useConsoleShellConfig,
+  useOpenRightSidebar,
 } from "@/shared";
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
@@ -40,6 +41,7 @@ function statusTone(status: KnowledgeBaseRecord["status"]) {
 }
 
 export function KnowledgeBasePage() {
+  const openRightSidebar = useOpenRightSidebar();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<(typeof statusFilters)[number]>("All");
   const [selectedId, setSelectedId] = useState("kb-001");
@@ -101,6 +103,11 @@ export function KnowledgeBasePage() {
 
   useConsoleShellConfig({ rightPanel });
 
+  function selectKnowledgeBase(knowledgeBase: KnowledgeBaseRecord) {
+    setSelectedId(knowledgeBase.id);
+    openRightSidebar();
+  }
+
   return (
     <>
       <PageHeader
@@ -113,7 +120,7 @@ export function KnowledgeBasePage() {
             </Button>
             <Button onClick={() => setNotice("Create KnowledgeBase drawer opened.")}>
               <Sparkles size={16} aria-hidden="true" />
-              New KnowledgeBase
+              New
             </Button>
           </>
         )}
@@ -183,7 +190,7 @@ export function KnowledgeBasePage() {
             title="KnowledgeBase Catalog"
             rows={pagination.visibleItems}
             rowKey={(knowledgeBase) => knowledgeBase.id}
-            onRowClick={(knowledgeBase) => setSelectedId(knowledgeBase.id)}
+            onRowClick={selectKnowledgeBase}
             rowClassName={(knowledgeBase) => (
               knowledgeBase.id === selectedKnowledgeBase.id ? "bg-[var(--color-surface-container-low)]" : undefined
             )}

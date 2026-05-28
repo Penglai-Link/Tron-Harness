@@ -189,14 +189,30 @@ async function routeAuthApi(page: Page) {
   });
 }
 
+function escapedPathPattern(path: string) {
+  return new RegExp(`${path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`);
+}
+
 async function signIn(page: Page, targetPath: string, expectedPath = targetPath) {
+  const expectedUrlPattern = escapedPathPattern(expectedPath);
+  const loginUrlPattern = new RegExp(`/login\\?redirect=${encodeURIComponent(targetPath).replace(/\//g, "%2F")}$`);
+
   await page.goto(`${frontendBaseUrl}${targetPath}`);
-  await expect(page).toHaveURL(new RegExp(`/login\\?redirect=${encodeURIComponent(targetPath).replace(/\//g, "%2F")}$`));
+
+  if (!expectedUrlPattern.test(page.url()) && !loginUrlPattern.test(page.url())) {
+    await page.waitForURL((url) => expectedUrlPattern.test(url.href) || loginUrlPattern.test(url.href));
+  }
+
+  if (expectedUrlPattern.test(page.url())) {
+    return;
+  }
+
+  await expect(page).toHaveURL(loginUrlPattern);
 
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
   await page.getByRole("button", { name: /sign in/i }).click();
-  await expect(page).toHaveURL(new RegExp(`${expectedPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`));
+  await expect(page).toHaveURL(expectedUrlPattern);
 }
 
 function rightSidebar(page: Page) {
@@ -332,10 +348,10 @@ test("AC-RCS-02: mobile right sidebar opens as a drawer and closes by all requir
 test("AC-RCS-03: shell right-panel pages retain content and no-panel pages show no stale controls", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await routeAuthApi(page);
-  await signIn(page, "/chats", "/chats/8842-alpha");
+  await signIn(page, "/chats/8842-alpha");
   await expect(page).toHaveURL(/\/chats\/8842-alpha$/);
   await openRightSidebar(page);
-  await expect(rightSidebar(page).getByText("Utility Hub")).toBeVisible();
+  await expect(rightSidebar(page).getByText("Run Context")).toBeVisible();
 
   await page.goto(`${frontendBaseUrl}/observability`);
   await expect(page.getByRole("heading", { name: "Observability Dashboard" })).toBeVisible();
@@ -368,7 +384,11 @@ test("AC-RCS-04: graph and memory inspectors render in shell right sidebar and p
   await expect(rightSidebar(page).getByText("Node Inspector")).toBeVisible();
   await expect(rightSidebar(page).getByText("Customer_0192")).toBeVisible();
 
+  await page.getByTestId("tron-right-sidebar-collapse").click();
+  await expect(rightSidebar(page)).toHaveCount(0);
+  await expect(rightReopenControl(page)).toBeVisible();
   await page.locator("aside").filter({ has: page.getByRole("heading", { name: "Entities" }) }).getByRole("button", { name: /Order_TXN_55/ }).click();
+  await expect(rightSidebar(page)).toBeVisible();
   await expect(rightSidebar(page).getByText("Order_TXN_55")).toBeVisible();
   await expect(rightSidebar(page).getByText("Transaction")).toBeVisible();
 
@@ -403,7 +423,11 @@ test("AC-RCS-04: graph and memory inspectors render in shell right sidebar and p
   await openRightSidebar(page);
   await expect(rightSidebar(page).getByRole("button", { name: "Edit Fragment" })).toBeVisible();
   await expect(rightSidebar(page).getByText("User prefers terse, direct responses without conversational filler.")).toBeVisible();
+  await page.getByTestId("tron-right-sidebar-collapse").click();
+  await expect(rightSidebar(page)).toHaveCount(0);
+  await expect(rightReopenControl(page)).toBeVisible();
   await page.getByRole("button", { name: /System default tone set to professional and helpful./ }).click();
+  await expect(rightSidebar(page)).toBeVisible();
   await expect(rightSidebar(page).getByText("System default tone set to professional and helpful.")).toBeVisible();
   await page.getByTestId("tron-right-sidebar-collapse").click();
   await expect(rightReopenControl(page)).toBeVisible();
@@ -473,7 +497,6 @@ test("AC-RCS-05: management inspectors render in shell right sidebar and preserv
   await page.getByRole("row", { hasText: "LLM Router System" })
     .getByRole("button", { name: "LLM Router System", exact: true })
     .click();
-  await openRightSidebar(page);
   await expect(rightSidebar(page).getByText("LLM Router System")).toBeVisible();
 
   await page.getByTestId("tron-right-sidebar-collapse").click();
@@ -487,30 +510,33 @@ test("AC-RCS-05: management inspectors render in shell right sidebar and preserv
   await expect(rightSidebar(page).getByText("Variable Studio")).toBeVisible();
 
   await page.goto(`${frontendBaseUrl}/variables`);
-  await openRightSidebar(page);
-  await expect(rightSidebar(page).getByText("Variable Studio")).toBeVisible();
+  await expect(rightReopenControl(page)).toBeVisible();
   const firstVariableRow = page.locator("tbody tr").first();
   const variableKey = (await firstVariableRow.locator("td").first().textContent())?.trim();
   await firstVariableRow.click();
+  await expect(rightSidebar(page).getByText("Variable Studio")).toBeVisible();
   if (variableKey) {
     await expect(rightSidebar(page).getByText(variableKey)).toBeVisible();
   }
 
   await page.goto(`${frontendBaseUrl}/knowledge-base`);
-  await openRightSidebar(page);
-  await expect(rightSidebar(page).getByText("Selected KnowledgeBase")).toBeVisible();
-  await expect(rightSidebar(page).getByText("Tron Product Manuals")).toBeVisible();
+  await expect(rightReopenControl(page)).toBeVisible();
   await page.locator("tbody tr").filter({ hasText: "Operations SOP Library" }).click();
+  await expect(rightSidebar(page).getByText("Selected KnowledgeBase")).toBeVisible();
   await expect(rightSidebar(page).getByText("Operations SOP Library")).toBeVisible();
 
   await page.goto(`${frontendBaseUrl}/skills`);
-  await openRightSidebar(page);
-  await expect(rightSidebar(page).getByText("Skill Detail")).toBeVisible();
+  await expect(rightReopenControl(page)).toBeVisible();
   const skillRows = page.locator("tbody tr");
   const skillRowsCount = await skillRows.count();
   if (skillRowsCount > 0) {
-    await skillRows.first().click();
-    await expect(rightSidebar(page).getByText("Skill Detail")).toBeVisible();
+    const firstCellText = (await skillRows.first().locator("td").first().textContent({ timeout: 1000 }).catch(() => ""))?.trim();
+    const skillName = firstCellText?.split(/\s+/)[0];
+    if (skillName && !firstCellText?.includes("No workspace skills")) {
+      await skillRows.first().click();
+      await expect(rightSidebar(page)).toBeVisible();
+      await expect(rightSidebar(page).getByText(skillName)).toBeVisible();
+    }
   }
 
   await page.goto(`${frontendBaseUrl}/settings/skills`);

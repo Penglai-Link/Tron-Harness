@@ -441,7 +441,7 @@ test("variable management supports inheritance override revert local CRUD and wo
   ))).toBe(true);
   await expect(variableInspector.getByText("Inherited From", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "New Variable", exact: true }).click();
+  await variableInspector.getByRole("button", { name: "New", exact: true }).click();
   await page.getByLabel("Variable key").fill("MAX_CONTEXT_WINDOW");
   await page.getByLabel("Variable value").fill("128000");
   await page.getByLabel("Variable description").fill("Local window size");

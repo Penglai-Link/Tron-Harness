@@ -104,6 +104,14 @@ export function useConsoleShellConfig(config: ConsoleShellConfig) {
   ]);
 }
 
+export function useOpenRightSidebar() {
+  const setRightSidebarCollapsed = useAppShellStore((state) => state.setRightSidebarCollapsed);
+
+  return useCallback(() => {
+    setRightSidebarCollapsed(false);
+  }, [setRightSidebarCollapsed]);
+}
+
 function sectionHasActiveItem(section: TronNavSection, activeItem?: string) {
   return Boolean(activeItem && section.items.some((item) => item.label === activeItem));
 }
@@ -322,10 +330,8 @@ export function TronShell({
   }, [sidebarCollapsed]);
 
   useEffect(() => {
-    if (hasRightPanel) {
-      setRightSidebarCollapsed(true);
-    }
-  }, [hasRightPanel, pathname, setRightSidebarCollapsed]);
+    setRightSidebarCollapsed(true);
+  }, [pathname, setRightSidebarCollapsed]);
 
   useEffect(() => {
     if (!hasRightPanel) {

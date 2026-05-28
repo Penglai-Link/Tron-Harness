@@ -18,6 +18,7 @@ import {
   InspectorPanel,
   SelectInput,
   useConsoleShellConfig,
+  useOpenRightSidebar,
 } from "@/shared";
 
 import { cn } from "@/shared/lib/utils";
@@ -29,6 +30,7 @@ function Notice({ value }: { value: string }) {
 }
 
 export function GraphPage({ domainFiltering = false }: { domainFiltering?: boolean }) {
+  const openRightSidebar = useOpenRightSidebar();
   const [domain, setDomain] = useState("customer-support");
   const [query, setQuery] = useState("");
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -43,6 +45,12 @@ export function GraphPage({ domainFiltering = false }: { domainFiltering?: boole
   );
 
   useConsoleShellConfig({ rightPanel });
+
+  function selectEntity(entityId: string) {
+    setSelectedId(entityId);
+    setInspectorOpen(true);
+    openRightSidebar();
+  }
 
   return (
     <>
@@ -70,10 +78,7 @@ export function GraphPage({ domainFiltering = false }: { domainFiltering?: boole
                 className={cn("flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-[var(--color-hover-surface)]", selected.id === entity.id ? "bg-[var(--color-surface-container-high)]" : "")}
                 key={entity.id}
                 type="button"
-                onClick={() => {
-                  setSelectedId(entity.id);
-                  setInspectorOpen(true);
-                }}
+                onClick={() => selectEntity(entity.id)}
               >
                 <span className="flex size-8 items-center justify-center rounded-full bg-[var(--color-surface-container)]">
                   <Database size={15} aria-hidden="true" />
@@ -86,13 +91,13 @@ export function GraphPage({ domainFiltering = false }: { domainFiltering?: boole
             ))}
           </div>
         </aside>
-        <GraphCanvas entities={graph.entities} selected={selected} setSelectedId={setSelectedId} setInspectorOpen={setInspectorOpen} setZoom={setZoom} zoom={zoom} />
+        <GraphCanvas entities={graph.entities} selected={selected} onSelectEntity={selectEntity} setZoom={setZoom} zoom={zoom} />
       </div>
     </>
   );
 }
 
-function GraphCanvas({ entities, selected, setInspectorOpen, setSelectedId, setZoom, zoom }: { entities: GraphEntity[]; selected: GraphEntity; setInspectorOpen: (open: boolean) => void; setSelectedId: (id: string) => void; setZoom: React.Dispatch<React.SetStateAction<number>>; zoom: number }) {
+function GraphCanvas({ entities, selected, onSelectEntity, setZoom, zoom }: { entities: GraphEntity[]; selected: GraphEntity; onSelectEntity: (entityId: string) => void; setZoom: React.Dispatch<React.SetStateAction<number>>; zoom: number }) {
   return (
     <section className="relative min-h-[720px] overflow-hidden bg-[var(--color-surface-container-low)]">
       <div className="absolute right-4 top-4 z-10 flex overflow-hidden rounded-lg border border-[var(--color-outline-variant)] bg-white">
@@ -112,10 +117,7 @@ function GraphCanvas({ entities, selected, setInspectorOpen, setSelectedId, setZ
           style={{ left: entity.x, top: entity.y, transform: `translate(-50%, -50%) scale(${zoom / 100})` }}
           key={entity.id}
           type="button"
-          onClick={() => {
-            setSelectedId(entity.id);
-            setInspectorOpen(true);
-          }}
+          onClick={() => onSelectEntity(entity.id)}
         >
           <span className={cn("flex rounded-full shadow-sm", selected.id === entity.id ? "size-14 bg-[var(--color-primary)] text-white ring-4 ring-[var(--color-accent-container)]" : "size-12 border border-[var(--color-outline-variant)] bg-white")}>
             <Network className="m-auto" size={20} aria-hidden="true" />

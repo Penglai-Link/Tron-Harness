@@ -21,6 +21,7 @@ import {
   SurfaceCard,
   TablePagination,
   useConsoleShellConfig,
+  useOpenRightSidebar,
   useTablePagination,
 } from "@/shared";
 
@@ -40,6 +41,7 @@ function Notice({ value }: { value: string }) {
 }
 
 function MemoryRepository() {
+  const openRightSidebar = useOpenRightSidebar();
   const fragments = useMemoryFragmentList();
   const [strategy, setStrategy] = useState("hybrid");
   const [query, setQuery] = useState("");
@@ -51,16 +53,23 @@ function MemoryRepository() {
   const memoryPagination = useTablePagination(visible);
   const selected = fragments.find((fragment) => fragment.id === selectedId) ?? fragments[0];
 
+  function selectFragment(fragment: MemoryFragment) {
+    setSelectedId(fragment.id);
+    setInspectorOpen(true);
+    openRightSidebar();
+  }
+
   const table = (
     <DataTable
       title="Memory Fragments"
       rows={memoryPagination.visibleItems}
       rowKey={(row) => row.id}
+      onRowClick={(row) => selectFragment(row)}
       toolbar={<span className="text-[13px] text-[var(--color-on-surface-variant)]">{visible.length} matching fragments</span>}
       columns={[
-        { id: "content", header: "Content Snippet", render: (row) => <button className="max-w-[380px] truncate text-left" type="button" onClick={() => {
-          setSelectedId(row.id);
-          setInspectorOpen(true);
+        { id: "content", header: "Content Snippet", render: (row) => <button className="max-w-[380px] truncate text-left" type="button" onClick={(event) => {
+          event.stopPropagation();
+          selectFragment(row);
         }}>{row.content}</button> },
         { id: "namespace", header: "Namespace", render: (row) => row.namespace },
         { id: "entity", header: "Entity", render: (row) => <span className="font-mono">{row.entity}</span> },

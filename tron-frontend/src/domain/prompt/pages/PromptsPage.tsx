@@ -20,6 +20,7 @@ import {
   SearchField,
   SurfaceCard,
   useConsoleShellConfig,
+  useOpenRightSidebar,
   TablePagination,
   TextArea,
   TextInput,
@@ -73,6 +74,7 @@ function PromptInspector({ onClose, prompt, notice, setNotice }: { onClose: () =
 
 export function PromptsPage() {
   const pt = useLocaleText();
+  const openRightSidebar = useOpenRightSidebar();
   const prompts = usePromptList();
   const [category, setCategory] = useState("All");
   const [query, setQuery] = useState("");
@@ -99,6 +101,7 @@ export function PromptsPage() {
   function selectPrompt(promptId: string) {
     setSelectedId(promptId);
     setPromptPanelOpen(true);
+    openRightSidebar();
   }
 
   return (

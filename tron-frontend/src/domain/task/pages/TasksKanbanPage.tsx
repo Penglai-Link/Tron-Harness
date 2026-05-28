@@ -202,7 +202,7 @@ export function TasksKanbanPage() {
                 refresh();
                 toast.success("Task board refreshed");
               }}><RefreshCcw size={16} aria-hidden="true" />Refresh</Button>
-              <Button onClick={() => navigate("/tasks/new")}><Plus size={16} aria-hidden="true" />Create Task</Button>
+              <Button onClick={() => navigate("/tasks/new")}><Plus size={16} aria-hidden="true" />New</Button>
             </>
           }
         />

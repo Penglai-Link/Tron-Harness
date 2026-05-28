@@ -34,6 +34,7 @@ import {
   useTablePagination,
   useToast,
   useConsoleShellConfig,
+  useOpenRightSidebar,
   useWorkspaceSpaces,
 } from "@/shared";
 
@@ -136,6 +137,7 @@ function getInheritedWorkspace(record: VariableRecord) {
 
 export function VariableManagementPage() {
   const toast = useToast();
+  const openRightSidebar = useOpenRightSidebar();
   const dataSource = getServiceDataSource("variable");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
@@ -219,17 +221,20 @@ export function VariableManagementPage() {
   function beginCreate() {
     setPanelMode("create");
     setForm(emptyForm());
+    openRightSidebar();
   }
 
   function beginOverride() {
     if (!selectedVariable) return;
     setPanelMode("override");
     setForm(formFromVariable(selectedVariable));
+    openRightSidebar();
   }
 
   function selectVariable(record: VariableRecord) {
     setSelectedKey(record.key);
     setPanelMode("selected");
+    openRightSidebar();
   }
 
   function beginOverrideFor(record: VariableRecord) {
@@ -237,6 +242,7 @@ export function VariableManagementPage() {
     setPanelMode("override");
     setForm(formFromVariable(record));
     setOpenRowMenu(null);
+    openRightSidebar();
   }
 
   function toggleRowMenu(row: VariableRecord, trigger: HTMLButtonElement) {
@@ -504,7 +510,7 @@ export function VariableManagementPage() {
             </Button>
             <Button variant="secondary" onClick={beginCreate}>
               <Plus size={16} aria-hidden="true" />
-              New Variable
+              New
             </Button>
           </div>
         </>
@@ -536,7 +542,7 @@ export function VariableManagementPage() {
             </Button>
             <Button variant="secondary" onClick={beginCreate}>
               <Plus size={16} aria-hidden="true" />
-              New Variable
+              New
             </Button>
           </>
         )}
@@ -566,6 +572,7 @@ export function VariableManagementPage() {
             variant="embedded"
             rows={pagination.visibleItems}
             rowKey={(row) => row.key}
+            onRowClick={(row) => selectVariable(row)}
             pagination={<TablePagination itemLabel="variables" {...pagination.paginationProps} />}
             emptyState={activeWorkspaceCode ? "No variables match the current filters." : "Select a workspace in the shell to load variables."}
             columns={[
@@ -580,7 +587,10 @@ export function VariableManagementPage() {
                       row.key === selectedKey ? "text-[var(--color-primary)]" : "text-[var(--color-on-surface)]",
                     )}
                     type="button"
-                    onClick={() => selectVariable(row)}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      selectVariable(row);
+                    }}
                   >
                     {row.key}
                   </button>

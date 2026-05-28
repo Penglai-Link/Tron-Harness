@@ -479,7 +479,7 @@ export function TaskDetailsPage() {
         title="Task Details"
         actions={
           <>
-            <Button className="bg-black text-white hover:bg-neutral-800" variant="primary" onClick={() => {
+            <Button variant="primary" onClick={() => {
               toast.info("Task execution is not available in v1");
             }}>Execute</Button>
             {detailEditable ? (

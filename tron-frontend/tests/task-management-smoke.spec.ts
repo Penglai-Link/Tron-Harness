@@ -641,7 +641,7 @@ test("task management supports kanban search create detail updates subtasks arch
   }).toBe(true);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/kanban" && request.searchParams.priority === "High" && request.searchParams.workspaceCode === "TRON_CORE" && request.searchParams.taskType === "Bug")).toBe(true);
 
-  await page.getByRole("button", { name: /^Create Task$/ }).click();
+  await page.getByRole("button", { name: /^New$/ }).click();
   await expect(page.getByRole("heading", { name: "Create Task" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create Task" })).toHaveCount(0);

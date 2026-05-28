@@ -1033,8 +1033,8 @@ test("TDD-UM-10: add user form posts uniform create request and renders created 
   await page.goto(`${frontendBaseUrl}/admin/users`);
 
   await expect(page.getByText("Alex Johnson")).toBeVisible();
-  await page.getByRole("button", { name: "Add User" }).click();
-  await expect(page, "Add User should open dedicated Create User route").toHaveURL(/\/admin\/users\/new$/);
+  await page.getByRole("button", { name: "New" }).click();
+  await expect(page, "New should open dedicated Create User route").toHaveURL(/\/admin\/users\/new$/);
   await expect(page.getByRole("heading", { name: /add user|create user/i })).toBeVisible();
   await expect(page.getByLabel(/user code/i), "Create User page should not expose manual userCode input").toHaveCount(0);
   await page.getByLabel(/^username$/i).fill("maya.singh");
@@ -1301,15 +1301,15 @@ test("consistency refactor TDD-UM-17: directory renders User Contact columns and
   await expect.soft(contactCell, "Contact column should include phone number.").toContainText("5550199", { timeout: layoutRedTimeout });
 });
 
-test("consistency refactor TDD-UM-18: Add User navigates to create page and submits from page owner", async ({ page }) => {
+test("consistency refactor TDD-UM-18: New navigates to create page and submits from page owner", async ({ page }) => {
   const requests: CapturedAdminRequest[] = [];
   await routeConsistencyRefactorApi(page, requests);
 
   await page.goto(`${frontendBaseUrl}/admin/users`);
 
   await expect(page.getByText("Sam Directory")).toBeVisible();
-  await page.getByRole("button", { name: "Add User" }).click();
-  await expect(page, "Add User must navigate to the dedicated create route.").toHaveURL(/\/admin\/users\/new$/);
+  await page.getByRole("button", { name: "New" }).click();
+  await expect(page, "New must navigate to the dedicated create route.").toHaveURL(/\/admin\/users\/new$/);
   await expect(page.getByRole("heading", { name: /add user|create user/i })).toBeVisible();
   await expect(page.getByLabel(/user code/i), "Create User page should not expose manual userCode input").toHaveCount(0);
 

@@ -19,6 +19,7 @@ import {
   SurfaceCard,
   TablePagination,
   useConsoleShellConfig,
+  useOpenRightSidebar,
   useTablePagination,
 } from "@/shared";
 
@@ -69,6 +70,7 @@ function InspectorTabs({ tabs, value, onValueChange }: { tabs: readonly string[]
 }
 
 export function ObservabilityPage() {
+  const openRightSidebar = useOpenRightSidebar();
   const data = useObservabilityOverview();
   const [inspectorTab, setInspectorTab] = useState("Details");
   const [inspectorOpen, setInspectorOpen] = useState(true);
@@ -109,13 +111,18 @@ export function ObservabilityPage() {
 
   useConsoleShellConfig({ rightPanel });
 
+  function openInspector() {
+    setInspectorOpen(true);
+    openRightSidebar();
+  }
+
   return (
     <>
       <PageHeader
         title="Observability Dashboard"
         actions={
           <>
-            <Button variant="secondary" onClick={() => setInspectorOpen(true)}>Open Inspector</Button>
+            <Button variant="secondary" onClick={openInspector}>Open Inspector</Button>
             <Button onClick={() => setNotice("Trace export queued")}>Export</Button>
           </>
         }

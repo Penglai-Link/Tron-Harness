@@ -176,7 +176,7 @@ export function UsersPage() {
 
   return (
     <>
-      <PageHeader title={pt("Users")} actions={<><Button variant="secondary" disabled={exporting} aria-busy={exporting} onClick={() => void handleExport()}><Download size={16} aria-hidden="true" />{exporting ? pt("Exporting...") : pt("Export")}</Button><Button onClick={() => navigate("/admin/users/new")}><UserPlus size={16} aria-hidden="true" />{pt("Add User")}</Button></>} />
+      <PageHeader title={pt("Users")} actions={<><Button variant="secondary" disabled={exporting} aria-busy={exporting} onClick={() => void handleExport()}><Download size={16} aria-hidden="true" />{exporting ? pt("Exporting...") : pt("Export")}</Button><Button onClick={() => navigate("/admin/users/new")}><UserPlus size={16} aria-hidden="true" />{pt("New")}</Button></>} />
       <div className="mb-5 grid gap-4 lg:grid-cols-2 2xl:grid-cols-4">
         <MetricCard label={pt("Users")} value={formatNumber(statistics.totalUsers)} trend={pt("Persisted user records")} icon={<ShieldCheck size={18} aria-hidden="true" />} />
         <MetricCard label={pt("Active")} value={formatNumber(statistics.activeUsers)} trend={pt("Active status count")} />

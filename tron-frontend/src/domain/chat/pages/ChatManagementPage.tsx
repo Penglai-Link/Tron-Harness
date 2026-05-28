@@ -34,6 +34,7 @@ import {
   MarkdownContent,
   useWorkspaceSpaces,
   useConsoleShellConfig,
+  useOpenRightSidebar,
   useDismissibleLayer,
   useToast,
 } from "@/shared";
@@ -878,6 +879,7 @@ function AguiEventRail({
 
 export function ChatManagementPage() {
   const toast = useToast();
+  const openRightSidebar = useOpenRightSidebar();
   const { session: authSession } = useAuthSession();
   const { preferences: aguiDebugPreferences } = useAguiDebugPreferences();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
@@ -992,6 +994,7 @@ export function ChatManagementPage() {
 
   function handleSessionSelect(sessionCode: string) {
     setActiveSessionCode(sessionCode);
+    openRightSidebar();
     setUnseenSessionCodes((current) => {
       if (!current.has(sessionCode)) return current;
       const next = new Set(current);
