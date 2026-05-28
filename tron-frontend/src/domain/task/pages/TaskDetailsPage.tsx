@@ -9,6 +9,7 @@ import {
   Link,
   useSearchParams,
 } from "react-router";
+import { createPortal } from "react-dom";
 import {
   Edit3,
   Maximize2,
@@ -655,8 +656,8 @@ export function TaskDetailsPage() {
             </div>
           </SurfaceCard>
       </div>
-      {descriptionFullscreenOpen ? (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+      {descriptionFullscreenOpen ? createPortal(
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
           <div
             className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             role="dialog"
@@ -695,7 +696,8 @@ export function TaskDetailsPage() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </>
   );

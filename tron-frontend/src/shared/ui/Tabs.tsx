@@ -47,8 +47,7 @@ export function InspectorPanel({ children, title }: InspectorPanelProps) {
   return (
     <section className="space-y-4">
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Inspector</p>
-        <h2 className="mt-1 text-xl font-semibold">{title}</h2>
+        <h2 className="text-xl font-semibold">{title}</h2>
       </div>
       {children}
     </section>

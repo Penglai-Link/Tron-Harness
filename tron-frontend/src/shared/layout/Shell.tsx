@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleUserRound,
+  MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -149,6 +150,8 @@ export function TronShell({
   const dataSource = getServiceDataSource("admin");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+  const [sidebarTooltip, setSidebarTooltip] = useState<{ label: string; top: number } | null>(null);
+  const [topbarToolsMenuOpen, setTopbarToolsMenuOpen] = useState(false);
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
   const workspaceSwitcherControllerRef = useRef<AbortController | null>(null);
   const workspaceSwitcherRequestSequenceRef = useRef(0);
@@ -310,7 +313,13 @@ export function TronShell({
   useEffect(() => {
     setMobileSidebarOpen(false);
     setRightDrawerOpen(false);
+    setSidebarTooltip(null);
+    setTopbarToolsMenuOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    setSidebarTooltip(null);
+  }, [sidebarCollapsed]);
 
   useEffect(() => {
     if (hasRightPanel) {
@@ -362,6 +371,7 @@ export function TronShell({
 
   function openRightDrawer() {
     closeFloatingPanels();
+    setTopbarToolsMenuOpen(false);
     setMobileSidebarOpen(false);
     setRightDrawerOpen(true);
   }
@@ -375,6 +385,15 @@ export function TronShell({
     closeMobileSidebar();
   }
 
+  function showCollapsedNavTooltip(label: string, element: HTMLElement) {
+    const rect = element.getBoundingClientRect();
+    setSidebarTooltip({ label, top: rect.top + rect.height / 2 });
+  }
+
+  function hideCollapsedNavTooltip() {
+    setSidebarTooltip(null);
+  }
+
   function handleWorkspaceSwitcherClick() {
     setAgentOpen(false);
     if (utilityPanel !== "workspace") {
@@ -385,15 +404,23 @@ export function TronShell({
 
   function handleUtilityPanelClick(panel: string) {
     setAgentOpen(false);
+    setTopbarToolsMenuOpen(false);
     toggleUtilityPanel(panel);
   }
 
   function handleAgentLauncherClick() {
+    setTopbarToolsMenuOpen(false);
     if (!agentOpen) {
       closeFloatingPanels();
     }
 
     setAgentOpen(!agentOpen);
+  }
+
+  function openSystemSettings() {
+    setTopbarToolsMenuOpen(false);
+    closeFloatingPanels();
+    navigate("/settings/general", { state: { from: `${pathname}${search}` } });
   }
 
   function selectWorkspaceNode(space: WorkspaceSwitcherData["secondarySpaces"][number]) {
@@ -516,11 +543,19 @@ export function TronShell({
                               ? "bg-[var(--color-surface-container-high)] font-medium text-[var(--color-on-surface)]"
                               : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]",
                           )}
+                          aria-label={compact ? itemLabel : undefined}
                           aria-current={active ? "page" : undefined}
                           data-active={active}
                           key={item.label}
+                          onBlur={compact ? hideCollapsedNavTooltip : undefined}
+                          onFocus={(event) => {
+                            if (compact) showCollapsedNavTooltip(itemLabel, event.currentTarget);
+                          }}
+                          onMouseEnter={(event) => {
+                            if (compact) showCollapsedNavTooltip(itemLabel, event.currentTarget);
+                          }}
+                          onMouseLeave={compact ? hideCollapsedNavTooltip : undefined}
                           onClick={mobile ? handleSidebarNavigationClick : undefined}
-                          title={compact ? itemLabel : undefined}
                           to={item.href}
                         >
                           <Icon size={17} aria-hidden="true" />
@@ -575,20 +610,60 @@ export function TronShell({
               <span className="truncate">{selectedWorkspacePathLabel}</span>
               <ChevronDown size={15} aria-hidden="true" />
             </button>
-            <Button
-              className="hidden lg:inline-flex"
-              size="icon"
-              type="button"
-              variant="ghost"
-              aria-label={sidebarCollapsed ? t("shell:aria.expandSidebar") : t("shell:aria.collapseSidebar")}
-              aria-pressed={sidebarCollapsed}
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            >
-              {sidebarCollapsed ? <PanelLeftOpen size={17} aria-hidden="true" /> : <PanelLeftClose size={17} aria-hidden="true" />}
-            </Button>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {topbarActions}
+            <Button
+              className="hidden min-[900px]:inline-flex"
+              size="icon"
+              variant="ghost"
+              aria-label={t("shell:aria.openSystemSettings")}
+              onClick={openSystemSettings}
+            >
+              <Settings2 size={17} aria-hidden="true" />
+            </Button>
+            <Button className="hidden min-[900px]:inline-flex" size="icon" variant="ghost" aria-label={t("shell:aria.viewNotifications")} aria-pressed={utilityPanel === "notifications"} onClick={() => handleUtilityPanelClick("notifications")}>
+              <Bell size={17} aria-hidden="true" />
+            </Button>
+            <Button className="hidden rounded-full hover:bg-transparent min-[900px]:inline-flex" size="icon" variant="ghost" aria-label={t("shell:aria.openUserMenu")} aria-pressed={utilityPanel === "user"} onClick={() => handleUtilityPanelClick("user")}>
+              <CircleUserRound size={18} aria-hidden="true" />
+            </Button>
+            <Button className={cn("hidden rounded-full min-[900px]:inline-flex", agentOpen ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]" : "")} size="icon" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} title={t("shell:assistant.title")} onClick={handleAgentLauncherClick}>
+              <Bot size={17} aria-hidden="true" />
+            </Button>
+            <div className="relative min-[900px]:hidden">
+              <Button
+                size="icon"
+                type="button"
+                variant="ghost"
+                aria-expanded={topbarToolsMenuOpen}
+                aria-haspopup="menu"
+                aria-label={t("shell:aria.moreActions")}
+                onClick={() => setTopbarToolsMenuOpen((open) => !open)}
+              >
+                <MoreHorizontal size={18} aria-hidden="true" />
+              </Button>
+              {topbarToolsMenuOpen ? (
+                <div className="absolute right-0 top-[calc(100%+8px)] z-[70] w-48 rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]" role="menu">
+                  <button className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={openSystemSettings}>
+                    <Settings2 size={16} aria-hidden="true" />
+                    {t("shell:utilityPanel.settings")}
+                  </button>
+                  <button className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={() => handleUtilityPanelClick("notifications")}>
+                    <Bell size={16} aria-hidden="true" />
+                    {t("shell:utilityPanel.notifications")}
+                  </button>
+                  <button className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={() => handleUtilityPanelClick("user")}>
+                    <CircleUserRound size={16} aria-hidden="true" />
+                    {t("shell:utilityPanel.user")}
+                  </button>
+                  <button className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={handleAgentLauncherClick}>
+                    <Bot size={16} aria-hidden="true" />
+                    {t("shell:assistant.title")}
+                  </button>
+                </div>
+              ) : null}
+            </div>
             {hasRightPanel ? (
               <Button
                 className="lg:hidden"
@@ -604,26 +679,6 @@ export function TronShell({
                 {rightDrawerOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
               </Button>
             ) : null}
-            <Button
-              size="icon"
-              variant="ghost"
-              aria-label={t("shell:aria.openSystemSettings")}
-              onClick={() => {
-                closeFloatingPanels();
-                navigate("/settings/general", { state: { from: `${pathname}${search}` } });
-              }}
-            >
-              <Settings2 size={17} aria-hidden="true" />
-            </Button>
-            <Button size="icon" variant="ghost" aria-label={t("shell:aria.viewNotifications")} aria-pressed={utilityPanel === "notifications"} onClick={() => handleUtilityPanelClick("notifications")}>
-              <Bell size={17} aria-hidden="true" />
-            </Button>
-            <Button className="rounded-full hover:bg-transparent" size="icon" variant="ghost" aria-label={t("shell:aria.openUserMenu")} aria-pressed={utilityPanel === "user"} onClick={() => handleUtilityPanelClick("user")}>
-              <CircleUserRound size={18} aria-hidden="true" />
-            </Button>
-            <Button className={cn("rounded-full", agentOpen ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]" : "")} size="icon" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} title={t("shell:assistant.title")} onClick={handleAgentLauncherClick}>
-              <Bot size={17} aria-hidden="true" />
-            </Button>
           </div>
         </div>
         {utilityPanel ? (
@@ -726,7 +781,7 @@ export function TronShell({
             onClick={closeRightDrawer}
           />
           <aside
-            className="fixed bottom-0 right-0 top-14 z-50 flex w-[min(22rem,calc(100vw-1rem))] flex-col overflow-y-auto border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-5 py-5 shadow-[-12px_0_34px_rgba(15,23,42,0.12),0_18px_45px_rgba(15,23,42,0.12)] lg:hidden"
+            className="fixed bottom-0 right-0 top-14 z-50 flex w-[min(22rem,calc(100vw-1rem))] flex-col overflow-y-auto bg-[var(--color-elevated-surface)] px-5 py-5 shadow-[-12px_0_34px_rgba(15,23,42,0.12),0_18px_45px_rgba(15,23,42,0.12)] lg:hidden"
             data-testid="tron-mobile-right-sidebar"
             id="tron-mobile-right-sidebar"
           >
@@ -748,33 +803,52 @@ export function TronShell({
 
       <aside
         className={cn(
-          "fixed bottom-0 left-0 top-14 z-50 hidden flex-col overflow-y-auto bg-[var(--color-elevated-surface)] py-4 shadow-[10px_0_28px_rgba(15,23,42,0.04)] transition-[width] duration-200 lg:flex",
-          sidebarCollapsed ? "w-[76px] px-2" : "w-[280px] px-3",
+          "fixed bottom-0 left-0 top-14 z-50 hidden flex-col overflow-visible bg-[var(--color-elevated-surface)] shadow-[10px_0_28px_rgba(15,23,42,0.04)] transition-[width] duration-200 lg:flex",
+          sidebarCollapsed ? "w-[76px]" : "w-[280px]",
         )}
         data-collapsed={sidebarCollapsed}
       >
-        {renderSidebarContent()}
+        <div className={cn("h-full overflow-y-auto py-4", sidebarCollapsed ? "px-2" : "px-3")}>
+          {renderSidebarContent()}
+        </div>
+        <button
+          className="absolute right-[-22px] top-1/2 z-10 inline-flex h-11 w-6 -translate-y-1/2 items-center justify-center rounded-l-none rounded-r-full border-0 bg-[var(--color-elevated-surface)] p-0 text-[var(--color-on-surface-variant)] shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-2"
+          type="button"
+          aria-label={sidebarCollapsed ? t("shell:aria.expandSidebar") : t("shell:aria.collapseSidebar")}
+          aria-pressed={sidebarCollapsed}
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+        >
+          {sidebarCollapsed ? <ChevronRight size={15} strokeWidth={2.4} aria-hidden="true" /> : <ChevronLeft size={15} strokeWidth={2.4} aria-hidden="true" />}
+        </button>
       </aside>
+
+      {sidebarTooltip && sidebarCollapsed ? (
+        <div
+          className="pointer-events-none fixed left-[84px] z-[70] -translate-y-1/2 whitespace-nowrap rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-2 py-1 text-xs font-medium text-[var(--color-on-surface)] opacity-100 shadow-[0_8px_18px_rgba(15,23,42,0.12)]"
+          role="tooltip"
+          style={{ top: sidebarTooltip.top }}
+        >
+          {sidebarTooltip.label}
+        </div>
+      ) : null}
 
       <section className={cn("relative z-0 min-w-0 pt-14 transition-[padding-left] duration-200", sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[280px]")}>
         <div className={cn("relative z-0 grid min-h-[calc(100vh-3.5rem)] grid-cols-1", showDesktopRightSidebar ? "lg:grid-cols-[minmax(0,1fr)_360px]" : "")}>
           <main className={cn("relative z-0 min-w-0 overflow-x-hidden px-6 py-6", contentClassName)}>{children}</main>
           {showDesktopRightSidebar ? (
             <aside
-              className="relative z-10 hidden border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-5 py-6 lg:block"
+              className="relative z-10 hidden bg-[var(--color-elevated-surface)] px-5 py-6 shadow-[-10px_0_28px_rgba(15,23,42,0.04)] lg:block"
               data-testid="tron-right-sidebar"
             >
-              <Button
-                className="absolute -left-[13px] top-1/2 z-20 h-11 w-6 -translate-y-1/2 rounded-full border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-0 text-[var(--color-on-surface-variant)] shadow-[0_10px_24px_rgba(15,23,42,0.10)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
-                size="icon"
+              <button
+                className="absolute left-[-22px] top-1/2 z-20 inline-flex h-11 w-6 -translate-y-1/2 items-center justify-center rounded-l-full rounded-r-none border-0 bg-[var(--color-elevated-surface)] p-0 text-[var(--color-on-surface-variant)] shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-2"
                 type="button"
-                variant="ghost"
                 aria-label={t("shell:aria.collapseRightSidebar")}
                 data-testid="tron-right-sidebar-collapse"
                 onClick={() => setRightSidebarCollapsed(true)}
               >
                 <ChevronRight size={15} strokeWidth={2.4} aria-hidden="true" />
-              </Button>
+              </button>
               {rightPanel}
             </aside>
           ) : null}
@@ -782,17 +856,15 @@ export function TronShell({
       </section>
 
       {hasRightPanel && rightSidebarCollapsed ? (
-        <Button
-          className="fixed right-0 top-1/2 z-30 hidden h-11 w-6 -translate-y-1/2 rounded-l-full rounded-r-none border border-r-0 border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-0 text-[var(--color-on-surface-variant)] shadow-[0_10px_24px_rgba(15,23,42,0.10)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] lg:inline-flex"
-          size="icon"
+        <button
+          className="fixed right-0 top-[calc(50vh+1.75rem)] z-30 hidden h-11 w-6 -translate-y-1/2 items-center justify-center rounded-l-full rounded-r-none border-0 bg-[var(--color-elevated-surface)] p-0 text-[var(--color-on-surface-variant)] shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-2 lg:inline-flex"
           type="button"
-          variant="ghost"
           aria-label={t("shell:aria.openRightSidebar")}
           data-testid="tron-right-sidebar-reopen"
           onClick={() => setRightSidebarCollapsed(false)}
         >
           <ChevronLeft size={15} strokeWidth={2.4} aria-hidden="true" />
-        </Button>
+        </button>
       ) : null}
 
     </div>

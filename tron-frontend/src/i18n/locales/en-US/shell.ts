@@ -10,6 +10,7 @@ export const shell = {
     openSystemSettings: "Open system settings",
     openUserMenu: "Open user menu",
     openWorkspaceSelector: "Open workspace selector",
+    moreActions: "More actions",
     closeWorkspaceSelector: "Close workspace selector",
     primaryNavigation: "Tron primary navigation",
     tronDashboard: "Tron dashboard",

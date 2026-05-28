@@ -1,20 +1,21 @@
 import {
+  AlarmClock,
+  Archive,
+  BookOpenText,
   Database,
   FileClock,
   FolderGit2,
   Gauge,
-  GitBranch,
   KeyRound,
   LayoutDashboard,
   LockKeyhole,
   MessageSquareText,
   Network,
-  PackageOpen,
+  ListTodo,
   ScrollText,
   Settings2,
   Sparkles,
   UsersRound,
-  Workflow,
   Wrench,
 } from "lucide-react";
 
@@ -27,8 +28,8 @@ export const tronNavigation: TronNavSection[] = [
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, translationKey: "shell:nav.items.dashboard" },
       { label: "Apps", href: "/apps", icon: FolderGit2, translationKey: "shell:nav.items.apps" },
-      { label: "Tasks", href: "/tasks", icon: GitBranch, translationKey: "shell:nav.items.tasks" },
-      { label: "Automations", href: "/automations", icon: Workflow, translationKey: "shell:nav.items.automations" },
+      { label: "Tasks", href: "/tasks", icon: ListTodo, translationKey: "shell:nav.items.tasks" },
+      { label: "Automations", href: "/automations", icon: AlarmClock, translationKey: "shell:nav.items.automations" },
     ],
   },
   {
@@ -47,8 +48,8 @@ export const tronNavigation: TronNavSection[] = [
     items: [
       { label: "Memory", href: "/memory", icon: Database, translationKey: "shell:nav.items.memory" },
       { label: "KnowledgeGraph", href: "/knowledge-graph", icon: Network, translationKey: "shell:nav.items.knowledgeGraph" },
-      { label: "KnowledgeBase", href: "/knowledge-base", icon: PackageOpen, translationKey: "shell:nav.items.knowledgeBase" },
-      { label: "Resources", href: "/resources", icon: PackageOpen, translationKey: "shell:nav.items.resources" },
+      { label: "KnowledgeBase", href: "/knowledge-base", icon: BookOpenText, translationKey: "shell:nav.items.knowledgeBase" },
+      { label: "Resources", href: "/resources", icon: Archive, translationKey: "shell:nav.items.resources" },
       { label: "Variables", href: "/variables", icon: KeyRound, translationKey: "shell:nav.items.variables" },
       { label: "Observability", href: "/observability", icon: Gauge, translationKey: "shell:nav.items.observability" },
     ],

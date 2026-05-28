@@ -621,7 +621,7 @@ function SessionSidebar({
     const collapsedSessions = groups.flatMap((group) => group.sessions);
 
     return (
-      <aside className="flex w-12 flex-col items-center border-r border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] py-3">
+      <aside className="flex w-12 flex-col items-center bg-[var(--color-surface-container-lowest)] py-3 shadow-[10px_0_28px_rgba(15,23,42,0.04)]">
         <button className={iconButtonClass()} type="button" aria-label="Expand sessions" onClick={onCollapseToggle}>
           <PanelLeftOpen size={17} />
         </button>
@@ -635,7 +635,7 @@ function SessionSidebar({
         >
           <Plus size={17} />
         </button>
-        <div className="mt-4 h-px w-6 bg-[var(--color-outline-variant)]" />
+        <div className="mt-4 h-px w-6 bg-[rgba(15,23,42,0.06)]" />
         <div className="mt-3 flex w-full flex-1 flex-col items-center gap-1 overflow-y-auto px-1">
           {collapsedSessions.map((session) => (
             <button
@@ -655,8 +655,8 @@ function SessionSidebar({
   }
 
   return (
-    <aside className="w-[286px] shrink-0 overflow-hidden border-r border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)]">
-      <div className="flex h-14 items-center justify-between border-b border-[var(--color-outline-variant)] px-4">
+    <aside className="w-[286px] shrink-0 overflow-hidden bg-[var(--color-surface-container-lowest)] shadow-[10px_0_28px_rgba(15,23,42,0.04)]">
+      <div className="flex h-14 items-center justify-between px-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
         <div className="flex items-center gap-2">
           <MessageSquareText size={17} />
           <h2 className="text-sm font-semibold">Sessions</h2>
@@ -778,7 +778,7 @@ function ChatBubble({
   const isUser = message.role === "USER";
   const actorName = isUser ? (currentUserDisplayName || message.actor) : message.actor;
   return (
-    <article className={cn("max-w-[760px] rounded-md border bg-white px-4 py-3 shadow-sm", isUser ? "ml-auto border-[var(--color-primary)]" : "border-[var(--color-card-border)]")}>
+    <article className={cn("max-w-[760px] rounded-md bg-white px-4 py-3 shadow-[0_8px_22px_rgba(15,23,42,0.06)]", isUser ? "ml-auto bg-[var(--color-surface-container-lowest)]" : "")}>
       <div className="mb-2 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           {isUser ? <UserRound size={16} /> : <Bot size={16} />}
@@ -805,7 +805,7 @@ function AguiEventCard({ event }: { event: TranscriptAguiEvent }) {
   const summary = aguiEventSummary(event);
 
   return (
-    <article className="rounded-md border border-[var(--color-outline-variant)] bg-white px-3 py-2 text-sm shadow-sm">
+    <article className="rounded-md bg-white px-3 py-2 text-sm shadow-[0_8px_22px_rgba(15,23,42,0.06)]">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-container-low)] text-[var(--color-on-surface-variant)]">
@@ -1244,7 +1244,7 @@ export function ChatManagementPage() {
         onSessionSelect={handleSessionSelect}
       />
       <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center justify-between border-b border-[var(--color-outline-variant)] px-5">
+        <header className="flex h-14 items-center justify-between px-5 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
           <div className="min-w-0">
             {editingTitle && activeSession ? (
               <input
@@ -1310,19 +1310,19 @@ export function ChatManagementPage() {
                 ) : null}
               </Fragment>
             )) : activeWorkspaceCode ? (
-              <div className="flex min-h-[360px] items-center justify-center rounded-md border border-dashed border-[var(--color-outline-variant)] bg-white text-sm text-[var(--color-on-surface-variant)]">
+              <div className="flex min-h-[360px] items-center justify-center rounded-md bg-[var(--color-surface-container-lowest)] text-sm text-[var(--color-on-surface-variant)] shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">
                 No persisted messages in this session.
               </div>
             ) : (
-              <div className="flex min-h-[360px] items-center justify-center rounded-md border border-dashed border-[var(--color-outline-variant)] bg-white text-sm text-[var(--color-on-surface-variant)]">
+              <div className="flex min-h-[360px] items-center justify-center rounded-md bg-[var(--color-surface-container-lowest)] text-sm text-[var(--color-on-surface-variant)] shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">
                 Select or create a workspace before loading chat sessions.
               </div>
             )}
           </div>
         </section>
 
-        <footer className="border-t border-[var(--color-outline-variant)] bg-white px-4 py-3">
-          <div className="flex min-h-28 w-full flex-col rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 py-3">
+        <footer className="bg-white px-4 py-3 shadow-[0_-10px_28px_rgba(15,23,42,0.04)]">
+          <div className="flex min-h-28 w-full flex-col rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.055)]">
             <TextArea
               className="min-h-16 w-full flex-1 resize-none rounded-none border-0 bg-transparent p-0 text-sm shadow-none focus:border-transparent focus:ring-0"
               placeholder="Enter to send, Ctrl/Cmd+Enter for newline"
