@@ -3,6 +3,7 @@ docs/brainstorm/*/runtime/
 
 # AI Tools
 .codex/
+.codex-artifacts/
 .gemini/
 .qwen/
 .claude/
