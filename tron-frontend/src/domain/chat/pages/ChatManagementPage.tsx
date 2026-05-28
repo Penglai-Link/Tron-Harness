@@ -1291,8 +1291,9 @@ export function ChatManagementPage() {
             <p className="mt-0.5 flex items-center gap-2 text-xs text-[var(--color-on-surface-variant)]">
               <CircleDot size={12} />
               {activeSession?.sessionCode ?? "No session"}
-              <span>·</span>
-              {activeSession?.taskCode ? "task agent conversation" : "main agent conversation"}
+              <span className="rounded-full bg-[var(--color-surface-container)] px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none text-[var(--color-on-surface-variant)]">
+                {activeSession?.taskCode ? "task" : "main"}
+              </span>
             </p>
           </div>
         </header>
@@ -1325,13 +1326,13 @@ export function ChatManagementPage() {
           <div className="flex min-h-28 w-full flex-col rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.055)]">
             <TextArea
               className="min-h-16 w-full flex-1 resize-none rounded-none border-0 bg-transparent p-0 text-sm shadow-none focus:border-transparent focus:ring-0"
-              placeholder="Enter to send, Ctrl/Cmd+Enter for newline"
+              placeholder="Enter to send, Shift+Enter for newline"
               value={composer}
               onChange={(event) => setComposer(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
                 event.preventDefault();
-                if (event.metaKey || event.ctrlKey) {
+                if (event.shiftKey) {
                   setComposer(insertNewlineAtCursor(event.currentTarget));
                   return;
                 }
