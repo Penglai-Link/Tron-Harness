@@ -39,6 +39,12 @@
 - Minimal and composable frontend abstractions
 - Internationalization is a first-class frontend concern; user-facing UI text must be resolved through translation keys rather than hard-coded component strings
 
+## Avoid cyclic dependency
+
+- Hook callers must not pass unstable inline factories or functions into dependency arrays when those functions update state, trigger effects, fetch data, or derive initial data. Fresh function identities can re-run effects every render and create render/effect cycles.
+- Shared hooks that accept factory or callback options must keep dependency arrays tied to semantic inputs rather than callback identity. Use refs for latest callback access, require memoized callbacks with `useCallback` or `useMemo`, or expose explicit stable `deps` when callers need to control re-execution.
+- Component code should stabilize object and function inputs before passing them to hooks that schedule state updates or side effects. Prefer clear state/query parameters over freshly created lambdas in dependency-sensitive APIs.
+
 ## Frontend Directory Standard
 
 frontend code must follow this target structure.  

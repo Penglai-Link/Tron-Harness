@@ -5,6 +5,15 @@ import type {
   AuthSession,
   InternalLoginPayload,
 } from "@/domain/auth/model";
+import { getAuthDataSource } from "@/domain/auth/api/authDataSource";
+import {
+  authorizeMockOAuth2,
+  fetchMockAuthProviders,
+  fetchMockCurrentAuthSession,
+  loginMockInternal,
+  logoutMockAuthSession,
+  refreshMockAuthSession,
+} from "@/domain/auth/mock/data";
 import {
   buildApiUrl,
   parseEndpoint,
@@ -21,6 +30,10 @@ export const authApiEndpoints = {
 } as const;
 
 export function fetchAuthProviders(signal?: AbortSignal) {
+  if (getAuthDataSource() === "mock") {
+    return fetchMockAuthProviders(signal);
+  }
+
   return requestApi<AuthProvidersPayload>(authApiEndpoints.listProviders, {
     retryOnUnauthorized: false,
     signal,
@@ -28,10 +41,18 @@ export function fetchAuthProviders(signal?: AbortSignal) {
 }
 
 export function fetchCurrentAuthSession(signal?: AbortSignal) {
+  if (getAuthDataSource() === "mock") {
+    return fetchMockCurrentAuthSession(signal);
+  }
+
   return requestApi<AuthSession>(authApiEndpoints.currentSession, { signal });
 }
 
 export function loginInternal(payload: InternalLoginPayload) {
+  if (getAuthDataSource() === "mock") {
+    return loginMockInternal(payload);
+  }
+
   return requestApi<AuthGrant>(authApiEndpoints.login, {
     body: payload,
     retryOnUnauthorized: false,
@@ -39,6 +60,10 @@ export function loginInternal(payload: InternalLoginPayload) {
 }
 
 export function refreshAuthSession() {
+  if (getAuthDataSource() === "mock") {
+    return refreshMockAuthSession();
+  }
+
   return requestApi<AuthGrant>(authApiEndpoints.refresh, {
     body: {},
     retryOnUnauthorized: false,
@@ -46,6 +71,10 @@ export function refreshAuthSession() {
 }
 
 export function logoutAuthSession() {
+  if (getAuthDataSource() === "mock") {
+    return logoutMockAuthSession();
+  }
+
   return requestApi<{ loggedOut: boolean }>(authApiEndpoints.logout, {
     body: {},
     retryOnUnauthorized: false,
@@ -53,6 +82,11 @@ export function logoutAuthSession() {
 }
 
 export function buildOAuth2AuthorizeUrl(providerCode: string, redirectPath: string) {
+  if (getAuthDataSource() === "mock") {
+    authorizeMockOAuth2(providerCode);
+    return buildOAuth2CallbackUrl(redirectPath);
+  }
+
   const { path } = parseEndpoint(authApiEndpoints.oauth2Authorize);
   const authorizeUrl = new URL(
     buildApiUrl(path, { providerCode }, { redirect: redirectPath }),

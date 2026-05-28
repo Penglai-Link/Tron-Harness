@@ -53,7 +53,6 @@ import type { VariableRecord } from "@/domain/variable/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 type PanelMode = "create" | "override" | "selected";
-type RouteVariant = "details" | "standard";
 type VariableSourceFilter = VariableRecord["sourceKind"] | "All";
 
 const variableSourceFilters = ["All", "Local", "Inherited", "Override"] as const satisfies readonly VariableSourceFilter[];
@@ -135,7 +134,7 @@ function getInheritedWorkspace(record: VariableRecord) {
   };
 }
 
-export function VariableManagementPage({ routeVariant }: { routeVariant: RouteVariant }) {
+export function VariableManagementPage() {
   const toast = useToast();
   const dataSource = getServiceDataSource("variable");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();

@@ -47,6 +47,7 @@ fe-check:
 .PHONY: fe-clean
 fe-clean:
 	rm -rf $(FRONTEND_DIR)/dist \
+		$(FRONTEND_DIR)/node_modules/.tmp/tsconfig.node.tsbuildinfo \
 		$(FRONTEND_DIR)/tsconfig.tsbuildinfo \
 		$(FRONTEND_DIR)/vite.config.js \
 		$(FRONTEND_DIR)/vite.config.d.ts
