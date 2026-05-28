@@ -2,6 +2,7 @@ use std::{fs, path::Path};
 
 const BACKEND_SRC: &str = "src";
 const FACADE_MAX_LINES: usize = 80;
+const IMPLEMENTATION_MAX_LINES: usize = 1_000;
 const FORBIDDEN_DOMAIN_TOKENS: &[&str] = &[
     "use axum",
     "axum::",
@@ -76,6 +77,24 @@ fn bounded_context_roots_are_small_facades() {
     assert!(
         roots.is_empty(),
         "application/domain context root files should be small facade modules: {roots:#?}"
+    );
+}
+
+#[test]
+fn backend_source_files_do_not_become_large_implementation_buckets() {
+    let offenders = collect_files(Path::new(BACKEND_SRC))
+        .into_iter()
+        .filter(|path| path.extension().is_some_and(|extension| extension == "rs"))
+        .filter_map(|path| {
+            let content = fs::read_to_string(&path).expect("source file should be readable");
+            let line_count = content.lines().count();
+            (line_count > IMPLEMENTATION_MAX_LINES).then(|| (display_path(path), line_count))
+        })
+        .collect::<Vec<_>>();
+
+    assert!(
+        offenders.is_empty(),
+        "backend implementation files should be split by DDD or adapter responsibility before they become large buckets: {offenders:#?}"
     );
 }
 
