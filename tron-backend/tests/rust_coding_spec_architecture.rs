@@ -2,7 +2,7 @@ use std::{fs, path::Path};
 
 const BACKEND_SRC: &str = "src";
 const FACADE_MAX_LINES: usize = 80;
-const IMPLEMENTATION_MAX_LINES: usize = 1_000;
+const IMPLEMENTATION_MAX_LINES: usize = 600;
 const FORBIDDEN_DOMAIN_TOKENS: &[&str] = &[
     "use axum",
     "axum::",
