@@ -43,7 +43,16 @@ export interface ChatMessage {
   channel: ChatMessageChannel;
   actor: string;
   content: string;
+  inputTokens?: number | null;
+  outputTokens?: number | null;
+  totalTokens?: number | null;
   createdAt: string;
+}
+
+export interface ChatTokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
 }
 
 export interface ChatRunSummary {
@@ -53,6 +62,7 @@ export interface ChatRunSummary {
   status: "COMPLETED";
   finalOutput: string;
   stepCount: number;
+  tokenUsage?: ChatTokenUsage | null;
 }
 
 export interface ChatSendResult {

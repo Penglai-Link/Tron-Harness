@@ -41,11 +41,17 @@ pub(super) const MODEL_REMOVE_EXPLICIT_PLATFORM_RESTORE_MIGRATION: &str = includ
 );
 pub(super) const MODEL_REMOVE_SEEDED_DATA_MIGRATION: &str =
     include_str!("../../../../../migrations/20260522_0015_remove_seeded_model_data.sql");
+pub(super) const MODEL_CONTEXT_WINDOW_TOKENS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260528_0019_add_model_context_window_tokens.sql");
 pub(super) const SKILL_REGISTRY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260519_0011_create_skill_registry.sql");
 pub(super) const BOOTSTRAP_PLATFORM_ADMIN_MIGRATION: &str =
     include_str!("../../../../../migrations/20260526_0017_bootstrap_platform_admin.sql");
 pub(super) const AGENT_RUN_HISTORY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260527_0017_create_agent_run_history.sql");
+pub(super) const AGENT_RUN_TOKEN_USAGE_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260528_0020_add_agent_run_token_usage.sql");
 pub(super) const CHAT_MANAGEMENT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260527_0018_create_chat_management.sql");
+pub(super) const CHAT_MESSAGE_TOKEN_USAGE_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260528_0021_add_chat_message_token_usage.sql");

@@ -3,7 +3,8 @@ use std::{future::Future, pin::Pin, sync::Arc};
 use crate::{
     domain::agent::{
         AgentError, AgentMessage, AgentModelConfig, AgentRunContext, AgentRunResult, ModelRequest,
-        ModelResponse, ModelStreamEvent, ModelStreamEventKind, ToolRegistry, ToolRequest,
+        ModelResponse, ModelStreamEvent, ModelStreamEventKind, ModelTokenUsage, ToolRegistry,
+        ToolRequest,
     },
     shared::event_bus::{BusEventDraft, BusOutcome, BusRequestRef, EventBusHandle, PublishOutcome},
 };
@@ -25,7 +26,7 @@ pub trait ModelClient: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
         Box::pin(async move {
             let response = self.generate(config, request).await?;
-            if let ModelResponse::FinalOutput(output) = &response
+            if let ModelResponse::FinalOutput { output, .. } = &response
                 && !output.is_empty()
             {
                 sink(ModelStreamEvent::text_delta(output.clone()));
@@ -92,6 +93,7 @@ impl ReactAgent {
         self.publish(&context, "agent.run.started", BusOutcome::Started, None)?;
         let mut step_count = 0;
         let mut tool_calls = 0;
+        let mut token_usage: Option<ModelTokenUsage> = None;
 
         loop {
             if step_count >= context.limits.max_steps {
@@ -137,9 +139,15 @@ impl ReactAgent {
                 BusOutcome::Completed,
                 Some("model_responded"),
             )?;
+            if let Some(usage) = response.token_usage() {
+                token_usage = Some(match token_usage {
+                    Some(current) => current.add(usage),
+                    None => usage,
+                });
+            }
 
             match response {
-                ModelResponse::FinalOutput(output) => {
+                ModelResponse::FinalOutput { output, .. } => {
                     self.publish(
                         &context,
                         "agent.output.created",
@@ -158,10 +166,11 @@ impl ReactAgent {
                         workspace_code: context.workspace_code.clone(),
                         final_output: output,
                         step_count,
+                        token_usage,
                         observations: context.observations.clone(),
                     });
                 }
-                ModelResponse::ToolCall(call) => {
+                ModelResponse::ToolCall { call, .. } => {
                     if tool_calls >= context.limits.max_tool_calls {
                         self.publish(
                             &context,

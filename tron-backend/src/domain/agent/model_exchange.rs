@@ -17,11 +17,25 @@ pub struct ToolCall {
     pub input: Value,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelTokenUsage {
+    pub input_tokens: u32,
+    pub output_tokens: u32,
+    pub total_tokens: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ModelResponse {
-    FinalOutput(String),
-    ToolCall(ToolCall),
+    FinalOutput {
+        output: String,
+        token_usage: Option<ModelTokenUsage>,
+    },
+    ToolCall {
+        call: ToolCall,
+        token_usage: Option<ModelTokenUsage>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -56,13 +70,52 @@ impl ModelStreamEvent {
 
 impl ModelResponse {
     pub fn final_output(output: impl Into<String>) -> Self {
-        Self::FinalOutput(output.into())
+        Self::final_output_with_usage(output, None)
+    }
+
+    pub fn final_output_with_usage(
+        output: impl Into<String>,
+        token_usage: Option<ModelTokenUsage>,
+    ) -> Self {
+        Self::FinalOutput {
+            output: output.into(),
+            token_usage,
+        }
     }
 
     pub fn tool_call(tool_name: impl Into<String>, input: Value) -> Self {
-        Self::ToolCall(ToolCall {
-            tool_name: tool_name.into(),
-            input,
-        })
+        Self::tool_call_with_usage(tool_name, input, None)
+    }
+
+    pub fn tool_call_with_usage(
+        tool_name: impl Into<String>,
+        input: Value,
+        token_usage: Option<ModelTokenUsage>,
+    ) -> Self {
+        Self::ToolCall {
+            call: ToolCall {
+                tool_name: tool_name.into(),
+                input,
+            },
+            token_usage,
+        }
+    }
+
+    pub fn token_usage(&self) -> Option<ModelTokenUsage> {
+        match self {
+            Self::FinalOutput { token_usage, .. } | Self::ToolCall { token_usage, .. } => {
+                *token_usage
+            }
+        }
+    }
+}
+
+impl ModelTokenUsage {
+    pub fn add(self, other: Self) -> Self {
+        Self {
+            input_tokens: self.input_tokens.saturating_add(other.input_tokens),
+            output_tokens: self.output_tokens.saturating_add(other.output_tokens),
+            total_tokens: self.total_tokens.saturating_add(other.total_tokens),
+        }
     }
 }

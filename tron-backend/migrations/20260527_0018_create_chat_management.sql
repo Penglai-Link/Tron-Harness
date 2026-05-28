@@ -28,6 +28,9 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   channel TEXT NOT NULL,
   actor TEXT NOT NULL,
   content TEXT NOT NULL,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  total_tokens INTEGER,
   created_at INTEGER NOT NULL
 );
 

@@ -78,6 +78,9 @@ const messagesBySession: Record<string, ChatMessage[]> = {
       channel: "TASK_AGENT",
       actor: "Assistant",
       content: "The narrowest rollback is to restore the fast-path cache check behind a feature flag, then watch eu-west-1 and eu-central-1 latency before widening rollout.",
+      inputTokens: 64,
+      outputTokens: 42,
+      totalTokens: 106,
       createdAt: "2026-05-27T10:44:00Z",
     },
   ],
@@ -102,6 +105,9 @@ const messagesBySession: Record<string, ChatMessage[]> = {
       channel: "TASK_AGENT",
       actor: "Assistant",
       content: "I will keep persistence and runtime dispatch untouched, and only move connector mapping behind the existing adapter seam.",
+      inputTokens: 38,
+      outputTokens: 23,
+      totalTokens: 61,
       createdAt: "2026-05-27T09:50:00Z",
     },
   ],
@@ -112,7 +118,7 @@ export function getChatSessionGroups(): ChatSessionGroup[] {
   return [
     {
       taskCode: "TASK-8842",
-      taskTitle: "TASK-8842",
+      taskTitle: "Auth latency rollback",
       sessions: sessions.filter((session) => session.taskCode === "TASK-8842"),
     },
     {
@@ -239,6 +245,11 @@ export function createMockChatSendResult(session: ChatSession, input: SendChatMe
       status: "COMPLETED",
       finalOutput,
       stepCount: 1,
+      tokenUsage: {
+        inputTokens: 32,
+        outputTokens: 24,
+        totalTokens: 56,
+      },
     },
     messages: [
       {
@@ -261,6 +272,9 @@ export function createMockChatSendResult(session: ChatSession, input: SendChatMe
         channel: session.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
         actor: "Assistant",
         content: finalOutput,
+        inputTokens: 32,
+        outputTokens: 24,
+        totalTokens: 56,
         createdAt: now,
       },
     ],

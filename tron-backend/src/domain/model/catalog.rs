@@ -96,6 +96,7 @@ pub struct Model {
     pub structured_output_enabled: bool,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
+    pub context_window_tokens: Option<u32>,
     pub top_p: Option<f64>,
     pub timeout_ms: Option<u64>,
     pub max_retries: Option<u32>,
@@ -145,6 +146,7 @@ pub struct ModelView {
     pub structured_output_enabled: bool,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
+    pub context_window_tokens: Option<u32>,
     pub top_p: Option<f64>,
     pub timeout_ms: Option<u64>,
     pub max_retries: Option<u32>,
@@ -234,6 +236,7 @@ pub enum ModelError {
     InvalidBaseUrl,
     ApiKeyRefRequired,
     ModelNameRequired,
+    InvalidContextWindowTokens,
     DuplicatePlatformDisplayName,
     DuplicateWorkspaceDisplayName { workspace_code: String },
     InvalidProtocolModelType,
@@ -263,6 +266,9 @@ impl fmt::Display for ModelError {
             Self::InvalidBaseUrl => formatter.write_str("baseUrl must be a valid absolute URL"),
             Self::ApiKeyRefRequired => formatter.write_str("apiKey is required"),
             Self::ModelNameRequired => formatter.write_str("modelName is required"),
+            Self::InvalidContextWindowTokens => {
+                formatter.write_str("contextWindowTokens must be greater than zero")
+            }
             Self::DuplicatePlatformDisplayName => {
                 formatter.write_str("displayName already exists in platform models")
             }

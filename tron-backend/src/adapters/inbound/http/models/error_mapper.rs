@@ -53,6 +53,11 @@ pub fn model_error_response(error: ModelError) -> Response {
             "MODEL_NAME_REQUIRED",
             "modelName is required".to_string(),
         ),
+        ModelError::InvalidContextWindowTokens => (
+            StatusCode::BAD_REQUEST,
+            "MODEL_CONTEXT_WINDOW_INVALID",
+            "contextWindowTokens must be greater than zero".to_string(),
+        ),
         ModelError::DuplicatePlatformDisplayName => (
             StatusCode::CONFLICT,
             "MODEL_DISPLAY_NAME_DUPLICATE",

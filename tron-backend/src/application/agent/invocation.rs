@@ -73,7 +73,8 @@ impl AgentInvocationService {
         user_code: Option<String>,
         sink: ModelStreamSink,
     ) -> Result<AgentInvocationResult, AgentInvocationError> {
-        self.invoke_with_stream(command, user_code, Some(sink)).await
+        self.invoke_with_stream(command, user_code, Some(sink))
+            .await
     }
 
     async fn invoke_with_stream(
@@ -193,6 +194,7 @@ impl AgentInvocationService {
         match result {
             Ok(result) => {
                 let finished_at = current_timestamp();
+                let token_usage = result.token_usage;
                 self.history
                     .create_run(AgentRunHistoryRecord {
                         id: 0,
@@ -207,6 +209,9 @@ impl AgentInvocationService {
                         outcome: "completed".into(),
                         step_count: result.step_count,
                         observation_count: result.observations.len() as u32,
+                        input_tokens: token_usage.map(|usage| usage.input_tokens),
+                        output_tokens: token_usage.map(|usage| usage.output_tokens),
+                        total_tokens: token_usage.map(|usage| usage.total_tokens),
                         output_preview: Some(safe_preview("output", &result.final_output)),
                         error_code: None,
                         error_message: None,
@@ -222,6 +227,7 @@ impl AgentInvocationService {
                     status: "COMPLETED",
                     final_output: result.final_output,
                     step_count: result.step_count,
+                    token_usage,
                 })
             }
             Err(error) => {
@@ -241,6 +247,9 @@ impl AgentInvocationService {
                         outcome: "failed".into(),
                         step_count: 0,
                         observation_count: 0,
+                        input_tokens: None,
+                        output_tokens: None,
+                        total_tokens: None,
                         output_preview: None,
                         error_code: Some(invocation_error.code().into()),
                         error_message: Some(safe_preview(

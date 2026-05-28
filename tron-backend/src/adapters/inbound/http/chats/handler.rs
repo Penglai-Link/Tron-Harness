@@ -357,7 +357,9 @@ fn chat_send_error_message(error: ChatSendError) -> String {
         ChatSendError::Chat(ChatError::SessionNotFound) => "chat session was not found".into(),
         ChatSendError::Chat(ChatError::SessionTitleRequired) => "session title is required".into(),
         ChatSendError::Chat(ChatError::WorkspaceRequired) => "workspaceCode is required".into(),
-        ChatSendError::Chat(ChatError::WorkspaceForbidden) => "workspace access is forbidden".into(),
+        ChatSendError::Chat(ChatError::WorkspaceForbidden) => {
+            "workspace access is forbidden".into()
+        }
         ChatSendError::Chat(ChatError::StorageFailure) => "chat storage failed".into(),
         ChatSendError::Agent(error) => error.message(),
     }

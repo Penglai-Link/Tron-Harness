@@ -10,7 +10,7 @@ use crate::{
     shared::time::{timestamp_from_millis, timestamp_to_millis},
 };
 
-use super::migrations::CHAT_MANAGEMENT_MIGRATION;
+use super::migrations::{CHAT_MANAGEMENT_MIGRATION, CHAT_MESSAGE_TOKEN_USAGE_MIGRATION};
 
 pub struct SqliteChatRepository {
     connection: Connection,
@@ -35,6 +35,12 @@ impl SqliteChatRepository {
             .connection
             .execute_batch(CHAT_MANAGEMENT_MIGRATION)
             .map_err(storage_error)?;
+        if !column_exists(&repository.connection, "chat_messages", "input_tokens")? {
+            repository
+                .connection
+                .execute_batch(CHAT_MESSAGE_TOKEN_USAGE_MIGRATION)
+                .map_err(storage_error)?;
+        }
         Ok(repository)
     }
 }
@@ -198,8 +204,8 @@ impl ChatRepository for SqliteChatRepository {
     fn create_message(&mut self, message: &ChatMessage) -> Result<(), ChatError> {
         self.connection
             .execute(
-                "INSERT INTO chat_messages (id, message_code, session_code, run_code, role, channel, actor, content, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                "INSERT INTO chat_messages (id, message_code, session_code, run_code, role, channel, actor, content, input_tokens, output_tokens, total_tokens, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     message.id,
                     message.message_code,
@@ -209,6 +215,9 @@ impl ChatRepository for SqliteChatRepository {
                     message_channel_to_storage(message.channel),
                     message.actor,
                     message.content,
+                    message.input_tokens,
+                    message.output_tokens,
+                    message.total_tokens,
                     timestamp_to_millis(&message.created_at),
                 ],
             )
@@ -220,7 +229,7 @@ impl ChatRepository for SqliteChatRepository {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT id, message_code, session_code, run_code, role, channel, actor, content, created_at
+                "SELECT id, message_code, session_code, run_code, role, channel, actor, content, input_tokens, output_tokens, total_tokens, created_at
                  FROM chat_messages
                  WHERE session_code = ?1
                  ORDER BY created_at ASC, id ASC",
@@ -264,8 +273,26 @@ fn row_to_message(row: &Row<'_>) -> rusqlite::Result<ChatMessage> {
         channel: message_channel_from_storage(&channel).map_err(chat_mapping_error)?,
         actor: row.get(6)?,
         content: row.get(7)?,
-        created_at: timestamp_from_millis(row.get(8)?),
+        input_tokens: row.get(8)?,
+        output_tokens: row.get(9)?,
+        total_tokens: row.get(10)?,
+        created_at: timestamp_from_millis(row.get(11)?),
     })
+}
+
+fn column_exists(
+    connection: &Connection,
+    table_name: &str,
+    column_name: &str,
+) -> Result<bool, ChatError> {
+    let pragma = format!("PRAGMA table_info({table_name})");
+    let mut statement = connection.prepare(&pragma).map_err(storage_error)?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(storage_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(storage_error)?;
+    Ok(columns.iter().any(|value| value == column_name))
 }
 
 fn next_id(connection: &Connection, table: &str) -> Result<i64, ChatError> {

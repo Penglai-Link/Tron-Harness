@@ -45,6 +45,7 @@ pub struct ModelCommand {
     pub structured_output_enabled: bool,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
+    pub context_window_tokens: Option<u32>,
     pub top_p: Option<f64>,
     pub timeout_ms: Option<u64>,
     pub max_retries: Option<u32>,
@@ -115,6 +116,7 @@ struct NormalizedModelSpec {
     structured_output_enabled: bool,
     temperature: Option<f64>,
     max_tokens: Option<u32>,
+    context_window_tokens: Option<u32>,
     top_p: Option<f64>,
     timeout_ms: Option<u64>,
     max_retries: Option<u32>,
@@ -243,6 +245,7 @@ impl ModelService {
             structured_output_enabled: source.structured_output_enabled,
             temperature: source.temperature,
             max_tokens: source.max_tokens,
+            context_window_tokens: source.context_window_tokens,
             top_p: source.top_p,
             timeout_ms: source.timeout_ms,
             max_retries: source.max_retries,
@@ -1382,6 +1385,7 @@ fn build_platform_view(model: Model, defaults_by_type: &HashMap<ModelType, Strin
         structured_output_enabled: model.structured_output_enabled,
         temperature: model.temperature,
         max_tokens: model.max_tokens,
+        context_window_tokens: model.context_window_tokens,
         top_p: model.top_p,
         timeout_ms: model.timeout_ms,
         max_retries: model.max_retries,
@@ -1425,6 +1429,7 @@ fn agent_model_config_from_view(view: &ModelView, api_key: &str) -> Option<Agent
         model_name: view.model_name.clone(),
         temperature: view.temperature,
         max_tokens: view.max_tokens,
+        context_window_tokens: view.context_window_tokens,
         top_p: view.top_p,
         timeout_ms: view.timeout_ms,
         max_retries: view.max_retries,
@@ -1483,6 +1488,7 @@ fn build_workspace_effective_view(
         structured_output_enabled: config_model.structured_output_enabled,
         temperature: config_model.temperature,
         max_tokens: config_model.max_tokens,
+        context_window_tokens: config_model.context_window_tokens,
         top_p: config_model.top_p,
         timeout_ms: config_model.timeout_ms,
         max_retries: config_model.max_retries,
@@ -1527,6 +1533,7 @@ fn build_workspace_preview_view(
     view.structured_output_enabled = preview_model.structured_output_enabled;
     view.temperature = preview_model.temperature;
     view.max_tokens = preview_model.max_tokens;
+    view.context_window_tokens = preview_model.context_window_tokens;
     view.top_p = preview_model.top_p;
     view.timeout_ms = preview_model.timeout_ms;
     view.max_retries = preview_model.max_retries;
@@ -1895,6 +1902,9 @@ fn normalize_model_spec(
         command.model_type,
         &model_capabilities,
     )?;
+    if command.context_window_tokens == Some(0) {
+        return Err(ModelError::InvalidContextWindowTokens);
+    }
 
     Ok(NormalizedModelSpec {
         display_name: command.display_name.trim().to_string(),
@@ -1912,6 +1922,7 @@ fn normalize_model_spec(
         structured_output_enabled: command.structured_output_enabled,
         temperature: command.temperature,
         max_tokens: command.max_tokens,
+        context_window_tokens: command.context_window_tokens,
         top_p: command.top_p,
         timeout_ms: command.timeout_ms,
         max_retries: command.max_retries,
@@ -1941,6 +1952,7 @@ fn update_model_from_spec(
     model.structured_output_enabled = spec.structured_output_enabled;
     model.temperature = spec.temperature;
     model.max_tokens = spec.max_tokens;
+    model.context_window_tokens = spec.context_window_tokens;
     model.top_p = spec.top_p;
     model.timeout_ms = spec.timeout_ms;
     model.max_retries = spec.max_retries;
@@ -2083,6 +2095,7 @@ fn duplicate_workspace_source_model(
         structured_output_enabled: source.structured_output_enabled,
         temperature: source.temperature,
         max_tokens: source.max_tokens,
+        context_window_tokens: source.context_window_tokens,
         top_p: source.top_p,
         timeout_ms: source.timeout_ms,
         max_retries: source.max_retries,
@@ -2128,6 +2141,7 @@ fn workspace_status_patch_model(
         structured_output_enabled: source.structured_output_enabled,
         temperature: source.temperature,
         max_tokens: source.max_tokens,
+        context_window_tokens: source.context_window_tokens,
         top_p: source.top_p,
         timeout_ms: source.timeout_ms,
         max_retries: source.max_retries,
@@ -2163,6 +2177,7 @@ fn update_workspace_status_patch_model(
     patch.structured_output_enabled = source.structured_output_enabled;
     patch.temperature = source.temperature;
     patch.max_tokens = source.max_tokens;
+    patch.context_window_tokens = source.context_window_tokens;
     patch.top_p = source.top_p;
     patch.timeout_ms = source.timeout_ms;
     patch.max_retries = source.max_retries;
@@ -2207,6 +2222,7 @@ fn workspace_override_model(
         structured_output_enabled: spec.structured_output_enabled,
         temperature: spec.temperature,
         max_tokens: spec.max_tokens,
+        context_window_tokens: spec.context_window_tokens,
         top_p: spec.top_p,
         timeout_ms: spec.timeout_ms,
         max_retries: spec.max_retries,
@@ -2247,6 +2263,7 @@ fn update_workspace_override_model(
     existing.structured_output_enabled = spec.structured_output_enabled;
     existing.temperature = spec.temperature;
     existing.max_tokens = spec.max_tokens;
+    existing.context_window_tokens = spec.context_window_tokens;
     existing.top_p = spec.top_p;
     existing.timeout_ms = spec.timeout_ms;
     existing.max_retries = spec.max_retries;
@@ -2303,6 +2320,7 @@ fn build_platform_model_from_spec(spec: NormalizedModelSpec, id: i64, model_code
         structured_output_enabled: spec.structured_output_enabled,
         temperature: spec.temperature,
         max_tokens: spec.max_tokens,
+        context_window_tokens: spec.context_window_tokens,
         top_p: spec.top_p,
         timeout_ms: spec.timeout_ms,
         max_retries: spec.max_retries,
@@ -2343,6 +2361,7 @@ fn build_workspace_local_model_from_spec(
         structured_output_enabled: spec.structured_output_enabled,
         temperature: spec.temperature,
         max_tokens: spec.max_tokens,
+        context_window_tokens: spec.context_window_tokens,
         top_p: spec.top_p,
         timeout_ms: spec.timeout_ms,
         max_retries: spec.max_retries,

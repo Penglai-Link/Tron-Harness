@@ -68,6 +68,7 @@ fn base_context(run_code: &str) -> AgentRunContext {
             model_name: "gpt-test".into(),
             temperature: Some(0.2),
             max_tokens: Some(128),
+            context_window_tokens: Some(8_192),
             top_p: Some(1.0),
             timeout_ms: Some(1000),
             max_retries: Some(0),

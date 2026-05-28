@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::ToolObservation;
+use super::{ModelTokenUsage, ToolObservation};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -10,6 +10,7 @@ pub struct AgentRunResult {
     pub workspace_code: String,
     pub final_output: String,
     pub step_count: u32,
+    pub token_usage: Option<ModelTokenUsage>,
     pub observations: Vec<ToolObservation>,
 }
 

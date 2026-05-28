@@ -13,6 +13,7 @@ use crate::{
             SendChatMessageCommand, UpdateChatSessionCommand,
         },
     },
+    domain::agent::ModelTokenUsage,
     domain::chat::{
         ChatError, ChatMessage, ChatMessageChannel, ChatMessageRole, ChatSession, ChatSessionGroup,
         ChatSessionStatus,
@@ -73,10 +74,7 @@ impl ChatService {
 
         let mut grouped = BTreeMap::<String, ChatSessionGroup>::new();
         for session in sessions {
-            let task_title = session
-                .task_code
-                .clone()
-                .unwrap_or_else(|| "Chat".into());
+            let task_title = session.task_code.clone().unwrap_or_else(|| "Chat".into());
             let group = grouped
                 .entry(task_title.clone())
                 .or_insert_with(|| ChatSessionGroup {
@@ -181,6 +179,7 @@ impl ChatService {
             channel,
             "User",
             &content,
+            None,
         )?;
         let invocation = AgentInvocationCommand {
             run_code: command.run_code,
@@ -206,6 +205,7 @@ impl ChatService {
             channel,
             "Assistant",
             &run.final_output,
+            run.token_usage,
         )?;
         let updated_at = current_timestamp();
         self.repository()
@@ -230,6 +230,7 @@ impl ChatService {
         channel: ChatMessageChannel,
         actor: &str,
         content: &str,
+        token_usage: Option<ModelTokenUsage>,
     ) -> Result<ChatMessage, ChatSendError> {
         let mut repository = self.repository();
         let id = repository.next_message_id().map_err(ChatSendError::Chat)?;
@@ -242,6 +243,9 @@ impl ChatService {
             channel,
             actor: actor.into(),
             content: content.into(),
+            input_tokens: token_usage.map(|usage| usage.input_tokens),
+            output_tokens: token_usage.map(|usage| usage.output_tokens),
+            total_tokens: token_usage.map(|usage| usage.total_tokens),
             created_at: current_timestamp(),
         };
         repository

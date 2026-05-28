@@ -295,6 +295,48 @@ async fn model_capabilities_round_trip_as_multi_value_field() {
 }
 
 #[tokio::test]
+async fn context_window_tokens_round_trip_for_platform_and_workspace_models() {
+    let database_url = temp_database_url("model-context-window-round-trip");
+    let config = AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let router = app_with_config(config);
+
+    let mut platform_payload =
+        model_payload("Context Platform", "qwen-max", "OPENAI_COMPATIBLE", "TEXT");
+    platform_payload["contextWindowTokens"] = json!(65536);
+    let platform_response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/admin/platform/models",
+        Some(platform_payload),
+    )
+    .await;
+    assert_eq!(platform_response.status(), StatusCode::CREATED);
+    let platform_body = response_json(platform_response).await;
+    assert_eq!(platform_body["data"]["contextWindowTokens"], json!(65536));
+
+    let mut workspace_payload = model_payload(
+        "Context Workspace",
+        "qwen-fast",
+        "OPENAI_COMPATIBLE",
+        "TEXT",
+    );
+    workspace_payload["contextWindowTokens"] = json!(32768);
+    let workspace_response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/models/workspaces/TRON_CORE",
+        Some(workspace_payload),
+    )
+    .await;
+    assert_eq!(workspace_response.status(), StatusCode::CREATED);
+    let workspace_body = response_json(workspace_response).await;
+    assert_eq!(workspace_body["data"]["contextWindowTokens"], json!(32768));
+}
+
+#[tokio::test]
 async fn duplicate_platform_model_clones_config_with_incrementing_copy_names() {
     let server = verify_mock_server().await;
     let database_url = temp_database_url("model-platform-duplicate");
@@ -2311,6 +2353,11 @@ fn model_payload(display_name: &str, model_name: &str, protocol: &str, model_typ
     } else {
         Value::Null
     };
+    let context_window_tokens = if model_type == "TEXT" {
+        json!(128000)
+    } else {
+        Value::Null
+    };
     let top_p = if model_type == "TEXT" {
         json!(1.0)
     } else {
@@ -2331,6 +2378,7 @@ fn model_payload(display_name: &str, model_name: &str, protocol: &str, model_typ
         "structuredOutputEnabled": protocol == "RESPONSES",
         "temperature": temperature,
         "maxTokens": max_tokens,
+        "contextWindowTokens": context_window_tokens,
         "topP": top_p,
         "timeoutMs": 1000,
         "maxRetries": 0

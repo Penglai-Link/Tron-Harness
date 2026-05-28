@@ -468,6 +468,9 @@ export function WorkspaceModelDetailsPage() {
               <Field label="Max Tokens">
                 <ReadValue>{selectedRecord.maxTokens === null ? "" : String(selectedRecord.maxTokens)}</ReadValue>
               </Field>
+              <Field label="Context Window">
+                <ReadValue>{selectedRecord.contextWindowTokens === null ? "" : String(selectedRecord.contextWindowTokens)}</ReadValue>
+              </Field>
               <Field label="Top P">
                 <ReadValue>{formatOptionalNumber(selectedRecord.topP)}</ReadValue>
               </Field>

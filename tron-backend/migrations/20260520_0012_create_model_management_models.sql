@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS models (
     structured_output_enabled INTEGER NOT NULL,
     temperature REAL NULL,
     max_tokens INTEGER NULL,
+    context_window_tokens INTEGER NULL,
     top_p REAL NULL,
     timeout_ms INTEGER NULL,
     max_retries INTEGER NULL,

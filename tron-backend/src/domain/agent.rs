@@ -24,7 +24,7 @@ pub use kind::{AgentKind, AgentModelProtocol, AgentRuntimeKind};
 pub use message::AgentMessage;
 pub use model_config::AgentModelConfig;
 pub use model_exchange::{
-    ModelRequest, ModelResponse, ModelStreamEvent, ModelStreamEventKind, ToolCall,
+    ModelRequest, ModelResponse, ModelStreamEvent, ModelStreamEventKind, ModelTokenUsage, ToolCall,
 };
 pub use run::{AgentRunResult, AgentRunStatus};
 pub use tool::{InProcessTool, Tool, ToolError, ToolObservation, ToolRegistry, ToolRequest};

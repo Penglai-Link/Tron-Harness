@@ -54,6 +54,9 @@ pub struct ChatMessage {
     pub channel: ChatMessageChannel,
     pub actor: String,
     pub content: String,
+    pub input_tokens: Option<u32>,
+    pub output_tokens: Option<u32>,
+    pub total_tokens: Option<u32>,
     pub created_at: String,
 }
 

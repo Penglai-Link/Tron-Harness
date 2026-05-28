@@ -1,15 +1,17 @@
 import {
+  Fragment,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import {
-  Activity,
   Bot,
   BrainCircuit,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
+  CircleAlert,
   CircleDot,
   Ellipsis,
   GitBranch,
@@ -46,10 +48,16 @@ import {
   useChatMessageListBySession,
   useChatSessionGroupList,
 } from "@/domain/chat/hooks";
+import { useAuthSession } from "@/domain/auth";
 import { fetchWorkspaceModelCatalog } from "@/domain/model/api";
 import { getWorkspaceModelCatalog } from "@/domain/model/mock";
 import type { ModelRecord } from "@/domain/model/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import {
+  shouldShowAguiEventType,
+  useAguiDebugPreferences,
+  type AguiDebugPreferences,
+} from "@/domain/settings/model/aguiDebugPreferences";
 import type {
   ChatAguiEvent,
   ChatAguiStreamEvent,
@@ -77,6 +85,14 @@ function findSession(groups: ChatSessionGroup[], sessionCode: string) {
     .find((session) => session.sessionCode === sessionCode);
 }
 
+function orderSessionGroups(groups: ChatSessionGroup[]) {
+  return [...groups].sort((left, right) => {
+    if (!left.taskCode && right.taskCode) return -1;
+    if (left.taskCode && !right.taskCode) return 1;
+    return left.taskTitle.localeCompare(right.taskTitle);
+  });
+}
+
 function insertSession(groups: ChatSessionGroup[], session: ChatSession): ChatSessionGroup[] {
   const groupKey = session.taskCode ?? "unassigned";
   let inserted = false;
@@ -90,38 +106,106 @@ function insertSession(groups: ChatSessionGroup[], session: ChatSession): ChatSe
     };
   });
 
-  if (inserted) return nextGroups;
+  if (inserted) return orderSessionGroups(nextGroups);
 
-  return [
+  return orderSessionGroups([
     {
       taskCode: session.taskCode,
       taskTitle: session.taskCode ?? "Chat",
       sessions: [session],
     },
     ...nextGroups,
-  ];
+  ]);
 }
 
 function replaceSession(groups: ChatSessionGroup[], session: ChatSession): ChatSessionGroup[] {
-  return groups.map((group) => ({
+  return orderSessionGroups(groups.map((group) => ({
     ...group,
     sessions: group.sessions.map((item) => (
       item.sessionCode === session.sessionCode ? session : item
     )),
-  }));
+  })));
 }
 
 function removeSession(groups: ChatSessionGroup[], sessionCode: string): ChatSessionGroup[] {
-  return groups
+  return orderSessionGroups(groups
     .map((group) => ({
       ...group,
       sessions: group.sessions.filter((session) => session.sessionCode !== sessionCode),
     }))
-    .filter((group) => group.sessions.length > 0);
+    .filter((group) => group.sessions.length > 0));
 }
 
 function latestEventValue(events: ChatAguiEvent[], key: string) {
-  return [...events].reverse().find((event) => event.metadata[key])?.metadata[key] ?? "unavailable";
+  return [...events].reverse().find((event) => event.metadata[key])?.metadata[key] ?? null;
+}
+
+function contextValue(value: string | null | undefined) {
+  const trimmed = value?.trim();
+  return trimmed && trimmed !== "unavailable" ? trimmed : null;
+}
+
+function formatTokenCount(value: number | null | undefined) {
+  if (value == null) return "unavailable";
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
+function tokenField(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function chatTokenUsage(messages: ChatMessage[]) {
+  const assistantMessages = messages.filter((message) => message.role === "ASSISTANT");
+  let hasUsage = assistantMessages.length === 0;
+  let input = 0;
+  let output = 0;
+  let total = 0;
+
+  assistantMessages.forEach((message) => {
+    const inputTokens = tokenField(message.inputTokens);
+    const outputTokens = tokenField(message.outputTokens);
+    const totalTokens = tokenField(message.totalTokens);
+    if (inputTokens == null && outputTokens == null && totalTokens == null) return;
+
+    hasUsage = true;
+    input += inputTokens ?? 0;
+    output += outputTokens ?? 0;
+    total += totalTokens ?? (inputTokens ?? 0) + (outputTokens ?? 0);
+  });
+
+  return {
+    input: hasUsage ? input : null,
+    output: hasUsage ? output : null,
+    total: hasUsage ? total : null,
+  };
+}
+
+function contextWindowLimit(model: ModelRecord | null | undefined) {
+  return model?.contextWindowTokens ?? null;
+}
+
+function formatContextUsagePercent(usedTokens: number | null, windowTokens: number | null) {
+  if (usedTokens == null || windowTokens == null || windowTokens <= 0) return null;
+  const percent = (usedTokens / windowTokens) * 100;
+  if (percent > 0 && percent < 0.01) return "<0.01% used";
+  const maximumFractionDigits = percent < 1 ? 2 : percent < 10 ? 1 : 0;
+  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits }).format(percent)}% used`;
+}
+
+function formatContextWindowValue(windowTokens: number | null, usedTokens: number | null) {
+  const windowLabel = formatTokenCount(windowTokens);
+  const usageLabel = formatContextUsagePercent(usedTokens, windowTokens);
+  return usageLabel ? `${windowLabel} · ${usageLabel}` : windowLabel;
+}
+
+function insertNewlineAtCursor(textarea: HTMLTextAreaElement) {
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const nextValue = `${textarea.value.slice(0, start)}\n${textarea.value.slice(end)}`;
+  textarea.value = nextValue;
+  textarea.selectionStart = start + 1;
+  textarea.selectionEnd = start + 1;
+  return nextValue;
 }
 
 function usedSkills(events: ChatAguiEvent[]) {
@@ -163,6 +247,7 @@ function aguiEventSummary(event: TranscriptAguiEvent) {
 function aguiEventTitle(type: string) {
   const normalized = type.toUpperCase();
   if (normalized.includes("REASONING")) return "Thinking";
+  if (normalized.includes("TEXT_MESSAGE")) return "Text message";
   if (normalized.includes("TOOL")) return "Tool call";
   if (normalized.includes("LOG") || normalized.includes("STEP") || normalized.includes("ACTIVITY")) return "Tool log";
   if (normalized.includes("RUN")) return "Run lifecycle";
@@ -172,9 +257,48 @@ function aguiEventTitle(type: string) {
 function aguiEventIcon(type: string) {
   const normalized = type.toUpperCase();
   if (normalized.includes("REASONING")) return <BrainCircuit size={16} />;
+  if (normalized.includes("TEXT_MESSAGE")) return <MessageSquareText size={16} />;
   if (normalized.includes("TOOL_CALL")) return <Hammer size={16} />;
   if (normalized.includes("LOG") || normalized.includes("STEP") || normalized.includes("ACTIVITY")) return <Terminal size={16} />;
-  return <Activity size={16} />;
+  if (normalized.includes("RUN_ERROR")) return <CircleAlert size={16} />;
+  if (normalized.includes("RUN_FINISHED")) return <CheckCircle2 size={16} />;
+  if (normalized.includes("RUN_STARTED")) return <LoaderCircle size={16} />;
+  if (normalized.includes("RUN")) return <CircleDot size={16} />;
+  return <CircleDot size={16} />;
+}
+
+function aguiEventMillis(event: TranscriptAguiEvent) {
+  if ("timestamp" in event && typeof event.timestamp === "number") return event.timestamp;
+  const parsed = Date.parse(aguiEventTime(event));
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function terminalAguiEvent(events: TranscriptAguiEvent[]) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const normalized = aguiEventType(events[index]).toUpperCase();
+    if (normalized.includes("RUN_FINISHED") || normalized.includes("RUN_ERROR")) return events[index];
+  }
+  return null;
+}
+
+function formatAguiDuration(milliseconds: number) {
+  if (milliseconds < 1000) return "<1s";
+  const totalSeconds = Math.max(1, Math.round(milliseconds / 1000));
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (totalMinutes < 60) return seconds ? `${totalMinutes}m ${seconds}s` : `${totalMinutes}m`;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
+}
+
+function aguiWorkDuration(events: TranscriptAguiEvent[]) {
+  const times = events
+    .map(aguiEventMillis)
+    .filter((value): value is number => typeof value === "number");
+  if (times.length < 2) return "<1s";
+  return formatAguiDuration(Math.max(...times) - Math.min(...times));
 }
 
 function availableChatModels(models: ModelRecord[]) {
@@ -244,14 +368,14 @@ function SessionActionMenu({
           role="menu"
           aria-label={`${session.title} actions`}
         >
+          <button className="flex w-full rounded-md px-2.5 py-1.5 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={() => select(onRename)}>
+            Rename
+          </button>
           <button className="flex w-full rounded-md px-2.5 py-1.5 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={() => select(onArchive)}>
             Archive
           </button>
           <button className="flex w-full rounded-md px-2.5 py-1.5 text-left text-[var(--color-error)] hover:bg-[var(--color-error-container)]" type="button" role="menuitem" onClick={() => select(onDelete)}>
             Delete
-          </button>
-          <button className="flex w-full rounded-md px-2.5 py-1.5 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={() => select(onRename)}>
-            Rename
           </button>
         </div>
       ) : null}
@@ -285,37 +409,62 @@ function SessionRunIndicator({
   return <span className="size-5" aria-hidden="true" />;
 }
 
-function RightContextSidebar({ events, session }: { events: ChatAguiEvent[]; session?: ChatSession }) {
+function RightContextSidebar({
+  events,
+  messages,
+  model,
+  session,
+}: {
+  events: ChatAguiEvent[];
+  messages: ChatMessage[];
+  model?: ModelRecord | null;
+  session?: ChatSession;
+}) {
   const skills = usedSkills(events);
-  const appCode = session?.appCode ?? latestEventValue(events, "appCode");
-  const taskCode = session?.taskCode ?? latestEventValue(events, "taskCode");
-  const worktreePath = latestEventValue(events, "localDirectory");
-  const branchName = latestEventValue(events, "branchName");
+  const appCode = contextValue(session?.appCode) ?? contextValue(latestEventValue(events, "appCode"));
+  const taskCode = contextValue(session?.taskCode) ?? contextValue(latestEventValue(events, "taskCode"));
+  const worktreePath = contextValue(latestEventValue(events, "localDirectory"));
+  const branchName = contextValue(latestEventValue(events, "branchName"));
+  const modelLabel = (
+    contextValue(model?.displayName)
+    ?? contextValue(model?.modelName)
+    ?? contextValue(latestEventValue(events, "modelName"))
+    ?? "unavailable"
+  );
+  const usage = chatTokenUsage(messages);
+  const usedTokens = usage.total;
+  const windowTokens = contextWindowLimit(model);
 
   return (
     <section className="space-y-4">
       <h2 className="text-xl font-semibold">Run Context</h2>
       <div className="space-y-5 text-sm">
-        <ContextBlock title="App / Task">
-          <ContextRow label="app" value={appCode || "unavailable"} />
-          <ContextRow label="task" value={taskCode || "unavailable"} />
+        <ContextBlock title="Context Window">
+          <ContextRow label="model" value={modelLabel} />
+          <ContextRow label="window" value={formatContextWindowValue(windowTokens, usedTokens)} />
+          <ContextRow label="used" value={formatTokenCount(usedTokens)} />
+          <ContextRow label="input" value={formatTokenCount(usage.input)} />
+          <ContextRow label="output" value={formatTokenCount(usage.output)} />
         </ContextBlock>
-        <ContextBlock title="Worktree">
-          <ContextRow label="path" value={worktreePath} />
-          <ContextRow label="branch" value={branchName} icon={<GitBranch size={14} />} />
-        </ContextBlock>
-        <ContextBlock title="Skills">
-          {skills.length ? (
+        {(appCode || taskCode) ? (
+          <ContextBlock title="App / Task">
+            {appCode ? <ContextRow label="app" value={appCode} /> : null}
+            {taskCode ? <ContextRow label="task" value={taskCode} /> : null}
+          </ContextBlock>
+        ) : null}
+        {(worktreePath || branchName) ? (
+          <ContextBlock title="Worktree">
+            {worktreePath ? <ContextRow label="path" value={worktreePath} /> : null}
+            {branchName ? <ContextRow label="branch" value={branchName} icon={<GitBranch size={14} />} /> : null}
+          </ContextBlock>
+        ) : null}
+        {skills.length ? (
+          <ContextBlock title="Skills">
             <div className="flex flex-wrap gap-2">
               {skills.map((skill) => <Badge key={skill} tone="neutral">{skill}</Badge>)}
             </div>
-          ) : (
-            <p className="font-mono text-xs text-[var(--color-on-surface-variant)]">unavailable</p>
-          )}
-        </ContextBlock>
-        <ContextBlock title="Context Window">
-          <ContextRow label="status" value="unavailable" />
-        </ContextBlock>
+          </ContextBlock>
+        ) : null}
       </div>
     </section>
   );
@@ -437,13 +586,36 @@ function SessionSidebar({
   onArchiveSession: (session: ChatSession) => void;
   onCreateSession: () => void;
   onDeleteSession: (session: ChatSession) => void;
-  onRenameSession: (session: ChatSession) => void;
+  onRenameSession: (session: ChatSession, title: string) => Promise<void>;
   onSessionSelect: (sessionCode: string) => void;
   runningSessionCode: string;
   sessionActionPendingCode: string;
   unseenSessionCodes: Set<string>;
 }) {
   const [closedGroups, setClosedGroups] = useState<Set<string>>(() => new Set());
+  const [editingSessionCode, setEditingSessionCode] = useState("");
+  const [renameDraft, setRenameDraft] = useState("");
+
+  function startInlineRename(session: ChatSession) {
+    setEditingSessionCode(session.sessionCode);
+    setRenameDraft(session.title);
+  }
+
+  function cancelInlineRename() {
+    setEditingSessionCode("");
+    setRenameDraft("");
+  }
+
+  async function submitInlineRename(session: ChatSession) {
+    const title = renameDraft.trim();
+    if (!title || title === session.title) {
+      cancelInlineRename();
+      return;
+    }
+
+    await onRenameSession(session, title);
+    cancelInlineRename();
+  }
 
   if (collapsed) {
     const collapsedSessions = groups.flatMap((group) => group.sessions);
@@ -528,33 +700,64 @@ function SessionSidebar({
               </button>
               {!closed ? (
                 <div className="space-y-1">
-                  {group.sessions.map((session) => (
-                    <div
-                      className={cn(
-                        "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md px-3 py-2 text-left transition",
-                        activeSessionCode === session.sessionCode
-                          ? "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]"
-                          : "text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]",
-                      )}
-                      key={session.sessionCode}
-                    >
-                      <button className="min-w-0 text-left" type="button" onClick={() => onSessionSelect(session.sessionCode)}>
-                        <span className="block truncate text-sm font-medium">{session.title}</span>
-                        <span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">{formatTime(session.updatedAt)}</span>
-                      </button>
-                      <SessionRunIndicator
-                        running={runningSessionCode === session.sessionCode}
-                        unseen={unseenSessionCodes.has(session.sessionCode)}
-                      />
-                      <SessionActionMenu
-                        disabled={sessionActionPendingCode === session.sessionCode}
-                        session={session}
-                        onArchive={onArchiveSession}
-                        onDelete={onDeleteSession}
-                        onRename={onRenameSession}
-                      />
-                    </div>
-                  ))}
+                  {group.sessions.map((session) => {
+                    const editing = editingSessionCode === session.sessionCode;
+                    const pending = sessionActionPendingCode === session.sessionCode;
+
+                    return (
+                      <div
+                        className={cn(
+                          "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md px-3 py-2 text-left transition",
+                          activeSessionCode === session.sessionCode
+                            ? "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]"
+                            : "text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]",
+                        )}
+                        key={session.sessionCode}
+                      >
+                        {editing ? (
+                          <input
+                            autoFocus
+                            aria-label={`Rename ${session.title}`}
+                            className="h-8 min-w-0 rounded-md border border-[var(--color-focus-ring)] bg-white px-2 text-sm font-medium text-[var(--color-on-surface)] outline-none"
+                            disabled={pending}
+                            value={renameDraft}
+                            onBlur={() => {
+                              if (!pending) void submitInlineRename(session);
+                            }}
+                            onChange={(event) => setRenameDraft(event.target.value)}
+                            onClick={(event) => event.stopPropagation()}
+                            onFocus={(event) => event.currentTarget.select()}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                void submitInlineRename(session);
+                              }
+                              if (event.key === "Escape") {
+                                event.preventDefault();
+                                cancelInlineRename();
+                              }
+                            }}
+                          />
+                        ) : (
+                          <button className="min-w-0 text-left" type="button" onClick={() => onSessionSelect(session.sessionCode)}>
+                            <span className="block truncate text-sm font-medium">{session.title}</span>
+                            <span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">{formatTime(session.updatedAt)}</span>
+                          </button>
+                        )}
+                        <SessionRunIndicator
+                          running={runningSessionCode === session.sessionCode}
+                          unseen={unseenSessionCodes.has(session.sessionCode)}
+                        />
+                        <SessionActionMenu
+                          disabled={pending}
+                          session={session}
+                          onArchive={onArchiveSession}
+                          onDelete={onDeleteSession}
+                          onRename={startInlineRename}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               ) : null}
             </section>
@@ -565,15 +768,21 @@ function SessionSidebar({
   );
 }
 
-function ChatBubble({ message }: { message: ChatMessage }) {
+function ChatBubble({
+  currentUserDisplayName,
+  message,
+}: {
+  currentUserDisplayName: string;
+  message: ChatMessage;
+}) {
   const isUser = message.role === "USER";
+  const actorName = isUser ? (currentUserDisplayName || message.actor) : message.actor;
   return (
     <article className={cn("max-w-[760px] rounded-md border bg-white px-4 py-3 shadow-sm", isUser ? "ml-auto border-[var(--color-primary)]" : "border-[var(--color-card-border)]")}>
       <div className="mb-2 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           {isUser ? <UserRound size={16} /> : <Bot size={16} />}
-          <span className="truncate text-sm font-semibold">{message.actor}</span>
-          <Badge tone="neutral">{message.channel === "TASK_AGENT" ? "task agent" : "main agent"}</Badge>
+          <span className="truncate text-sm font-semibold">{actorName}</span>
         </div>
         <span className="shrink-0 text-xs text-[var(--color-on-surface-variant)]">{formatTime(message.createdAt)}</span>
       </div>
@@ -622,28 +831,55 @@ function AguiEventCard({ event }: { event: TranscriptAguiEvent }) {
   );
 }
 
-function AguiEventRail({ events }: { events: TranscriptAguiEvent[] }) {
-  const cardEvents = events.filter((event) => {
-    const type = aguiEventType(event).toUpperCase();
-    return !["TEXT_MESSAGE_CONTENT", "TEXT_MESSAGE_START", "TEXT_MESSAGE_END"].includes(type);
-  });
+function AguiEventRail({
+  events,
+  preferences,
+}: {
+  events: TranscriptAguiEvent[];
+  preferences: AguiDebugPreferences;
+}) {
+  const cardEvents = events.filter((event) => shouldShowAguiEventType(aguiEventType(event), preferences));
+  const terminalEvent = terminalAguiEvent(events);
+  const terminalRunCode = terminalEvent ? aguiEventRunCode(terminalEvent) : "";
+  const [expanded, setExpanded] = useState(true);
+
+  useEffect(() => {
+    setExpanded(!terminalRunCode);
+  }, [terminalRunCode]);
 
   if (!cardEvents.length) return null;
 
   return (
     <section className="max-w-[760px] space-y-2" aria-label="AG-UI event cards">
-      {cardEvents.slice(-8).map((event, index) => (
+      {terminalEvent ? (
+        <button
+          aria-expanded={expanded}
+          className="flex w-full items-center gap-3 py-1 text-xs font-medium text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)]"
+          type="button"
+          onClick={() => setExpanded((current) => !current)}
+        >
+          <span className="h-px flex-1 bg-[var(--color-outline-variant)]" />
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            Worked for {aguiWorkDuration(events)}
+          </span>
+          <span className="h-px flex-1 bg-[var(--color-outline-variant)]" />
+        </button>
+      ) : null}
+      {expanded ? cardEvents.map((event, index) => (
         <AguiEventCard
           key={`${aguiEventType(event)}-${aguiEventRunCode(event)}-${aguiEventTime(event)}-${index}`}
           event={event}
         />
-      ))}
+      )) : null}
     </section>
   );
 }
 
 export function ChatManagementPage() {
   const toast = useToast();
+  const { session: authSession } = useAuthSession();
+  const { preferences: aguiDebugPreferences } = useAguiDebugPreferences();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
   const groups = useChatSessionGroupList(activeWorkspaceCode);
@@ -656,6 +892,7 @@ export function ChatManagementPage() {
   const aguiEvents = useChatAguiEvents(activeSession?.sessionCode ?? "");
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
   const [liveAguiEvents, setLiveAguiEvents] = useState<ChatAguiStreamEvent[]>([]);
+  const [liveAguiAnchorMessageCode, setLiveAguiAnchorMessageCode] = useState("");
   const [sending, setSending] = useState(false);
   const [creatingSession, setCreatingSession] = useState(false);
   const [chatModels, setChatModels] = useState<ModelRecord[]>([]);
@@ -669,9 +906,10 @@ export function ChatManagementPage() {
   const [unseenSessionCodes, setUnseenSessionCodes] = useState<Set<string>>(() => new Set());
   const activeSessionCodeRef = useRef("");
   const selectedModel = chatModels.find((model) => model.modelCode === selectedModelCode) ?? null;
+  const currentUserDisplayName = authSession?.user.displayName ?? "";
 
   useEffect(() => {
-    setSessionGroups(groups);
+    setSessionGroups(orderSessionGroups(groups));
   }, [groups]);
 
   useEffect(() => {
@@ -729,16 +967,26 @@ export function ChatManagementPage() {
   useEffect(() => {
     setVisibleMessages(messages);
     setLiveAguiEvents([]);
+    setLiveAguiAnchorMessageCode("");
   }, [messages]);
 
-  const transcriptAguiEvents = useMemo<TranscriptAguiEvent[]>(() => [
-    ...aguiEvents,
-    ...liveAguiEvents,
-  ], [aguiEvents, liveAguiEvents]);
+  const transcriptAguiEvents = useMemo<TranscriptAguiEvent[]>(() => liveAguiEvents, [liveAguiEvents]);
+  const liveAguiAnchorIndex = useMemo(() => {
+    if (!transcriptAguiEvents.length) return -1;
+
+    const anchoredIndex = visibleMessages.findIndex((message) => message.messageCode === liveAguiAnchorMessageCode);
+    if (anchoredIndex >= 0) return anchoredIndex;
+
+    for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
+      if (visibleMessages[index].role === "USER") return index;
+    }
+
+    return -1;
+  }, [liveAguiAnchorMessageCode, transcriptAguiEvents.length, visibleMessages]);
 
   const rightPanel = useMemo(() => (
-    <RightContextSidebar events={aguiEvents} session={activeSession} />
-  ), [activeSession, aguiEvents]);
+    <RightContextSidebar events={aguiEvents} messages={visibleMessages} model={selectedModel} session={activeSession} />
+  ), [activeSession, aguiEvents, selectedModel, visibleMessages]);
 
   useConsoleShellConfig({ rightPanel });
 
@@ -789,6 +1037,7 @@ export function ChatManagementPage() {
     setRunningSessionCode(sendingSessionCode);
     setComposer("");
     setLiveAguiEvents([]);
+    setLiveAguiAnchorMessageCode(optimisticUserCode);
     if (activeSessionCodeRef.current === sendingSessionCode) {
       setVisibleMessages((current) => [
         ...current,
@@ -809,7 +1058,7 @@ export function ChatManagementPage() {
         {
           onAguiEvent: (event) => {
             if (event.threadId && event.threadId !== sendingSessionCode) return;
-            setLiveAguiEvents((current) => [...current.slice(-31), event]);
+            setLiveAguiEvents((current) => [...current, event]);
           },
           onDelta: (delta) => {
             if (activeSessionCodeRef.current !== sendingSessionCode) return;
@@ -823,6 +1072,8 @@ export function ChatManagementPage() {
       );
       setSessionGroups((current) => replaceSession(current, result.session));
       if (activeSessionCodeRef.current === result.session.sessionCode) {
+        const resultUserMessage = result.messages.find((message) => message.role === "USER") ?? null;
+        setLiveAguiAnchorMessageCode(resultUserMessage?.messageCode ?? optimisticUserCode);
         setVisibleMessages((current) => [
           ...current.filter((message) => (
             message.messageCode !== optimisticUserCode
@@ -876,12 +1127,6 @@ export function ChatManagementPage() {
     } finally {
       setCreatingSession(false);
     }
-  }
-
-  function focusSessionTitle(session: ChatSession) {
-    setActiveSessionCode(session.sessionCode);
-    setTitleDraft(session.title);
-    setEditingTitle(true);
   }
 
   async function handleArchiveSession(session: ChatSession) {
@@ -962,6 +1207,25 @@ export function ChatManagementPage() {
     }
   }
 
+  async function handleSidebarRenameSession(session: ChatSession, title: string) {
+    if (!title.trim()) {
+      toast.warning("Session title is required", { title: "Rename skipped" });
+      return;
+    }
+
+    setSessionActionPendingCode(session.sessionCode);
+    try {
+      const renamed = await updateChatSession(session.sessionCode, { title });
+      setSessionGroups((current) => replaceSession(current, renamed));
+      toast.success("Session renamed", { title: renamed.sessionCode });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Rename session failed";
+      toast.error(message, { title: "Rename session failed" });
+    } finally {
+      setSessionActionPendingCode("");
+    }
+  }
+
   return (
     <div className="relative z-0 flex h-[calc(100vh-3.5rem)] min-h-[720px] min-w-0 overflow-hidden bg-white">
       <SessionSidebar
@@ -976,7 +1240,7 @@ export function ChatManagementPage() {
         onCollapseToggle={() => setSidebarCollapsed((value) => !value)}
         onCreateSession={() => void handleCreateSession()}
         onDeleteSession={(session) => void handleDeleteSession(session)}
-        onRenameSession={focusSessionTitle}
+        onRenameSession={handleSidebarRenameSession}
         onSessionSelect={handleSessionSelect}
       />
       <main className="flex min-w-0 flex-1 flex-col">
@@ -1035,9 +1299,16 @@ export function ChatManagementPage() {
 
         <section className="flex-1 overflow-y-auto bg-[var(--color-surface-container-low)] px-5 py-5">
           <div className="mx-auto flex max-w-4xl flex-col gap-4">
-            <AguiEventRail events={transcriptAguiEvents} />
             {visibleMessages.length ? visibleMessages.map((message) => (
-              <ChatBubble key={message.messageCode} message={message} />
+              <Fragment key={message.messageCode}>
+                <ChatBubble
+                  currentUserDisplayName={currentUserDisplayName}
+                  message={message}
+                />
+                {liveAguiAnchorIndex >= 0 && visibleMessages[liveAguiAnchorIndex]?.messageCode === message.messageCode ? (
+                  <AguiEventRail events={transcriptAguiEvents} preferences={aguiDebugPreferences} />
+                ) : null}
+              </Fragment>
             )) : activeWorkspaceCode ? (
               <div className="flex min-h-[360px] items-center justify-center rounded-md border border-dashed border-[var(--color-outline-variant)] bg-white text-sm text-[var(--color-on-surface-variant)]">
                 No persisted messages in this session.
@@ -1054,13 +1325,17 @@ export function ChatManagementPage() {
           <div className="flex min-h-28 w-full flex-col rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 py-3">
             <TextArea
               className="min-h-16 w-full flex-1 resize-none rounded-none border-0 bg-transparent p-0 text-sm shadow-none focus:border-transparent focus:ring-0"
-              placeholder="Send a message to continue this session"
+              placeholder="Enter to send, Ctrl/Cmd+Enter for newline"
               value={composer}
               onChange={(event) => setComposer(event.target.value)}
               onKeyDown={(event) => {
-                if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                  void handleSend();
+                if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+                event.preventDefault();
+                if (event.metaKey || event.ctrlKey) {
+                  setComposer(insertNewlineAtCursor(event.currentTarget));
+                  return;
                 }
+                void handleSend();
               }}
             />
             <div className="mt-2 flex items-center justify-between gap-3">

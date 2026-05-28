@@ -60,7 +60,10 @@ impl ModelClient for HttpModelClient {
         request: &'a ModelRequest,
         sink: ModelStreamSink,
     ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
-        Box::pin(async move { self.generate_stream_with_adapter(config, request, sink).await })
+        Box::pin(async move {
+            self.generate_stream_with_adapter(config, request, sink)
+                .await
+        })
     }
 }
 
@@ -90,7 +93,14 @@ impl HttpModelClient {
         let body = adapter.stream_request_body(config, request)?;
         let output = Arc::new(std::sync::Mutex::new(String::new()));
         let output_for_sink = output.clone();
+        let token_usage = Arc::new(std::sync::Mutex::new(None));
+        let token_usage_for_sink = token_usage.clone();
         let event_sink = Arc::new(move |event: Value| {
+            if let Some(usage) = adapter.parse_usage(&event) {
+                *token_usage_for_sink
+                    .lock()
+                    .expect("model stream usage mutex poisoned") = Some(usage);
+            }
             if let Some(delta) = adapter.parse_stream_event(&event)? {
                 output_for_sink
                     .lock()
@@ -107,10 +117,13 @@ impl HttpModelClient {
             .lock()
             .expect("model stream output mutex poisoned")
             .clone();
+        let token_usage = *token_usage
+            .lock()
+            .expect("model stream usage mutex poisoned");
         if output.is_empty() {
             return self.generate_with_adapter(config, request).await;
         }
-        Ok(ModelResponse::final_output(output))
+        Ok(ModelResponse::final_output_with_usage(output, token_usage))
     }
 }
 
@@ -179,7 +192,11 @@ impl ReqwestProviderClient {
         url: &str,
         body: &Value,
     ) -> reqwest::RequestBuilder {
-        let mut request = self.client.post(url).bearer_auth(&config.api_key).json(body);
+        let mut request = self
+            .client
+            .post(url)
+            .bearer_auth(&config.api_key)
+            .json(body);
         if let Some(timeout_ms) = config.timeout_ms
             && timeout_ms > 0
         {

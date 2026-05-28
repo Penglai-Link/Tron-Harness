@@ -13,6 +13,7 @@ pub struct AgentModelConfig {
     pub model_name: String,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
+    pub context_window_tokens: Option<u32>,
     pub top_p: Option<f64>,
     pub timeout_ms: Option<u64>,
     pub max_retries: Option<u32>,

@@ -41,6 +41,7 @@ type BaseModel = {
   lastVerifiedAt: string | null;
   lastVerifyMessage: string | null;
   lastVerifyStatus: ModelVerifyStatus | null;
+  contextWindowTokens: number | null;
   maxRetries: number | null;
   maxTokens: number | null;
   modelCapabilities: ModelCapability[];
@@ -153,6 +154,7 @@ function createSeedBaseModel(
     lastVerifiedAt: null,
     lastVerifyMessage: null,
     lastVerifyStatus: null,
+    contextWindowTokens: modelType === "TEXT" ? 128000 : null,
     maxRetries: 1,
     maxTokens: modelType === "TEXT" ? 4096 : null,
     modelCapabilities: getDefaultModelCapabilitiesForType(modelType),
@@ -268,6 +270,7 @@ function buildPlatformView(model: PlatformModel): ModelRecord {
     structuredOutputEnabled: model.structuredOutputEnabled,
     temperature: model.temperature,
     maxTokens: model.maxTokens,
+    contextWindowTokens: model.contextWindowTokens,
     topP: model.topP,
     timeoutMs: model.timeoutMs,
     maxRetries: model.maxRetries,
@@ -316,6 +319,7 @@ function buildWorkspaceView(
     structuredOutputEnabled: configModel.structuredOutputEnabled,
     temperature: configModel.temperature,
     maxTokens: configModel.maxTokens,
+    contextWindowTokens: configModel.contextWindowTokens,
     topP: configModel.topP,
     timeoutMs: configModel.timeoutMs,
     maxRetries: configModel.maxRetries,
@@ -713,6 +717,7 @@ function updateBaseModelFromPayload(
   model.structuredOutputEnabled = payload.structuredOutputEnabled;
   model.temperature = payload.temperature ?? null;
   model.maxTokens = payload.maxTokens ?? null;
+  model.contextWindowTokens = payload.contextWindowTokens ?? null;
   model.topP = payload.topP ?? null;
   model.timeoutMs = payload.timeoutMs ?? null;
   model.maxRetries = payload.maxRetries ?? null;
@@ -1170,6 +1175,7 @@ export function verifyWorkspaceModelDraftRecord(
     lastVerifyStatus: preview.lastVerifyStatus,
     maxRetries: preview.maxRetries,
     maxTokens: preview.maxTokens,
+    contextWindowTokens: preview.contextWindowTokens,
     modelCapabilities: [...preview.modelCapabilities],
     modelName: preview.modelName,
     modelType: preview.modelType,

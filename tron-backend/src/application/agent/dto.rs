@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::agent::{AgentModelConfig, AgentRunLimits, EffectiveTool};
+use crate::domain::agent::{AgentModelConfig, AgentRunLimits, EffectiveTool, ModelTokenUsage};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,4 +27,5 @@ pub struct AgentInvocationResult {
     pub status: &'static str,
     pub final_output: String,
     pub step_count: u32,
+    pub token_usage: Option<ModelTokenUsage>,
 }

@@ -34,6 +34,7 @@ export interface ModelFormState {
   baseUrl: string;
   description: string;
   displayName: string;
+  contextWindowTokens: string;
   maxRetries: string;
   maxTokens: string;
   modelName: string;
@@ -57,6 +58,7 @@ export function emptyModelFormState(): ModelFormState {
     baseUrl: "",
     description: "",
     displayName: "",
+    contextWindowTokens: "",
     maxRetries: DEFAULT_MAX_RETRIES,
     maxTokens: "",
     modelName: "",
@@ -83,6 +85,7 @@ export function modelFormFromRecord(record: ModelRecord): ModelFormState {
     baseUrl: record.baseUrl,
     description: record.description ?? "",
     displayName: record.displayName,
+    contextWindowTokens: record.contextWindowTokens === null ? "" : String(record.contextWindowTokens),
     maxRetries: record.maxRetries === null ? DEFAULT_MAX_RETRIES : String(record.maxRetries),
     maxTokens: record.structuredOutputEnabled
       ? ""
@@ -141,6 +144,7 @@ export function modelFormToPayload(
     structuredOutputEnabled: state.structuredOutputEnabled,
     temperature: parseOptionalNumber(state.temperature),
     maxTokens: parseOptionalInteger(state.maxTokens),
+    contextWindowTokens: parseOptionalInteger(state.contextWindowTokens),
     topP: parseOptionalNumber(state.topP),
     timeoutMs: parseOptionalInteger(state.timeoutMs),
     maxRetries: parseOptionalInteger(state.maxRetries),
@@ -347,6 +351,15 @@ export function ModelFormFields({
             value={state.maxTokens}
             onChange={(event) => patch("maxTokens", event.target.value)}
             disabled={maxTokensDisabled}
+          />
+        </Field>
+        <Field label="Context Window">
+          <TextInput
+            type="number"
+            step="1"
+            value={state.contextWindowTokens}
+            onChange={(event) => patch("contextWindowTokens", event.target.value)}
+            disabled={readOnly}
           />
         </Field>
         <Field label="Top P">
