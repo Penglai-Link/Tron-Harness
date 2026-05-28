@@ -180,3 +180,22 @@ The frontend must support internationalization from the first implementation pas
 - **Formatting**
   - Dates, times, durations, numbers, percentages, token counts, file sizes, and currency values use locale-aware formatters based on the JavaScript `Intl` APIs
   - User-generated content, logs, code, identifiers, repository paths, model names, provider names, and secrets are displayed as authored and are not translated by the UI runtime
+
+## Action Labels
+
+Action labels must use concise verbs that describe the user action directly.  
+- Prefer simple action words such as `Save / 保存`, `Edit / 编辑`, `Delete / 删除`, `Cancel / 取消`, `Confirm / 确认`
+- Avoid object-heavy or sentence-like labels such as `Save settings / 保存设置`, `Edit user / 编辑用户`, `Delete record / 删除记录` unless disambiguation is required
+- When the action target is already clear from the surrounding UI context, the label must not repeat the target.
+- Labels must remain short enough to avoid overflow in buttons, dropdown items, table actions, dialogs, and mobile layouts.
+- Use consistent verb pairs across locales, for example:
+  - `Save` = `保存`
+  - `Edit` = `编辑`
+  - `New` = `创建`
+  - `Delete` = `删除`
+  - `Submit` = `提交`
+  - `Cancel` = `取消`
+  - `Archive` = `归档`
+  - `Detail` = `详情`
+  - `Refresh` = `刷新`
+  - `Search` = `搜索`

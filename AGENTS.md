@@ -2,8 +2,8 @@
 
 ## Instructions
 
-- Always use `Makefile` first to bulid,test and cleanup.
-- Use a different available port if the default port is already in use, and ensure the frontend and backend port configuration remains synchronized.
+- Always use `Makefile` first to bulid,test and cleanup
+- Use a different available port if the default port is already in use, and ensure the frontend matchs the backend port
 
 ## API
 

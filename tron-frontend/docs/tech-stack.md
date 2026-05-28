@@ -15,3 +15,5 @@ Application bootstrapping, routing, domain modules, shared UI, global state, and
 - **shadcn/ui**: component system built on Radix UI and Tailwind CSS
 - **i18next + react-i18next**: React internationalization runtime and translation hook/component layer
 - **npm**: package management
+- **reactbit**: dynamic login background
+- **
