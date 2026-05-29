@@ -34,7 +34,7 @@ One row is one actual git worktree checkout. `agent id` and `subtask name` follo
 
 | agent id | subtask name | codex agent id | codex agent name | ac refs | tdd phase | branch | worktree path | base ref | status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| backend | lpg-domain-contract | runtime_pending | runtime_pending | AC-LPG-01, AC-LPG-02, AC-LPG-03, AC-LPG-04, AC-LPG-05, AC-LPG-06, AC-LPG-07 | tdd | feature/clouds3n/graph-storage-foundation/backend/lpg-domain-contract | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/graph-storage-foundation/backend/lpg-domain-contract | feature/clouds3n/graph-storage-foundation/base | ready |
+| backend | lpg-domain-contract | 019e73a0-2714-79f3-8f98-a694417d114d | Halley | AC-LPG-01, AC-LPG-02, AC-LPG-03, AC-LPG-04, AC-LPG-05, AC-LPG-06, AC-LPG-07 | tdd | feature/clouds3n/graph-storage-foundation/backend/lpg-domain-contract | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/graph-storage-foundation/backend/lpg-domain-contract | feature/clouds3n/graph-storage-foundation/base | in_progress |
 
 - worker_ref: backend/lpg-domain-contract
 - workflow_owner: tdd-slice-worker
@@ -45,7 +45,7 @@ One row is one actual git worktree checkout. `agent id` and `subtask name` follo
 
 | ac_refs | decision | execution_owner | rationale | worker_ref | status |
 | --- | --- | --- | --- | --- | --- |
-| AC-LPG-01, AC-LPG-02, AC-LPG-03, AC-LPG-04, AC-LPG-05, AC-LPG-06, AC-LPG-07 | spawn | tdd-slice-worker; runtime_agent_type=worker | grouped because all ACs share the graph LPG Rust module write scope and command aliases; coder-spark capacity fallback recorded | backend/lpg-domain-contract | ready |
+| AC-LPG-01, AC-LPG-02, AC-LPG-03, AC-LPG-04, AC-LPG-05, AC-LPG-06, AC-LPG-07 | spawn | tdd-slice-worker; runtime_agent_type=worker | grouped because all ACs share the graph LPG Rust module write scope and command aliases; coder-spark capacity fallback recorded | backend/lpg-domain-contract | in_progress |
 
 ## Branch And Path Rules
 
