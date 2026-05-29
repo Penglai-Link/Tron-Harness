@@ -22,7 +22,7 @@ use crate::{
         },
         outbound::{
             crypto::BcryptPasswordHasher,
-            model::HttpModelClient,
+            model::{HttpLlmRuntimeClient, HttpModelClient},
             persistence::{
                 SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
                 SqliteChatRepository, SqliteModelRepository, SqliteRoleRepository,
@@ -35,6 +35,7 @@ use crate::{
     application::app::AppService,
     application::automation::AutomationService,
     application::chat::ChatService,
+    application::llm::LlmRuntimeService,
     application::model::ModelService,
     application::role::RoleService,
     application::skill::SkillRegistryService,
@@ -79,6 +80,7 @@ pub struct AppState {
     pub workspaces: WorkspaceService,
     pub skills: SkillRegistryService,
     pub models: ModelService,
+    pub llm_runtime: LlmRuntimeService,
 }
 
 impl AppState {
@@ -189,6 +191,10 @@ impl AppState {
         } else {
             build_model_service(&config.database_url, workspaces.clone())
         };
+        let llm_runtime = LlmRuntimeService::new(
+            Arc::new(models.clone()),
+            Arc::new(HttpLlmRuntimeClient::default()),
+        );
         let agent_runs = build_agent_run_history_service(&config.database_url);
         let chats = if config.database_url == ":memory:" {
             GLOBAL_CHAT_SERVICE
@@ -209,6 +215,7 @@ impl AppState {
             chats,
             event_bus,
             models,
+            llm_runtime,
             skills,
             roles,
             tasks,

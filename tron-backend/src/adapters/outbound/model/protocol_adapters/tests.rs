@@ -143,7 +143,9 @@ fn chat_stream_maps_reasoning_content_to_summary_delta() {
 
     assert_eq!(
         event,
-        Some(ModelStreamEvent::reasoning_summary_delta("thinking summary"))
+        Some(ModelStreamEvent::reasoning_summary_delta(
+            "thinking summary"
+        ))
     );
 }
 
@@ -286,7 +288,9 @@ fn responses_stream_maps_reasoning_and_output_deltas() {
     );
     assert_eq!(
         reasoning_summary,
-        Some(ModelStreamEvent::reasoning_summary_delta("summary thinking"))
+        Some(ModelStreamEvent::reasoning_summary_delta(
+            "summary thinking"
+        ))
     );
     assert_eq!(output, Some(ModelStreamEvent::text_delta("final answer")));
     assert_eq!(done, None);

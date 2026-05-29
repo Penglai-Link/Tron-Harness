@@ -46,6 +46,22 @@ impl ModelService {
         self.resolve_text_agent_model_config(workspace_code, model_code)
     }
 
+    pub fn embedding_runtime_model_config(
+        &self,
+        workspace_code: &str,
+        model_code: Option<&str>,
+    ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        self.resolve_runtime_model_config(workspace_code, model_code, ModelType::Embedding)
+    }
+
+    pub fn rerank_runtime_model_config(
+        &self,
+        workspace_code: &str,
+        model_code: Option<&str>,
+    ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        self.resolve_runtime_model_config(workspace_code, model_code, ModelType::Rerank)
+    }
+
     fn resolve_text_agent_model_config(
         &self,
         workspace_code: &str,
@@ -77,6 +93,43 @@ impl ModelService {
         };
 
         Ok(agent_model_config_from_view(
+            &record.view,
+            &record.definition_model.api_key_ref,
+        ))
+    }
+
+    fn resolve_runtime_model_config(
+        &self,
+        workspace_code: &str,
+        model_code: Option<&str>,
+        model_type: ModelType,
+    ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        let workspace = self.active_workspace_detail(workspace_code)?;
+        let catalog_state = self.resolve_workspace_catalog_state(&workspace)?;
+        let requested_model_code = model_code.map(str::trim).filter(|value| !value.is_empty());
+        let resolved_model_code = if let Some(model_code) = requested_model_code {
+            model_code
+        } else {
+            let Some(default_model_code) = catalog_state
+                .catalog
+                .defaults
+                .iter()
+                .find(|default| default.model_type == model_type)
+                .and_then(|default| default.model_code.as_deref())
+            else {
+                return Ok(None);
+            };
+            default_model_code
+        };
+        let Some(record) = catalog_state.records.iter().find(|record| {
+            record.view.model_code == resolved_model_code
+                && record.view.enabled
+                && record.view.model_type == model_type
+        }) else {
+            return Ok(None);
+        };
+
+        Ok(runtime_model_config_from_view(
             &record.view,
             &record.definition_model.api_key_ref,
         ))

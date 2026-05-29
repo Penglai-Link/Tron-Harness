@@ -98,6 +98,30 @@ pub(super) fn agent_model_config_from_view(
     })
 }
 
+pub(super) fn runtime_model_config_from_view(
+    view: &ModelView,
+    api_key: &str,
+) -> Option<RuntimeModelConfig> {
+    match (view.protocol, view.model_type) {
+        (ModelProtocol::OpenAiCompatible, ModelType::Text)
+        | (ModelProtocol::OpenAiCompatible, ModelType::Embedding)
+        | (ModelProtocol::Responses, ModelType::Text)
+        | (ModelProtocol::Responses, ModelType::Image)
+        | (ModelProtocol::Rerank, ModelType::Rerank) => Some(RuntimeModelConfig {
+            model_code: view.model_code.clone(),
+            protocol: view.protocol,
+            model_type: view.model_type,
+            base_url: view.base_url.clone(),
+            api_path: view.api_path.clone(),
+            api_key: api_key.to_string(),
+            model_name: view.model_name.clone(),
+            timeout_ms: view.timeout_ms,
+            max_retries: view.max_retries,
+        }),
+        _ => None,
+    }
+}
+
 pub(super) fn build_workspace_effective_view(
     workspace: &WorkspaceDetail,
     visible_model_code: &str,

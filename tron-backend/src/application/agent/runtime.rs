@@ -1,4 +1,8 @@
-use std::{future::Future, pin::Pin, sync::{Arc, Mutex}};
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     domain::agent::{
@@ -367,18 +371,21 @@ impl ReactAgent {
                     .expect("agent output start mutex poisoned");
                 if !*started {
                     *started = true;
-                    let mut start_draft = BusEventDraft::agui("agent.output.started", "agent_runtime")
-                        .outcome(BusOutcome::Started)
-                        .subject("agent_run", run_code.clone())
-                        .attr("workspace_code", workspace_code.clone())
-                        .attr("agent_kind", "react")
-                        .attr("runtime_kind", "in_process")
-                        .attr("model_code", model_code.clone());
+                    let mut start_draft =
+                        BusEventDraft::agui("agent.output.started", "agent_runtime")
+                            .outcome(BusOutcome::Started)
+                            .subject("agent_run", run_code.clone())
+                            .attr("workspace_code", workspace_code.clone())
+                            .attr("agent_kind", "react")
+                            .attr("runtime_kind", "in_process")
+                            .attr("model_code", model_code.clone());
                     if let Some(conversation_code) = &conversation_code {
-                        start_draft = start_draft.attr("conversation_code", conversation_code.clone());
+                        start_draft =
+                            start_draft.attr("conversation_code", conversation_code.clone());
                     }
                     if let Some(stream_key) = &stream_key {
-                        start_draft = start_draft.request(BusRequestRef::with_stream_key(stream_key.clone()));
+                        start_draft =
+                            start_draft.request(BusRequestRef::with_stream_key(stream_key.clone()));
                     }
                     let _ = event_bus.publish(start_draft);
                 }

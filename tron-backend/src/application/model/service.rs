@@ -65,6 +65,19 @@ pub struct ModelCommand {
     pub allow_inheritance: Option<bool>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RuntimeModelConfig {
+    pub model_code: String,
+    pub protocol: ModelProtocol,
+    pub model_type: ModelType,
+    pub base_url: String,
+    pub api_path: Option<String>,
+    pub api_key: String,
+    pub model_name: String,
+    pub timeout_ms: Option<u64>,
+    pub max_retries: Option<u32>,
+}
+
 #[derive(Debug, Clone)]
 pub struct SetAllowInheritanceCommand {
     pub allow_inheritance: bool,
