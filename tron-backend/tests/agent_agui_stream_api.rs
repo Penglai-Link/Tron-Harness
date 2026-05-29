@@ -1,5 +1,7 @@
 mod common;
 
+use std::sync::Arc;
+
 use axum::{
     Json, Router,
     http::{Method, StatusCode},
@@ -7,6 +9,16 @@ use axum::{
 };
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
+use tron_backend::{
+    application::agent::AgentAguiStreamService,
+    shared::{
+        event_bus::{
+            AguiEventSink, BusEventDraft, BusOutcome, BusRequestRef, EventBusConfig,
+            EventBusRuntimeBuilder, PublishOutcome,
+        },
+        id::FixedSnowflakeIdProvider,
+    },
+};
 
 use common::{app, authenticated_bearer_token, request_with_headers, response_json};
 
@@ -159,4 +171,138 @@ async fn agui_stream_adapter_converts_replayed_agent_events_safely() {
     assert_eq!(deactivate.status(), StatusCode::OK);
     let deactivated = response_json(deactivate).await;
     assert_eq!(deactivated["data"]["streamKey"], json!(stream_key));
+}
+
+#[tokio::test]
+async fn agui_protocol_separates_reasoning_summary_and_raw_text() {
+    let config = EventBusConfig::default();
+    let sink = Arc::new(AguiEventSink::new(&config));
+    let event_bus =
+        EventBusRuntimeBuilder::new(config, Arc::new(FixedSnowflakeIdProvider::new(450)))
+            .register_sink(sink.clone())
+            .build();
+    let service = AgentAguiStreamService::new(sink);
+    let stream_key = "CONV-REASONING-AGUI";
+    let run_code = "RUN-REASONING-AGUI";
+    service
+        .activate(stream_key)
+        .expect("stream should activate");
+
+    let publish = |event_name: &'static str, delta: &'static str| {
+        event_bus.publish(
+            BusEventDraft::agui(event_name, "test")
+                .outcome(BusOutcome::Progress)
+                .subject("agent_run", run_code)
+                .request(BusRequestRef::with_stream_key(stream_key))
+                .payload_field(
+                    "delta_json",
+                    serde_json::to_string(delta).expect("delta should serialize"),
+                ),
+        )
+    };
+
+    assert!(matches!(
+        publish("agent.reasoning.delta", "summary reasoning"),
+        PublishOutcome::Accepted { .. }
+    ));
+    assert!(matches!(
+        publish("agent.reasoning.raw_delta", "raw reasoning"),
+        PublishOutcome::Accepted { .. }
+    ));
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let events = service
+        .protocol_events(stream_key)
+        .expect("protocol events should be available");
+    let event = |event_type: &str| {
+        events
+            .iter()
+            .find(|event| event.sse_event == event_type)
+            .expect("expected protocol event")
+    };
+    assert_eq!(
+        event("REASONING_MESSAGE_CONTENT").data["delta"],
+        json!("summary reasoning")
+    );
+    assert_eq!(
+        event("REASONING_TEXT_CONTENT").data["delta"],
+        json!("raw reasoning")
+    );
+}
+
+#[tokio::test]
+async fn agui_protocol_tool_events_keep_correlation_fields() {
+    let config = EventBusConfig::default();
+    let sink = Arc::new(AguiEventSink::new(&config));
+    let event_bus =
+        EventBusRuntimeBuilder::new(config, Arc::new(FixedSnowflakeIdProvider::new(400)))
+            .register_sink(sink.clone())
+            .build();
+    let service = AgentAguiStreamService::new(sink);
+    let stream_key = "CONV-TOOL-AGUI";
+    let run_code = "RUN-TOOL-AGUI";
+    service
+        .activate(stream_key)
+        .expect("stream should activate");
+
+    let publish = |event_name: &'static str, outcome: BusOutcome| {
+        event_bus.publish(
+            BusEventDraft::agui(event_name, "test")
+                .outcome(outcome)
+                .subject("agent_run", run_code)
+                .request(BusRequestRef::with_stream_key(stream_key))
+                .summary("shell.exec")
+                .payload_field("tool_call_id", "RUN-TOOL-AGUI-tool-1")
+                .payload_field("tool_name", "shell.exec")
+                .payload_field("tool_args_json", "{\"command\":\"cargo test\"}")
+                .payload_field("tool_result_json", "ok"),
+        )
+    };
+
+    assert!(matches!(
+        publish("agent.tool.selected", BusOutcome::Progress),
+        PublishOutcome::Accepted { .. }
+    ));
+    assert!(matches!(
+        publish("agent.tool.started", BusOutcome::Started),
+        PublishOutcome::Accepted { .. }
+    ));
+    assert!(matches!(
+        publish("agent.observation.created", BusOutcome::Progress),
+        PublishOutcome::Accepted { .. }
+    ));
+    assert!(matches!(
+        publish("agent.tool.completed", BusOutcome::Completed),
+        PublishOutcome::Accepted { .. }
+    ));
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let events = service
+        .protocol_events(stream_key)
+        .expect("protocol events should be available");
+    let event = |event_type: &str| {
+        events
+            .iter()
+            .find(|event| event.sse_event == event_type)
+            .expect("expected protocol event")
+    };
+    assert_eq!(
+        event("TOOL_CALL_START").data["toolCallId"],
+        json!("RUN-TOOL-AGUI-tool-1")
+    );
+    assert_eq!(
+        event("TOOL_CALL_START").data["toolCallArgs"]["command"],
+        json!("cargo test")
+    );
+    assert_eq!(
+        event("ACTIVITY_DELTA").data["toolCallId"],
+        json!("RUN-TOOL-AGUI-tool-1")
+    );
+    assert_eq!(event("TOOL_CALL_RESULT").data["content"], json!("ok"));
+    assert_eq!(
+        event("TOOL_CALL_END").data["toolCallId"],
+        json!("RUN-TOOL-AGUI-tool-1")
+    );
 }

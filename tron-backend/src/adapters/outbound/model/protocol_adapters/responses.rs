@@ -51,6 +51,10 @@ pub fn responses_request(config: &AgentModelConfig, request: &ModelRequest) -> V
     if let Some(max_tokens) = config.max_tokens {
         payload["max_output_tokens"] = json!(max_tokens);
     }
+    if config.thinking_enabled {
+        payload["enable_thinking"] = json!(true);
+        payload["reasoning"] = json!({ "effort": "medium" });
+    }
     if !request.tools.is_empty() {
         payload["tools"] = json!(
             request
@@ -79,6 +83,10 @@ fn parse_responses_stream_event(body: &Value) -> Option<ModelStreamEvent> {
             .get("delta")
             .and_then(Value::as_str)
             .map(|text| ModelStreamEvent::reasoning_delta(text.to_owned())),
+        "response.reasoning_summary_text.delta" => body
+            .get("delta")
+            .and_then(Value::as_str)
+            .map(|text| ModelStreamEvent::reasoning_summary_delta(text.to_owned())),
         _ => None,
     }?;
     if event.delta.is_empty() {

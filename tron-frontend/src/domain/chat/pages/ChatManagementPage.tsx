@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import {
+  ArrowDown,
   Bot,
   BrainCircuit,
   CheckCircle2,
@@ -13,6 +14,7 @@ import {
   ChevronRight,
   CircleAlert,
   CircleDot,
+  Copy,
   Ellipsis,
   GitBranch,
   Hammer,
@@ -34,7 +36,6 @@ import {
   MarkdownContent,
   useWorkspaceSpaces,
   useConsoleShellConfig,
-  useOpenRightSidebar,
   useDismissibleLayer,
   useToast,
 } from "@/shared";
@@ -74,6 +75,24 @@ function formatTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+async function copyPlainText(value: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(value);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textarea);
+  if (!copied) throw new Error("Clipboard copy failed");
 }
 
 function firstSession(groups: ChatSessionGroup[]) {
@@ -215,6 +234,9 @@ function usedSkills(events: ChatAguiEvent[]) {
 
 type TranscriptAguiEvent = ChatAguiEvent | ChatAguiStreamEvent;
 
+const chatScrollBottomThreshold = 96;
+const chatScrollJumpButtonThreshold = 160;
+
 function aguiEventType(event: TranscriptAguiEvent) {
   if (typeof event.type === "string") return event.type;
   if ("eventName" in event && typeof event.eventName === "string") return event.eventName;
@@ -300,6 +322,249 @@ function aguiWorkDuration(events: TranscriptAguiEvent[]) {
     .filter((value): value is number => typeof value === "number");
   if (times.length < 2) return "<1s";
   return formatAguiDuration(Math.max(...times) - Math.min(...times));
+}
+
+function latestAguiRunCode(events: TranscriptAguiEvent[]) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    if (aguiEventType(events[index]).toUpperCase() === "RUN_STARTED") {
+      return aguiEventRunCode(events[index]);
+    }
+  }
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const runCode = aguiEventRunCode(events[index]);
+    if (runCode && runCode !== "stream") return runCode;
+  }
+  return "";
+}
+
+function eventsForLatestAguiRun(events: TranscriptAguiEvent[]) {
+  const runCode = latestAguiRunCode(events);
+  if (!runCode) return events;
+  return events.filter((event) => aguiEventRunCode(event) === runCode);
+}
+
+function aguiEventMessageId(event: TranscriptAguiEvent) {
+  return "messageId" in event && typeof event.messageId === "string" ? event.messageId : "";
+}
+
+function aguiEventToolCallId(event: TranscriptAguiEvent) {
+  return "toolCallId" in event && typeof event.toolCallId === "string" ? event.toolCallId : "";
+}
+
+function aguiEventToolName(event: TranscriptAguiEvent) {
+  if ("toolCallName" in event && typeof event.toolCallName === "string" && event.toolCallName.trim()) return event.toolCallName;
+  return aguiEventSummary(event) || "tool";
+}
+
+function aguiEventToolArgs(event: TranscriptAguiEvent) {
+  return "toolCallArgs" in event ? event.toolCallArgs : undefined;
+}
+
+function stringifyPreview(value: unknown) {
+  if (value == null || value === "") return "";
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function truncateLabel(value: string, maxLength = 64) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
+}
+
+const toolTargetKeys = ["command", "cmd", "file", "fileName", "filePath", "path", "target", "query", "pattern", "url", "uri"];
+
+function valueAtKnownKey(value: unknown, depth = 0): string {
+  if (depth > 3 || value == null) return "";
+  if (typeof value === "string") return value;
+  if (typeof value !== "object") return "";
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = valueAtKnownKey(item, depth + 1);
+      if (found) return found;
+    }
+    return "";
+  }
+
+  const record = value as Record<string, unknown>;
+  for (const key of toolTargetKeys) {
+    const direct = record[key];
+    if (typeof direct === "string" && direct.trim()) return direct;
+  }
+  for (const child of Object.values(record)) {
+    const found = valueAtKnownKey(child, depth + 1);
+    if (found) return found;
+  }
+  return "";
+}
+
+function toolActionLabel(toolName: string, args: unknown) {
+  const normalizedTool = toolName.toLowerCase();
+  const target = valueAtKnownKey(args).toLowerCase();
+  if (normalizedTool.includes("edit") || normalizedTool.includes("write") || normalizedTool.includes("patch")) return "Edit";
+  if (target.includes("/") || target.includes(".")) {
+    if (!normalizedTool.includes("exec") && !normalizedTool.includes("run") && !normalizedTool.includes("shell")) return "Edit";
+  }
+  return "Run";
+}
+
+function toolSummaryLabel(toolName: string, args: unknown) {
+  const target = valueAtKnownKey(args) || toolName;
+  return `${toolActionLabel(toolName, args)} ${truncateLabel(target, 72)}`;
+}
+
+function activityLines(event: TranscriptAguiEvent) {
+  const delta = "delta" in event ? event.delta : undefined;
+  if (typeof delta === "string") return delta.trim() ? [delta] : [];
+  if (!Array.isArray(delta)) return [];
+
+  return delta
+    .map((item) => {
+      if (typeof item === "string") return item;
+      if (item && typeof item === "object") {
+        const value = (item as { value?: unknown }).value;
+        return typeof value === "string" ? value : stringifyPreview(value);
+      }
+      return stringifyPreview(item);
+    })
+    .filter(Boolean);
+}
+
+interface ReasoningWorkCard {
+  content: string;
+  ended: boolean;
+  endMillis: number | null;
+  firstMillis: number;
+  id: string;
+  runCode: string;
+}
+
+interface ToolWorkCard {
+  args: unknown;
+  ended: boolean;
+  firstMillis: number;
+  id: string;
+  logs: string[];
+  result: string;
+  runCode: string;
+  started: boolean;
+  toolCallId: string;
+  toolName: string;
+}
+
+type AguiUserWorkCard =
+  | { kind: "reasoning"; value: ReasoningWorkCard }
+  | { kind: "tool"; value: ToolWorkCard };
+
+function reasoningCardKey(event: TranscriptAguiEvent) {
+  const runCode = aguiEventRunCode(event);
+  return `${runCode}:reasoning`;
+}
+
+function ensureReasoningCard(cards: Map<string, ReasoningWorkCard>, event: TranscriptAguiEvent) {
+  const key = reasoningCardKey(event);
+  const existing = cards.get(key);
+  if (existing) return existing;
+  const card = {
+    content: "",
+    ended: false,
+    endMillis: null,
+    firstMillis: aguiEventMillis(event) ?? Date.now(),
+    id: key,
+    runCode: aguiEventRunCode(event),
+  };
+  cards.set(key, card);
+  return card;
+}
+
+function ensureToolCard(cards: Map<string, ToolWorkCard>, event: TranscriptAguiEvent) {
+  const toolCallId = aguiEventToolCallId(event);
+  if (!toolCallId) return null;
+  const key = `${aguiEventRunCode(event)}:${toolCallId}`;
+  const existing = cards.get(key);
+  if (existing) return existing;
+  const toolName = aguiEventToolName(event);
+  const card = {
+    args: aguiEventToolArgs(event),
+    ended: false,
+    firstMillis: aguiEventMillis(event) ?? Date.now(),
+    id: key,
+    logs: [],
+    result: "",
+    runCode: aguiEventRunCode(event),
+    started: false,
+    toolCallId,
+    toolName,
+  };
+  cards.set(key, card);
+  return card;
+}
+
+function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard[] {
+  const reasoningCards = new Map<string, ReasoningWorkCard>();
+  const toolCards = new Map<string, ToolWorkCard>();
+
+  events.forEach((event) => {
+    const type = aguiEventType(event).toUpperCase();
+
+    if (type === "REASONING_START" || type === "REASONING_MESSAGE_START") {
+      ensureReasoningCard(reasoningCards, event);
+      return;
+    }
+    if (type === "REASONING_MESSAGE_CONTENT") {
+      const card = ensureReasoningCard(reasoningCards, event);
+      const delta = "delta" in event && typeof event.delta === "string" ? event.delta : "";
+      card.content += delta;
+      return;
+    }
+    if (type === "REASONING_END" || type === "REASONING_MESSAGE_END") {
+      const card = ensureReasoningCard(reasoningCards, event);
+      card.ended = true;
+      card.endMillis = aguiEventMillis(event) ?? card.endMillis;
+      return;
+    }
+
+    if (type === "TOOL_CALL_START" || type === "TOOL_CALL_ARGS") {
+      const card = ensureToolCard(toolCards, event);
+      if (!card) return;
+      card.started = card.started || type === "TOOL_CALL_START";
+      card.toolName = aguiEventToolName(event);
+      const args = aguiEventToolArgs(event);
+      if (args !== undefined) card.args = args;
+      return;
+    }
+    if (type === "ACTIVITY_DELTA") {
+      const card = ensureToolCard(toolCards, event);
+      if (!card) return;
+      card.logs.push(...activityLines(event));
+      return;
+    }
+    if (type === "TOOL_CALL_RESULT") {
+      const card = ensureToolCard(toolCards, event);
+      if (!card) return;
+      card.toolName = aguiEventToolName(event);
+      const result = "content" in event && typeof event.content === "string" ? event.content : "";
+      card.result = result || aguiEventSummary(event);
+      return;
+    }
+    if (type === "TOOL_CALL_END") {
+      const card = ensureToolCard(toolCards, event);
+      if (card) card.ended = true;
+    }
+  });
+
+  return [
+    ...Array.from(reasoningCards.values())
+      .filter((value) => value.content.trim() || !value.ended)
+      .map((value) => ({ kind: "reasoning" as const, value })),
+    ...Array.from(toolCards.values())
+      .filter((value) => value.started)
+      .map((value) => ({ kind: "tool" as const, value })),
+  ].sort((left, right) => left.value.firstMillis - right.value.firstMillis);
 }
 
 function availableChatModels(models: ModelRecord[]) {
@@ -778,6 +1043,25 @@ function ChatBubble({
 }) {
   const isUser = message.role === "USER";
   const actorName = isUser ? (currentUserDisplayName || message.actor) : message.actor;
+  const [copied, setCopied] = useState(false);
+  const copyResetRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current);
+  }, []);
+
+  async function handleCopyMessage() {
+    if (!message.content) return;
+    try {
+      await copyPlainText(message.content);
+      setCopied(true);
+      if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current);
+      copyResetRef.current = window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  }
+
   return (
     <article className={cn("max-w-[760px] rounded-md bg-white px-4 py-3 shadow-[0_8px_22px_rgba(15,23,42,0.06)]", isUser ? "ml-auto bg-[var(--color-surface-container-lowest)]" : "")}>
       <div className="mb-2 flex items-center justify-between gap-3">
@@ -785,7 +1069,21 @@ function ChatBubble({
           {isUser ? <UserRound size={16} /> : <Bot size={16} />}
           <span className="truncate text-sm font-semibold">{actorName}</span>
         </div>
-        <span className="shrink-0 text-xs text-[var(--color-on-surface-variant)]">{formatTime(message.createdAt)}</span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {!isUser ? (
+            <button
+              aria-label="Copy raw markdown"
+              className="inline-flex size-6 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
+              disabled={!message.content}
+              title="Copy raw markdown"
+              type="button"
+              onClick={() => void handleCopyMessage()}
+            >
+              {copied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+            </button>
+          ) : null}
+          <span className="text-xs text-[var(--color-on-surface-variant)]">{formatTime(message.createdAt)}</span>
+        </div>
       </div>
       {isUser ? (
         <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--color-on-surface)]">{message.content}</p>
@@ -798,6 +1096,171 @@ function ChatBubble({
         />
       )}
     </article>
+  );
+}
+
+function AguiUserCardShell({
+  children,
+  icon,
+  meta,
+  summary,
+  title,
+}: {
+  children: React.ReactNode;
+  icon: React.ReactNode;
+  meta?: React.ReactNode;
+  summary?: React.ReactNode;
+  title: React.ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <article className="rounded-md bg-white px-3 py-2 text-sm shadow-[0_8px_22px_rgba(15,23,42,0.06)]">
+      <button
+        className="flex w-full items-start justify-between gap-3 text-left"
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-container-low)] text-[var(--color-on-surface-variant)]">
+            {icon}
+          </span>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-semibold">{title}</span>
+              {meta}
+            </div>
+            {summary ? <div className="mt-1 min-w-0 text-[var(--color-on-surface-variant)]">{summary}</div> : null}
+          </div>
+        </div>
+        <span className="mt-1 shrink-0 text-[var(--color-on-surface-variant)]">
+          {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        </span>
+      </button>
+      {expanded ? <div className="mt-3 border-t border-[var(--color-outline-variant)] pt-3">{children}</div> : null}
+    </article>
+  );
+}
+
+function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
+  const hasContent = card.content.trim().length > 0;
+  const detail = hasContent ? card.content : "";
+  const [expanded, setExpanded] = useState(!card.ended);
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const duration = card.endMillis ? formatAguiDuration(Math.max(0, card.endMillis - card.firstMillis)) : "";
+
+  useEffect(() => {
+    setExpanded(!card.ended);
+  }, [card.ended]);
+
+  useEffect(() => {
+    if (!expanded || !detail) return;
+    const element = contentRef.current;
+    if (!element) return;
+    const frame = window.requestAnimationFrame(() => {
+      element.scrollTop = element.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [detail, expanded]);
+
+  return (
+    <article aria-label="Thinking" className="rounded-md bg-white px-3 py-2 text-sm shadow-[0_8px_22px_rgba(15,23,42,0.06)]">
+      <button
+        className="flex w-full items-start justify-between gap-3 text-left"
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-container-low)] text-[var(--color-on-surface-variant)]">
+            <BrainCircuit className={card.ended ? undefined : "animate-pulse"} size={16} />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className={cn("truncate font-semibold", card.ended ? undefined : "animate-pulse")}>
+                {card.ended && duration ? `Thought for ${duration}` : "Thinking"}
+              </span>
+            </div>
+          </div>
+        </div>
+        <span className="mt-1 shrink-0 text-[var(--color-on-surface-variant)]">
+          {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        </span>
+      </button>
+      {expanded && detail ? (
+        <div ref={contentRef} className="mt-3 h-40 min-h-0 overflow-y-scroll overscroll-contain whitespace-pre-wrap rounded-md bg-[var(--color-surface-container-lowest)] p-3 text-sm leading-6 text-[var(--color-on-surface)]">
+          {detail}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function JsonBlock({ value }: { value: unknown }) {
+  const preview = stringifyPreview(value);
+  if (!preview) return null;
+
+  return (
+    <pre className="max-h-52 overflow-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)]">
+      {preview}
+    </pre>
+  );
+}
+
+function ToolUserCard({ card }: { card: ToolWorkCard }) {
+  const complete = card.ended || Boolean(card.result);
+  const result = card.result || (complete ? "No result payload." : "");
+
+  return (
+    <AguiUserCardShell
+      icon={complete ? <CheckCircle2 size={16} /> : <Hammer className="animate-pulse" size={16} />}
+      meta={<Badge tone={complete ? "neutral" : "success"}>{complete ? "done" : "running"}</Badge>}
+      title={toolSummaryLabel(card.toolName, card.args)}
+      summary={(
+        <p className="line-clamp-1 font-mono text-xs">
+          {card.toolName} · {card.toolCallId}
+        </p>
+      )}
+    >
+      <div className="space-y-3">
+        <section className="space-y-1.5">
+          <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Parameters</h3>
+          <JsonBlock value={card.args ?? { tool: card.toolName }} />
+        </section>
+        {complete ? (
+          <section className="space-y-1.5">
+            <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Result</h3>
+            <div className="whitespace-pre-wrap rounded-md bg-[var(--color-surface-container-lowest)] p-3 text-sm leading-6 text-[var(--color-on-surface)]">
+              {result}
+            </div>
+          </section>
+        ) : (
+          <section className="space-y-1.5">
+            <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Log</h3>
+            <div className="space-y-1 rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)]">
+              {card.logs.length ? card.logs.map((line, index) => (
+                <p className="whitespace-pre-wrap" key={`${card.id}-log-${index}`}>{line}</p>
+              )) : <p className="text-[var(--color-on-surface-variant)]">Waiting for tool activity...</p>}
+            </div>
+          </section>
+        )}
+      </div>
+    </AguiUserCardShell>
+  );
+}
+
+function AguiUserWorkRail({ cards }: { cards: AguiUserWorkCard[] }) {
+  if (!cards.length) return null;
+
+  return (
+    <section className="space-y-2" aria-label="AG-UI user work cards">
+      {cards.map((card) => (
+        card.kind === "reasoning"
+          ? <ReasoningUserCard card={card.value} key={`reasoning-${card.value.id}`} />
+          : <ToolUserCard card={card.value} key={`tool-${card.value.id}`} />
+      ))}
+    </section>
   );
 }
 
@@ -832,14 +1295,30 @@ function AguiEventCard({ event }: { event: TranscriptAguiEvent }) {
   );
 }
 
-function AguiEventRail({
+function AguiEventRail({ events }: { events: TranscriptAguiEvent[] }) {
+  if (!events.length) return null;
+
+  return (
+    <section className="space-y-2" aria-label="AG-UI debug event cards">
+      {events.map((event, index) => (
+        <AguiEventCard
+          key={`${aguiEventType(event)}-${aguiEventRunCode(event)}-${aguiEventTime(event)}-${index}`}
+          event={event}
+        />
+      ))}
+    </section>
+  );
+}
+
+function AguiRunWorkRail({
   events,
   preferences,
 }: {
   events: TranscriptAguiEvent[];
   preferences: AguiDebugPreferences;
 }) {
-  const cardEvents = events.filter((event) => shouldShowAguiEventType(aguiEventType(event), preferences));
+  const userCards = buildAguiUserWorkCards(events);
+  const debugEvents = events.filter((event) => shouldShowAguiEventType(aguiEventType(event), preferences));
   const terminalEvent = terminalAguiEvent(events);
   const terminalRunCode = terminalEvent ? aguiEventRunCode(terminalEvent) : "";
   const [expanded, setExpanded] = useState(true);
@@ -848,10 +1327,10 @@ function AguiEventRail({
     setExpanded(!terminalRunCode);
   }, [terminalRunCode]);
 
-  if (!cardEvents.length) return null;
+  if (!userCards.length && !debugEvents.length) return null;
 
   return (
-    <section className="max-w-[760px] space-y-2" aria-label="AG-UI event cards">
+    <section className="max-w-[760px] space-y-2" aria-label="AG-UI run work">
       {terminalEvent ? (
         <button
           aria-expanded={expanded}
@@ -867,19 +1346,18 @@ function AguiEventRail({
           <span className="h-px flex-1 bg-[var(--color-outline-variant)]" />
         </button>
       ) : null}
-      {expanded ? cardEvents.map((event, index) => (
-        <AguiEventCard
-          key={`${aguiEventType(event)}-${aguiEventRunCode(event)}-${aguiEventTime(event)}-${index}`}
-          event={event}
-        />
-      )) : null}
+      {!terminalEvent || expanded ? (
+        <>
+          <AguiUserWorkRail cards={userCards} />
+          <AguiEventRail events={debugEvents} />
+        </>
+      ) : null}
     </section>
   );
 }
 
 export function ChatManagementPage() {
   const toast = useToast();
-  const openRightSidebar = useOpenRightSidebar();
   const { session: authSession } = useAuthSession();
   const { preferences: aguiDebugPreferences } = useAguiDebugPreferences();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
@@ -906,9 +1384,34 @@ export function ChatManagementPage() {
   const [runningSessionCode, setRunningSessionCode] = useState("");
   const [sessionActionPendingCode, setSessionActionPendingCode] = useState("");
   const [unseenSessionCodes, setUnseenSessionCodes] = useState<Set<string>>(() => new Set());
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const activeSessionCodeRef = useRef("");
+  const autoStickToBottomRef = useRef(true);
+  const messageScrollRef = useRef<HTMLElement | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
+  const visibleSessionCodeRef = useRef("");
   const selectedModel = chatModels.find((model) => model.modelCode === selectedModelCode) ?? null;
   const currentUserDisplayName = authSession?.user.displayName ?? "";
+
+  function scrollToLatestMessage(behavior: ScrollBehavior = "auto") {
+    if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      const element = messageScrollRef.current;
+      if (!element) return;
+      element.scrollTo({ behavior, top: element.scrollHeight });
+      autoStickToBottomRef.current = true;
+      setShowScrollToBottom(false);
+      scrollFrameRef.current = null;
+    });
+  }
+
+  function handleTranscriptScroll() {
+    const element = messageScrollRef.current;
+    if (!element) return;
+    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    autoStickToBottomRef.current = distanceFromBottom <= chatScrollBottomThreshold;
+    setShowScrollToBottom(distanceFromBottom > chatScrollJumpButtonThreshold);
+  }
 
   useEffect(() => {
     setSessionGroups(orderSessionGroups(groups));
@@ -966,13 +1469,27 @@ export function ChatManagementPage() {
     activeSessionCodeRef.current = activeSessionCode;
   }, [activeSessionCode]);
 
-  useEffect(() => {
-    setVisibleMessages(messages);
-    setLiveAguiEvents([]);
-    setLiveAguiAnchorMessageCode("");
-  }, [messages]);
+  useEffect(() => () => {
+    if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
+  }, []);
 
-  const transcriptAguiEvents = useMemo<TranscriptAguiEvent[]>(() => liveAguiEvents, [liveAguiEvents]);
+  useEffect(() => {
+    autoStickToBottomRef.current = true;
+    setShowScrollToBottom(false);
+    scrollToLatestMessage("auto");
+  }, [activeSession?.sessionCode]);
+
+  useEffect(() => {
+    const sessionCode = activeSession?.sessionCode ?? "";
+    setVisibleMessages(sessionCode ? messages.filter((message) => message.sessionCode === sessionCode) : []);
+    if (visibleSessionCodeRef.current !== sessionCode) {
+      visibleSessionCodeRef.current = sessionCode;
+      setLiveAguiEvents([]);
+      setLiveAguiAnchorMessageCode("");
+    }
+  }, [activeSession?.sessionCode, messages]);
+
+  const transcriptAguiEvents = useMemo<TranscriptAguiEvent[]>(() => eventsForLatestAguiRun(liveAguiEvents), [liveAguiEvents]);
   const liveAguiAnchorIndex = useMemo(() => {
     if (!transcriptAguiEvents.length) return -1;
 
@@ -992,9 +1509,13 @@ export function ChatManagementPage() {
 
   useConsoleShellConfig({ rightPanel });
 
+  useEffect(() => {
+    if (autoStickToBottomRef.current) scrollToLatestMessage("auto");
+    else handleTranscriptScroll();
+  }, [transcriptAguiEvents, visibleMessages]);
+
   function handleSessionSelect(sessionCode: string) {
     setActiveSessionCode(sessionCode);
-    openRightSidebar();
     setUnseenSessionCodes((current) => {
       if (!current.has(sessionCode)) return current;
       const next = new Set(current);
@@ -1045,8 +1566,10 @@ export function ChatManagementPage() {
       setVisibleMessages((current) => [
         ...current,
         optimisticUserMessage,
-        optimisticAssistantMessage,
       ]);
+      autoStickToBottomRef.current = true;
+      setShowScrollToBottom(false);
+      scrollToLatestMessage("auto");
     }
     try {
       const result = await streamChatMessage(
@@ -1065,11 +1588,20 @@ export function ChatManagementPage() {
           },
           onDelta: (delta) => {
             if (activeSessionCodeRef.current !== sendingSessionCode) return;
-            setVisibleMessages((current) => current.map((message) => (
-              message.messageCode === optimisticAssistantCode
-                ? { ...message, content: `${message.content}${delta}` }
-                : message
-            )));
+            setVisibleMessages((current) => {
+              const assistantExists = current.some((message) => message.messageCode === optimisticAssistantCode);
+              if (!assistantExists) {
+                return [
+                  ...current,
+                  { ...optimisticAssistantMessage, content: delta },
+                ];
+              }
+              return current.map((message) => (
+                message.messageCode === optimisticAssistantCode
+                  ? { ...message, content: `${message.content}${delta}` }
+                  : message
+              ));
+            });
           },
         },
       );
@@ -1094,11 +1626,18 @@ export function ChatManagementPage() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Chat send failed";
       if (activeSessionCodeRef.current === sendingSessionCode) {
-        setVisibleMessages((current) => current.map((item) => (
-          item.messageCode === optimisticAssistantCode
-            ? { ...item, content: message }
-            : item
-        )));
+        setVisibleMessages((current) => (
+          current.some((item) => item.messageCode === optimisticAssistantCode)
+            ? current.map((item) => (
+              item.messageCode === optimisticAssistantCode
+                ? { ...item, content: message }
+                : item
+            ))
+            : [
+              ...current,
+              { ...optimisticAssistantMessage, content: message },
+            ]
+        ));
       }
       toast.error(message, { title: "Chat send failed" });
     } finally {
@@ -1301,7 +1840,12 @@ export function ChatManagementPage() {
           </div>
         </header>
 
-        <section className="flex-1 overflow-y-auto bg-[var(--color-surface-container-low)] px-5 py-5">
+        <section
+          aria-label="Chat transcript"
+          className="flex-1 overflow-y-auto bg-[var(--color-surface-container-low)] px-5 py-5"
+          ref={messageScrollRef}
+          onScroll={handleTranscriptScroll}
+        >
           <div className="mx-auto flex max-w-4xl flex-col gap-4">
             {visibleMessages.length ? visibleMessages.map((message) => (
               <Fragment key={message.messageCode}>
@@ -1310,7 +1854,7 @@ export function ChatManagementPage() {
                   message={message}
                 />
                 {liveAguiAnchorIndex >= 0 && visibleMessages[liveAguiAnchorIndex]?.messageCode === message.messageCode ? (
-                  <AguiEventRail events={transcriptAguiEvents} preferences={aguiDebugPreferences} />
+                  <AguiRunWorkRail events={transcriptAguiEvents} preferences={aguiDebugPreferences} />
                 ) : null}
               </Fragment>
             )) : activeWorkspaceCode ? (
@@ -1325,7 +1869,17 @@ export function ChatManagementPage() {
           </div>
         </section>
 
-        <footer className="bg-white px-4 py-3 shadow-[0_-10px_28px_rgba(15,23,42,0.04)]">
+        <footer className="relative bg-white px-4 py-3 shadow-[0_-10px_28px_rgba(15,23,42,0.04)]">
+          {showScrollToBottom ? (
+            <button
+              aria-label="Jump to latest message"
+              className="absolute left-1/2 top-0 z-20 inline-flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-[0_10px_26px_rgba(15,23,42,0.18)] ring-1 ring-[var(--color-outline-variant)] transition hover:bg-[var(--color-hover-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+              type="button"
+              onClick={() => scrollToLatestMessage("smooth")}
+            >
+              <ArrowDown size={16} />
+            </button>
+          ) : null}
           <div className="flex min-h-28 w-full flex-col rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.055)]">
             <TextArea
               className="min-h-16 w-full flex-1 resize-none rounded-none border-0 bg-transparent p-0 text-sm shadow-none focus:border-transparent focus:ring-0"

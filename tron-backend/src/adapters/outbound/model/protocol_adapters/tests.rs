@@ -106,6 +106,7 @@ fn chat_stream_request_asks_for_usage_chunk() {
         api_path: None,
         api_key: "sk-test".into(),
         model_name: "gpt-test".into(),
+        thinking_enabled: true,
         temperature: None,
         max_tokens: None,
         context_window_tokens: Some(128_000),
@@ -125,6 +126,57 @@ fn chat_stream_request_asks_for_usage_chunk() {
 
     assert_eq!(body["stream"], json!(true));
     assert_eq!(body["stream_options"]["include_usage"], json!(true));
+    assert_eq!(body["enable_thinking"], json!(true));
+}
+
+#[test]
+fn chat_stream_maps_reasoning_content_to_summary_delta() {
+    let event = ChatCompletionsAdapter
+        .parse_stream_event(&json!({
+            "choices": [{
+                "delta": {
+                    "reasoning_content": "thinking summary"
+                }
+            }]
+        }))
+        .expect("chat reasoning stream event should parse safely");
+
+    assert_eq!(
+        event,
+        Some(ModelStreamEvent::reasoning_summary_delta("thinking summary"))
+    );
+}
+
+#[test]
+fn responses_request_enables_reasoning_for_thinking_models() {
+    let config = AgentModelConfig {
+        model_code: "MODEL-1".into(),
+        protocol: AgentModelProtocol::Responses,
+        base_url: "https://provider.test/v1".into(),
+        api_path: None,
+        api_key: "sk-test".into(),
+        model_name: "qwen-test".into(),
+        thinking_enabled: true,
+        temperature: None,
+        max_tokens: None,
+        context_window_tokens: Some(128_000),
+        top_p: None,
+        timeout_ms: None,
+        max_retries: None,
+    };
+    let body = ResponsesAdapter
+        .stream_request_body(
+            &config,
+            &ModelRequest {
+                messages: vec![AgentMessage::user("hello")],
+                tools: vec![],
+            },
+        )
+        .expect("responses stream request should build");
+
+    assert_eq!(body["stream"], json!(true));
+    assert_eq!(body["enable_thinking"], json!(true));
+    assert_eq!(body["reasoning"]["effort"], json!("medium"));
 }
 
 #[test]
@@ -211,6 +263,12 @@ fn responses_stream_maps_reasoning_and_output_deltas() {
             "delta": "final answer"
         }))
         .expect("output stream event should parse safely");
+    let reasoning_summary = ResponsesAdapter
+        .parse_stream_event(&json!({
+            "type": "response.reasoning_summary_text.delta",
+            "delta": "summary thinking"
+        }))
+        .expect("reasoning summary stream event should parse safely");
     let done = ResponsesAdapter
         .parse_stream_event(&json!({
             "type": "response.content_part.done",
@@ -225,6 +283,10 @@ fn responses_stream_maps_reasoning_and_output_deltas() {
     assert_eq!(
         reasoning,
         Some(ModelStreamEvent::reasoning_delta("Thinking Process:"))
+    );
+    assert_eq!(
+        reasoning_summary,
+        Some(ModelStreamEvent::reasoning_summary_delta("summary thinking"))
     );
     assert_eq!(output, Some(ModelStreamEvent::text_delta("final answer")));
     assert_eq!(done, None);

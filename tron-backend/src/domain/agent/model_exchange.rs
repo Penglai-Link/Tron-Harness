@@ -50,6 +50,7 @@ pub struct ModelStreamEvent {
 pub enum ModelStreamEventKind {
     Text,
     Reasoning,
+    ReasoningSummary,
 }
 
 impl ModelStreamEvent {
@@ -63,6 +64,13 @@ impl ModelStreamEvent {
     pub fn reasoning_delta(delta: impl Into<String>) -> Self {
         Self {
             kind: ModelStreamEventKind::Reasoning,
+            delta: delta.into(),
+        }
+    }
+
+    pub fn reasoning_summary_delta(delta: impl Into<String>) -> Self {
+        Self {
+            kind: ModelStreamEventKind::ReasoningSummary,
             delta: delta.into(),
         }
     }

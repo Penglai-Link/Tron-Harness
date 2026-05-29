@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use crate::{
     application::agent::{ModelClient, ModelStreamSink},
-    domain::agent::{AgentModelConfig, ModelRequest, ModelResponse},
+    domain::agent::{AgentModelConfig, ModelRequest, ModelResponse, ModelStreamEventKind},
 };
 
 use super::protocol_adapters::{ModelProtocolAdapter, adapter_for_protocol};
@@ -102,10 +102,12 @@ impl HttpModelClient {
                     .expect("model stream usage mutex poisoned") = Some(usage);
             }
             if let Some(delta) = adapter.parse_stream_event(&event)? {
-                output_for_sink
-                    .lock()
-                    .expect("model stream output mutex poisoned")
-                    .push_str(&delta.delta);
+                if delta.kind == ModelStreamEventKind::Text {
+                    output_for_sink
+                        .lock()
+                        .expect("model stream output mutex poisoned")
+                        .push_str(&delta.delta);
+                }
                 sink(delta);
             }
             Ok::<(), String>(())

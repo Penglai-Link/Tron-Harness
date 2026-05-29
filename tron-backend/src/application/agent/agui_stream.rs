@@ -136,28 +136,15 @@ fn convert_protocol_events(stream_key: &str, event: BusEvent) -> Vec<AgentAguiPr
     let reasoning_message_id = format!("{run_code}-reasoning");
 
     match event.event_name.as_str() {
-        "agent.run.started" => vec![
-            protocol_event(
-                "RUN_STARTED",
-                json!({
-                    "type": "RUN_STARTED",
-                    "threadId": stream_key,
-                    "runId": run_code,
-                    "timestamp": timestamp,
-                }),
-            ),
-            protocol_event(
-                "TEXT_MESSAGE_START",
-                json!({
-                    "type": "TEXT_MESSAGE_START",
-                    "threadId": stream_key,
-                    "runId": run_code,
-                    "messageId": assistant_message_id,
-                    "role": "assistant",
-                    "timestamp": timestamp,
-                }),
-            ),
-        ],
+        "agent.run.started" => vec![protocol_event(
+            "RUN_STARTED",
+            json!({
+                "type": "RUN_STARTED",
+                "threadId": stream_key,
+                "runId": run_code,
+                "timestamp": timestamp,
+            }),
+        )],
         "agent.model.requested" => vec![
             protocol_event(
                 "REASONING_START",
@@ -194,6 +181,21 @@ fn convert_protocol_events(stream_key: &str, event: BusEvent) -> Vec<AgentAguiPr
                 )]
             })
             .unwrap_or_default(),
+        "agent.reasoning.raw_delta" => payload_delta(&event)
+            .map(|delta| {
+                vec![protocol_event(
+                    "REASONING_TEXT_CONTENT",
+                    json!({
+                        "type": "REASONING_TEXT_CONTENT",
+                        "threadId": stream_key,
+                        "runId": run_code,
+                        "messageId": format!("{run_code}-reasoning-raw"),
+                        "delta": delta,
+                        "timestamp": timestamp,
+                    }),
+                )]
+            })
+            .unwrap_or_default(),
         "agent.model.responded" => vec![
             protocol_event(
                 "REASONING_MESSAGE_END",
@@ -215,6 +217,17 @@ fn convert_protocol_events(stream_key: &str, event: BusEvent) -> Vec<AgentAguiPr
                 }),
             ),
         ],
+        "agent.output.started" => vec![protocol_event(
+            "TEXT_MESSAGE_START",
+            json!({
+                "type": "TEXT_MESSAGE_START",
+                "threadId": stream_key,
+                "runId": run_code,
+                "messageId": assistant_message_id,
+                "role": "assistant",
+                "timestamp": timestamp,
+            }),
+        )],
         "agent.output.delta" => payload_delta(&event)
             .map(|delta| {
                 vec![protocol_event(
@@ -259,29 +272,61 @@ fn convert_protocol_events(stream_key: &str, event: BusEvent) -> Vec<AgentAguiPr
                 "timestamp": timestamp,
             }),
         )],
-        "agent.tool.started" | "agent.tool.selected" => {
-            let tool_name = event
-                .summary
-                .clone()
-                .or_else(|| attr_value(&event, "tool_name"))
-                .unwrap_or_else(|| "tool".into());
+        "agent.tool.selected" => {
+            let tool_name = event_tool_name(&event);
+            let tool_call_id = event_tool_call_id(&event, &run_code, &tool_name);
+            let tool_args = event_tool_args(&event);
+            vec![protocol_event(
+                "TOOL_CALL_ARGS",
+                json!({
+                    "type": "TOOL_CALL_ARGS",
+                    "threadId": stream_key,
+                    "runId": run_code,
+                    "toolCallId": tool_call_id,
+                    "toolCallName": tool_name,
+                    "toolCallArgs": tool_args,
+                    "parentMessageId": assistant_message_id,
+                    "timestamp": timestamp,
+                }),
+            )]
+        }
+        "agent.tool.started" => {
+            let tool_name = event_tool_name(&event);
+            let tool_call_id = event_tool_call_id(&event, &run_code, &tool_name);
+            let tool_args = event_tool_args(&event);
             vec![protocol_event(
                 "TOOL_CALL_START",
                 json!({
                     "type": "TOOL_CALL_START",
                     "threadId": stream_key,
                     "runId": run_code,
-                    "toolCallId": tool_call_id(&run_code, &tool_name),
+                    "toolCallId": tool_call_id,
                     "toolCallName": tool_name,
+                    "toolCallArgs": tool_args,
                     "parentMessageId": assistant_message_id,
                     "timestamp": timestamp,
                 }),
             )]
         }
         "agent.tool.completed" => {
-            let tool_name = event.summary.clone().unwrap_or_else(|| "tool".into());
-            let tool_call_id = tool_call_id(&run_code, &tool_name);
+            let tool_name = event_tool_name(&event);
+            let tool_call_id = event_tool_call_id(&event, &run_code, &tool_name);
+            let result = event_tool_result(&event).unwrap_or_else(|| "completed".into());
             vec![
+                protocol_event(
+                    "TOOL_CALL_RESULT",
+                    json!({
+                        "type": "TOOL_CALL_RESULT",
+                        "threadId": stream_key,
+                        "runId": run_code,
+                        "messageId": format!("{run_code}-tool-result"),
+                        "toolCallId": tool_call_id,
+                        "toolCallName": tool_name,
+                        "content": result,
+                        "role": "tool",
+                        "timestamp": timestamp,
+                    }),
+                ),
                 protocol_event(
                     "TOOL_CALL_END",
                     json!({
@@ -292,23 +337,12 @@ fn convert_protocol_events(stream_key: &str, event: BusEvent) -> Vec<AgentAguiPr
                         "timestamp": timestamp,
                     }),
                 ),
-                protocol_event(
-                    "TOOL_CALL_RESULT",
-                    json!({
-                        "type": "TOOL_CALL_RESULT",
-                        "threadId": stream_key,
-                        "runId": run_code,
-                        "messageId": format!("{run_code}-tool-result"),
-                        "toolCallId": tool_call_id,
-                        "content": "completed",
-                        "role": "tool",
-                        "timestamp": timestamp,
-                    }),
-                ),
             ]
         }
         "agent.tool.failed" => {
-            let tool_name = event.summary.clone().unwrap_or_else(|| "tool".into());
+            let tool_name = event_tool_name(&event);
+            let tool_call_id = event_tool_call_id(&event, &run_code, &tool_name);
+            let result = event_tool_result(&event).unwrap_or_else(|| "failed".into());
             vec![protocol_event(
                 "TOOL_CALL_RESULT",
                 json!({
@@ -316,23 +350,32 @@ fn convert_protocol_events(stream_key: &str, event: BusEvent) -> Vec<AgentAguiPr
                     "threadId": stream_key,
                     "runId": run_code,
                     "messageId": format!("{run_code}-tool-result"),
-                    "toolCallId": tool_call_id(&run_code, &tool_name),
-                    "content": "failed",
+                    "toolCallId": tool_call_id,
+                    "toolCallName": tool_name,
+                    "content": result,
                     "role": "tool",
                     "timestamp": timestamp,
                 }),
             )]
         }
-        "agent.observation.created" => vec![protocol_event(
-            "ACTIVITY_DELTA",
-            json!({
-                "type": "ACTIVITY_DELTA",
-                "threadId": stream_key,
-                "runId": run_code,
-                "delta": [{"op":"add","path":"/logs/-","value":"observation created"}],
-                "timestamp": timestamp,
-            }),
-        )],
+        "agent.observation.created" => {
+            let tool_name = event_tool_name(&event);
+            let tool_call_id = event_tool_call_id(&event, &run_code, &tool_name);
+            let log_line =
+                event_tool_result(&event).unwrap_or_else(|| "observation created".into());
+            vec![protocol_event(
+                "ACTIVITY_DELTA",
+                json!({
+                    "type": "ACTIVITY_DELTA",
+                    "threadId": stream_key,
+                    "runId": run_code,
+                    "toolCallId": tool_call_id,
+                    "toolCallName": tool_name,
+                    "delta": [{"op":"add","path":"/logs/-","value":log_line}],
+                    "timestamp": timestamp,
+                }),
+            )]
+        }
         _ => Vec::new(),
     }
 }
@@ -366,7 +409,29 @@ fn attr_value(event: &BusEvent, key: &str) -> Option<String> {
         .map(|attr| attr.value.clone())
 }
 
-fn tool_call_id(run_code: &str, tool_name: &str) -> String {
+fn event_tool_name(event: &BusEvent) -> String {
+    payload_value(event, "tool_name")
+        .or_else(|| event.summary.clone())
+        .or_else(|| attr_value(event, "tool_name"))
+        .unwrap_or_else(|| "tool".into())
+}
+
+fn event_tool_call_id(event: &BusEvent, run_code: &str, tool_name: &str) -> String {
+    payload_value(event, "tool_call_id")
+        .unwrap_or_else(|| fallback_tool_call_id(run_code, tool_name))
+}
+
+fn event_tool_args(event: &BusEvent) -> Value {
+    payload_value(event, "tool_args_json")
+        .map(|value| serde_json::from_str::<Value>(&value).unwrap_or(Value::String(value)))
+        .unwrap_or(Value::Null)
+}
+
+fn event_tool_result(event: &BusEvent) -> Option<String> {
+    payload_value(event, "tool_result_json").or_else(|| payload_value(event, "tool_result"))
+}
+
+fn fallback_tool_call_id(run_code: &str, tool_name: &str) -> String {
     let suffix = tool_name
         .chars()
         .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })

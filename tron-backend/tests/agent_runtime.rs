@@ -66,6 +66,7 @@ fn base_context(run_code: &str) -> AgentRunContext {
             api_path: None,
             api_key: "sk-test".into(),
             model_name: "gpt-test".into(),
+            thinking_enabled: false,
             temperature: Some(0.2),
             max_tokens: Some(128),
             context_window_tokens: Some(8_192),
@@ -202,6 +203,97 @@ async fn react_agent_executes_allowed_tool_and_keeps_runs_isolated() {
     assert_eq!(first.observations.len(), 1);
     assert_eq!(second.final_output, "second-run");
     assert!(second.observations.is_empty());
+}
+
+#[tokio::test]
+async fn react_agent_publishes_tool_agui_correlation_payloads() {
+    let registry = ToolRegistry::default();
+    registry
+        .register(Arc::new(InProcessTool::new(
+            "echo",
+            |request: ToolRequest| {
+                Ok(ToolObservation {
+                    tool_name: request.tool_name,
+                    output: format!("observed:{}", request.input["command"]),
+                })
+            },
+        )))
+        .expect("tool should register");
+    let sink = Arc::new(RecordingEventSink::with_route_class(
+        "agent-runtime-tool",
+        BusRouteClass::Agui,
+    ));
+    let event_bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(200)),
+    )
+    .register_sink(sink.clone())
+    .build();
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![
+            ModelResponse::tool_call("echo", json!({"command": "cargo test"})),
+            ModelResponse::final_output("after-tool"),
+        ])),
+        Arc::new(registry),
+        event_bus,
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    agent
+        .run(base_context("RUN-TOOL-META"))
+        .await
+        .expect("tool run should pass");
+
+    assert!(sink.wait_for_len(11, Duration::from_secs(2)));
+    let events = sink.events();
+    let tool_started = events
+        .iter()
+        .find(|event| event.event_name == "agent.tool.started")
+        .expect("tool start event should be published");
+    let tool_completed = events
+        .iter()
+        .find(|event| event.event_name == "agent.tool.completed")
+        .expect("tool completion event should be published");
+    let observation = events
+        .iter()
+        .find(|event| event.event_name == "agent.observation.created")
+        .expect("observation event should be published");
+
+    let payload =
+        |key: &str, event: &tron_backend::shared::event_bus::BusEvent| -> Option<String> {
+            event
+                .payload_fields
+                .iter()
+                .find(|attr| attr.key == key)
+                .map(|attr| attr.value.clone())
+        };
+
+    assert_eq!(
+        payload("tool_call_id", tool_started).as_deref(),
+        Some("RUN-TOOL-META-tool-1")
+    );
+    assert_eq!(payload("tool_name", tool_started).as_deref(), Some("echo"));
+    assert!(
+        payload("tool_args_json", tool_started)
+            .as_deref()
+            .expect("tool args should be present")
+            .contains("cargo test")
+    );
+    assert_eq!(
+        payload("tool_call_id", tool_completed).as_deref(),
+        Some("RUN-TOOL-META-tool-1")
+    );
+    assert!(
+        payload("tool_result_json", tool_completed)
+            .as_deref()
+            .expect("tool result should be present")
+            .contains("observed")
+    );
+    assert_eq!(
+        payload("tool_call_id", observation).as_deref(),
+        Some("RUN-TOOL-META-tool-1")
+    );
 }
 
 #[tokio::test]

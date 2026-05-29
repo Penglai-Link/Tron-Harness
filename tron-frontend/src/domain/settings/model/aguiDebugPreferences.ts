@@ -4,7 +4,7 @@ import {
   useState,
 } from "react";
 
-export type AguiDebugMode = "core" | "all" | "custom";
+export type AguiDebugMode = "off" | "all" | "custom";
 
 export interface AguiDebugPreferences {
   customEventTypes: string[];
@@ -28,9 +28,9 @@ const changedEventName = "tron.aguiDebugPreferences.changed";
 
 export const aguiDebugModeOptions: readonly AguiDebugModeOption[] = [
   {
-    description: "Show the live run, reasoning, tool, and activity cards operators normally need.",
-    label: "Core cards",
-    value: "core",
+    description: "Hide low-level AG-UI debug event cards while keeping user-facing reasoning and tool cards visible.",
+    label: "Off",
+    value: "off",
   },
   {
     description: "Show every live AG-UI event card, including low-level text message stream events.",
@@ -50,7 +50,8 @@ export const aguiEventTypeOptions: readonly AguiEventTypeOption[] = [
   { value: "RUN_ERROR", label: "Run error", description: "Live AG-UI run error events." },
   { value: "REASONING_START", label: "Reasoning start", description: "Reasoning block start markers." },
   { value: "REASONING_MESSAGE_START", label: "Reasoning message start", description: "Reasoning message start markers." },
-  { value: "REASONING_MESSAGE_CONTENT", label: "Reasoning message content", description: "Reasoning stream text deltas." },
+  { value: "REASONING_MESSAGE_CONTENT", label: "Reasoning summary content", description: "User-facing reasoning summary deltas." },
+  { value: "REASONING_TEXT_CONTENT", label: "Reasoning text content", description: "Raw provider reasoning deltas for debug review." },
   { value: "REASONING_MESSAGE_END", label: "Reasoning message end", description: "Reasoning message end markers." },
   { value: "REASONING_END", label: "Reasoning end", description: "Reasoning block end markers." },
   { value: "TOOL_CALL_START", label: "Tool call start", description: "Tool invocation start markers." },
@@ -63,7 +64,7 @@ export const aguiEventTypeOptions: readonly AguiEventTypeOption[] = [
   { value: "TEXT_MESSAGE_END", label: "Text message end", description: "Assistant text stream end markers." },
 ];
 
-const coreEventTypes = [
+const defaultCustomEventTypes = [
   "RUN_STARTED",
   "RUN_FINISHED",
   "RUN_ERROR",
@@ -76,8 +77,8 @@ const coreEventTypes = [
 ] as const;
 
 const defaultPreferences: AguiDebugPreferences = {
-  customEventTypes: [...coreEventTypes],
-  mode: "core",
+  customEventTypes: [...defaultCustomEventTypes],
+  mode: "off",
 };
 
 function normalizeEventType(value: string) {
@@ -85,7 +86,7 @@ function normalizeEventType(value: string) {
 }
 
 function isAguiDebugMode(value: unknown): value is AguiDebugMode {
-  return value === "core" || value === "all" || value === "custom";
+  return value === "off" || value === "all" || value === "custom";
 }
 
 function uniqueKnownEventTypes(values: unknown): string[] {
@@ -140,8 +141,8 @@ export function shouldShowAguiEventType(type: string, preferences: AguiDebugPref
 }
 
 export function resolveAguiDebugEventTypes(preferences: AguiDebugPreferences) {
+  if (preferences.mode === "off") return [];
   if (preferences.mode === "all") return aguiEventTypeOptions.map((option) => option.value);
-  if (preferences.mode === "core") return [...coreEventTypes];
   return preferences.customEventTypes;
 }
 

@@ -101,6 +101,7 @@ export type ChatAguiStreamEventType =
   | "REASONING_START"
   | "REASONING_MESSAGE_START"
   | "REASONING_MESSAGE_CONTENT"
+  | "REASONING_TEXT_CONTENT"
   | "REASONING_MESSAGE_END"
   | "REASONING_END"
   | "TOOL_CALL_START"
@@ -116,12 +117,13 @@ export interface ChatAguiStreamEvent {
   runId?: string;
   messageId?: string;
   role?: string;
-  delta?: string;
+  delta?: string | unknown[];
   content?: string;
   code?: string;
   message?: string;
   toolCallId?: string;
   toolCallName?: string;
+  toolCallArgs?: unknown;
   parentMessageId?: string;
   timestamp?: number;
   result?: ChatSendResult;

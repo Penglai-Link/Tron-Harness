@@ -46,10 +46,27 @@ async fn agent_model_mock_server() -> AgentModelMockServer {
 }
 
 async fn agent_chat_completion(Json(payload): Json<Value>) -> Response {
-    let prompt = payload["messages"][0]["content"]
-        .as_str()
+    let prompt = payload["messages"]
+        .as_array()
+        .and_then(|messages| {
+            messages
+                .iter()
+                .rev()
+                .find_map(|message| message["content"].as_str())
+        })
         .unwrap_or_default();
     if payload["stream"].as_bool() == Some(true) {
+        assert_eq!(payload["enable_thinking"], json!(true));
+        let reasoning = json!({
+            "choices": [{
+                "delta": {
+                    "reasoning_content": format!(
+                        "thinking about {prompt}. {}done thinking.",
+                        "reasoning detail ".repeat(12)
+                    )
+                }
+            }]
+        });
         let first = json!({
             "choices": [{
                 "delta": {
@@ -65,6 +82,7 @@ async fn agent_chat_completion(Json(payload): Json<Value>) -> Response {
             }]
         });
         let stream = async_stream::stream! {
+            yield Ok::<Event, Infallible>(Event::default().data(reasoning.to_string()));
             yield Ok::<Event, Infallible>(Event::default().data(first.to_string()));
             yield Ok::<Event, Infallible>(Event::default().data(second.to_string()));
             yield Ok::<Event, Infallible>(Event::default().data("[DONE]"));
@@ -249,7 +267,8 @@ async fn chat_send_persists_messages_and_invokes_agent_run() {
                 "protocol": "CHAT_COMPLETIONS",
                 "baseUrl": server.base_url,
                 "apiKey": "sk-chat-api",
-                "modelName": "gpt-chat"
+                "modelName": "gpt-chat",
+                "thinkingEnabled": true
             }
         })),
         None,
@@ -329,7 +348,8 @@ async fn chat_stream_persists_messages_and_emits_deltas() {
                 "protocol": "CHAT_COMPLETIONS",
                 "baseUrl": server.base_url,
                 "apiKey": "sk-chat-api",
-                "modelName": "gpt-chat"
+                "modelName": "gpt-chat",
+                "thinkingEnabled": true
             }
         })),
         None,
@@ -349,6 +369,11 @@ async fn chat_stream_persists_messages_and_emits_deltas() {
     let body = String::from_utf8(body.to_vec()).expect("stream body should be utf8");
     assert!(body.contains("event: RUN_STARTED"));
     assert!(body.contains("\"type\":\"RUN_STARTED\""));
+    assert!(body.contains("event: REASONING_MESSAGE_CONTENT"));
+    assert!(body.contains("thinking about stream this session"));
+    assert!(body.contains("done thinking."));
+    assert!(body.matches("event: REASONING_MESSAGE_CONTENT").count() > 1);
+    assert!(!body.contains("Analyzing request with gpt-chat."));
     assert!(body.contains("event: TEXT_MESSAGE_START"));
     assert!(body.contains("event: TEXT_MESSAGE_CONTENT"));
     assert!(body.contains("\"delta\":\"chat \""));
@@ -376,6 +401,89 @@ async fn chat_stream_persists_messages_and_emits_deltas() {
         messages["data"][1]["content"],
         json!("chat reply: stream this session")
     );
+}
+
+#[tokio::test]
+async fn chat_stream_only_emits_events_for_current_run() {
+    let app = app();
+    let server = agent_model_mock_server().await;
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Replay guard chat"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let first_stream_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages/stream"),
+        Some(json!({
+            "content": "first stream replay guard",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "CHAT_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": server.base_url,
+                "apiKey": "sk-chat-api",
+                "modelName": "gpt-chat",
+                "thinkingEnabled": true
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(first_stream_response.status(), StatusCode::OK);
+    let first_body = to_bytes(first_stream_response.into_body(), usize::MAX)
+        .await
+        .expect("first stream body should be readable");
+    let first_body = String::from_utf8(first_body.to_vec()).expect("first stream should be utf8");
+    assert!(first_body.contains("\"delta\":\"reply: first stream replay guard\""));
+
+    let second_stream_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages/stream"),
+        Some(json!({
+            "content": "second stream replay guard",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "CHAT_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": server.base_url,
+                "apiKey": "sk-chat-api",
+                "modelName": "gpt-chat",
+                "thinkingEnabled": true
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(second_stream_response.status(), StatusCode::OK);
+    let second_body = to_bytes(second_stream_response.into_body(), usize::MAX)
+        .await
+        .expect("second stream body should be readable");
+    let second_body =
+        String::from_utf8(second_body.to_vec()).expect("second stream should be utf8");
+    assert!(second_body.contains("\"delta\":\"reply: second stream replay guard\""));
+    assert!(!second_body.contains("first stream replay guard"));
 }
 
 #[tokio::test]

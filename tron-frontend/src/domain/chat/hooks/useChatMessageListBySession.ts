@@ -84,18 +84,41 @@ export async function streamChatMessage(
     const runId = result.run.runCode;
     const messageId = assistant?.messageCode ?? `${runId}-assistant`;
     const startedAt = Date.now();
+    const staleRunId = `${runId}-stale`;
+    const reasoningContent = [
+      "Reviewing session context and available skills.",
+      ...Array.from({ length: 18 }, (_, index) => `Reasoning stream segment ${index + 1}: validating latest summary visibility while the card content overflows.`),
+    ];
+    const reasoningContentEvents: ChatAguiStreamEvent[] = reasoningContent.map((delta, index) => ({
+      type: "REASONING_MESSAGE_CONTENT",
+      threadId: session.sessionCode,
+      runId,
+      messageId: `${runId}-reasoning`,
+      delta,
+      timestamp: startedAt + 3 + index,
+    }));
+    const reasoningEndOffset = 3 + reasoningContentEvents.length;
     [
+      { type: "RUN_STARTED", threadId: session.sessionCode, runId: staleRunId, timestamp: startedAt - 657_000 },
+      { type: "REASONING_START", threadId: session.sessionCode, runId: staleRunId, messageId: `${staleRunId}-reasoning`, timestamp: startedAt - 656_000 },
+      { type: "REASONING_MESSAGE_START", threadId: session.sessionCode, runId: staleRunId, messageId: `${staleRunId}-reasoning`, timestamp: startedAt - 655_000 },
+      { type: "REASONING_MESSAGE_CONTENT", threadId: session.sessionCode, runId: staleRunId, messageId: `${staleRunId}-reasoning`, delta: "This stale run should not render.", timestamp: startedAt - 654_000 },
+      { type: "REASONING_MESSAGE_END", threadId: session.sessionCode, runId: staleRunId, messageId: `${staleRunId}-reasoning`, timestamp: startedAt - 653_000 },
+      { type: "REASONING_END", threadId: session.sessionCode, runId: staleRunId, messageId: `${staleRunId}-reasoning`, timestamp: startedAt - 652_000 },
+      { type: "RUN_FINISHED", threadId: session.sessionCode, runId: staleRunId, timestamp: startedAt - 651_000 },
       { type: "RUN_STARTED", threadId: session.sessionCode, runId, timestamp: startedAt },
       { type: "REASONING_START", threadId: session.sessionCode, runId, messageId: `${runId}-reasoning`, timestamp: startedAt + 1 },
       { type: "REASONING_MESSAGE_START", threadId: session.sessionCode, runId, messageId: `${runId}-reasoning`, timestamp: startedAt + 2 },
-      { type: "REASONING_MESSAGE_CONTENT", threadId: session.sessionCode, runId, messageId: `${runId}-reasoning`, delta: "Reviewing session context and available skills.", timestamp: startedAt + 3 },
-      { type: "REASONING_MESSAGE_END", threadId: session.sessionCode, runId, messageId: `${runId}-reasoning`, timestamp: startedAt + 4 },
-      { type: "REASONING_END", threadId: session.sessionCode, runId, messageId: `${runId}-reasoning`, timestamp: startedAt + 5 },
-      { type: "TOOL_CALL_START", threadId: session.sessionCode, runId, toolCallId: `${runId}-tool`, toolCallName: "workspace.search", timestamp: startedAt + 4 },
-      { type: "ACTIVITY_DELTA", threadId: session.sessionCode, runId, delta: "Streaming workspace.search logs", timestamp: startedAt + 5 },
-      { type: "TOOL_CALL_RESULT", threadId: session.sessionCode, runId, toolCallId: `${runId}-tool`, content: "Matched workspace context", timestamp: startedAt + 5 },
-      { type: "TOOL_CALL_END", threadId: session.sessionCode, runId, toolCallId: `${runId}-tool`, timestamp: startedAt + 6 },
-      { type: "TEXT_MESSAGE_START", threadId: session.sessionCode, runId, messageId, role: "assistant", timestamp: startedAt + 7 },
+      ...reasoningContentEvents,
+      { type: "REASONING_MESSAGE_END", threadId: session.sessionCode, runId, messageId: `${runId}-reasoning`, timestamp: startedAt + reasoningEndOffset },
+      { type: "REASONING_END", threadId: session.sessionCode, runId, messageId: `${runId}-reasoning`, timestamp: startedAt + reasoningEndOffset + 1 },
+      { type: "TOOL_CALL_START", threadId: session.sessionCode, runId, toolCallId: `${runId}-tool-1`, toolCallName: "shell.exec", toolCallArgs: { command: "rg AG-UI tron-frontend/src/domain/chat" }, timestamp: startedAt + reasoningEndOffset + 2 },
+      { type: "TOOL_CALL_ARGS", threadId: session.sessionCode, runId, toolCallId: `${runId}-tool-1`, toolCallName: "shell.exec", toolCallArgs: { command: "rg AG-UI tron-frontend/src/domain/chat" }, timestamp: startedAt + reasoningEndOffset + 3 },
+      { type: "ACTIVITY_DELTA", threadId: session.sessionCode, runId, toolCallId: `${runId}-tool-1`, delta: [{ op: "add", path: "/logs/-", value: "Scanning chat domain files" }], timestamp: startedAt + reasoningEndOffset + 4 },
+      { type: "ACTIVITY_DELTA", threadId: session.sessionCode, runId, toolCallId: `${runId}-unmatched-tool`, delta: [{ op: "add", path: "/logs/-", value: "This log belongs elsewhere" }], timestamp: startedAt + reasoningEndOffset + 5 },
+      { type: "TOOL_CALL_RESULT", threadId: session.sessionCode, runId, toolCallId: `${runId}-tool-1`, toolCallName: "shell.exec", content: "Matched chat AG-UI presentation files", timestamp: startedAt + reasoningEndOffset + 6 },
+      { type: "TOOL_CALL_END", threadId: session.sessionCode, runId, toolCallId: `${runId}-tool-1`, timestamp: startedAt + reasoningEndOffset + 7 },
+      { type: "TEXT_MESSAGE_START", threadId: session.sessionCode, runId, messageId, role: "assistant", timestamp: startedAt + reasoningEndOffset + 8 },
     ].forEach((event) => handlers.onAguiEvent?.(event));
     if (assistant?.content) {
       assistant.content.match(/.{1,18}/g)?.forEach((delta, index) => {
@@ -105,7 +128,7 @@ export async function streamChatMessage(
           runId,
           messageId,
           delta,
-          timestamp: startedAt + 8 + index,
+          timestamp: startedAt + reasoningEndOffset + 9 + index,
         });
         handlers.onDelta?.(delta);
       });
@@ -166,7 +189,7 @@ export async function streamChatMessage(
     const type = (payload.type ?? eventName).toUpperCase();
     const aguiEvent = { ...payload, type };
     handlers.onAguiEvent?.(aguiEvent);
-    if (type === "TEXT_MESSAGE_CONTENT" && payload.delta) {
+    if (type === "TEXT_MESSAGE_CONTENT" && typeof payload.delta === "string") {
       handlers.onDelta?.(payload.delta);
       return;
     }

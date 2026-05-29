@@ -88,6 +88,7 @@ pub(super) fn agent_model_config_from_view(
         api_path: view.api_path.clone(),
         api_key: api_key.to_string(),
         model_name: view.model_name.clone(),
+        thinking_enabled: view.thinking_enabled,
         temperature: view.temperature,
         max_tokens: view.max_tokens,
         context_window_tokens: view.context_window_tokens,

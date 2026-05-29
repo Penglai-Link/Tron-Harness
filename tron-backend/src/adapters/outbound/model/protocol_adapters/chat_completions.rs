@@ -65,6 +65,9 @@ pub fn chat_completions_request(config: &AgentModelConfig, request: &ModelReques
     if let Some(top_p) = config.top_p {
         payload["top_p"] = json!(top_p);
     }
+    if config.thinking_enabled {
+        payload["enable_thinking"] = json!(true);
+    }
     if !request.tools.is_empty() {
         payload["tools"] = json!(
             request
@@ -135,7 +138,7 @@ fn parse_chat_stream_event(body: &Value) -> Option<ModelStreamEvent> {
     let event = if let Some(text) = delta.get("content").and_then(text_from_content) {
         ModelStreamEvent::text_delta(text)
     } else if let Some(text) = delta.get("reasoning_content").and_then(Value::as_str) {
-        ModelStreamEvent::reasoning_delta(text)
+        ModelStreamEvent::reasoning_summary_delta(text)
     } else {
         return None;
     };

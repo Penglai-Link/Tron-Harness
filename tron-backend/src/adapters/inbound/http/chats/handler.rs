@@ -247,6 +247,9 @@ pub async fn stream_message(
             let mut emitted = false;
             if let Ok(events) = stream_service.protocol_events(&stream_key) {
                 for event in events {
+                    if !protocol_event_belongs_to_run(&event.data, &stream_run_code) {
+                        continue;
+                    }
                     if matches!(event.sse_event.as_str(), "RUN_FINISHED" | "RUN_ERROR") {
                         continue;
                     }
@@ -278,6 +281,10 @@ pub async fn stream_message(
     Sse::new(stream)
         .keep_alive(KeepAlive::default())
         .into_response()
+}
+
+fn protocol_event_belongs_to_run(data: &Value, run_code: &str) -> bool {
+    data.get("runId").and_then(Value::as_str) == Some(run_code)
 }
 
 #[derive(Debug)]
