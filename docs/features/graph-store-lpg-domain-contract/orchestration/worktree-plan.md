@@ -10,7 +10,7 @@
 - execution_mode: hybrid
 - main_branch: feature/clouds3n/graph-storage-foundation/base
 - main_worktree_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/graph-storage-foundation/base
-- status: ready
+- status: complete
 
 ## Repository State
 
@@ -18,7 +18,7 @@
 - base_ref: origin/master
 - current_branch: feature/clouds3n/graph-storage-foundation/base
 - current_commit: 8bce976252f4869e447be8561bab1c7abbeffc27
-- working_tree_status: LPG contract docs in progress
+- working_tree_status: integrated and verified
 - note: graph scope kernel is complete and supplies `ResolvedGraphScope` for this feature.
 
 ## Multi-Agent Base Branch
@@ -34,7 +34,7 @@ One row is one actual git worktree checkout. `agent id` and `subtask name` follo
 
 | agent id | subtask name | codex agent id | codex agent name | ac refs | tdd phase | branch | worktree path | base ref | status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| backend | lpg-domain-contract | 019e73a0-2714-79f3-8f98-a694417d114d | Halley | AC-LPG-01, AC-LPG-02, AC-LPG-03, AC-LPG-04, AC-LPG-05, AC-LPG-06, AC-LPG-07 | tdd | feature/clouds3n/graph-storage-foundation/backend/lpg-domain-contract | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/graph-storage-foundation/backend/lpg-domain-contract | feature/clouds3n/graph-storage-foundation/base | in_progress |
+| backend | lpg-domain-contract | 019e73a0-2714-79f3-8f98-a694417d114d | Halley | AC-LPG-01, AC-LPG-02, AC-LPG-03, AC-LPG-04, AC-LPG-05, AC-LPG-06, AC-LPG-07 | tdd | feature/clouds3n/graph-storage-foundation/backend/lpg-domain-contract | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/graph-storage-foundation/backend/lpg-domain-contract | feature/clouds3n/graph-storage-foundation/base | done |
 
 - worker_ref: backend/lpg-domain-contract
 - workflow_owner: tdd-slice-worker
@@ -45,7 +45,7 @@ One row is one actual git worktree checkout. `agent id` and `subtask name` follo
 
 | ac_refs | decision | execution_owner | rationale | worker_ref | status |
 | --- | --- | --- | --- | --- | --- |
-| AC-LPG-01, AC-LPG-02, AC-LPG-03, AC-LPG-04, AC-LPG-05, AC-LPG-06, AC-LPG-07 | spawn | tdd-slice-worker; runtime_agent_type=worker | grouped because all ACs share the graph LPG Rust module write scope and command aliases; coder-spark capacity fallback recorded | backend/lpg-domain-contract | in_progress |
+| AC-LPG-01, AC-LPG-02, AC-LPG-03, AC-LPG-04, AC-LPG-05, AC-LPG-06, AC-LPG-07 | spawn | tdd-slice-worker; runtime_agent_type=worker | grouped because all ACs share the graph LPG Rust module write scope and command aliases; coder-spark capacity fallback recorded | backend/lpg-domain-contract | done |
 
 ## Branch And Path Rules
 

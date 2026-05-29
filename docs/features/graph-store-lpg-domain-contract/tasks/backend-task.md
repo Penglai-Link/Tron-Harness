@@ -3,7 +3,7 @@
 ## Execution Contract
 
 - feature_slug: graph-store-lpg-domain-contract
-- status: ready
+- status: done
 - execution_mode: hybrid
 - selected_worker: backend/lpg-domain-contract
 
@@ -13,13 +13,13 @@ One bounded `tdd` slice owns RED -> GREEN -> focused VERIFY for the LPG contract
 
 ## Task Rows
 
-- AC-LPG-01 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph* | command_ref: CMD-BE-LPG-UNIT | status: ready.
-- AC-LPG-02 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph* | command_ref: CMD-BE-LPG-UNIT | status: ready.
-- AC-LPG-03 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph* | command_ref: CMD-BE-LPG-UNIT | status: ready.
-- AC-LPG-04 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph* | command_ref: CMD-BE-LPG-UNIT | status: ready.
-- AC-LPG-05 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph* | command_ref: CMD-BE-LPG-GUARD | status: ready.
-- AC-LPG-06 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph* | command_ref: CMD-BE-LPG-UNIT | status: ready.
-- AC-LPG-07 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/Cargo.toml | command_ref: CMD-BE-LPG-GUARD | status: ready.
+- AC-LPG-01 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph* | command_ref: CMD-BE-LPG-UNIT | status: done.
+- AC-LPG-02 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph* | command_ref: CMD-BE-LPG-UNIT | status: done.
+- AC-LPG-03 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph* | command_ref: CMD-BE-LPG-UNIT | status: done.
+- AC-LPG-04 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph* | command_ref: CMD-BE-LPG-UNIT | status: done.
+- AC-LPG-05 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph* | command_ref: CMD-BE-LPG-GUARD | status: done.
+- AC-LPG-06 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph* | command_ref: CMD-BE-LPG-UNIT | status: done.
+- AC-LPG-07 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/Cargo.toml | command_ref: CMD-BE-LPG-GUARD | status: done.
 
 ## Worktree Notes
 

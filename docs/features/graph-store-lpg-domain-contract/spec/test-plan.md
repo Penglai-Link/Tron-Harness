@@ -10,7 +10,7 @@ Valid statuses: `draft_pending_confirmation`, `approved`, `approved_with_default
 
 ## Proof Rows
 
-- AC-LPG-01 | layer: backend | case: node and edge command validation | red: graph LPG domain has no typed command validation | green: tests prove valid commands normalize and invalid labels, relationships, codes, or reserved properties fail | command_ref: CMD-BE-LPG-UNIT.
+- AC-LPG-01 | layer: backend | case: node and edge CRUD command validation | red: graph LPG domain has no typed CRUD command validation | green: tests prove create, update, delete, and get commands validate codes, labels, relationships, text, and properties | command_ref: CMD-BE-LPG-UNIT.
 - AC-LPG-02 | layer: backend | case: duplicate and missing graph records | red: duplicate or missing store outcomes cannot map to typed graph errors | green: fake store outcomes map to duplicate node, duplicate edge, missing node, and missing edge errors | command_ref: CMD-BE-LPG-UNIT.
 - AC-LPG-03 | layer: backend | case: edge endpoint consistency | red: service can write an edge without checking source and target nodes in scope | green: service checks both endpoints through the same resolved scope before calling create edge | command_ref: CMD-BE-LPG-UNIT.
 - AC-LPG-04 | layer: backend | case: typed search and traversal plans | red: search and traversal have no typed plan for combined retrieval dimensions | green: tests build structured, full-text, vector text, label, traversal, limit, and score options without raw query strings | command_ref: CMD-BE-LPG-UNIT.
@@ -21,7 +21,7 @@ Valid statuses: `draft_pending_confirmation`, `approved`, `approved_with_default
 ## Command Index
 
 - CMD-BE-LPG-UNIT | command: `rtk cargo test --manifest-path tron-backend/Cargo.toml graph:: -- --nocapture` | cost: medium | when: red-green-verify | rerun: after graph LPG domain, service, or port changes | expect: graph scope and LPG contract tests fail in RED and pass in GREEN.
-- CMD-BE-LPG-GUARD | command: `rtk proxy bash -lc 'set -euo pipefail; ! rg -n "knowledge-graph|memory/fragments|inheritable|grafeo|raw_query|cypher|sparql|gql_query|embedding_vector|Vec<f32>" tron-backend/src tron-backend/Cargo.toml; cargo test --manifest-path tron-backend/Cargo.toml --test rust_coding_spec_architecture'` | cost: medium | when: verify | rerun: after graph contract or manifest changes | expect: no HTTP graph route, no Grafeo dependency, no raw query/vector input surface, no RDF leakage, and architecture tests pass.
+- CMD-BE-LPG-GUARD | command: `rtk proxy bash -lc 'set -euo pipefail; ! rg -n "knowledge-graph|memory/fragments|inheritable|grafeo|raw_query|cypher|sparql|gql_query|embedding_vector|Vec<f32>" tron-backend/src/domain/graph tron-backend/src/application/graph tron-backend/Cargo.toml; cargo test --manifest-path tron-backend/Cargo.toml --test rust_coding_spec_architecture'` | cost: medium | when: verify | rerun: after graph contract or manifest changes | expect: no HTTP graph route, no Grafeo dependency, no raw query/vector input surface, no RDF leakage, and architecture tests pass.
 - CMD-BE-CHECK | command: `rtk make be-check` | cost: medium | when: verify | rerun: after Rust source edits | expect: backend compiles through the project Makefile.
 - CMD-BE-FMT | command: `rtk cargo fmt --manifest-path tron-backend/Cargo.toml --check` | cost: low | when: verify | rerun: after Rust source edits | expect: backend graph source is formatted.
 

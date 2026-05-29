@@ -7,6 +7,8 @@ pub struct GraphNode {
     pub node_code: String,
     pub labels: Vec<String>,
     pub properties: BTreeMap<String, GraphPropertyValue>,
+    pub full_text: Option<String>,
+    pub embedding_text: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -16,6 +18,8 @@ pub struct GraphEdge {
     pub target_node_code: String,
     pub relationship: String,
     pub properties: BTreeMap<String, GraphPropertyValue>,
+    pub full_text: Option<String>,
+    pub embedding_text: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -23,6 +27,8 @@ pub struct GraphNodeWrite {
     pub node_code: String,
     pub labels: Vec<String>,
     pub properties: BTreeMap<String, GraphPropertyValue>,
+    pub full_text: Option<String>,
+    pub embedding_text: Option<String>,
 }
 
 impl GraphNodeWrite {
@@ -31,6 +37,8 @@ impl GraphNodeWrite {
             node_code: normalize_graph_code(&self.node_code)?,
             labels: normalize_labels(self.labels)?,
             properties: normalize_properties(self.properties)?,
+            full_text: normalize_optional_text(self.full_text),
+            embedding_text: normalize_optional_text(self.embedding_text),
         })
     }
 }
@@ -42,6 +50,8 @@ pub struct GraphEdgeWrite {
     pub target_node_code: String,
     pub relationship: String,
     pub properties: BTreeMap<String, GraphPropertyValue>,
+    pub full_text: Option<String>,
+    pub embedding_text: Option<String>,
 }
 
 impl GraphEdgeWrite {
@@ -52,6 +62,8 @@ impl GraphEdgeWrite {
             target_node_code: normalize_graph_code(&self.target_node_code)?,
             relationship: normalize_relationship(&self.relationship)?,
             properties: normalize_properties(self.properties)?,
+            full_text: normalize_optional_text(self.full_text),
+            embedding_text: normalize_optional_text(self.embedding_text),
         })
     }
 }
@@ -373,6 +385,8 @@ mod tests {
                 ("priority".to_owned(), GraphPropertyValue::Integer(10)),
                 ("active".to_owned(), GraphPropertyValue::Boolean(true)),
             ]),
+            full_text: Some("  release note text ".to_owned()),
+            embedding_text: Some(" semantic release note ".to_owned()),
         }
         .validate()
         .expect("valid node write should normalize");
@@ -382,6 +396,11 @@ mod tests {
         assert_eq!(
             node.properties.get("displayName"),
             Some(&GraphPropertyValue::Text("memory node".to_owned()))
+        );
+        assert_eq!(node.full_text.as_deref(), Some("release note text"));
+        assert_eq!(
+            node.embedding_text.as_deref(),
+            Some("semantic release note")
         );
 
         let edge = GraphEdgeWrite {
@@ -393,6 +412,8 @@ mod tests {
                 "confidence".to_owned(),
                 GraphPropertyValue::Decimal(0.93),
             )]),
+            full_text: Some("  relationship context ".to_owned()),
+            embedding_text: Some(" semantic relationship ".to_owned()),
         }
         .validate()
         .expect("valid edge write should normalize");
@@ -401,12 +422,19 @@ mod tests {
         assert_eq!(edge.source_node_code, "NODE-A");
         assert_eq!(edge.target_node_code, "NODE-B");
         assert_eq!(edge.relationship, "REFERENCES");
+        assert_eq!(edge.full_text.as_deref(), Some("relationship context"));
+        assert_eq!(
+            edge.embedding_text.as_deref(),
+            Some("semantic relationship")
+        );
 
         assert_eq!(
             GraphNodeWrite {
                 node_code: "NODE-A".to_owned(),
                 labels: vec![" ".to_owned()],
                 properties: BTreeMap::new(),
+                full_text: None,
+                embedding_text: None,
             }
             .validate(),
             Err(GraphError::LabelRequired)
@@ -418,6 +446,8 @@ mod tests {
                 target_node_code: "NODE-B".to_owned(),
                 relationship: " ".to_owned(),
                 properties: BTreeMap::new(),
+                full_text: None,
+                embedding_text: None,
             }
             .validate(),
             Err(GraphError::RelationshipRequired)
@@ -427,6 +457,8 @@ mod tests {
                 node_code: "bad code".to_owned(),
                 labels: vec!["Memory".to_owned()],
                 properties: BTreeMap::new(),
+                full_text: None,
+                embedding_text: None,
             }
             .validate(),
             Err(GraphError::InvalidGraphCode)
@@ -439,6 +471,8 @@ mod tests {
                     "workspaceCode".to_owned(),
                     GraphPropertyValue::Text("WS-ROOT".to_owned()),
                 )]),
+                full_text: None,
+                embedding_text: None,
             }
             .validate(),
             Err(GraphError::ReservedPropertyName)
