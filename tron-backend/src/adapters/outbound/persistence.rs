@@ -1,5 +1,12 @@
+pub mod grafeo;
 pub mod sqlite;
 
+pub use grafeo::GrafeoAdapterConfig;
+pub use grafeo::GrafeoGraphStore;
+pub use grafeo::GrafeoOntologyStore;
+pub use grafeo::GrafeoStoreCore;
+pub use grafeo::encode_graph_name;
+pub use grafeo::encode_schema_name;
 pub use sqlite::SqliteAgentRunRepository;
 pub use sqlite::SqliteAppRepository;
 pub use sqlite::SqliteAutomationRepository;

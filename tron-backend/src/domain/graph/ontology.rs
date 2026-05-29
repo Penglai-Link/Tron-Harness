@@ -1,8 +1,10 @@
 use std::collections::BTreeSet;
 
+use serde::{Deserialize, Serialize};
+
 use super::OntologyError;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OntologyDomain {
     Operations,
     Development,
@@ -30,7 +32,7 @@ impl OntologyDomain {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OntologyDataType {
     Text,
     Integer,
@@ -40,7 +42,7 @@ pub enum OntologyDataType {
     DateTime,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OntologyRangeTarget {
     Class { class_code: String },
     DataType(OntologyDataType),
@@ -57,7 +59,7 @@ impl OntologyRangeTarget {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OntologyResourceType {
     Class,
     Property,
@@ -80,7 +82,7 @@ impl OntologyResourceType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OntologyClass {
     pub class_code: String,
     pub ontology_domain: OntologyDomain,
@@ -107,7 +109,7 @@ impl OntologyClass {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OntologyDomainResource {
     pub domain_code: String,
     pub ontology_domain: OntologyDomain,
@@ -128,7 +130,7 @@ impl OntologyDomainResource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OntologyRangeResource {
     pub range_code: String,
     pub ontology_domain: OntologyDomain,
@@ -149,7 +151,7 @@ impl OntologyRangeResource {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OntologyProperty {
     pub property_code: String,
     pub ontology_domain: OntologyDomain,
@@ -178,7 +180,7 @@ impl OntologyProperty {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OntologyConstraint {
     pub constraint_code: String,
     pub ontology_domain: OntologyDomain,
@@ -221,7 +223,7 @@ impl OntologyConstraint {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OntologyShapeProperty {
     pub property_code: String,
     pub constraint_codes: Vec<String>,
@@ -241,7 +243,7 @@ impl OntologyShapeProperty {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OntologyShaclShape {
     pub shape_code: String,
     pub ontology_domain: OntologyDomain,
@@ -269,7 +271,7 @@ impl OntologyShaclShape {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum OntologyResource {
     Class(OntologyClass),
     Property(OntologyProperty),

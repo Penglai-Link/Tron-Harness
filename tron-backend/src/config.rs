@@ -5,6 +5,7 @@ use crate::shared::event_bus::EventBusConfig;
 const DEFAULT_BIND_ADDRESS: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 8080;
 const DEFAULT_DATABASE_URL: &str = "tron-backend/target/tron.sqlite3";
+const DEFAULT_GRAPH_STORAGE_PATH: &str = "tron-backend/target/tron.graph.grafeo";
 const TEST_DATABASE_URL: &str = ":memory:";
 const DEFAULT_AUTH_JWT_SECRET: &str = "tron-dev-jwt-secret";
 const DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS: i64 = 900;
@@ -23,6 +24,7 @@ pub struct AppConfig {
     pub bind_address: String,
     pub port: u16,
     pub database_url: String,
+    pub graph_storage_path: String,
     pub skills_registry_root: String,
     pub auth: AuthConfig,
     pub event_bus: EventBusConfig,
@@ -64,6 +66,8 @@ impl AppConfig {
         };
         let database_url =
             env::var("TRON_BACKEND_DATABASE_URL").unwrap_or_else(|_| DEFAULT_DATABASE_URL.into());
+        let graph_storage_path = env::var("TRON_GRAPH_STORAGE_PATH")
+            .unwrap_or_else(|_| DEFAULT_GRAPH_STORAGE_PATH.into());
         let skills_registry_root = env::var("TRON_SKILLS_REGISTRY_ROOT")
             .unwrap_or_else(|_| default_skills_registry_root_from_home());
         let github_oauth_enabled = parse_bool_env("TRON_AUTH_GITHUB_ENABLED", false)?;
@@ -141,6 +145,7 @@ impl AppConfig {
             bind_address,
             port,
             database_url,
+            graph_storage_path,
             skills_registry_root,
             auth,
             event_bus,
@@ -164,6 +169,7 @@ impl Default for AppConfig {
             bind_address: DEFAULT_BIND_ADDRESS.into(),
             port: DEFAULT_PORT,
             database_url: TEST_DATABASE_URL.into(),
+            graph_storage_path: ":memory:".into(),
             skills_registry_root: std::env::temp_dir()
                 .join("tron-skills-registry-test")
                 .display()

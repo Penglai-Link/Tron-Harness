@@ -46,6 +46,7 @@ pub enum GraphError {
     InvalidTraversalQuery,
     RawQueryNotAllowed,
     CallerSuppliedVectorNotAllowed,
+    UnsupportedStoreBehavior,
     StorageFailure,
     Scope(GraphScopeError),
 }
@@ -81,6 +82,9 @@ impl fmt::Display for GraphError {
             }
             Self::CallerSuppliedVectorNotAllowed => {
                 formatter.write_str("caller supplied graph vectors are not allowed")
+            }
+            Self::UnsupportedStoreBehavior => {
+                formatter.write_str("graph store behavior is not supported")
             }
             Self::StorageFailure => formatter.write_str("graph storage failure"),
             Self::Scope(error) => write!(formatter, "{error}"),

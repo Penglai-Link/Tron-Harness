@@ -10,6 +10,7 @@ async-stream = "0.3"
 bcrypt = "0.17"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 cron = "0.12"
+grafeo = { version = "0.5.42", default-features = false, features = ["embedded", "storage"] }
 jsonwebtoken = "9"
 rand = "0.9.4"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }

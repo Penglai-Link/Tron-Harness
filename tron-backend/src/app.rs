@@ -24,6 +24,7 @@ use crate::{
             crypto::BcryptPasswordHasher,
             model::{HttpLlmRuntimeClient, HttpModelClient},
             persistence::{
+                GrafeoAdapterConfig, GrafeoGraphStore, GrafeoOntologyStore, GrafeoStoreCore,
                 SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
                 SqliteChatRepository, SqliteModelRepository, SqliteRoleRepository,
                 SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteUserRepository,
@@ -35,6 +36,7 @@ use crate::{
     application::app::AppService,
     application::automation::AutomationService,
     application::chat::ChatService,
+    application::graph::{GraphService, OntologyService, ScopeResolver},
     application::llm::LlmRuntimeService,
     application::model::ModelService,
     application::role::RoleService,
@@ -61,6 +63,7 @@ static GLOBAL_VARIABLE_SERVICE: OnceLock<VariableService> = OnceLock::new();
 static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
 static GLOBAL_MODEL_SERVICE: OnceLock<ModelService> = OnceLock::new();
 static GLOBAL_CHAT_SERVICE: OnceLock<ChatService> = OnceLock::new();
+static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService)> = OnceLock::new();
 
 #[derive(Clone)]
 pub struct AppState {
@@ -73,6 +76,8 @@ pub struct AppState {
     pub automations: AutomationService,
     pub chats: ChatService,
     pub event_bus: EventBusHandle,
+    pub graphs: GraphService,
+    pub ontologies: OntologyService,
     pub roles: RoleService,
     pub tasks: TaskService,
     pub users: UserService,
@@ -129,6 +134,15 @@ impl AppState {
         };
         bootstrap_platform_admin(&config.database_url)
             .expect("bootstrap platform admin data should initialize");
+        let (graphs, ontologies) = if config.graph_storage_path == ":memory:" {
+            GLOBAL_GRAPH_SERVICES
+                .get_or_init(|| {
+                    build_graph_services(&config.graph_storage_path, workspaces.clone())
+                })
+                .clone()
+        } else {
+            build_graph_services(&config.graph_storage_path, workspaces.clone())
+        };
         let apps = if config.database_url == ":memory:" {
             GLOBAL_APP_SERVICE
                 .get_or_init(|| build_app_service(":memory:", workspaces.clone()))
@@ -214,6 +228,8 @@ impl AppState {
             automations,
             chats,
             event_bus,
+            graphs,
+            ontologies,
             models,
             llm_runtime,
             skills,
@@ -259,6 +275,18 @@ impl FromRef<AppState> for RoleService {
 impl FromRef<AppState> for WorkspaceService {
     fn from_ref(state: &AppState) -> Self {
         state.workspaces.clone()
+    }
+}
+
+impl FromRef<AppState> for GraphService {
+    fn from_ref(state: &AppState) -> Self {
+        state.graphs.clone()
+    }
+}
+
+impl FromRef<AppState> for OntologyService {
+    fn from_ref(state: &AppState) -> Self {
+        state.ontologies.clone()
     }
 }
 
@@ -412,6 +440,26 @@ fn build_model_service(database_url: &str, workspaces: WorkspaceService) -> Mode
     let repository = SqliteModelRepository::connect(database_url)
         .expect("model SQLite repository should initialize");
     ModelService::new(repository, workspaces)
+}
+
+fn build_graph_services(
+    graph_storage_path: &str,
+    workspaces: WorkspaceService,
+) -> (GraphService, OntologyService) {
+    let core = GrafeoStoreCore::connect(GrafeoAdapterConfig {
+        storage_path: graph_storage_path.to_owned(),
+    })
+    .expect("graph Grafeo adapter should initialize");
+    let graphs = GraphService::new(
+        GrafeoGraphStore::new(core.clone()),
+        ScopeResolver::new(workspaces.clone()),
+    );
+    let ontologies = OntologyService::new(
+        GrafeoOntologyStore::new(core),
+        ScopeResolver::new(workspaces),
+    );
+
+    (graphs, ontologies)
 }
 
 fn build_agent_run_history_service(database_url: &str) -> AgentRunHistoryService {
