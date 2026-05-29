@@ -600,41 +600,6 @@ async fn chat_send_resolves_model_code_through_model_management() {
     assert!(!sent.to_string().contains("sk-chat-api"));
 }
 
-fn seed_chat_session(
-    database_url: &PathBuf,
-    session_code: &str,
-    workspace_code: &str,
-    message_code: &str,
-) {
-    let connection = Connection::open(database_url).expect("chat test db should reopen");
-    connection
-        .execute(
-            "INSERT INTO chat_sessions (id, session_code, workspace_code, user_code, app_code, task_code, title, status, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, NULL, NULL, ?5, 'ACTIVE', ?6, ?6)",
-            params![
-                735_200_000_000_010_001_i64,
-                session_code,
-                workspace_code,
-                "USR-OTHER",
-                "Private chat",
-                1_779_235_200_000_i64,
-            ],
-        )
-        .expect("chat test session should insert");
-    connection
-        .execute(
-            "INSERT INTO chat_messages (id, message_code, session_code, role, channel, actor, content, created_at)
-             VALUES (?1, ?2, ?3, 'USER', 'MAIN_AGENT', 'User', 'private', ?4)",
-            params![
-                735_200_000_000_020_001_i64,
-                message_code,
-                session_code,
-                1_779_235_200_000_i64,
-            ],
-        )
-        .expect("chat test message should insert");
-}
-
 fn seed_workspace_without_access(database_url: &PathBuf, workspace_code: &str) {
     let connection = Connection::open(database_url).expect("chat test db should reopen");
     connection

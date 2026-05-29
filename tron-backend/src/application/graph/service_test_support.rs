@@ -8,8 +8,8 @@ use crate::{
     domain::graph::{
         GraphEdge, GraphEdgeWrite, GraphError, GraphFilterOperator, GraphNode, GraphNodeWrite,
         GraphPath, GraphPropertyFilter, GraphPropertyValue, GraphQueryLimit, GraphScopeCommand,
-        GraphSearchHit, GraphSearchQuery, GraphStorageDimensions, GraphTraversalClause,
-        GraphTraversalDirection, GraphTraverseQuery, ResolvedGraphScope,
+        GraphSearchHit, GraphSearchQuery, GraphSearchTraversal, GraphStorageDimensions,
+        GraphTraversalClause, GraphTraversalDirection, GraphTraverseQuery, ResolvedGraphScope,
     },
 };
 
@@ -144,7 +144,7 @@ impl FakeStore {
 
 impl GraphStore for FakeStore {
     fn create_node(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         command: GraphNodeWrite,
     ) -> Result<GraphNode, GraphError> {
@@ -160,7 +160,7 @@ impl GraphStore for FakeStore {
     }
 
     fn get_node(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         node_code: &str,
     ) -> Result<Option<GraphNode>, GraphError> {
@@ -176,7 +176,7 @@ impl GraphStore for FakeStore {
     }
 
     fn update_node(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         command: GraphNodeWrite,
     ) -> Result<GraphNode, GraphError> {
@@ -191,11 +191,7 @@ impl GraphStore for FakeStore {
         Ok(node(&command.node_code))
     }
 
-    fn delete_node(
-        &mut self,
-        scope: &ResolvedGraphScope,
-        node_code: &str,
-    ) -> Result<(), GraphError> {
+    fn delete_node(&self, scope: &ResolvedGraphScope, node_code: &str) -> Result<(), GraphError> {
         let mut state = self.state.lock().expect("store state mutex poisoned");
         state.calls.push(StoreCall::DeleteNode {
             scope: scope.clone(),
@@ -210,7 +206,7 @@ impl GraphStore for FakeStore {
     }
 
     fn get_edge(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         edge_code: &str,
     ) -> Result<Option<GraphEdge>, GraphError> {
@@ -223,7 +219,7 @@ impl GraphStore for FakeStore {
     }
 
     fn create_edge(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         command: GraphEdgeWrite,
     ) -> Result<GraphEdge, GraphError> {
@@ -239,7 +235,7 @@ impl GraphStore for FakeStore {
     }
 
     fn update_edge(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         command: GraphEdgeWrite,
     ) -> Result<GraphEdge, GraphError> {
@@ -254,11 +250,7 @@ impl GraphStore for FakeStore {
         Ok(edge(&command.edge_code))
     }
 
-    fn delete_edge(
-        &mut self,
-        scope: &ResolvedGraphScope,
-        edge_code: &str,
-    ) -> Result<(), GraphError> {
+    fn delete_edge(&self, scope: &ResolvedGraphScope, edge_code: &str) -> Result<(), GraphError> {
         let mut state = self.state.lock().expect("store state mutex poisoned");
         state.calls.push(StoreCall::DeleteEdge {
             scope: scope.clone(),
@@ -273,7 +265,7 @@ impl GraphStore for FakeStore {
     }
 
     fn search(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         query: GraphSearchQuery,
     ) -> Result<Vec<GraphSearchHit>, GraphError> {
@@ -289,7 +281,7 @@ impl GraphStore for FakeStore {
     }
 
     fn traverse(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         query: GraphTraverseQuery,
     ) -> Result<Vec<GraphPath>, GraphError> {
@@ -368,6 +360,15 @@ pub(super) fn search_query() -> GraphSearchQuery {
         }],
         full_text: Some("release".to_owned()),
         vector_text: Some("semantic memory lookup".to_owned()),
+        traversal: Some(GraphSearchTraversal {
+            start_node_codes: vec!["NODE-A".to_owned()],
+            clauses: vec![GraphTraversalClause {
+                direction: GraphTraversalDirection::Outgoing,
+                relationships: vec!["REFERENCES".to_owned()],
+                min_depth: 1,
+                max_depth: 2,
+            }],
+        }),
         labels: vec!["Memory".to_owned()],
         limit: GraphQueryLimit::new(10).expect("positive limit should be valid"),
         min_score: None,
@@ -395,6 +396,8 @@ fn node(node_code: &str) -> GraphNode {
         properties: BTreeMap::new(),
         full_text: None,
         embedding_text: None,
+        created_at: graph_timestamp(),
+        updated_at: graph_timestamp(),
     }
 }
 
@@ -407,5 +410,11 @@ fn edge(edge_code: &str) -> GraphEdge {
         properties: BTreeMap::new(),
         full_text: None,
         embedding_text: None,
+        created_at: graph_timestamp(),
+        updated_at: graph_timestamp(),
     }
+}
+
+fn graph_timestamp() -> String {
+    "2026-05-29T00:00:00Z".to_owned()
 }

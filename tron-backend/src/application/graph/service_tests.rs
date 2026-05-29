@@ -172,19 +172,19 @@ fn store_port_receives_resolved_scope_and_typed_lpg_requests() {
     let search = search_query();
     let traversal = traversal_query();
 
-    service
+    let created_node = service
         .create_node(scope_command(), node_write(" NODE-A "))
         .expect("create node should pass");
-    service
+    let updated_node = service
         .update_node(scope_command(), node_write("NODE-A"))
         .expect("update node should pass");
     service
         .delete_node(scope_command(), "NODE-A".to_owned())
         .expect("delete node should pass");
-    service
+    let created_edge = service
         .create_edge(scope_command(), edge_write("EDGE-A", "NODE-A", "NODE-B"))
         .expect("create edge should pass");
-    service
+    let updated_edge = service
         .update_edge(scope_command(), edge_write("EDGE-A", "NODE-A", "NODE-B"))
         .expect("update edge should pass");
     service
@@ -196,6 +196,11 @@ fn store_port_receives_resolved_scope_and_typed_lpg_requests() {
     service
         .traverse(scope_command(), traversal.clone())
         .expect("traverse should pass");
+
+    assert_eq!(created_node.created_at, "2026-05-29T00:00:00Z");
+    assert_eq!(updated_node.updated_at, "2026-05-29T00:00:00Z");
+    assert_eq!(created_edge.created_at, "2026-05-29T00:00:00Z");
+    assert_eq!(updated_edge.updated_at, "2026-05-29T00:00:00Z");
 
     assert_eq!(
         store.calls(),

@@ -10,7 +10,6 @@ use std::{
 use axum::http::{Method, StatusCode, header};
 use rusqlite::Connection;
 use serde_json::json;
-use tron_backend::config::AppConfig;
 
 use common::{
     AUTH_LOGIN, AUTH_PASSWORD, GITHUB_TEST_CODE, app_with_config, cookie_header_from_set_cookie,

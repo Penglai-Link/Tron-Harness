@@ -95,3 +95,76 @@ impl From<GraphScopeError> for GraphError {
         Self::Scope(error)
     }
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OntologyError {
+    InvalidOntologyCode,
+    InvalidOntologyDomain,
+    InvalidOntologyResource,
+    InvalidOntologyQuery,
+    EmptyOntologySearchQuery,
+    DuplicateOntologyResource {
+        resource_type: &'static str,
+        resource_code: String,
+    },
+    MissingOntologyResource {
+        resource_type: &'static str,
+        resource_code: String,
+    },
+    InconsistentOntologyResource,
+    RawRdfNotAllowed,
+    SparqlNotAllowed,
+    TurtleTextNotAllowed,
+    ShaclTextNotAllowed,
+    UnsupportedStoreBehavior,
+    StorageFailure,
+    Scope(GraphScopeError),
+}
+
+impl fmt::Display for OntologyError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidOntologyCode => formatter.write_str("invalid ontology code"),
+            Self::InvalidOntologyDomain => formatter.write_str("invalid ontology domain"),
+            Self::InvalidOntologyResource => formatter.write_str("invalid ontology resource"),
+            Self::InvalidOntologyQuery => formatter.write_str("invalid ontology query"),
+            Self::EmptyOntologySearchQuery => formatter.write_str("ontology search query is empty"),
+            Self::DuplicateOntologyResource {
+                resource_type,
+                resource_code,
+            } => write!(
+                formatter,
+                "ontology {resource_type} already exists: {resource_code}"
+            ),
+            Self::MissingOntologyResource {
+                resource_type,
+                resource_code,
+            } => write!(
+                formatter,
+                "ontology {resource_type} was not found: {resource_code}"
+            ),
+            Self::InconsistentOntologyResource => {
+                formatter.write_str("ontology resource is inconsistent")
+            }
+            Self::RawRdfNotAllowed
+            | Self::SparqlNotAllowed
+            | Self::TurtleTextNotAllowed
+            | Self::ShaclTextNotAllowed => {
+                formatter.write_str("ontology text payload bypass is not allowed")
+            }
+            Self::UnsupportedStoreBehavior => {
+                formatter.write_str("ontology store behavior is not supported")
+            }
+            Self::StorageFailure => formatter.write_str("ontology storage failure"),
+            Self::Scope(error) => write!(formatter, "{error}"),
+        }
+    }
+}
+
+impl Error for OntologyError {}
+
+impl From<GraphScopeError> for OntologyError {
+    fn from(error: GraphScopeError) -> Self {
+        Self::Scope(error)
+    }
+}

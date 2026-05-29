@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use crate::{
     application::graph::{ScopeResolver, WorkspaceDetailProvider},
@@ -28,63 +28,55 @@ where
     }
 }
 
-pub trait GraphStore: Send {
+pub trait GraphStore: Send + Sync {
     fn create_node(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         command: GraphNodeWrite,
     ) -> Result<GraphNode, GraphError>;
 
     fn get_node(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         node_code: &str,
     ) -> Result<Option<GraphNode>, GraphError>;
 
     fn update_node(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         command: GraphNodeWrite,
     ) -> Result<GraphNode, GraphError>;
 
-    fn delete_node(
-        &mut self,
-        scope: &ResolvedGraphScope,
-        node_code: &str,
-    ) -> Result<(), GraphError>;
+    fn delete_node(&self, scope: &ResolvedGraphScope, node_code: &str) -> Result<(), GraphError>;
 
     fn get_edge(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         edge_code: &str,
     ) -> Result<Option<GraphEdge>, GraphError>;
 
     fn create_edge(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         command: GraphEdgeWrite,
     ) -> Result<GraphEdge, GraphError>;
 
     fn update_edge(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         command: GraphEdgeWrite,
     ) -> Result<GraphEdge, GraphError>;
 
-    fn delete_edge(
-        &mut self,
-        scope: &ResolvedGraphScope,
-        edge_code: &str,
-    ) -> Result<(), GraphError>;
+    fn delete_edge(&self, scope: &ResolvedGraphScope, edge_code: &str) -> Result<(), GraphError>;
 
     fn search(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         query: GraphSearchQuery,
     ) -> Result<Vec<GraphSearchHit>, GraphError>;
 
     fn traverse(
-        &mut self,
+        &self,
         scope: &ResolvedGraphScope,
         query: GraphTraverseQuery,
     ) -> Result<Vec<GraphPath>, GraphError>;
@@ -92,7 +84,7 @@ pub trait GraphStore: Send {
 
 #[derive(Clone)]
 pub struct GraphService<R = ScopeResolver> {
-    store: Arc<Mutex<Box<dyn GraphStore>>>,
+    store: Arc<dyn GraphStore>,
     scope_resolver: R,
 }
 
@@ -102,7 +94,7 @@ where
 {
     pub fn new(store: impl GraphStore + 'static, scope_resolver: R) -> Self {
         Self {
-            store: Arc::new(Mutex::new(Box::new(store))),
+            store: Arc::new(store),
             scope_resolver,
         }
     }
@@ -113,11 +105,7 @@ where
         command: GraphNodeWrite,
     ) -> Result<GraphNode, GraphError> {
         let command = command.validate()?;
-        let scope = self.scope_resolver.resolve_graph_scope(scope)?;
-        self.store
-            .lock()
-            .expect("graph store mutex poisoned")
-            .create_node(&scope, command)
+        self.with_scope(scope, |store, scope| store.create_node(scope, command))
     }
 
     pub fn get_node(
@@ -126,12 +114,11 @@ where
         node_code: String,
     ) -> Result<GraphNode, GraphError> {
         let node_code = normalize_graph_code(&node_code)?;
-        let scope = self.scope_resolver.resolve_graph_scope(scope)?;
-        self.store
-            .lock()
-            .expect("graph store mutex poisoned")
-            .get_node(&scope, &node_code)?
-            .ok_or(GraphError::MissingNode { node_code })
+        self.with_scope(scope, |store, scope| {
+            store
+                .get_node(scope, &node_code)?
+                .ok_or(GraphError::MissingNode { node_code })
+        })
     }
 
     pub fn update_node(
@@ -140,11 +127,7 @@ where
         command: GraphNodeWrite,
     ) -> Result<GraphNode, GraphError> {
         let command = command.validate()?;
-        let scope = self.scope_resolver.resolve_graph_scope(scope)?;
-        self.store
-            .lock()
-            .expect("graph store mutex poisoned")
-            .update_node(&scope, command)
+        self.with_scope(scope, |store, scope| store.update_node(scope, command))
     }
 
     pub fn delete_node(
@@ -153,11 +136,7 @@ where
         node_code: String,
     ) -> Result<(), GraphError> {
         let node_code = normalize_graph_code(&node_code)?;
-        let scope = self.scope_resolver.resolve_graph_scope(scope)?;
-        self.store
-            .lock()
-            .expect("graph store mutex poisoned")
-            .delete_node(&scope, &node_code)
+        self.with_scope(scope, |store, scope| store.delete_node(scope, &node_code))
     }
 
     pub fn get_edge(
@@ -166,12 +145,11 @@ where
         edge_code: String,
     ) -> Result<GraphEdge, GraphError> {
         let edge_code = normalize_graph_code(&edge_code)?;
-        let scope = self.scope_resolver.resolve_graph_scope(scope)?;
-        self.store
-            .lock()
-            .expect("graph store mutex poisoned")
-            .get_edge(&scope, &edge_code)?
-            .ok_or(GraphError::MissingEdge { edge_code })
+        self.with_scope(scope, |store, scope| {
+            store
+                .get_edge(scope, &edge_code)?
+                .ok_or(GraphError::MissingEdge { edge_code })
+        })
     }
 
     pub fn create_edge(
@@ -180,11 +158,11 @@ where
         command: GraphEdgeWrite,
     ) -> Result<GraphEdge, GraphError> {
         let command = command.validate()?;
-        let scope = self.scope_resolver.resolve_graph_scope(scope)?;
-        let mut store = self.store.lock().expect("graph store mutex poisoned");
-        ensure_endpoint_exists(store.as_mut(), &scope, &command.source_node_code)?;
-        ensure_endpoint_exists(store.as_mut(), &scope, &command.target_node_code)?;
-        store.create_edge(&scope, command)
+        self.with_scope(scope, |store, scope| {
+            ensure_endpoint_exists(store, scope, &command.source_node_code)?;
+            ensure_endpoint_exists(store, scope, &command.target_node_code)?;
+            store.create_edge(scope, command)
+        })
     }
 
     pub fn update_edge(
@@ -193,11 +171,11 @@ where
         command: GraphEdgeWrite,
     ) -> Result<GraphEdge, GraphError> {
         let command = command.validate()?;
-        let scope = self.scope_resolver.resolve_graph_scope(scope)?;
-        let mut store = self.store.lock().expect("graph store mutex poisoned");
-        ensure_endpoint_exists(store.as_mut(), &scope, &command.source_node_code)?;
-        ensure_endpoint_exists(store.as_mut(), &scope, &command.target_node_code)?;
-        store.update_edge(&scope, command)
+        self.with_scope(scope, |store, scope| {
+            ensure_endpoint_exists(store, scope, &command.source_node_code)?;
+            ensure_endpoint_exists(store, scope, &command.target_node_code)?;
+            store.update_edge(scope, command)
+        })
     }
 
     pub fn delete_edge(
@@ -206,11 +184,7 @@ where
         edge_code: String,
     ) -> Result<(), GraphError> {
         let edge_code = normalize_graph_code(&edge_code)?;
-        let scope = self.scope_resolver.resolve_graph_scope(scope)?;
-        self.store
-            .lock()
-            .expect("graph store mutex poisoned")
-            .delete_edge(&scope, &edge_code)
+        self.with_scope(scope, |store, scope| store.delete_edge(scope, &edge_code))
     }
 
     pub fn search(
@@ -219,11 +193,7 @@ where
         query: GraphSearchQuery,
     ) -> Result<Vec<GraphSearchHit>, GraphError> {
         let query = query.validate()?;
-        let scope = self.scope_resolver.resolve_graph_scope(scope)?;
-        self.store
-            .lock()
-            .expect("graph store mutex poisoned")
-            .search(&scope, query)
+        self.with_scope(scope, |store, scope| store.search(scope, query))
     }
 
     pub fn traverse(
@@ -232,16 +202,21 @@ where
         query: GraphTraverseQuery,
     ) -> Result<Vec<GraphPath>, GraphError> {
         let query = query.validate()?;
+        self.with_scope(scope, |store, scope| store.traverse(scope, query))
+    }
+
+    fn with_scope<T>(
+        &self,
+        scope: GraphScopeCommand,
+        operation: impl FnOnce(&dyn GraphStore, &ResolvedGraphScope) -> Result<T, GraphError>,
+    ) -> Result<T, GraphError> {
         let scope = self.scope_resolver.resolve_graph_scope(scope)?;
-        self.store
-            .lock()
-            .expect("graph store mutex poisoned")
-            .traverse(&scope, query)
+        operation(self.store.as_ref(), &scope)
     }
 }
 
 fn ensure_endpoint_exists(
-    store: &mut dyn GraphStore,
+    store: &dyn GraphStore,
     scope: &ResolvedGraphScope,
     node_code: &str,
 ) -> Result<(), GraphError> {

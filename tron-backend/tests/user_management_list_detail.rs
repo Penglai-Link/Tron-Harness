@@ -1,12 +1,10 @@
 mod common;
 
 use axum::{
-    body::{Body, to_bytes},
-    http::{Method, Request, StatusCode},
+    body::to_bytes,
+    http::{Method, StatusCode},
 };
 use serde_json::Value;
-use tower::ServiceExt;
-use tron_backend::{app::build_router, config::AppConfig};
 
 use common::{app as auth_test_app, authenticated_request};
 
