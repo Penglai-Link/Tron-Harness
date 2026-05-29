@@ -34,18 +34,18 @@ One row is one actual git worktree checkout. `agent id` and `subtask name` follo
 
 | agent id | subtask name | codex agent id | codex agent name | ac refs | tdd phase | branch | worktree path | base ref | status |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| backend | graph-scope-kernel | runtime_pending | runtime_pending | AC-GSI-01, AC-GSI-02, AC-GSI-03, AC-GSI-04, AC-GSI-05, AC-GSI-06, AC-GSI-07 | tdd | feature/clouds3n/graph-storage-foundation/backend/graph-scope-kernel | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/graph-storage-foundation/backend/graph-scope-kernel | feature/clouds3n/graph-storage-foundation/base | ready |
+| backend | graph-scope-kernel | 019e738f-57b6-7590-9de9-167cb30d7a81 | Dalton | AC-GSI-01, AC-GSI-02, AC-GSI-03, AC-GSI-04, AC-GSI-05, AC-GSI-06, AC-GSI-07 | tdd | feature/clouds3n/graph-storage-foundation/backend/graph-scope-kernel | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/graph-storage-foundation/backend/graph-scope-kernel | feature/clouds3n/graph-storage-foundation/base | in_progress |
 
 - worker_ref: backend/graph-scope-kernel
 - workflow_owner: tdd-slice-worker
-- runtime_agent_type: coder-spark
-- runtime_agent_type_source: ELITEFORGE_SKILL_SUPERPOWER_TDD_AGENT
+- runtime_agent_type: worker
+- runtime_agent_type_source: fallback after `coder-spark` capacity error from Codex runtime `019e738a-a7cc-7281-ba7b-6ca28affa8c7`
 
 ## Dispatch Decisions
 
 | ac_refs | decision | execution_owner | rationale | worker_ref | status |
 | --- | --- | --- | --- | --- | --- |
-| AC-GSI-01, AC-GSI-02, AC-GSI-03, AC-GSI-04, AC-GSI-05, AC-GSI-06, AC-GSI-07 | spawn | tdd-slice-worker; runtime_agent_type=coder-spark | grouped because all ACs share the graph scope Rust module write scope and command aliases | backend/graph-scope-kernel | ready |
+| AC-GSI-01, AC-GSI-02, AC-GSI-03, AC-GSI-04, AC-GSI-05, AC-GSI-06, AC-GSI-07 | spawn | tdd-slice-worker; runtime_agent_type=worker | grouped because all ACs share the graph scope Rust module write scope and command aliases; coder-spark capacity fallback recorded | backend/graph-scope-kernel | in_progress |
 
 ## Branch And Path Rules
 
