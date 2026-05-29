@@ -4,7 +4,10 @@ use std::{
 };
 
 use crate::{
-    application::graph::{GraphScopeResolver, GraphStore},
+    application::graph::{
+        GraphScopeResolver, GraphStore, PreparedGraphEdgeWrite, PreparedGraphNodeWrite,
+        PreparedGraphSearchQuery,
+    },
     domain::graph::{
         GraphEdge, GraphEdgeWrite, GraphError, GraphFilterOperator, GraphNode, GraphNodeWrite,
         GraphPath, GraphPropertyFilter, GraphPropertyValue, GraphQueryLimit, GraphScopeCommand,
@@ -45,11 +48,11 @@ impl GraphScopeResolver for FakeScopeResolver {
 pub(super) enum StoreCall {
     CreateNode {
         scope: ResolvedGraphScope,
-        command: GraphNodeWrite,
+        command: PreparedGraphNodeWrite,
     },
     UpdateNode {
         scope: ResolvedGraphScope,
-        command: GraphNodeWrite,
+        command: PreparedGraphNodeWrite,
     },
     DeleteNode {
         scope: ResolvedGraphScope,
@@ -65,11 +68,11 @@ pub(super) enum StoreCall {
     },
     CreateEdge {
         scope: ResolvedGraphScope,
-        command: GraphEdgeWrite,
+        command: PreparedGraphEdgeWrite,
     },
     UpdateEdge {
         scope: ResolvedGraphScope,
-        command: GraphEdgeWrite,
+        command: PreparedGraphEdgeWrite,
     },
     DeleteEdge {
         scope: ResolvedGraphScope,
@@ -77,7 +80,7 @@ pub(super) enum StoreCall {
     },
     Search {
         scope: ResolvedGraphScope,
-        query: GraphSearchQuery,
+        query: PreparedGraphSearchQuery,
     },
     Traverse {
         scope: ResolvedGraphScope,
@@ -146,7 +149,7 @@ impl GraphStore for FakeStore {
     fn create_node(
         &self,
         scope: &ResolvedGraphScope,
-        command: GraphNodeWrite,
+        command: PreparedGraphNodeWrite,
     ) -> Result<GraphNode, GraphError> {
         let mut state = self.state.lock().expect("store state mutex poisoned");
         state.calls.push(StoreCall::CreateNode {
@@ -156,7 +159,7 @@ impl GraphStore for FakeStore {
         if let Some(result) = state.next_node_result.take() {
             return result;
         }
-        Ok(node(&command.node_code))
+        Ok(node(&command.command.node_code))
     }
 
     fn get_node(
@@ -178,7 +181,7 @@ impl GraphStore for FakeStore {
     fn update_node(
         &self,
         scope: &ResolvedGraphScope,
-        command: GraphNodeWrite,
+        command: PreparedGraphNodeWrite,
     ) -> Result<GraphNode, GraphError> {
         let mut state = self.state.lock().expect("store state mutex poisoned");
         state.calls.push(StoreCall::UpdateNode {
@@ -188,7 +191,7 @@ impl GraphStore for FakeStore {
         if let Some(result) = state.next_node_result.take() {
             return result;
         }
-        Ok(node(&command.node_code))
+        Ok(node(&command.command.node_code))
     }
 
     fn delete_node(&self, scope: &ResolvedGraphScope, node_code: &str) -> Result<(), GraphError> {
@@ -221,7 +224,7 @@ impl GraphStore for FakeStore {
     fn create_edge(
         &self,
         scope: &ResolvedGraphScope,
-        command: GraphEdgeWrite,
+        command: PreparedGraphEdgeWrite,
     ) -> Result<GraphEdge, GraphError> {
         let mut state = self.state.lock().expect("store state mutex poisoned");
         state.calls.push(StoreCall::CreateEdge {
@@ -231,13 +234,13 @@ impl GraphStore for FakeStore {
         if let Some(result) = state.next_edge_result.take() {
             return result;
         }
-        Ok(edge(&command.edge_code))
+        Ok(edge(&command.command.edge_code))
     }
 
     fn update_edge(
         &self,
         scope: &ResolvedGraphScope,
-        command: GraphEdgeWrite,
+        command: PreparedGraphEdgeWrite,
     ) -> Result<GraphEdge, GraphError> {
         let mut state = self.state.lock().expect("store state mutex poisoned");
         state.calls.push(StoreCall::UpdateEdge {
@@ -247,7 +250,7 @@ impl GraphStore for FakeStore {
         if let Some(result) = state.next_edge_result.take() {
             return result;
         }
-        Ok(edge(&command.edge_code))
+        Ok(edge(&command.command.edge_code))
     }
 
     fn delete_edge(&self, scope: &ResolvedGraphScope, edge_code: &str) -> Result<(), GraphError> {
@@ -267,7 +270,7 @@ impl GraphStore for FakeStore {
     fn search(
         &self,
         scope: &ResolvedGraphScope,
-        query: GraphSearchQuery,
+        query: PreparedGraphSearchQuery,
     ) -> Result<Vec<GraphSearchHit>, GraphError> {
         self.state
             .lock()
@@ -331,7 +334,16 @@ pub(super) fn node_write(node_code: &str) -> GraphNodeWrite {
             GraphPropertyValue::Text("Memory".to_owned()),
         )]),
         full_text: Some("memory body".to_owned()),
+        embedding_text: None,
+        embedding_model_code: None,
+    }
+}
+
+pub(super) fn semantic_node_write(node_code: &str) -> GraphNodeWrite {
+    GraphNodeWrite {
         embedding_text: Some("semantic memory body".to_owned()),
+        embedding_model_code: Some("TEXT_EMBED_3_SMALL".to_owned()),
+        ..node_write(node_code)
     }
 }
 
@@ -347,7 +359,21 @@ pub(super) fn edge_write(
         relationship: "REFERENCES".to_owned(),
         properties: BTreeMap::new(),
         full_text: Some("edge body".to_owned()),
+        embedding_text: None,
+        embedding_model_code: None,
+    }
+}
+
+#[allow(dead_code)]
+pub(super) fn semantic_edge_write(
+    edge_code: &str,
+    source_node_code: &str,
+    target_node_code: &str,
+) -> GraphEdgeWrite {
+    GraphEdgeWrite {
         embedding_text: Some("semantic edge body".to_owned()),
+        embedding_model_code: Some("TEXT_EMBED_3_SMALL".to_owned()),
+        ..edge_write(edge_code, source_node_code, target_node_code)
     }
 }
 
@@ -359,7 +385,8 @@ pub(super) fn search_query() -> GraphSearchQuery {
             value: GraphPropertyValue::Text("memory".to_owned()),
         }],
         full_text: Some("release".to_owned()),
-        vector_text: Some("semantic memory lookup".to_owned()),
+        vector_text: None,
+        embedding_model_code: None,
         traversal: Some(GraphSearchTraversal {
             start_node_codes: vec!["NODE-A".to_owned()],
             clauses: vec![GraphTraversalClause {
@@ -375,6 +402,14 @@ pub(super) fn search_query() -> GraphSearchQuery {
     }
 }
 
+pub(super) fn vector_search_query() -> GraphSearchQuery {
+    GraphSearchQuery {
+        vector_text: Some("semantic memory lookup".to_owned()),
+        embedding_model_code: Some("TEXT_EMBED_3_SMALL".to_owned()),
+        ..search_query()
+    }
+}
+
 pub(super) fn traversal_query() -> GraphTraverseQuery {
     GraphTraverseQuery {
         start_node_codes: vec!["NODE-A".to_owned()],
@@ -387,6 +422,18 @@ pub(super) fn traversal_query() -> GraphTraverseQuery {
         filters: vec![],
         limit: GraphQueryLimit::new(10).expect("positive limit should be valid"),
     }
+}
+
+pub(super) fn plain_prepared_node(command: GraphNodeWrite) -> PreparedGraphNodeWrite {
+    PreparedGraphNodeWrite::plain(command.validate().expect("node should validate"))
+}
+
+pub(super) fn plain_prepared_edge(command: GraphEdgeWrite) -> PreparedGraphEdgeWrite {
+    PreparedGraphEdgeWrite::plain(command.validate().expect("edge should validate"))
+}
+
+pub(super) fn plain_prepared_search(query: GraphSearchQuery) -> PreparedGraphSearchQuery {
+    PreparedGraphSearchQuery::plain(query.validate().expect("search should validate"))
 }
 
 fn node(node_code: &str) -> GraphNode {

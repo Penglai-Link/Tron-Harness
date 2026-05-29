@@ -4,15 +4,16 @@ use crate::{
     application::graph::{
         GraphService,
         service_test_support::{
-            FakeScopeResolver, FakeStore, StoreCall, edge_write, node_write, resolved_scope,
-            scope_command, search_query, traversal_query,
+            FakeScopeResolver, FakeStore, StoreCall, edge_write, node_write, plain_prepared_edge,
+            plain_prepared_node, plain_prepared_search, resolved_scope, scope_command,
+            search_query, traversal_query,
         },
     },
     domain::graph::{GraphEdgeWrite, GraphError, GraphNodeWrite, GraphPropertyValue},
 };
 
-#[test]
-fn duplicate_and_missing_store_outcomes_return_typed_graph_errors() {
+#[tokio::test]
+async fn duplicate_and_missing_store_outcomes_return_typed_graph_errors() {
     let scope = resolved_scope();
     let resolver = FakeScopeResolver::new(scope);
     let store = FakeStore::with_nodes(&["NODE-A", "NODE-B"]);
@@ -22,7 +23,9 @@ fn duplicate_and_missing_store_outcomes_return_typed_graph_errors() {
         node_code: "NODE-A".to_owned(),
     }));
     assert_eq!(
-        service.create_node(scope_command(), node_write("NODE-A")),
+        service
+            .create_node(scope_command(), node_write("NODE-A"))
+            .await,
         Err(GraphError::DuplicateNode {
             node_code: "NODE-A".to_owned()
         })
@@ -32,7 +35,9 @@ fn duplicate_and_missing_store_outcomes_return_typed_graph_errors() {
         edge_code: "EDGE-A".to_owned(),
     }));
     assert_eq!(
-        service.create_edge(scope_command(), edge_write("EDGE-A", "NODE-A", "NODE-B")),
+        service
+            .create_edge(scope_command(), edge_write("EDGE-A", "NODE-A", "NODE-B"))
+            .await,
         Err(GraphError::DuplicateEdge {
             edge_code: "EDGE-A".to_owned()
         })
@@ -48,7 +53,9 @@ fn duplicate_and_missing_store_outcomes_return_typed_graph_errors() {
         node_code: "NODE-MISSING".to_owned(),
     }));
     assert_eq!(
-        service.update_node(scope_command(), node_write("NODE-MISSING")),
+        service
+            .update_node(scope_command(), node_write("NODE-MISSING"))
+            .await,
         Err(GraphError::MissingNode {
             node_code: "NODE-MISSING".to_owned()
         })
@@ -71,10 +78,12 @@ fn duplicate_and_missing_store_outcomes_return_typed_graph_errors() {
         edge_code: "EDGE-MISSING".to_owned(),
     }));
     assert_eq!(
-        service.update_edge(
-            scope_command(),
-            edge_write("EDGE-MISSING", "NODE-A", "NODE-B"),
-        ),
+        service
+            .update_edge(
+                scope_command(),
+                edge_write("EDGE-MISSING", "NODE-A", "NODE-B"),
+            )
+            .await,
         Err(GraphError::MissingEdge {
             edge_code: "EDGE-MISSING".to_owned()
         })
@@ -87,15 +96,17 @@ fn duplicate_and_missing_store_outcomes_return_typed_graph_errors() {
     );
 }
 
-#[test]
-fn edge_writes_require_source_and_target_nodes_in_same_resolved_scope() {
+#[tokio::test]
+async fn edge_writes_require_source_and_target_nodes_in_same_resolved_scope() {
     let scope = resolved_scope();
     let resolver = FakeScopeResolver::new(scope.clone());
     let store = FakeStore::with_nodes(&["NODE-A"]);
     let service = GraphService::new(store.clone(), resolver);
 
     assert_eq!(
-        service.create_edge(scope_command(), edge_write("EDGE-A", "NODE-A", "NODE-B")),
+        service
+            .create_edge(scope_command(), edge_write("EDGE-A", "NODE-A", "NODE-B"))
+            .await,
         Err(GraphError::MissingEndpoint {
             node_code: "NODE-B".to_owned()
         })
@@ -115,26 +126,29 @@ fn edge_writes_require_source_and_target_nodes_in_same_resolved_scope() {
     );
 }
 
-#[test]
-fn crud_methods_validate_commands_before_store_calls() {
+#[tokio::test]
+async fn crud_methods_validate_commands_before_store_calls() {
     let resolver = FakeScopeResolver::new(resolved_scope());
     let store = FakeStore::with_nodes(&["NODE-A"]);
     let service = GraphService::new(store.clone(), resolver);
 
     assert_eq!(
-        service.update_node(
-            scope_command(),
-            GraphNodeWrite {
-                node_code: "NODE-A".to_owned(),
-                labels: vec!["Memory".to_owned()],
-                properties: BTreeMap::from([(
-                    "workspaceCode".to_owned(),
-                    GraphPropertyValue::Text("WS-ROOT".to_owned()),
-                )]),
-                full_text: None,
-                embedding_text: None,
-            },
-        ),
+        service
+            .update_node(
+                scope_command(),
+                GraphNodeWrite {
+                    node_code: "NODE-A".to_owned(),
+                    labels: vec!["Memory".to_owned()],
+                    properties: BTreeMap::from([(
+                        "workspaceCode".to_owned(),
+                        GraphPropertyValue::Text("WS-ROOT".to_owned()),
+                    )]),
+                    full_text: None,
+                    embedding_text: None,
+                    embedding_model_code: None,
+                },
+            )
+            .await,
         Err(GraphError::ReservedPropertyName)
     );
     assert_eq!(
@@ -142,18 +156,21 @@ fn crud_methods_validate_commands_before_store_calls() {
         Err(GraphError::InvalidGraphCode)
     );
     assert_eq!(
-        service.update_edge(
-            scope_command(),
-            GraphEdgeWrite {
-                edge_code: "EDGE-A".to_owned(),
-                source_node_code: "NODE-A".to_owned(),
-                target_node_code: "NODE-B".to_owned(),
-                relationship: " ".to_owned(),
-                properties: BTreeMap::new(),
-                full_text: None,
-                embedding_text: None,
-            },
-        ),
+        service
+            .update_edge(
+                scope_command(),
+                GraphEdgeWrite {
+                    edge_code: "EDGE-A".to_owned(),
+                    source_node_code: "NODE-A".to_owned(),
+                    target_node_code: "NODE-B".to_owned(),
+                    relationship: " ".to_owned(),
+                    properties: BTreeMap::new(),
+                    full_text: None,
+                    embedding_text: None,
+                    embedding_model_code: None,
+                },
+            )
+            .await,
         Err(GraphError::RelationshipRequired)
     );
     assert_eq!(
@@ -163,8 +180,8 @@ fn crud_methods_validate_commands_before_store_calls() {
     assert_eq!(store.calls(), Vec::new());
 }
 
-#[test]
-fn store_port_receives_resolved_scope_and_typed_lpg_requests() {
+#[tokio::test]
+async fn store_port_receives_resolved_scope_and_typed_lpg_requests() {
     let scope = resolved_scope();
     let resolver = FakeScopeResolver::new(scope.clone());
     let store = FakeStore::with_nodes(&["NODE-A", "NODE-B"]);
@@ -174,24 +191,29 @@ fn store_port_receives_resolved_scope_and_typed_lpg_requests() {
 
     let created_node = service
         .create_node(scope_command(), node_write(" NODE-A "))
+        .await
         .expect("create node should pass");
     let updated_node = service
         .update_node(scope_command(), node_write("NODE-A"))
+        .await
         .expect("update node should pass");
     service
         .delete_node(scope_command(), "NODE-A".to_owned())
         .expect("delete node should pass");
     let created_edge = service
         .create_edge(scope_command(), edge_write("EDGE-A", "NODE-A", "NODE-B"))
+        .await
         .expect("create edge should pass");
     let updated_edge = service
         .update_edge(scope_command(), edge_write("EDGE-A", "NODE-A", "NODE-B"))
+        .await
         .expect("update edge should pass");
     service
         .delete_edge(scope_command(), "EDGE-A".to_owned())
         .expect("delete edge should pass");
     service
         .search(scope_command(), search.clone())
+        .await
         .expect("search should pass");
     service
         .traverse(scope_command(), traversal.clone())
@@ -207,15 +229,11 @@ fn store_port_receives_resolved_scope_and_typed_lpg_requests() {
         vec![
             StoreCall::CreateNode {
                 scope: scope.clone(),
-                command: node_write("NODE-A")
-                    .validate()
-                    .expect("node should validate"),
+                command: plain_prepared_node(node_write("NODE-A")),
             },
             StoreCall::UpdateNode {
                 scope: scope.clone(),
-                command: node_write("NODE-A")
-                    .validate()
-                    .expect("node should validate"),
+                command: plain_prepared_node(node_write("NODE-A")),
             },
             StoreCall::DeleteNode {
                 scope: scope.clone(),
@@ -231,9 +249,7 @@ fn store_port_receives_resolved_scope_and_typed_lpg_requests() {
             },
             StoreCall::CreateEdge {
                 scope: scope.clone(),
-                command: edge_write("EDGE-A", "NODE-A", "NODE-B")
-                    .validate()
-                    .expect("edge should validate"),
+                command: plain_prepared_edge(edge_write("EDGE-A", "NODE-A", "NODE-B")),
             },
             StoreCall::GetNode {
                 scope: scope.clone(),
@@ -245,9 +261,7 @@ fn store_port_receives_resolved_scope_and_typed_lpg_requests() {
             },
             StoreCall::UpdateEdge {
                 scope: scope.clone(),
-                command: edge_write("EDGE-A", "NODE-A", "NODE-B")
-                    .validate()
-                    .expect("edge should validate"),
+                command: plain_prepared_edge(edge_write("EDGE-A", "NODE-A", "NODE-B")),
             },
             StoreCall::DeleteEdge {
                 scope: scope.clone(),
@@ -255,7 +269,7 @@ fn store_port_receives_resolved_scope_and_typed_lpg_requests() {
             },
             StoreCall::Search {
                 scope: scope.clone(),
-                query: search.validate().expect("search should validate"),
+                query: plain_prepared_search(search),
             },
             StoreCall::Traverse {
                 scope,

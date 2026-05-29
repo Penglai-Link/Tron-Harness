@@ -25,6 +25,7 @@ fn node_and_edge_write_commands_validate_codes_labels_relationships_and_properti
         ]),
         full_text: Some("  release note text ".to_owned()),
         embedding_text: Some(" semantic release note ".to_owned()),
+        embedding_model_code: Some(" TEXT_EMBED_3_SMALL ".to_owned()),
     }
     .validate()
     .expect("valid node write should normalize");
@@ -40,6 +41,10 @@ fn node_and_edge_write_commands_validate_codes_labels_relationships_and_properti
         node.embedding_text.as_deref(),
         Some("semantic release note")
     );
+    assert_eq!(
+        node.embedding_model_code.as_deref(),
+        Some("TEXT_EMBED_3_SMALL")
+    );
 
     let edge = GraphEdgeWrite {
         edge_code: " EDGE-A ".to_owned(),
@@ -49,6 +54,7 @@ fn node_and_edge_write_commands_validate_codes_labels_relationships_and_properti
         properties: BTreeMap::from([("confidence".to_owned(), GraphPropertyValue::Decimal(0.93))]),
         full_text: Some("  relationship context ".to_owned()),
         embedding_text: Some(" semantic relationship ".to_owned()),
+        embedding_model_code: Some(" TEXT_EMBED_3_SMALL ".to_owned()),
     }
     .validate()
     .expect("valid edge write should normalize");
@@ -62,6 +68,10 @@ fn node_and_edge_write_commands_validate_codes_labels_relationships_and_properti
         edge.embedding_text.as_deref(),
         Some("semantic relationship")
     );
+    assert_eq!(
+        edge.embedding_model_code.as_deref(),
+        Some("TEXT_EMBED_3_SMALL")
+    );
 
     assert_eq!(
         GraphNodeWrite {
@@ -70,6 +80,7 @@ fn node_and_edge_write_commands_validate_codes_labels_relationships_and_properti
             properties: BTreeMap::new(),
             full_text: None,
             embedding_text: None,
+            embedding_model_code: None,
         }
         .validate(),
         Err(GraphError::LabelRequired)
@@ -83,6 +94,7 @@ fn node_and_edge_write_commands_validate_codes_labels_relationships_and_properti
             properties: BTreeMap::new(),
             full_text: None,
             embedding_text: None,
+            embedding_model_code: None,
         }
         .validate(),
         Err(GraphError::RelationshipRequired)
@@ -94,6 +106,7 @@ fn node_and_edge_write_commands_validate_codes_labels_relationships_and_properti
             properties: BTreeMap::new(),
             full_text: None,
             embedding_text: None,
+            embedding_model_code: None,
         }
         .validate(),
         Err(GraphError::InvalidGraphCode)
@@ -108,6 +121,7 @@ fn node_and_edge_write_commands_validate_codes_labels_relationships_and_properti
             )]),
             full_text: None,
             embedding_text: None,
+            embedding_model_code: None,
         }
         .validate(),
         Err(GraphError::ReservedPropertyName)
@@ -124,6 +138,7 @@ fn search_and_traversal_contracts_are_structured_and_typed() {
         }],
         full_text: Some("  release checklist ".to_owned()),
         vector_text: Some("semantic description of release risk".to_owned()),
+        embedding_model_code: Some(" TEXT_EMBED_3_SMALL ".to_owned()),
         traversal: Some(GraphSearchTraversal {
             start_node_codes: vec![" NODE-A ".to_owned()],
             clauses: vec![GraphTraversalClause {
@@ -144,6 +159,10 @@ fn search_and_traversal_contracts_are_structured_and_typed() {
     assert_eq!(
         query.vector_text.as_deref(),
         Some("semantic description of release risk")
+    );
+    assert_eq!(
+        query.embedding_model_code.as_deref(),
+        Some("TEXT_EMBED_3_SMALL")
     );
     assert_eq!(
         query

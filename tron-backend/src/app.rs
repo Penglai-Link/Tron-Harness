@@ -134,15 +134,6 @@ impl AppState {
         };
         bootstrap_platform_admin(&config.database_url)
             .expect("bootstrap platform admin data should initialize");
-        let (graphs, ontologies) = if config.graph_storage_path == ":memory:" {
-            GLOBAL_GRAPH_SERVICES
-                .get_or_init(|| {
-                    build_graph_services(&config.graph_storage_path, workspaces.clone())
-                })
-                .clone()
-        } else {
-            build_graph_services(&config.graph_storage_path, workspaces.clone())
-        };
         let apps = if config.database_url == ":memory:" {
             GLOBAL_APP_SERVICE
                 .get_or_init(|| build_app_service(":memory:", workspaces.clone()))
@@ -209,6 +200,23 @@ impl AppState {
             Arc::new(models.clone()),
             Arc::new(HttpLlmRuntimeClient::default()),
         );
+        let (graphs, ontologies) = if config.graph_storage_path == ":memory:" {
+            GLOBAL_GRAPH_SERVICES
+                .get_or_init(|| {
+                    build_graph_services(
+                        &config.graph_storage_path,
+                        workspaces.clone(),
+                        llm_runtime.clone(),
+                    )
+                })
+                .clone()
+        } else {
+            build_graph_services(
+                &config.graph_storage_path,
+                workspaces.clone(),
+                llm_runtime.clone(),
+            )
+        };
         let agent_runs = build_agent_run_history_service(&config.database_url);
         let chats = if config.database_url == ":memory:" {
             GLOBAL_CHAT_SERVICE
@@ -445,14 +453,16 @@ fn build_model_service(database_url: &str, workspaces: WorkspaceService) -> Mode
 fn build_graph_services(
     graph_storage_path: &str,
     workspaces: WorkspaceService,
+    llm_runtime: LlmRuntimeService,
 ) -> (GraphService, OntologyService) {
     let core = GrafeoStoreCore::connect(GrafeoAdapterConfig {
         storage_path: graph_storage_path.to_owned(),
     })
     .expect("graph Grafeo adapter should initialize");
-    let graphs = GraphService::new(
+    let graphs = GraphService::with_embedding_runtime(
         GrafeoGraphStore::new(core.clone()),
         ScopeResolver::new(workspaces.clone()),
+        Arc::new(llm_runtime),
     );
     let ontologies = OntologyService::new(
         GrafeoOntologyStore::new(core),

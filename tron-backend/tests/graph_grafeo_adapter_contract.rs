@@ -25,8 +25,8 @@ use tron_backend::{
     },
 };
 
-#[test]
-fn embedded_grafeo_adapter_bootstraps_namespaces_and_persists_required_graph_fields() {
+#[tokio::test]
+async fn embedded_grafeo_adapter_bootstraps_namespaces_and_persists_required_graph_fields() {
     let storage_path = unique_graph_storage_path();
     {
         let (graph_service, _) = build_services(&storage_path);
@@ -36,12 +36,14 @@ fn embedded_grafeo_adapter_bootstraps_namespaces_and_persists_required_graph_fie
                 root_scope(),
                 node_write("ROOT_SENTINEL", "sentinel root", 1),
             )
+            .await
             .expect("sentinel node should persist");
         let updated_sentinel = graph_service
             .update_node(
                 root_scope(),
                 node_write("ROOT_SENTINEL", "sentinel root updated", 2),
             )
+            .await
             .expect("sentinel node should update");
         assert!(!sentinel_node.created_at.is_empty());
         assert_eq!(
@@ -55,27 +57,31 @@ fn embedded_grafeo_adapter_bootstraps_namespaces_and_persists_required_graph_fie
 
         graph_service
             .create_node(root_scoped_scope(), node_write("ROOT_NODE", "root task", 3))
+            .await
             .expect("root scoped node should persist");
         graph_service
             .create_node(child_scope(), node_write("CHILD_NODE", "child task", 4))
+            .await
             .expect("child scoped node should persist");
-        let updated_edge = graph_service
+        graph_service
             .create_edge(
                 child_scope(),
                 edge_write("ROOT_TO_CHILD", "ROOT_NODE", "CHILD_NODE", "LINKS", 8.0),
             )
-            .and_then(|_| {
-                graph_service.update_edge(
-                    child_scope(),
-                    edge_write(
-                        "ROOT_TO_CHILD",
-                        "ROOT_NODE",
-                        "CHILD_NODE",
-                        "RELATES_TO",
-                        9.5,
-                    ),
-                )
-            })
+            .await
+            .expect("edge should persist");
+        let updated_edge = graph_service
+            .update_edge(
+                child_scope(),
+                edge_write(
+                    "ROOT_TO_CHILD",
+                    "ROOT_NODE",
+                    "CHILD_NODE",
+                    "RELATES_TO",
+                    9.5,
+                ),
+            )
+            .await
             .expect("edge should update");
         assert_eq!(updated_edge.relationship, "RELATES_TO");
         assert_eq!(
@@ -88,10 +94,12 @@ fn embedded_grafeo_adapter_bootstraps_namespaces_and_persists_required_graph_fie
                 audit_root_scope(),
                 node_write("AUDIT_NODE", "audit record", 5),
             )
+            .await
             .expect("audit namespace node should persist");
 
         graph_service
             .create_node(root_scoped_scope(), node_write("DELETE_ME", "delete me", 6))
+            .await
             .expect("temporary node should persist");
         graph_service
             .delete_node(root_scoped_scope(), "DELETE_ME".to_owned())
@@ -192,8 +200,8 @@ fn embedded_grafeo_adapter_bootstraps_namespaces_and_persists_required_graph_fie
     assert_eq!(audit_codes, vec!["AUDIT_NODE"]);
 }
 
-#[test]
-fn embedded_grafeo_adapter_enforces_named_graph_and_lineage_visibility_for_graph_search_and_traversal()
+#[tokio::test]
+async fn embedded_grafeo_adapter_enforces_named_graph_and_lineage_visibility_for_graph_search_and_traversal()
  {
     let storage_path = unique_graph_storage_path();
     let (graph_service, _) = build_services(&storage_path);
@@ -203,21 +211,25 @@ fn embedded_grafeo_adapter_enforces_named_graph_and_lineage_visibility_for_graph
             root_scoped_scope(),
             node_write("ROOT_NODE", "root visible", 1),
         )
+        .await
         .expect("root node should persist");
     graph_service
         .create_node(child_scope(), node_write("CHILD_NODE", "child visible", 2))
+        .await
         .expect("child node should persist");
     graph_service
         .create_node(
             sibling_scope(),
             node_write("SIBLING_NODE", "sibling hidden", 3),
         )
+        .await
         .expect("sibling node should persist");
     graph_service
         .create_node(
             other_root_child_scope(),
             node_write("OTHER_NODE", "other root hidden", 4),
         )
+        .await
         .expect("other-root node should persist");
 
     graph_service
@@ -225,16 +237,19 @@ fn embedded_grafeo_adapter_enforces_named_graph_and_lineage_visibility_for_graph
             child_scope(),
             edge_write("ROOT_TO_CHILD", "ROOT_NODE", "CHILD_NODE", "LINKS", 1.0),
         )
+        .await
         .expect("child edge should persist");
     graph_service
         .create_edge(
             sibling_scope(),
             edge_write("ROOT_TO_SIBLING", "ROOT_NODE", "SIBLING_NODE", "LINKS", 2.0),
         )
+        .await
         .expect("sibling edge should persist");
 
     let child_hits = graph_service
         .search(child_scope(), label_search_query())
+        .await
         .expect("child search should work");
     assert_eq!(
         graph_hit_codes(&child_hits),
@@ -243,11 +258,13 @@ fn embedded_grafeo_adapter_enforces_named_graph_and_lineage_visibility_for_graph
 
     let root_hits = graph_service
         .search(root_scoped_scope(), label_search_query())
+        .await
         .expect("root search should work");
     assert_eq!(graph_hit_codes(&root_hits), vec!["ROOT_NODE"]);
 
     let sibling_hits = graph_service
         .search(sibling_scope(), label_search_query())
+        .await
         .expect("sibling search should work");
     assert_eq!(
         graph_hit_codes(&sibling_hits),
@@ -256,6 +273,7 @@ fn embedded_grafeo_adapter_enforces_named_graph_and_lineage_visibility_for_graph
 
     let other_hits = graph_service
         .search(other_root_child_scope(), label_search_query())
+        .await
         .expect("other-root search should work");
     assert_eq!(graph_hit_codes(&other_hits), vec!["OTHER_NODE"]);
 
@@ -285,8 +303,8 @@ fn embedded_grafeo_adapter_enforces_named_graph_and_lineage_visibility_for_graph
     );
 }
 
-#[test]
-fn embedded_grafeo_adapter_persists_all_typed_ontology_resources_with_scope_rules() {
+#[tokio::test]
+async fn embedded_grafeo_adapter_persists_all_typed_ontology_resources_with_scope_rules() {
     let storage_path = unique_graph_storage_path();
     let (_, ontology_service) = build_services(&storage_path);
 
@@ -410,16 +428,19 @@ fn embedded_grafeo_adapter_persists_all_typed_ontology_resources_with_scope_rule
     );
 }
 
-#[test]
-fn embedded_grafeo_adapter_maps_typed_store_errors_and_capability_gaps() {
+#[tokio::test]
+async fn embedded_grafeo_adapter_maps_typed_store_errors_and_capability_gaps() {
     let storage_path = unique_graph_storage_path();
     let (graph_service, ontology_service) = build_services(&storage_path);
 
     graph_service
         .create_node(child_scope(), node_write("DUP_NODE", "duplicate", 1))
+        .await
         .expect("duplicate test node should persist");
     assert_eq!(
-        graph_service.create_node(child_scope(), node_write("DUP_NODE", "duplicate", 1)),
+        graph_service
+            .create_node(child_scope(), node_write("DUP_NODE", "duplicate", 1))
+            .await,
         Err(GraphError::DuplicateNode {
             node_code: "DUP_NODE".to_owned(),
         })
@@ -430,11 +451,6 @@ fn embedded_grafeo_adapter_maps_typed_store_errors_and_capability_gaps() {
             edge_code: "MISSING_EDGE".to_owned(),
         })
     );
-    assert_eq!(
-        graph_service.search(child_scope(), vector_search_query()),
-        Err(GraphError::UnsupportedStoreBehavior)
-    );
-
     ontology_service
         .create_class(
             child_scope(),
@@ -601,6 +617,7 @@ fn node_write(node_code: &str, full_text: &str, priority: i64) -> GraphNodeWrite
         )]),
         full_text: Some(full_text.to_owned()),
         embedding_text: None,
+        embedding_model_code: None,
     }
 }
 
@@ -619,6 +636,7 @@ fn edge_write(
         properties: BTreeMap::from([("weight".to_owned(), GraphPropertyValue::Decimal(weight))]),
         full_text: None,
         embedding_text: None,
+        embedding_model_code: None,
     }
 }
 
@@ -627,18 +645,7 @@ fn label_search_query() -> GraphSearchQuery {
         filters: Vec::new(),
         full_text: None,
         vector_text: None,
-        traversal: None,
-        labels: vec!["Task".to_owned()],
-        limit: GraphQueryLimit::new(10).expect("limit"),
-        min_score: None,
-    }
-}
-
-fn vector_search_query() -> GraphSearchQuery {
-    GraphSearchQuery {
-        filters: Vec::new(),
-        full_text: None,
-        vector_text: Some("semantic lookup".to_owned()),
+        embedding_model_code: None,
         traversal: None,
         labels: vec!["Task".to_owned()],
         limit: GraphQueryLimit::new(10).expect("limit"),

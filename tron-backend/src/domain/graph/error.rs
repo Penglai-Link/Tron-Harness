@@ -46,6 +46,8 @@ pub enum GraphError {
     InvalidTraversalQuery,
     RawQueryNotAllowed,
     CallerSuppliedVectorNotAllowed,
+    EmbeddingUnavailable,
+    EmbeddingProviderFailure,
     UnsupportedStoreBehavior,
     StorageFailure,
     Scope(GraphScopeError),
@@ -82,6 +84,12 @@ impl fmt::Display for GraphError {
             }
             Self::CallerSuppliedVectorNotAllowed => {
                 formatter.write_str("caller supplied graph vectors are not allowed")
+            }
+            Self::EmbeddingUnavailable => {
+                formatter.write_str("graph embedding model is unavailable")
+            }
+            Self::EmbeddingProviderFailure => {
+                formatter.write_str("graph embedding provider failed")
             }
             Self::UnsupportedStoreBehavior => {
                 formatter.write_str("graph store behavior is not supported")

@@ -1,7 +1,11 @@
 use std::sync::Arc;
 
 use crate::{
-    application::graph::{ScopeResolver, WorkspaceDetailProvider},
+    application::graph::{
+        GraphEmbeddingRuntime, PreparedGraphEdgeWrite, PreparedGraphNodeWrite,
+        PreparedGraphSearchQuery, ScopeResolver, WorkspaceDetailProvider, prepare_edge_write,
+        prepare_node_write, prepare_search_query,
+    },
     domain::graph::{
         GraphEdge, GraphEdgeWrite, GraphError, GraphNode, GraphNodeWrite, GraphPath,
         GraphScopeCommand, GraphSearchHit, GraphSearchQuery, GraphTraverseQuery,
@@ -32,7 +36,7 @@ pub trait GraphStore: Send + Sync {
     fn create_node(
         &self,
         scope: &ResolvedGraphScope,
-        command: GraphNodeWrite,
+        command: PreparedGraphNodeWrite,
     ) -> Result<GraphNode, GraphError>;
 
     fn get_node(
@@ -44,7 +48,7 @@ pub trait GraphStore: Send + Sync {
     fn update_node(
         &self,
         scope: &ResolvedGraphScope,
-        command: GraphNodeWrite,
+        command: PreparedGraphNodeWrite,
     ) -> Result<GraphNode, GraphError>;
 
     fn delete_node(&self, scope: &ResolvedGraphScope, node_code: &str) -> Result<(), GraphError>;
@@ -58,13 +62,13 @@ pub trait GraphStore: Send + Sync {
     fn create_edge(
         &self,
         scope: &ResolvedGraphScope,
-        command: GraphEdgeWrite,
+        command: PreparedGraphEdgeWrite,
     ) -> Result<GraphEdge, GraphError>;
 
     fn update_edge(
         &self,
         scope: &ResolvedGraphScope,
-        command: GraphEdgeWrite,
+        command: PreparedGraphEdgeWrite,
     ) -> Result<GraphEdge, GraphError>;
 
     fn delete_edge(&self, scope: &ResolvedGraphScope, edge_code: &str) -> Result<(), GraphError>;
@@ -72,7 +76,7 @@ pub trait GraphStore: Send + Sync {
     fn search(
         &self,
         scope: &ResolvedGraphScope,
-        query: GraphSearchQuery,
+        query: PreparedGraphSearchQuery,
     ) -> Result<Vec<GraphSearchHit>, GraphError>;
 
     fn traverse(
@@ -86,6 +90,7 @@ pub trait GraphStore: Send + Sync {
 pub struct GraphService<R = ScopeResolver> {
     store: Arc<dyn GraphStore>,
     scope_resolver: R,
+    embedding_runtime: Option<Arc<dyn GraphEmbeddingRuntime>>,
 }
 
 impl<R> GraphService<R>
@@ -96,16 +101,31 @@ where
         Self {
             store: Arc::new(store),
             scope_resolver,
+            embedding_runtime: None,
         }
     }
 
-    pub fn create_node(
+    pub fn with_embedding_runtime(
+        store: impl GraphStore + 'static,
+        scope_resolver: R,
+        embedding_runtime: Arc<dyn GraphEmbeddingRuntime>,
+    ) -> Self {
+        Self {
+            store: Arc::new(store),
+            scope_resolver,
+            embedding_runtime: Some(embedding_runtime),
+        }
+    }
+
+    pub async fn create_node(
         &self,
         scope: GraphScopeCommand,
         command: GraphNodeWrite,
     ) -> Result<GraphNode, GraphError> {
         let command = command.validate()?;
-        self.with_scope(scope, |store, scope| store.create_node(scope, command))
+        let scope = self.resolve_scope(scope)?;
+        let command = prepare_node_write(self.embedding_runtime(), &scope, command).await?;
+        self.store.create_node(&scope, command)
     }
 
     pub fn get_node(
@@ -121,13 +141,15 @@ where
         })
     }
 
-    pub fn update_node(
+    pub async fn update_node(
         &self,
         scope: GraphScopeCommand,
         command: GraphNodeWrite,
     ) -> Result<GraphNode, GraphError> {
         let command = command.validate()?;
-        self.with_scope(scope, |store, scope| store.update_node(scope, command))
+        let scope = self.resolve_scope(scope)?;
+        let command = prepare_node_write(self.embedding_runtime(), &scope, command).await?;
+        self.store.update_node(&scope, command)
     }
 
     pub fn delete_node(
@@ -152,30 +174,30 @@ where
         })
     }
 
-    pub fn create_edge(
+    pub async fn create_edge(
         &self,
         scope: GraphScopeCommand,
         command: GraphEdgeWrite,
     ) -> Result<GraphEdge, GraphError> {
         let command = command.validate()?;
-        self.with_scope(scope, |store, scope| {
-            ensure_endpoint_exists(store, scope, &command.source_node_code)?;
-            ensure_endpoint_exists(store, scope, &command.target_node_code)?;
-            store.create_edge(scope, command)
-        })
+        let scope = self.resolve_scope(scope)?;
+        ensure_endpoint_exists(self.store.as_ref(), &scope, &command.source_node_code)?;
+        ensure_endpoint_exists(self.store.as_ref(), &scope, &command.target_node_code)?;
+        let command = prepare_edge_write(self.embedding_runtime(), &scope, command).await?;
+        self.store.create_edge(&scope, command)
     }
 
-    pub fn update_edge(
+    pub async fn update_edge(
         &self,
         scope: GraphScopeCommand,
         command: GraphEdgeWrite,
     ) -> Result<GraphEdge, GraphError> {
         let command = command.validate()?;
-        self.with_scope(scope, |store, scope| {
-            ensure_endpoint_exists(store, scope, &command.source_node_code)?;
-            ensure_endpoint_exists(store, scope, &command.target_node_code)?;
-            store.update_edge(scope, command)
-        })
+        let scope = self.resolve_scope(scope)?;
+        ensure_endpoint_exists(self.store.as_ref(), &scope, &command.source_node_code)?;
+        ensure_endpoint_exists(self.store.as_ref(), &scope, &command.target_node_code)?;
+        let command = prepare_edge_write(self.embedding_runtime(), &scope, command).await?;
+        self.store.update_edge(&scope, command)
     }
 
     pub fn delete_edge(
@@ -187,13 +209,15 @@ where
         self.with_scope(scope, |store, scope| store.delete_edge(scope, &edge_code))
     }
 
-    pub fn search(
+    pub async fn search(
         &self,
         scope: GraphScopeCommand,
         query: GraphSearchQuery,
     ) -> Result<Vec<GraphSearchHit>, GraphError> {
         let query = query.validate()?;
-        self.with_scope(scope, |store, scope| store.search(scope, query))
+        let scope = self.resolve_scope(scope)?;
+        let query = prepare_search_query(self.embedding_runtime(), &scope, query).await?;
+        self.store.search(&scope, query)
     }
 
     pub fn traverse(
@@ -210,8 +234,18 @@ where
         scope: GraphScopeCommand,
         operation: impl FnOnce(&dyn GraphStore, &ResolvedGraphScope) -> Result<T, GraphError>,
     ) -> Result<T, GraphError> {
-        let scope = self.scope_resolver.resolve_graph_scope(scope)?;
+        let scope = self.resolve_scope(scope)?;
         operation(self.store.as_ref(), &scope)
+    }
+
+    fn resolve_scope(&self, scope: GraphScopeCommand) -> Result<ResolvedGraphScope, GraphError> {
+        self.scope_resolver.resolve_graph_scope(scope)
+    }
+
+    fn embedding_runtime(&self) -> Option<&dyn GraphEmbeddingRuntime> {
+        self.embedding_runtime
+            .as_ref()
+            .map(|runtime| runtime.as_ref())
     }
 }
 

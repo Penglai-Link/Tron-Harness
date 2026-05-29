@@ -33,6 +33,7 @@ pub struct GraphNodeWrite {
     pub properties: BTreeMap<String, GraphPropertyValue>,
     pub full_text: Option<String>,
     pub embedding_text: Option<String>,
+    pub embedding_model_code: Option<String>,
 }
 
 impl GraphNodeWrite {
@@ -43,6 +44,7 @@ impl GraphNodeWrite {
             properties: normalize_properties(self.properties)?,
             full_text: normalize_optional_text(self.full_text),
             embedding_text: normalize_optional_text(self.embedding_text),
+            embedding_model_code: normalize_optional_graph_code(self.embedding_model_code)?,
         })
     }
 }
@@ -56,6 +58,7 @@ pub struct GraphEdgeWrite {
     pub properties: BTreeMap<String, GraphPropertyValue>,
     pub full_text: Option<String>,
     pub embedding_text: Option<String>,
+    pub embedding_model_code: Option<String>,
 }
 
 impl GraphEdgeWrite {
@@ -68,6 +71,7 @@ impl GraphEdgeWrite {
             properties: normalize_properties(self.properties)?,
             full_text: normalize_optional_text(self.full_text),
             embedding_text: normalize_optional_text(self.embedding_text),
+            embedding_model_code: normalize_optional_graph_code(self.embedding_model_code)?,
         })
     }
 }
@@ -133,6 +137,7 @@ pub struct GraphSearchQuery {
     pub filters: Vec<GraphPropertyFilter>,
     pub full_text: Option<String>,
     pub vector_text: Option<String>,
+    pub embedding_model_code: Option<String>,
     pub traversal: Option<GraphSearchTraversal>,
     pub labels: Vec<String>,
     pub limit: GraphQueryLimit,
@@ -145,6 +150,7 @@ impl GraphSearchQuery {
             filters: Vec::new(),
             full_text: None,
             vector_text: None,
+            embedding_model_code: None,
             traversal: None,
             labels: Vec::new(),
             limit: GraphQueryLimit { value: 25 },
@@ -160,6 +166,7 @@ impl GraphSearchQuery {
             .collect::<Result<Vec<_>, _>>()?;
         let full_text = normalize_optional_text(self.full_text);
         let vector_text = normalize_optional_text(self.vector_text);
+        let embedding_model_code = normalize_optional_graph_code(self.embedding_model_code)?;
         let traversal = self
             .traversal
             .map(GraphSearchTraversal::validate)
@@ -179,6 +186,7 @@ impl GraphSearchQuery {
             filters,
             full_text,
             vector_text,
+            embedding_model_code,
             traversal,
             labels,
             limit: self.limit,
@@ -398,4 +406,11 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
     value
         .map(|text| text.trim().to_owned())
         .filter(|text| !text.is_empty())
+}
+
+fn normalize_optional_graph_code(value: Option<String>) -> Result<Option<String>, GraphError> {
+    match value {
+        Some(value) => Ok(Some(normalize_graph_code(&value)?)),
+        None => Ok(None),
+    }
 }

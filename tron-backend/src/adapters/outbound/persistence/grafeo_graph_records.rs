@@ -1,23 +1,25 @@
 use std::collections::{BTreeMap, HashMap};
 
 use grafeo::{Session, Value};
+use serde::{Deserialize, Serialize};
 
-use crate::domain::graph::{
-    GraphEdge, GraphEdgeWrite, GraphError, GraphNode, GraphNodeWrite, GraphPropertyValue,
-    ResolvedGraphScope,
+use crate::{
+    application::graph::{PreparedGraphEdgeWrite, PreparedGraphNodeWrite},
+    domain::graph::{GraphEdge, GraphError, GraphNode, GraphPropertyValue, ResolvedGraphScope},
 };
 
 const NODE_QUERY: &str = "MATCH (n:TronGraphNode) RETURN \
-    n.nodeCode, n.recordLabels, n.businessProps, n.fullText, n.embeddingText, \
+    n.nodeCode, n.recordLabels, n.businessProps, n.fullText, n.embeddingText, n.semanticPayload, \
     n.createdAt, n.updatedAt, n.namespace, n.workspaceCode, n.appCode, n.userCode";
 const EDGE_QUERY: &str = "MATCH (source:TronGraphNode)-[e:TRON_EDGE]->(target:TronGraphNode) RETURN \
     e.edgeCode, e.sourceNodeCode, e.targetNodeCode, e.relationship, e.businessProps, \
-    e.fullText, e.embeddingText, e.createdAt, e.updatedAt, e.namespace, e.workspaceCode, \
+    e.fullText, e.embeddingText, e.semanticPayload, e.createdAt, e.updatedAt, e.namespace, e.workspaceCode, \
     e.appCode, e.userCode, source.workspaceCode, target.workspaceCode";
 
 #[derive(Clone)]
 pub(super) struct StoredGraphNodeRecord {
     pub node: GraphNode,
+    pub semantic_payload: StoredGraphSemanticPayload,
     pub namespace: String,
     pub workspace_code: String,
     pub app_code: String,
@@ -27,12 +29,44 @@ pub(super) struct StoredGraphNodeRecord {
 #[derive(Clone)]
 pub(super) struct StoredGraphEdgeRecord {
     pub edge: GraphEdge,
+    #[allow(dead_code)]
+    pub semantic_payload: StoredGraphSemanticPayload,
     pub namespace: String,
     pub workspace_code: String,
     pub app_code: String,
     pub user_code: String,
     pub source_workspace_code: String,
     pub target_workspace_code: String,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(super) struct StoredGraphSemanticPayload {
+    pub model_code: Option<String>,
+    pub projection: Option<Vec<f32>>,
+    pub slices: Vec<StoredGraphSemanticSlice>,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct StoredGraphSemanticSlice {
+    #[allow(dead_code)]
+    pub chunk_index: usize,
+    #[allow(dead_code)]
+    pub content: String,
+    pub projection: Vec<f32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct StoredGraphSemanticPayloadWire {
+    model_code: Option<String>,
+    projection: Option<Vec<f32>>,
+    slices: Vec<StoredGraphSemanticSliceWire>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct StoredGraphSemanticSliceWire {
+    chunk_index: usize,
+    content: String,
+    projection: Vec<f32>,
 }
 
 pub(super) trait ScopedRecord {
@@ -139,16 +173,20 @@ pub(super) fn base_scope_params(scope: &ResolvedGraphScope) -> HashMap<String, V
 
 pub(super) fn build_node_params(
     scope: &ResolvedGraphScope,
-    command: &GraphNodeWrite,
+    command: &PreparedGraphNodeWrite,
     created_at: &str,
     updated_at: &str,
 ) -> HashMap<String, Value> {
     let mut params = base_scope_params(scope);
-    params.insert("nodeCode".into(), Value::from(command.node_code.clone()));
+    params.insert(
+        "nodeCode".into(),
+        Value::from(command.command.node_code.clone()),
+    );
     params.insert(
         "recordLabels".into(),
         Value::List(
             command
+                .command
                 .labels
                 .iter()
                 .map(|label| Value::from(label.clone()))
@@ -158,11 +196,12 @@ pub(super) fn build_node_params(
     );
     params.insert(
         "businessProps".into(),
-        graph_properties_to_value(&command.properties),
+        graph_properties_to_value(&command.command.properties),
     );
     params.insert(
         "fullText".into(),
         command
+            .command
             .full_text
             .clone()
             .map(Value::from)
@@ -171,10 +210,22 @@ pub(super) fn build_node_params(
     params.insert(
         "embeddingText".into(),
         command
+            .command
             .embedding_text
             .clone()
             .map(Value::from)
             .unwrap_or(Value::Null),
+    );
+    params.insert(
+        "semanticPayload".into(),
+        semantic_payload_to_value(
+            command.semantic_model_code.as_deref(),
+            command
+                .semantic_projection
+                .as_ref()
+                .map(|projection| projection.as_slice()),
+            &command.semantic_slices,
+        ),
     );
     params.insert("createdAt".into(), Value::from(created_at.to_owned()));
     params.insert("updatedAt".into(), Value::from(updated_at.to_owned()));
@@ -183,21 +234,24 @@ pub(super) fn build_node_params(
 
 pub(super) fn build_edge_params(
     scope: &ResolvedGraphScope,
-    command: &GraphEdgeWrite,
+    command: &PreparedGraphEdgeWrite,
     source_workspace_code: &str,
     target_workspace_code: &str,
     created_at: &str,
     updated_at: &str,
 ) -> HashMap<String, Value> {
     let mut params = base_scope_params(scope);
-    params.insert("edgeCode".into(), Value::from(command.edge_code.clone()));
+    params.insert(
+        "edgeCode".into(),
+        Value::from(command.command.edge_code.clone()),
+    );
     params.insert(
         "sourceNodeCode".into(),
-        Value::from(command.source_node_code.clone()),
+        Value::from(command.command.source_node_code.clone()),
     );
     params.insert(
         "targetNodeCode".into(),
-        Value::from(command.target_node_code.clone()),
+        Value::from(command.command.target_node_code.clone()),
     );
     params.insert(
         "sourceWorkspaceCode".into(),
@@ -209,15 +263,16 @@ pub(super) fn build_edge_params(
     );
     params.insert(
         "relationship".into(),
-        Value::from(command.relationship.clone()),
+        Value::from(command.command.relationship.clone()),
     );
     params.insert(
         "businessProps".into(),
-        graph_properties_to_value(&command.properties),
+        graph_properties_to_value(&command.command.properties),
     );
     params.insert(
         "fullText".into(),
         command
+            .command
             .full_text
             .clone()
             .map(Value::from)
@@ -226,10 +281,22 @@ pub(super) fn build_edge_params(
     params.insert(
         "embeddingText".into(),
         command
+            .command
             .embedding_text
             .clone()
             .map(Value::from)
             .unwrap_or(Value::Null),
+    );
+    params.insert(
+        "semanticPayload".into(),
+        semantic_payload_to_value(
+            command.semantic_model_code.as_deref(),
+            command
+                .semantic_projection
+                .as_ref()
+                .map(|projection| projection.as_slice()),
+            &command.semantic_slices,
+        ),
     );
     params.insert("createdAt".into(), Value::from(created_at.to_owned()));
     params.insert("updatedAt".into(), Value::from(updated_at.to_owned()));
@@ -307,13 +374,14 @@ fn parse_node_row(row: &[Value]) -> Result<StoredGraphNodeRecord, GraphError> {
             properties: graph_properties_from_value(&row[2])?,
             full_text: optional_string(&row[3]),
             embedding_text: optional_string(&row[4]),
-            created_at: required_string(&row[5])?,
-            updated_at: required_string(&row[6])?,
+            created_at: required_string(&row[6])?,
+            updated_at: required_string(&row[7])?,
         },
-        namespace: required_string(&row[7])?,
-        workspace_code: required_string(&row[8])?,
-        app_code: required_string(&row[9])?,
-        user_code: required_string(&row[10])?,
+        semantic_payload: semantic_payload_from_value(&row[5])?,
+        namespace: required_string(&row[8])?,
+        workspace_code: required_string(&row[9])?,
+        app_code: required_string(&row[10])?,
+        user_code: required_string(&row[11])?,
     })
 }
 
@@ -327,16 +395,67 @@ fn parse_edge_row(row: &[Value]) -> Result<StoredGraphEdgeRecord, GraphError> {
             properties: graph_properties_from_value(&row[4])?,
             full_text: optional_string(&row[5]),
             embedding_text: optional_string(&row[6]),
-            created_at: required_string(&row[7])?,
-            updated_at: required_string(&row[8])?,
+            created_at: required_string(&row[8])?,
+            updated_at: required_string(&row[9])?,
         },
-        namespace: required_string(&row[9])?,
-        workspace_code: required_string(&row[10])?,
-        app_code: required_string(&row[11])?,
-        user_code: required_string(&row[12])?,
-        source_workspace_code: required_string(&row[13])?,
-        target_workspace_code: required_string(&row[14])?,
+        semantic_payload: semantic_payload_from_value(&row[7])?,
+        namespace: required_string(&row[10])?,
+        workspace_code: required_string(&row[11])?,
+        app_code: required_string(&row[12])?,
+        user_code: required_string(&row[13])?,
+        source_workspace_code: required_string(&row[14])?,
+        target_workspace_code: required_string(&row[15])?,
     })
+}
+
+fn semantic_payload_to_value(
+    model_code: Option<&str>,
+    projection: Option<&[f32]>,
+    slices: &[crate::application::graph::GraphSemanticSlice],
+) -> Value {
+    if model_code.is_none() && projection.is_none() && slices.is_empty() {
+        return Value::Null;
+    }
+
+    Value::from(
+        serde_json::to_string(&StoredGraphSemanticPayloadWire {
+            model_code: model_code.map(str::to_owned),
+            projection: projection.map(|projection| projection.to_vec()),
+            slices: slices
+                .iter()
+                .map(|slice| StoredGraphSemanticSliceWire {
+                    chunk_index: slice.chunk_index,
+                    content: slice.content.clone(),
+                    projection: slice.projection.as_slice().to_vec(),
+                })
+                .collect(),
+        })
+        .expect("graph semantic payload serialization should succeed"),
+    )
+}
+
+fn semantic_payload_from_value(value: &Value) -> Result<StoredGraphSemanticPayload, GraphError> {
+    match value {
+        Value::Null => Ok(StoredGraphSemanticPayload::default()),
+        Value::String(text) => {
+            let payload = serde_json::from_str::<StoredGraphSemanticPayloadWire>(text)
+                .map_err(|_| GraphError::StorageFailure)?;
+            Ok(StoredGraphSemanticPayload {
+                model_code: payload.model_code,
+                projection: payload.projection,
+                slices: payload
+                    .slices
+                    .into_iter()
+                    .map(|slice| StoredGraphSemanticSlice {
+                        chunk_index: slice.chunk_index,
+                        content: slice.content,
+                        projection: slice.projection,
+                    })
+                    .collect(),
+            })
+        }
+        _ => Err(GraphError::StorageFailure),
+    }
 }
 
 fn required_string(value: &Value) -> Result<String, GraphError> {
