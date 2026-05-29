@@ -3,7 +3,7 @@
 ## Execution Contract
 
 - feature_slug: graph-scope-and-isolation-kernel
-- status: ready
+- status: done
 - execution_mode: hybrid
 - selected_worker: backend/graph-scope-kernel
 
@@ -13,13 +13,13 @@ One bounded `tdd` slice owns RED -> GREEN -> focused VERIFY for the graph scope 
 
 ## Task Rows
 
-- AC-GSI-01 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/src/domain.rs; tron-backend/src/application.rs | command_ref: CMD-BE-GRAPH-SCOPE-UNIT | status: ready.
-- AC-GSI-02 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/src/domain.rs; tron-backend/src/application.rs | command_ref: CMD-BE-GRAPH-SCOPE-UNIT | status: ready.
-- AC-GSI-03 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/src/domain.rs; tron-backend/src/application.rs | command_ref: CMD-BE-GRAPH-SCOPE-UNIT | status: ready.
-- AC-GSI-04 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/src/domain.rs; tron-backend/src/application.rs | command_ref: CMD-BE-GRAPH-SCOPE-UNIT | status: ready.
-- AC-GSI-05 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/src/domain.rs; tron-backend/src/application.rs | command_ref: CMD-BE-GRAPH-SCOPE-UNIT | status: ready.
-- AC-GSI-06 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/src/domain.rs; tron-backend/src/application.rs | command_ref: CMD-BE-GRAPH-SCOPE-UNIT | status: ready.
-- AC-GSI-07 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/src/domain.rs; tron-backend/src/application.rs; tron-backend/Cargo.toml | command_ref: CMD-BE-GRAPH-SCOPE-GUARD | status: ready.
+- AC-GSI-01 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/src/domain.rs; tron-backend/src/application.rs | command_ref: CMD-BE-GRAPH-SCOPE-UNIT | status: done.
+- AC-GSI-02 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/src/domain.rs; tron-backend/src/application.rs | command_ref: CMD-BE-GRAPH-SCOPE-UNIT | status: done.
+- AC-GSI-03 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/src/domain.rs; tron-backend/src/application.rs | command_ref: CMD-BE-GRAPH-SCOPE-UNIT | status: done.
+- AC-GSI-04 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/src/domain.rs; tron-backend/src/application.rs | command_ref: CMD-BE-GRAPH-SCOPE-UNIT | status: done.
+- AC-GSI-05 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/src/domain.rs; tron-backend/src/application.rs | command_ref: CMD-BE-GRAPH-SCOPE-UNIT | status: done.
+- AC-GSI-06 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/src/domain.rs; tron-backend/src/application.rs | command_ref: CMD-BE-GRAPH-SCOPE-UNIT | status: done.
+- AC-GSI-07 | phase: tdd | owner: tdd-slice-worker | scope: tron-backend/src/domain/graph*; tron-backend/src/application/graph*; tron-backend/src/domain.rs; tron-backend/src/application.rs; tron-backend/Cargo.toml | command_ref: CMD-BE-GRAPH-SCOPE-GUARD | status: done.
 
 ## Worktree Notes
 
