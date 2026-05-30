@@ -460,11 +460,16 @@ fn rag_foundation_does_not_register_http_routes_or_call_runtime_graph_or_event_s
     let http_sources = read_rs_sources("src/adapters/inbound/http");
     let rag_application_sources = read_rs_sources("src/application/rag");
 
-    assert!(!app_source.contains("/api/v1/rag"));
-    assert!(!http_sources.contains("/api/v1/rag"));
-    assert!(!http_sources.contains("RagService"));
+    for forbidden_route in [
+        "/api/v1/rag/search",
+        "/api/v1/rag/debug",
+        "/api/v1/rag/retry",
+    ] {
+        assert!(!app_source.contains(forbidden_route));
+        assert!(!http_sources.contains(forbidden_route));
+    }
 
-    for forbidden in ["LlmRuntimeService", "GraphService", "EventBusHandle"] {
+    for forbidden in ["GraphService", "EventBusHandle"] {
         assert!(
             !rag_application_sources.contains(forbidden),
             "RAG foundation must not call {forbidden}"

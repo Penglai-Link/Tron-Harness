@@ -77,6 +77,8 @@ pub(super) const RAG_FOUNDATION_MIGRATION: &str =
     include_str!("../../../../../migrations/20260530_0022_create_rag_foundation.sql");
 pub(super) const RAG_DOMAIN_FIELDS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260530_0023_add_rag_domain_fields.sql");
+pub(super) const RAG_INGEST_PROFILES_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260531_0024_add_rag_ingest_profiles.sql");
 pub(super) const AGENT_MANAGEMENT_RUNTIME_TYPE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260601_0027_add_agent_management_runtime_type.sql");
 pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_MIGRATION: &str =

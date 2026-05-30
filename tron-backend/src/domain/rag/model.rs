@@ -101,6 +101,12 @@ pub struct RagProfileRecord {
 pub enum RagError {
     CorpusNotFound,
     ProfileNotFound,
+    IngestRequestInvalid,
+    IngestProfileInvalid,
+    IngestScopeInvalid,
+    IngestStageFailed,
+    EmbeddingFailed,
+    CorpusReserved,
     StorageBindingInvalid,
     StorageFailure,
 }
@@ -110,6 +116,12 @@ impl fmt::Display for RagError {
         match self {
             Self::CorpusNotFound => formatter.write_str("RAG corpus not found"),
             Self::ProfileNotFound => formatter.write_str("RAG profile not found"),
+            Self::IngestRequestInvalid => formatter.write_str("RAG ingest request invalid"),
+            Self::IngestProfileInvalid => formatter.write_str("RAG ingest profile invalid"),
+            Self::IngestScopeInvalid => formatter.write_str("RAG ingest scope invalid"),
+            Self::IngestStageFailed => formatter.write_str("RAG ingest stage failed"),
+            Self::EmbeddingFailed => formatter.write_str("RAG embedding failed"),
+            Self::CorpusReserved => formatter.write_str("RAG corpus reserved"),
             Self::StorageBindingInvalid => formatter.write_str("RAG storage binding invalid"),
             Self::StorageFailure => formatter.write_str("RAG storage failure"),
         }

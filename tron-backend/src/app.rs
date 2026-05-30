@@ -395,6 +395,12 @@ impl FromRef<AppState> for OpenAppService {
     }
 }
 
+impl FromRef<AppState> for LlmRuntimeService {
+    fn from_ref(state: &AppState) -> Self {
+        state.llm_runtime.clone()
+    }
+}
+
 impl FromRef<AppState> for AgentRunHistoryService {
     fn from_ref(state: &AppState) -> Self {
         state.agent_runs.clone()

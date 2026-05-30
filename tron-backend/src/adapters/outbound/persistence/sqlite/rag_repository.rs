@@ -1,3 +1,5 @@
+mod ingest;
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
@@ -14,7 +16,9 @@ use crate::{
     },
 };
 
-use super::migrations::{RAG_DOMAIN_FIELDS_MIGRATION, RAG_FOUNDATION_MIGRATION};
+use super::migrations::{
+    RAG_DOMAIN_FIELDS_MIGRATION, RAG_FOUNDATION_MIGRATION, RAG_INGEST_PROFILES_MIGRATION,
+};
 
 pub struct SqliteRagRepository {
     connection: Connection,
@@ -42,7 +46,8 @@ impl SqliteRagRepository {
 
     pub fn apply_rag_migrations(&self) -> Result<(), RagError> {
         self.apply_rag_foundation_migration()?;
-        self.apply_rag_domain_fields_migration()
+        self.apply_rag_domain_fields_migration()?;
+        self.apply_rag_ingest_profiles_migration()
     }
 
     pub fn apply_rag_foundation_migration(&self) -> Result<(), RagError> {
@@ -82,6 +87,12 @@ impl SqliteRagRepository {
         )?;
         self.connection
             .execute_batch(RAG_DOMAIN_FIELDS_MIGRATION)
+            .map_err(storage_error)
+    }
+
+    pub fn apply_rag_ingest_profiles_migration(&self) -> Result<(), RagError> {
+        self.connection
+            .execute_batch(RAG_INGEST_PROFILES_MIGRATION)
             .map_err(storage_error)
     }
 

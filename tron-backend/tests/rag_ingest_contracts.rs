@@ -1,0 +1,506 @@
+use std::{
+    future::Future,
+    path::PathBuf,
+    pin::Pin,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+use rusqlite::Connection;
+use serde_json::{Value, json};
+use tron_backend::{
+    adapters::outbound::persistence::sqlite::SqliteRagRepository,
+    application::rag::{
+        DefaultRagStrategyRegistry, RagConfigRepository, RagEmbeddingCall, RagEmbeddingRuntime,
+        RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService,
+        compile_ingest_profile,
+    },
+    domain::rag::{RagError, RagProfileRecord, RagProfileType, RagStatus},
+};
+
+#[tokio::test]
+async fn memory_plain_text_ingest_writes_source_text_unit_fulltext_and_vector_fields() {
+    let database_path = temp_database_path("rag-ingest-memory-success");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    let embeddings = FakeEmbeddingRuntime::fixed(vec![0.25, 0.75]);
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        embeddings.clone(),
+    );
+
+    let result = service.ingest(memory_request("v1")).await.unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(result.text_unit_count, 1);
+    assert_eq!(result.fulltext_status, "INDEXED");
+    assert_eq!(result.embedding_status, "INDEXED");
+    assert_eq!(embeddings.call_count(), 1);
+
+    let connection = Connection::open(&database_url).unwrap();
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT status FROM rag_memory_sources WHERE source_code = 'memory-rag-rule'"
+        ),
+        "ACTIVE"
+    );
+    let unit = query_unit(&connection, "rag_memory_text_units");
+    assert_eq!(
+        unit["search_text"],
+        json!("Always cite source titles in RAG answers.")
+    );
+    assert_eq!(unit["embedding_status"], json!("INDEXED"));
+    assert_eq!(unit["embedding_model_code"], json!("fake-embedding"));
+    assert_eq!(unit["embedding_dimension"], json!(2));
+}
+
+#[tokio::test]
+async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_units() {
+    let database_path = temp_database_path("rag-ingest-project-doc");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::fixed(vec![0.1, 0.2, 0.3]),
+    );
+
+    let result = service.ingest(project_doc_request("v1")).await.unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(result.text_unit_count, 2);
+    assert_eq!(result.embedding_status, "INDEXED");
+
+    let connection = Connection::open(&database_url).unwrap();
+    let source = query_project_doc_source(&connection);
+    assert_eq!(source["document_code"], json!("DOC_RAG_MVP"));
+    assert_eq!(source["document_type"], json!("DESIGN"));
+    assert_eq!(source["path"], json!("docs/rag-mvp.md"));
+    assert_eq!(source["repo_code"], json!("REPO_TRON"));
+    assert_eq!(source["module_code"], json!("MOD_RAG"));
+
+    let headings = query_text_unit_headings(&connection);
+    assert_eq!(headings, vec!["RAG MVP", "RAG MVP > Write Path"]);
+}
+
+#[tokio::test]
+async fn same_source_version_is_idempotent_and_multiple_versions_coexist() {
+    let database_path = temp_database_path("rag-ingest-idempotency");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::fixed(vec![1.0]),
+    );
+
+    service.ingest(memory_request("v1")).await.unwrap();
+    service.ingest(memory_request("v1")).await.unwrap();
+    service.ingest(memory_request("v2")).await.unwrap();
+
+    let connection = Connection::open(&database_url).unwrap();
+    assert_eq!(
+        query_i64(&connection, "SELECT COUNT(*) FROM rag_memory_sources"),
+        2
+    );
+    assert_eq!(
+        query_i64(&connection, "SELECT COUNT(*) FROM rag_memory_text_units"),
+        2
+    );
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_memory_sources WHERE source_version = 'v1'"
+        ),
+        1
+    );
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_memory_sources WHERE source_version = 'v2'"
+        ),
+        1
+    );
+}
+
+#[tokio::test]
+async fn embedding_failure_degrades_project_doc_but_fails_memory() {
+    let doc_path = temp_database_path("rag-ingest-project-doc-vector-failure");
+    let doc_url = doc_path.to_string_lossy().to_string();
+    let doc_repository = SqliteRagRepository::connect(&doc_url).unwrap();
+    let doc_service = RagIngestService::new(
+        doc_repository,
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::failing("fake vector unavailable"),
+    );
+
+    let doc_result = doc_service.ingest(project_doc_request("v1")).await.unwrap();
+
+    assert_eq!(doc_result.status, "ACTIVE");
+    assert_eq!(doc_result.embedding_status, "FAILED");
+    assert_eq!(doc_result.warnings.len(), 1);
+    assert_eq!(
+        doc_result.warnings[0]["code"],
+        json!("RAG_VECTOR_INDEX_WARNING")
+    );
+    let doc_connection = Connection::open(&doc_url).unwrap();
+    assert_eq!(
+        query_i64(&doc_connection, "SELECT COUNT(*) FROM rag_diagnostics"),
+        1
+    );
+    assert_eq!(
+        query_string(
+            &doc_connection,
+            "SELECT status FROM rag_project_doc_sources WHERE source_code = 'doc-rag-mvp'"
+        ),
+        "ACTIVE"
+    );
+
+    let memory_path = temp_database_path("rag-ingest-memory-vector-failure");
+    let memory_url = memory_path.to_string_lossy().to_string();
+    let memory_repository = SqliteRagRepository::connect(&memory_url).unwrap();
+    let memory_service = RagIngestService::new(
+        memory_repository,
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::failing("fake vector unavailable"),
+    );
+
+    let error = memory_service
+        .ingest(memory_request("v1"))
+        .await
+        .expect_err("memory vector failure must fail the ingest");
+
+    assert_eq!(error, RagError::EmbeddingFailed);
+    let memory_connection = Connection::open(&memory_url).unwrap();
+    assert_eq!(
+        query_string(
+            &memory_connection,
+            "SELECT status FROM rag_memory_sources WHERE source_code = 'memory-rag-rule'"
+        ),
+        "FAILED"
+    );
+}
+
+#[test]
+fn ingest_profile_compiler_rejects_invalid_dag_contracts() {
+    let repository = SqliteRagRepository::connect(":memory:").unwrap();
+    let corpus = repository.get_corpus("memory-card").unwrap().unwrap();
+    let registry = DefaultRagStrategyRegistry::default();
+
+    assert!(
+        compile_ingest_profile(&ingest_profile("valid", valid_dag()), &corpus, &registry).is_ok()
+    );
+
+    for (name, config, expected) in [
+        (
+            "invalid-corpus",
+            valid_dag(),
+            RagError::IngestProfileInvalid,
+        ),
+        ("cycle", cycle_dag(), RagError::IngestProfileInvalid),
+        (
+            "missing-stage",
+            missing_stage_dag(),
+            RagError::IngestProfileInvalid,
+        ),
+        (
+            "unregistered-strategy",
+            unregistered_strategy_dag(),
+            RagError::IngestProfileInvalid,
+        ),
+        (
+            "artifact-incompatible",
+            artifact_incompatible_dag(),
+            RagError::IngestProfileInvalid,
+        ),
+        (
+            "missing-persist",
+            missing_persist_dag(),
+            RagError::IngestProfileInvalid,
+        ),
+    ] {
+        let mut profile = ingest_profile(name, config);
+        if name == "invalid-corpus" {
+            profile.primary_corpus_id = Some("project-doc".into());
+            profile.corpus_ids = vec!["project-doc".into()];
+        }
+        assert_eq!(
+            compile_ingest_profile(&profile, &corpus, &registry).unwrap_err(),
+            expected,
+            "{name} should be rejected",
+        );
+    }
+}
+
+#[test]
+fn ingest_boundary_does_not_add_search_debug_retry_or_graph_memory_flow_behavior() {
+    let app_source = include_str!("../src/app.rs");
+    let rag_source = include_str!("../src/application/rag/service.rs");
+
+    for forbidden_route in [
+        "/api/v1/rag/search",
+        "/api/v1/rag/debug",
+        "/api/v1/rag/retry",
+    ] {
+        assert!(
+            !app_source.contains(forbidden_route),
+            "AC-RID-07: ingest must not register {forbidden_route}",
+        );
+    }
+    for forbidden_behavior in ["SummaryTree", "GraphService", "MemoryFlow"] {
+        assert!(
+            !rag_source.contains(forbidden_behavior),
+            "AC-RID-07: ingest service must not add {forbidden_behavior} behavior",
+        );
+    }
+}
+
+#[derive(Clone)]
+struct FakeEmbeddingRuntime {
+    result: Arc<Mutex<Result<Vec<f32>, String>>>,
+    calls: Arc<AtomicUsize>,
+}
+
+impl FakeEmbeddingRuntime {
+    fn fixed(embedding: Vec<f32>) -> Self {
+        Self {
+            result: Arc::new(Mutex::new(Ok(embedding))),
+            calls: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    fn failing(message: &str) -> Self {
+        Self {
+            result: Arc::new(Mutex::new(Err(message.to_string()))),
+            calls: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    fn call_count(&self) -> usize {
+        self.calls.load(Ordering::SeqCst)
+    }
+}
+
+impl RagEmbeddingRuntime for FakeEmbeddingRuntime {
+    fn embed<'a>(
+        &'a self,
+        _call: RagEmbeddingCall,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
+        Box::pin(async move {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            self.result.lock().unwrap().clone()
+        })
+    }
+}
+
+fn memory_request(source_version: &str) -> RagIngestRequest {
+    RagIngestRequest {
+        corpus_id: "memory-card".into(),
+        ingest_profile_id: "memory-card-ingest-v1".into(),
+        workspace_code: "TRON_CORE".into(),
+        access_context: RagIngestAccessContext {
+            user_code: "USR-LARGE-ID".into(),
+            agent_code: "AGENT_CODEX".into(),
+            workspace_code: "TRON_CORE".into(),
+        },
+        target_scope: RagIngestScope {
+            scope_type: "USER".into(),
+            scope_code: "USR-LARGE-ID".into(),
+        },
+        source_code: "memory-rag-rule".into(),
+        source_version: source_version.into(),
+        source_type: "PLAIN_TEXT".into(),
+        payload: json!({
+            "title": "RAG citation rule",
+            "text": "Always cite source titles in RAG answers.",
+            "memoryType": "RULE",
+            "memoryStatus": "ACTIVE",
+            "reviewStatus": "APPROVED",
+            "importanceScore": 90
+        }),
+    }
+}
+
+fn project_doc_request(source_version: &str) -> RagIngestRequest {
+    RagIngestRequest {
+        corpus_id: "project-doc".into(),
+        ingest_profile_id: "project-doc-ingest-v1".into(),
+        workspace_code: "TRON_CORE".into(),
+        access_context: RagIngestAccessContext {
+            user_code: "USR-LARGE-ID".into(),
+            agent_code: "AGENT_CODEX".into(),
+            workspace_code: "TRON_CORE".into(),
+        },
+        target_scope: RagIngestScope {
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+        },
+        source_code: "doc-rag-mvp".into(),
+        source_version: source_version.into(),
+        source_type: "MARKDOWN".into(),
+        payload: json!({
+            "title": "RAG MVP",
+            "text": "# RAG MVP\nIntro.\n\n## Write Path\nPersist synchronously.",
+            "documentCode": "DOC_RAG_MVP",
+            "documentType": "DESIGN",
+            "path": "docs/rag-mvp.md",
+            "repoCode": "REPO_TRON",
+            "moduleCode": "MOD_RAG",
+            "moduleName": "RAG"
+        }),
+    }
+}
+
+fn ingest_profile(profile_id: &str, config: Value) -> RagProfileRecord {
+    RagProfileRecord {
+        profile_id: profile_id.into(),
+        profile_type: RagProfileType::Ingest,
+        status: RagStatus::Enabled,
+        primary_corpus_id: Some("memory-card".into()),
+        corpus_ids: vec!["memory-card".into()],
+        required_source_version: None,
+        config,
+        filters: json!({}),
+        degrade_policy: "FAIL_FAST".into(),
+    }
+}
+
+fn valid_dag() -> Value {
+    json!({
+        "dag": {
+            "nodes": ["validateSource", "splitText", "fulltextIndex", "vectorIndex", "persistSource"],
+            "edges": [
+                { "from": "validateSource", "to": "splitText" },
+                { "from": "splitText", "to": "fulltextIndex" },
+                { "from": "fulltextIndex", "to": "vectorIndex" },
+                { "from": "vectorIndex", "to": "persistSource" }
+            ]
+        },
+        "stages": {
+            "validateSource": { "strategyId": "RAG_VALIDATE_SOURCE", "inputArtifact": "request", "outputArtifact": "source" },
+            "splitText": { "strategyId": "RAG_SPLIT_TEXT", "inputArtifact": "source", "outputArtifact": "textUnits" },
+            "fulltextIndex": { "strategyId": "RAG_FULLTEXT_INDEX", "inputArtifact": "textUnits", "outputArtifact": "fulltextUnits" },
+            "vectorIndex": { "strategyId": "RAG_VECTOR_INDEX", "inputArtifact": "fulltextUnits", "outputArtifact": "vectorUnits" },
+            "persistSource": { "strategyId": "RAG_PERSIST_SOURCE", "inputArtifact": "vectorUnits", "outputArtifact": "persisted" }
+        }
+    })
+}
+
+fn cycle_dag() -> Value {
+    let mut value = valid_dag();
+    value["dag"]["edges"] = json!([
+        { "from": "validateSource", "to": "splitText" },
+        { "from": "splitText", "to": "validateSource" }
+    ]);
+    value
+}
+
+fn missing_stage_dag() -> Value {
+    let mut value = valid_dag();
+    value["dag"]["nodes"] = json!(["validateSource", "splitText", "persistSource"]);
+    value["stages"].as_object_mut().unwrap().remove("splitText");
+    value
+}
+
+fn unregistered_strategy_dag() -> Value {
+    let mut value = valid_dag();
+    value["stages"]["vectorIndex"]["strategyId"] = json!("RAG_UNKNOWN_VECTOR");
+    value
+}
+
+fn artifact_incompatible_dag() -> Value {
+    let mut value = valid_dag();
+    value["stages"]["vectorIndex"]["inputArtifact"] = json!("unrelatedArtifact");
+    value
+}
+
+fn missing_persist_dag() -> Value {
+    let mut value = valid_dag();
+    value["dag"]["nodes"] = json!([
+        "validateSource",
+        "splitText",
+        "fulltextIndex",
+        "vectorIndex"
+    ]);
+    value["dag"]["edges"] = json!([
+        { "from": "validateSource", "to": "splitText" },
+        { "from": "splitText", "to": "fulltextIndex" },
+        { "from": "fulltextIndex", "to": "vectorIndex" }
+    ]);
+    value["stages"]
+        .as_object_mut()
+        .unwrap()
+        .remove("persistSource");
+    value
+}
+
+fn query_i64(connection: &Connection, sql: &str) -> i64 {
+    connection.query_row(sql, [], |row| row.get(0)).unwrap()
+}
+
+fn query_string(connection: &Connection, sql: &str) -> String {
+    connection.query_row(sql, [], |row| row.get(0)).unwrap()
+}
+
+fn query_unit(connection: &Connection, table: &str) -> Value {
+    let sql = format!(
+        "SELECT search_text, embedding_status, embedding_model_code, embedding_dimension FROM {table} ORDER BY ordinal"
+    );
+    connection
+        .query_row(&sql, [], |row| {
+            Ok(json!({
+                "search_text": row.get::<_, String>(0)?,
+                "embedding_status": row.get::<_, String>(1)?,
+                "embedding_model_code": row.get::<_, String>(2)?,
+                "embedding_dimension": row.get::<_, i64>(3)?,
+            }))
+        })
+        .unwrap()
+}
+
+fn query_project_doc_source(connection: &Connection) -> Value {
+    connection
+        .query_row(
+            "SELECT document_code, document_type, path, repo_code, module_code
+             FROM rag_project_doc_sources
+             WHERE source_code = 'doc-rag-mvp'",
+            [],
+            |row| {
+                Ok(json!({
+                    "document_code": row.get::<_, String>(0)?,
+                    "document_type": row.get::<_, String>(1)?,
+                    "path": row.get::<_, String>(2)?,
+                    "repo_code": row.get::<_, String>(3)?,
+                    "module_code": row.get::<_, String>(4)?,
+                }))
+            },
+        )
+        .unwrap()
+}
+
+fn query_text_unit_headings(connection: &Connection) -> Vec<String> {
+    let mut statement = connection
+        .prepare("SELECT heading_path FROM rag_project_doc_text_units ORDER BY ordinal")
+        .unwrap();
+    statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+}
+
+fn temp_database_path(test_name: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    std::env::temp_dir().join(format!(
+        "tron-{test_name}-{nanos}-{}.sqlite3",
+        std::process::id()
+    ))
+}

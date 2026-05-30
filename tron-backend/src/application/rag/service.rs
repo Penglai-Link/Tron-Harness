@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::{Arc, Mutex},
+};
 
 use serde_json::{Value, json};
 
@@ -11,6 +14,35 @@ pub trait RagConfigRepository {
     fn get_corpus(&self, corpus_id: &str) -> Result<Option<RagCorpusRecord>, RagError>;
     fn list_profiles(&self, query: RagProfileListQuery) -> Result<Vec<RagProfileRecord>, RagError>;
     fn get_profile(&self, profile_id: &str) -> Result<Option<RagProfileRecord>, RagError>;
+}
+
+impl<T> RagConfigRepository for Arc<Mutex<T>>
+where
+    T: RagConfigRepository,
+{
+    fn list_corpora(&self) -> Result<Vec<RagCorpusRecord>, RagError> {
+        self.lock()
+            .expect("RAG repository mutex poisoned")
+            .list_corpora()
+    }
+
+    fn get_corpus(&self, corpus_id: &str) -> Result<Option<RagCorpusRecord>, RagError> {
+        self.lock()
+            .expect("RAG repository mutex poisoned")
+            .get_corpus(corpus_id)
+    }
+
+    fn list_profiles(&self, query: RagProfileListQuery) -> Result<Vec<RagProfileRecord>, RagError> {
+        self.lock()
+            .expect("RAG repository mutex poisoned")
+            .list_profiles(query)
+    }
+
+    fn get_profile(&self, profile_id: &str) -> Result<Option<RagProfileRecord>, RagError> {
+        self.lock()
+            .expect("RAG repository mutex poisoned")
+            .get_profile(profile_id)
+    }
 }
 
 pub trait RagStrategyRegistry: Clone + Send + Sync + 'static {
@@ -216,13 +248,11 @@ where
             match registration.status {
                 StrategyRegistrationStatus::Enabled => {}
                 StrategyRegistrationStatus::Reserved if profile.status == RagStatus::Reserved => {}
-                StrategyRegistrationStatus::Reserved => {
-                    errors.push(profile_error(
-                        "RAG_STRATEGY_RESERVED",
-                        "enabled Profile 引用了 reserved strategy",
-                        Some(strategy_id.clone()),
-                    ));
-                }
+                StrategyRegistrationStatus::Reserved => errors.push(profile_error(
+                    "RAG_STRATEGY_RESERVED",
+                    "enabled Profile 引用了 reserved strategy",
+                    Some(strategy_id.clone()),
+                )),
                 StrategyRegistrationStatus::Unsupported => errors.push(profile_error(
                     "RAG_STRATEGY_UNREGISTERED",
                     "Profile 引用了未注册 strategy",
@@ -302,7 +332,17 @@ pub struct DefaultRagStrategyRegistry;
 
 impl RagStrategyRegistry for DefaultRagStrategyRegistry {
     fn resolve_stage(&self, strategy_id: &str) -> StrategyRegistration {
-        default_registration(strategy_id, &["INGEST_CHUNK"])
+        default_registration(
+            strategy_id,
+            &[
+                "INGEST_CHUNK",
+                "RAG_VALIDATE_SOURCE",
+                "RAG_SPLIT_TEXT",
+                "RAG_FULLTEXT_INDEX",
+                "RAG_VECTOR_INDEX",
+                "RAG_PERSIST_SOURCE",
+            ],
+        )
     }
 
     fn resolve_retriever(&self, strategy_id: &str) -> StrategyRegistration {
