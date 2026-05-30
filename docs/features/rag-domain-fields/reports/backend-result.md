@@ -17,14 +17,12 @@
 
 ## Evidence Rows
 
-| ac_ref | red | green | verify | status |
-| --- | --- | --- | --- | --- |
-| AC-RDF-01 | `make be-test` failed: `memory_type` missing | `make be-test` passed: Memory columns and indexes present | `make be-check` passed | completed |
-| AC-RDF-02 | `make be-test` failed: `repo_code` missing | `make be-test` passed: Project Doc columns and indexes present | `make be-check` passed | completed |
-| AC-RDF-03 | service test added before seed update; first RED stopped at schema suite | `memory_corpus_seed_maps_governance_logical_fields_to_physical_columns` passed | `make be-test` passed | completed |
-| AC-RDF-04 | service test added before seed update; first RED stopped at schema suite | `project_doc_corpus_seed_maps_repo_module_logical_fields_to_physical_columns` passed | `make be-test` passed | completed |
-| AC-RDF-05 | filter validation test added before seed update; first RED stopped at schema suite | `filter_validation_accepts_domain_fields_and_rejects_unknown_or_mistyped_values` passed | `make be-test` passed | completed |
-| AC-RDF-06 | existing boundary test retained | boundary test passed | `make be-check` passed | completed |
+- AC-RDF-01 | red: `make be-test` failed because `memory_type` was missing | green: `make be-test` passed with Memory columns and indexes present | command_ref: CMD-BE-TEST | browser:not applicable | status: passed.
+- AC-RDF-02 | red: `make be-test` failed because `repo_code` was missing | green: `make be-test` passed with Project Doc columns and indexes present | command_ref: CMD-BE-TEST | browser:not applicable | status: passed.
+- AC-RDF-03 | red: service test was added before seed update and old seed lacked Memory governance mappings | green: `memory_corpus_seed_maps_governance_logical_fields_to_physical_columns` passed | command_ref: CMD-BE-TEST | browser:not applicable | status: passed.
+- AC-RDF-04 | red: service test was added before seed update and old seed lacked Project Doc repo/module mappings | green: `project_doc_corpus_seed_maps_repo_module_logical_fields_to_physical_columns` passed | command_ref: CMD-BE-TEST | browser:not applicable | status: passed.
+- AC-RDF-05 | red: filter validation test was added before seed update and old filterSchema lacked new domain fields | green: `filter_validation_accepts_domain_fields_and_rejects_unknown_or_mistyped_values` passed | command_ref: CMD-BE-TEST | browser:not applicable | status: passed.
+- AC-RDF-06 | red: existing boundary test retained the no HTTP/model/graph/event guard | green: boundary test passed and `make be-check` passed | command_ref: CMD-BE-CHECK | browser:not applicable | status: passed.
 
 ## Changed Paths
 

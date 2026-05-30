@@ -3,7 +3,7 @@
 ## Execution Contract
 
 - feature_slug: rag-domain-fields
-- status: in_progress
+- status: done
 - execution_mode: hybrid_worker
 - canonical_report_target: reports/backend-result.md
 - main_agent_owned: false
@@ -14,12 +14,12 @@
 
 ## Task Rows
 
-- AC-RDF-01 | phase: tdd | owner: backend-worker | scope: tron-backend/migrations/*_add_rag_domain_fields.sql tron-backend/src/adapters/outbound/persistence/sqlite/migrations.rs tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: in_progress.
-- AC-RDF-02 | phase: tdd | owner: backend-worker | scope: tron-backend/migrations/*_add_rag_domain_fields.sql tron-backend/src/adapters/outbound/persistence/sqlite/migrations.rs tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: in_progress.
-- AC-RDF-03 | phase: tdd | owner: backend-worker | scope: tron-backend/migrations/*_add_rag_domain_fields.sql tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/src/application/rag/service.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: in_progress.
-- AC-RDF-04 | phase: tdd | owner: backend-worker | scope: tron-backend/migrations/*_add_rag_domain_fields.sql tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/src/application/rag/service.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: in_progress.
-- AC-RDF-05 | phase: tdd | owner: backend-worker | scope: tron-backend/src/application/rag/service.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: in_progress.
-- AC-RDF-06 | phase: tdd | owner: backend-worker | scope: tron-backend/src/app.rs tron-backend/src/adapters/inbound/http/* tron-backend/src/application/rag.rs tron-backend/src/application/rag/* tron-backend/src/application/llm/* tron-backend/src/application/graph/* tron-backend/src/shared/event_bus/* tron-backend/tests/*rag* | command_ref: CMD-BE-CHECK | status: in_progress.
+- AC-RDF-01 | phase: tdd | owner: backend-worker | scope: tron-backend/migrations/*_add_rag_domain_fields.sql tron-backend/src/adapters/outbound/persistence/sqlite/migrations.rs tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: done.
+- AC-RDF-02 | phase: tdd | owner: backend-worker | scope: tron-backend/migrations/*_add_rag_domain_fields.sql tron-backend/src/adapters/outbound/persistence/sqlite/migrations.rs tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: done.
+- AC-RDF-03 | phase: tdd | owner: backend-worker | scope: tron-backend/migrations/*_add_rag_domain_fields.sql tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/src/application/rag/service.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: done.
+- AC-RDF-04 | phase: tdd | owner: backend-worker | scope: tron-backend/migrations/*_add_rag_domain_fields.sql tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/src/application/rag/service.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: done.
+- AC-RDF-05 | phase: tdd | owner: backend-worker | scope: tron-backend/src/application/rag/service.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: done.
+- AC-RDF-06 | phase: tdd | owner: backend-worker | scope: tron-backend/src/app.rs tron-backend/src/adapters/inbound/http/* tron-backend/src/application/rag.rs tron-backend/src/application/rag/* tron-backend/src/application/llm/* tron-backend/src/application/graph/* tron-backend/src/shared/event_bus/* tron-backend/tests/*rag* | command_ref: CMD-BE-CHECK | status: done.
 
 ## Worktree Notes
 
