@@ -707,12 +707,13 @@ export function TronShell({
             ) : utilityPanel === "user" ? (
               <div className="mt-3 space-y-4">
                 {userMenuContent}
-                <div className={cn("space-y-4", userMenuContent ? "border-t border-[var(--color-outline-variant)] pt-4" : "")}>
-                  <div>
+                <div className={cn("grid grid-cols-2 gap-3", userMenuContent ? "border-t border-[var(--color-outline-variant)] pt-4" : "")}>
+                  <div className="min-w-0">
                     <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-theme-select">
                       {t("shell:theme.label")}
                     </label>
                     <SelectInput
+                      className="w-full"
                       id="tron-theme-select"
                       value={theme}
                       onChange={(event) => setTheme(event.target.value === "matrix-dark" ? "matrix-dark" : "light")}
@@ -723,13 +724,13 @@ export function TronShell({
                         </option>
                       ))}
                     </SelectInput>
-                    <p className="mt-2 text-[12px] text-[var(--color-on-surface-variant)]">{t("shell:theme.hint")}</p>
                   </div>
-                  <div className="border-t border-[var(--color-outline-variant)] pt-4">
+                  <div className="min-w-0">
                     <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-locale-select">
                       {t("common:locale.label")}
                     </label>
                     <SelectInput
+                      className="w-full"
                       id="tron-locale-select"
                       value={currentLocale}
                       onChange={(event) => void changeLocale(event.target.value as typeof currentLocale)}
@@ -740,7 +741,6 @@ export function TronShell({
                         </option>
                       ))}
                     </SelectInput>
-                    <p className="mt-2 text-[12px] text-[var(--color-on-surface-variant)]">{t("common:locale.unavailable")}</p>
                   </div>
                 </div>
               </div>

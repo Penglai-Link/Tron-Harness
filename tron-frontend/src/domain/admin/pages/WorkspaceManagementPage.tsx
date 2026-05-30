@@ -762,7 +762,7 @@ export function WorkspaceManagementPage() {
             </Button>
             <Button variant="secondary" onClick={() => prepareCreate(null)}>
               <Plus size={16} aria-hidden="true" />
-              {pt("New")}
+              {pt("Root")}
             </Button>
           </>
         )}
@@ -817,10 +817,16 @@ export function WorkspaceManagementPage() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                {inspectorTab === "create" ? (
+                  <Button disabled={creatingWorkspace} aria-busy={creatingWorkspace} onClick={() => void handleCreateWorkspace()}>
+                    <Plus size={16} aria-hidden="true" />
+                    {creatingWorkspace ? pt("Saving...") : pt("Save")}
+                  </Button>
+                ) : null}
                 {detail ? (
                   <Button variant="secondary" onClick={() => prepareCreate(detail.workspaceCode)}>
                     <Plus size={16} aria-hidden="true" />
-                    {pt("New")}
+                    {pt("Child")}
                   </Button>
                 ) : null}
               </div>
@@ -849,43 +855,42 @@ export function WorkspaceManagementPage() {
                     : <Badge tone="neutral">{pt("Root workspace")}</Badge>}
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
-                  <Field label={pt("Parent workspace")}>
-                    <SelectInput value={createForm.parentWorkspaceCode} onChange={(event) => setCreateForm((current) => ({ ...current, parentWorkspaceCode: event.target.value }))}>
-                      <option value={ROOT_PARENT_VALUE}>{pt("Root workspace")}</option>
-                      {createParentOptions.map((record) => (
-                        <option key={record.workspaceCode} value={record.workspaceCode}>
-                          {pt("{{name}} ({{code}}) · Level {{depth}}", { code: record.workspaceCode, depth: formatNumber(record.depth), name: record.name })}
-                        </option>
-                      ))}
-                    </SelectInput>
-                  </Field>
-                  <Field label={pt("Workspace name")}>
-                    <TextInput
-                      aria-label={pt("Workspace name")}
-                      value={createForm.name}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))}
-                    />
-                  </Field>
-                  <Field label={pt("Description")}>
-                    <TextArea
-                      aria-label={pt("Workspace description")}
-                      className="min-h-24"
-                      value={createForm.description}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))}
-                    />
-                  </Field>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button disabled={creatingWorkspace} aria-busy={creatingWorkspace} onClick={() => void handleCreateWorkspace()}>
-                    <Plus size={16} aria-hidden="true" />
-                    {creatingWorkspace ? pt("Saving...") : pt("Save")}
-                  </Button>
-                  {selectedWorkspaceCode ? (
-                    <Button variant="secondary" onClick={() => prepareCreate(selectedWorkspaceCode)}>
-                      <Plus size={16} aria-hidden="true" />
-                      {pt("Use")}
-                    </Button>
-                  ) : null}
+                  <div className="min-w-0">
+                    <Field label={pt("Parent workspace")}>
+                      <SelectInput
+                        className="w-full min-w-0"
+                        value={createForm.parentWorkspaceCode}
+                        onChange={(event) => setCreateForm((current) => ({ ...current, parentWorkspaceCode: event.target.value }))}
+                      >
+                        <option value={ROOT_PARENT_VALUE}>{pt("Root workspace")}</option>
+                        {createParentOptions.map((record) => (
+                          <option key={record.workspaceCode} value={record.workspaceCode}>
+                            {pt("{{name}} ({{code}}) · Level {{depth}}", { code: record.workspaceCode, depth: formatNumber(record.depth), name: record.name })}
+                          </option>
+                        ))}
+                      </SelectInput>
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field label={pt("Workspace name")}>
+                      <TextInput
+                        aria-label={pt("Workspace name")}
+                        className="w-full"
+                        value={createForm.name}
+                        onChange={(event) => setCreateForm((current) => ({ ...current, name: event.target.value }))}
+                      />
+                    </Field>
+                  </div>
+                  <div className="min-w-0">
+                    <Field label={pt("Description")}>
+                      <TextArea
+                        aria-label={pt("Workspace description")}
+                        className="min-h-24 w-full"
+                        value={createForm.description}
+                        onChange={(event) => setCreateForm((current) => ({ ...current, description: event.target.value }))}
+                      />
+                    </Field>
+                  </div>
                 </div>
               </section>
             ) : detailLoading && !detail ? (
@@ -901,10 +906,10 @@ export function WorkspaceManagementPage() {
                 <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
                   <div className="space-y-4">
                     <Field label={pt("Name")}>
-                      <TextInput value={detailForm.name} onChange={(event) => setDetailForm((current) => ({ ...current, name: event.target.value }))} />
+                      <TextInput className="w-full" value={detailForm.name} onChange={(event) => setDetailForm((current) => ({ ...current, name: event.target.value }))} />
                     </Field>
                     <Field label={pt("Move parent")} hint={pt("Resulting workspace depth: level {{depth}}.", { depth: formatNumber(movePreviewDepth) })}>
-                      <SelectInput value={moveParentWorkspaceCode} onChange={(event) => setMoveParentWorkspaceCode(event.target.value)}>
+                      <SelectInput className="w-full min-w-0" value={moveParentWorkspaceCode} onChange={(event) => setMoveParentWorkspaceCode(event.target.value)}>
                         <option value={ROOT_PARENT_VALUE}>{pt("Root workspace")}</option>
                         {moveParentOptions.map((record) => (
                           <option key={record.workspaceCode} value={record.workspaceCode}>
@@ -915,7 +920,7 @@ export function WorkspaceManagementPage() {
                     </Field>
                     <Field label={pt("Description")}>
                       <TextArea
-                        className="min-h-40"
+                        className="min-h-40 w-full"
                         value={detailForm.description}
                         onChange={(event) => setDetailForm((current) => ({ ...current, description: event.target.value }))}
                       />

@@ -3,6 +3,7 @@ mod context;
 mod error;
 mod history;
 mod kind;
+mod management;
 mod message;
 mod model_config;
 mod model_exchange;
@@ -21,6 +22,11 @@ pub use history::{
     AgentRunHistoryError, AgentRunHistoryQuery, AgentRunHistoryRecord, PagedAgentRunHistoryRecords,
 };
 pub use kind::{AgentKind, AgentModelProtocol, AgentRuntimeKind};
+pub use management::{
+    AgentManagementError, ManagedAgentSource, ManagedAgentType, ManagedSystemAgentRecord,
+    PlatformMainAgentConfig, SystemAgentRegistryEntry, SystemAgentStatus,
+    SystemAgentSyncResult, WorkspaceSystemAgentPolicy,
+};
 pub use message::AgentMessage;
 pub use model_config::AgentModelConfig;
 pub use model_exchange::{

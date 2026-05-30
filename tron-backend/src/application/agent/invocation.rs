@@ -20,8 +20,9 @@ use crate::{
 };
 
 use super::{
-    AgentInvocationCommand, AgentInvocationError, AgentInvocationResult, AgentRunHistoryService,
-    ModelClient, ModelStreamSink, ReactAgentBuilder,
+    AgentInvocationCommand, AgentInvocationError, AgentInvocationResult,
+    AgentManagementService, AgentRunHistoryService, ModelClient, ModelStreamSink,
+    ReactAgentBuilder,
 };
 
 #[derive(Clone)]
@@ -30,6 +31,7 @@ pub struct AgentInvocationService {
     apps: AppService,
     variables: VariableService,
     skills: SkillRegistryService,
+    management: AgentManagementService,
     history: AgentRunHistoryService,
     event_bus: EventBusHandle,
     model_client: Arc<dyn ModelClient>,
@@ -42,6 +44,7 @@ impl AgentInvocationService {
         apps: AppService,
         variables: VariableService,
         skills: SkillRegistryService,
+        management: AgentManagementService,
         history: AgentRunHistoryService,
         event_bus: EventBusHandle,
         model_client: Arc<dyn ModelClient>,
@@ -52,6 +55,7 @@ impl AgentInvocationService {
             apps,
             variables,
             skills,
+            management,
             history,
             event_bus,
             model_client,
@@ -145,6 +149,19 @@ impl AgentInvocationService {
             .collect::<Vec<_>>();
 
         let run_code = command.run_code.unwrap_or_else(generate_agent_run_code);
+        let mut messages = Vec::new();
+        if command.task_code.is_none() {
+            if let Some(guidance) = self
+                .management
+                .current_main_agent_guidance()
+                .map_err(|_| {
+                    AgentInvocationError::RuntimeFailed("main agent config load failed".into())
+                })?
+            {
+                messages.push(AgentMessage::system(guidance));
+            }
+        }
+        messages.push(AgentMessage::user(prompt));
         let context = AgentRunContext {
             conversation_code: command.conversation_code.clone(),
             run_code: run_code.clone(),
@@ -168,7 +185,7 @@ impl AgentInvocationService {
                 task_code: command.task_code,
             },
             limits: command.limits.unwrap_or_default(),
-            messages: vec![AgentMessage::user(prompt)],
+            messages,
             observations: Vec::new(),
             started_at: chrono::Utc::now().to_rfc3339(),
         };

@@ -1,4 +1,5 @@
 import {
+  Bot,
   KeyRound,
   Package,
   Settings2,
@@ -17,6 +18,12 @@ export const settingsNavigation = [
     href: "/settings/models",
     icon: Sparkles,
     translationKey: "shell:settings.items.models",
+  },
+  {
+    label: "Agents",
+    href: "/settings/agents",
+    icon: Bot,
+    translationKey: "shell:settings.items.agents",
   },
   {
     label: "Variables",

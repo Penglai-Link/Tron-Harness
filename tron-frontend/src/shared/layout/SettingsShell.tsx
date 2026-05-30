@@ -59,7 +59,7 @@ export function SettingsShell({ activeItem, children, items }: SettingsShellProp
 
   return (
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]">
-      <header className="fixed inset-x-0 top-0 z-40 h-14 border-b border-[var(--color-outline-variant)] bg-[var(--color-header-backdrop)] px-4 backdrop-blur sm:px-6">
+      <header className="fixed inset-x-0 top-0 z-40 h-14 bg-[var(--color-header-backdrop)] px-4 shadow-[0_10px_28px_rgba(15,23,42,0.045)] backdrop-blur sm:px-6">
         <div className="flex h-full items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex size-9 items-center justify-center rounded-lg bg-[var(--color-surface-container)] text-[var(--color-primary)]">
@@ -77,7 +77,7 @@ export function SettingsShell({ activeItem, children, items }: SettingsShellProp
       </header>
 
       <div className="pt-14 lg:grid lg:min-h-screen lg:grid-cols-[260px_minmax(0,1fr)]">
-        <aside className="border-b border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-4 py-4 lg:min-h-[calc(100vh-3.5rem)] lg:border-b-0 lg:border-r lg:px-3 lg:py-6">
+        <aside className="bg-[var(--color-elevated-surface)] px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.03)] lg:min-h-[calc(100vh-3.5rem)] lg:px-3 lg:py-6 lg:shadow-[10px_0_28px_rgba(15,23,42,0.04)]">
           <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
             {t("shell:settings.navigation")}
           </p>

@@ -18,6 +18,8 @@ const DEFAULT_AUTH_GITHUB_USER_API_URL: &str = "https://api.github.com/user";
 const DEFAULT_AUTH_GITHUB_EMAILS_API_URL: &str = "https://api.github.com/user/emails";
 const DEFAULT_AUTH_GITHUB_SCOPE: &str = "read:user user:email";
 const DEFAULT_SKILLS_REGISTRY_ROOT_SUFFIX: &str = ".tron/skills-registry";
+const DEFAULT_SYSTEM_AGENT_CODEX_COMMAND: &str = "codex";
+const DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND: &str = "opencode";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppConfig {
@@ -26,8 +28,15 @@ pub struct AppConfig {
     pub database_url: String,
     pub graph_storage_path: String,
     pub skills_registry_root: String,
+    pub system_agents: SystemAgentConfig,
     pub auth: AuthConfig,
     pub event_bus: EventBusConfig,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SystemAgentConfig {
+    pub codex_command: String,
+    pub opencode_command: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -147,6 +156,12 @@ impl AppConfig {
             database_url,
             graph_storage_path,
             skills_registry_root,
+            system_agents: SystemAgentConfig {
+                codex_command: env::var("TRON_SYSTEM_AGENT_CODEX_COMMAND")
+                    .unwrap_or_else(|_| DEFAULT_SYSTEM_AGENT_CODEX_COMMAND.into()),
+                opencode_command: env::var("TRON_SYSTEM_AGENT_OPENCODE_COMMAND")
+                    .unwrap_or_else(|_| DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND.into()),
+            },
             auth,
             event_bus,
         })
@@ -174,6 +189,10 @@ impl Default for AppConfig {
                 .join("tron-skills-registry-test")
                 .display()
                 .to_string(),
+            system_agents: SystemAgentConfig {
+                codex_command: DEFAULT_SYSTEM_AGENT_CODEX_COMMAND.into(),
+                opencode_command: DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND.into(),
+            },
             auth: AuthConfig {
                 jwt_secret: DEFAULT_AUTH_JWT_SECRET.into(),
                 access_token_ttl_seconds: DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS,

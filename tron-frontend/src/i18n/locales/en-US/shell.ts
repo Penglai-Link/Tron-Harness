@@ -23,6 +23,7 @@ export const shell = {
   },
   nav: {
     items: {
+      agents: "Agents",
       apps: "Apps",
       auditLogs: "Audit Logs",
       automations: "Automations",
@@ -55,6 +56,7 @@ export const shell = {
   settings: {
     back: "Back",
     items: {
+      agents: "Agents",
       general: "General",
       models: "Models",
       skillCenter: "Skill Center",

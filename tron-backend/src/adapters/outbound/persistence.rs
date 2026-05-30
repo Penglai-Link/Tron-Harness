@@ -7,6 +7,7 @@ pub use grafeo::GrafeoOntologyStore;
 pub use grafeo::GrafeoStoreCore;
 pub use grafeo::encode_graph_name;
 pub use grafeo::encode_schema_name;
+pub use sqlite::SqliteAgentManagementRepository;
 pub use sqlite::SqliteAgentRunRepository;
 pub use sqlite::SqliteAppRepository;
 pub use sqlite::SqliteAutomationRepository;

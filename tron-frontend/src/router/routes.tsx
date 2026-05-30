@@ -31,6 +31,7 @@ export interface AppRoute {
 }
 
 export const appRoutes: AppRoute[] = [
+  { pageId: "agents.index", route: "/agents", activeNav: "Agents", title: "Agents", archetype: "data-table", shellConfig: { searchPlaceholder: "Search agents..." } },
   { pageId: "models.new", route: "/models/new", activeNav: "Models", title: "Create Workspace Model", archetype: "form" },
   { pageId: "models.detail", route: "/models/detail", activeNav: "Models", title: "Workspace Model Detail", archetype: "detail" },
   { pageId: "apps.index", route: "/apps", activeNav: "Apps", title: "App Management", archetype: "data-table", shellConfig: { searchPlaceholder: "Search apps, repositories, and tags..." } },
@@ -70,6 +71,7 @@ export const appRoutes: AppRoute[] = [
   { pageId: "variables.index", route: "/variables", activeNav: "Variables", title: "Variable Management", archetype: "split-pane", shellConfig: { searchPlaceholder: "Search variables..." } },
   { pageId: "variables.details", route: "/variables/details", activeNav: "Variables", title: "Variable Details", archetype: "split-pane" },
   { pageId: "settings.general", route: "/settings/general", activeNav: "Settings", title: "General Settings", archetype: "settings", layout: "settings", settingsNav: "General" },
+  { pageId: "settings.agents", route: "/settings/agents", activeNav: "Settings", title: "Agent Management", archetype: "settings", layout: "settings", settingsNav: "Agents" },
   { pageId: "settings.models", route: "/settings/models", activeNav: "Settings", title: "Platform Models", archetype: "settings", layout: "settings", settingsNav: "Models" },
   { pageId: "settings.modelsNew", route: "/settings/models/new", activeNav: "Settings", title: "Create Platform Model", archetype: "settings", layout: "settings", settingsNav: "Models" },
   { pageId: "settings.modelsDetail", route: "/settings/models/detail", activeNav: "Settings", title: "Platform Model Detail", archetype: "settings", layout: "settings", settingsNav: "Models" },

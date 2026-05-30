@@ -6,7 +6,7 @@ use axum::{
 
 use crate::{
     application::agent::{AgentAguiStreamError, AgentInvocationError},
-    domain::agent::AgentRunHistoryError,
+    domain::agent::{AgentManagementError, AgentRunHistoryError},
     response::ApiResponse,
 };
 
@@ -77,6 +77,32 @@ pub fn agent_agui_error_response(error: AgentAguiStreamError) -> Response {
             StatusCode::BAD_REQUEST,
             "AGENT_AGUI_STREAM_KEY_REQUIRED",
             "stream key is required".to_string(),
+        ),
+    };
+    (status, Json(ApiResponse::error(code, message))).into_response()
+}
+
+pub fn agent_management_error_response(error: AgentManagementError) -> Response {
+    let (status, code, message) = match error {
+        AgentManagementError::InvalidWorkspace => (
+            StatusCode::BAD_REQUEST,
+            "AGENT_WORKSPACE_INVALID",
+            "workspace must reference an active workspace".to_string(),
+        ),
+        AgentManagementError::SystemAgentNotFound => (
+            StatusCode::NOT_FOUND,
+            "AGENT_SYSTEM_NOT_FOUND",
+            "system agent was not found".to_string(),
+        ),
+        AgentManagementError::SystemAgentUnavailable => (
+            StatusCode::BAD_REQUEST,
+            "AGENT_SYSTEM_UNAVAILABLE",
+            "system agent is unavailable on the current machine".to_string(),
+        ),
+        AgentManagementError::StorageFailure => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "AGENT_MANAGEMENT_STORAGE_FAILED",
+            "agent management storage operation failed".to_string(),
         ),
     };
     (status, Json(ApiResponse::error(code, message))).into_response()

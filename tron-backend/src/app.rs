@@ -25,14 +25,15 @@ use crate::{
             model::{HttpLlmRuntimeClient, HttpModelClient},
             persistence::{
                 GrafeoAdapterConfig, GrafeoGraphStore, GrafeoOntologyStore, GrafeoStoreCore,
-                SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
-                SqliteChatRepository, SqliteModelRepository, SqliteRoleRepository,
-                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteUserRepository,
-                SqliteVariableRepository, SqliteWorkspaceRepository, bootstrap_platform_admin,
+                SqliteAgentManagementRepository, SqliteAgentRunRepository,
+                SqliteAppRepository, SqliteAutomationRepository, SqliteChatRepository,
+                SqliteModelRepository, SqliteRoleRepository, SqliteSkillRegistryRepository,
+                SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
+                SqliteWorkspaceRepository, bootstrap_platform_admin,
             },
         },
     },
-    application::agent::{AgentRunHistoryService, ModelClient},
+    application::agent::{AgentManagementService, AgentRunHistoryService, ModelClient},
     application::app::AppService,
     application::automation::AutomationService,
     application::chat::ChatService,
@@ -70,6 +71,7 @@ pub struct AppState {
     pub config: AppConfig,
     pub agui_events: Arc<AguiEventSink>,
     pub agent_model_client: Arc<dyn ModelClient>,
+    pub agent_management: AgentManagementService,
     pub agent_runs: AgentRunHistoryService,
     pub agent_tool_registry: Arc<ToolRegistry>,
     pub apps: AppService,
@@ -184,6 +186,14 @@ impl AppState {
                 &config.skills_registry_root,
             )
         };
+        let agent_management = build_agent_management_service(
+            &config.database_url,
+            workspaces.clone(),
+            &config.system_agents,
+        );
+        if let Err(error) = agent_management.bootstrap_registry() {
+            eprintln!("agent management bootstrap scan failed: {error:?}");
+        }
         let automations =
             build_automation_service(&config.database_url, workspaces.clone(), event_bus.clone());
         automations
@@ -230,6 +240,7 @@ impl AppState {
             config,
             agui_events,
             agent_model_client,
+            agent_management,
             agent_runs,
             agent_tool_registry,
             apps,
@@ -337,6 +348,12 @@ impl FromRef<AppState> for ModelService {
 impl FromRef<AppState> for AgentRunHistoryService {
     fn from_ref(state: &AppState) -> Self {
         state.agent_runs.clone()
+    }
+}
+
+impl FromRef<AppState> for AgentManagementService {
+    fn from_ref(state: &AppState) -> Self {
+        state.agent_management.clone()
     }
 }
 
@@ -476,4 +493,14 @@ fn build_agent_run_history_service(database_url: &str) -> AgentRunHistoryService
     let repository = SqliteAgentRunRepository::connect(database_url)
         .expect("agent run SQLite repository should initialize");
     AgentRunHistoryService::new(repository)
+}
+
+fn build_agent_management_service(
+    database_url: &str,
+    workspaces: WorkspaceService,
+    system_agents: &crate::config::SystemAgentConfig,
+) -> AgentManagementService {
+    let repository = SqliteAgentManagementRepository::connect(database_url)
+        .expect("agent management SQLite repository should initialize");
+    AgentManagementService::new(repository, workspaces, system_agents)
 }
