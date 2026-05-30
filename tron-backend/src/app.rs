@@ -37,6 +37,7 @@ use crate::{
     application::graph::{GraphService, OntologyService, ScopeResolver},
     application::llm::LlmRuntimeService,
     application::mcp::McpService,
+    application::memory::MemoryService,
     application::model::ModelService,
     application::open_app::OpenAppService,
     application::rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
@@ -245,17 +246,6 @@ impl AppState {
         } else {
             build_model_service(&config.database_url, workspaces.clone())
         };
-        let agent_tool_registry = Arc::new(ToolRegistry::default());
-        register_default_agent_tools(
-            agent_tool_registry.as_ref(),
-            workspaces.clone(),
-            apps.clone(),
-            tasks.clone(),
-            models.clone(),
-            skills.clone(),
-            variables.clone(),
-        )
-        .expect("default agent tools should register");
         let llm_runtime = LlmRuntimeService::new(
             Arc::new(models.clone()),
             Arc::new(HttpLlmRuntimeClient::new(model_inference_client)),
@@ -275,6 +265,18 @@ impl AppState {
             &config.project_doc_root,
             event_bus.clone(),
         );
+        let agent_tool_registry = Arc::new(ToolRegistry::default());
+        register_default_agent_tools(
+            agent_tool_registry.as_ref(),
+            workspaces.clone(),
+            apps.clone(),
+            tasks.clone(),
+            models.clone(),
+            skills.clone(),
+            variables.clone(),
+            MemoryService::new(rag.clone()),
+        )
+        .expect("default agent tools should register");
         let (graphs, ontologies) = if config.graph_storage_path == ":memory:" {
             let graph_core = graph_core.clone();
             GLOBAL_GRAPH_SERVICES
