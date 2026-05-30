@@ -30,14 +30,14 @@
 
 | agent id | subtask_name | codex_agent_id | codex_agent_name | ac_refs | tdd_phase | branch | worktree_path | base_ref | status | runtime_agent_type |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| database | schema-seed | 019e7898-9492-7c42-af8d-758cf4882f0f | Faraday | AC-RAG-01, AC-RAG-02, AC-RAG-08 | tdd | feature/langtaoxin/rag-corpus-storage-profile-foundation/database/schema-seed | /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-corpus-storage-profile-foundation/database/schema-seed | feature/langtaoxin/rag-corpus-storage-profile-foundation/base | in_progress | worker |
+| database | schema-seed | 019e7898-9492-7c42-af8d-758cf4882f0f | Faraday | AC-RAG-01, AC-RAG-02, AC-RAG-08 | tdd | feature/langtaoxin/rag-corpus-storage-profile-foundation/database/schema-seed | /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-corpus-storage-profile-foundation/database/schema-seed | feature/langtaoxin/rag-corpus-storage-profile-foundation/base | done | worker |
 | backend | service-contracts | pending_spawn | pending_spawn | AC-RAG-03, AC-RAG-04, AC-RAG-05, AC-RAG-06, AC-RAG-07, AC-RAG-09 | tdd | feature/langtaoxin/rag-corpus-storage-profile-foundation/backend/service-contracts | /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-corpus-storage-profile-foundation/backend/service-contracts | feature/langtaoxin/rag-corpus-storage-profile-foundation/base | planned | worker |
 
 ## Dispatch Decisions
 
 | ac_refs | decision | execution_owner | rationale | worker_ref | status |
 | --- | --- | --- | --- | --- | --- |
-| AC-RAG-01, AC-RAG-02, AC-RAG-08 | spawn | database-worker | database schema and seed work is isolated from service projection work and benefits from a bounded TDD worker after explicit coding-subagent authorization | database/schema-seed | ready |
+| AC-RAG-01, AC-RAG-02, AC-RAG-08 | spawn | database-worker | database schema and seed work is isolated from service projection work and benefits from a bounded TDD worker after explicit coding-subagent authorization | database/schema-seed | done |
 | AC-RAG-03, AC-RAG-04, AC-RAG-05, AC-RAG-06, AC-RAG-07, AC-RAG-09 | spawn | backend-worker | service, DTO, registry, filter validation, and boundary regression share one backend write scope and should be one bounded TDD worker after explicit coding-subagent authorization | backend/service-contracts | ready |
 
 ## Branch And Path Rules
