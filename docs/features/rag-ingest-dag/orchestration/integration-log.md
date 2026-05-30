@@ -4,12 +4,13 @@
 
 - feature_slug: rag-ingest-dag
 - integration_branch: feature/langtaoxin/rag-ingest-dag/base
-- status: waiting_human_decision
+- status: implementation_dispatched
 
 ## Integration Events
 
 | event | ac_refs | source_branch | result | validation |
 | --- | --- | --- | --- | --- |
+| dispatched backend worker | AC-RID-01, AC-RID-02, AC-RID-03, AC-RID-04, AC-RID-05, AC-RID-06, AC-RID-07 | feature/langtaoxin/rag-ingest-dag/backend/ingest-dag | worker Mendel started in isolated worktree | pending worker result |
 
 ## Conflict Log
 
@@ -21,4 +22,4 @@
 
 ## Blockers
 
-- 行为改动尚未获得本阶段明确执行授权；等待用户选择 coding subagent 或 lead solo。
+- None.

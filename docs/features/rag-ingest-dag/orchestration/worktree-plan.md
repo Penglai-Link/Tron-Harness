@@ -10,14 +10,14 @@
 - execution_mode: hybrid
 - main_branch: feature/langtaoxin/rag-ingest-dag/base
 - main_worktree_path: /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-ingest-dag/base
-- status: ready
+- status: implementation_dispatched
 
 ## Repository State
 
 - default_branch: master
 - base_ref: master
 - current_branch: feature/langtaoxin/rag-ingest-dag/base
-- note: 规格与任务文档已在 lite-spec base worktree 中生成；行为改动需要用户明确选择 coding subagent 或 lead solo 后执行。
+- note: 规格与任务文档已在 lite-spec base worktree 中生成；用户已选择 coding subagent，后端实现派发给 backend worker。
 
 ## Multi-Agent Base Branch
 
@@ -30,12 +30,13 @@
 
 | agent id | subtask_name | codex_agent_id | codex_agent_name | ac_refs | tdd_phase | branch | worktree_path | base_ref | status | runtime_agent_type |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| backend | ingest-dag | 019e79bb-1c0c-75e1-a44c-c542df347e5b | Mendel | AC-RID-01, AC-RID-02, AC-RID-03, AC-RID-04, AC-RID-05, AC-RID-06, AC-RID-07 | tdd | feature/langtaoxin/rag-ingest-dag/backend/ingest-dag | /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-ingest-dag/backend/ingest-dag | feature/langtaoxin/rag-ingest-dag/base | in_progress | worker |
 
 ## Dispatch Decisions
 
 | ac_refs | decision | execution_owner | rationale | worker_ref | status |
 | --- | --- | --- | --- | --- | --- |
-| AC-RID-01, AC-RID-02, AC-RID-03, AC-RID-04, AC-RID-05, AC-RID-06, AC-RID-07 | blocked | lead-agent | 当前阶段将新增 HTTP route、RAG ingest service、SQLite write methods、LLM embedding port usage 和后端测试，属于行为改动；需要用户明确选择 coding subagent 或 lead solo 后执行 | not_applicable | waiting_human_decision |
+| AC-RID-01, AC-RID-02, AC-RID-03, AC-RID-04, AC-RID-05, AC-RID-06, AC-RID-07 | spawn | backend-worker | 用户选择 A；ingest API、DAG、SQLite 写入与 embedding 降级共享同一后端写入面，派发一个 bounded backend worker 执行 RED -> GREEN -> VERIFY | backend/ingest-dag | in_progress |
 
 ## Branch And Path Rules
 
@@ -64,4 +65,4 @@
 
 ## Open Decisions
 
-- 等待用户选择执行方式：coding subagent 或 lead solo。
+- None.
