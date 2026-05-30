@@ -30,13 +30,13 @@
 
 | agent id | subtask_name | codex_agent_id | codex_agent_name | ac_refs | tdd_phase | branch | worktree_path | base_ref | status | runtime_agent_type |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| backend | domain-fields | pending-spawn | pending-spawn | AC-RDF-01, AC-RDF-02, AC-RDF-03, AC-RDF-04, AC-RDF-05, AC-RDF-06 | tdd | feature/langtaoxin/rag-domain-fields/backend/domain-fields | /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-domain-fields/backend/domain-fields | feature/langtaoxin/rag-domain-fields/base | ready | worker |
+| backend | domain-fields | 019e7989-9ab6-75c0-880d-cea8442d12b3 | Kant | AC-RDF-01, AC-RDF-02, AC-RDF-03, AC-RDF-04, AC-RDF-05, AC-RDF-06 | tdd | feature/langtaoxin/rag-domain-fields/backend/domain-fields | /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-domain-fields/backend/domain-fields | feature/langtaoxin/rag-domain-fields/base | in_progress | worker |
 
 ## Dispatch Decisions
 
 | ac_refs | decision | execution_owner | rationale | worker_ref | status |
 | --- | --- | --- | --- | --- | --- |
-| AC-RDF-01, AC-RDF-02, AC-RDF-03, AC-RDF-04, AC-RDF-05, AC-RDF-06 | spawn | backend-worker | 用户已选择 coding subagent；数据库迁移、种子配置、过滤校验和回归测试写入面集中，适合由一个 bounded backend TDD worker 执行 | backend/domain-fields | ready |
+| AC-RDF-01, AC-RDF-02, AC-RDF-03, AC-RDF-04, AC-RDF-05, AC-RDF-06 | spawn | backend-worker | 用户已选择 coding subagent；数据库迁移、种子配置、过滤校验和回归测试写入面集中，适合由一个 bounded backend TDD worker 执行 | backend/domain-fields | in_progress |
 
 ## Branch And Path Rules
 
