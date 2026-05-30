@@ -10,14 +10,14 @@
 - execution_mode: hybrid
 - main_branch: feature/langtaoxin/rag-domain-fields/base
 - main_worktree_path: /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-domain-fields/base
-- status: ready
+- status: in_progress
 
 ## Repository State
 
 - default_branch: master
 - base_ref: master
 - current_branch: feature/langtaoxin/rag-domain-fields/base
-- note: 本阶段规格与任务文档已在 lite-spec base worktree 中生成；行为改动需要在用户明确授权 coding subagent 或 lead solo 后开始。
+- note: 用户已选择 coding subagent 执行；行为改动将在 backend/domain-fields worker worktree 中完成，lead agent 负责集成与最终验证。
 
 ## Multi-Agent Base Branch
 
@@ -30,12 +30,13 @@
 
 | agent id | subtask_name | codex_agent_id | codex_agent_name | ac_refs | tdd_phase | branch | worktree_path | base_ref | status | runtime_agent_type |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| backend | domain-fields | pending-spawn | pending-spawn | AC-RDF-01, AC-RDF-02, AC-RDF-03, AC-RDF-04, AC-RDF-05, AC-RDF-06 | tdd | feature/langtaoxin/rag-domain-fields/backend/domain-fields | /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-domain-fields/backend/domain-fields | feature/langtaoxin/rag-domain-fields/base | ready | worker |
 
 ## Dispatch Decisions
 
 | ac_refs | decision | execution_owner | rationale | worker_ref | status |
 | --- | --- | --- | --- | --- | --- |
-| AC-RDF-01, AC-RDF-02, AC-RDF-03, AC-RDF-04, AC-RDF-05, AC-RDF-06 | blocked | lead-agent | 当前阶段已完成规格与任务切片；数据库迁移、种子配置、过滤校验和回归测试属于行为改动，需要用户明确选择 coding subagent 或 lead solo 后执行 | not_applicable | waiting_human_decision |
+| AC-RDF-01, AC-RDF-02, AC-RDF-03, AC-RDF-04, AC-RDF-05, AC-RDF-06 | spawn | backend-worker | 用户已选择 coding subagent；数据库迁移、种子配置、过滤校验和回归测试写入面集中，适合由一个 bounded backend TDD worker 执行 | backend/domain-fields | ready |
 
 ## Branch And Path Rules
 
@@ -46,8 +47,7 @@
 
 ## Merge Strategy
 
-- 如果用户授权 coding subagent，优先派发一个 backend worker 覆盖 AC-RDF-01 到 AC-RDF-06，因为本阶段写入面集中在 RAG schema、seed profile 和过滤校验。
-- 如果用户授权 lead solo，则在 base worktree 中直接执行同一组 AC，任务行需要同步记录 solo rationale。
+- backend/domain-fields worker 覆盖 AC-RDF-01 到 AC-RDF-06，因为本阶段写入面集中在 RAG schema、seed profile 和过滤校验。
 - 实现完成后运行 `make be-test`，必要时再运行 `make be-check`。
 
 ## Conflict Rules
@@ -64,4 +64,4 @@
 
 ## Open Decisions
 
-- 等待用户选择执行方式：coding subagent 或 lead solo。
+- None.

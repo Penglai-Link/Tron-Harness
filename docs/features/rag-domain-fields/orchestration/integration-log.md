@@ -4,7 +4,7 @@
 
 - feature_slug: rag-domain-fields
 - integration_branch: feature/langtaoxin/rag-domain-fields/base
-- status: waiting_human_decision
+- status: in_progress
 
 ## Integration Events
 
@@ -17,8 +17,8 @@
 
 ## Validation After Integration
 
-- 尚未进入实现与集成阶段。
+- 实现将在 backend/domain-fields worker 完成后集成验证。
 
 ## Blockers
 
-- 行为改动尚未获得本阶段明确执行授权；等待用户选择 coding subagent 或 lead solo。
+- None.
