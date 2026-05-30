@@ -29,9 +29,10 @@ use crate::{
 use self::field_mapping::parse_field_mapping;
 use super::migrations::{
     RAG_DOMAIN_FIELDS_MIGRATION, RAG_FOUNDATION_MIGRATION, RAG_INGEST_PROFILES_MIGRATION,
-    RAG_MEMORY_EMBEDDED_SOURCE_MIGRATION, RAG_OPTIONAL_MODEL_CODES_MIGRATION,
-    RAG_SEARCH_PROFILES_MIGRATION, RAG_SKILL_CORPUS_MIGRATION, RAG_SKILL_GRAPH_CORPUS_MIGRATION,
-    RAG_STORAGE_BACKEND_FUSION_MIGRATION, RAG_STORAGE_BINDING_LAYOUT_MIGRATION,
+    RAG_MEMORY_EMBEDDED_SOURCE_MIGRATION, RAG_MEMORY_QUERY_PROFILE_MIGRATION,
+    RAG_OPTIONAL_MODEL_CODES_MIGRATION, RAG_SEARCH_PROFILES_MIGRATION, RAG_SKILL_CORPUS_MIGRATION,
+    RAG_SKILL_GRAPH_CORPUS_MIGRATION, RAG_STORAGE_BACKEND_FUSION_MIGRATION,
+    RAG_STORAGE_BINDING_LAYOUT_MIGRATION,
 };
 
 pub struct SqliteRagRepository {
@@ -72,6 +73,7 @@ impl SqliteRagRepository {
         self.apply_rag_skill_corpus_migration()?;
         self.apply_rag_skill_graph_corpus_migration()?;
         self.apply_rag_storage_backend_fusion_migration()?;
+        self.apply_rag_memory_query_profile_migration()?;
         self.apply_rag_sqlite_extension_index_migration()
     }
 
@@ -132,6 +134,12 @@ impl SqliteRagRepository {
     pub fn apply_rag_storage_backend_fusion_migration(&self) -> Result<(), RagError> {
         self.connection
             .execute_batch(RAG_STORAGE_BACKEND_FUSION_MIGRATION)
+            .map_err(storage_error)
+    }
+
+    pub fn apply_rag_memory_query_profile_migration(&self) -> Result<(), RagError> {
+        self.connection
+            .execute_batch(RAG_MEMORY_QUERY_PROFILE_MIGRATION)
             .map_err(storage_error)
     }
 
