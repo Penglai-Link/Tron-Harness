@@ -1,5 +1,11 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
+use rusqlite::Connection;
 use tron_backend::adapters::outbound::persistence::sqlite::SqliteRagRepository;
 use tron_backend::domain::rag::RagScopeFields;
 
@@ -28,8 +34,8 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
     );
 
     repository
-        .apply_rag_foundation_migration()
-        .expect("RAG migration should be idempotent");
+        .apply_rag_migrations()
+        .expect("RAG migrations should be idempotent");
 
     assert_eq!(
         repository.seeded_corpus_statuses().unwrap(),
@@ -118,4 +124,124 @@ fn rag_foundation_preserves_scope_isolation_columns_without_permission_columns()
             );
         }
     }
+}
+
+#[test]
+fn rag_domain_fields_migration_adds_memory_governance_columns_and_indexes_idempotently() {
+    let database_path = temp_database_path("rag-domain-fields-memory");
+    let database_url = database_path.to_string_lossy().to_string();
+
+    SqliteRagRepository::connect(&database_url).expect("first RAG migration should succeed");
+    let repository = SqliteRagRepository::connect(&database_url)
+        .expect("second RAG migration should be idempotent");
+
+    let columns = repository.table_columns("rag_memory_sources").unwrap();
+    for required in [
+        "memory_type",
+        "memory_status",
+        "review_status",
+        "version",
+        "superseded_by",
+        "conflict_group",
+        "duplicate_group",
+        "injectable",
+        "importance_score",
+        "confidence_score",
+        "quality_score",
+        "pin_level",
+        "expires_at",
+        "derived_source_type",
+        "derived_source_code",
+    ] {
+        assert!(
+            columns.contains(required),
+            "rag_memory_sources should expose {required}",
+        );
+    }
+
+    let indexes = table_indexes(&database_url, "rag_memory_sources");
+    for required in [
+        "idx_rag_memory_sources_domain_status",
+        "idx_rag_memory_sources_domain_rank",
+        "idx_rag_memory_sources_expires",
+    ] {
+        assert!(
+            indexes.contains(required),
+            "rag_memory_sources should expose {required}",
+        );
+    }
+
+    let _ = fs::remove_file(database_path);
+}
+
+#[test]
+fn rag_domain_fields_migration_adds_project_doc_repo_module_columns_and_indexes_idempotently() {
+    let database_path = temp_database_path("rag-domain-fields-project-doc");
+    let database_url = database_path.to_string_lossy().to_string();
+
+    SqliteRagRepository::connect(&database_url).expect("first RAG migration should succeed");
+    let repository = SqliteRagRepository::connect(&database_url)
+        .expect("second RAG migration should be idempotent");
+
+    let columns = repository.table_columns("rag_project_doc_sources").unwrap();
+    for required in ["repo_code", "module_code", "module_name"] {
+        assert!(
+            columns.contains(required),
+            "rag_project_doc_sources should expose {required}",
+        );
+    }
+    for reused in [
+        "document_code",
+        "document_type",
+        "path",
+        "title",
+        "body_hash",
+    ] {
+        assert!(
+            columns.contains(reused),
+            "rag_project_doc_sources should keep existing {reused}",
+        );
+    }
+
+    let indexes = table_indexes(&database_url, "rag_project_doc_sources");
+    for required in [
+        "idx_rag_project_doc_sources_repo_module",
+        "idx_rag_project_doc_sources_path",
+    ] {
+        assert!(
+            indexes.contains(required),
+            "rag_project_doc_sources should expose {required}",
+        );
+    }
+
+    let _ = fs::remove_file(database_path);
+}
+
+fn table_indexes(database_url: &str, table_name: &str) -> BTreeSet<String> {
+    let connection = Connection::open(database_url).expect("database should be readable");
+    let mut statement = connection
+        .prepare(
+            "SELECT name
+             FROM sqlite_schema
+             WHERE type = 'index'
+               AND tbl_name = ?1
+             ORDER BY name",
+        )
+        .expect("index query should prepare");
+    statement
+        .query_map([table_name], |row| row.get::<_, String>(0))
+        .expect("index query should run")
+        .collect::<Result<BTreeSet<_>, _>>()
+        .expect("index names should collect")
+}
+
+fn temp_database_path(test_name: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock should be after unix epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!(
+        "tron-{test_name}-{nanos}-{}.sqlite3",
+        std::process::id()
+    ))
 }

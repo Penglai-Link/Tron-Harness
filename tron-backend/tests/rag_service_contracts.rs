@@ -6,8 +6,8 @@ use tron_backend::{
     adapters::outbound::persistence::sqlite::SqliteRagRepository,
     application::rag::{
         DefaultRagStrategyRegistry, RagConfigRepository, RagFilterValidationRequest,
-        RagProfileListQuery, RagService, RagStrategyRegistry, StrategyRegistration,
-        StrategyRegistrationStatus,
+        RagFilterValueType, RagProfileListQuery, RagService, RagStrategyRegistry,
+        StrategyRegistration, StrategyRegistrationStatus,
     },
     domain::rag::{
         RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus, RagStorageBinding,
@@ -44,6 +44,118 @@ fn rag_service_resolves_enabled_corpus_storage_binding_from_repository_port() {
         Some("source_code")
     );
     assert!(corpus.filter_schema.fields.contains_key("scopeType"));
+}
+
+#[test]
+fn memory_corpus_seed_maps_governance_logical_fields_to_physical_columns() {
+    let service = RagService::new(
+        SqliteRagRepository::connect(":memory:").expect("RAG repository should connect"),
+        DefaultRagStrategyRegistry::default(),
+    );
+
+    let corpus = service
+        .get_corpus("memory-card")
+        .expect("memory-card corpus should exist");
+
+    for (field, column, field_type) in [
+        ("memoryType", "memory_type", RagFilterValueType::String),
+        ("memoryStatus", "memory_status", RagFilterValueType::String),
+        ("reviewStatus", "review_status", RagFilterValueType::String),
+        ("version", "version", RagFilterValueType::String),
+        ("supersededBy", "superseded_by", RagFilterValueType::String),
+        (
+            "conflictGroup",
+            "conflict_group",
+            RagFilterValueType::String,
+        ),
+        (
+            "duplicateGroup",
+            "duplicate_group",
+            RagFilterValueType::String,
+        ),
+        ("injectable", "injectable", RagFilterValueType::Boolean),
+        (
+            "importanceScore",
+            "importance_score",
+            RagFilterValueType::Integer,
+        ),
+        (
+            "confidenceScore",
+            "confidence_score",
+            RagFilterValueType::Integer,
+        ),
+        ("qualityScore", "quality_score", RagFilterValueType::Integer),
+        ("pinLevel", "pin_level", RagFilterValueType::Integer),
+        ("expiresAt", "expires_at", RagFilterValueType::Integer),
+        (
+            "derivedSourceType",
+            "derived_source_type",
+            RagFilterValueType::String,
+        ),
+        (
+            "derivedSourceCode",
+            "derived_source_code",
+            RagFilterValueType::String,
+        ),
+    ] {
+        assert_eq!(
+            corpus.field_mapping.get(field).map(String::as_str),
+            Some(column),
+            "{field} should map to {column}",
+        );
+        let schema_field = corpus
+            .filter_schema
+            .fields
+            .get(field)
+            .unwrap_or_else(|| panic!("{field} should be declared in filterSchema"));
+        assert_eq!(schema_field.column.as_deref(), Some(column));
+        assert_eq!(schema_field.field_type, field_type);
+    }
+
+    assert!(
+        corpus
+            .filter_schema
+            .fields
+            .get("pinLevel")
+            .expect("pinLevel should be declared")
+            .operators
+            .contains("gte"),
+        "numeric Memory fields should support range filtering",
+    );
+}
+
+#[test]
+fn project_doc_corpus_seed_maps_repo_module_logical_fields_to_physical_columns() {
+    let service = RagService::new(
+        SqliteRagRepository::connect(":memory:").expect("RAG repository should connect"),
+        DefaultRagStrategyRegistry::default(),
+    );
+
+    let corpus = service
+        .get_corpus("project-doc")
+        .expect("project-doc corpus should exist");
+
+    for (field, column) in [
+        ("documentCode", "document_code"),
+        ("documentType", "document_type"),
+        ("path", "path"),
+        ("repoCode", "repo_code"),
+        ("moduleCode", "module_code"),
+        ("moduleName", "module_name"),
+    ] {
+        assert_eq!(
+            corpus.field_mapping.get(field).map(String::as_str),
+            Some(column),
+            "{field} should map to {column}",
+        );
+        let schema_field = corpus
+            .filter_schema
+            .fields
+            .get(field)
+            .unwrap_or_else(|| panic!("{field} should be declared in filterSchema"));
+        assert_eq!(schema_field.column.as_deref(), Some(column));
+        assert_eq!(schema_field.field_type, RagFilterValueType::String);
+    }
 }
 
 #[test]
@@ -258,6 +370,87 @@ fn filter_validation_accepts_declared_fields_and_rejects_invalid_filters() {
     );
     assert!(rejected.field_errors.iter().any(|error| {
         error.field == "status" && error.code == "RAG_FILTER_OPERATOR_UNSUPPORTED"
+    }));
+}
+
+#[test]
+fn filter_validation_accepts_domain_fields_and_rejects_unknown_or_mistyped_values() {
+    let service = RagService::new(
+        SqliteRagRepository::connect(":memory:").expect("RAG repository should connect"),
+        DefaultRagStrategyRegistry::default(),
+    );
+
+    let memory = service
+        .validate_filters(RagFilterValidationRequest {
+            corpus_id: "memory-card".to_string(),
+            filters: json!({
+                "memoryType": ["RULE", "DECISION"],
+                "reviewStatus": "APPROVED",
+                "injectable": true,
+                "pinLevel": { "op": "gte", "value": 1 },
+                "importanceScore": { "op": "lte", "value": 90 },
+                "derivedSourceCode": "chat-run-001"
+            }),
+        })
+        .unwrap();
+    assert!(memory.valid, "{memory:?}");
+    assert_eq!(
+        memory.normalized_filters["memoryType"],
+        json!({"op": "in", "value": ["RULE", "DECISION"]})
+    );
+    assert_eq!(
+        memory.normalized_filters["pinLevel"],
+        json!({"op": "gte", "value": 1})
+    );
+    assert_eq!(
+        memory.normalized_filters["injectable"],
+        json!({"op": "eq", "value": true})
+    );
+
+    let project_doc = service
+        .validate_filters(RagFilterValidationRequest {
+            corpus_id: "project-doc".to_string(),
+            filters: json!({
+                "repoCode": "REPO-TRON",
+                "moduleCode": "MOD-RAG",
+                "moduleName": "RAG Backend",
+                "documentType": ["ADR", "DESIGN"],
+                "path": "docs/rag.md"
+            }),
+        })
+        .unwrap();
+    assert!(project_doc.valid, "{project_doc:?}");
+    assert_eq!(
+        project_doc.normalized_filters["documentType"],
+        json!({"op": "in", "value": ["ADR", "DESIGN"]})
+    );
+
+    let rejected = service
+        .validate_filters(RagFilterValidationRequest {
+            corpus_id: "memory-card".to_string(),
+            filters: json!({
+                "metadata.reviewReason": "manual",
+                "confidenceScore": "high",
+                "injectable": "yes",
+                "pinLevel": { "op": "contains", "value": 1 }
+            }),
+        })
+        .unwrap();
+
+    assert!(!rejected.valid);
+    assert!(rejected.field_errors.iter().any(|error| {
+        error.field == "metadata.reviewReason" && error.code == "RAG_FILTER_FIELD_UNKNOWN"
+    }));
+    assert!(rejected.field_errors.iter().any(|error| {
+        error.field == "confidenceScore" && error.code == "RAG_FILTER_TYPE_INVALID"
+    }));
+    assert!(
+        rejected.field_errors.iter().any(|error| {
+            error.field == "injectable" && error.code == "RAG_FILTER_TYPE_INVALID"
+        })
+    );
+    assert!(rejected.field_errors.iter().any(|error| {
+        error.field == "pinLevel" && error.code == "RAG_FILTER_OPERATOR_UNSUPPORTED"
     }));
 }
 

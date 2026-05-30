@@ -14,7 +14,7 @@ use crate::{
     },
 };
 
-use super::migrations::RAG_FOUNDATION_MIGRATION;
+use super::migrations::{RAG_DOMAIN_FIELDS_MIGRATION, RAG_FOUNDATION_MIGRATION};
 
 pub struct SqliteRagRepository {
     connection: Connection,
@@ -36,13 +36,52 @@ impl SqliteRagRepository {
         .map_err(storage_error)?;
 
         let repository = Self { connection };
-        repository.apply_rag_foundation_migration()?;
+        repository.apply_rag_migrations()?;
         Ok(repository)
+    }
+
+    pub fn apply_rag_migrations(&self) -> Result<(), RagError> {
+        self.apply_rag_foundation_migration()?;
+        self.apply_rag_domain_fields_migration()
     }
 
     pub fn apply_rag_foundation_migration(&self) -> Result<(), RagError> {
         self.connection
             .execute_batch(RAG_FOUNDATION_MIGRATION)
+            .map_err(storage_error)
+    }
+
+    pub fn apply_rag_domain_fields_migration(&self) -> Result<(), RagError> {
+        self.ensure_columns(
+            "rag_memory_sources",
+            &[
+                ("memory_type", "memory_type TEXT"),
+                ("memory_status", "memory_status TEXT"),
+                ("review_status", "review_status TEXT"),
+                ("version", "version TEXT"),
+                ("superseded_by", "superseded_by TEXT"),
+                ("conflict_group", "conflict_group TEXT"),
+                ("duplicate_group", "duplicate_group TEXT"),
+                ("injectable", "injectable INTEGER NOT NULL DEFAULT 1"),
+                ("importance_score", "importance_score INTEGER"),
+                ("confidence_score", "confidence_score INTEGER"),
+                ("quality_score", "quality_score INTEGER"),
+                ("pin_level", "pin_level INTEGER NOT NULL DEFAULT 0"),
+                ("expires_at", "expires_at INTEGER"),
+                ("derived_source_type", "derived_source_type TEXT"),
+                ("derived_source_code", "derived_source_code TEXT"),
+            ],
+        )?;
+        self.ensure_columns(
+            "rag_project_doc_sources",
+            &[
+                ("repo_code", "repo_code TEXT"),
+                ("module_code", "module_code TEXT"),
+                ("module_name", "module_name TEXT"),
+            ],
+        )?;
+        self.connection
+            .execute_batch(RAG_DOMAIN_FIELDS_MIGRATION)
             .map_err(storage_error)
     }
 
@@ -72,6 +111,23 @@ impl SqliteRagRepository {
             .map_err(storage_error)?
             .collect::<Result<BTreeSet<_>, _>>()
             .map_err(storage_error)
+    }
+
+    fn ensure_columns(&self, table_name: &str, columns: &[(&str, &str)]) -> Result<(), RagError> {
+        for (column_name, column_definition) in columns {
+            if !self.column_exists(table_name, column_name)? {
+                self.connection
+                    .execute_batch(&format!(
+                        "ALTER TABLE {table_name} ADD COLUMN {column_definition};"
+                    ))
+                    .map_err(storage_error)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn column_exists(&self, table_name: &str, column_name: &str) -> Result<bool, RagError> {
+        Ok(self.table_columns(table_name)?.contains(column_name))
     }
 
     pub fn seeded_corpus_statuses(&self) -> Result<BTreeMap<String, String>, RagError> {
