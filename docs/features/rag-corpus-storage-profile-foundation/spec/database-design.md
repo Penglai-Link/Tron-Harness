@@ -7,7 +7,7 @@
 - approved_by: none
 - approved_at: none
 
-本 feature 需要新增 RAG 基础 schema。迁移只建立 Corpus/Profile/Binding/filterSchema、通用 Source/Document/TextUnit/FTS/Vector 表边界，以及 warnings/trace 的最小表壳。它不写入真实业务数据，不执行 ingest/search，不添加 Memory 治理字段或 Project Doc 领域字段。
+本 feature 新增 RAG 基础 schema，并按“能合并就合并”的原则收缩表数量。第一版不再把全文索引和向量索引拆成独立物理表，而是把可检索正文、全文检索状态、embedding 信息和向量 BLOB 合并到 `rag_text_units`。Source 与 Project Doc Document 元数据也合并到 `rag_sources`。最终本 feature 计划新增 5 张表。
 
 ## Existing Schema Impact
 
@@ -17,11 +17,24 @@
 - 新增 SQLite repository 应沿用现有 `SqliteXxxRepository::connect(database_url)` 模式，在连接时执行 RAG migration。
 - `GraphService`、Grafeo adapter 和 graph 相关表不受影响。
 
+## Table Count
+
+本设计新增 5 张表：
+
+1. `rag_corpora`
+2. `rag_profiles`
+3. `rag_sources`
+4. `rag_text_units`
+5. `rag_diagnostics`
+
+删除原设计中的独立 `rag_corpus_table_bindings`、`rag_ingest_profiles`、`rag_retrieval_profiles`、各 Corpus 独立 Source 表、Project Doc Document 表、各 Corpus 独立 TextUnit 表、FTS 表、Vector 表、warnings 表和 search trace 表。
+
 ## Proposed Schema
 
-### rag_corpus_profiles
+### rag_corpora
 
 - change_type: create
+- purpose: 存 Corpus 基础配置、filterSchema、物理字段映射、表绑定和能力声明。
 - fields:
   - `corpus_id TEXT PRIMARY KEY`
   - `display_name TEXT NOT NULL`
@@ -29,340 +42,218 @@
   - `description TEXT`
   - `capabilities_json TEXT NOT NULL`
   - `filter_schema_json TEXT NOT NULL`
+  - `field_mapping_json TEXT NOT NULL`
+  - `storage_binding_json TEXT NOT NULL`
   - `created_at INTEGER NOT NULL`
   - `updated_at INTEGER NOT NULL`
 - constraints:
   - `status` 只允许 `enabled`、`reserved`、`disabled`。
   - 第一阶段 seed：`memory-card=enabled`、`project-doc=enabled`、`code-graph=reserved`。
+  - `storage_binding_json` 第一阶段指向统一表：`rag_sources`、`rag_text_units`、`rag_diagnostics`。
 - indexes:
   - primary key covers `corpus_id`
 - notes:
+  - 原 `rag_corpus_profiles` 和 `rag_corpus_table_bindings` 合并为本表。
   - `code-graph` 只作为 reserved Corpus 存在，不能启用真实写入或检索。
   - `filter_schema_json` 保存逻辑字段到物理列的映射摘要；application 层仍需解析后执行类型和字段校验。
 
-### rag_corpus_table_bindings
+### rag_profiles
 
 - change_type: create
-- fields:
-  - `corpus_id TEXT PRIMARY KEY`
-  - `source_table TEXT NOT NULL`
-  - `document_table TEXT`
-  - `text_unit_table TEXT`
-  - `fts_table TEXT`
-  - `vector_table TEXT`
-  - `summary_tree_table TEXT`
-  - `graph_node_table TEXT`
-  - `graph_edge_table TEXT`
-  - `field_mapping_json TEXT NOT NULL`
-  - `created_at INTEGER NOT NULL`
-  - `updated_at INTEGER NOT NULL`
-- constraints:
-  - `corpus_id` references `rag_corpus_profiles(corpus_id)` logically; SQLite 可不强制外键，但 repository 必须校验。
-  - `memory-card` 与 `project-doc` 必须有 source/textUnit/fts/vector 表名。
-  - `code-graph` 保持 reserved，不得配置可执行 graph node/edge 表。
-- indexes:
-  - primary key covers `corpus_id`
-- notes:
-  - `summary_tree_table`、`graph_node_table`、`graph_edge_table` 在本阶段为空或 unsupported。
-  - 后续替换存储引擎时，application 层继续通过 binding 获取逻辑落点，不直接硬编码物理表。
-
-### rag_ingest_profiles
-
-- change_type: create
+- purpose: 统一存 Ingest Profile 与 Retrieval Profile。
 - fields:
   - `profile_id TEXT PRIMARY KEY`
-  - `corpus_id TEXT NOT NULL`
+  - `profile_type TEXT NOT NULL`
   - `status TEXT NOT NULL`
-  - `dag_json TEXT NOT NULL`
-  - `stage_config_json TEXT NOT NULL`
-  - `degrade_policy TEXT NOT NULL`
-  - `created_at INTEGER NOT NULL`
-  - `updated_at INTEGER NOT NULL`
-- constraints:
-  - `status` 只允许 `enabled`、`reserved`、`disabled`。
-  - `corpus_id` 必须引用已知 Corpus。
-  - `dag_json` 只能引用 Rust strategy registry 中存在的 stage strategy ID。
-- indexes:
-  - `idx_rag_ingest_profiles_corpus_status` on `(corpus_id, status)`
-- notes:
-  - 本 feature 只存储和读取 profile，不执行 DAG。
-  - `SUMMARY_TREE_BUILDER`、Graph 相关 stage 可在 registry 中标记 reserved，但不可执行。
-
-### rag_retrieval_profiles
-
-- change_type: create
-- fields:
-  - `profile_id TEXT PRIMARY KEY`
-  - `status TEXT NOT NULL`
+  - `primary_corpus_id TEXT`
   - `corpus_ids_json TEXT NOT NULL`
-  - `required_source_version TEXT NOT NULL`
+  - `required_source_version TEXT`
+  - `config_json TEXT NOT NULL`
   - `filters_json TEXT NOT NULL`
-  - `routes_json TEXT NOT NULL`
-  - `fusion_policy TEXT NOT NULL`
-  - `dedup_policy TEXT NOT NULL`
-  - `rerank_policy_json TEXT NOT NULL`
-  - `hydrate_policy TEXT NOT NULL`
-  - `context_policy_json TEXT NOT NULL`
   - `degrade_policy TEXT NOT NULL`
   - `created_at INTEGER NOT NULL`
   - `updated_at INTEGER NOT NULL`
 - constraints:
+  - `profile_type` 只允许 `INGEST`、`RETRIEVAL`。
   - `status` 只允许 `enabled`、`reserved`、`disabled`。
-  - `required_source_version` 必填；第一阶段没有 latest 版本语义。
-  - `routes_json` 中的 retriever 只能引用 registry 中存在的 retriever ID。
-  - `GRAPH`、`SUMMARY_TREE` route 可存为 reserved，但不能在 enabled Profile 中启用执行。
+  - `primary_corpus_id` 必须为空或引用已知 Corpus。
+  - `corpus_ids_json` 必须只引用已知 Corpus。
+  - `profile_type = RETRIEVAL` 时 `required_source_version` 必填；第一阶段没有 latest 版本语义。
+  - `config_json` 中的 stage、retriever、fusion、dedup、rerank、hydrate、context ID 只能引用 Rust registry 中存在的 ID。
+  - `GRAPH`、`SUMMARY_TREE` route 可在 reserved profile 中出现，但不能在 enabled profile 中启用执行。
 - indexes:
-  - `idx_rag_retrieval_profiles_status` on `(status)`
+  - `idx_rag_profiles_type_status` on `(profile_type, status)`
+  - `idx_rag_profiles_primary_corpus` on `(primary_corpus_id, profile_type, status)`
 - notes:
-  - 本 feature 不执行检索，只保证配置可保存、读取和校验。
+  - 原 `rag_ingest_profiles` 和 `rag_retrieval_profiles` 合并为本表。
+  - `config_json` 按 profile_type 存不同结构：INGEST 存 DAG/stage config；RETRIEVAL 存 routes/fusion/dedup/rerank/hydrate/context。
+  - 本 feature 只存储、读取和校验 Profile，不执行 DAG 或检索。
 
-### rag_memory_sources
+### rag_sources
 
 - change_type: create
+- purpose: 统一存所有 Corpus 的 Source 元数据，并承载 Project Doc 的 Document 元数据字段。
 - fields:
   - `id INTEGER PRIMARY KEY`
+  - `corpus_id TEXT NOT NULL`
   - `source_code TEXT NOT NULL`
   - `source_version TEXT NOT NULL`
-  - `corpus_id TEXT NOT NULL`
   - `source_type TEXT NOT NULL`
   - `scope_type TEXT NOT NULL`
   - `scope_code TEXT NOT NULL`
   - `status TEXT NOT NULL`
   - `title TEXT`
   - `content_hash TEXT`
-  - `metadata TEXT NOT NULL`
-  - `created_at INTEGER NOT NULL`
-  - `updated_at INTEGER NOT NULL`
-- constraints:
-  - unique `(source_code, source_version, scope_type, scope_code)`
-  - `corpus_id` 固定为 `memory-card`
-  - `scope_type` 只允许 `USER`、`AGENT`、`SPACE`
-  - `status` 只允许 `PENDING`、`ACTIVE`、`FAILED`、`DISABLED`、`ARCHIVED`、`DELETED`
-- indexes:
-  - `idx_rag_memory_sources_scope_status` on `(scope_type, scope_code, status)`
-  - `idx_rag_memory_sources_code_version` on `(source_code, source_version)`
-- notes:
-  - Memory 治理字段不在本 migration 中创建，后续 `Memory 与 Project Doc 领域字段` feature 通过 alter migration 添加。
-
-### rag_project_doc_sources
-
-- change_type: create
-- fields: 与 `rag_memory_sources` 相同
-- constraints:
-  - unique `(source_code, source_version, scope_type, scope_code)`
-  - `corpus_id` 固定为 `project-doc`
-- indexes:
-  - `idx_rag_project_doc_sources_scope_status` on `(scope_type, scope_code, status)`
-  - `idx_rag_project_doc_sources_code_version` on `(source_code, source_version)`
-- notes:
-  - Project Doc 的 repo、module、path、doc_type 等领域字段不在本 migration 中创建，后续领域字段 feature 添加。
-
-### rag_project_doc_documents
-
-- change_type: create
-- fields:
-  - `id INTEGER PRIMARY KEY`
-  - `document_code TEXT NOT NULL`
-  - `source_code TEXT NOT NULL`
-  - `source_version TEXT NOT NULL`
-  - `corpus_id TEXT NOT NULL`
-  - `scope_type TEXT NOT NULL`
-  - `scope_code TEXT NOT NULL`
-  - `document_type TEXT NOT NULL`
-  - `title TEXT`
+  - `document_code TEXT`
+  - `document_type TEXT`
   - `path TEXT`
   - `body_hash TEXT`
   - `metadata TEXT NOT NULL`
   - `created_at INTEGER NOT NULL`
   - `updated_at INTEGER NOT NULL`
 - constraints:
-  - unique `(document_code, source_code, source_version, scope_type, scope_code)`
-  - `corpus_id` 固定为 `project-doc`
+  - unique `(corpus_id, source_code, source_version, scope_type, scope_code)`
+  - `corpus_id` 第一阶段只允许 `memory-card`、`project-doc`；`code-graph` 为 reserved，不允许真实写入。
+  - `scope_type` 只允许 `USER`、`AGENT`、`SPACE`。
+  - `status` 只允许 `PENDING`、`ACTIVE`、`FAILED`、`DISABLED`、`ARCHIVED`、`DELETED`。
 - indexes:
-  - `idx_rag_project_doc_documents_source` on `(source_code, source_version)`
-  - `idx_rag_project_doc_documents_scope` on `(scope_type, scope_code)`
+  - `idx_rag_sources_corpus_scope_status` on `(corpus_id, scope_type, scope_code, status)`
+  - `idx_rag_sources_code_version` on `(corpus_id, source_code, source_version)`
+  - `idx_rag_sources_document_code` on `(document_code)`
 - notes:
-  - `memory-card` 第一阶段不建 document 表，binding 中 `document_table` 可为空。
+  - 原 `rag_memory_sources`、`rag_project_doc_sources` 和 `rag_project_doc_documents` 合并为本表。
+  - Project Doc 第一阶段按一个 Source 对应一个文档处理，因此 Document 元数据直接放在 Source 行上。
+  - Memory 治理字段不在本 migration 中创建，后续 `Memory 与 Project Doc 领域字段` feature 通过 alter migration 添加到本表。
+  - Project Doc 的 repo、module、doc_type 细化等领域字段也在后续 feature 添加到本表。
 
-### rag_memory_text_units
+### rag_text_units
 
 - change_type: create
+- purpose: 统一存所有 Corpus 的 TextUnit 主数据、全文检索文本和向量检索数据。
 - fields:
   - `id INTEGER PRIMARY KEY`
+  - `corpus_id TEXT NOT NULL`
   - `text_unit_code TEXT NOT NULL UNIQUE`
   - `source_code TEXT NOT NULL`
   - `source_version TEXT NOT NULL`
   - `document_code TEXT`
-  - `corpus_id TEXT NOT NULL`
   - `scope_type TEXT NOT NULL`
   - `scope_code TEXT NOT NULL`
   - `unit_type TEXT NOT NULL`
   - `text TEXT NOT NULL`
+  - `search_text TEXT NOT NULL`
   - `heading_path TEXT NOT NULL`
   - `ordinal INTEGER NOT NULL`
   - `token_count INTEGER`
   - `content_hash TEXT`
   - `status TEXT NOT NULL`
+  - `fulltext_status TEXT NOT NULL`
+  - `embedding_model_code TEXT`
+  - `embedding_version TEXT`
+  - `embedding_text_hash TEXT`
+  - `embedding_dimension INTEGER`
+  - `embedding BLOB`
+  - `embedding_status TEXT NOT NULL`
   - `metadata TEXT NOT NULL`
   - `created_at INTEGER NOT NULL`
   - `updated_at INTEGER NOT NULL`
 - constraints:
-  - unique `(source_code, source_version, ordinal)`
-  - `corpus_id` 固定为 `memory-card`
-  - `unit_type` 只允许 `LEAF`、`SUMMARY`、`SYMBOL`、`NOTE`
-  - `status` 只允许 `ACTIVE`、`DISABLED`、`DELETED`
+  - unique `(corpus_id, source_code, source_version, ordinal)`
+  - `corpus_id` 第一阶段只允许 `memory-card`、`project-doc`。
+  - `unit_type` 只允许 `LEAF`、`SUMMARY`、`SYMBOL`、`NOTE`。
+  - `status` 只允许 `ACTIVE`、`DISABLED`、`DELETED`。
+  - `fulltext_status` 只允许 `PENDING`、`INDEXED`、`FAILED`、`SKIPPED`。
+  - `embedding_status` 只允许 `PENDING`、`INDEXED`、`FAILED`、`SKIPPED`。
+  - 当 `embedding_status = INDEXED` 时，`embedding_model_code`、`embedding_version`、`embedding_text_hash`、`embedding_dimension` 和 `embedding` 必须有值。
 - indexes:
-  - `idx_rag_memory_text_units_source` on `(source_code, source_version, ordinal)`
-  - `idx_rag_memory_text_units_scope_status` on `(scope_type, scope_code, status)`
+  - `idx_rag_text_units_source` on `(corpus_id, source_code, source_version, ordinal)`
+  - `idx_rag_text_units_scope_status` on `(corpus_id, scope_type, scope_code, status)`
+  - `idx_rag_text_units_document` on `(corpus_id, document_code)`
+  - `idx_rag_text_units_fulltext_status` on `(corpus_id, fulltext_status)`
+  - `idx_rag_text_units_embedding_model` on `(corpus_id, embedding_model_code, embedding_version, embedding_status)`
 - notes:
-  - 本 feature 只建表，不实现 split 或 TextUnit 写入。
+  - 原 `rag_memory_text_units`、`rag_project_doc_text_units`、`rag_memory_text_units_fts`、`rag_project_doc_text_units_fts`、`rag_memory_text_units_vec`、`rag_project_doc_text_units_vec` 合并为本表。
+  - 全文检索直接使用 `search_text` 和本表元数据，不再单独创建 FTS 物理表。
+  - 向量检索直接读取本表 `embedding` BLOB，由后端 brute-force cosine 计算。
+  - 第一阶段只支持每个 TextUnit 一份当前 Profile 使用的 embedding。如果未来同一 TextUnit 需要同时保留多个模型/版本的 embedding，再单独评估是否拆出 embedding 子表。
 
-### rag_project_doc_text_units
+### rag_diagnostics
 
 - change_type: create
-- fields: 与 `rag_memory_text_units` 相同
-- constraints:
-  - unique `(source_code, source_version, ordinal)`
-  - `corpus_id` 固定为 `project-doc`
-- indexes:
-  - `idx_rag_project_doc_text_units_source` on `(source_code, source_version, ordinal)`
-  - `idx_rag_project_doc_text_units_scope_status` on `(scope_type, scope_code, status)`
-  - `idx_rag_project_doc_text_units_document` on `(document_code)`
-- notes:
-  - heading path 使用 JSON 字符串保存，后续检索可以按 hydrate 需要解析。
-
-### rag_memory_text_units_fts
-
-- change_type: create
-- fields:
-  - SQLite FTS5 virtual table with `text`
-  - unindexed columns: `text_unit_code`、`source_code`、`source_version`、`corpus_id`、`scope_type`、`scope_code`
-- constraints:
-  - FTS 表只作为索引表，Source/TextUnit 是主数据。
-- indexes:
-  - FTS5 内部索引
-- notes:
-  - 如果目标 SQLite 编译缺少 FTS5，repository 初始化应返回明确 storage error，不能静默降级成普通表。
-
-### rag_project_doc_text_units_fts
-
-- change_type: create
-- fields: 与 `rag_memory_text_units_fts` 相同
-- constraints:
-  - FTS 表只作为索引表，Source/TextUnit 是主数据。
-- indexes:
-  - FTS5 内部索引
-- notes:
-  - 后续 fulltextIndex stage 负责维护该表内容。
-
-### rag_memory_text_units_vec
-
-- change_type: create
+- purpose: 统一存 indexing warnings 和 lightweight search trace。
 - fields:
   - `id INTEGER PRIMARY KEY`
-  - `target_type TEXT NOT NULL`
-  - `target_code TEXT NOT NULL`
-  - `source_code TEXT NOT NULL`
-  - `source_version TEXT NOT NULL`
-  - `corpus_id TEXT NOT NULL`
-  - `scope_type TEXT NOT NULL`
-  - `scope_code TEXT NOT NULL`
-  - `embedding_model_code TEXT NOT NULL`
-  - `embedding_version TEXT NOT NULL`
-  - `embedding_text_hash TEXT NOT NULL`
-  - `embedding_dimension INTEGER NOT NULL`
-  - `embedding BLOB NOT NULL`
-  - `status TEXT NOT NULL`
-  - `metadata TEXT NOT NULL`
-  - `created_at INTEGER NOT NULL`
-  - `updated_at INTEGER NOT NULL`
-- constraints:
-  - unique `(target_type, target_code, embedding_model_code, embedding_version)`
-  - `target_type` 第一阶段只允许 `TEXT_UNIT`
-  - `corpus_id` 固定为 `memory-card`
-- indexes:
-  - `idx_rag_memory_vec_scope_status` on `(scope_type, scope_code, status)`
-  - `idx_rag_memory_vec_source` on `(source_code, source_version)`
-  - `idx_rag_memory_vec_model` on `(embedding_model_code, embedding_version)`
-- notes:
-  - `embedding` 使用 BLOB 保存后端可解码的 f32 向量。第一版向量召回由后端 brute-force cosine 完成，不依赖 SQLite 扩展。
-
-### rag_project_doc_text_units_vec
-
-- change_type: create
-- fields: 与 `rag_memory_text_units_vec` 相同
-- constraints:
-  - unique `(target_type, target_code, embedding_model_code, embedding_version)`
-  - `corpus_id` 固定为 `project-doc`
-- indexes:
-  - `idx_rag_project_doc_vec_scope_status` on `(scope_type, scope_code, status)`
-  - `idx_rag_project_doc_vec_source` on `(source_code, source_version)`
-  - `idx_rag_project_doc_vec_model` on `(embedding_model_code, embedding_version)`
-- notes:
-  - 向量写入行为属于后续 ingest/vectorIndex feature。
-
-### rag_indexing_warnings
-
-- change_type: create
-- fields:
-  - `id INTEGER PRIMARY KEY`
-  - `warning_code TEXT NOT NULL`
-  - `corpus_id TEXT NOT NULL`
+  - `record_type TEXT NOT NULL`
+  - `record_code TEXT NOT NULL UNIQUE`
+  - `corpus_id TEXT`
+  - `profile_id TEXT`
   - `source_code TEXT`
   - `source_version TEXT`
   - `scope_type TEXT`
   - `scope_code TEXT`
-  - `stage_id TEXT`
-  - `message TEXT NOT NULL`
-  - `metadata TEXT NOT NULL`
-  - `created_at INTEGER NOT NULL`
-- constraints:
-  - warning 不保存正文、embedding、provider 原始响应或 API key。
-- indexes:
-  - `idx_rag_indexing_warnings_source` on `(corpus_id, source_code, source_version)`
-  - `idx_rag_indexing_warnings_created` on `(created_at DESC)`
-- notes:
-  - 本 feature 只建最小表壳。真实 warnings 写入与 debug 展示属于后续诊断 feature。
-
-### rag_search_traces
-
-- change_type: create
-- fields:
-  - `id INTEGER PRIMARY KEY`
-  - `trace_code TEXT NOT NULL UNIQUE`
-  - `profile_id TEXT NOT NULL`
-  - `workspace_code TEXT NOT NULL`
+  - `workspace_code TEXT`
   - `user_code TEXT`
   - `agent_code TEXT`
-  - `query_text TEXT NOT NULL`
-  - `route_counts_json TEXT NOT NULL`
-  - `timings_json TEXT NOT NULL`
-  - `warnings_json TEXT NOT NULL`
-  - `candidate_refs_json TEXT NOT NULL`
-  - `result_count INTEGER NOT NULL`
-  - `token_usage_json TEXT NOT NULL`
+  - `stage_id TEXT`
+  - `query_text TEXT`
+  - `message TEXT`
+  - `payload_json TEXT NOT NULL`
   - `created_at INTEGER NOT NULL`
-  - `expires_at INTEGER NOT NULL`
+  - `expires_at INTEGER`
 - constraints:
-  - trace 不保存 hydrate 正文、Context Pack body、embedding、provider 原始响应或 API key。
+  - `record_type` 只允许 `INDEXING_WARNING`、`SEARCH_TRACE`。
+  - `INDEXING_WARNING` 不要求 `expires_at`。
+  - `SEARCH_TRACE` 必须有 `profile_id`、`workspace_code`、`query_text` 和 `expires_at`。
+  - diagnostics 不保存 hydrate 正文、Context Pack body、embedding、provider 原始响应或 API key。
 - indexes:
-  - `idx_rag_search_traces_profile_created` on `(profile_id, created_at DESC)`
-  - `idx_rag_search_traces_workspace_created` on `(workspace_code, created_at DESC)`
-  - `idx_rag_search_traces_expires` on `(expires_at)`
+  - `idx_rag_diagnostics_type_created` on `(record_type, created_at DESC)`
+  - `idx_rag_diagnostics_source` on `(record_type, corpus_id, source_code, source_version)`
+  - `idx_rag_diagnostics_workspace` on `(record_type, workspace_code, created_at DESC)`
+  - `idx_rag_diagnostics_expires` on `(record_type, expires_at)`
 - notes:
-  - 本 feature 只建表壳。真实 trace 写入、TTL 清理和 debug 查询属于后续诊断 feature。
+  - 原 `rag_indexing_warnings` 和 `rag_search_traces` 合并为本表。
+  - 本 feature 只建最小表壳。真实 warning 写入、trace 写入、TTL 清理和 debug 展示属于后续诊断 feature。
+
+## Merge Decisions
+
+### 已合并
+
+- `rag_corpus_profiles` + `rag_corpus_table_bindings` -> `rag_corpora`
+  - reason: Corpus 配置、filterSchema、field mapping 和 storage binding 是一对一关系，生命周期一致。
+- `rag_ingest_profiles` + `rag_retrieval_profiles` -> `rag_profiles`
+  - reason: 两者都是 Profile 配置，差异可以通过 `profile_type` 和 `config_json` 表达。
+- `rag_memory_sources` + `rag_project_doc_sources` + `rag_project_doc_documents` -> `rag_sources`
+  - reason: Source 是统一知识来源；Project Doc 第一阶段是一 Source 一文档，Document 元数据可作为 Source 字段。
+- `rag_memory_text_units` + `rag_project_doc_text_units` + FTS 表 + Vector 表 -> `rag_text_units`
+  - reason: 当前 RAG 模块支持全文检索和向量检索在一张表中，TextUnit 是检索最小单元，正文和 embedding 放在同一行最直接。
+- `rag_indexing_warnings` + `rag_search_traces` -> `rag_diagnostics`
+  - reason: 两者都属于 RAG 运行诊断数据，可以通过 `record_type` 区分，差异字段放在通用列和 `payload_json` 中。
+
+### 暂不合并
+
+- `rag_corpora` 不合并进 `rag_profiles`
+  - reason: Corpus 是知识域定义，Profile 是执行配置；一个 Corpus 有多个 Profile，Retrieval Profile 还可能跨多个 Corpus。
+- `rag_profiles` 不合并进 `rag_sources`
+  - reason: Profile 是配置数据，Source 是业务数据；生命周期、查询方式、权限边界不同。
+- `rag_sources` 不合并进 `rag_text_units`
+  - reason: Source 与 TextUnit 是一对多关系。合并会在每个 TextUnit 上重复 Source 状态、标题、hash、metadata，Source 状态更新和 hydrate 校验会变复杂。
+- `rag_diagnostics` 不合并进 `rag_sources` 或 `rag_text_units`
+  - reason: diagnostics 是运行诊断数据，包含 warning/trace 和 TTL；合并到热检索表会污染查询路径，并增加误返回诊断内容的风险。
+
+### 需要用户判断的未来分歧
+
+- 如果后续必须使用 SQLite FTS5 的 `MATCH` 语义和 FTS5 排名能力，SQLite 通常需要额外的 FTS virtual table。当前设计先按“一张 `rag_text_units` 同时承载全文与向量数据”处理，不创建 FTS virtual table。
+- 如果后续同一 TextUnit 需要同时保留多个 embedding 模型或多个 embedding version，单行 embedding 字段会不够，需要新增 embedding 子表或改为多行版本化策略。当前 PRD 已规定 Profile 固定 `embeddingModelCode`，所以第一阶段先不拆表。
 
 ## Relationships And Cardinality
 
-- 一个 Corpus 对应一个 `rag_corpus_profiles` 记录。
-- 一个 Corpus 最多对应一个 `rag_corpus_table_bindings` 记录。
-- 一个 Corpus 可以有多个 Ingest Profile 和多个 Retrieval Profile。
-- 一个 Source 由 `(source_code, source_version, scope_type, scope_code)` 唯一识别。
+- 一个 Corpus 对应一个 `rag_corpora` 记录。
+- 一个 Corpus 可以有多个 `rag_profiles`；一个 Retrieval Profile 可以覆盖多个 Corpus。
+- 一个 Source 由 `(corpus_id, source_code, source_version, scope_type, scope_code)` 唯一识别。
 - 一个 Source 可以有多个 TextUnit。
-- 一个 Project Doc Source 可以有多个 Document；Memory Source 第一阶段不建 Document。
-- 一个 TextUnit 可以对应多个 embedding 记录，不同模型或版本通过 `(embedding_model_code, embedding_version)` 区分。
-- FTS 和 Vector 表是索引表，不是 Source/TextUnit 主数据。
-- warnings 和 trace 是诊断数据，不反向驱动 Source 状态。
+- 一个 Project Doc Source 第一阶段对应一个文档，文档字段存放在 `rag_sources`。
+- 一个 TextUnit 第一阶段最多保存一份 active embedding。
+- diagnostics 是运行诊断数据，不反向驱动 Source 状态。
 
 ## Migration Plan
 
@@ -370,42 +261,43 @@
 2. 在 `sqlite/migrations.rs` 中新增 `RAG_FOUNDATION_MIGRATION` 常量。
 3. 新增 `SqliteRagRepository::connect(database_url)`，连接时执行 RAG migration。
 4. migration 使用 `CREATE TABLE IF NOT EXISTS`、`CREATE INDEX IF NOT EXISTS` 和 `INSERT OR IGNORE` seed，保证重复执行幂等。
-5. seed `memory-card`、`project-doc`、`code-graph` Corpus Profile。
+5. seed `memory-card`、`project-doc`、`code-graph` Corpus。
 6. seed 第一阶段最小 Ingest/Retrieval Profile。Profile 可先为后续 ingest/search 提供配置骨架，真实执行由后续 feature 实现。
 7. 不执行数据 backfill，因为这是新 schema。
 8. rollback 以删除新增 RAG 表为主；已有业务表不受影响。
 
 ## Query And Performance Plan
 
-- Profile 查询按 `profile_id` 主键读取。
-- Corpus binding 查询按 `corpus_id` 主键读取。
-- filterSchema 校验先按 Corpus 读取 profile，再在内存中解析 `filter_schema_json`。
-- Source 查询主要使用 `(source_code, source_version)` 和 `(scope_type, scope_code, status)` 索引。
-- TextUnit 查询主要使用 `(source_code, source_version, ordinal)` 和 `(scope_type, scope_code, status)` 索引。
-- FTS 查询使用 FTS5 内部索引，普通过滤条件仍通过 scope/source 字段约束。
-- Vector 查询第一版由后端按 scope/source/model 过滤后，读取 BLOB 并执行 brute-force cosine；后续向量存储替换不改变 application 契约。
-- warnings 查询按 source 或 created_at 排序。
-- trace 查询按 workspace/profile 和 created_at 排序，TTL 清理按 `expires_at` 索引。
+- Corpus 查询按 `corpus_id` 主键读取。
+- Profile 查询按 `profile_id` 主键读取，按 `(profile_type, status)` 列表查询。
+- filterSchema 校验先按 Corpus 读取 `filter_schema_json`，再在内存中解析。
+- Source 查询主要使用 `(corpus_id, source_code, source_version)` 和 `(corpus_id, scope_type, scope_code, status)` 索引。
+- TextUnit 查询主要使用 `(corpus_id, source_code, source_version, ordinal)` 和 `(corpus_id, scope_type, scope_code, status)` 索引。
+- 全文检索第一阶段基于 `rag_text_units.search_text` 与 scope/source/status 条件完成，不使用单独 FTS 表。
+- Vector 查询第一版由后端按 corpus/scope/source/model/status 过滤后，读取 `embedding` BLOB 并执行 brute-force cosine；后续向量存储替换不改变 application 契约。
+- diagnostics 查询按 `record_type`、source、workspace 和 created_at 排序。
+- search trace TTL 清理按 `record_type = SEARCH_TRACE` 和 `expires_at` 索引。
 
 ## Data Governance
 
 - 所有主数据表保留 `scope_type` 和 `scope_code`。
 - HTTP workspace access guard 不在数据库层完成；数据库层只保存可过滤的 scope 字段。
-- 普通检索后续只读取 `status = ACTIVE` 的 Source/TextUnit。
+- 普通检索后续只读取 active Source 与 active TextUnit。
 - metadata 只保存低频扩展信息，不能作为未声明过滤字段绕过 filterSchema。
-- warnings、trace、Event payload 不保存正文、Context Pack body、embedding、provider 原始响应或 API key。
+- diagnostics、Event payload 不保存正文、Context Pack body、embedding、provider 原始响应或 API key。
 - `embedding` BLOB 属于索引数据，只能通过 RAG repository 读写，不能通过 debug API 直接返回。
-- `rag_search_traces` 的 TTL 策略为 7 天，具体清理任务由后续诊断 feature 实现。
+- `SEARCH_TRACE` 的 TTL 策略为 7 天，具体清理任务由后续诊断 feature 实现。
 
 ## Test Data And Fixtures
 
-- SQLite in-memory fixture 应能执行 RAG migration 并 seed 三个 Corpus Profile。
+- SQLite in-memory fixture 应能执行 RAG migration 并 seed 三个 Corpus。
 - Fixture 应包含 enabled Corpus：`memory-card`、`project-doc`。
 - Fixture 应包含 reserved Corpus：`code-graph`。
 - Profile fixture 应覆盖 enabled、reserved、disabled 三种状态。
 - filterSchema fixture 应覆盖合法字段、未知字段、类型不匹配字段和跨 Corpus 字段。
+- TextUnit fixture 应在同一行覆盖 `search_text` 和 `embedding` 字段。
 - Vector fixture 可使用短 BLOB 测试编码/解码边界，不需要真实模型调用。
-- FTS fixture 应验证 FTS5 表能创建；如果本地 SQLite 不支持 FTS5，测试应给出明确失败。
+- diagnostics fixture 应覆盖 `INDEXING_WARNING` 和 `SEARCH_TRACE` 两种 `record_type`。
 
 ## Validation Commands
 
