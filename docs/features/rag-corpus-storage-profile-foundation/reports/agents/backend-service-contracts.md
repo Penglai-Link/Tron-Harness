@@ -29,6 +29,8 @@
 
 - Added finite strategy registry contract with enabled, reserved, and unsupported statuses for stage, retriever, and policy references.
 - Proof: `strategy_registry_validation_reports_enabled_reserved_and_unsupported_references` passes.
+- Review fix: reserved Profile validation now allows reserved strategy references such as `GRAPH` and `SUMMARY_TREE`, while enabled Profiles still report `RAG_STRATEGY_RESERVED` for reserved strategy references.
+- Review-fix proof: `reserved_profile_allows_reserved_strategy_references` and `enabled_profile_still_rejects_reserved_strategy_references` pass.
 
 ### AC-RAG-07
 
@@ -65,7 +67,8 @@
 - `cargo fmt --manifest-path tron-backend/Cargo.toml`
 - `make be-test`
 - Result: passed.
-- Summary: full backend test suite passed, including 6 tests in `tests/rag_service_contracts.rs` and existing RAG schema tests.
+- Summary: full backend test suite passed, including 8 tests in `tests/rag_service_contracts.rs` and existing RAG schema tests.
+- Review-fix summary: reserved Profile with `GRAPH`/`SUMMARY_TREE` validates without `RAG_STRATEGY_RESERVED`; enabled Profile with `GRAPH` still reports `RAG_STRATEGY_RESERVED`.
 
 ### VERIFY
 

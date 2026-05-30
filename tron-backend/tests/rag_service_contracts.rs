@@ -118,7 +118,7 @@ fn strategy_registry_validation_reports_enabled_reserved_and_unsupported_referen
     let registry = FakeStrategyRegistry::new([
         ("FULLTEXT", StrategyRegistrationStatus::Enabled),
         ("GRAPH", StrategyRegistrationStatus::Reserved),
-        ("SUMMARY_TREE", StrategyRegistrationStatus::Unsupported),
+        ("UNKNOWN_RETRIEVER", StrategyRegistrationStatus::Unsupported),
     ]);
     let service = RagService::new(
         FakeRagRepository::with_profiles(vec![profile_record(
@@ -126,7 +126,7 @@ fn strategy_registry_validation_reports_enabled_reserved_and_unsupported_referen
             Some("v1"),
             json!({
                 "stages": ["INGEST_CHUNK"],
-                "retrievers": ["FULLTEXT", "GRAPH", "SUMMARY_TREE"],
+                "retrievers": ["FULLTEXT", "GRAPH", "UNKNOWN_RETRIEVER"],
                 "policies": ["SKIP_VECTOR_ON_UNAVAILABLE"]
             }),
         )]),
@@ -146,7 +146,63 @@ fn strategy_registry_validation_reports_enabled_reserved_and_unsupported_referen
     }));
     assert!(validation.errors.iter().any(|error| {
         error.code == "RAG_STRATEGY_UNREGISTERED"
-            && error.strategy_id.as_deref() == Some("SUMMARY_TREE")
+            && error.strategy_id.as_deref() == Some("UNKNOWN_RETRIEVER")
+    }));
+}
+
+#[test]
+fn reserved_profile_allows_reserved_strategy_references() {
+    let registry = FakeStrategyRegistry::new([
+        ("GRAPH", StrategyRegistrationStatus::Reserved),
+        ("SUMMARY_TREE", StrategyRegistrationStatus::Reserved),
+    ]);
+    let service = RagService::new(
+        FakeRagRepository::with_profiles(vec![profile_record_with_status(
+            "reserved-code-graph",
+            RagStatus::Reserved,
+            Some("v1"),
+            json!({
+                "retrievers": ["GRAPH"],
+                "policies": ["SUMMARY_TREE"]
+            }),
+        )]),
+        registry,
+    );
+
+    let validation = service.validate_profile("reserved-code-graph").unwrap();
+
+    assert!(validation.valid, "{validation:?}");
+    assert!(
+        validation
+            .errors
+            .iter()
+            .all(|error| error.code != "RAG_STRATEGY_RESERVED")
+    );
+    assert!(validation.strategy_refs.iter().any(|reference| {
+        reference.strategy_id == "GRAPH" && reference.status == StrategyRegistrationStatus::Reserved
+    }));
+    assert!(validation.strategy_refs.iter().any(|reference| {
+        reference.strategy_id == "SUMMARY_TREE"
+            && reference.status == StrategyRegistrationStatus::Reserved
+    }));
+}
+
+#[test]
+fn enabled_profile_still_rejects_reserved_strategy_references() {
+    let service = RagService::new(
+        FakeRagRepository::with_profiles(vec![profile_record(
+            "enabled-graph",
+            Some("v1"),
+            json!({ "retrievers": ["GRAPH"] }),
+        )]),
+        FakeStrategyRegistry::new([("GRAPH", StrategyRegistrationStatus::Reserved)]),
+    );
+
+    let validation = service.validate_profile("enabled-graph").unwrap();
+
+    assert!(!validation.valid);
+    assert!(validation.errors.iter().any(|error| {
+        error.code == "RAG_STRATEGY_RESERVED" && error.strategy_id.as_deref() == Some("GRAPH")
     }));
 }
 
@@ -322,10 +378,24 @@ fn profile_record(
     required_source_version: Option<&str>,
     config: serde_json::Value,
 ) -> RagProfileRecord {
+    profile_record_with_status(
+        profile_id,
+        RagStatus::Enabled,
+        required_source_version,
+        config,
+    )
+}
+
+fn profile_record_with_status(
+    profile_id: &str,
+    status: RagStatus,
+    required_source_version: Option<&str>,
+    config: serde_json::Value,
+) -> RagProfileRecord {
     RagProfileRecord {
         profile_id: profile_id.to_string(),
         profile_type: RagProfileType::Retrieval,
-        status: RagStatus::Enabled,
+        status,
         primary_corpus_id: Some("memory-card".to_string()),
         corpus_ids: vec!["memory-card".to_string()],
         required_source_version: required_source_version.map(str::to_string),

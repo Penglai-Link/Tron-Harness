@@ -215,11 +215,14 @@ where
             };
             match registration.status {
                 StrategyRegistrationStatus::Enabled => {}
-                StrategyRegistrationStatus::Reserved => errors.push(profile_error(
-                    "RAG_STRATEGY_RESERVED",
-                    "enabled Profile 引用了 reserved strategy",
-                    Some(strategy_id.clone()),
-                )),
+                StrategyRegistrationStatus::Reserved if profile.status == RagStatus::Reserved => {}
+                StrategyRegistrationStatus::Reserved => {
+                    errors.push(profile_error(
+                        "RAG_STRATEGY_RESERVED",
+                        "enabled Profile 引用了 reserved strategy",
+                        Some(strategy_id.clone()),
+                    ));
+                }
                 StrategyRegistrationStatus::Unsupported => errors.push(profile_error(
                     "RAG_STRATEGY_UNREGISTERED",
                     "Profile 引用了未注册 strategy",
