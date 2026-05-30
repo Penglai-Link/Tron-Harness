@@ -286,3 +286,67 @@ ON CONFLICT (corpus_id) DO UPDATE SET
     field_mapping_json = excluded.field_mapping_json,
     storage_binding_json = excluded.storage_binding_json,
     updated_at = excluded.updated_at;
+
+INSERT INTO rag_profiles (
+    profile_id,
+    profile_type,
+    status,
+    primary_corpus_id,
+    corpus_ids_json,
+    required_source_version,
+    config_json,
+    filters_json,
+    degrade_policy,
+    created_at,
+    updated_at
+)
+VALUES
+    (
+        'memory-related-v1',
+        'RETRIEVAL',
+        'enabled',
+        'memory-card',
+        '["memory-card"]',
+        'v1',
+        '{"retrievers":["FULLTEXT","VECTOR"],"policies":["SKIP_VECTOR_ON_UNAVAILABLE","DEDUP_BY_SOURCE","HYDRATE_TEXT_UNIT","CONTEXT_PACK_BASIC"]}',
+        '{}',
+        'SKIP_VECTOR_ON_UNAVAILABLE',
+        1772294400000,
+        1772294400000
+    ),
+    (
+        'project-doc-related-v1',
+        'RETRIEVAL',
+        'enabled',
+        'project-doc',
+        '["project-doc"]',
+        'v1',
+        '{"retrievers":["FULLTEXT","VECTOR"],"policies":["SKIP_VECTOR_ON_UNAVAILABLE","DEDUP_BY_SOURCE","HYDRATE_TEXT_UNIT","CONTEXT_PACK_BASIC"]}',
+        '{}',
+        'SKIP_VECTOR_ON_UNAVAILABLE',
+        1772294400000,
+        1772294400000
+    ),
+    (
+        'code-graph-reserved-v1',
+        'RETRIEVAL',
+        'reserved',
+        'code-graph',
+        '["code-graph"]',
+        'v1',
+        '{"retrievers":["GRAPH"],"policies":["SUMMARY_TREE"]}',
+        '{}',
+        'SKIP_VECTOR_ON_UNAVAILABLE',
+        1772294400000,
+        1772294400000
+    )
+ON CONFLICT (profile_id) DO UPDATE SET
+    profile_type = excluded.profile_type,
+    status = excluded.status,
+    primary_corpus_id = excluded.primary_corpus_id,
+    corpus_ids_json = excluded.corpus_ids_json,
+    required_source_version = excluded.required_source_version,
+    config_json = excluded.config_json,
+    filters_json = excluded.filters_json,
+    degrade_policy = excluded.degrade_policy,
+    updated_at = excluded.updated_at;
