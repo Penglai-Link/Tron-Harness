@@ -222,11 +222,37 @@ fn rag_service_lists_and_reads_profile_configuration_without_sqlite_details() {
         .map(|profile| profile.profile_id.as_str())
         .collect::<Vec<_>>();
     assert!(profile_ids.contains(&"memory-related-v1"));
+    assert!(profile_ids.contains(&"memory-query-v1"));
     assert!(profile_ids.contains(&"memory-project-doc-fusion-v1"));
     assert!(
         profiles
             .iter()
-            .all(|profile| profile.required_source_version.as_deref() == Some("v1"))
+        .all(|profile| profile.required_source_version.as_deref() == Some("v1"))
+    );
+
+    let memory_query = service
+        .get_profile("memory-query-v1")
+        .expect("memory query profile should be readable");
+    let route_retrievers = memory_query.config["routes"]
+        .as_array()
+        .expect("memory query profile should declare routes")
+        .iter()
+        .map(|route| route["retriever"].as_str().unwrap_or_default())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        route_retrievers,
+        vec![
+            "FULLTEXT_SQLITE_FTS5_SIMPLE_V1",
+            "VECTOR_SQLITE_VEC0_COSINE_V1"
+        ]
+    );
+    assert!(
+        !route_retrievers.contains(&"STRUCTURED_FILTER_SQLITE_V1"),
+        "memory-query-v1 must stay query-only and avoid broad structured filter retrieval"
+    );
+    assert_eq!(
+        memory_query.config["contextPolicy"]["supportedStrategies"],
+        json!(["RESULT_LIST"])
     );
 
     let profile = service
