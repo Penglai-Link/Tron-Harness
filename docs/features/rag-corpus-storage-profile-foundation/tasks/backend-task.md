@@ -3,8 +3,8 @@
 ## Execution Contract
 
 - feature_slug: rag-corpus-storage-profile-foundation
-- status: ready
-- execution_mode: pending_worktree_plan
+- status: done
+- execution_mode: hybrid
 - canonical_report_target: reports/backend-result.md
 - main_agent_owned: false
 
@@ -14,12 +14,12 @@
 
 ## Task Rows
 
-- AC-RAG-03 | phase: tdd | owner: backend-worker | scope: tron-backend/src/domain/rag.rs tron-backend/src/domain/rag/* tron-backend/src/application/rag.rs tron-backend/src/application/rag/* tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: ready.
-- AC-RAG-04 | phase: tdd | owner: backend-worker | scope: tron-backend/src/domain/rag.rs tron-backend/src/domain/rag/* tron-backend/src/application/rag.rs tron-backend/src/application/rag/* tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: ready.
-- AC-RAG-05 | phase: tdd | owner: backend-worker | scope: tron-backend/src/domain/rag.rs tron-backend/src/domain/rag/* tron-backend/src/application/rag.rs tron-backend/src/application/rag/* tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: ready.
-- AC-RAG-06 | phase: tdd | owner: backend-worker | scope: tron-backend/src/domain/rag.rs tron-backend/src/domain/rag/* tron-backend/src/application/rag.rs tron-backend/src/application/rag/* tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: ready.
-- AC-RAG-07 | phase: tdd | owner: backend-worker | scope: tron-backend/src/domain/rag.rs tron-backend/src/domain/rag/* tron-backend/src/application/rag.rs tron-backend/src/application/rag/* tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: ready.
-- AC-RAG-09 | phase: tdd | owner: backend-worker | scope: tron-backend/src/app.rs tron-backend/src/adapters/inbound/http/* tron-backend/src/application/rag.rs tron-backend/src/application/rag/* tron-backend/src/application/llm/* tron-backend/src/application/graph/* tron-backend/src/shared/event_bus/* tron-backend/tests/*rag* | command_ref: CMD-BE-CHECK | status: ready.
+- AC-RAG-03 | phase: tdd | owner: backend-worker | scope: tron-backend/src/domain/rag.rs tron-backend/src/domain/rag/* tron-backend/src/application/rag.rs tron-backend/src/application/rag/* tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: done.
+- AC-RAG-04 | phase: tdd | owner: backend-worker | scope: tron-backend/src/domain/rag.rs tron-backend/src/domain/rag/* tron-backend/src/application/rag.rs tron-backend/src/application/rag/* tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: done.
+- AC-RAG-05 | phase: tdd | owner: backend-worker | scope: tron-backend/src/domain/rag.rs tron-backend/src/domain/rag/* tron-backend/src/application/rag.rs tron-backend/src/application/rag/* tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: done.
+- AC-RAG-06 | phase: tdd | owner: backend-worker | scope: tron-backend/src/domain/rag.rs tron-backend/src/domain/rag/* tron-backend/src/application/rag.rs tron-backend/src/application/rag/* tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: done.
+- AC-RAG-07 | phase: tdd | owner: backend-worker | scope: tron-backend/src/domain/rag.rs tron-backend/src/domain/rag/* tron-backend/src/application/rag.rs tron-backend/src/application/rag/* tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: done.
+- AC-RAG-09 | phase: tdd | owner: backend-worker | scope: tron-backend/src/app.rs tron-backend/src/adapters/inbound/http/* tron-backend/src/application/rag.rs tron-backend/src/application/rag/* tron-backend/src/application/llm/* tron-backend/src/application/graph/* tron-backend/src/shared/event_bus/* tron-backend/tests/*rag* | command_ref: CMD-BE-CHECK | status: done.
 
 ## Worktree Notes
 

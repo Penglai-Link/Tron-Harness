@@ -3,8 +3,8 @@
 ## Execution Contract
 
 - feature_slug: rag-corpus-storage-profile-foundation
-- status: ready
-- execution_mode: pending_worktree_plan
+- status: done
+- execution_mode: hybrid
 - canonical_report_target: reports/database-result.md
 - main_agent_owned: false
 
@@ -14,9 +14,9 @@
 
 ## Task Rows
 
-- AC-RAG-01 | phase: tdd | owner: database-worker | scope: tron-backend/migrations/*_create_rag_foundation.sql tron-backend/src/adapters/outbound/persistence/sqlite/migrations.rs tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: ready.
-- AC-RAG-02 | phase: tdd | owner: database-worker | scope: tron-backend/migrations/*_create_rag_foundation.sql tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: ready.
-- AC-RAG-08 | phase: tdd | owner: database-worker | scope: tron-backend/migrations/*_create_rag_foundation.sql tron-backend/src/domain/rag.rs tron-backend/src/domain/rag/* tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: ready.
+- AC-RAG-01 | phase: tdd | owner: database-worker | scope: tron-backend/migrations/*_create_rag_foundation.sql tron-backend/src/adapters/outbound/persistence/sqlite/migrations.rs tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: done.
+- AC-RAG-02 | phase: tdd | owner: database-worker | scope: tron-backend/migrations/*_create_rag_foundation.sql tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: done.
+- AC-RAG-08 | phase: tdd | owner: database-worker | scope: tron-backend/migrations/*_create_rag_foundation.sql tron-backend/src/domain/rag.rs tron-backend/src/domain/rag/* tron-backend/tests/*rag* | command_ref: CMD-BE-TEST | status: done.
 
 ## Worktree Notes
 
