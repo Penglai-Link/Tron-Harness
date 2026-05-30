@@ -51,8 +51,8 @@
 
 - 新增 RAG bounded context 的 domain/application/persistence 基础结构。
 - 定义 `CorpusId`、`CorpusProfile`、`IngestProfile`、`RetrievalProfile`、`CorpusTableBinding`、`FilterSchema`、`StrategyRegistry` 等核心模型。
-- 新增 SQLite migration，建立 RAG 第一阶段所需 5 张基础表和索引。
-- 为 `memory-card` 和 `project-doc` 建立统一 Source 表与统一 TextUnit 表；TextUnit 行同时承载全文检索文本和向量检索数据。
+- 新增 SQLite migration，建立 RAG 第一阶段所需 7 张基础表和索引。
+- 为 `memory-card` 和 `project-doc` 建立按 Corpus 独立的 Source 表与 TextUnit 表；每个 Corpus 自己的 TextUnit 行同时承载全文检索文本和向量检索数据。
 - 建立 Corpus/Profile/filterSchema/storage binding 存储字段和内置 seed。
 - 建立只读 repository/application 方法，用于列出 Profile、读取 Profile、读取 Corpus binding、校验 filter 字段。
 - 保持统一 response 和 HTTP debug 入口的设计边界，但真实 debug API 可在后续诊断切片完成。
@@ -83,7 +83,7 @@
 
 `CorpusProfile` 描述一个知识域的基础能力、可用表绑定、filterSchema 和默认状态。第一阶段只启用 `memory-card` 与 `project-doc`，`code-graph` 保留为 disabled/reserved。
 
-`CorpusTableBinding` 连接逻辑 Corpus 与物理表名。第一阶段它作为 `rag_corpora.storage_binding_json` 的一部分存储，指向统一 `rag_sources`、`rag_text_units` 和 `rag_diagnostics`，不再为 FTS 或 Vector 单独声明物理表。
+`CorpusTableBinding` 连接逻辑 Corpus 与物理表名。第一阶段它作为 `rag_corpora.storage_binding_json` 的一部分存储，按 Corpus 指向 `rag_memory_sources`、`rag_project_doc_sources`、`rag_memory_text_units`、`rag_project_doc_text_units` 和统一 `rag_diagnostics`，不再为 FTS 或 Vector 单独声明物理表。
 
 `FilterSchema` 定义调用方可使用的逻辑过滤字段、物理列、值类型、可用操作和适用 Corpus。过滤校验只认 schema 中声明的字段。
 
@@ -132,7 +132,7 @@ UI: Not applicable.
 
 ### 数据库区域
 
-RAG 表应通过独立 migration 创建。第一阶段计划创建 `rag_corpora`、`rag_profiles`、`rag_sources`、`rag_text_units`、`rag_diagnostics` 5 张表。`rag_text_units` 同时承载 TextUnit 主数据、全文检索文本和向量检索数据。具体字段和索引在 `spec/database-design.md` 中定义。
+RAG 表应通过独立 migration 创建。第一阶段计划创建 `rag_corpora`、`rag_profiles`、`rag_memory_sources`、`rag_project_doc_sources`、`rag_memory_text_units`、`rag_project_doc_text_units`、`rag_diagnostics` 7 张表。`rag_memory_text_units` 和 `rag_project_doc_text_units` 分别承载对应 Corpus 的 TextUnit 主数据、全文检索文本和向量检索数据。具体字段和索引在 `spec/database-design.md` 中定义。
 
 ### 共享库与外部服务
 
@@ -154,4 +154,5 @@ RAG 表应通过独立 migration 创建。第一阶段计划创建 `rag_corpora`
 
 - RAG debug HTTP 是否随本 feature 一并提供最小只读路由；signal: PRD 第一个 feature 引用了 `Page: Backend API - RAG Debug`，但诊断、重试、Trace 与事件是第五个 feature；modules: inbound HTTP RAG routes、RagService；target: `tron-backend/src/adapters/inbound/http/rag`; recommendation: defer to diagnostics feature, this feature only提供 service 查询边界; decision: approved.
 - RAG migration 是否一次性创建 warnings 和 trace 表；signal: 后续诊断 feature 依赖这些表，但当前 feature 目标是存储基础；modules: migrations、SQLite repository；target: RAG foundation migration; recommendation: create merged `rag_diagnostics` minimal table now, behavior later; decision: approved.
-- RAG 是否保留独立 FTS/Vector 表；signal: 用户确认当前 RAG 模块支持向量检索和全文检索在一张表中；modules: migrations、SQLite repository、TextUnit model；target: `rag_text_units`; recommendation: merge fulltext and vector fields into `rag_text_units`; decision: approved.
+- RAG 是否保留独立 FTS/Vector 表；signal: 用户确认当前 RAG 模块支持向量检索和全文检索在一张表中；modules: migrations、SQLite repository、TextUnit model；target: `rag_memory_text_units`, `rag_project_doc_text_units`; recommendation: merge fulltext and vector fields into each Corpus TextUnit table; decision: approved.
+- RAG Source/TextUnit 是否跨 Corpus 合并；signal: 用户确认 Corpus/Profile/diagnostics 合并没问题，但 Source 和 TextUnit 还是按 corpora 维度分开存储更好；modules: migrations、SQLite repository、Source model、TextUnit model；target: `rag_memory_sources`, `rag_project_doc_sources`, `rag_memory_text_units`, `rag_project_doc_text_units`; recommendation: keep Source and TextUnit tables per Corpus; decision: approved.
