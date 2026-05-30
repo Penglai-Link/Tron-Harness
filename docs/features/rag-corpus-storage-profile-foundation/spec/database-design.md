@@ -2,10 +2,10 @@
 
 ## Database Decision
 
-- status: draft
+- status: approved
 - impact: create
-- approved_by: none
-- approved_at: none
+- approved_by: langtaoxin
+- approved_at: 2026-05-30
 
 本 feature 新增 RAG 基础 schema。按最新确认：Corpus/Profile/diagnostics 继续合并；Source 和 TextUnit 按 Corpus 独立存储；全文检索和向量检索不再拆独立表，而是放在各 Corpus 自己的 TextUnit 表中。最终本 feature 计划新增 7 张表。
 

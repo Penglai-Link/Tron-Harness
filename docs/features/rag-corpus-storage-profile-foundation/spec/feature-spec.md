@@ -5,7 +5,7 @@
 - drafted_from_requirement: yes
 - drafted_from_repository_findings: yes
 - best_practice_defaults_applied: yes
-- user_confirmation_status: waiting_human_decision
+- user_confirmation_status: approved_by_user_default
 
 本稿选择 PRD 的第一个可交付切片：`Corpus 存储与 Profile 基础`。该切片只建立 RAG 的 Corpus、Profile、filterSchema、strategy registry、CorpusTableBinding 和 SQLite adapter 边界，给后续 ingest、search、领域字段、debug、retry 和 trace 提供稳定地基。
 
@@ -15,7 +15,7 @@
 
 - feature_slug: rag-corpus-storage-profile-foundation
 - feature_name: RAG 后端底座 - Corpus 存储与 Profile 基础
-- status: draft
+- status: approved
 - owner: langtaoxin
 - source_request: 基于 ONES《RAG MVP 设计方案》和已批准 PRD，先落地第一阶段 RAG 后端底座的 Corpus 存储与 Profile 基础。
 - main_agent: current-thread lead agent
