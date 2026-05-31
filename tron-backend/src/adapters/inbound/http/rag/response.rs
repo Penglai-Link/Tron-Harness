@@ -1,7 +1,7 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::application::rag::RagIngestResult;
+use crate::application::rag::{CandidateHit, ContextPack, RagIngestResult, RagSearchResult};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -29,6 +29,104 @@ impl From<RagIngestResult> for RagIngestResponse {
             fulltext_status: result.fulltext_status,
             embedding_status: result.embedding_status,
             warnings: result.warnings,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagSearchResponse {
+    pub profile_id: String,
+    pub query: String,
+    pub context_strategy: String,
+    pub hits: Vec<RagCandidateHitResponse>,
+    pub context_pack: Option<RagContextPackResponse>,
+    pub warnings: Vec<Value>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagCandidateHitResponse {
+    pub corpus_id: String,
+    pub source_code: String,
+    pub source_version: String,
+    pub target_type: String,
+    pub target_code: String,
+    pub route_ids: Vec<String>,
+    pub score: f64,
+    pub scope_type: String,
+    pub scope_code: String,
+    pub preview: String,
+    pub text: String,
+    pub metadata: Value,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagContextPackResponse {
+    pub items: Vec<RagContextPackItemResponse>,
+    pub token_count: usize,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagContextPackItemResponse {
+    pub source_code: String,
+    pub text: String,
+    pub tokens: usize,
+    pub metadata: Value,
+}
+
+impl From<RagSearchResult> for RagSearchResponse {
+    fn from(result: RagSearchResult) -> Self {
+        Self {
+            profile_id: result.profile_id,
+            query: result.query,
+            context_strategy: result.context_strategy,
+            hits: result
+                .hits
+                .into_iter()
+                .map(RagCandidateHitResponse::from)
+                .collect(),
+            context_pack: result.context_pack.map(RagContextPackResponse::from),
+            warnings: result.warnings,
+        }
+    }
+}
+
+impl From<CandidateHit> for RagCandidateHitResponse {
+    fn from(hit: CandidateHit) -> Self {
+        Self {
+            corpus_id: hit.corpus_id,
+            source_code: hit.source_code,
+            source_version: hit.source_version,
+            target_type: hit.target_type,
+            target_code: hit.target_code,
+            route_ids: hit.route_ids,
+            score: hit.score,
+            scope_type: hit.scope_type,
+            scope_code: hit.scope_code,
+            preview: hit.preview,
+            text: hit.text,
+            metadata: hit.metadata,
+        }
+    }
+}
+
+impl From<ContextPack> for RagContextPackResponse {
+    fn from(pack: ContextPack) -> Self {
+        Self {
+            items: pack
+                .items
+                .into_iter()
+                .map(|item| RagContextPackItemResponse {
+                    source_code: item.source_code,
+                    text: item.text,
+                    tokens: item.tokens,
+                    metadata: item.metadata,
+                })
+                .collect(),
+            token_count: pack.token_count,
         }
     }
 }

@@ -12,7 +12,7 @@ use crate::{
     },
     application::{
         llm::LlmRuntimeService,
-        rag::{DefaultRagStrategyRegistry, RagIngestService},
+        rag::{DefaultRagStrategyRegistry, RagIngestService, RagSearchService},
         workspace::WorkspaceService,
     },
     config::AppConfig,
@@ -21,7 +21,9 @@ use crate::{
 };
 
 use super::{
-    error_mapper::rag_error_response, request::RagIngestHttpRequest, response::RagIngestResponse,
+    error_mapper::rag_error_response,
+    request::{RagIngestHttpRequest, RagSearchHttpRequest},
+    response::{RagIngestResponse, RagSearchResponse},
 };
 
 pub async fn ingest(
@@ -60,6 +62,39 @@ pub async fn ingest(
     }
 }
 
+pub async fn search(
+    State(config): State<AppConfig>,
+    State(workspaces): State<WorkspaceService>,
+    State(llm_runtime): State<LlmRuntimeService>,
+    auth: RequestAuthContext,
+    Json(request): Json<RagSearchHttpRequest>,
+) -> Response {
+    let request = request.into_application();
+    if !has_required_search_request_fields(&request) {
+        return rag_error_response(crate::domain::rag::RagError::SearchRequestInvalid);
+    }
+    if request.access_context.user_code != auth.user().user_code
+        || request.workspace_code != request.access_context.workspace_code
+        || !user_has_workspace_access(&workspaces, &request.workspace_code, &auth.user().user_code)
+    {
+        return rag_error_response(crate::domain::rag::RagError::SearchScopeInvalid);
+    }
+
+    let repository = match SqliteRagRepository::connect(&config.database_url) {
+        Ok(repository) => repository,
+        Err(error) => return rag_error_response(error),
+    };
+    let service = RagSearchService::new(
+        Arc::new(Mutex::new(repository)),
+        DefaultRagStrategyRegistry::default(),
+        llm_runtime,
+    );
+    match service.search(request).await {
+        Ok(result) => Json(ApiResponse::success(RagSearchResponse::from(result))).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
 fn user_has_workspace_access(
     workspaces: &WorkspaceService,
     workspace_code: &str,
@@ -70,8 +105,8 @@ fn user_has_workspace_access(
             workspace_code,
             WorkspaceAccessListQuery {
                 current: Some(1),
-                size: Some(500),
-                search: None,
+                size: Some(1),
+                search: Some(user_code.to_string()),
             },
         )
         .is_ok_and(|page| page.records.iter().any(|user| user.user_code == user_code))
@@ -94,4 +129,20 @@ fn has_required_request_fields(request: &crate::application::rag::RagIngestReque
     .into_iter()
     .all(|value| !value.trim().is_empty())
         && request.payload.as_object().is_some()
+}
+
+fn has_required_search_request_fields(request: &crate::application::rag::RagSearchRequest) -> bool {
+    [
+        request.profile_id.as_str(),
+        request.workspace_code.as_str(),
+        request.query.as_str(),
+        request.access_context.user_code.as_str(),
+        request.access_context.agent_code.as_str(),
+        request.access_context.workspace_code.as_str(),
+        request.context.strategy.as_str(),
+    ]
+    .into_iter()
+    .all(|value| !value.trim().is_empty())
+        && request.filters.as_object().is_some()
+        && request.limit > 0
 }

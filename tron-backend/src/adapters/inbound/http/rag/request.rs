@@ -1,7 +1,10 @@
 use serde::Deserialize;
 use serde_json::Value;
 
-use crate::application::rag::{RagIngestAccessContext, RagIngestRequest, RagIngestScope};
+use crate::application::rag::{
+    RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagSearchContextRequest,
+    RagSearchRequest,
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -87,5 +90,62 @@ impl Default for RagIngestScopeRequest {
             scope_type: None,
             scope_code: None,
         }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagSearchHttpRequest {
+    #[serde(default)]
+    pub profile_id: Option<String>,
+    #[serde(default)]
+    pub workspace_code: Option<String>,
+    #[serde(default)]
+    pub query: Option<String>,
+    #[serde(default)]
+    pub access_context: Option<RagIngestAccessContextRequest>,
+    #[serde(default)]
+    pub filters: Value,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub token_budget: Option<usize>,
+    #[serde(default)]
+    pub context: Option<RagSearchContextHttpRequest>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagSearchContextHttpRequest {
+    #[serde(default)]
+    pub strategy: Option<String>,
+}
+
+impl RagSearchHttpRequest {
+    pub fn into_application(self) -> RagSearchRequest {
+        let access_context = self.access_context.unwrap_or_default();
+        let context = self.context.unwrap_or_default();
+        RagSearchRequest {
+            profile_id: self.profile_id.unwrap_or_default(),
+            workspace_code: self.workspace_code.unwrap_or_default(),
+            query: self.query.unwrap_or_default(),
+            access_context: RagIngestAccessContext {
+                user_code: access_context.user_code.unwrap_or_default(),
+                agent_code: access_context.agent_code.unwrap_or_default(),
+                workspace_code: access_context.workspace_code.unwrap_or_default(),
+            },
+            filters: self.filters,
+            limit: self.limit.unwrap_or(10),
+            token_budget: self.token_budget.unwrap_or(1200),
+            context: RagSearchContextRequest {
+                strategy: context.strategy.unwrap_or_else(|| "RESULT_LIST".into()),
+            },
+        }
+    }
+}
+
+impl Default for RagSearchContextHttpRequest {
+    fn default() -> Self {
+        Self { strategy: None }
     }
 }
