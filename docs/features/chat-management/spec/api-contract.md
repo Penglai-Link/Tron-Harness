@@ -23,7 +23,7 @@ Protected Chat Management APIs own durable session and message state. They call 
 - auth: authenticated user.
 - acceptance_ids: AC-CM-01
 - parameter_passing: request body.
-- request: `workspaceCode`, optional `title`, `appCode`, `taskCode`.
+- request: `workspaceCode`, optional `title`, `appCode`, `taskCode`, `agentCode`.
 - response: `ChatSession`.
 - client_impact: used by new chat button.
 - compatibility: additive endpoint.
@@ -43,9 +43,10 @@ Protected Chat Management APIs own durable session and message state. They call 
 
 - purpose: persist user message, run the agent, persist assistant final output, and return the updated transcript.
 - auth: authenticated user.
-- acceptance_ids: AC-CM-02
+- acceptance_ids: AC-CM-02, AC-CM-09
 - parameter_passing: path variable and request body.
-- request: `content`, `workspaceCode`, optional `appCode`, `taskCode`, `model`, `limits`, `tools`.
+- request: `content`, `workspaceCode`, optional `appCode`, `taskCode`, `agentCode`, `model`, `limits`, `tools`.
+- agent_resolution: `agentCode` in request > session `agentCode` > `main-agent`; `main-agent` uses in-process runtime, `codex`/`opencode` use system CLI runtime when workspace policy is enabled and available.
 - response: `ChatSendResult` with `session`, `run`, and `messages`.
 - client_impact: composer sends through Chat API.
 - compatibility: additive endpoint.
@@ -54,7 +55,7 @@ Protected Chat Management APIs own durable session and message state. They call 
 
 - purpose: persist user message, run the agent through the streaming model path, forward EventBus-backed AG-UI standard SSE events, persist assistant final output, and end with the updated transcript.
 - auth: authenticated user.
-- acceptance_ids: AC-CM-02, AC-CM-05.
+- acceptance_ids: AC-CM-02, AC-CM-05, AC-CM-09.
 - parameter_passing: path variable and request body.
 - request: same payload as non-stream send.
 - response: `text/event-stream` frames:
@@ -67,7 +68,7 @@ Protected Chat Management APIs own durable session and message state. They call 
 
 ## Auth And Permissions
 
-All endpoints use existing protected-route auth. The first version validates active workspace through the existing agent invocation path on send and stores the authenticated user code on created sessions/messages.
+All endpoints use existing protected-route auth. The first version validates active workspace through the existing agent invocation path on send and stores the authenticated user code on created sessions/messages. System agent execution also requires the selected workspace agent policy to be enabled and available.
 
 ## Error Contract
 
@@ -75,6 +76,7 @@ All endpoints use existing protected-route auth. The first version validates act
 - missing content -> 400 / `CHAT_MESSAGE_REQUIRED`; unified error response; AC-CM-02.
 - storage failure -> 500 / `CHAT_STORAGE_FAILED`; unified error response; AC-CM-01.
 - agent invocation failure -> mapped existing agent error code; unified error response; AC-CM-02.
+- unavailable system agent -> 500 runtime failure with explicit disabled/unavailable reason; unified error response; AC-CM-09.
 
 ## Frontend Backend Boundary
 
@@ -82,7 +84,7 @@ Backend owns session/message persistence and send orchestration. Frontend owns l
 
 ## Database And Transaction Boundary
 
-The user message is committed before invocation. The assistant final output and session latest-run fields are committed after invocation completes. Agent invocation errors keep the user message as durable history.
+The user message is committed before invocation. The assistant final output and session latest-run fields are committed after invocation completes. Agent invocation errors keep the user message as durable history. Session `agentCode` is persisted at session create and reused when send payload does not specify another agent.
 
 ## Mock Or Adapter Expectations
 

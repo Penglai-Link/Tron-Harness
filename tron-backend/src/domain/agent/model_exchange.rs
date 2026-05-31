@@ -8,6 +8,8 @@ use super::{AgentMessage, EffectiveTool};
 pub struct ModelRequest {
     pub messages: Vec<AgentMessage>,
     pub tools: Vec<EffectiveTool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_agent_session_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -31,6 +33,7 @@ pub enum ModelResponse {
     FinalOutput {
         output: String,
         token_usage: Option<ModelTokenUsage>,
+        system_agent_session_id: Option<String>,
     },
     ToolCall {
         call: ToolCall,
@@ -85,9 +88,18 @@ impl ModelResponse {
         output: impl Into<String>,
         token_usage: Option<ModelTokenUsage>,
     ) -> Self {
+        Self::final_output_with_usage_and_session(output, token_usage, None)
+    }
+
+    pub fn final_output_with_usage_and_session(
+        output: impl Into<String>,
+        token_usage: Option<ModelTokenUsage>,
+        system_agent_session_id: Option<String>,
+    ) -> Self {
         Self::FinalOutput {
             output: output.into(),
             token_usage,
+            system_agent_session_id,
         }
     }
 

@@ -11,6 +11,7 @@ pub struct AgentRunResult {
     pub final_output: String,
     pub step_count: u32,
     pub token_usage: Option<ModelTokenUsage>,
+    pub system_agent_session_id: Option<String>,
     pub observations: Vec<ToolObservation>,
 }
 

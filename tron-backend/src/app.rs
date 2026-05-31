@@ -25,15 +25,17 @@ use crate::{
             model::{HttpLlmRuntimeClient, HttpModelClient},
             persistence::{
                 GrafeoAdapterConfig, GrafeoGraphStore, GrafeoOntologyStore, GrafeoStoreCore,
-                SqliteAgentManagementRepository, SqliteAgentRunRepository,
-                SqliteAppRepository, SqliteAutomationRepository, SqliteChatRepository,
-                SqliteModelRepository, SqliteRoleRepository, SqliteSkillRegistryRepository,
-                SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
-                SqliteWorkspaceRepository, bootstrap_platform_admin,
+                SqliteAgentEventReplayStore, SqliteAgentManagementRepository,
+                SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
+                SqliteChatRepository, SqliteModelRepository, SqliteRoleRepository,
+                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteUserRepository,
+                SqliteVariableRepository, SqliteWorkspaceRepository, bootstrap_platform_admin,
             },
         },
     },
-    application::agent::{AgentManagementService, AgentRunHistoryService, ModelClient},
+    application::agent::{
+        AgentAguiReplayStore, AgentManagementService, AgentRunHistoryService, ModelClient,
+    },
     application::app::AppService,
     application::automation::AutomationService,
     application::chat::ChatService,
@@ -70,6 +72,7 @@ static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService)> = OnceLo
 pub struct AppState {
     pub config: AppConfig,
     pub agui_events: Arc<AguiEventSink>,
+    pub agui_replay_store: Arc<dyn AgentAguiReplayStore>,
     pub agent_model_client: Arc<dyn ModelClient>,
     pub agent_management: AgentManagementService,
     pub agent_runs: AgentRunHistoryService,
@@ -93,11 +96,16 @@ pub struct AppState {
 impl AppState {
     pub fn new(config: AppConfig) -> Self {
         let agui_events = Arc::new(AguiEventSink::new(&config.event_bus));
+        let agui_replay_store = Arc::new(
+            SqliteAgentEventReplayStore::connect(&config.database_url)
+                .expect("agent event replay store should initialize"),
+        );
         let event_bus = EventBusRuntimeBuilder::new(
             config.event_bus.clone(),
             Arc::new(SnowflakedSnowflakeIdProvider::default()),
         )
         .register_sink(agui_events.clone())
+        .register_sink(agui_replay_store.clone())
         .build();
         let agent_model_client = Arc::new(HttpModelClient::default());
         let agent_tool_registry = Arc::new(ToolRegistry::default());
@@ -239,6 +247,7 @@ impl AppState {
         Self {
             config,
             agui_events,
+            agui_replay_store,
             agent_model_client,
             agent_management,
             agent_runs,

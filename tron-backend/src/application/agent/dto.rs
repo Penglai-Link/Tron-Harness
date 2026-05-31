@@ -10,6 +10,9 @@ pub struct AgentInvocationCommand {
     pub prompt: Option<String>,
     pub workspace_code: Option<String>,
     pub conversation_code: Option<String>,
+    pub agent_code: Option<String>,
+    #[serde(skip)]
+    pub system_agent_session_id: Option<String>,
     pub app_code: Option<String>,
     pub task_code: Option<String>,
     pub model: Option<AgentModelConfig>,
@@ -24,8 +27,10 @@ pub struct AgentInvocationResult {
     pub run_code: String,
     pub conversation_code: Option<String>,
     pub workspace_code: String,
+    pub runtime_adapter_key: String,
     pub status: &'static str,
     pub final_output: String,
     pub step_count: u32,
     pub token_usage: Option<ModelTokenUsage>,
+    pub system_agent_session_id: Option<String>,
 }

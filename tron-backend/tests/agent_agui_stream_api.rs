@@ -1,6 +1,10 @@
 mod common;
 
-use std::sync::Arc;
+use std::{
+    path::PathBuf,
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use axum::{
     Json, Router,
@@ -11,6 +15,7 @@ use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tron_backend::{
     application::agent::AgentAguiStreamService,
+    config::AppConfig,
     shared::{
         event_bus::{
             AguiEventSink, BusEventDraft, BusOutcome, BusRequestRef, EventBusConfig,
@@ -305,4 +310,78 @@ async fn agui_protocol_tool_events_keep_correlation_fields() {
         event("TOOL_CALL_END").data["toolCallId"],
         json!("RUN-TOOL-AGUI-tool-1")
     );
+}
+
+#[tokio::test]
+async fn agui_stream_events_can_replay_from_persistent_store_after_restart() {
+    let database_path = temp_database_path("agui-replay");
+    let mut config = AppConfig::default();
+    config.database_url = database_path.to_string_lossy().into_owned();
+    let app = common::app_with_config(config.clone());
+    let server = agent_model_mock_server().await;
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let stream_key = "CONV-AGUI-PERSIST";
+
+    let create_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/agents/runs",
+        Some(json!({
+            "prompt": "persist this stream replay",
+            "workspaceCode": "TRON_CORE",
+            "conversationCode": stream_key,
+            "model": {
+                "modelCode": "AGUI_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": server.base_url,
+                "apiKey": "sk-agui-api-key",
+                "modelName": "gpt-agui"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(create_response.status(), StatusCode::OK);
+    tokio::time::sleep(std::time::Duration::from_millis(120)).await;
+
+    let restarted = common::app_with_config(config);
+    let token = authenticated_bearer_token(&restarted).await;
+    let authorization = format!("Bearer {token}");
+    let events_response = request_with_headers(
+        &restarted,
+        Method::GET,
+        &format!("/api/v1/agents/agui/streams/{stream_key}/events"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(events_response.status(), StatusCode::OK);
+    let events = response_json(events_response).await;
+    assert_eq!(events["code"], json!("SUCCESS"));
+    let records = events["data"]["events"]
+        .as_array()
+        .expect("events should be an array");
+    assert!(
+        records
+            .iter()
+            .any(|event| event["eventName"] == "agent.run.started")
+    );
+    assert!(
+        records
+            .iter()
+            .any(|event| event["eventName"] == "agent.run.completed")
+    );
+}
+
+fn temp_database_path(test_name: &str) -> PathBuf {
+    let mut path = std::env::temp_dir();
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock should be monotonic")
+        .as_nanos();
+    path.push(format!("tron-{test_name}-{nanos}.sqlite3"));
+    path
 }

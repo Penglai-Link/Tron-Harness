@@ -1,3 +1,4 @@
+mod agent_event_replay_store;
 mod agent_management_repository;
 mod agent_repository;
 mod app_repository;
@@ -14,6 +15,7 @@ mod user_repository;
 mod variable_repository;
 mod workspace_repository;
 
+pub use agent_event_replay_store::SqliteAgentEventReplayStore;
 pub use agent_management_repository::SqliteAgentManagementRepository;
 pub use agent_repository::SqliteAgentRunRepository;
 pub use app_repository::SqliteAppRepository;

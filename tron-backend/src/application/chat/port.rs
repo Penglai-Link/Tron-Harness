@@ -24,6 +24,23 @@ pub trait ChatRepository: Send {
         session_code: &str,
         run_code: &str,
         run_status: &str,
+        agent_code: Option<&str>,
+        system_agent_session_id: Option<&str>,
+        updated_at: &str,
+    ) -> Result<(), ChatError>;
+    fn runtime_session_id(
+        &mut self,
+        conversation_code: &str,
+        runtime_adapter_key: &str,
+        agent_code: &str,
+    ) -> Result<Option<String>, ChatError>;
+    fn upsert_runtime_session(
+        &mut self,
+        conversation_code: &str,
+        runtime_adapter_key: &str,
+        agent_code: &str,
+        runtime_session_id: &str,
+        last_run_code: Option<&str>,
         updated_at: &str,
     ) -> Result<(), ChatError>;
     fn create_message(&mut self, message: &ChatMessage) -> Result<(), ChatError>;

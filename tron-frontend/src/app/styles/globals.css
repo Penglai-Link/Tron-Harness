@@ -135,6 +135,12 @@ body {
   color: var(--color-on-surface);
 }
 
+html.tron-chat-scroll-lock,
+body.tron-chat-scroll-lock {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 .auth-page-shell {
   background-color: var(--color-background);
   background-image:

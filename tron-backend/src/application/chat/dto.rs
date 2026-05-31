@@ -21,6 +21,7 @@ pub struct CreateChatSessionCommand {
     pub title: Option<String>,
     pub app_code: Option<String>,
     pub task_code: Option<String>,
+    pub agent_code: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -38,6 +39,7 @@ pub struct SendChatMessageCommand {
     pub workspace_code: Option<String>,
     pub app_code: Option<String>,
     pub task_code: Option<String>,
+    pub agent_code: Option<String>,
     pub model_code: Option<String>,
     pub model: Option<AgentModelConfig>,
     pub limits: Option<AgentRunLimits>,

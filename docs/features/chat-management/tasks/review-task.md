@@ -19,6 +19,8 @@ Review reused fresh backend, frontend, docs, and browser evidence.
 - AC-CM-05 | phase: review | owner: lead | scope: backend AG-UI stream contract and regression evidence | command_ref: CMD-BE-TEST | status: done.
 - AC-CM-06 | phase: review | owner: lead | scope: frontend AG-UI event cards, streaming Markdown, and browser evidence | command_ref: CMD-FE-CHECK | status: done.
 - AC-CM-07 | phase: review | owner: lead | scope: frontend send completion toast behavior and browser evidence | command_ref: CMD-FE-CHECK | status: done.
+- AC-CM-08 | phase: review | owner: lead | scope: frontend agent selector and session `agentCode` persistence evidence | command_ref: CMD-FE-CHECK | status: done.
+- AC-CM-09 | phase: review | owner: lead | scope: backend system agent runtime dispatch and CLI adapter evidence | command_ref: CMD-BE-TEST | status: done.
 
 ## Worktree Notes
 

@@ -120,6 +120,7 @@ fn chat_stream_request_asks_for_usage_chunk() {
             &ModelRequest {
                 messages: vec![AgentMessage::user("hello")],
                 tools: vec![],
+                system_agent_session_id: None,
             },
         )
         .expect("stream request should build");
@@ -172,6 +173,7 @@ fn responses_request_enables_reasoning_for_thinking_models() {
             &ModelRequest {
                 messages: vec![AgentMessage::user("hello")],
                 tools: vec![],
+                system_agent_session_id: None,
             },
         )
         .expect("responses stream request should build");

@@ -24,7 +24,7 @@ The implementation request supplies the design boundary: durable sessions and me
 
 - user_story: Operators can continue historical chat sessions, send new messages, and observe the current agent run without losing durable message history.
 - intent: separate chat history management from direct agent execution and prevent AG-UI replay from becoming the historical message source.
-- outcome: `/chats` becomes the durable Chat Management workspace with grouped sessions, persisted transcript replay, send orchestration, and a constrained right context sidebar.
+- outcome: `/chats` becomes the durable Chat Management workspace with grouped sessions, persisted transcript replay, send orchestration, session-level agent selection, and a constrained right context sidebar.
 
 ## Product Source Slices
 
@@ -42,12 +42,15 @@ The implementation request supplies the design boundary: durable sessions and me
 - Existing synchronous agent invocation remains the first implementation path for chat sends.
 - API-mode chat sends must provide a model config because the current agent runtime requires one.
 - Mock-mode frontend can show deterministic AG-UI-like current-run events for visual proof.
+- System agent execution in this iteration is stateless CLI invocation per send request.
 
 ### In Scope
 
 - `chat_sessions` and `chat_messages` persistence.
 - Protected `/api/v1/chats` routes for grouping sessions, creating sessions, listing messages, and sending messages.
 - Chat API orchestration over existing agent invocation with `conversationCode=sessionCode`.
+- Session `agentCode` persistence and chat send fallback to session-selected agent when request payload omits `agentCode`.
+- Chat-layer routing that consumes runtime support for `main-agent`, `codex`, and `opencode` from `react-agent-runtime`.
 - `/chats` three-column workbench and compatibility rendering for existing `/chats/8842-alpha` sample path.
 - Right context sidebar limited to app/task, worktree path/branch, actually observed skills, and context-window status.
 
@@ -57,6 +60,8 @@ The implementation request supplies the design boundary: durable sessions and me
 - Reconstructing historical messages from AG-UI events.
 - Fabricated context-window token metrics.
 - Full asynchronous background run lifecycle beyond the existing invocation service.
+- Cross-run or cross-request continuation mapping to external CLI sessions (resume/fork/session handoff).
+- Generic passthrough of all Codex/OpenCode CLI flags from frontend payloads.
 
 ### Constraints
 
@@ -67,9 +72,9 @@ The implementation request supplies the design boundary: durable sessions and me
 
 ## Feature Model
 
-Session is the durable conversation container and owns a stable `sessionCode`. Run is a single execution under a session and uses `runCode`; the existing `agent_runs` table stores run summaries. Message is the durable historical transcript record and is never rebuilt from AG-UI. AG-UI only represents current-run event state and can supply step/status metadata and the skill names actually observed in this run.
+Session is the durable conversation container and owns a stable `sessionCode` plus optional `agentCode` for invocation routing. Run is a single execution under a session and uses `runCode`; the existing `agent_runs` table stores run summaries. Message is the durable historical transcript record and is never rebuilt from AG-UI. AG-UI only represents current-run event state and can supply step/status metadata and the skill names actually observed in this run.
 
-Sending a chat message creates or uses a session, persists a user message, invokes the agent with `conversationCode=sessionCode`, updates the latest run summary on the session, and stores the assistant final output as a message after completion.
+Sending a chat message creates or uses a session, persists a user message, resolves invocation agent by payload `agentCode` or session `agentCode`, invokes the selected runtime with `conversationCode=sessionCode`, updates the latest run summary on the session, and stores the assistant final output as a message after completion.
 
 ## Page And Module Surface
 
@@ -89,7 +94,10 @@ The page uses the console shell content area for the left session sidebar and co
 - Agent invocation already persists `agent_runs` and emits AG-UI events with stream key from `conversationCode`.
 - AG-UI events contain metadata only; this aligns with the right context requirement but cannot supply context-window statistics yet.
 - Strong feature dependencies found after scanning adjacent feature specs: Agent Invocation API, Agent Run History, Agent AG-UI Stream Adapter, Right Context Sidebar.
+- Workspace system agent management already exposes enabled/available state for `codex` and `opencode`, which can be reused for chat agent selection.
+- Existing invocation contract enforces model config even when execution is delegated to a CLI system agent runtime.
 
 ## Open Decisions
 
 - Chat service capability; signal: future pages may reuse durable chat sessions; modules: backend chat API and frontend chat hooks; target: `application/chat` and `domain/chat`; recommendation: extract now as feature-local domain with reusable service boundary; decision: approved_with_defaults.
+- CLI session continuity; signal: users may expect `conversation` resume across requests for Codex/OpenCode; modules: chat session model, agent runtime adapters, run history mapping; target: future evolution after current adapter foundation; recommendation: add explicit runtime session mapping contract and resume strategy as a follow-up feature; decision: pending.

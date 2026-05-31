@@ -24,8 +24,8 @@ pub use history::{
 pub use kind::{AgentKind, AgentModelProtocol, AgentRuntimeKind};
 pub use management::{
     AgentManagementError, ManagedAgentSource, ManagedAgentType, ManagedSystemAgentRecord,
-    PlatformMainAgentConfig, SystemAgentRegistryEntry, SystemAgentStatus,
-    SystemAgentSyncResult, WorkspaceSystemAgentPolicy,
+    PlatformMainAgentConfig, RuntimeAdapterCapabilityRecord, SystemAgentModelRecord,
+    SystemAgentRegistryEntry, SystemAgentStatus, SystemAgentSyncResult, WorkspaceSystemAgentPolicy,
 };
 pub use message::AgentMessage;
 pub use model_config::AgentModelConfig;

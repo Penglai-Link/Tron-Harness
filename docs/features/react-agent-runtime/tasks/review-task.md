@@ -18,6 +18,10 @@ Review checks AC coverage, proof rows, changed paths, and validation evidence.
 - AC-RAR-04 | phase: review | owner: lead | scope: success lifecycle evidence | command_ref: none | status: done.
 - AC-RAR-05 | phase: review | owner: lead | scope: failure lifecycle evidence | command_ref: none | status: done.
 - AC-RAR-06 | phase: review | owner: lead | scope: event safety evidence | command_ref: none | status: done.
+- AC-RAR-07 | phase: review | owner: lead | scope: runtime kind dispatch and system CLI adapter evidence | command_ref: CMD-BE-TEST | status: done.
+- AC-RAR-08 | phase: review | owner: lead | scope: orchestrator routing evidence and runtime capability descriptor contract | command_ref: CMD-BE-TEST | status: done.
+- AC-RAR-09 | phase: review | owner: lead | scope: canonical-event to AGUI translator evidence | command_ref: CMD-BE-TEST | status: done.
+- AC-RAR-10 | phase: review | owner: lead | scope: durable AGUI replay persistence sink and restart replay evidence | command_ref: CMD-BE-TEST | status: done.
 
 ## Worktree Notes
 

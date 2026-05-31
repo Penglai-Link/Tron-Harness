@@ -35,6 +35,8 @@ pub struct ChatSession {
     pub user_code: Option<String>,
     pub app_code: Option<String>,
     pub task_code: Option<String>,
+    pub agent_code: Option<String>,
+    pub system_agent_session_id: Option<String>,
     pub title: String,
     pub status: ChatSessionStatus,
     pub last_run_code: Option<String>,

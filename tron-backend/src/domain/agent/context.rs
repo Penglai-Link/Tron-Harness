@@ -66,6 +66,7 @@ pub struct AgentRunContext {
     pub request_id: Option<String>,
     pub stream_key: Option<String>,
     pub agent_kind: AgentKind,
+    pub system_agent_session_id: Option<String>,
     pub model: AgentModelConfig,
     pub variables: Vec<EffectiveVariable>,
     pub skills: Vec<EffectiveSkill>,

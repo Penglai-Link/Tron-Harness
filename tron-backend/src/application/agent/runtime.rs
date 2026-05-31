@@ -6,9 +6,9 @@ use std::{
 
 use crate::{
     domain::agent::{
-        AgentError, AgentMessage, AgentModelConfig, AgentRunContext, AgentRunResult, ModelRequest,
-        ModelResponse, ModelStreamEvent, ModelStreamEventKind, ModelTokenUsage, ToolRegistry,
-        ToolRequest,
+        AgentError, AgentKind, AgentMessage, AgentModelConfig, AgentRunContext, AgentRunResult,
+        ModelRequest, ModelResponse, ModelStreamEvent, ModelStreamEventKind, ModelTokenUsage,
+        ToolRegistry, ToolRequest,
     },
     shared::event_bus::{BusEventDraft, BusOutcome, BusRequestRef, EventBusHandle, PublishOutcome},
 };
@@ -94,6 +94,12 @@ impl ReactAgent {
         sink: Option<ModelStreamSink>,
     ) -> Result<AgentRunResult, AgentError> {
         validate_context(&context)?;
+        self.publish(
+            &context,
+            "agent.run.requested",
+            BusOutcome::Started,
+            Some("run_requested"),
+        )?;
         self.publish(&context, "agent.run.started", BusOutcome::Started, None)?;
         let mut step_count = 0;
         let mut tool_calls = 0;
@@ -151,7 +157,11 @@ impl ReactAgent {
             }
 
             match response {
-                ModelResponse::FinalOutput { output, .. } => {
+                ModelResponse::FinalOutput {
+                    output,
+                    system_agent_session_id,
+                    ..
+                } => {
                     self.publish(
                         &context,
                         "agent.output.created",
@@ -171,6 +181,7 @@ impl ReactAgent {
                         final_output: output,
                         step_count,
                         token_usage,
+                        system_agent_session_id,
                         observations: context.observations.clone(),
                     });
                 }
@@ -316,9 +327,13 @@ impl ReactAgent {
             .outcome(outcome)
             .subject("agent_run", context.run_code.clone())
             .attr("workspace_code", context.workspace_code.clone())
-            .attr("agent_kind", "react")
+            .attr("agent_kind", agent_kind_label(context.agent_kind))
             .attr("runtime_kind", "in_process")
-            .attr("model_code", context.model.model_code.clone());
+            .attr("model_code", context.model.model_code.clone())
+            .payload_field("model_name", context.model.model_name.clone());
+        if let Some(context_window_tokens) = context.model.context_window_tokens {
+            draft = draft.payload_field("context_window_limit", context_window_tokens.to_string());
+        }
         if let Some(summary) = summary {
             draft = draft.summary(summary);
         }
@@ -355,9 +370,15 @@ impl ReactAgent {
         let event_bus = self.event_bus.clone();
         let run_code = context.run_code.clone();
         let workspace_code = context.workspace_code.clone();
+        let agent_kind = context.agent_kind;
         let conversation_code = context.conversation_code.clone();
         let stream_key = context.stream_key.clone();
         let model_code = context.model.model_code.clone();
+        let model_name = context.model.model_name.clone();
+        let context_window_tokens = context
+            .model
+            .context_window_tokens
+            .map(|value| value.to_string());
         let output_started = Arc::new(Mutex::new(false));
         Arc::new(move |event: ModelStreamEvent| {
             let event_name = match event.kind {
@@ -376,9 +397,14 @@ impl ReactAgent {
                             .outcome(BusOutcome::Started)
                             .subject("agent_run", run_code.clone())
                             .attr("workspace_code", workspace_code.clone())
-                            .attr("agent_kind", "react")
+                            .attr("agent_kind", agent_kind_label(agent_kind))
                             .attr("runtime_kind", "in_process")
-                            .attr("model_code", model_code.clone());
+                            .attr("model_code", model_code.clone())
+                            .payload_field("model_name", model_name.clone());
+                    if let Some(context_window_tokens) = &context_window_tokens {
+                        start_draft = start_draft
+                            .payload_field("context_window_limit", context_window_tokens.clone());
+                    }
                     if let Some(conversation_code) = &conversation_code {
                         start_draft =
                             start_draft.attr("conversation_code", conversation_code.clone());
@@ -395,10 +421,15 @@ impl ReactAgent {
                     .outcome(BusOutcome::Progress)
                     .subject("agent_run", run_code.clone())
                     .attr("workspace_code", workspace_code.clone())
-                    .attr("agent_kind", "react")
+                    .attr("agent_kind", agent_kind_label(agent_kind))
                     .attr("runtime_kind", "in_process")
                     .attr("model_code", model_code.clone())
+                    .payload_field("model_name", model_name.clone())
                     .payload_field("delta_json", delta_payload);
+                if let Some(context_window_tokens) = &context_window_tokens {
+                    draft =
+                        draft.payload_field("context_window_limit", context_window_tokens.clone());
+                }
                 if let Some(conversation_code) = &conversation_code {
                     draft = draft.attr("conversation_code", conversation_code.clone());
                 }
@@ -409,6 +440,13 @@ impl ReactAgent {
             }
             sink(event);
         })
+    }
+}
+
+fn agent_kind_label(agent_kind: AgentKind) -> &'static str {
+    match agent_kind {
+        AgentKind::React => "react",
+        AgentKind::SystemCli => "system_cli",
     }
 }
 
@@ -482,5 +520,6 @@ fn model_request_from_context(context: &AgentRunContext) -> ModelRequest {
     ModelRequest {
         messages,
         tools: context.tools.clone(),
+        system_agent_session_id: context.system_agent_session_id.clone(),
     }
 }

@@ -108,7 +108,9 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
         Ok(())
     }
 
-    fn list_system_agents(&mut self) -> Result<Vec<SystemAgentRegistryEntry>, AgentManagementError> {
+    fn list_system_agents(
+        &mut self,
+    ) -> Result<Vec<SystemAgentRegistryEntry>, AgentManagementError> {
         let mut statement = self
             .connection
             .prepare(

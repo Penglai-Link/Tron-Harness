@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentAguiStreamState {
     pub stream_key: String,
@@ -13,7 +13,7 @@ pub struct AgentAguiStreamState {
     pub replay_evicted: usize,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentAguiEventSnapshot {
     pub stream_key: String,
@@ -22,7 +22,7 @@ pub struct AgentAguiEventSnapshot {
     pub events: Vec<AgentAguiEvent>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentAguiEvent {
     pub id: String,
@@ -36,7 +36,7 @@ pub struct AgentAguiEvent {
     pub metadata: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentAguiProtocolEvent {
     pub sse_event: String,

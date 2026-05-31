@@ -16,8 +16,8 @@
 
 - default_branch: master
 - base_ref: master
-- current_branch: feature/clouds3n/agent-framework/base
-- note: selected Lite Spec multi-agent base branch already exists and current worktree mirrors the branch tree.
+- current_branch: detached HEAD (continuation worktree `/Users/clouds3n/.codex/worktrees/1b07/Tron`)
+- note: selected Lite Spec base branch remains reference lineage; this evolution continuation executed in the current worktree.
 
 ## Multi-Agent Base Branch
 
@@ -36,6 +36,7 @@
 | AC-RAR-04 | solo | lead | user approved Codex-owned decisions and ReAct lifecycle integrates the same runtime contracts | none | done |
 | AC-RAR-05 | solo | lead | user approved Codex-owned decisions and failure lifecycle tests share the same runtime module | none | done |
 | AC-RAR-06 | solo | lead | user approved Codex-owned decisions and event safety is a bounded runtime-module slice | none | done |
+| AC-RAR-07 | solo | lead | runtime dispatch, system CLI adapter, and invocation wiring are tightly coupled with chat orchestration integration tests in this continuation worktree | none | done |
 
 ## Agent Worktrees
 

@@ -15,6 +15,7 @@ export * from "./types/ShellNavigation";
 export * from "./types/WorkspaceSpace";
 export * from "./ui/DataTable";
 export * from "./ui/DetailField";
+export * from "./ui/ConfirmDialog";
 export * from "./ui/Forms";
 export * from "./ui/MarkdownContent";
 export * from "./ui/PixelBlast";

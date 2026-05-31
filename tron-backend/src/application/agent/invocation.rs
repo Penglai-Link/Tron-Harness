@@ -9,7 +9,7 @@ use crate::{
     },
     domain::{
         agent::{
-            AgentError, AgentExecutionScope, AgentKind, AgentMessage, AgentRunContext,
+            AgentExecutionScope, AgentKind, AgentManagementError, AgentMessage, AgentRunContext,
             AgentRunHistoryRecord, AgentRunStatus, EffectiveSkill, EffectiveVariable, ToolRegistry,
         },
         skill::WorkspaceSkillListQuery,
@@ -20,10 +20,12 @@ use crate::{
 };
 
 use super::{
-    AgentInvocationCommand, AgentInvocationError, AgentInvocationResult,
-    AgentManagementService, AgentRunHistoryService, ModelClient, ModelStreamSink,
-    ReactAgentBuilder,
+    AgentInvocationCommand, AgentInvocationError, AgentInvocationResult, AgentManagementService,
+    AgentOrchestrator, AgentRunHistoryService, AgentRuntimeRegistry, ModelClient, ModelStreamSink,
+    ResolvedSystemAgentRuntime, RuntimeAdapterSelection, SystemAgentCliKind,
 };
+
+const MAIN_AGENT_CODE: &str = "main-agent";
 
 #[derive(Clone)]
 pub struct AgentInvocationService {
@@ -87,13 +89,24 @@ impl AgentInvocationService {
         user_code: Option<String>,
         sink: Option<ModelStreamSink>,
     ) -> Result<AgentInvocationResult, AgentInvocationError> {
-        let prompt = command
-            .prompt
+        let AgentInvocationCommand {
+            run_code: requested_run_code,
+            prompt: requested_prompt,
+            workspace_code: requested_workspace_code,
+            conversation_code: requested_conversation_code,
+            agent_code: requested_agent_code,
+            system_agent_session_id: requested_system_agent_session_id,
+            app_code: requested_app_code,
+            task_code: requested_task_code,
+            model: requested_model,
+            limits: requested_limits,
+            tools: requested_tools,
+        } = command;
+        let prompt = requested_prompt
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
             .ok_or(AgentInvocationError::PromptRequired)?;
-        let workspace_code = command
-            .workspace_code
+        let workspace_code = requested_workspace_code
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty())
             .ok_or(AgentInvocationError::WorkspaceRequired)?;
@@ -104,10 +117,9 @@ impl AgentInvocationService {
         if workspace.status != WorkspaceStatus::Active {
             return Err(AgentInvocationError::WorkspaceInvalid);
         }
-        let model = command.model.ok_or(AgentInvocationError::ModelRequired)?;
+        let model = requested_model.ok_or(AgentInvocationError::ModelRequired)?;
         let model_code = model.model_code.clone();
-        let app = command
-            .app_code
+        let app = requested_app_code
             .as_deref()
             .map(|app_code| self.apps.get_app(app_code))
             .transpose()
@@ -117,6 +129,11 @@ impl AgentInvocationService {
                 return Err(AgentInvocationError::WorkspaceInvalid);
             }
         }
+        let resolved_agent = resolve_invocation_agent(
+            &self.management,
+            &workspace.workspace_code,
+            requested_agent_code,
+        )?;
         let variables = self
             .variables
             .list_variables(
@@ -148,68 +165,75 @@ impl AgentInvocationService {
             })
             .collect::<Vec<_>>();
 
-        let run_code = command.run_code.unwrap_or_else(generate_agent_run_code);
+        let run_code = requested_run_code.unwrap_or_else(generate_agent_run_code);
         let mut messages = Vec::new();
-        if command.task_code.is_none() {
-            if let Some(guidance) = self
-                .management
-                .current_main_agent_guidance()
-                .map_err(|_| {
-                    AgentInvocationError::RuntimeFailed("main agent config load failed".into())
-                })?
-            {
+        if requested_task_code.is_none() && matches!(resolved_agent, ResolvedInvocationAgent::Main)
+        {
+            if let Some(guidance) = self.management.current_main_agent_guidance().map_err(|_| {
+                AgentInvocationError::RuntimeFailed("main agent config load failed".into())
+            })? {
                 messages.push(AgentMessage::system(guidance));
             }
         }
         messages.push(AgentMessage::user(prompt));
+        let local_directory = app.as_ref().map(|app| app.local_directory.clone());
+        let branch_name = app.as_ref().and_then(|app| app.default_branch.clone());
+        let repository_url = app.as_ref().and_then(|app| app.repository_url.clone());
+        let app_code = app.as_ref().map(|app| app.app_code.clone());
+        let task_code = requested_task_code;
+        let runtime_registry = AgentRuntimeRegistry::new(
+            self.model_client.clone(),
+            self.tool_registry.clone(),
+            self.event_bus.clone(),
+        );
+        let orchestrator = AgentOrchestrator::new(runtime_registry);
+        let runtime_selection =
+            runtime_selection_for_agent(&resolved_agent, local_directory.clone())?;
+        let requested_system_agent_session_id =
+            normalize_optional(requested_system_agent_session_id);
         let context = AgentRunContext {
-            conversation_code: command.conversation_code.clone(),
+            conversation_code: requested_conversation_code.clone(),
             run_code: run_code.clone(),
             workspace_code: workspace.workspace_code.clone(),
             user_code: user_code.clone(),
             request_id: None,
-            stream_key: command
-                .conversation_code
+            stream_key: requested_conversation_code
                 .clone()
                 .or_else(|| Some(run_code.clone())),
-            agent_kind: AgentKind::React,
+            agent_kind: resolved_agent.agent_kind(),
+            system_agent_session_id: None,
             model,
             variables,
             skills,
-            tools: command.tools,
+            tools: requested_tools,
             execution_scope: AgentExecutionScope {
-                app_code: app.as_ref().map(|app| app.app_code.clone()),
-                repository_url: app.as_ref().and_then(|app| app.repository_url.clone()),
-                local_directory: app.as_ref().map(|app| app.local_directory.clone()),
-                branch_name: app.as_ref().and_then(|app| app.default_branch.clone()),
-                task_code: command.task_code,
+                app_code: app_code.clone(),
+                repository_url,
+                local_directory,
+                branch_name,
+                task_code: task_code.clone(),
             },
-            limits: command.limits.unwrap_or_default(),
+            limits: requested_limits.unwrap_or_default(),
             messages,
             observations: Vec::new(),
             started_at: chrono::Utc::now().to_rfc3339(),
         };
-        let agent = ReactAgentBuilder::new(
-            self.model_client.clone(),
-            self.tool_registry.clone(),
-            self.event_bus.clone(),
-        )
-        .build()
-        .map_err(map_agent_error)?;
         let started_at = context.started_at.clone();
         let conversation_code = context.conversation_code.clone();
         let workspace_code = context.workspace_code.clone();
-        let app_code = context.execution_scope.app_code.clone();
-        let task_code = context.execution_scope.task_code.clone();
 
-        let result = if let Some(sink) = sink {
-            agent.run_stream(context, sink).await
-        } else {
-            agent.run(context).await
-        };
+        let result = orchestrator
+            .execute_with_selection(
+                runtime_selection,
+                context,
+                requested_system_agent_session_id.clone(),
+                sink,
+            )
+            .await;
 
         match result {
-            Ok(result) => {
+            Ok(orchestrated) => {
+                let result = orchestrated.run;
                 let finished_at = current_timestamp();
                 let token_usage = result.token_usage;
                 self.history
@@ -241,14 +265,15 @@ impl AgentInvocationService {
                     run_code: result.run_code,
                     conversation_code: result.conversation_code,
                     workspace_code: result.workspace_code,
+                    runtime_adapter_key: orchestrated.runtime_adapter_key,
                     status: "COMPLETED",
                     final_output: result.final_output,
                     step_count: result.step_count,
                     token_usage,
+                    system_agent_session_id: result.system_agent_session_id,
                 })
             }
-            Err(error) => {
-                let invocation_error = map_agent_error(error);
+            Err(invocation_error) => {
                 let finished_at = current_timestamp();
                 self.history
                     .create_run(AgentRunHistoryRecord {
@@ -284,17 +309,92 @@ impl AgentInvocationService {
     }
 }
 
-fn map_agent_error(error: AgentError) -> AgentInvocationError {
-    match error {
-        AgentError::ModelFailure(message) => AgentInvocationError::ModelFailed(message),
-        AgentError::ToolFailure(message)
-        | AgentError::MissingTool(message)
-        | AgentError::UnauthorizedTool(message) => AgentInvocationError::ToolFailed(message),
-        AgentError::MaxStepsExceeded => AgentInvocationError::MaxStepsExceeded,
-        AgentError::InvalidConfiguration(message) | AgentError::EventPublishFailed(message) => {
-            AgentInvocationError::RuntimeFailed(message)
+#[derive(Debug, Clone)]
+enum ResolvedInvocationAgent {
+    Main,
+    System(ResolvedSystemAgentRuntime),
+}
+
+impl ResolvedInvocationAgent {
+    fn agent_kind(&self) -> AgentKind {
+        match self {
+            Self::Main => AgentKind::React,
+            Self::System(_) => AgentKind::SystemCli,
         }
     }
+}
+
+fn resolve_invocation_agent(
+    management: &AgentManagementService,
+    workspace_code: &str,
+    requested_agent_code: Option<String>,
+) -> Result<ResolvedInvocationAgent, AgentInvocationError> {
+    let normalized = normalize_optional(requested_agent_code);
+    if normalized
+        .as_deref()
+        .map(is_main_agent_code)
+        .unwrap_or(true)
+    {
+        return Ok(ResolvedInvocationAgent::Main);
+    }
+    let agent_code = normalized.expect("normalized agent code should exist");
+    let runtime = management
+        .resolve_workspace_system_agent_runtime(workspace_code, &agent_code)
+        .map_err(|error| map_system_agent_error(&agent_code, error))?;
+    Ok(ResolvedInvocationAgent::System(runtime))
+}
+
+fn runtime_selection_for_agent(
+    resolved_agent: &ResolvedInvocationAgent,
+    local_directory: Option<String>,
+) -> Result<RuntimeAdapterSelection, AgentInvocationError> {
+    match resolved_agent {
+        ResolvedInvocationAgent::Main => Ok(RuntimeAdapterSelection::MainReact),
+        ResolvedInvocationAgent::System(runtime) => {
+            let kind =
+                SystemAgentCliKind::from_agent_code(&runtime.agent_code).ok_or_else(|| {
+                    AgentInvocationError::RuntimeFailed(format!(
+                        "system agent `{}` runtime adapter is not supported",
+                        runtime.agent_code
+                    ))
+                })?;
+            match kind {
+                SystemAgentCliKind::Codex => Ok(RuntimeAdapterSelection::CodexExec {
+                    command_name: runtime.command_name.clone(),
+                    working_directory: local_directory,
+                }),
+                SystemAgentCliKind::OpenCode => Ok(RuntimeAdapterSelection::OpenCodeRun {
+                    command_name: runtime.command_name.clone(),
+                    working_directory: local_directory,
+                }),
+            }
+        }
+    }
+}
+
+fn map_system_agent_error(agent_code: &str, error: AgentManagementError) -> AgentInvocationError {
+    match error {
+        AgentManagementError::InvalidWorkspace => AgentInvocationError::WorkspaceInvalid,
+        AgentManagementError::SystemAgentNotFound => AgentInvocationError::RuntimeFailed(format!(
+            "system agent `{agent_code}` was not found"
+        )),
+        AgentManagementError::SystemAgentUnavailable => AgentInvocationError::RuntimeFailed(
+            format!("system agent `{agent_code}` is unavailable or disabled for this workspace"),
+        ),
+        AgentManagementError::StorageFailure => {
+            AgentInvocationError::RuntimeFailed("system agent configuration load failed".into())
+        }
+    }
+}
+
+fn normalize_optional(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn is_main_agent_code(agent_code: &str) -> bool {
+    agent_code.eq_ignore_ascii_case(MAIN_AGENT_CODE)
 }
 
 pub fn generate_agent_run_code() -> String {

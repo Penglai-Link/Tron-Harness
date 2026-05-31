@@ -3,11 +3,26 @@
 ## Summary
 
 - feature_slug: chat-management
-- total_changes: 2
+- total_changes: 3
 - first_evolution: 2026-05-27
-- last_evolution: 2026-05-28
+- last_evolution: 2026-05-30
 
 ## Change History
+
+### #3
+
+- change_id: 3
+- timestamp: 2026-05-30
+- trigger: user_request
+- change_type: requirement_expansion
+- gate_reopened: Phase 4A
+- diff_summary: |
+    What changed vs before:
+    - Chat session creation supported model selection only and send runtime always used in-process main agent path.
+    + Chat session creation supports `agentCode` selection (`main-agent` + workspace-enabled system agents), send runtime resolves by session/request `agentCode`, and `codex`/`opencode` execute through real CLI runtime adapters.
+- downstream_impact: feature-spec,database-design,api-contract,acceptance,test-plan,tasks,worktree-plan,integration-log,reports,backend-chat-service,backend-agent-invocation,frontend-chat-page,react-agent-runtime-feature-evolution
+- old_evidence_status: superseded
+- user_approval: approved_with_defaults
 
 ### #2
 
@@ -46,3 +61,4 @@
 ## Residual Risks
 
 - API-mode chat sends still require a model config because the existing agent invocation service requires one.
+- System agent CLI execution is stateless per send in this version; runtime session continuation mapping and resume/fork lifecycle are not implemented yet.
