@@ -1,5 +1,3 @@
-use std::sync::{Arc, Mutex};
-
 use axum::{
     Json,
     extract::{Query, State},
@@ -7,21 +5,9 @@ use axum::{
 };
 
 use crate::{
-    adapters::{
-        inbound::http::auth::RequestAuthContext, outbound::persistence::sqlite::SqliteRagRepository,
-    },
-    application::{
-        llm::LlmRuntimeService,
-        rag::{
-            DefaultRagStrategyRegistry, RagDiagnosticsService, RagIngestService,
-            RagRetryIndexService, RagSearchService,
-        },
-        workspace::WorkspaceService,
-    },
-    config::AppConfig,
-    domain::workspace::WorkspaceAccessListQuery,
+    adapters::inbound::http::auth::RequestAuthContext, app::AppRagService,
+    application::workspace::WorkspaceService, domain::workspace::WorkspaceAccessListQuery,
     response::ApiResponse,
-    shared::event_bus::EventBusHandle,
 };
 
 use super::{
@@ -37,10 +23,8 @@ use super::{
 };
 
 pub async fn ingest(
-    State(config): State<AppConfig>,
     State(workspaces): State<WorkspaceService>,
-    State(llm_runtime): State<LlmRuntimeService>,
-    State(event_bus): State<EventBusHandle>,
+    State(rag): State<AppRagService>,
     auth: RequestAuthContext,
     Json(request): Json<RagIngestHttpRequest>,
 ) -> Response {
@@ -58,27 +42,15 @@ pub async fn ingest(
         return rag_error_response(crate::domain::rag::RagError::IngestScopeInvalid);
     }
 
-    let repository = match SqliteRagRepository::connect(&config.database_url) {
-        Ok(repository) => repository,
-        Err(error) => return rag_error_response(error),
-    };
-    let service = RagIngestService::new(
-        Arc::new(Mutex::new(repository)),
-        DefaultRagStrategyRegistry::default(),
-        llm_runtime,
-    )
-    .with_event_bus(event_bus);
-    match service.ingest(request).await {
+    match rag.ingest(request).await {
         Ok(result) => Json(ApiResponse::success(RagIngestResponse::from(result))).into_response(),
         Err(error) => rag_error_response(error),
     }
 }
 
 pub async fn search(
-    State(config): State<AppConfig>,
     State(workspaces): State<WorkspaceService>,
-    State(llm_runtime): State<LlmRuntimeService>,
-    State(event_bus): State<EventBusHandle>,
+    State(rag): State<AppRagService>,
     auth: RequestAuthContext,
     Json(request): Json<RagSearchHttpRequest>,
 ) -> Response {
@@ -93,25 +65,15 @@ pub async fn search(
         return rag_error_response(crate::domain::rag::RagError::SearchScopeInvalid);
     }
 
-    let repository = match SqliteRagRepository::connect(&config.database_url) {
-        Ok(repository) => repository,
-        Err(error) => return rag_error_response(error),
-    };
-    let service = RagSearchService::new(
-        Arc::new(Mutex::new(repository)),
-        DefaultRagStrategyRegistry::default(),
-        llm_runtime,
-    )
-    .with_event_bus(event_bus);
-    match service.search(request).await {
+    match rag.search(request).await {
         Ok(result) => Json(ApiResponse::success(RagSearchResponse::from(result))).into_response(),
         Err(error) => rag_error_response(error),
     }
 }
 
 pub async fn debug_profile(
-    State(config): State<AppConfig>,
     State(workspaces): State<WorkspaceService>,
+    State(rag): State<AppRagService>,
     auth: RequestAuthContext,
     Query(query): Query<RagDebugProfileHttpQuery>,
 ) -> Response {
@@ -123,12 +85,7 @@ pub async fn debug_profile(
     if !user_has_workspace_access(&workspaces, &workspace_code, &auth.user().user_code) {
         return rag_error_response(crate::domain::rag::RagError::DebugScopeInvalid);
     }
-    let repository = match SqliteRagRepository::connect(&config.database_url) {
-        Ok(repository) => repository,
-        Err(error) => return rag_error_response(error),
-    };
-    let service = RagDiagnosticsService::new(repository, DefaultRagStrategyRegistry::default());
-    match service.debug_profile(&workspace_code, &profile_id) {
+    match rag.debug_profile(&workspace_code, &profile_id) {
         Ok(result) => {
             Json(ApiResponse::success(RagDebugProfileResponse::from(result))).into_response()
         }
@@ -137,8 +94,8 @@ pub async fn debug_profile(
 }
 
 pub async fn debug_source(
-    State(config): State<AppConfig>,
     State(workspaces): State<WorkspaceService>,
+    State(rag): State<AppRagService>,
     auth: RequestAuthContext,
     Query(query): Query<RagDebugSourceHttpQuery>,
 ) -> Response {
@@ -156,12 +113,7 @@ pub async fn debug_source(
     {
         return rag_error_response(crate::domain::rag::RagError::DebugScopeInvalid);
     }
-    let repository = match SqliteRagRepository::connect(&config.database_url) {
-        Ok(repository) => repository,
-        Err(error) => return rag_error_response(error),
-    };
-    let service = RagDiagnosticsService::new(repository, DefaultRagStrategyRegistry::default());
-    match service.debug_source(request) {
+    match rag.debug_source(request) {
         Ok(result) => {
             Json(ApiResponse::success(RagDebugSourceResponse::from(result))).into_response()
         }
@@ -170,10 +122,8 @@ pub async fn debug_source(
 }
 
 pub async fn retry_index(
-    State(config): State<AppConfig>,
     State(workspaces): State<WorkspaceService>,
-    State(llm_runtime): State<LlmRuntimeService>,
-    State(event_bus): State<EventBusHandle>,
+    State(rag): State<AppRagService>,
     auth: RequestAuthContext,
     Json(request): Json<RagRetryIndexHttpRequest>,
 ) -> Response {
@@ -191,13 +141,7 @@ pub async fn retry_index(
     {
         return rag_error_response(crate::domain::rag::RagError::RetryScopeInvalid);
     }
-    let repository = match SqliteRagRepository::connect(&config.database_url) {
-        Ok(repository) => repository,
-        Err(error) => return rag_error_response(error),
-    };
-    let service = RagRetryIndexService::new(Arc::new(Mutex::new(repository)), llm_runtime)
-        .with_event_bus(event_bus);
-    match service.retry_index(request).await {
+    match rag.retry_index(request).await {
         Ok(result) => {
             Json(ApiResponse::success(RagRetryIndexResponse::from(result))).into_response()
         }

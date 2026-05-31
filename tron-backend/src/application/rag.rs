@@ -1,5 +1,6 @@
 mod diagnostics;
 mod events;
+mod facade;
 mod ingest;
 mod ingest_payload;
 mod ingest_profile;
@@ -16,6 +17,7 @@ pub use diagnostics::{
     RagDiagnosticsService, RagSearchTraceWrite, safe_trace_payload,
 };
 pub use events::publish_rag_event;
+pub use facade::RagService;
 pub use ingest::{
     RagEmbeddingCall, RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRepository,
     RagIngestRequest, RagIngestResult, RagIngestScope, RagIngestService, RagIngestWarning,
@@ -35,9 +37,9 @@ pub use search::{
 pub use search_filter::merge_search_filters;
 pub use search_profile::{CompiledRetrievalProfile, RetrievalRoute, compile_retrieval_profile};
 pub use service::{
-    DefaultRagStrategyRegistry, RagConfigRepository, RagFilterFieldError, RagFilterSchema,
-    RagFilterSchemaField, RagFilterValidationRequest, RagFilterValidationView, RagFilterValueType,
-    RagProfileListQuery, RagProfileValidationError, RagProfileValidationView, RagProfileView,
-    RagService, RagStrategyReferenceView, RagStrategyRegistry, StrategyRegistration,
-    StrategyRegistrationStatus,
+    DefaultRagStrategyRegistry, RagConfigRepository, RagConfigService, RagCorpusView,
+    RagFilterFieldError, RagFilterSchema, RagFilterSchemaField, RagFilterValidationRequest,
+    RagFilterValidationView, RagFilterValueType, RagProfileListQuery, RagProfileValidationError,
+    RagProfileValidationView, RagProfileView, RagStrategyReferenceView, RagStrategyRegistry,
+    StrategyRegistration, StrategyRegistrationStatus,
 };

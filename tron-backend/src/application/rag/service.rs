@@ -158,12 +158,12 @@ pub enum RagFilterValueType {
     Boolean,
 }
 
-pub struct RagService<R, S> {
+pub struct RagConfigService<R, S> {
     repository: R,
     strategy_registry: S,
 }
 
-impl<R, S> RagService<R, S>
+impl<R, S> RagConfigService<R, S>
 where
     R: RagConfigRepository,
     S: RagStrategyRegistry,

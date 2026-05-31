@@ -5,8 +5,8 @@ use serde_json::json;
 use tron_backend::{
     adapters::outbound::persistence::sqlite::SqliteRagRepository,
     application::rag::{
-        DefaultRagStrategyRegistry, RagConfigRepository, RagFilterValidationRequest,
-        RagFilterValueType, RagProfileListQuery, RagService, RagStrategyRegistry,
+        DefaultRagStrategyRegistry, RagConfigRepository, RagConfigService,
+        RagFilterValidationRequest, RagFilterValueType, RagProfileListQuery, RagStrategyRegistry,
         StrategyRegistration, StrategyRegistrationStatus,
     },
     domain::rag::{
@@ -16,7 +16,7 @@ use tron_backend::{
 
 #[test]
 fn rag_service_resolves_enabled_corpus_storage_binding_from_repository_port() {
-    let service = RagService::new(
+    let service = RagConfigService::new(
         SqliteRagRepository::connect(":memory:").expect("RAG repository should connect"),
         DefaultRagStrategyRegistry::default(),
     );
@@ -48,7 +48,7 @@ fn rag_service_resolves_enabled_corpus_storage_binding_from_repository_port() {
 
 #[test]
 fn memory_corpus_seed_maps_governance_logical_fields_to_physical_columns() {
-    let service = RagService::new(
+    let service = RagConfigService::new(
         SqliteRagRepository::connect(":memory:").expect("RAG repository should connect"),
         DefaultRagStrategyRegistry::default(),
     );
@@ -126,7 +126,7 @@ fn memory_corpus_seed_maps_governance_logical_fields_to_physical_columns() {
 
 #[test]
 fn project_doc_corpus_seed_maps_repo_module_logical_fields_to_physical_columns() {
-    let service = RagService::new(
+    let service = RagConfigService::new(
         SqliteRagRepository::connect(":memory:").expect("RAG repository should connect"),
         DefaultRagStrategyRegistry::default(),
     );
@@ -160,7 +160,7 @@ fn project_doc_corpus_seed_maps_repo_module_logical_fields_to_physical_columns()
 
 #[test]
 fn rag_service_lists_and_reads_profile_configuration_without_sqlite_details() {
-    let service = RagService::new(
+    let service = RagConfigService::new(
         SqliteRagRepository::connect(":memory:").expect("RAG repository should connect"),
         DefaultRagStrategyRegistry::default(),
     );
@@ -187,7 +187,7 @@ fn rag_service_lists_and_reads_profile_configuration_without_sqlite_details() {
 
 #[test]
 fn retrieval_profile_validation_rejects_missing_or_latest_source_version() {
-    let service = RagService::new(
+    let service = RagConfigService::new(
         FakeRagRepository::with_profiles(vec![
             profile_record(
                 "missing-version",
@@ -232,7 +232,7 @@ fn strategy_registry_validation_reports_enabled_reserved_and_unsupported_referen
         ("GRAPH", StrategyRegistrationStatus::Reserved),
         ("UNKNOWN_RETRIEVER", StrategyRegistrationStatus::Unsupported),
     ]);
-    let service = RagService::new(
+    let service = RagConfigService::new(
         FakeRagRepository::with_profiles(vec![profile_record(
             "mixed-strategies",
             Some("v1"),
@@ -268,7 +268,7 @@ fn reserved_profile_allows_reserved_strategy_references() {
         ("GRAPH", StrategyRegistrationStatus::Reserved),
         ("SUMMARY_TREE", StrategyRegistrationStatus::Reserved),
     ]);
-    let service = RagService::new(
+    let service = RagConfigService::new(
         FakeRagRepository::with_profiles(vec![profile_record_with_status(
             "reserved-code-graph",
             RagStatus::Reserved,
@@ -301,7 +301,7 @@ fn reserved_profile_allows_reserved_strategy_references() {
 
 #[test]
 fn enabled_profile_still_rejects_reserved_strategy_references() {
-    let service = RagService::new(
+    let service = RagConfigService::new(
         FakeRagRepository::with_profiles(vec![profile_record(
             "enabled-graph",
             Some("v1"),
@@ -320,7 +320,7 @@ fn enabled_profile_still_rejects_reserved_strategy_references() {
 
 #[test]
 fn filter_validation_accepts_declared_fields_and_rejects_invalid_filters() {
-    let service = RagService::new(
+    let service = RagConfigService::new(
         SqliteRagRepository::connect(":memory:").expect("RAG repository should connect"),
         DefaultRagStrategyRegistry::default(),
     );
@@ -375,7 +375,7 @@ fn filter_validation_accepts_declared_fields_and_rejects_invalid_filters() {
 
 #[test]
 fn filter_validation_accepts_domain_fields_and_rejects_unknown_or_mistyped_values() {
-    let service = RagService::new(
+    let service = RagConfigService::new(
         SqliteRagRepository::connect(":memory:").expect("RAG repository should connect"),
         DefaultRagStrategyRegistry::default(),
     );
@@ -483,6 +483,38 @@ fn rag_foundation_diagnostics_boundary_does_not_call_runtime_graph_services() {
             "RAG foundation diagnostics must not call {forbidden}"
         );
     }
+}
+
+#[test]
+fn http_rag_handler_uses_facade_instead_of_assembling_rag_internals() {
+    let handler =
+        fs::read_to_string("src/adapters/inbound/http/rag/handler.rs").expect("handler source");
+    let app_source = fs::read_to_string("src/app.rs").expect("app source should be readable");
+
+    assert!(
+        handler.contains("State(rag): State<AppRagService>"),
+        "HTTP RAG handlers should receive the unified AppRagService facade from state"
+    );
+    for forbidden in [
+        "SqliteRagRepository",
+        "RagIngestService",
+        "RagSearchService",
+        "RagDiagnosticsService",
+        "RagRetryIndexService",
+    ] {
+        assert!(
+            !handler.contains(forbidden),
+            "HTTP RAG handler should not assemble {forbidden} directly"
+        );
+    }
+    assert!(
+        app_source.contains("pub rag: AppRagService"),
+        "AppState should own the unified RAG facade"
+    );
+    assert!(
+        app_source.contains("fn build_rag_service("),
+        "app assembly should be the only RAG SQLite wiring point"
+    );
 }
 
 #[derive(Clone)]

@@ -1,4 +1,4 @@
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 mod routing;
 
@@ -20,6 +20,7 @@ use crate::{
                 SqliteOpenAppRepository, SqliteRoleRepository, SqliteSkillRegistryRepository,
                 SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
                 SqliteWorkspaceRepository, bootstrap_platform_admin,
+                sqlite::SqliteRagRepository,
             },
         },
     },
@@ -35,6 +36,7 @@ use crate::{
     application::mcp::McpService,
     application::model::ModelService,
     application::open_app::OpenAppService,
+    application::rag::{DefaultRagStrategyRegistry, RagService},
     application::role::RoleService,
     application::skill::SkillRegistryService,
     application::task::TaskService,
@@ -66,6 +68,9 @@ static GLOBAL_CHAT_SERVICE: OnceLock<ChatService> = OnceLock::new();
 static GLOBAL_OPEN_APP_SERVICE: OnceLock<OpenAppService> = OnceLock::new();
 static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService)> = OnceLock::new();
 
+pub type AppRagService =
+    RagService<Arc<Mutex<SqliteRagRepository>>, DefaultRagStrategyRegistry, LlmRuntimeService>;
+
 #[derive(Clone)]
 pub struct AppState {
     pub config: AppConfig,
@@ -92,6 +97,7 @@ pub struct AppState {
     pub open_apps: OpenAppService,
     pub llm_runtime: LlmRuntimeService,
     pub mcp: McpService,
+    pub rag: AppRagService,
 }
 
 impl AppState {
@@ -250,6 +256,7 @@ impl AppState {
             Arc::new(models.clone()),
             Arc::new(HttpLlmRuntimeClient::new(model_inference_client)),
         );
+        let rag = build_rag_service(&config.database_url, llm_runtime.clone(), event_bus.clone());
         let (graphs, ontologies) = if config.graph_storage_path == ":memory:" {
             GLOBAL_GRAPH_SERVICES
                 .get_or_init(|| {
@@ -295,6 +302,7 @@ impl AppState {
             open_apps,
             llm_runtime,
             mcp,
+            rag,
             skills,
             roles,
             tasks,
@@ -398,6 +406,12 @@ impl FromRef<AppState> for OpenAppService {
 impl FromRef<AppState> for LlmRuntimeService {
     fn from_ref(state: &AppState) -> Self {
         state.llm_runtime.clone()
+    }
+}
+
+impl FromRef<AppState> for AppRagService {
+    fn from_ref(state: &AppState) -> Self {
+        state.rag.clone()
     }
 }
 
@@ -527,6 +541,7 @@ fn build_model_service(database_url: &str, workspaces: WorkspaceService) -> Mode
     ModelService::new(repository, workspaces)
 }
 
+<<<<<<< HEAD
 fn build_open_app_service(
     database_url: &str,
     users: UserService,
@@ -535,6 +550,21 @@ fn build_open_app_service(
     let repository = SqliteOpenAppRepository::connect(database_url)
         .expect("open-app SQLite repository should initialize");
     OpenAppService::new(repository, users, Aes256SecretBox::new(jwt_secret))
+=======
+fn build_rag_service(
+    database_url: &str,
+    llm_runtime: LlmRuntimeService,
+    event_bus: EventBusHandle,
+) -> AppRagService {
+    let repository = SqliteRagRepository::connect(database_url)
+        .expect("RAG SQLite repository should initialize");
+    RagService::new(
+        Arc::new(Mutex::new(repository)),
+        DefaultRagStrategyRegistry::default(),
+        llm_runtime,
+    )
+    .with_event_bus(event_bus)
+>>>>>>> ae264096 (refactor: add rag service facade)
 }
 
 fn build_graph_services(
