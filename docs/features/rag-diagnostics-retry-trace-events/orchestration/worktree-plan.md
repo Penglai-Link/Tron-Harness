@@ -10,14 +10,14 @@
 - execution_mode: hybrid
 - main_branch: feature/langtaoxin/rag-diagnostics-retry-trace-events/base
 - main_worktree_path: /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-diagnostics-retry-trace-events/base
-- status: spec_created
+- status: implementation_dispatched
 
 ## Repository State
 
 - default_branch: master
 - base_ref: master
 - current_branch: feature/langtaoxin/rag-diagnostics-retry-trace-events/base
-- note: 规格与任务文档在 lite-spec base worktree 中生成；后端实现尚未派发。
+- note: 规格与任务文档在 lite-spec base worktree 中生成；后端实现已派发给 backend worker。
 
 ## Multi-Agent Base Branch
 
@@ -30,13 +30,13 @@
 
 | agent id | subtask_name | codex_agent_id | codex_agent_name | ac_refs | tdd_phase | branch | worktree_path | base_ref | status | runtime_agent_type |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| backend | diagnostics-retry-trace-events | pending | pending | AC-RDT-01, AC-RDT-02, AC-RDT-03, AC-RDT-04, AC-RDT-05, AC-RDT-06, AC-RDT-07, AC-RDT-08 | tdd | feature/langtaoxin/rag-diagnostics-retry-trace-events/backend/diagnostics-retry-trace-events | /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-diagnostics-retry-trace-events/backend/diagnostics-retry-trace-events | feature/langtaoxin/rag-diagnostics-retry-trace-events/base | planned | worker |
+| backend | diagnostics-retry-trace-events | 019e7c00-aa8e-7be3-bef7-603a11ab5619 | Helmholtz | AC-RDT-01, AC-RDT-02, AC-RDT-03, AC-RDT-04, AC-RDT-05, AC-RDT-06, AC-RDT-07, AC-RDT-08 | tdd | feature/langtaoxin/rag-diagnostics-retry-trace-events/backend/diagnostics-retry-trace-events | /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-diagnostics-retry-trace-events/backend/diagnostics-retry-trace-events | feature/langtaoxin/rag-diagnostics-retry-trace-events/base | in_progress | worker |
 
 ## Dispatch Decisions
 
 | ac_refs | decision | execution_owner | rationale | worker_ref | status |
 | --- | --- | --- | --- | --- | --- |
-| AC-RDT-01, AC-RDT-02, AC-RDT-03, AC-RDT-04, AC-RDT-05, AC-RDT-06, AC-RDT-07, AC-RDT-08 | spawn | backend-worker | debug API、retry API、trace persistence、EventBus wiring 和 boundary tests 共享同一后端诊断面，派发一个 bounded backend worker 执行 RED -> GREEN -> VERIFY | backend/diagnostics-retry-trace-events | planned |
+| AC-RDT-01, AC-RDT-02, AC-RDT-03, AC-RDT-04, AC-RDT-05, AC-RDT-06, AC-RDT-07, AC-RDT-08 | spawn | backend-worker | debug API、retry API、trace persistence、EventBus wiring 和 boundary tests 共享同一后端诊断面，派发一个 bounded backend worker 执行 RED -> GREEN -> VERIFY | backend/diagnostics-retry-trace-events | in_progress |
 
 ## Branch And Path Rules
 
