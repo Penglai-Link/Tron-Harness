@@ -2,7 +2,9 @@ use rusqlite::params;
 use serde_json::{Value, json};
 
 use crate::{
-    application::rag::{RagSearchRepository, RagSearchRow, RagTextUnitSearchQuery},
+    application::rag::{
+        RagSearchRepository, RagSearchRow, RagSearchTraceWrite, RagTextUnitSearchQuery,
+    },
     domain::rag::RagError,
 };
 
@@ -18,6 +20,35 @@ impl RagSearchRepository for SqliteRagRepository {
             "project-doc" => search_project_doc(self, &query),
             _ => Err(RagError::CorpusReserved),
         }
+    }
+
+    fn persist_search_trace(&self, trace: RagSearchTraceWrite) -> Result<(), RagError> {
+        crate::application::rag::safe_trace_payload(&trace.payload)?;
+        self.connection
+            .execute(
+                "INSERT INTO rag_diagnostics (
+                    record_type, record_code, profile_id, workspace_code, user_code, agent_code,
+                    query_text, payload_json, created_at, expires_at
+                )
+                VALUES ('SEARCH_TRACE', ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+                ON CONFLICT (record_code) DO UPDATE SET
+                    payload_json = excluded.payload_json,
+                    created_at = excluded.created_at,
+                    expires_at = excluded.expires_at",
+                params![
+                    trace.record_code,
+                    trace.profile_id,
+                    trace.workspace_code,
+                    trace.user_code,
+                    trace.agent_code,
+                    trace.query_text,
+                    json_string(&trace.payload)?,
+                    trace.created_at,
+                    trace.expires_at,
+                ],
+            )
+            .map_err(storage_error)?;
+        Ok(())
     }
 }
 
@@ -219,4 +250,8 @@ fn decode_embedding(raw: Vec<u8>) -> Option<Vec<f32>> {
 
 fn parse_json(raw: &str) -> Value {
     serde_json::from_str(raw).unwrap_or_else(|_| json!({}))
+}
+
+fn json_string(value: &Value) -> Result<String, RagError> {
+    serde_json::to_string(value).map_err(|_| RagError::StorageFailure)
 }

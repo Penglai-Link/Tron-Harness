@@ -1,7 +1,10 @@
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::application::rag::{CandidateHit, ContextPack, RagIngestResult, RagSearchResult};
+use crate::application::rag::{
+    CandidateHit, ContextPack, RagDebugProfileResult, RagDebugSourceResult, RagIngestResult,
+    RagRetryIndexResult, RagRetryStageResult, RagSearchResult,
+};
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,6 +45,7 @@ pub struct RagSearchResponse {
     pub hits: Vec<RagCandidateHitResponse>,
     pub context_pack: Option<RagContextPackResponse>,
     pub warnings: Vec<Value>,
+    pub trace_code: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -90,6 +94,7 @@ impl From<RagSearchResult> for RagSearchResponse {
                 .collect(),
             context_pack: result.context_pack.map(RagContextPackResponse::from),
             warnings: result.warnings,
+            trace_code: result.trace_code,
         }
     }
 }
@@ -109,6 +114,59 @@ impl From<CandidateHit> for RagCandidateHitResponse {
             preview: hit.preview,
             text: hit.text,
             metadata: hit.metadata,
+        }
+    }
+}
+
+pub type RagDebugProfileResponse = RagDebugProfileResult;
+pub type RagDebugSourceResponse = RagDebugSourceResult;
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagRetryIndexResponse {
+    pub corpus_id: String,
+    pub source_code: String,
+    pub source_version: String,
+    pub status: String,
+    pub stage_results: Vec<RagRetryStageResponse>,
+    pub warnings: Vec<Value>,
+    pub trace_code: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagRetryStageResponse {
+    pub stage_id: String,
+    pub status: String,
+    pub updated_count: usize,
+    pub warnings: Vec<Value>,
+}
+
+impl From<RagRetryIndexResult> for RagRetryIndexResponse {
+    fn from(result: RagRetryIndexResult) -> Self {
+        Self {
+            corpus_id: result.corpus_id,
+            source_code: result.source_code,
+            source_version: result.source_version,
+            status: result.status,
+            stage_results: result
+                .stage_results
+                .into_iter()
+                .map(RagRetryStageResponse::from)
+                .collect(),
+            warnings: result.warnings,
+            trace_code: result.trace_code,
+        }
+    }
+}
+
+impl From<RagRetryStageResult> for RagRetryStageResponse {
+    fn from(result: RagRetryStageResult) -> Self {
+        Self {
+            stage_id: result.stage_id,
+            status: result.status,
+            updated_count: result.updated_count,
+            warnings: result.warnings,
         }
     }
 }

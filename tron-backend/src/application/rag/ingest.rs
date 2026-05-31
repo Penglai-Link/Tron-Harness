@@ -9,11 +9,12 @@ use serde_json::{Value, json};
 use crate::{
     application::llm::{LlmEmbeddingCallCommand, LlmRuntimeService},
     domain::rag::{RagError, RagStatus},
+    shared::event_bus::{BusOutcome, EventBusHandle},
 };
 
 use super::{
     RagConfigRepository, RagStrategyRegistry, ingest_payload::prepare_payload,
-    ingest_profile::compile_ingest_profile,
+    ingest_profile::compile_ingest_profile, publish_rag_event,
 };
 
 pub trait RagIngestRepository: RagConfigRepository {
@@ -176,6 +177,7 @@ pub struct RagIngestService<R, S, E> {
     repository: R,
     strategy_registry: S,
     embedding_runtime: E,
+    event_bus: EventBusHandle,
 }
 
 impl<R, S, E> RagIngestService<R, S, E>
@@ -189,12 +191,25 @@ where
             repository,
             strategy_registry,
             embedding_runtime,
+            event_bus: EventBusHandle::disabled(),
         }
+    }
+
+    pub fn with_event_bus(mut self, event_bus: EventBusHandle) -> Self {
+        self.event_bus = event_bus;
+        self
     }
 
     pub async fn ingest(&self, request: RagIngestRequest) -> Result<RagIngestResult, RagError> {
         validate_ingest_request(&request)?;
         validate_direct_scope(&request.access_context, &request.target_scope)?;
+        publish_ingest_event(
+            &self.event_bus,
+            "rag.ingest.started",
+            BusOutcome::Started,
+            &request,
+            "started",
+        );
 
         let corpus = self
             .repository
@@ -257,6 +272,20 @@ where
                         user_code: request.access_context.user_code.clone(),
                         agent_code: request.access_context.agent_code.clone(),
                     })?;
+                    publish_ingest_stage_event(
+                        &self.event_bus,
+                        "vectorIndex",
+                        BusOutcome::Failure,
+                        1,
+                        &request,
+                    );
+                    publish_ingest_event(
+                        &self.event_bus,
+                        "rag.ingest.completed",
+                        BusOutcome::Failure,
+                        &request,
+                        "failed",
+                    );
                     return Err(RagError::EmbeddingFailed);
                 }
             }
@@ -295,6 +324,46 @@ where
             user_code: request.access_context.user_code.clone(),
             agent_code: request.access_context.agent_code.clone(),
         })?;
+        publish_ingest_stage_event(
+            &self.event_bus,
+            "persist",
+            BusOutcome::Completed,
+            text_unit_count,
+            &request,
+        );
+        publish_ingest_stage_event(
+            &self.event_bus,
+            "fulltextIndex",
+            BusOutcome::Completed,
+            text_unit_count,
+            &request,
+        );
+        publish_ingest_stage_event(
+            &self.event_bus,
+            "vectorIndex",
+            if embedding_failed {
+                BusOutcome::Failure
+            } else {
+                BusOutcome::Completed
+            },
+            text_unit_count,
+            &request,
+        );
+        publish_ingest_event(
+            &self.event_bus,
+            "rag.ingest.completed",
+            if embedding_failed {
+                BusOutcome::Failure
+            } else {
+                BusOutcome::Completed
+            },
+            &request,
+            if embedding_failed {
+                "partial_warning"
+            } else {
+                "success"
+            },
+        );
 
         Ok(RagIngestResult {
             corpus_id: request.corpus_id,
@@ -317,6 +386,52 @@ where
                 .collect(),
         })
     }
+}
+
+fn publish_ingest_event(
+    event_bus: &EventBusHandle,
+    event_name: &'static str,
+    outcome: BusOutcome,
+    request: &RagIngestRequest,
+    status: &str,
+) {
+    publish_rag_event(
+        event_bus,
+        event_name,
+        outcome,
+        &[
+            ("workspace_code", request.workspace_code.clone()),
+            ("corpus_id", request.corpus_id.clone()),
+            ("profile_id", request.ingest_profile_id.clone()),
+            ("source_code", request.source_code.clone()),
+            ("source_version", request.source_version.clone()),
+            ("scope_type", request.target_scope.scope_type.clone()),
+            ("scope_code", request.target_scope.scope_code.clone()),
+            ("status", status.to_string()),
+        ],
+    );
+}
+
+fn publish_ingest_stage_event(
+    event_bus: &EventBusHandle,
+    stage_id: &str,
+    outcome: BusOutcome,
+    count: usize,
+    request: &RagIngestRequest,
+) {
+    publish_rag_event(
+        event_bus,
+        "rag.stage.completed",
+        outcome,
+        &[
+            ("workspace_code", request.workspace_code.clone()),
+            ("corpus_id", request.corpus_id.clone()),
+            ("source_code", request.source_code.clone()),
+            ("source_version", request.source_version.clone()),
+            ("stage_id", stage_id.to_string()),
+            ("count", count.to_string()),
+        ],
+    );
 }
 
 fn validate_ingest_request(request: &RagIngestRequest) -> Result<(), RagError> {

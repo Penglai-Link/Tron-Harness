@@ -14,7 +14,7 @@ use tron_backend::{
         DefaultRagStrategyRegistry, RagConfigRepository, RagEmbeddingCall, RagEmbeddingRuntime,
         RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService, RagRerankCall,
         RagSearchContextRequest, RagSearchRequest, RagSearchRuntime, RagSearchService,
-        compile_retrieval_profile, merge_search_filters,
+        RagSearchTraceRequest, compile_retrieval_profile, merge_search_filters,
     },
     domain::rag::{RagError, RagProfileRecord, RagProfileType, RagStatus},
 };
@@ -287,23 +287,17 @@ async fn vector_route_failure_degrades_to_fulltext_warning_without_trace_payload
 }
 
 #[test]
-fn repository_search_boundary_does_not_add_trace_graph_or_memory_flow_behavior() {
+fn repository_search_boundary_keeps_graph_summary_and_memory_flow_behavior_out() {
     let rag_http_routes = include_str!("../src/adapters/inbound/http/rag/routes.rs");
     let rag_application = include_str!("../src/application/rag/search.rs");
     let repository_search =
         include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/search.rs");
 
     assert!(rag_http_routes.contains("/api/v1/rag/search"));
-    for forbidden_route in ["/api/v1/rag/debug", "/api/v1/rag/retry"] {
+    for forbidden_route in ["/api/v1/rag/graph", "/api/v1/rag/memory-flow"] {
         assert!(!rag_http_routes.contains(forbidden_route));
     }
-    for forbidden_behavior in [
-        "GraphService",
-        "SummaryTree",
-        "MemoryFlow",
-        "traceCode",
-        "persist_trace",
-    ] {
+    for forbidden_behavior in ["GraphService", "SummaryTree", "MemoryFlow"] {
         assert!(!rag_application.contains(forbidden_behavior));
         assert!(!repository_search.contains(forbidden_behavior));
     }
@@ -399,6 +393,7 @@ fn search_request(
         context: RagSearchContextRequest {
             strategy: strategy.into(),
         },
+        trace: RagSearchTraceRequest { enabled: false },
     }
 }
 

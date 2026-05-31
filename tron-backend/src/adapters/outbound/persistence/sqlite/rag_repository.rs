@@ -1,4 +1,6 @@
+mod diagnostics;
 mod ingest;
+mod retry;
 mod search;
 
 use std::{

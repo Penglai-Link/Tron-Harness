@@ -68,6 +68,46 @@ pub fn rag_error_response(error: RagError) -> Response {
             "RAG_RERANK_FAILED",
             "rag rerank failed",
         ),
+        RagError::DebugRequestInvalid => (
+            StatusCode::BAD_REQUEST,
+            "RAG_DEBUG_REQUEST_INVALID",
+            "rag debug request is invalid",
+        ),
+        RagError::DebugScopeInvalid => (
+            StatusCode::FORBIDDEN,
+            "RAG_DEBUG_SCOPE_INVALID",
+            "rag debug scope is invalid",
+        ),
+        RagError::RetryRequestInvalid => (
+            StatusCode::BAD_REQUEST,
+            "RAG_RETRY_REQUEST_INVALID",
+            "rag retry request is invalid",
+        ),
+        RagError::RetryScopeInvalid => (
+            StatusCode::FORBIDDEN,
+            "RAG_RETRY_SCOPE_INVALID",
+            "rag retry scope is invalid",
+        ),
+        RagError::RetryStageUnsupported => (
+            StatusCode::BAD_REQUEST,
+            "RAG_RETRY_STAGE_UNSUPPORTED",
+            "rag retry stage is unsupported",
+        ),
+        RagError::RetryTextUnitsMissing => (
+            StatusCode::NOT_FOUND,
+            "RAG_RETRY_TEXT_UNITS_MISSING",
+            "rag retry text units are missing",
+        ),
+        RagError::TracePayloadInvalid => (
+            StatusCode::BAD_REQUEST,
+            "RAG_TRACE_PAYLOAD_INVALID",
+            "rag trace payload is invalid",
+        ),
+        RagError::EventPayloadInvalid => (
+            StatusCode::BAD_REQUEST,
+            "RAG_EVENT_PAYLOAD_INVALID",
+            "rag event payload is invalid",
+        ),
         RagError::CorpusReserved => (
             StatusCode::BAD_REQUEST,
             "RAG_CORPUS_RESERVED",
@@ -82,6 +122,11 @@ pub fn rag_error_response(error: RagError) -> Response {
             StatusCode::NOT_FOUND,
             "RAG_RETRIEVAL_PROFILE_NOT_FOUND",
             "rag retrieval profile was not found",
+        ),
+        RagError::SourceNotFound => (
+            StatusCode::NOT_FOUND,
+            "RAG_SOURCE_NOT_FOUND",
+            "rag source was not found",
         ),
         RagError::CorpusNotFound | RagError::StorageBindingInvalid => (
             StatusCode::BAD_REQUEST,

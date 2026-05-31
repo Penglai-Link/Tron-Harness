@@ -10,11 +10,13 @@ use serde_json::{Value, json};
 use crate::{
     application::llm::{LlmRerankCallCommand, LlmRuntimeService},
     domain::rag::{RagError, RagStatus},
+    shared::event_bus::EventBusHandle,
 };
 
 use super::{
     CompiledRetrievalProfile, RagConfigRepository, RagEmbeddingCall, RagIngestAccessContext,
-    RagStrategyRegistry, compile_retrieval_profile, merge_search_filters,
+    RagSearchTraceWrite, RagStrategyRegistry, compile_retrieval_profile, merge_search_filters,
+    search_observability::{persist_trace_if_enabled, publish_route_events, publish_search_event},
 };
 
 pub trait RagSearchRepository: RagConfigRepository {
@@ -22,6 +24,7 @@ pub trait RagSearchRepository: RagConfigRepository {
         &self,
         query: RagTextUnitSearchQuery,
     ) -> Result<Vec<RagSearchRow>, RagError>;
+    fn persist_search_trace(&self, trace: RagSearchTraceWrite) -> Result<(), RagError>;
 }
 
 impl<T> RagSearchRepository for Arc<Mutex<T>>
@@ -35,6 +38,12 @@ where
         self.lock()
             .expect("RAG repository mutex poisoned")
             .search_text_units(query)
+    }
+
+    fn persist_search_trace(&self, trace: RagSearchTraceWrite) -> Result<(), RagError> {
+        self.lock()
+            .expect("RAG repository mutex poisoned")
+            .persist_search_trace(trace)
     }
 }
 
@@ -137,11 +146,17 @@ pub struct RagSearchRequest {
     pub limit: usize,
     pub token_budget: usize,
     pub context: RagSearchContextRequest,
+    pub trace: RagSearchTraceRequest,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RagSearchContextRequest {
     pub strategy: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RagSearchTraceRequest {
+    pub enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -152,6 +167,7 @@ pub struct RagSearchResult {
     pub hits: Vec<CandidateHit>,
     pub context_pack: Option<ContextPack>,
     pub warnings: Vec<Value>,
+    pub trace_code: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -189,6 +205,7 @@ pub struct RagSearchService<R, S, E> {
     repository: R,
     strategy_registry: S,
     runtime: E,
+    event_bus: EventBusHandle,
 }
 
 impl<R, S, E> RagSearchService<R, S, E>
@@ -202,11 +219,18 @@ where
             repository,
             strategy_registry,
             runtime,
+            event_bus: EventBusHandle::disabled(),
         }
+    }
+
+    pub fn with_event_bus(mut self, event_bus: EventBusHandle) -> Self {
+        self.event_bus = event_bus;
+        self
     }
 
     pub async fn search(&self, request: RagSearchRequest) -> Result<RagSearchResult, RagError> {
         validate_request(&request)?;
+        publish_search_event(&self.event_bus, "rag.search.started", &request);
         let profile = self
             .repository
             .get_profile(&request.profile_id)?
@@ -245,13 +269,23 @@ where
             limit: request.limit.max(1) * 4,
             include_vectors,
         })?;
-        let (mut ranked_hits, warnings) = self.rank_rows(rows, &compiled, &request).await?;
+        let (mut ranked_hits, mut warnings) = self.rank_rows(rows, &compiled, &request).await?;
         ranked_hits.truncate(request.limit);
         let context_pack = assemble_context_pack(
             &request.context.strategy,
             &ranked_hits,
             request.token_budget,
         );
+        publish_route_events(&self.event_bus, &ranked_hits, &request);
+        let trace_code = persist_trace_if_enabled(
+            &self.repository,
+            &request,
+            &compiled,
+            &ranked_hits,
+            context_pack.as_ref(),
+            &mut warnings,
+        )?;
+        publish_search_event(&self.event_bus, "rag.search.completed", &request);
 
         Ok(RagSearchResult {
             profile_id: compiled.profile_id,
@@ -260,6 +294,7 @@ where
             hits: ranked_hits,
             context_pack,
             warnings,
+            trace_code,
         })
     }
 

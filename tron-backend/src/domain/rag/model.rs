@@ -100,6 +100,7 @@ pub struct RagProfileRecord {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RagError {
     CorpusNotFound,
+    SourceNotFound,
     ProfileNotFound,
     RetrievalProfileNotFound,
     IngestRequestInvalid,
@@ -114,6 +115,14 @@ pub enum RagError {
     SearchRouteUnavailable,
     HydrateSourceInactive,
     RerankFailed,
+    DebugRequestInvalid,
+    DebugScopeInvalid,
+    RetryRequestInvalid,
+    RetryScopeInvalid,
+    RetryStageUnsupported,
+    RetryTextUnitsMissing,
+    TracePayloadInvalid,
+    EventPayloadInvalid,
     CorpusReserved,
     StorageBindingInvalid,
     StorageFailure,
@@ -123,6 +132,7 @@ impl fmt::Display for RagError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::CorpusNotFound => formatter.write_str("RAG corpus not found"),
+            Self::SourceNotFound => formatter.write_str("RAG source not found"),
             Self::ProfileNotFound => formatter.write_str("RAG profile not found"),
             Self::RetrievalProfileNotFound => {
                 formatter.write_str("RAG retrieval profile not found")
@@ -139,6 +149,14 @@ impl fmt::Display for RagError {
             Self::SearchRouteUnavailable => formatter.write_str("RAG search route unavailable"),
             Self::HydrateSourceInactive => formatter.write_str("RAG hydrate source inactive"),
             Self::RerankFailed => formatter.write_str("RAG rerank failed"),
+            Self::DebugRequestInvalid => formatter.write_str("RAG debug request invalid"),
+            Self::DebugScopeInvalid => formatter.write_str("RAG debug scope invalid"),
+            Self::RetryRequestInvalid => formatter.write_str("RAG retry request invalid"),
+            Self::RetryScopeInvalid => formatter.write_str("RAG retry scope invalid"),
+            Self::RetryStageUnsupported => formatter.write_str("RAG retry stage unsupported"),
+            Self::RetryTextUnitsMissing => formatter.write_str("RAG retry text units missing"),
+            Self::TracePayloadInvalid => formatter.write_str("RAG trace payload invalid"),
+            Self::EventPayloadInvalid => formatter.write_str("RAG event payload invalid"),
             Self::CorpusReserved => formatter.write_str("RAG corpus reserved"),
             Self::StorageBindingInvalid => formatter.write_str("RAG storage binding invalid"),
             Self::StorageFailure => formatter.write_str("RAG storage failure"),

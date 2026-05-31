@@ -455,7 +455,7 @@ fn filter_validation_accepts_domain_fields_and_rejects_unknown_or_mistyped_value
 }
 
 #[test]
-fn rag_foundation_does_not_register_http_routes_or_call_runtime_graph_or_event_services() {
+fn rag_foundation_diagnostics_boundary_does_not_call_runtime_graph_services() {
     let app_source = fs::read_to_string("src/app.rs").expect("app source should be readable");
     let http_sources = read_rs_sources("src/adapters/inbound/http");
     let rag_application_sources = read_rs_sources("src/application/rag");
@@ -464,15 +464,23 @@ fn rag_foundation_does_not_register_http_routes_or_call_runtime_graph_or_event_s
         http_sources.contains("/api/v1/rag/search"),
         "RAG search-context-pack now owns the search route"
     );
-    for forbidden_route in ["/api/v1/rag/debug", "/api/v1/rag/retry"] {
+    assert!(
+        http_sources.contains("/api/v1/rag/debug/profile"),
+        "RAG diagnostics now owns the debug profile route"
+    );
+    assert!(
+        http_sources.contains("/api/v1/rag/retry/index"),
+        "RAG diagnostics now owns the retry index route"
+    );
+    for forbidden_route in ["/api/v1/rag/graph"] {
         assert!(!app_source.contains(forbidden_route));
         assert!(!http_sources.contains(forbidden_route));
     }
 
-    for forbidden in ["GraphService", "EventBusHandle"] {
+    for forbidden in ["GraphService"] {
         assert!(
             !rag_application_sources.contains(forbidden),
-            "RAG foundation must not call {forbidden}"
+            "RAG foundation diagnostics must not call {forbidden}"
         );
     }
 }

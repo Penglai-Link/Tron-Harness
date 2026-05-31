@@ -2,8 +2,8 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use crate::application::rag::{
-    RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagSearchContextRequest,
-    RagSearchRequest,
+    RagDebugSourceRequest, RagIngestAccessContext, RagIngestRequest, RagIngestScope,
+    RagRetryIndexRequest, RagSearchContextRequest, RagSearchRequest, RagSearchTraceRequest,
 };
 
 #[derive(Debug, Deserialize)]
@@ -112,6 +112,8 @@ pub struct RagSearchHttpRequest {
     pub token_budget: Option<usize>,
     #[serde(default)]
     pub context: Option<RagSearchContextHttpRequest>,
+    #[serde(default)]
+    pub trace: Option<RagSearchTraceHttpRequest>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -121,10 +123,18 @@ pub struct RagSearchContextHttpRequest {
     pub strategy: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagSearchTraceHttpRequest {
+    #[serde(default)]
+    pub enabled: Option<bool>,
+}
+
 impl RagSearchHttpRequest {
     pub fn into_application(self) -> RagSearchRequest {
         let access_context = self.access_context.unwrap_or_default();
         let context = self.context.unwrap_or_default();
+        let trace = self.trace.unwrap_or_default();
         RagSearchRequest {
             profile_id: self.profile_id.unwrap_or_default(),
             workspace_code: self.workspace_code.unwrap_or_default(),
@@ -140,6 +150,9 @@ impl RagSearchHttpRequest {
             context: RagSearchContextRequest {
                 strategy: context.strategy.unwrap_or_else(|| "RESULT_LIST".into()),
             },
+            trace: RagSearchTraceRequest {
+                enabled: trace.enabled.unwrap_or(false),
+            },
         }
     }
 }
@@ -147,5 +160,94 @@ impl RagSearchHttpRequest {
 impl Default for RagSearchContextHttpRequest {
     fn default() -> Self {
         Self { strategy: None }
+    }
+}
+
+impl Default for RagSearchTraceHttpRequest {
+    fn default() -> Self {
+        Self { enabled: None }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagDebugProfileHttpQuery {
+    #[serde(default)]
+    pub workspace_code: Option<String>,
+    #[serde(default)]
+    pub profile_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagDebugSourceHttpQuery {
+    #[serde(default)]
+    pub workspace_code: Option<String>,
+    #[serde(default)]
+    pub corpus_id: Option<String>,
+    #[serde(default)]
+    pub source_code: Option<String>,
+    #[serde(default)]
+    pub source_version: Option<String>,
+    #[serde(default)]
+    pub scope_type: Option<String>,
+    #[serde(default)]
+    pub scope_code: Option<String>,
+    #[serde(default)]
+    pub include_text_units: Option<bool>,
+    #[serde(default)]
+    pub include_warnings: Option<bool>,
+}
+
+impl RagDebugSourceHttpQuery {
+    pub fn into_application(self) -> RagDebugSourceRequest {
+        RagDebugSourceRequest {
+            workspace_code: self.workspace_code.unwrap_or_default(),
+            corpus_id: self.corpus_id.unwrap_or_default(),
+            source_code: self.source_code.unwrap_or_default(),
+            source_version: self.source_version.unwrap_or_default(),
+            scope_type: self.scope_type.unwrap_or_default(),
+            scope_code: self.scope_code.unwrap_or_default(),
+            include_text_units: self.include_text_units.unwrap_or(true),
+            include_warnings: self.include_warnings.unwrap_or(true),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagRetryIndexHttpRequest {
+    #[serde(default)]
+    pub workspace_code: Option<String>,
+    #[serde(default)]
+    pub corpus_id: Option<String>,
+    #[serde(default)]
+    pub source_code: Option<String>,
+    #[serde(default)]
+    pub source_version: Option<String>,
+    #[serde(default)]
+    pub scope_type: Option<String>,
+    #[serde(default)]
+    pub scope_code: Option<String>,
+    #[serde(default)]
+    pub stages: Vec<String>,
+    #[serde(default)]
+    pub embedding_model_code: Option<String>,
+}
+
+impl RagRetryIndexHttpRequest {
+    pub fn into_application(self, user_code: String, agent_code: String) -> RagRetryIndexRequest {
+        RagRetryIndexRequest {
+            workspace_code: self.workspace_code.unwrap_or_default(),
+            corpus_id: self.corpus_id.unwrap_or_default(),
+            source_code: self.source_code.unwrap_or_default(),
+            source_version: self.source_version.unwrap_or_default(),
+            scope_type: self.scope_type.unwrap_or_default(),
+            scope_code: self.scope_code.unwrap_or_default(),
+            stages: self.stages,
+            embedding_model_code: self.embedding_model_code,
+            user_code,
+            agent_code,
+        }
     }
 }
