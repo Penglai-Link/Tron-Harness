@@ -3,7 +3,7 @@
 ## Execution Contract
 
 - feature_slug: rag-search-context-pack
-- status: waiting_human_decision
+- status: in_progress
 - execution_mode: spawn
 - canonical_report_target: reports/backend-result.md
 - main_agent_owned: false
@@ -14,14 +14,14 @@
 
 ## Task Rows
 
-- AC-RSC-01 | phase: tdd | owner: backend-worker | scope: tron-backend/src/adapters/inbound/http/rag/* tron-backend/src/app.rs tron-backend/tests/rag_search_api.rs | command_ref: CMD-BE-TEST | status: ready.
-- AC-RSC-02 | phase: tdd | owner: backend-worker | scope: tron-backend/src/application/rag/* tron-backend/src/domain/rag/* tron-backend/tests/rag_search_contracts.rs | command_ref: CMD-BE-TEST | status: ready.
-- AC-RSC-03 | phase: tdd | owner: backend-worker | scope: tron-backend/src/application/rag/* tron-backend/tests/rag_search_contracts.rs tron-backend/tests/rag_service_contracts.rs | command_ref: CMD-BE-TEST | status: ready.
-- AC-RSC-04 | phase: tdd | owner: backend-worker | scope: tron-backend/src/application/rag/* tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository/* tron-backend/tests/rag_search_contracts.rs | command_ref: CMD-BE-TEST | status: ready.
-- AC-RSC-05 | phase: tdd | owner: backend-worker | scope: tron-backend/src/application/rag/* tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository/* tron-backend/tests/rag_search_contracts.rs | command_ref: CMD-BE-TEST | status: ready.
-- AC-RSC-06 | phase: tdd | owner: backend-worker | scope: tron-backend/src/application/rag/* tron-backend/src/application/llm/* tron-backend/tests/rag_search_contracts.rs | command_ref: CMD-BE-TEST | status: ready.
-- AC-RSC-07 | phase: tdd | owner: backend-worker | scope: tron-backend/src/application/rag/* tron-backend/tests/rag_search_contracts.rs | command_ref: CMD-BE-TEST | status: ready.
-- AC-RSC-08 | phase: tdd | owner: backend-worker | scope: tron-backend/src/adapters/inbound/http/* tron-backend/src/application/rag/* tron-backend/src/application/graph/* tron-backend/src/shared/event_bus/* tron-backend/tests/*rag* | command_ref: CMD-BE-CHECK | status: ready.
+- AC-RSC-01 | phase: tdd | owner: backend-worker | scope: tron-backend/src/adapters/inbound/http/rag/* tron-backend/src/app.rs tron-backend/tests/rag_search_api.rs | command_ref: CMD-BE-TEST | status: in_progress.
+- AC-RSC-02 | phase: tdd | owner: backend-worker | scope: tron-backend/src/application/rag/* tron-backend/src/domain/rag/* tron-backend/tests/rag_search_contracts.rs | command_ref: CMD-BE-TEST | status: in_progress.
+- AC-RSC-03 | phase: tdd | owner: backend-worker | scope: tron-backend/src/application/rag/* tron-backend/tests/rag_search_contracts.rs tron-backend/tests/rag_service_contracts.rs | command_ref: CMD-BE-TEST | status: in_progress.
+- AC-RSC-04 | phase: tdd | owner: backend-worker | scope: tron-backend/src/application/rag/* tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository/* tron-backend/tests/rag_search_contracts.rs | command_ref: CMD-BE-TEST | status: in_progress.
+- AC-RSC-05 | phase: tdd | owner: backend-worker | scope: tron-backend/src/application/rag/* tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository/* tron-backend/tests/rag_search_contracts.rs | command_ref: CMD-BE-TEST | status: in_progress.
+- AC-RSC-06 | phase: tdd | owner: backend-worker | scope: tron-backend/src/application/rag/* tron-backend/src/application/llm/* tron-backend/tests/rag_search_contracts.rs | command_ref: CMD-BE-TEST | status: in_progress.
+- AC-RSC-07 | phase: tdd | owner: backend-worker | scope: tron-backend/src/application/rag/* tron-backend/tests/rag_search_contracts.rs | command_ref: CMD-BE-TEST | status: in_progress.
+- AC-RSC-08 | phase: tdd | owner: backend-worker | scope: tron-backend/src/adapters/inbound/http/* tron-backend/src/application/rag/* tron-backend/src/application/graph/* tron-backend/src/shared/event_bus/* tron-backend/tests/*rag* | command_ref: CMD-BE-CHECK | status: in_progress.
 
 ## Worktree Notes
 

@@ -4,13 +4,14 @@
 
 - feature_slug: rag-search-context-pack
 - integration_branch: feature/langtaoxin/rag-search-context-pack/base
-- status: ready_for_dispatch
+- status: implementation_dispatched
 
 ## Integration Events
 
 | event | ac_refs | source_branch | result | validation |
 | --- | --- | --- | --- | --- |
 | selected next feature | AC-RSC-01, AC-RSC-02, AC-RSC-03, AC-RSC-04, AC-RSC-05, AC-RSC-06, AC-RSC-07, AC-RSC-08 | master | PRD order and explorer validation selected search/context pack | spec validation passed |
+| dispatched backend worker | AC-RSC-01, AC-RSC-02, AC-RSC-03, AC-RSC-04, AC-RSC-05, AC-RSC-06, AC-RSC-07, AC-RSC-08 | feature/langtaoxin/rag-search-context-pack/backend/search-context-pack | worker Banach started in isolated worktree | pending worker result |
 
 ## Conflict Log
 
