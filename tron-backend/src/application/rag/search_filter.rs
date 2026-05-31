@@ -57,6 +57,37 @@ pub fn merge_search_request_filters(
     Ok(Value::Object(merged.into_iter().collect()))
 }
 
+pub fn validate_request_filters_for_corpora(
+    corpora: &[&RagCorpusRecord],
+    request_filters: &Value,
+) -> Result<(), RagError> {
+    let object = request_filters
+        .as_object()
+        .ok_or(RagError::SearchFilterInvalid)?;
+    for (field, raw_value) in object {
+        let (operator, value) = extract_operator(raw_value);
+        let mut field_known = false;
+        let mut value_valid = false;
+        for corpus in corpora {
+            let schema = parse_schema(&corpus.filter_schema);
+            let Some(schema_field) = schema.get(field) else {
+                continue;
+            };
+            field_known = true;
+            if schema_field.operators.contains(operator)
+                && value_matches(&schema_field.field_type, operator, value)
+            {
+                value_valid = true;
+                break;
+            }
+        }
+        if !field_known || !value_valid {
+            return Err(RagError::SearchFilterInvalid);
+        }
+    }
+    Ok(())
+}
+
 fn normalize_filters(
     schema: &BTreeMap<String, FilterField>,
     filters: &Value,

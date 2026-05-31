@@ -754,6 +754,61 @@ async fn seeded_memory_related_profile_allows_blank_query_structured_filter_only
 }
 
 #[tokio::test]
+async fn seeded_memory_query_profile_uses_only_query_routes_and_access_context_scopes() {
+    let database_url = temp_database_path("rag-seeded-memory-query-two-routes")
+        .to_string_lossy()
+        .to_string();
+    seed_memory_fixture(&database_url).await;
+    let repository = CapturingSearchRepository::connect(&database_url);
+    let route_calls = repository.route_calls.clone();
+    let runtime = FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0));
+    let service = RagSearchService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+
+    let result = service
+        .search(search_request(
+            "memory-query-v1",
+            "cite source titles",
+            "RESULT_LIST",
+            json!({ "memoryType": "RULE" }),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(result.hits.len(), 1);
+    assert_eq!(result.hits[0].source_code, "memory-rag-rule");
+    assert_eq!(runtime.embedding_call_count(), 1);
+    let route_calls = route_calls.lock().unwrap();
+    assert_eq!(
+        route_calls
+            .iter()
+            .map(|call| call.retriever.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "FULLTEXT_SQLITE_FTS5_SIMPLE_V1",
+            "VECTOR_SQLITE_VEC0_COSINE_V1"
+        ]
+    );
+    for call in route_calls.iter() {
+        assert_eq!(call.query, "cite source titles");
+        assert_eq!(
+            call.scopes
+                .iter()
+                .map(|scope| (scope.scope_type.as_str(), scope.scope_code.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("USER", "USR-LARGE-ID"),
+                ("AGENT", "AGENT_CODEX"),
+                ("SPACE", "TRON_CORE")
+            ]
+        );
+    }
+}
+
+#[tokio::test]
 async fn sqlite_structured_filter_returns_active_scoped_versioned_limited_rows() {
     let database_url = temp_database_path("rag-structured-filter-sqlite")
         .to_string_lossy()

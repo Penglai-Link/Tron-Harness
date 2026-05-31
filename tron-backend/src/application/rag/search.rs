@@ -26,6 +26,7 @@ use super::{
     search_validation::{
         filters_and_version, search_scopes, validate_request, validate_return_fields,
     },
+    validate_request_filters_for_corpora,
 };
 
 pub trait RagSearchRepository: RagConfigRepository {
@@ -221,6 +222,8 @@ pub struct CandidateHit {
     pub corpus_id: String,
     pub source_code: String,
     pub source_version: String,
+    pub scope_type: String,
+    pub scope_code: String,
     pub title: Option<String>,
     pub score: f64,
     pub text: String,
@@ -401,6 +404,11 @@ where
         if blank_query && executable_routes.is_empty() {
             return Err(RagError::SearchRequestInvalid);
         }
+        let request_filter_corpora = executable_routes
+            .iter()
+            .filter_map(|(route, _)| route_corpora.get(&route.corpus_id))
+            .collect::<Vec<_>>();
+        validate_request_filters_for_corpora(&request_filter_corpora, &request.filters)?;
 
         let embedding_routes = executable_routes
             .iter()
