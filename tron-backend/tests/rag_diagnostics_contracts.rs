@@ -3,7 +3,7 @@ use std::{
     path::PathBuf,
     pin::Pin,
     sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use rusqlite::{Connection, params};
@@ -267,8 +267,18 @@ async fn rag_search_events_use_safe_payload_and_publish_failure_is_non_blocking(
 
     service.search(search_request(true)).await.unwrap();
 
-    assert!(sink.wait_for_len(4, Duration::from_secs(2)));
-    let events = sink.events();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let events = loop {
+        let events = sink.events();
+        if events
+            .iter()
+            .any(|event| event.event_name == "rag.search.completed")
+            || Instant::now() >= deadline
+        {
+            break events;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
     let names = events
         .iter()
         .map(|event| event.event_name.as_str())
