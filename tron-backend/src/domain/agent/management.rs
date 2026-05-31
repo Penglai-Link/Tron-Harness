@@ -58,9 +58,21 @@ pub struct ManagedSystemAgentRecord {
     pub status: SystemAgentStatus,
     pub enabled: bool,
     pub available: bool,
+    #[serde(default)]
+    pub models: Vec<SystemAgentModelRecord>,
     pub last_scanned_at: Option<String>,
     pub last_seen_at: Option<String>,
     pub last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemAgentModelRecord {
+    pub model_id: String,
+    pub display_name: String,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_window_tokens: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,6 +92,21 @@ pub struct SystemAgentSyncResult {
     pub available_count: usize,
     pub unavailable_count: usize,
     pub records: Vec<ManagedSystemAgentRecord>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeAdapterCapabilityRecord {
+    pub adapter_key: String,
+    pub name: String,
+    pub stage: String,
+    pub available: bool,
+    pub enabled: bool,
+    pub supports_resume: bool,
+    pub supports_cancel: bool,
+    pub supports_streaming: bool,
+    pub supports_ephemeral: bool,
+    pub supports_workdir: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

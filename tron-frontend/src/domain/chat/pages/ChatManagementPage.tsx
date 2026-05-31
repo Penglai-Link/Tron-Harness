@@ -32,6 +32,7 @@ import {
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
+  ConfirmDialog,
   TextArea,
   MarkdownContent,
   useWorkspaceSpaces,
@@ -51,6 +52,9 @@ import {
   useChatSessionGroupList,
 } from "@/domain/chat/hooks";
 import { useAuthSession } from "@/domain/auth";
+import { fetchWorkspaceSystemAgents } from "@/domain/agent/api";
+import { listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
+import type { SystemAgentModelRecord, WorkspaceSystemAgentRecord } from "@/domain/agent/model";
 import { fetchWorkspaceModelCatalog } from "@/domain/model/api";
 import { getWorkspaceModelCatalog } from "@/domain/model/mock";
 import type { ModelRecord } from "@/domain/model/model";
@@ -66,6 +70,7 @@ import type {
   ChatMessage,
   ChatSession,
   ChatSessionGroup,
+  SendChatMessageInput,
 } from "@/domain/chat/model";
 
 function formatTime(value: string) {
@@ -75,6 +80,12 @@ function formatTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date);
+}
+
+function sessionAgentTagLabel(agentCode: string | null | undefined) {
+  const normalized = agentCode?.trim().toLowerCase();
+  if (!normalized || normalized === "main-agent") return "MAIN";
+  return normalized.toUpperCase();
 }
 
 async function copyPlainText(value: string) {
@@ -174,6 +185,14 @@ function tokenField(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function tokenFieldFromMetadata(value: string | null | undefined) {
+  if (!value) return null;
+  const normalized = value.replaceAll(",", "").trim();
+  if (!normalized) return null;
+  const parsed = Number.parseInt(normalized, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function chatTokenUsage(messages: ChatMessage[]) {
   const assistantMessages = messages.filter((message) => message.role === "ASSISTANT");
   let hasUsage = assistantMessages.length === 0;
@@ -200,8 +219,39 @@ function chatTokenUsage(messages: ChatMessage[]) {
   };
 }
 
-function contextWindowLimit(model: ModelRecord | null | undefined) {
-  return model?.contextWindowTokens ?? null;
+function lastTurnTokenUsage(messages: ChatMessage[]) {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== "ASSISTANT") continue;
+    const inputTokens = tokenField(message.inputTokens);
+    const outputTokens = tokenField(message.outputTokens);
+    const totalTokens = tokenField(message.totalTokens);
+    if (inputTokens == null && outputTokens == null && totalTokens == null) continue;
+    return {
+      input: inputTokens,
+      output: outputTokens,
+      total: totalTokens ?? (inputTokens ?? 0) + (outputTokens ?? 0),
+    };
+  }
+  return {
+    input: null,
+    output: null,
+    total: null,
+  };
+}
+
+function contextWindowLimit(
+  model: ModelRecord | null | undefined,
+  selectedModel: ChatModelOption | null | undefined,
+  events: ChatAguiEvent[],
+) {
+  const metadataWindow = tokenFieldFromMetadata(
+    contextValue(latestEventValue(events, "contextWindowTokens"))
+    ?? contextValue(latestEventValue(events, "context_window_tokens"))
+    ?? contextValue(latestEventValue(events, "contextWindowLimit"))
+    ?? contextValue(latestEventValue(events, "context_window_limit")),
+  );
+  return model?.contextWindowTokens ?? selectedModel?.contextWindowTokens ?? metadataWindow ?? null;
 }
 
 function formatContextUsagePercent(usedTokens: number | null, windowTokens: number | null) {
@@ -230,6 +280,37 @@ function insertNewlineAtCursor(textarea: HTMLTextAreaElement) {
 
 function usedSkills(events: ChatAguiEvent[]) {
   return Array.from(new Set(events.map((event) => event.metadata.skillName).filter(Boolean)));
+}
+
+function homeDirectoryFromWorktreePath(worktreePath: string | null | undefined) {
+  if (!worktreePath) return null;
+  const marker = "/.codex/worktrees/";
+  const markerIndex = worktreePath.indexOf(marker);
+  if (markerIndex <= 0) return null;
+  return worktreePath.slice(0, markerIndex);
+}
+
+function systemAgentSessionPath({
+  agentCode,
+  sessionId,
+  worktreePath,
+}: {
+  agentCode: string | null | undefined;
+  sessionId: string | null | undefined;
+  worktreePath: string | null | undefined;
+}) {
+  const normalizedAgentCode = contextValue(agentCode)?.toLowerCase();
+  const normalizedSessionId = contextValue(sessionId);
+  if (!normalizedAgentCode || !normalizedSessionId) return null;
+  const homeDirectory = homeDirectoryFromWorktreePath(worktreePath) ?? "~";
+
+  if (normalizedAgentCode === "codex") {
+    return `${homeDirectory}/.codex/sessions/**/rollout-*-${normalizedSessionId}.jsonl`;
+  }
+  if (normalizedAgentCode === "opencode") {
+    return `${homeDirectory}/.local/share/opencode/opencode.db`;
+  }
+  return null;
 }
 
 type TranscriptAguiEvent = ChatAguiEvent | ChatAguiStreamEvent;
@@ -515,7 +596,7 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
       ensureReasoningCard(reasoningCards, event);
       return;
     }
-    if (type === "REASONING_MESSAGE_CONTENT") {
+    if (type === "REASONING_MESSAGE_CONTENT" || type === "REASONING_TEXT_CONTENT") {
       const card = ensureReasoningCard(reasoningCards, event);
       const delta = "delta" in event && typeof event.delta === "string" ? event.delta : "";
       card.content += delta;
@@ -557,9 +638,25 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
     }
   });
 
+  if (!reasoningCards.size) {
+    const runStartEvent = events.find((event) => aguiEventType(event).toUpperCase() === "RUN_STARTED") ?? events[0];
+    if (runStartEvent) {
+      const runCode = aguiEventRunCode(runStartEvent) || "stream";
+      const terminalEvent = terminalAguiEvent(events);
+      const fallbackKey = `${runCode}:reasoning-fallback`;
+      reasoningCards.set(fallbackKey, {
+        content: "",
+        ended: Boolean(terminalEvent),
+        endMillis: terminalEvent ? aguiEventMillis(terminalEvent) : null,
+        firstMillis: aguiEventMillis(runStartEvent) ?? Date.now(),
+        id: fallbackKey,
+        runCode,
+      });
+    }
+  }
+
   return [
     ...Array.from(reasoningCards.values())
-      .filter((value) => value.content.trim() || !value.ended)
       .map((value) => ({ kind: "reasoning" as const, value })),
     ...Array.from(toolCards.values())
       .filter((value) => value.started)
@@ -573,6 +670,119 @@ function availableChatModels(models: ModelRecord[]) {
 
 function defaultChatModel(models: ModelRecord[]) {
   return models.find((model) => model.isDefault) ?? models[0] ?? null;
+}
+
+interface ChatModelOption {
+  contextWindowTokens: number | null;
+  displayName: string;
+  modelCode: string | null;
+  modelName: string;
+  optionCode: string;
+  source: "main-agent" | "system-agent";
+}
+
+interface ChatAgentOption {
+  agentCode: string;
+  description: string;
+  models: SystemAgentModelRecord[];
+  name: string;
+}
+
+const mainChatAgentOption: ChatAgentOption = {
+  agentCode: "main-agent",
+  description: "Platform main in-process agent runtime.",
+  models: [],
+  name: "Main Agent",
+};
+
+function availableChatAgents(records: WorkspaceSystemAgentRecord[]) {
+  const systemAgents = records
+    .filter((record) => record.available && record.enabled)
+    .map((record) => ({
+      agentCode: record.agentCode,
+      description: record.description,
+      models: record.models,
+      name: record.name,
+    }));
+  return [mainChatAgentOption, ...systemAgents];
+}
+
+function isMainChatAgent(agentCode: string) {
+  return agentCode.trim().toLowerCase() === mainChatAgentOption.agentCode;
+}
+
+function modelsForAgent(models: ModelRecord[], selectedAgent: ChatAgentOption | null): ChatModelOption[] {
+  if (!selectedAgent || isMainChatAgent(selectedAgent.agentCode)) {
+    return models.map((model) => ({
+      contextWindowTokens: model.contextWindowTokens ?? null,
+      displayName: model.displayName,
+      modelCode: model.modelCode,
+      modelName: model.modelName,
+      optionCode: `main:${model.modelCode}`,
+      source: "main-agent",
+    }));
+  }
+
+  return selectedAgent.models.map((model) => ({
+    contextWindowTokens: model.contextWindowTokens ?? null,
+    displayName: model.displayName || model.modelId,
+    modelCode: null,
+    modelName: model.modelId,
+    optionCode: `system:${selectedAgent.agentCode}:${model.modelId}`,
+    source: "system-agent",
+  }));
+}
+
+function defaultChatModelOption(options: ChatModelOption[], models: ModelRecord[]) {
+  if (!options.length) return null;
+  if (options[0].source === "system-agent") return options[0];
+  const defaultModel = defaultChatModel(models);
+  if (!defaultModel) return options[0];
+  return options.find((option) => option.modelCode === defaultModel.modelCode) ?? options[0];
+}
+
+function normalizedFuzzyValue(value: string) {
+  return value.trim().toLowerCase().replace(/[\s\-_/.:]+/g, "");
+}
+
+function fuzzySubsequenceMatch(query: string, target: string) {
+  if (!query) return true;
+  let queryIndex = 0;
+  for (const char of target) {
+    if (char === query[queryIndex]) queryIndex += 1;
+    if (queryIndex === query.length) return true;
+  }
+  return false;
+}
+
+function fuzzyTextMatch(query: string, target: string) {
+  const rawQuery = query.trim().toLowerCase();
+  if (!rawQuery) return true;
+  const rawTarget = target.toLowerCase();
+  if (rawTarget.includes(rawQuery)) return true;
+
+  const normalizedQuery = normalizedFuzzyValue(query);
+  if (!normalizedQuery) return true;
+  const normalizedTarget = normalizedFuzzyValue(target);
+  if (normalizedTarget.includes(normalizedQuery)) return true;
+  return fuzzySubsequenceMatch(normalizedQuery, normalizedTarget);
+}
+
+function fuzzyModelMatch(query: string, model: ChatModelOption) {
+  return fuzzyTextMatch(query, model.displayName) || fuzzyTextMatch(query, model.modelName);
+}
+
+function systemAgentModelConfig(modelName: string, contextWindowTokens?: number | null) {
+  return {
+    apiKey: "sk-system-agent",
+    baseUrl: "http://system-agent.local",
+    contextWindowTokens: contextWindowTokens ?? undefined,
+    maxRetries: 0,
+    modelCode: "SYSTEM_AGENT_MODEL",
+    modelName,
+    protocol: "CHAT_COMPLETIONS",
+    timeoutMs: 180_000,
+  };
 }
 
 function iconButtonClass(active = false) {
@@ -679,11 +889,13 @@ function RightContextSidebar({
   events,
   messages,
   model,
+  selectedModel,
   session,
 }: {
   events: ChatAguiEvent[];
   messages: ChatMessage[];
   model?: ModelRecord | null;
+  selectedModel?: ChatModelOption | null;
   session?: ChatSession;
 }) {
   const skills = usedSkills(events);
@@ -694,12 +906,25 @@ function RightContextSidebar({
   const modelLabel = (
     contextValue(model?.displayName)
     ?? contextValue(model?.modelName)
+    ?? contextValue(selectedModel?.displayName)
+    ?? contextValue(selectedModel?.modelName)
     ?? contextValue(latestEventValue(events, "modelName"))
+    ?? contextValue(latestEventValue(events, "model_name"))
     ?? "unavailable"
   );
   const usage = chatTokenUsage(messages);
+  const lastTurnUsage = lastTurnTokenUsage(messages);
   const usedTokens = usage.total;
-  const windowTokens = contextWindowLimit(model);
+  const windowTokens = contextWindowLimit(model, selectedModel, events);
+  const isSystemAgentSession = Boolean(
+    session?.agentCode && !isMainChatAgent(session.agentCode),
+  );
+  const systemAgentSessionId = contextValue(session?.systemAgentSessionId);
+  const systemSessionPath = isSystemAgentSession ? systemAgentSessionPath({
+    agentCode: session?.agentCode,
+    sessionId: systemAgentSessionId,
+    worktreePath,
+  }) : null;
 
   return (
     <section className="space-y-4">
@@ -708,6 +933,7 @@ function RightContextSidebar({
         <ContextBlock title="Context Window">
           <ContextRow label="model" value={modelLabel} />
           <ContextRow label="window" value={formatContextWindowValue(windowTokens, usedTokens)} />
+          <ContextRow label="last turn" value={<TokenUsageCompare lastTurn={lastTurnUsage} sessionTotal={usage} />} />
           <ContextRow label="used" value={formatTokenCount(usedTokens)} />
           <ContextRow label="input" value={formatTokenCount(usage.input)} />
           <ContextRow label="output" value={formatTokenCount(usage.output)} />
@@ -722,6 +948,13 @@ function RightContextSidebar({
           <ContextBlock title="Worktree">
             {worktreePath ? <ContextRow label="path" value={worktreePath} /> : null}
             {branchName ? <ContextRow label="branch" value={branchName} icon={<GitBranch size={14} />} /> : null}
+          </ContextBlock>
+        ) : null}
+        {isSystemAgentSession ? (
+          <ContextBlock title="System Agent Session">
+            <ContextRow label="agent" value={contextValue(session?.agentCode) ?? "unavailable"} />
+            <ContextRow label="session" value={systemAgentSessionId ?? "unavailable"} />
+            <ContextRow label="path" value={systemSessionPath ?? "unavailable"} />
           </ContextBlock>
         ) : null}
         {skills.length ? (
@@ -745,7 +978,7 @@ function ContextBlock({ children, title }: { children: React.ReactNode; title: s
   );
 }
 
-function ContextRow({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) {
+function ContextRow({ icon, label, value }: { icon?: React.ReactNode; label: string; value: React.ReactNode }) {
   return (
     <div className="grid grid-cols-[72px_minmax(0,1fr)] items-start gap-3">
       <span className="text-[var(--color-on-surface-variant)]">{label}</span>
@@ -757,21 +990,54 @@ function ContextRow({ icon, label, value }: { icon?: React.ReactNode; label: str
   );
 }
 
+function TokenUsageCompare({
+  lastTurn,
+  sessionTotal,
+}: {
+  lastTurn: { input: number | null; output: number | null; total: number | null };
+  sessionTotal: { input: number | null; output: number | null; total: number | null };
+}) {
+  return (
+    <span className="grid min-w-0 grid-cols-2 gap-2">
+      <span className="min-w-0 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-2 py-1">
+        <span className="block text-[10px] uppercase tracking-wide text-[var(--color-on-surface-variant)]">last turn</span>
+        <span className="block">used {formatTokenCount(lastTurn.total)}</span>
+        <span className="block">in {formatTokenCount(lastTurn.input)}</span>
+        <span className="block">out {formatTokenCount(lastTurn.output)}</span>
+      </span>
+      <span className="min-w-0 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-2 py-1">
+        <span className="block text-[10px] uppercase tracking-wide text-[var(--color-on-surface-variant)]">session total</span>
+        <span className="block">used {formatTokenCount(sessionTotal.total)}</span>
+        <span className="block">in {formatTokenCount(sessionTotal.input)}</span>
+        <span className="block">out {formatTokenCount(sessionTotal.output)}</span>
+      </span>
+    </span>
+  );
+}
+
 function ChatModelSelector({
+  emptyLabel,
   loading,
   models,
   onSelect,
   selectedModelCode,
 }: {
+  emptyLabel: string;
   loading: boolean;
-  models: ModelRecord[];
+  models: ChatModelOption[];
   onSelect: (modelCode: string) => void;
   selectedModelCode: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const selectedModel = models.find((model) => model.modelCode === selectedModelCode) ?? null;
+  const selectedModel = models.find((model) => model.optionCode === selectedModelCode) ?? null;
+  const filteredModels = useMemo(
+    () => models.filter((model) => fuzzyModelMatch(searchQuery, model)),
+    [models, searchQuery],
+  );
   const disabled = loading || models.length === 0;
 
   useDismissibleLayer({
@@ -780,6 +1046,18 @@ function ChatModelSelector({
     popupRef: menuRef,
     triggerElement: triggerRef.current,
   });
+
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery("");
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+      searchInputRef.current?.select();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open]);
 
   return (
     <div className="relative min-w-0">
@@ -794,33 +1072,133 @@ function ChatModelSelector({
       >
         <Bot size={14} />
         <span className="truncate">
-          {loading ? "Loading models..." : selectedModel ? selectedModel.displayName : "No text model"}
+          {loading ? "Loading models..." : selectedModel ? selectedModel.displayName : emptyLabel}
         </span>
         <ChevronDown size={14} />
       </button>
       {open ? (
         <div
           ref={menuRef}
-          className="absolute bottom-full left-0 z-30 mb-2 max-h-72 min-w-full w-max max-w-[240px] overflow-y-auto rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-1.5 text-sm shadow-[0_12px_28px_rgba(0,0,0,0.18)]"
+          className="absolute bottom-full left-0 z-30 mb-2 max-h-72 min-w-full w-max max-w-[260px] overflow-y-auto overscroll-contain rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-1.5 text-sm shadow-[0_12px_28px_rgba(0,0,0,0.18)]"
           role="listbox"
           aria-label="Chat models"
         >
-          {models.map((model) => (
+          <div className="sticky top-0 z-10 bg-[var(--color-elevated-surface)] pb-1.5">
+            <input
+              ref={searchInputRef}
+              aria-label="Search chat models"
+              className="h-8 w-full rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-2 text-xs text-[var(--color-on-surface)] outline-none focus:border-[var(--color-focus-ring)]"
+              placeholder="Search models..."
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter") return;
+                const firstModel = filteredModels[0];
+                if (!firstModel) return;
+                event.preventDefault();
+                onSelect(firstModel.optionCode);
+                setOpen(false);
+              }}
+            />
+          </div>
+          {filteredModels.length ? filteredModels.map((model) => (
             <button
               className={cn(
                 "flex w-full items-center rounded-md px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]",
-                model.modelCode === selectedModelCode && "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]",
+                model.optionCode === selectedModelCode && "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]",
               )}
-              key={model.modelCode}
+              key={model.optionCode}
               type="button"
               role="option"
-              aria-selected={model.modelCode === selectedModelCode}
+              aria-selected={model.optionCode === selectedModelCode}
               onClick={() => {
-                onSelect(model.modelCode);
+                onSelect(model.optionCode);
                 setOpen(false);
               }}
             >
               <span className="block min-w-0 truncate font-medium">{model.displayName}</span>
+            </button>
+          )) : (
+            <p className="px-3 py-2 text-xs text-[var(--color-on-surface-variant)]">
+              No models match "{searchQuery.trim()}".
+            </p>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ChatAgentSelector({
+  locked,
+  loading,
+  agents,
+  onSelect,
+  selectedAgentCode,
+}: {
+  locked?: boolean;
+  loading: boolean;
+  agents: ChatAgentOption[];
+  onSelect: (agentCode: string) => void;
+  selectedAgentCode: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const selectedAgent = agents.find((agent) => agent.agentCode === selectedAgentCode) ?? null;
+  const disabled = loading || agents.length === 0 || Boolean(locked);
+
+  useDismissibleLayer({
+    onDismiss: () => setOpen(false),
+    open,
+    popupRef: menuRef,
+    triggerElement: triggerRef.current,
+  });
+
+  return (
+    <div className="relative min-w-0">
+      <button
+        ref={triggerRef}
+        className="inline-flex h-8 max-w-[320px] items-center gap-2 rounded-md px-2 text-xs text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
+        type="button"
+        aria-label="Select chat agent"
+        aria-expanded={open}
+        title={locked ? "Agent is locked after the first chat turn in this session" : undefined}
+        disabled={disabled}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <Wrench size={14} />
+        <span className="truncate">
+          {loading ? "Loading agents..." : selectedAgent?.name ?? "Main Agent"}
+        </span>
+        <ChevronDown size={14} />
+      </button>
+      {open ? (
+        <div
+          ref={menuRef}
+          className="absolute bottom-full left-0 z-30 mb-2 max-h-72 min-w-full w-max max-w-[260px] overflow-y-auto overscroll-contain rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-1.5 text-sm shadow-[0_12px_28px_rgba(0,0,0,0.18)]"
+          role="listbox"
+          aria-label="Chat agents"
+        >
+          {agents.map((agent) => (
+            <button
+              className={cn(
+                "flex w-full flex-col items-start rounded-md px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]",
+                agent.agentCode === selectedAgentCode && "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]",
+              )}
+              key={agent.agentCode}
+              type="button"
+              role="option"
+              aria-selected={agent.agentCode === selectedAgentCode}
+              onClick={() => {
+                onSelect(agent.agentCode);
+                setOpen(false);
+              }}
+            >
+              <span className="block min-w-0 truncate font-medium">{agent.name}</span>
+              <span className="mt-0.5 block min-w-0 truncate text-[11px] text-[var(--color-on-surface-variant)]">
+                {agent.agentCode}
+              </span>
             </button>
           ))}
         </div>
@@ -887,7 +1265,7 @@ function SessionSidebar({
     const collapsedSessions = groups.flatMap((group) => group.sessions);
 
     return (
-      <aside className="flex w-12 flex-col items-center bg-[var(--color-surface-container-lowest)] py-3 shadow-[10px_0_28px_rgba(15,23,42,0.04)]">
+      <aside className="flex h-full w-12 flex-col items-center bg-[var(--color-surface-container-lowest)] py-3 shadow-[10px_0_28px_rgba(15,23,42,0.04)]">
         <button className={iconButtonClass()} type="button" aria-label="Expand sessions" onClick={onCollapseToggle}>
           <PanelLeftOpen size={17} />
         </button>
@@ -921,7 +1299,7 @@ function SessionSidebar({
   }
 
   return (
-    <aside className="w-[286px] shrink-0 overflow-hidden bg-[var(--color-surface-container-lowest)] shadow-[10px_0_28px_rgba(15,23,42,0.04)]">
+    <aside className="h-full w-[286px] shrink-0 overflow-hidden bg-[var(--color-surface-container-lowest)] shadow-[10px_0_28px_rgba(15,23,42,0.04)]">
       <div className="flex h-14 items-center justify-between px-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
         <div className="flex items-center gap-2">
           <MessageSquareText size={17} />
@@ -1007,7 +1385,12 @@ function SessionSidebar({
                         ) : (
                           <button className="min-w-0 text-left" type="button" onClick={() => onSessionSelect(session.sessionCode)}>
                             <span className="block truncate text-sm font-medium">{session.title}</span>
-                            <span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">{formatTime(session.updatedAt)}</span>
+                            <span className="mt-1 flex items-center gap-1.5 text-xs text-[var(--color-on-surface-variant)]">
+                              <span className="inline-flex h-4 items-center rounded border border-[var(--color-outline-variant)] px-1 font-mono text-[10px] leading-none">
+                                {sessionAgentTagLabel(session.agentCode)}
+                              </span>
+                              <span>{formatTime(session.updatedAt)}</span>
+                            </span>
                           </button>
                         )}
                         <SessionRunIndicator
@@ -1146,13 +1529,9 @@ function AguiUserCardShell({
 function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
   const hasContent = card.content.trim().length > 0;
   const detail = hasContent ? card.content : "";
-  const [expanded, setExpanded] = useState(!card.ended);
+  const [expanded, setExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const duration = card.endMillis ? formatAguiDuration(Math.max(0, card.endMillis - card.firstMillis)) : "";
-
-  useEffect(() => {
-    setExpanded(!card.ended);
-  }, [card.ended]);
 
   useEffect(() => {
     if (!expanded || !detail) return;
@@ -1327,7 +1706,7 @@ function AguiRunWorkRail({
     setExpanded(!terminalRunCode);
   }, [terminalRunCode]);
 
-  if (!userCards.length && !debugEvents.length) return null;
+  if (!terminalEvent && !userCards.length && !debugEvents.length) return null;
 
   return (
     <section className="max-w-[760px] space-y-2" aria-label="AG-UI run work">
@@ -1378,11 +1757,15 @@ export function ChatManagementPage() {
   const [chatModels, setChatModels] = useState<ModelRecord[]>([]);
   const [selectedModelCode, setSelectedModelCode] = useState("");
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [chatAgents, setChatAgents] = useState<ChatAgentOption[]>(() => [mainChatAgentOption]);
+  const [selectedAgentCode, setSelectedAgentCode] = useState(mainChatAgentOption.agentCode);
+  const [agentsLoading, setAgentsLoading] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [renamingSession, setRenamingSession] = useState(false);
   const [runningSessionCode, setRunningSessionCode] = useState("");
   const [sessionActionPendingCode, setSessionActionPendingCode] = useState("");
+  const [deleteTargetSession, setDeleteTargetSession] = useState<ChatSession | null>(null);
   const [unseenSessionCodes, setUnseenSessionCodes] = useState<Set<string>>(() => new Set());
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const activeSessionCodeRef = useRef("");
@@ -1390,7 +1773,25 @@ export function ChatManagementPage() {
   const messageScrollRef = useRef<HTMLElement | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
   const visibleSessionCodeRef = useRef("");
-  const selectedModel = chatModels.find((model) => model.modelCode === selectedModelCode) ?? null;
+  const effectiveAgentCode = selectedAgentCode || mainChatAgentOption.agentCode;
+  const selectedAgent = chatAgents.find((agent) => agent.agentCode === effectiveAgentCode) ?? null;
+  const agentScopedModels = useMemo(
+    () => modelsForAgent(chatModels, selectedAgent),
+    [chatModels, selectedAgent],
+  );
+  const selectedModel = agentScopedModels.find((model) => model.optionCode === selectedModelCode) ?? null;
+  const selectedMainAgentModel = selectedModel?.modelCode
+    ? chatModels.find((model) => model.modelCode === selectedModel.modelCode) ?? null
+    : null;
+  const hasActiveSession = Boolean(activeSession);
+  const sessionStarted = Boolean(activeSession?.lastRunCode || visibleMessages.length > 0);
+  const agentSelectionLocked = Boolean(activeSession && sessionStarted);
+  const displayedAgentCode = sessionStarted
+    ? (activeSession?.agentCode ?? selectedAgentCode ?? mainChatAgentOption.agentCode)
+    : (selectedAgentCode || activeSession?.agentCode || mainChatAgentOption.agentCode);
+  const modelEmptyLabel = isMainChatAgent(effectiveAgentCode)
+    ? "No text model"
+    : `No models for ${selectedAgent?.name ?? effectiveAgentCode}`;
   const currentUserDisplayName = authSession?.user.displayName ?? "";
 
   function scrollToLatestMessage(behavior: ScrollBehavior = "auto") {
@@ -1434,13 +1835,7 @@ export function ChatManagementPage() {
           : getWorkspaceModelCatalog(activeWorkspaceCode);
         if (!active) return;
         const models = availableChatModels(catalog.records);
-        const defaultModel = defaultChatModel(models);
         setChatModels(models);
-        setSelectedModelCode((current) => (
-          current && models.some((model) => model.modelCode === current)
-            ? current
-            : defaultModel?.modelCode ?? ""
-        ));
       } catch (error) {
         if (active) {
           setChatModels([]);
@@ -1460,6 +1855,68 @@ export function ChatManagementPage() {
   }, [activeWorkspaceCode, toast]);
 
   useEffect(() => {
+    let active = true;
+
+    async function loadAgents() {
+      if (!activeWorkspaceCode) {
+        setChatAgents([mainChatAgentOption]);
+        setSelectedAgentCode(mainChatAgentOption.agentCode);
+        return;
+      }
+
+      setAgentsLoading(true);
+      try {
+        const records = getServiceDataSource("agent") === "api"
+          ? await fetchWorkspaceSystemAgents(activeWorkspaceCode)
+          : listWorkspaceSystemAgentsMock(activeWorkspaceCode);
+        if (!active) return;
+        const agents = availableChatAgents(records);
+        setChatAgents(agents);
+        setSelectedAgentCode((current) => (
+          current && agents.some((agent) => agent.agentCode === current)
+            ? current
+            : mainChatAgentOption.agentCode
+        ));
+      } catch (error) {
+        if (active) {
+          setChatAgents([mainChatAgentOption]);
+          setSelectedAgentCode(mainChatAgentOption.agentCode);
+          toast.error(error instanceof Error ? error.message : "Workspace agents could not be loaded", { title: "Agent load failed" });
+        }
+      } finally {
+        if (active) setAgentsLoading(false);
+      }
+    }
+
+    void loadAgents();
+
+    return () => {
+      active = false;
+    };
+  }, [activeWorkspaceCode, toast]);
+
+  useEffect(() => {
+    const sessionAgentCode = activeSession?.agentCode ?? mainChatAgentOption.agentCode;
+    setSelectedAgentCode((current) => {
+      if (!chatAgents.some((agent) => agent.agentCode === sessionAgentCode)) {
+        return current && chatAgents.some((agent) => agent.agentCode === current)
+          ? current
+          : mainChatAgentOption.agentCode;
+      }
+      return sessionAgentCode;
+    });
+  }, [activeSession?.agentCode, activeSession?.sessionCode, chatAgents]);
+
+  useEffect(() => {
+    const defaultModel = defaultChatModelOption(agentScopedModels, chatModels);
+    setSelectedModelCode((current) => (
+      current && agentScopedModels.some((model) => model.optionCode === current)
+        ? current
+        : defaultModel?.optionCode ?? ""
+    ));
+  }, [agentScopedModels, chatModels]);
+
+  useEffect(() => {
     if (!activeSessionCode && activeSession) {
       setActiveSessionCode(activeSession.sessionCode);
     }
@@ -1468,6 +1925,19 @@ export function ChatManagementPage() {
   useEffect(() => {
     activeSessionCodeRef.current = activeSessionCode;
   }, [activeSessionCode]);
+
+  useEffect(() => {
+    const htmlElement = document.documentElement;
+    const bodyElement = document.body;
+
+    htmlElement.classList.add("tron-chat-scroll-lock");
+    bodyElement.classList.add("tron-chat-scroll-lock");
+
+    return () => {
+      htmlElement.classList.remove("tron-chat-scroll-lock");
+      bodyElement.classList.remove("tron-chat-scroll-lock");
+    };
+  }, []);
 
   useEffect(() => () => {
     if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
@@ -1503,9 +1973,18 @@ export function ChatManagementPage() {
     return -1;
   }, [liveAguiAnchorMessageCode, transcriptAguiEvents.length, visibleMessages]);
 
-  const rightPanel = useMemo(() => (
-    <RightContextSidebar events={aguiEvents} messages={visibleMessages} model={selectedModel} session={activeSession} />
-  ), [activeSession, aguiEvents, selectedModel, visibleMessages]);
+  const rightPanel = useMemo(() => {
+    if (!hasActiveSession) return undefined;
+    return (
+      <RightContextSidebar
+        events={aguiEvents}
+        messages={visibleMessages}
+        model={selectedMainAgentModel}
+        selectedModel={selectedModel}
+        session={activeSession}
+      />
+    );
+  }, [activeSession, aguiEvents, hasActiveSession, selectedMainAgentModel, selectedModel, visibleMessages]);
 
   useConsoleShellConfig({ rightPanel });
 
@@ -1530,6 +2009,25 @@ export function ChatManagementPage() {
     if (!content) {
       toast.warning("Message content is required", { title: "Nothing to send" });
       return;
+    }
+    if (!selectedModel) {
+      toast.warning("Select a model before sending", { title: "Model required" });
+      return;
+    }
+    const sendInput: SendChatMessageInput = {
+      agentCode: effectiveAgentCode,
+      appCode: activeSession.appCode,
+      content,
+      taskCode: activeSession.taskCode,
+      workspaceCode: activeSession.workspaceCode,
+    };
+    if (selectedModel.source === "system-agent") {
+      sendInput.model = systemAgentModelConfig(
+        selectedModel.modelName,
+        selectedModel.contextWindowTokens,
+      );
+    } else {
+      sendInput.modelCode = selectedModel.modelCode;
     }
     const sendingSessionCode = activeSession.sessionCode;
     const optimisticUserCode = `LOCAL-${Date.now()}-USER`;
@@ -1574,13 +2072,7 @@ export function ChatManagementPage() {
     try {
       const result = await streamChatMessage(
         activeSession,
-        {
-          appCode: activeSession.appCode,
-          content,
-          modelCode: selectedModel?.modelCode ?? null,
-          taskCode: activeSession.taskCode,
-          workspaceCode: activeSession.workspaceCode,
-        },
+        sendInput,
         {
           onAguiEvent: (event) => {
             if (event.threadId && event.threadId !== sendingSessionCode) return;
@@ -1655,6 +2147,7 @@ export function ChatManagementPage() {
     setCreatingSession(true);
     try {
       const session = await createChatSession({
+        agentCode: selectedAgentCode || mainChatAgentOption.agentCode,
         title: "New chat",
         workspaceCode: activeWorkspaceCode,
       });
@@ -1696,8 +2189,9 @@ export function ChatManagementPage() {
     }
   }
 
-  async function handleDeleteSession(session: ChatSession) {
-    if (!window.confirm(`Delete "${session.title}" permanently?`)) return;
+  async function confirmDeleteSession() {
+    if (!deleteTargetSession) return;
+    const session = deleteTargetSession;
 
     setSessionActionPendingCode(session.sessionCode);
     try {
@@ -1720,6 +2214,9 @@ export function ChatManagementPage() {
       toast.error(message, { title: "Delete session failed" });
     } finally {
       setSessionActionPendingCode("");
+      setDeleteTargetSession((current) => (
+        current?.sessionCode === session.sessionCode ? null : current
+      ));
     }
   }
 
@@ -1769,7 +2266,7 @@ export function ChatManagementPage() {
   }
 
   return (
-    <div className="relative z-0 flex h-[calc(100vh-3.5rem)] min-h-[720px] min-w-0 overflow-hidden bg-white">
+    <div className="relative z-0 flex h-full min-h-0 min-w-0 overflow-hidden overscroll-none bg-white">
       <SessionSidebar
         activeSessionCode={activeSession?.sessionCode ?? ""}
         collapsed={sidebarCollapsed}
@@ -1781,11 +2278,11 @@ export function ChatManagementPage() {
         onArchiveSession={(session) => void handleArchiveSession(session)}
         onCollapseToggle={() => setSidebarCollapsed((value) => !value)}
         onCreateSession={() => void handleCreateSession()}
-        onDeleteSession={(session) => void handleDeleteSession(session)}
+        onDeleteSession={setDeleteTargetSession}
         onRenameSession={handleSidebarRenameSession}
         onSessionSelect={handleSessionSelect}
       />
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center justify-between px-5 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
           <div className="min-w-0">
             {editingTitle && activeSession ? (
@@ -1830,88 +2327,138 @@ export function ChatManagementPage() {
                 {activeSession?.title ?? "Chat Management"}
               </h1>
             )}
-            <p className="mt-0.5 flex items-center gap-2 text-xs text-[var(--color-on-surface-variant)]">
-              <CircleDot size={12} />
-              {activeSession?.sessionCode ?? "No session"}
-              <span className="rounded-full bg-[var(--color-surface-container)] px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none text-[var(--color-on-surface-variant)]">
-                {activeSession?.taskCode ? "task" : "main"}
-              </span>
-            </p>
+            {hasActiveSession ? (
+              <p className="mt-0.5 flex items-center gap-2 text-xs text-[var(--color-on-surface-variant)]">
+                <CircleDot size={12} />
+                {activeSession?.sessionCode}
+                <span className="rounded-full bg-[var(--color-surface-container)] px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none text-[var(--color-on-surface-variant)]">
+                  {displayedAgentCode.replace("-agent", "")}
+                </span>
+              </p>
+            ) : (
+              <p className="mt-0.5 text-xs text-[var(--color-on-surface-variant)]">
+                Select a session from the left to continue.
+              </p>
+            )}
           </div>
         </header>
 
-        <section
-          aria-label="Chat transcript"
-          className="flex-1 overflow-y-auto bg-[var(--color-surface-container-low)] px-5 py-5"
-          ref={messageScrollRef}
-          onScroll={handleTranscriptScroll}
-        >
-          <div className="mx-auto flex max-w-4xl flex-col gap-4">
-            {visibleMessages.length ? visibleMessages.map((message) => (
-              <Fragment key={message.messageCode}>
-                <ChatBubble
-                  currentUserDisplayName={currentUserDisplayName}
-                  message={message}
-                />
-                {liveAguiAnchorIndex >= 0 && visibleMessages[liveAguiAnchorIndex]?.messageCode === message.messageCode ? (
-                  <AguiRunWorkRail events={transcriptAguiEvents} preferences={aguiDebugPreferences} />
-                ) : null}
-              </Fragment>
-            )) : activeWorkspaceCode ? (
-              <div className="flex min-h-[360px] items-center justify-center rounded-md bg-[var(--color-surface-container-lowest)] text-sm text-[var(--color-on-surface-variant)] shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">
-                No persisted messages in this session.
-              </div>
-            ) : (
-              <div className="flex min-h-[360px] items-center justify-center rounded-md bg-[var(--color-surface-container-lowest)] text-sm text-[var(--color-on-surface-variant)] shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">
-                Select or create a workspace before loading chat sessions.
-              </div>
-            )}
-          </div>
-        </section>
-
-        <footer className="relative bg-white px-4 py-3 shadow-[0_-10px_28px_rgba(15,23,42,0.04)]">
-          {showScrollToBottom ? (
-            <button
-              aria-label="Jump to latest message"
-              className="absolute left-1/2 top-0 z-20 inline-flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-[0_10px_26px_rgba(15,23,42,0.18)] ring-1 ring-[var(--color-outline-variant)] transition hover:bg-[var(--color-hover-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
-              type="button"
-              onClick={() => scrollToLatestMessage("smooth")}
+        {hasActiveSession ? (
+          <>
+            <section
+              aria-label="Chat transcript"
+              className="flex-1 overflow-y-auto bg-[var(--color-surface-container-low)] px-5 py-5"
+              ref={messageScrollRef}
+              onScroll={handleTranscriptScroll}
             >
-              <ArrowDown size={16} />
-            </button>
-          ) : null}
-          <div className="flex min-h-28 w-full flex-col rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.055)]">
-            <TextArea
-              className="min-h-16 w-full flex-1 resize-none rounded-none border-0 bg-transparent p-0 text-sm shadow-none focus:border-transparent focus:ring-0"
-              placeholder="Enter to send, Shift+Enter for newline"
-              value={composer}
-              onChange={(event) => setComposer(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-                event.preventDefault();
-                if (event.shiftKey) {
-                  setComposer(insertNewlineAtCursor(event.currentTarget));
-                  return;
-                }
-                void handleSend();
-              }}
-            />
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <ChatModelSelector
-                loading={modelsLoading}
-                models={chatModels}
-                selectedModelCode={selectedModelCode}
-                onSelect={setSelectedModelCode}
-              />
-              <Button className="shrink-0" disabled={sending || !activeSession || !selectedModel} size="sm" onClick={() => void handleSend()}>
-                {sending ? <Wrench size={15} /> : <Send size={15} />}
-                Send
-              </Button>
-            </div>
-          </div>
-        </footer>
-      </main>
+              <div className="mx-auto flex max-w-4xl flex-col gap-4">
+                {visibleMessages.length ? visibleMessages.map((message) => (
+                  <Fragment key={message.messageCode}>
+                    <ChatBubble
+                      currentUserDisplayName={currentUserDisplayName}
+                      message={message}
+                    />
+                    {liveAguiAnchorIndex >= 0 && visibleMessages[liveAguiAnchorIndex]?.messageCode === message.messageCode ? (
+                      <AguiRunWorkRail events={transcriptAguiEvents} preferences={aguiDebugPreferences} />
+                    ) : null}
+                  </Fragment>
+                )) : activeWorkspaceCode ? (
+                  <div className="flex min-h-[360px] items-center justify-center rounded-md bg-[var(--color-surface-container-lowest)] text-sm text-[var(--color-on-surface-variant)] shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">
+                    No persisted messages in this session.
+                  </div>
+                ) : (
+                  <div className="flex min-h-[360px] items-center justify-center rounded-md bg-[var(--color-surface-container-lowest)] text-sm text-[var(--color-on-surface-variant)] shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">
+                    Select or create a workspace before loading chat sessions.
+                  </div>
+                )}
+              </div>
+            </section>
 
+            <footer className="relative bg-white px-4 py-3 shadow-[0_-10px_28px_rgba(15,23,42,0.04)]">
+              {showScrollToBottom ? (
+                <button
+                  aria-label="Jump to latest message"
+                  className="absolute left-1/2 top-0 z-20 inline-flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-[0_10px_26px_rgba(15,23,42,0.18)] ring-1 ring-[var(--color-outline-variant)] transition hover:bg-[var(--color-hover-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
+                  type="button"
+                  onClick={() => scrollToLatestMessage("smooth")}
+                >
+                  <ArrowDown size={16} />
+                </button>
+              ) : null}
+              <div className="flex min-h-28 w-full flex-col rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.055)]">
+                <TextArea
+                  className="min-h-16 w-full flex-1 resize-none rounded-none border-0 bg-transparent p-0 text-sm shadow-none focus:border-transparent focus:ring-0"
+                  placeholder="Enter to send, Shift+Enter for newline"
+                  value={composer}
+                  onChange={(event) => setComposer(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+                    event.preventDefault();
+                    if (event.shiftKey) {
+                      setComposer(insertNewlineAtCursor(event.currentTarget));
+                      return;
+                    }
+                    void handleSend();
+                  }}
+                />
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-1">
+                    <ChatAgentSelector
+                      locked={agentSelectionLocked}
+                      loading={agentsLoading}
+                      agents={chatAgents}
+                      selectedAgentCode={selectedAgentCode}
+                      onSelect={setSelectedAgentCode}
+                    />
+                    <ChatModelSelector
+                      emptyLabel={modelEmptyLabel}
+                      loading={modelsLoading}
+                      models={agentScopedModels}
+                      selectedModelCode={selectedModelCode}
+                      onSelect={setSelectedModelCode}
+                    />
+                  </div>
+                  <Button className="shrink-0" disabled={sending || !activeSession || !selectedModel} size="sm" onClick={() => void handleSend()}>
+                    {sending ? <Wrench size={15} /> : <Send size={15} />}
+                    Send
+                  </Button>
+                </div>
+              </div>
+            </footer>
+          </>
+        ) : (
+          <section
+            aria-label="Chat onboarding"
+            className="flex flex-1 items-center justify-center bg-[var(--color-surface-container-low)] px-5 py-8"
+          >
+            <div className="w-full max-w-2xl rounded-lg bg-[var(--color-surface-container-lowest)] p-8 text-center shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">
+              <h2 className="text-base font-semibold text-[var(--color-on-surface)]">
+                No session selected
+              </h2>
+              <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
+                Create a new session or pick one from the left panel to view chat details and start messaging.
+              </p>
+            </div>
+          </section>
+        )}
+      </main>
+      <ConfirmDialog
+        ariaLabel="Delete chat session confirmation"
+        cancelText="Cancel"
+        confirmText={sessionActionPendingCode === deleteTargetSession?.sessionCode ? "Deleting..." : "Delete"}
+        description={deleteTargetSession
+          ? `Delete "${deleteTargetSession.title}" permanently? This action cannot be undone.`
+          : undefined}
+        open={Boolean(deleteTargetSession)}
+        pending={sessionActionPendingCode === deleteTargetSession?.sessionCode}
+        title="Delete session"
+        tone="danger"
+        onCancel={() => {
+          if (sessionActionPendingCode === deleteTargetSession?.sessionCode) return;
+          setDeleteTargetSession(null);
+        }}
+        onConfirm={() => void confirmDeleteSession()}
+      />
     </div>
   );
 }

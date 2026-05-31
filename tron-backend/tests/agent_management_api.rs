@@ -2,7 +2,10 @@ mod common;
 
 use std::{
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -22,6 +25,8 @@ struct RecordingModelServer {
     requests: Arc<Mutex<Vec<Value>>>,
     _task: JoinHandle<()>,
 }
+
+static DB_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 async fn recording_model_server() -> RecordingModelServer {
     let listener = TcpListener::bind("127.0.0.1:0")
@@ -74,8 +79,11 @@ fn temp_database_url(test_name: &str) -> String {
         .duration_since(UNIX_EPOCH)
         .expect("system time should be after Unix epoch")
         .as_nanos();
+    let sequence = DB_SEQUENCE.fetch_add(1, Ordering::Relaxed);
     std::env::temp_dir()
-        .join(format!("tron-agent-mgmt-{test_name}-{nanos}.sqlite3"))
+        .join(format!(
+            "tron-agent-mgmt-{test_name}-{nanos}-{sequence}.sqlite3"
+        ))
         .display()
         .to_string()
 }
@@ -89,7 +97,18 @@ fn temp_command_path(command_name: &str) -> PathBuf {
 }
 
 fn write_fake_command(path: &PathBuf) {
-    std::fs::write(path, "#!/bin/sh\nexit 0\n").expect("fake command should be written");
+    write_executable_script(path, "#!/bin/sh\nexit 0\n");
+}
+
+fn write_executable_script(path: &PathBuf, script: &str) {
+    use std::os::unix::fs::PermissionsExt;
+
+    std::fs::write(path, script).expect("fake command should be written");
+    let mut permissions = std::fs::metadata(path)
+        .expect("fake command metadata should exist")
+        .permissions();
+    permissions.set_mode(0o755);
+    std::fs::set_permissions(path, permissions).expect("fake command should be executable");
 }
 
 fn test_config(codex_command: &PathBuf, opencode_command: &PathBuf) -> AppConfig {
@@ -130,7 +149,11 @@ async fn startup_scan_workspace_policies_and_rescan_unavailable_state_work() {
         .as_array()
         .expect("platform rows should be an array");
     assert_eq!(platform_rows.len(), 2);
-    assert!(platform_rows.iter().all(|row| row["status"] == json!("ENABLED")));
+    assert!(
+        platform_rows
+            .iter()
+            .all(|row| row["status"] == json!("ENABLED"))
+    );
 
     let workspace_response = request_with_headers(
         &app,
@@ -147,9 +170,21 @@ async fn startup_scan_workspace_policies_and_rescan_unavailable_state_work() {
         .as_array()
         .expect("workspace rows should be an array");
     assert_eq!(workspace_rows.len(), 2);
-    assert!(workspace_rows.iter().all(|row| row["agentType"] == json!("SYSTEM")));
-    assert!(workspace_rows.iter().all(|row| row["inheritedFrom"] == json!("Platform")));
-    assert!(workspace_rows.iter().all(|row| row["agentCode"] != json!("main-agent")));
+    assert!(
+        workspace_rows
+            .iter()
+            .all(|row| row["agentType"] == json!("SYSTEM"))
+    );
+    assert!(
+        workspace_rows
+            .iter()
+            .all(|row| row["inheritedFrom"] == json!("Platform"))
+    );
+    assert!(
+        workspace_rows
+            .iter()
+            .all(|row| row["agentCode"] != json!("main-agent"))
+    );
 
     let disable_workspace = request_with_headers(
         &app,
@@ -163,7 +198,10 @@ async fn startup_scan_workspace_policies_and_rescan_unavailable_state_work() {
     assert_eq!(disable_workspace.status(), StatusCode::OK);
     let disabled_workspace_row = response_json(disable_workspace).await;
     assert_eq!(disabled_workspace_row["data"]["status"], json!("DISABLED"));
-    assert_eq!(disabled_workspace_row["data"]["platformEnabled"], json!(true));
+    assert_eq!(
+        disabled_workspace_row["data"]["platformEnabled"],
+        json!(true)
+    );
     assert_eq!(
         disabled_workspace_row["data"]["workspaceOverrideDisabled"],
         json!(true)
@@ -178,7 +216,8 @@ async fn startup_scan_workspace_policies_and_rescan_unavailable_state_work() {
         Some(&authorization),
     )
     .await;
-    let platform_after_workspace_disable_body = response_json(platform_after_workspace_disable).await;
+    let platform_after_workspace_disable_body =
+        response_json(platform_after_workspace_disable).await;
     let codex_platform_row = platform_after_workspace_disable_body["data"]
         .as_array()
         .and_then(|rows| rows.iter().find(|row| row["agentCode"] == json!("codex")))
@@ -197,7 +236,10 @@ async fn startup_scan_workspace_policies_and_rescan_unavailable_state_work() {
     assert_eq!(enable_workspace.status(), StatusCode::OK);
     let enabled_workspace_row = response_json(enable_workspace).await;
     assert_eq!(enabled_workspace_row["data"]["status"], json!("ENABLED"));
-    assert_eq!(enabled_workspace_row["data"]["platformEnabled"], json!(true));
+    assert_eq!(
+        enabled_workspace_row["data"]["platformEnabled"],
+        json!(true)
+    );
     assert_eq!(
         enabled_workspace_row["data"]["workspaceOverrideDisabled"],
         json!(false)
@@ -225,7 +267,8 @@ async fn startup_scan_workspace_policies_and_rescan_unavailable_state_work() {
         Some(&authorization),
     )
     .await;
-    let workspace_after_platform_disable_body = response_json(workspace_after_platform_disable).await;
+    let workspace_after_platform_disable_body =
+        response_json(workspace_after_platform_disable).await;
     let codex_workspace_row = workspace_after_platform_disable_body["data"]
         .as_array()
         .and_then(|rows| rows.iter().find(|row| row["agentCode"] == json!("codex")))
@@ -277,9 +320,83 @@ async fn startup_scan_workspace_policies_and_rescan_unavailable_state_work() {
         Some(&authorization),
     )
     .await;
-    assert_eq!(unavailable_workspace_mutation.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        unavailable_workspace_mutation.status(),
+        StatusCode::BAD_REQUEST
+    );
     let unavailable_workspace_body = response_json(unavailable_workspace_mutation).await;
-    assert_eq!(unavailable_workspace_body["code"], json!("AGENT_SYSTEM_UNAVAILABLE"));
+    assert_eq!(
+        unavailable_workspace_body["code"],
+        json!("AGENT_SYSTEM_UNAVAILABLE")
+    );
+}
+
+#[tokio::test]
+async fn startup_scan_loads_system_agent_models_and_rescan_refreshes_models() {
+    let codex_command = temp_command_path("codex-models");
+    let opencode_command = temp_command_path("opencode-models");
+    write_executable_script(
+        &codex_command,
+        "#!/bin/sh\nif [ \"$1\" = \"models\" ]; then\n  echo '[{\"id\":\"gpt-5-codex\",\"displayName\":\"GPT-5 Codex\"}]'\n  exit 0\nfi\nexit 0\n",
+    );
+    write_executable_script(
+        &opencode_command,
+        "#!/bin/sh\nif [ \"$1\" = \"models\" ]; then\n  echo '{\"models\":[{\"id\":\"openai/gpt-4.1\",\"displayName\":\"OpenAI GPT-4.1\"}]}'\n  exit 0\nfi\nexit 0\n",
+    );
+    let app = app_with_config(test_config(&codex_command, &opencode_command));
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let startup_platform_response = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/agents/registry/system",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(startup_platform_response.status(), StatusCode::OK);
+    let startup_platform_body = response_json(startup_platform_response).await;
+    let startup_rows = startup_platform_body["data"]
+        .as_array()
+        .expect("platform rows should be an array");
+    let startup_codex = startup_rows
+        .iter()
+        .find(|row| row["agentCode"] == json!("codex"))
+        .expect("codex row should exist after startup scan");
+    assert_eq!(
+        startup_codex["models"],
+        json!([{ "modelId": "gpt-5-codex", "displayName": "GPT-5 Codex" }])
+    );
+
+    write_executable_script(
+        &codex_command,
+        "#!/bin/sh\nif [ \"$1\" = \"models\" ]; then\n  echo '[{\"id\":\"gpt-5-codex-next\",\"displayName\":\"GPT-5 Codex Next\"}]'\n  exit 0\nfi\nexit 0\n",
+    );
+
+    let rescan_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/agents/registry/system/rescan",
+        Some(json!({})),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(rescan_response.status(), StatusCode::OK);
+    let rescan_body = response_json(rescan_response).await;
+    let rescan_rows = rescan_body["data"]["records"]
+        .as_array()
+        .expect("rescan rows should be an array");
+    let rescan_codex = rescan_rows
+        .iter()
+        .find(|row| row["agentCode"] == json!("codex"))
+        .expect("codex row should exist after rescan");
+    assert_eq!(
+        rescan_codex["models"],
+        json!([{ "modelId": "gpt-5-codex-next", "displayName": "GPT-5 Codex Next" }])
+    );
 }
 
 #[tokio::test]
@@ -396,5 +513,95 @@ async fn main_agent_config_is_persisted_and_only_main_agent_runs_receive_guidanc
         .expect("task-agent messages should be an array");
     assert_eq!(task_messages.len(), 1);
     assert_eq!(task_messages[0]["role"], json!("user"));
-    assert_eq!(task_messages[0]["content"], json!("Investigate latency for task."));
+    assert_eq!(
+        task_messages[0]["content"],
+        json!("Investigate latency for task.")
+    );
+}
+
+#[tokio::test]
+async fn runtime_registry_capabilities_are_discoverable() {
+    let codex_command = temp_command_path("codex-runtime-discovery");
+    let opencode_command = temp_command_path("opencode-runtime-discovery");
+    write_fake_command(&codex_command);
+    write_fake_command(&opencode_command);
+
+    let app = app_with_config(test_config(&codex_command, &opencode_command));
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let list_response = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/agents/runtimes",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_body = response_json(list_response).await;
+    let rows = list_body["data"]
+        .as_array()
+        .expect("runtime capabilities should be an array");
+    assert!(
+        rows.iter()
+            .any(|row| row["adapterKey"] == json!("MAIN_REACT"))
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row["adapterKey"] == json!("CODEX_EXEC"))
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row["adapterKey"] == json!("OPENCODE_RUN"))
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row["adapterKey"] == json!("CODEX_APP_SERVER"))
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row["adapterKey"] == json!("OPENCODE_SERVE"))
+    );
+    assert!(
+        rows.iter()
+            .any(|row| row["adapterKey"] == json!("OPENCODE_ACP"))
+    );
+
+    let codex_row = rows
+        .iter()
+        .find(|row| row["adapterKey"] == json!("CODEX_EXEC"))
+        .expect("codex runtime row should exist");
+    assert_eq!(codex_row["available"], json!(true));
+    assert_eq!(codex_row["enabled"], json!(true));
+    assert_eq!(codex_row["supportsResume"], json!(true));
+    assert_eq!(codex_row["supportsCancel"], json!(false));
+
+    let detail_response = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/agents/runtimes/CODEX_EXEC/capabilities",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail_body = response_json(detail_response).await;
+    assert_eq!(detail_body["data"]["adapterKey"], json!("CODEX_EXEC"));
+    assert_eq!(detail_body["data"]["supportsResume"], json!(true));
+
+    let missing_response = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/agents/runtimes/UNKNOWN_RUNTIME/capabilities",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(missing_response.status(), StatusCode::NOT_FOUND);
+    let missing_body = response_json(missing_response).await;
+    assert_eq!(missing_body["code"], json!("AGENT_RUNTIME_NOT_FOUND"));
 }

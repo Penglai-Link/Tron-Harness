@@ -1,8 +1,11 @@
 use std::{
     collections::HashMap,
-    path::Path,
-    process::Command,
     sync::{Arc, Mutex},
+};
+
+use super::{
+    runtime_capability::{build_runtime_capabilities, find_runtime_capability},
+    system_agent_model_probe::{ProcessSystemCommandProbe, SystemCommandProbe},
 };
 
 use crate::{
@@ -11,8 +14,9 @@ use crate::{
     domain::{
         agent::{
             AgentManagementError, ManagedAgentSource, ManagedAgentType, ManagedSystemAgentRecord,
-            PlatformMainAgentConfig, SystemAgentRegistryEntry, SystemAgentStatus,
-            SystemAgentSyncResult, WorkspaceSystemAgentPolicy,
+            PlatformMainAgentConfig, RuntimeAdapterCapabilityRecord, SystemAgentModelRecord,
+            SystemAgentRegistryEntry, SystemAgentStatus, SystemAgentSyncResult,
+            WorkspaceSystemAgentPolicy,
         },
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceStatus},
     },
@@ -25,14 +29,23 @@ pub struct UpdatePlatformMainAgentCommand {
     pub instructions: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResolvedSystemAgentRuntime {
+    pub agent_code: String,
+    pub command_name: String,
+    pub name: String,
+}
+
 pub trait AgentManagementRepository: Send {
-    fn get_main_agent_config(&mut self)
-    -> Result<Option<PlatformMainAgentConfig>, AgentManagementError>;
+    fn get_main_agent_config(
+        &mut self,
+    ) -> Result<Option<PlatformMainAgentConfig>, AgentManagementError>;
     fn upsert_main_agent_config(
         &mut self,
         config: &PlatformMainAgentConfig,
     ) -> Result<(), AgentManagementError>;
-    fn list_system_agents(&mut self) -> Result<Vec<SystemAgentRegistryEntry>, AgentManagementError>;
+    fn list_system_agents(&mut self)
+    -> Result<Vec<SystemAgentRegistryEntry>, AgentManagementError>;
     fn upsert_system_agent(
         &mut self,
         agent: &SystemAgentRegistryEntry,
@@ -52,30 +65,6 @@ pub trait AgentManagementRepository: Send {
     ) -> Result<bool, AgentManagementError>;
 }
 
-trait SystemCommandProbe: Send + Sync {
-    fn is_available(&self, command_name: &str) -> Result<bool, String>;
-}
-
-#[derive(Debug, Clone, Default)]
-struct ProcessSystemCommandProbe;
-
-impl SystemCommandProbe for ProcessSystemCommandProbe {
-    fn is_available(&self, command_name: &str) -> Result<bool, String> {
-        let command_name = command_name.trim();
-        if command_name.is_empty() {
-            return Ok(false);
-        }
-        if command_name.contains(std::path::MAIN_SEPARATOR) {
-            return Ok(Path::new(command_name).exists());
-        }
-        let output = Command::new("which")
-            .arg(command_name)
-            .output()
-            .map_err(|error| error.to_string())?;
-        Ok(output.status.success())
-    }
-}
-
 #[derive(Debug, Clone)]
 struct SupportedSystemAgentDefinition {
     agent_code: String,
@@ -90,6 +79,7 @@ pub struct AgentManagementService {
     workspaces: WorkspaceService,
     supported_agents: Vec<SupportedSystemAgentDefinition>,
     probe: Arc<dyn SystemCommandProbe>,
+    model_catalog: Arc<Mutex<HashMap<String, Vec<SystemAgentModelRecord>>>>,
 }
 
 impl AgentManagementService {
@@ -117,6 +107,7 @@ impl AgentManagementService {
             workspaces,
             supported_agents,
             probe,
+            model_catalog: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -180,7 +171,9 @@ impl AgentManagementService {
         entries.sort_by(|left, right| left.agent_code.cmp(&right.agent_code));
         Ok(entries
             .into_iter()
-            .map(|entry| managed_system_record(&entry, None))
+            .map(|entry| {
+                managed_system_record(&entry, None, self.system_agent_models(&entry.agent_code))
+            })
             .collect())
     }
 
@@ -199,11 +192,30 @@ impl AgentManagementService {
         for supported in &self.supported_agents {
             let existing_entry = existing.get(&supported.agent_code);
             let availability = self.probe.is_available(&supported.command_name);
-            let (available, last_error) = match availability {
+            let mut last_error = None;
+            let (available, availability_error) = match availability {
                 Ok(true) => (true, None),
                 Ok(false) => (false, None),
                 Err(message) => (false, Some(message)),
             };
+            if let Some(error) = availability_error {
+                last_error = Some(error);
+            }
+            let models = if available {
+                match self
+                    .probe
+                    .list_models(&supported.agent_code, &supported.command_name)
+                {
+                    Ok(models) => models,
+                    Err(error) => {
+                        last_error = Some(error);
+                        Vec::new()
+                    }
+                }
+            } else {
+                Vec::new()
+            };
+            self.set_system_agent_models(&supported.agent_code, models);
             if available {
                 available_count += 1;
             } else {
@@ -237,6 +249,21 @@ impl AgentManagementService {
         })
     }
 
+    pub fn list_runtime_capabilities(
+        &self,
+    ) -> Result<Vec<RuntimeAdapterCapabilityRecord>, AgentManagementError> {
+        let entries = self.repository().list_system_agents()?;
+        Ok(build_runtime_capabilities(&entries))
+    }
+
+    pub fn runtime_capability(
+        &self,
+        adapter_key: &str,
+    ) -> Result<Option<RuntimeAdapterCapabilityRecord>, AgentManagementError> {
+        let entries = self.repository().list_system_agents()?;
+        Ok(find_runtime_capability(&entries, adapter_key))
+    }
+
     pub fn enable_platform_system_agent(
         &self,
         agent_code: &str,
@@ -247,7 +274,11 @@ impl AgentManagementService {
         }
         entry.enabled = true;
         self.repository().upsert_system_agent(&entry)?;
-        Ok(managed_system_record(&entry, None))
+        Ok(managed_system_record(
+            &entry,
+            None,
+            self.system_agent_models(&entry.agent_code),
+        ))
     }
 
     pub fn disable_platform_system_agent(
@@ -260,7 +291,11 @@ impl AgentManagementService {
         }
         entry.enabled = false;
         self.repository().upsert_system_agent(&entry)?;
-        Ok(managed_system_record(&entry, None))
+        Ok(managed_system_record(
+            &entry,
+            None,
+            self.system_agent_models(&entry.agent_code),
+        ))
     }
 
     pub fn list_workspace_system_agents(
@@ -282,9 +317,43 @@ impl AgentManagementService {
                 let disabled = policies
                     .get(entry.agent_code.as_str())
                     .is_some_and(|policy| !policy.enabled);
-                managed_system_record(&entry, Some(disabled))
+                managed_system_record(
+                    &entry,
+                    Some(disabled),
+                    self.system_agent_models(&entry.agent_code),
+                )
             })
             .collect())
+    }
+
+    pub fn resolve_workspace_system_agent_runtime(
+        &self,
+        workspace_code: &str,
+        agent_code: &str,
+    ) -> Result<ResolvedSystemAgentRuntime, AgentManagementError> {
+        self.active_workspace_detail(workspace_code)?;
+        let normalized_agent_code = agent_code.trim();
+        if normalized_agent_code.is_empty() {
+            return Err(AgentManagementError::SystemAgentNotFound);
+        }
+        let entry = self.required_system_agent(normalized_agent_code)?;
+        if !entry.available || !entry.enabled || entry.command_name.trim().is_empty() {
+            return Err(AgentManagementError::SystemAgentUnavailable);
+        }
+        let workspace_override_disabled = self
+            .repository()
+            .list_workspace_system_policies(Some(workspace_code))?
+            .into_iter()
+            .find(|policy| policy.agent_code == entry.agent_code)
+            .is_some_and(|policy| !policy.enabled);
+        if workspace_override_disabled {
+            return Err(AgentManagementError::SystemAgentUnavailable);
+        }
+        Ok(ResolvedSystemAgentRuntime {
+            agent_code: entry.agent_code,
+            command_name: entry.command_name,
+            name: entry.name,
+        })
     }
 
     pub fn enable_workspace_system_agent(
@@ -340,7 +409,11 @@ impl AgentManagementService {
                     .find(|policy| policy.agent_code == entry.agent_code)
             })
             .is_some_and(|policy| !policy.enabled);
-        managed_system_record(entry, Some(disabled))
+        managed_system_record(
+            entry,
+            Some(disabled),
+            self.system_agent_models(&entry.agent_code),
+        )
     }
 
     fn required_system_agent(
@@ -368,22 +441,36 @@ impl AgentManagementService {
         Ok(workspace)
     }
 
-    fn repository(
-        &self,
-    ) -> std::sync::MutexGuard<'_, Box<dyn AgentManagementRepository>> {
+    fn repository(&self) -> std::sync::MutexGuard<'_, Box<dyn AgentManagementRepository>> {
         self.repository
             .lock()
             .expect("agent management repository mutex poisoned")
+    }
+
+    fn system_agent_models(&self, agent_code: &str) -> Vec<SystemAgentModelRecord> {
+        self.model_catalog
+            .lock()
+            .expect("agent management model catalog mutex poisoned")
+            .get(agent_code)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    fn set_system_agent_models(&self, agent_code: &str, models: Vec<SystemAgentModelRecord>) {
+        self.model_catalog
+            .lock()
+            .expect("agent management model catalog mutex poisoned")
+            .insert(agent_code.to_string(), models);
     }
 }
 
 fn managed_system_record(
     entry: &SystemAgentRegistryEntry,
     workspace_disabled_override: Option<bool>,
+    models: Vec<SystemAgentModelRecord>,
 ) -> ManagedSystemAgentRecord {
-    let effective_enabled = entry.available
-        && entry.enabled
-        && !workspace_disabled_override.unwrap_or(false);
+    let effective_enabled =
+        entry.available && entry.enabled && !workspace_disabled_override.unwrap_or(false);
     ManagedSystemAgentRecord {
         agent_code: entry.agent_code.clone(),
         name: entry.name.clone(),
@@ -402,6 +489,7 @@ fn managed_system_record(
         },
         enabled: effective_enabled,
         available: entry.available,
+        models,
         last_scanned_at: entry.last_scanned_at.clone(),
         last_seen_at: entry.last_seen_at.clone(),
         last_error: entry.last_error.clone(),

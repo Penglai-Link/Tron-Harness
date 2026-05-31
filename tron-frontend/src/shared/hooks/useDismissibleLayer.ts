@@ -33,16 +33,20 @@ export function useDismissibleLayer({
 
     const dismiss = () => onDismiss();
     const withinGracePeriod = () => Date.now() - openedAtRef.current < scrollGracePeriodMs;
+    const isWithinLayer = (target: EventTarget | null) => {
+      if (!(target instanceof Node)) return false;
+      if (popupRef.current?.contains(target)) return true;
+      return Boolean(triggerElement?.contains(target));
+    };
 
     const handlePointerDown = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (popupRef.current?.contains(target)) return;
-      if (triggerElement?.contains(target)) return;
+      if (isWithinLayer(event.target)) return;
       dismiss();
     };
 
-    const handleViewportChange = () => {
+    const handleViewportChange = (event?: Event) => {
       if (withinGracePeriod()) return;
+      if (event && isWithinLayer(event.target)) return;
       dismiss();
     };
 

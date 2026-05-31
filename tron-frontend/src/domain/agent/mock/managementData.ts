@@ -10,6 +10,7 @@ type SystemAgentSeed = {
   agentCode: string;
   available: boolean;
   description: string;
+  models: Array<{ modelId: string; displayName: string }>;
   name: string;
   platformEnabled: boolean;
   source: string;
@@ -30,6 +31,10 @@ let systemAgentRegistry: SystemAgentSeed[] = [
     agentCode: "codex",
     available: true,
     description: "OpenAI coding agent runtime used for structured feature delivery.",
+    models: [
+      { modelId: "gpt-5-codex", displayName: "GPT-5 Codex" },
+      { modelId: "gpt-5-codex-low", displayName: "GPT-5 Codex Low" },
+    ],
     name: "Codex",
     platformEnabled: true,
     source: "System Scan",
@@ -39,6 +44,10 @@ let systemAgentRegistry: SystemAgentSeed[] = [
     agentCode: "opencode",
     available: true,
     description: "Local CLI coding agent kept as a platform-level fallback executor.",
+    models: [
+      { modelId: "openai/gpt-4.1", displayName: "OpenAI GPT-4.1" },
+      { modelId: "anthropic/claude-sonnet-4", displayName: "Claude Sonnet 4" },
+    ],
     name: "OpenCode",
     platformEnabled: false,
     source: "System Scan",
@@ -95,6 +104,7 @@ function buildPlatformRecord(record: SystemAgentSeed): PlatformSystemAgentRecord
     description: record.description,
     enabled: status === "Enabled",
     lastScannedAt: record.lastScannedAt,
+    models: [...record.models],
     name: record.name,
     source: record.source,
     status,
@@ -121,6 +131,7 @@ function buildWorkspaceRecord(
     enabled,
     inheritedFrom: "Platform",
     lastScannedAt: record.lastScannedAt,
+    models: [...record.models],
     name: record.name,
     platformEnabled: record.platformEnabled,
     source: record.source,

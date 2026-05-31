@@ -15,6 +15,7 @@ Backend rows cover RED -> GREEN -> focused VERIFY in the selected Lite Spec base
 - AC-CM-01 | phase: tdd | owner: lead | scope: `tron-backend/src/domain/chat*`, `tron-backend/src/application/chat*`, `tron-backend/src/adapters/outbound/persistence/sqlite/chat_repository.rs`, `tron-backend/src/adapters/inbound/http/chats*`, `tron-backend/migrations/20260527_0018_create_chat_management.sql`, `tron-backend/tests/chat_management_api.rs` | command_ref: CMD-BE-TEST | status: done.
 - AC-CM-02 | phase: tdd | owner: lead | scope: `tron-backend/src/application/chat/service.rs`, existing agent invocation wiring, `tron-backend/tests/chat_management_api.rs` | command_ref: CMD-BE-TEST | status: done.
 - AC-CM-05 | phase: tdd | owner: lead | scope: `tron-backend/src/application/agent/runtime.rs`, `tron-backend/src/application/agent/agui_stream.rs`, `tron-backend/src/domain/agent/model_exchange.rs`, `tron-backend/src/adapters/inbound/http/chats/handler.rs`, `tron-backend/tests/chat_management_api.rs` | command_ref: CMD-BE-TEST | status: done.
+- AC-CM-09 | phase: tdd | owner: lead | scope: `tron-backend/src/application/agent/invocation.rs`, `tron-backend/src/application/agent/system_cli_model_client.rs`, `tron-backend/src/application/agent/management.rs`, `tron-backend/src/application/chat/service.rs`, `tron-backend/src/adapters/outbound/persistence/sqlite/chat_repository.rs`, `tron-backend/migrations/20260530_0023_add_chat_session_agent_code.sql`, `tron-backend/tests/chat_management_api.rs` | command_ref: CMD-BE-TEST | status: done.
 
 ## Worktree Notes
 
@@ -25,6 +26,8 @@ Rows ran in the selected Lite Spec base worktree because backend chat service, p
 Chat send uses existing `AgentInvocationService` and preserves `/api/v1/agents/runs` as a direct execution API outside the Chat UI boundary.
 
 Chat stream now keeps the event path as ReactAgent internal events -> EventBus -> AG-UI stream sink -> AG-UI protocol adapter -> chat SSE response. The chat handler no longer sends chat-internal `delta`/`done` events.
+
+Agent invocation now resolves `agentCode` at runtime: `main-agent` keeps in-process React execution, and workspace-enabled `codex`/`opencode` execute through CLI adapters while preserving chat send persistence flow.
 
 ## Open Decisions
 

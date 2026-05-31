@@ -15,7 +15,7 @@
 ## Repository State
 
 - root_worktree_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/chat-management/base
-- current_branch: feature/clouds3n/chat-management/base
+- current_branch: detached HEAD (continuation worktree `/Users/clouds3n/.codex/worktrees/1b07/Tron`)
 - selected_git_skill_verified: true
 
 ## Multi-Agent Base Branch
@@ -37,6 +37,8 @@
 | AC-CM-06, AC-CM-07 | solo | lead | continuation execution in existing base worktree; frontend stream parser, transcript rendering, and send feedback are one synchronized interaction slice | none | pending |
 | AC-CM-05 | solo | lead | continuation execution in existing base worktree; subagent spawning was not explicitly requested in this runtime, and stream API changes are tightly coupled to chat send orchestration | none | done |
 | AC-CM-06, AC-CM-07 | solo | lead | continuation execution in existing base worktree; frontend stream parser, transcript rendering, and send feedback are one synchronized interaction slice | none | done |
+| AC-CM-08 | solo | lead | continuation execution in current worktree; agent selector UI, session payload, and active-session rebinding are a single frontend interaction slice | none | done |
+| AC-CM-09 | solo | lead | continuation execution in current worktree; chat session persistence, invocation routing, CLI adapter, and runtime tests are tightly coupled backend changes | none | done |
 
 ## Agent Worktrees
 

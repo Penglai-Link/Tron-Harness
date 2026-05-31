@@ -59,6 +59,7 @@ fn base_context(run_code: &str) -> AgentRunContext {
         request_id: Some("REQ-1".into()),
         stream_key: Some("CONV-1".into()),
         agent_kind: AgentKind::React,
+        system_agent_session_id: None,
         model: AgentModelConfig {
             model_code: "MODEL-1".into(),
             protocol: AgentModelProtocol::ChatCompletions,
@@ -138,7 +139,7 @@ async fn react_agent_completes_final_answer_and_publishes_metadata_only_events()
 
     assert_eq!(result.final_output, "done");
     assert_eq!(result.step_count, 1);
-    assert!(sink.wait_for_len(5, Duration::from_secs(2)));
+    assert!(sink.wait_for_len(6, Duration::from_secs(2)));
     let events = sink.events();
     let names: Vec<_> = events
         .iter()
@@ -147,6 +148,7 @@ async fn react_agent_completes_final_answer_and_publishes_metadata_only_events()
     assert_eq!(
         names,
         vec![
+            "agent.run.requested",
             "agent.run.started",
             "agent.model.requested",
             "agent.model.responded",
@@ -344,6 +346,7 @@ async fn model_request_builders_use_frozen_model_config() {
             skill_name: None,
             required_variable_keys: vec![],
         }],
+        system_agent_session_id: None,
     };
 
     let chat = chat_completions_request(&config, &request);

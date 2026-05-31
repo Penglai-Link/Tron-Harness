@@ -1,5 +1,11 @@
 export type AgentStatus = "Enabled" | "Disabled" | "Unavailable";
 
+export interface SystemAgentModelRecord {
+  modelId: string;
+  displayName: string;
+  contextWindowTokens?: number | null;
+}
+
 export interface MainAgentConfig {
   personality: string;
   instructions: string;
@@ -14,6 +20,7 @@ interface SystemAgentBaseRecord {
   status: AgentStatus;
   enabled: boolean;
   available: boolean;
+  models: SystemAgentModelRecord[];
   lastScannedAt: string | null;
 }
 

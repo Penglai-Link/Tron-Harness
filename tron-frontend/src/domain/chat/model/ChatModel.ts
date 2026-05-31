@@ -9,6 +9,8 @@ export interface ChatSession {
   userCode?: string | null;
   appCode?: string | null;
   taskCode?: string | null;
+  agentCode?: string | null;
+  systemAgentSessionId?: string | null;
   title: string;
   status: ChatSessionStatus;
   lastRunCode?: string | null;
@@ -28,6 +30,7 @@ export interface CreateChatSessionInput {
   title?: string | null;
   appCode?: string | null;
   taskCode?: string | null;
+  agentCode?: string | null;
 }
 
 export interface UpdateChatSessionInput {
@@ -63,6 +66,7 @@ export interface ChatRunSummary {
   finalOutput: string;
   stepCount: number;
   tokenUsage?: ChatTokenUsage | null;
+  systemAgentSessionId?: string | null;
 }
 
 export interface ChatSendResult {
@@ -76,6 +80,7 @@ export interface SendChatMessageInput {
   workspaceCode: string;
   appCode?: string | null;
   taskCode?: string | null;
+  agentCode?: string | null;
   modelCode?: string | null;
   model?: Record<string, unknown>;
 }

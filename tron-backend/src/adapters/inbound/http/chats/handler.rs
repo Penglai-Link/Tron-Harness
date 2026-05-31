@@ -15,17 +15,28 @@ use crate::{
     adapters::inbound::http::auth::RequestAuthContext,
     app::AppState,
     application::{
-        agent::{AgentAguiStreamService, AgentInvocationService, generate_agent_run_code},
+        agent::{
+            AgentAguiStreamService, AgentInvocationError, AgentInvocationService,
+            generate_agent_run_code,
+        },
         chat::{
             ChatSendError, ChatSendResult, ChatSessionQuery, CreateChatSessionCommand,
             SendChatMessageCommand, UpdateChatSessionCommand,
         },
     },
-    domain::{agent::ModelStreamEvent, chat::ChatError},
+    domain::agent::ModelStreamEvent,
+    domain::{
+        agent::ManagedSystemAgentRecord,
+        chat::{ChatError, ChatSession},
+    },
     response::ApiResponse,
 };
 
 use super::error_mapper::{chat_error_response, chat_send_error_response};
+use super::stream_live::SystemAgentLiveEventBuilder;
+
+const CHAT_STREAM_POLL_INTERVAL_MS: u64 = 25;
+const CHAT_STREAM_DRAIN_AFTER_COMPLETION_TICKS: u16 = 80;
 
 pub async fn list_session_groups(
     State(state): State<AppState>,
@@ -119,16 +130,8 @@ pub async fn send_message(
     let Ok(session) = state.chats.get_session(&session_code) else {
         return chat_error_response(ChatError::SessionNotFound);
     };
-    if request.model.is_none() {
-        match state
-            .models
-            .text_agent_model_config(&session.workspace_code, request.model_code.as_deref())
-        {
-            Ok(model) => request.model = model,
-            Err(_) => {
-                return chat_send_error_response(ChatSendError::Chat(ChatError::StorageFailure));
-            }
-        }
+    if let Err(error) = prepare_send_model(&state, &session, &mut request) {
+        return chat_send_error_response(error);
     }
 
     let agent_service = AgentInvocationService::new(
@@ -166,26 +169,25 @@ pub async fn stream_message(
     let Ok(session) = state.chats.get_session(&session_code) else {
         return chat_error_response(ChatError::SessionNotFound);
     };
-    if request.model.is_none() {
-        match state
-            .models
-            .text_agent_model_config(&session.workspace_code, request.model_code.as_deref())
-        {
-            Ok(model) => request.model = model,
-            Err(_) => {
-                return chat_send_error_response(ChatSendError::Chat(ChatError::StorageFailure));
-            }
-        }
+    let effective_agent_code = effective_agent_code(&session, &request);
+    let system_agent_live_stream = !is_main_agent_code(&effective_agent_code);
+    if let Err(error) = prepare_send_model(&state, &session, &mut request) {
+        return chat_send_error_response(error);
     }
 
     let run_code = generate_agent_run_code();
     request.run_code = Some(run_code.clone());
 
-    let agui_stream = AgentAguiStreamService::new(state.agui_events.clone());
+    let agui_stream = AgentAguiStreamService::with_replay_store(
+        state.agui_events.clone(),
+        state.agui_replay_store.clone(),
+    );
     let _ = agui_stream.activate(&session_code);
 
     let (completion_sender, mut completion_receiver) =
         tokio::sync::mpsc::channel::<ChatStreamCompletion>(1);
+    let (model_event_sender, mut model_event_receiver) =
+        tokio::sync::mpsc::unbounded_channel::<ModelStreamEvent>();
     let chats = state.chats.clone();
     let session_code_for_task = session_code.clone();
     let user_code = Some(auth.user().user_code.clone());
@@ -200,7 +202,9 @@ pub async fn stream_message(
         state.agent_model_client.clone(),
         state.agent_tool_registry.clone(),
     );
-    let sink = Arc::new(move |_event: ModelStreamEvent| {});
+    let sink = Arc::new(move |event: ModelStreamEvent| {
+        let _ = model_event_sender.send(event);
+    });
 
     tokio::spawn(async move {
         let result = chats
@@ -234,8 +238,13 @@ pub async fn stream_message(
     let stream = async_stream::stream! {
         let mut seen = BTreeSet::<String>::new();
         let mut completion: Option<ChatStreamCompletion> = None;
-        let mut drain_ticks = 0u8;
-        let mut interval = tokio::time::interval(Duration::from_millis(25));
+        let mut drain_ticks = 0u16;
+        let mut interval = tokio::time::interval(Duration::from_millis(CHAT_STREAM_POLL_INTERVAL_MS));
+        let mut live_event_builder = SystemAgentLiveEventBuilder::new(
+            &stream_key,
+            &stream_run_code,
+            system_agent_live_stream,
+        );
 
         loop {
             interval.tick().await;
@@ -247,12 +256,40 @@ pub async fn stream_message(
             }
 
             let mut emitted = false;
+            while let Ok(event) = model_event_receiver.try_recv() {
+                for payload in live_event_builder.ingest(event) {
+                    let key = format!("{}:{}", payload.sse_event, payload.data);
+                    if seen.insert(key) {
+                        emitted = true;
+                        yield Ok::<Event, Infallible>(
+                            ChatSsePayload::agui(payload.sse_event, payload.data).event()
+                        );
+                    }
+                }
+            }
             if let Ok(events) = stream_service.protocol_events(&stream_key) {
                 for event in events {
                     if !protocol_event_belongs_to_run(&event.data, &stream_run_code) {
                         continue;
                     }
                     if matches!(event.sse_event.as_str(), "RUN_FINISHED" | "RUN_ERROR") {
+                        continue;
+                    }
+                    if live_event_builder.enabled()
+                        && matches!(
+                            event.sse_event.as_str(),
+                            "RUN_STARTED"
+                                | "REASONING_START"
+                                | "REASONING_MESSAGE_START"
+                                | "REASONING_MESSAGE_CONTENT"
+                                | "REASONING_TEXT_CONTENT"
+                                | "REASONING_MESSAGE_END"
+                                | "REASONING_END"
+                                | "TEXT_MESSAGE_START"
+                                | "TEXT_MESSAGE_CONTENT"
+                                | "TEXT_MESSAGE_END"
+                        )
+                    {
                         continue;
                     }
                     let key = format!("{}:{}", event.sse_event, event.data);
@@ -264,12 +301,21 @@ pub async fn stream_message(
             }
 
             if let Some(done) = completion.as_ref() {
+                for payload in live_event_builder.finalize() {
+                    let key = format!("{}:{}", payload.sse_event, payload.data);
+                    if seen.insert(key) {
+                        emitted = true;
+                        yield Ok::<Event, Infallible>(
+                            ChatSsePayload::agui(payload.sse_event, payload.data).event()
+                        );
+                    }
+                }
                 if emitted {
                     drain_ticks = 0;
                     continue;
                 }
                 drain_ticks = drain_ticks.saturating_add(1);
-                if drain_ticks < 4 {
+                if drain_ticks < CHAT_STREAM_DRAIN_AFTER_COMPLETION_TICKS {
                     continue;
                 }
                 yield Ok::<Event, Infallible>(done.payload(&stream_key, &stream_run_code).event());
@@ -378,4 +424,108 @@ fn normalized_required(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
+}
+
+fn normalized_optional(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn is_main_agent_code(agent_code: &str) -> bool {
+    agent_code.trim().eq_ignore_ascii_case("main-agent")
+}
+
+fn effective_agent_code(session: &ChatSession, request: &SendChatMessageCommand) -> String {
+    let selected = if session.last_run_code.is_some() {
+        session.agent_code.clone()
+    } else {
+        normalized_optional(request.agent_code.clone()).or(session.agent_code.clone())
+    };
+    selected.unwrap_or_else(|| "main-agent".to_string())
+}
+
+fn prepare_send_model(
+    state: &AppState,
+    session: &ChatSession,
+    request: &mut SendChatMessageCommand,
+) -> Result<(), ChatSendError> {
+    let effective_agent_code = effective_agent_code(session, request);
+
+    if is_main_agent_code(&effective_agent_code) {
+        if request.model.is_none() {
+            request.model = state
+                .models
+                .text_agent_model_config(&session.workspace_code, request.model_code.as_deref())
+                .map_err(|_| ChatSendError::Chat(ChatError::StorageFailure))?;
+        }
+        return Ok(());
+    }
+
+    if request.model.is_none() {
+        return Err(ChatSendError::Agent(AgentInvocationError::ModelRequired));
+    }
+
+    let model_name = request
+        .model
+        .as_ref()
+        .map(|model| model.model_name.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or(ChatSendError::Agent(AgentInvocationError::ModelRequired))?;
+
+    let system_agent = state
+        .agent_management
+        .list_workspace_system_agents(&session.workspace_code)
+        .map_err(|_| {
+            ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+                "workspace system agent policy load failed".into(),
+            ))
+        })?
+        .into_iter()
+        .find(|record| {
+            record
+                .agent_code
+                .eq_ignore_ascii_case(&effective_agent_code)
+        })
+        .ok_or_else(|| {
+            ChatSendError::Agent(AgentInvocationError::RuntimeFailed(format!(
+                "system agent `{effective_agent_code}` was not found"
+            )))
+        })?;
+
+    validate_system_agent_model(&system_agent, &model_name)?;
+    Ok(())
+}
+
+fn validate_system_agent_model(
+    system_agent: &ManagedSystemAgentRecord,
+    model_name: &str,
+) -> Result<(), ChatSendError> {
+    if !system_agent.enabled || !system_agent.available {
+        return Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+            format!(
+                "system agent `{}` is unavailable or disabled for this workspace",
+                system_agent.agent_code
+            ),
+        )));
+    }
+
+    if system_agent.models.is_empty() {
+        return Ok(());
+    }
+
+    let model_matched = system_agent
+        .models
+        .iter()
+        .any(|item| item.model_id.eq_ignore_ascii_case(model_name));
+    if model_matched {
+        return Ok(());
+    }
+
+    Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+        format!(
+            "model `{model_name}` is not available for system agent `{}`",
+            system_agent.agent_code
+        ),
+    )))
 }

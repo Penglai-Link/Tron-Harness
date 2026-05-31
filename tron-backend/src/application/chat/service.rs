@@ -21,6 +21,11 @@ use crate::{
     shared::time::current_timestamp,
 };
 
+const MAIN_AGENT_CODE: &str = "main-agent";
+const MAIN_RUNTIME_ADAPTER_KEY: &str = "MAIN_REACT";
+const CODEX_RUNTIME_ADAPTER_KEY: &str = "CODEX_EXEC";
+const OPENCODE_RUNTIME_ADAPTER_KEY: &str = "OPENCODE_RUN";
+
 #[derive(Clone)]
 pub struct ChatService {
     repository: Arc<Mutex<Box<dyn ChatRepository>>>,
@@ -50,6 +55,8 @@ impl ChatService {
             user_code,
             app_code: normalized_optional(command.app_code),
             task_code: normalized_optional(command.task_code),
+            agent_code: normalized_optional(command.agent_code),
+            system_agent_session_id: None,
             title: normalized_optional(command.title).unwrap_or_else(|| "New chat".into()),
             status: ChatSessionStatus::Active,
             last_run_code: None,
@@ -172,6 +179,17 @@ impl ChatService {
         } else {
             ChatMessageChannel::MainAgent
         };
+        let effective_agent_code = if session.last_run_code.is_some() {
+            session.agent_code.clone()
+        } else {
+            normalized_optional(command.agent_code.clone()).or(session.agent_code.clone())
+        }
+        .unwrap_or_else(|| MAIN_AGENT_CODE.to_string());
+        let runtime_adapter_key = runtime_adapter_key_for_agent(&effective_agent_code);
+        let mapped_runtime_session_id = self
+            .repository()
+            .runtime_session_id(session_code, runtime_adapter_key, &effective_agent_code)
+            .map_err(ChatSendError::Chat)?;
         let user_message = self.create_message(
             session_code,
             None,
@@ -186,6 +204,9 @@ impl ChatService {
             prompt: Some(content),
             workspace_code: Some(workspace_code),
             conversation_code: Some(session.session_code.clone()),
+            agent_code: Some(effective_agent_code.clone()),
+            system_agent_session_id: mapped_runtime_session_id
+                .or(session.system_agent_session_id.clone()),
             app_code: command.app_code.or(session.app_code.clone()),
             task_code: command.task_code.or(session.task_code.clone()),
             model: command.model,
@@ -208,8 +229,27 @@ impl ChatService {
             run.token_usage,
         )?;
         let updated_at = current_timestamp();
+        if let Some(runtime_session_id) = run.system_agent_session_id.as_deref() {
+            self.repository()
+                .upsert_runtime_session(
+                    session_code,
+                    run.runtime_adapter_key.as_str(),
+                    &effective_agent_code,
+                    runtime_session_id,
+                    Some(run.run_code.as_str()),
+                    &updated_at,
+                )
+                .map_err(ChatSendError::Chat)?;
+        }
         self.repository()
-            .update_session_run(session_code, &run.run_code, run.status, &updated_at)
+            .update_session_run(
+                session_code,
+                &run.run_code,
+                run.status,
+                Some(effective_agent_code.as_str()),
+                run.system_agent_session_id.as_deref(),
+                &updated_at,
+            )
             .map_err(ChatSendError::Chat)?;
         let updated_session = self
             .repository()
@@ -275,4 +315,12 @@ fn normalized_optional(value: Option<String>) -> Option<String> {
 
 fn normalized_required(value: Option<String>) -> Option<String> {
     normalized_optional(value)
+}
+
+fn runtime_adapter_key_for_agent(agent_code: &str) -> &'static str {
+    match agent_code.trim().to_ascii_lowercase().as_str() {
+        "codex" => CODEX_RUNTIME_ADAPTER_KEY,
+        "opencode" => OPENCODE_RUNTIME_ADAPTER_KEY,
+        _ => MAIN_RUNTIME_ADAPTER_KEY,
+    }
 }

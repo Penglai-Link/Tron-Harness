@@ -2,7 +2,7 @@
 
 ## Summary
 
-Chat persistence/API, send orchestration, `/chats` workbench rewrite, AG-UI-backed right context, backend tests, frontend build, and browser smoke are integrated.
+Chat persistence/API, send orchestration, `/chats` workbench rewrite, AG-UI-backed right context, agent selection with system runtime dispatch, backend tests, frontend build, and browser smoke are integrated.
 
 ## Integration Events
 
@@ -17,6 +17,17 @@ Chat persistence/API, send orchestration, `/chats` workbench rewrite, AG-UI-back
 - result: done
 - evidence: @ref:reports/test-report.md#evidence-rows
 
+### #2
+
+- event_id: 2
+- worktree_ref: @ref:orchestration/worktree-plan.md#dispatch-decisions
+- ac_ref: AC-CM-08, AC-CM-09
+- task_ref: @ref:tasks/frontend-task.md#task-rows, @ref:tasks/backend-task.md#task-rows
+- action: patch-apply
+- command_ref: @ref:spec/test-plan.md#command-index
+- result: done
+- evidence: @ref:reports/test-report.md#evidence-rows
+
 ## Conflict Log
 
 - None.
@@ -25,6 +36,7 @@ Chat persistence/API, send orchestration, `/chats` workbench rewrite, AG-UI-back
 
 - `rtk make be-test`: passed.
 - `rtk make fe-check`: passed.
+- `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/chat-management --phase spec --complete-spec`: passed.
 - Playwright browser smoke against `/chats`: passed.
 
 ## Blockers

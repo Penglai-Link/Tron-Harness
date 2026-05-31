@@ -20,7 +20,7 @@
 
 ## Requirement
 
-Deliver the backend-only foundational runtime kernel for an in-process ReAct agent. The kernel owns frozen per-run context, runtime identity, production model-client contracts, tool registry contracts, bounded ReAct execution, metadata-only event publishing, typed errors, and deterministic backend tests.
+Deliver the backend runtime foundation with runtime-kind dispatch: in-process ReAct for `main-agent` and bounded system CLI adapters for workspace-enabled `codex`/`opencode`. The runtime owns frozen per-run context, runtime identity, production model-client contracts, system-agent CLI model-catalog scanning (startup and rescan), tool registry contracts, bounded execution, metadata-only event publishing, typed errors, and deterministic backend tests.
 
 ## Product Source Slices
 
@@ -31,7 +31,7 @@ Deliver the backend-only foundational runtime kernel for an in-process ReAct age
 
 ## Scope Boundary
 
-This feature is backend-internal and foundational. It does not expose HTTP routes, frontend UI, database persistence, AG-UI protocol conversion, Docker/external Codex execution, concrete platform tools, or sensitive-variable semantics.
+This feature is backend-internal and foundational. It does not expose frontend UI, generic shell tooling, broad CLI passthrough, async job orchestration, or sensitive-variable semantics. Evolution extends runtime execution from pure in-process ReAct to include bounded `codex`/`opencode` system CLI adapters resolved by workspace policy.
 
 ## Assumptions
 
@@ -40,6 +40,7 @@ This feature is backend-internal and foundational. It does not expose HTTP route
 - Skills and tools stay separate: skills influence instructions, tools provide executable schemas and handlers.
 - Tests may inject scripted model clients and tools; production runtime still depends on real trait boundaries and a real OpenAI-compatible client implementation.
 - Agent events are metadata-only and must avoid full prompt, completion, raw tool output, tokens, secrets, request bodies, and response bodies.
+- System agent command paths are configured from trusted backend settings and validated by agent management before invocation.
 
 ## In Scope
 
@@ -49,6 +50,9 @@ This feature is backend-internal and foundational. It does not expose HTTP route
 - `ModelClient` trait plus OpenAI-compatible request builders for Chat Completions, Responses, and Embeddings.
 - `Tool` trait, `ToolRegistry`, tool allow-list validation, tool request, and tool observation contracts.
 - `ReactAgentBuilder` and `ReactAgent` bounded loop.
+- Invocation routing by `agentCode` between in-process runtime and system CLI runtime.
+- `SystemAgentCliModelClient` adapters for `codex` and `opencode`, including unified output/token-usage parsing.
+- Backend-managed system-agent model catalogs sourced from real CLI commands and exposed through registry records.
 - Agent event publishing through `EventBusHandle`.
 - Deterministic unit tests for context isolation, model requests, tool registry behavior, event order, max-step exhaustion, and concurrency.
 
@@ -58,9 +62,10 @@ This feature is backend-internal and foundational. It does not expose HTTP route
 - Run or transcript persistence.
 - Frontend pages or browser-specific behavior.
 - AG-UI protocol adapter.
-- Docker, shell, external Codex, or worktree tool execution.
+- Arbitrary shell command execution, generic system-agent plugin loading, or unsupported CLI runtimes beyond configured `codex`/`opencode`.
 - Sensitive variable references, secret injection, and redaction beyond event payload guardrails.
 - Persisted skill-to-tool bindings.
+- Runtime-level continuation mapping to external CLI sessions (`resume`/`fork`/session token lifecycle).
 
 ## Constraints
 
@@ -83,8 +88,9 @@ This feature is backend-internal and foundational. It does not expose HTTP route
 
 ### Core Objects
 
-- `AgentKind`: first value `React`.
+- `AgentKind`: `React` and `SystemCli`.
 - `AgentRuntimeKind`: first value `InProcess`.
+- `SystemAgentCliModelClient`: model-client adapter for local `codex` and `opencode` command execution.
 - `AgentRunRequest`: prompt, identity, workspace/user/app scope, and context inputs.
 - `AgentRunContext`: immutable run snapshot plus mutable per-run message/observation vectors owned by the run.
 - `AgentModelConfig`: provider protocol, base URL, API path, API key, model name, generation options, timeout, and retry fields.
@@ -101,10 +107,11 @@ This feature is backend-internal and foundational. It does not expose HTTP route
 2. Freeze `AgentRunContext`.
 3. Publish run started event.
 4. Build model input from prompt, skills, tools, variables, prior messages, and observations.
-5. Request model output.
-6. If final output arrives, publish output and completion events.
-7. If a tool call arrives, validate allowed tool, execute through registry, append observation, and continue.
-8. If a limit or failure occurs, publish failure event and return typed error.
+5. Resolve runtime kind by requested agent (`main-agent` vs workspace-enabled system agent).
+6. Request model output through the selected runtime adapter.
+7. If final output arrives, publish output and completion events.
+8. If a tool call arrives in ReAct mode, validate allowed tool, execute through registry, append observation, and continue.
+9. If a limit or failure occurs, publish failure event and return typed error.
 
 ## Page And Module Surface
 
@@ -122,7 +129,8 @@ This feature is backend-internal and foundational. It does not expose HTTP route
 - Effective variables already resolve workspace inheritance but have no sensitive flag.
 - Skill registry can resolve enabled skills but has no executable tool schema contract.
 - App records include local directory, repository URL, and default branch; no repository code or worktree path exists today.
+- System-agent config already defines command bindings for `codex` and `opencode`, and workspace policies already expose enabled/disabled/available gates.
 
 ## Open Decisions
 
-- None. Runtime receives frozen snapshots in this feature; repository-backed resolution is handled by `agent-invocation-api` only where existing services support it.
+- Runtime continuation mapping direction is resolved by @ref:spec/runtime-v2-architecture.md#phased-delivery-plan: session-aware runtime abstraction and adapter capability contracts are introduced through phased delivery M1-M4.

@@ -1,6 +1,10 @@
 mod common;
 
-use std::{convert::Infallible, path::PathBuf};
+use std::{
+    convert::Infallible,
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use axum::{
     Json, Router,
@@ -12,10 +16,10 @@ use axum::{
     },
     routing::post,
 };
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
-use tron_backend::config::AppConfig;
+use tron_backend::config::{AppConfig, SystemAgentConfig};
 
 use common::{
     app, app_with_config, authenticated_bearer_token, request_with_headers, response_json,
@@ -600,6 +604,756 @@ async fn chat_send_resolves_model_code_through_model_management() {
     assert!(!sent.to_string().contains("sk-chat-api"));
 }
 
+#[tokio::test]
+async fn chat_session_creation_persists_selected_agent_code() {
+    let app = app();
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "System agent selection",
+            "agentCode": "codex"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let payload = response_json(response).await;
+    assert_eq!(payload["data"]["agentCode"], json!("codex"));
+}
+
+#[tokio::test]
+async fn chat_send_uses_codex_system_agent_cli_runtime() {
+    let codex_command = temp_command_path("codex");
+    let opencode_command = temp_command_path("opencode");
+    write_executable_script(
+        &codex_command,
+        "#!/bin/sh\necho '{\"type\":\"thread.started\",\"thread_id\":\"thr\"}'\necho '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"codex system reply\"}}'\necho '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":11,\"output_tokens\":17}}'\n",
+    );
+    write_executable_script(
+        &opencode_command,
+        "#!/bin/sh\necho '{\"type\":\"text\",\"part\":{\"text\":\"opencode fallback\"}}'\necho '{\"type\":\"step_finish\",\"part\":{\"tokens\":{\"input\":3,\"output\":5,\"total\":8}}}'\n",
+    );
+
+    let app =
+        app_with_system_agent_commands("chat-system-codex", &codex_command, &opencode_command);
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Codex runtime session",
+            "agentCode": "codex"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let send_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "execute codex system agent",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "SYSTEM_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": "http://invalid.local",
+                "apiKey": "sk-system",
+                "modelName": "gpt-5-codex"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+
+    assert_eq!(send_response.status(), StatusCode::OK);
+    let payload = response_json(send_response).await;
+    assert_eq!(
+        payload["data"]["messages"][1]["content"],
+        json!("codex system reply")
+    );
+    assert_eq!(
+        payload["data"]["session"]["systemAgentSessionId"],
+        json!("thr")
+    );
+    assert_eq!(payload["data"]["run"]["systemAgentSessionId"], json!("thr"));
+    assert_eq!(
+        payload["data"]["run"]["tokenUsage"]["totalTokens"],
+        json!(28)
+    );
+}
+
+#[tokio::test]
+async fn chat_send_system_agent_requires_explicit_model_config() {
+    let codex_command = temp_command_path("codex-model-required");
+    let opencode_command = temp_command_path("opencode-model-required");
+    write_executable_script(
+        &codex_command,
+        "#!/bin/sh\necho '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"codex fallback\"}}'\necho '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}'\n",
+    );
+    write_executable_script(
+        &opencode_command,
+        "#!/bin/sh\necho '{\"type\":\"text\",\"part\":{\"text\":\"opencode fallback\"}}'\necho '{\"type\":\"step_finish\",\"part\":{\"tokens\":{\"input\":1,\"output\":1,\"total\":2}}}'\n",
+    );
+
+    let app = app_with_system_agent_commands(
+        "chat-system-model-required",
+        &codex_command,
+        &opencode_command,
+    );
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "System model required",
+            "agentCode": "codex"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let send_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "missing system model",
+            "workspaceCode": "TRON_CORE",
+            "modelCode": "PLATFORM_MODEL"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(send_response.status(), StatusCode::BAD_REQUEST);
+    let payload = response_json(send_response).await;
+    assert_eq!(payload["code"], json!("AGENT_MODEL_REQUIRED"));
+}
+
+#[tokio::test]
+async fn chat_send_system_agent_rejects_model_outside_scanned_catalog() {
+    let codex_command = temp_command_path("codex-model-scope");
+    let opencode_command = temp_command_path("opencode-model-scope");
+    write_executable_script(
+        &codex_command,
+        "#!/bin/sh\nif [ \"$1\" = \"models\" ]; then\n  echo '{\"models\":[{\"id\":\"gpt-5-codex\"}]}'\n  exit 0\nfi\necho '{\"type\":\"thread.started\",\"thread_id\":\"thr\"}'\necho '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"codex scoped reply\"}}'\necho '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":2,\"output_tokens\":3}}'\n",
+    );
+    write_executable_script(
+        &opencode_command,
+        "#!/bin/sh\necho '{\"type\":\"text\",\"part\":{\"text\":\"opencode fallback\"}}'\necho '{\"type\":\"step_finish\",\"part\":{\"tokens\":{\"input\":1,\"output\":1,\"total\":2}}}'\n",
+    );
+
+    let app = app_with_system_agent_commands(
+        "chat-system-model-scope",
+        &codex_command,
+        &opencode_command,
+    );
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "System model scope",
+            "agentCode": "codex"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let send_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "use unsupported system model",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "SYSTEM_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": "http://invalid.local",
+                "apiKey": "sk-system",
+                "modelName": "gpt-4.1-unsupported"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+
+    assert_eq!(send_response.status(), StatusCode::BAD_REQUEST);
+    let payload = response_json(send_response).await;
+    assert_eq!(payload["code"], json!("AGENT_RUNTIME_FAILED"));
+    let message = payload["message"]
+        .as_str()
+        .expect("error message should be returned");
+    assert!(message.contains("is not available for system agent"));
+}
+
+#[tokio::test]
+async fn chat_send_uses_opencode_system_agent_cli_runtime() {
+    let codex_command = temp_command_path("codex-open");
+    let opencode_command = temp_command_path("opencode-open");
+    write_executable_script(
+        &codex_command,
+        "#!/bin/sh\necho '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"codex fallback\"}}'\necho '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":2}}'\n",
+    );
+    write_executable_script(
+        &opencode_command,
+        "#!/bin/sh\necho '{\"type\":\"step_start\",\"sessionID\":\"ses-opencode-1\",\"part\":{\"id\":\"step\",\"sessionID\":\"ses-opencode-1\"}}'\necho '{\"type\":\"text\",\"part\":{\"text\":\"opencode system reply\"}}'\necho '{\"type\":\"step_finish\",\"part\":{\"tokens\":{\"input\":9,\"output\":4,\"total\":13}}}'\n",
+    );
+
+    let app =
+        app_with_system_agent_commands("chat-system-opencode", &codex_command, &opencode_command);
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "OpenCode runtime session",
+            "agentCode": "opencode"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let send_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "execute opencode system agent",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "SYSTEM_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": "http://invalid.local",
+                "apiKey": "sk-system",
+                "modelName": "openai/gpt-4.1"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+
+    assert_eq!(send_response.status(), StatusCode::OK);
+    let payload = response_json(send_response).await;
+    assert_eq!(
+        payload["data"]["messages"][1]["content"],
+        json!("opencode system reply")
+    );
+    assert_eq!(
+        payload["data"]["session"]["systemAgentSessionId"],
+        json!("ses-opencode-1")
+    );
+    assert_eq!(
+        payload["data"]["run"]["systemAgentSessionId"],
+        json!("ses-opencode-1")
+    );
+    assert_eq!(
+        payload["data"]["run"]["tokenUsage"]["totalTokens"],
+        json!(13)
+    );
+}
+
+#[tokio::test]
+async fn chat_stream_uses_opencode_system_agent_cli_runtime_and_emits_live_events() {
+    let codex_command = temp_command_path("codex-opencode-stream");
+    let opencode_command = temp_command_path("opencode-stream");
+    write_executable_script(
+        &codex_command,
+        "#!/bin/sh\necho '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"codex fallback\"}}'\necho '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":2}}'\n",
+    );
+    write_executable_script(
+        &opencode_command,
+        "#!/bin/sh\necho '{\"type\":\"step_start\",\"sessionID\":\"ses-opencode-stream\",\"part\":{\"id\":\"step\",\"sessionID\":\"ses-opencode-stream\"}}'\necho '{\"type\":\"reasoning\",\"sessionID\":\"ses-opencode-stream\",\"part\":{\"text\":\"stream thinking\"}}'\necho '{\"type\":\"text\",\"part\":{\"text\":\"streamed \"}}'\necho '{\"type\":\"text\",\"part\":{\"text\":\"opencode reply\"}}'\necho '{\"type\":\"step_finish\",\"part\":{\"tokens\":{\"input\":10,\"output\":7,\"total\":17}}}'\n",
+    );
+
+    let app = app_with_system_agent_commands(
+        "chat-system-opencode-stream",
+        &codex_command,
+        &opencode_command,
+    );
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "OpenCode stream session",
+            "agentCode": "opencode"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let stream_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages/stream"),
+        Some(json!({
+            "content": "stream opencode system agent",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "SYSTEM_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": "http://invalid.local",
+                "apiKey": "sk-system",
+                "modelName": "openai/gpt-4.1"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+
+    assert_eq!(stream_response.status(), StatusCode::OK);
+    let body = to_bytes(stream_response.into_body(), usize::MAX)
+        .await
+        .expect("stream body should be readable");
+    let body = String::from_utf8(body.to_vec()).expect("stream body should be utf8");
+    assert!(body.contains("event: RUN_STARTED"));
+    assert!(body.contains("event: REASONING_START"));
+    assert!(body.contains("event: REASONING_MESSAGE_CONTENT"));
+    assert!(body.contains("\"delta\":\"stream thinking\""));
+    assert!(body.contains("event: TEXT_MESSAGE_START"));
+    assert!(body.contains("\"delta\":\"streamed \""));
+    assert!(body.contains("\"delta\":\"opencode reply\""));
+    assert!(body.contains("event: TEXT_MESSAGE_END"));
+    assert!(body.contains("event: RUN_FINISHED"));
+    assert!(!body.contains("event: RUN_ERROR"));
+}
+
+#[tokio::test]
+async fn chat_send_resumes_codex_system_agent_session() {
+    let codex_command = temp_command_path("codex-resume");
+    let opencode_command = temp_command_path("opencode-resume");
+    let args_log = temp_command_path("codex-resume-args");
+    write_executable_script(
+        &codex_command,
+        &format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"{}\"\nif [ \"$2\" = \"resume\" ]; then\n  echo '{{\"type\":\"thread.started\",\"thread_id\":\"thr-resumed\"}}'\n  echo '{{\"type\":\"item.completed\",\"item\":{{\"type\":\"agent_message\",\"text\":\"codex resumed reply\"}}}}'\nelse\n  echo '{{\"type\":\"thread.started\",\"thread_id\":\"thr-initial\"}}'\n  echo '{{\"type\":\"item.completed\",\"item\":{{\"type\":\"agent_message\",\"text\":\"codex initial reply\"}}}}'\nfi\necho '{{\"type\":\"turn.completed\",\"usage\":{{\"input_tokens\":4,\"output_tokens\":6}}}}'\n",
+            args_log.display()
+        ),
+    );
+    write_executable_script(
+        &opencode_command,
+        "#!/bin/sh\necho '{\"type\":\"text\",\"part\":{\"text\":\"opencode fallback\"}}'\necho '{\"type\":\"step_finish\",\"part\":{\"tokens\":{\"input\":1,\"output\":1,\"total\":2}}}'\n",
+    );
+
+    let app = app_with_system_agent_commands(
+        "chat-system-codex-resume",
+        &codex_command,
+        &opencode_command,
+    );
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Codex resume session",
+            "agentCode": "codex"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let first_send = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "first codex turn",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "SYSTEM_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": "http://invalid.local",
+                "apiKey": "sk-system",
+                "modelName": "gpt-5-codex"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(first_send.status(), StatusCode::OK);
+    let first_payload = response_json(first_send).await;
+    assert_eq!(
+        first_payload["data"]["messages"][1]["content"],
+        json!("codex initial reply")
+    );
+    assert_eq!(
+        first_payload["data"]["session"]["systemAgentSessionId"],
+        json!("thr-initial")
+    );
+
+    let second_send = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "second codex turn",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "SYSTEM_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": "http://invalid.local",
+                "apiKey": "sk-system",
+                "modelName": "gpt-5-codex"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(second_send.status(), StatusCode::OK);
+    let second_payload = response_json(second_send).await;
+    assert_eq!(
+        second_payload["data"]["messages"][1]["content"],
+        json!("codex resumed reply")
+    );
+    assert_eq!(
+        second_payload["data"]["run"]["systemAgentSessionId"],
+        json!("thr-resumed")
+    );
+
+    let args_lines = std::fs::read_to_string(&args_log).expect("codex args log should be readable");
+    assert!(args_lines.contains("exec "));
+    assert!(args_lines.contains("--json"));
+    assert!(args_lines.contains("--skip-git-repo-check"));
+    assert!(args_lines.contains("resume"));
+    assert!(args_lines.contains("thr-initial"));
+    assert!(!args_lines.contains("--color"));
+}
+
+#[tokio::test]
+async fn chat_send_resumes_opencode_system_agent_session() {
+    let codex_command = temp_command_path("codex-opencode-resume");
+    let opencode_command = temp_command_path("opencode-session-resume");
+    let args_log = temp_command_path("opencode-resume-args");
+    write_executable_script(
+        &codex_command,
+        "#!/bin/sh\necho '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"codex fallback\"}}'\necho '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}'\n",
+    );
+    let opencode_script = r#"#!/bin/sh
+printf '%s\n' "$*" >> "__ARGS_LOG__"
+resume=0
+session_id="ses-opencode-initial"
+for arg in "$@"; do
+  if [ "$arg" = "--session" ]; then
+    resume=1
+  fi
+done
+if [ "$resume" -eq 1 ]; then
+  session_id="ses-opencode-resumed"
+fi
+echo "{\"type\":\"step_start\",\"sessionID\":\"${session_id}\",\"part\":{\"id\":\"step\",\"sessionID\":\"${session_id}\"}}"
+echo '{"type":"text","part":{"text":"opencode resume reply"}}'
+echo '{"type":"step_finish","part":{"tokens":{"input":5,"output":3,"total":8}}}'
+"#
+    .replace("__ARGS_LOG__", &args_log.display().to_string());
+    write_executable_script(&opencode_command, &opencode_script);
+
+    let app = app_with_system_agent_commands(
+        "chat-system-opencode-resume",
+        &codex_command,
+        &opencode_command,
+    );
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "OpenCode resume session",
+            "agentCode": "opencode"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let first_send = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "first opencode turn",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "SYSTEM_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": "http://invalid.local",
+                "apiKey": "sk-system",
+                "modelName": "openai/gpt-4.1"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(first_send.status(), StatusCode::OK);
+    let first_payload = response_json(first_send).await;
+    assert_eq!(
+        first_payload["data"]["session"]["systemAgentSessionId"],
+        json!("ses-opencode-initial")
+    );
+
+    let second_send = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "second opencode turn",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "SYSTEM_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": "http://invalid.local",
+                "apiKey": "sk-system",
+                "modelName": "openai/gpt-4.1"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(second_send.status(), StatusCode::OK);
+    let second_payload = response_json(second_send).await;
+    assert_eq!(
+        second_payload["data"]["run"]["systemAgentSessionId"],
+        json!("ses-opencode-resumed")
+    );
+
+    let args_lines =
+        std::fs::read_to_string(&args_log).expect("opencode args log should be readable");
+    assert!(args_lines.contains("--session"));
+    assert!(args_lines.contains("ses-opencode-initial"));
+}
+
+#[tokio::test]
+async fn chat_send_resumes_from_runtime_mapping_when_legacy_session_field_is_empty() {
+    let database_url = temp_database_url("chat-runtime-mapping-resume");
+    let codex_command = temp_command_path("codex-runtime-mapping");
+    let opencode_command = temp_command_path("opencode-runtime-mapping");
+    let args_log = temp_command_path("codex-runtime-mapping-args");
+    write_executable_script(
+        &codex_command,
+        &format!(
+            "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"{}\"\nif [ \"$2\" = \"resume\" ]; then\n  echo '{{\"type\":\"thread.started\",\"thread_id\":\"thr-resumed\"}}'\n  echo '{{\"type\":\"item.completed\",\"item\":{{\"type\":\"agent_message\",\"text\":\"codex resumed from mapping\"}}}}'\nelse\n  echo '{{\"type\":\"thread.started\",\"thread_id\":\"thr-initial\"}}'\n  echo '{{\"type\":\"item.completed\",\"item\":{{\"type\":\"agent_message\",\"text\":\"codex initial mapping\"}}}}'\nfi\necho '{{\"type\":\"turn.completed\",\"usage\":{{\"input_tokens\":2,\"output_tokens\":3}}}}'\n",
+            args_log.display()
+        ),
+    );
+    write_executable_script(
+        &opencode_command,
+        "#!/bin/sh\necho '{\"type\":\"text\",\"part\":{\"text\":\"opencode fallback\"}}'\necho '{\"type\":\"step_finish\",\"part\":{\"tokens\":{\"input\":1,\"output\":1,\"total\":2}}}'\n",
+    );
+
+    let app = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        system_agents: SystemAgentConfig {
+            codex_command: codex_command.display().to_string(),
+            opencode_command: opencode_command.display().to_string(),
+        },
+        ..AppConfig::default()
+    });
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Runtime mapping session",
+            "agentCode": "codex"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let first_send = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "mapping first turn",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "SYSTEM_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": "http://invalid.local",
+                "apiKey": "sk-system",
+                "modelName": "gpt-5-codex"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(first_send.status(), StatusCode::OK);
+    let first_payload = response_json(first_send).await;
+    assert_eq!(
+        first_payload["data"]["messages"][1]["content"],
+        json!("codex initial mapping")
+    );
+    assert_eq!(
+        first_payload["data"]["session"]["systemAgentSessionId"],
+        json!("thr-initial")
+    );
+
+    let connection = Connection::open(&database_url).expect("runtime mapping db should reopen");
+    let runtime_mapping = connection
+        .query_row(
+            "SELECT runtime_session_id
+             FROM conversation_runtime_sessions
+             WHERE conversation_code = ?1
+               AND runtime_adapter_key = 'CODEX_EXEC'
+               AND agent_code = 'codex'",
+            [session_code.as_str()],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .expect("runtime mapping query should succeed");
+    assert_eq!(runtime_mapping.as_deref(), Some("thr-initial"));
+    connection
+        .execute(
+            "UPDATE chat_sessions SET system_agent_session_id = NULL WHERE session_code = ?1",
+            params![session_code],
+        )
+        .expect("legacy session field should clear");
+
+    let second_send = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "mapping second turn",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "SYSTEM_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": "http://invalid.local",
+                "apiKey": "sk-system",
+                "modelName": "gpt-5-codex"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(second_send.status(), StatusCode::OK);
+    let second_payload = response_json(second_send).await;
+    assert_eq!(
+        second_payload["data"]["messages"][1]["content"],
+        json!("codex resumed from mapping")
+    );
+    assert_eq!(
+        second_payload["data"]["run"]["systemAgentSessionId"],
+        json!("thr-resumed")
+    );
+
+    let args_lines =
+        std::fs::read_to_string(&args_log).expect("codex runtime mapping args should be readable");
+    assert!(args_lines.contains("exec "));
+    assert!(args_lines.contains("resume"));
+    assert!(args_lines.contains("thr-initial"));
+}
+
 fn seed_workspace_without_access(database_url: &PathBuf, workspace_code: &str) {
     let connection = Connection::open(database_url).expect("chat test db should reopen");
     connection
@@ -675,9 +1429,45 @@ async fn create_platform_text_model(app: &Router, authorization: &str, base_url:
         .to_string()
 }
 
+fn app_with_system_agent_commands(
+    test_name: &str,
+    codex_command: &PathBuf,
+    opencode_command: &PathBuf,
+) -> Router {
+    app_with_config(AppConfig {
+        database_url: temp_database_url(test_name).to_string_lossy().into_owned(),
+        system_agents: SystemAgentConfig {
+            codex_command: codex_command.display().to_string(),
+            opencode_command: opencode_command.display().to_string(),
+        },
+        ..AppConfig::default()
+    })
+}
+
+fn temp_command_path(command_name: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time should be after epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!("tron-chat-{command_name}-{nanos}"))
+}
+
+fn write_executable_script(path: &PathBuf, script: &str) {
+    std::fs::write(path, script).expect("script should be written");
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = std::fs::metadata(path)
+            .expect("script metadata should load")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(path, permissions).expect("script permissions should be updated");
+    }
+}
+
 fn temp_database_url(test_name: &str) -> PathBuf {
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
         .expect("system time should be after epoch")
         .as_nanos();
     std::env::temp_dir().join(format!("tron-{test_name}-{nanos}.sqlite3"))

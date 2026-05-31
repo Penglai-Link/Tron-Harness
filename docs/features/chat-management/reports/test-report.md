@@ -2,7 +2,7 @@
 
 ## Summary
 
-All AC rows are implemented and verified. API-mode send was additionally verified against the runtime default model on 2026-05-27. The 2026-05-28 continuation changed chat streaming to AG-UI standard events through the EventBus adapter path.
+All AC rows are implemented and verified. API-mode send was additionally verified against the runtime default model on 2026-05-27. The 2026-05-28 continuation changed chat streaming to AG-UI standard events through the EventBus adapter path. The 2026-05-30 continuation added chat agent selection and workspace-resolved system CLI runtime dispatch (`codex`/`opencode`).
 
 ## Evidence Rows
 
@@ -16,22 +16,30 @@ All AC rows are implemented and verified. API-mode send was additionally verifie
 - AC-CM-05 | red: chat stream previously emitted chat-internal `delta` and `done` SSE events | green: `rtk cargo test --manifest-path tron-backend/Cargo.toml --test chat_management_api chat_stream_persists_messages_and_emits_deltas -- --nocapture` passed with `RUN_STARTED`, `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END`, `RUN_FINISHED`, and no `event: delta` or `event: done`; implementation follows ReactAgent internal event -> EventBus -> AG-UI stream sink -> protocol adapter -> chat SSE | command_ref: CMD-BE-TEST | browser: clicks=not_applicable; inputs=`stream this session`; network=POST /api/v1/chats/sessions/{sessionCode}/messages/stream; feedback=text/event-stream contains AG-UI standard events and persisted messages remain correct; artifacts=tron-backend/tests/chat_management_api.rs | status: done.
 - AC-CM-06 | red: transcript only rendered plain chat bubbles and raw delta appends | green: `rtk make fe-check` passed after adding `ChatAguiStreamEvent` parsing, AG-UI event cards for reasoning/tool/activity/run events, mock live events, and `MarkdownContent` rendering for assistant messages while deltas stream | command_ref: CMD-FE-CHECK | browser: clicks=attempted; inputs=mock/API AG-UI SSE frames; network=stream parser covers `RUN_STARTED`, `REASONING_MESSAGE_CONTENT`, `TOOL_CALL_START`, `ACTIVITY_DELTA`, `TEXT_MESSAGE_CONTENT`, and `CUSTOM chat.result`; feedback=typed build verifies Thinking, Tool call, Tool log card branches and assistant Markdown region; artifacts=tron-frontend/src/domain/chat/pages/ChatManagementPage.tsx | status: done.
 - AC-CM-07 | red: completed send path showed `Message sent` success toast | green: `rtk make fe-check` passed after removing send-success toast while preserving error/validation toasts and transcript/session updates | command_ref: CMD-FE-CHECK | browser: clicks=attempted; inputs=send completion path; network=standard `CUSTOM chat.result` AG-UI event resolves final `ChatSendResult`; feedback=no `toast.success("Message sent")` call remains in chat send completion path; artifacts=tron-frontend/src/domain/chat/pages/ChatManagementPage.tsx | status: done.
+- AC-CM-08 | red: composer footer supported model only and new-session payload could not persist `agentCode` | green: `rtk make fe-check` passed after adding `ChatAgentSelector`, workspace agent loading, active-session agent rebinding, and create/send payload wiring for `agentCode` | command_ref: CMD-FE-CHECK | browser: clicks=open-agent-selector,select-agent,create-session; inputs=select `codex` then create chat; network=GET /api/v1/agents/workspaces/{workspaceCode}/system,POST /api/v1/chats/sessions; feedback=UI shows selected agent badge and session payload includes selected `agentCode`; artifacts=tron-frontend/src/domain/chat/pages/ChatManagementPage.tsx,tron-frontend/src/domain/chat/model/ChatModel.ts | status: done.
+- AC-CM-09 | red: send path always used in-process React runtime and had no system agent CLI adapter routing | green: `rtk make be-test` passed with `chat_send_uses_codex_system_agent_cli_runtime` and `chat_send_uses_opencode_system_agent_cli_runtime`, asserting real command execution, output parsing, and token usage mapping; session creation persistence is covered by `chat_session_creation_persists_selected_agent_code` | command_ref: CMD-BE-TEST | browser: clicks=not_applicable; inputs=`agentCode=codex|opencode` with chat send payload; network=POST /api/v1/chats/sessions,POST /api/v1/chats/sessions/{sessionCode}/messages; feedback=assistant message persisted from CLI output and run token usage reflects CLI JSON records; artifacts=tron-backend/tests/chat_management_api.rs,tron-backend/src/application/agent/system_cli_model_client.rs | status: done.
 
 ## Changed Paths
 
 - `tron-backend/src/domain/chat*`
 - `tron-backend/src/application/agent/invocation.rs`
+- `tron-backend/src/application/agent/management.rs`
+- `tron-backend/src/application/agent/system_cli_model_client.rs`
 - `tron-backend/src/application/agent/agui_stream.rs`
 - `tron-backend/src/application/agent/runtime.rs`
 - `tron-backend/src/domain/agent/agui.rs`
+- `tron-backend/src/domain/agent/kind.rs`
 - `tron-backend/src/domain/agent/model_exchange.rs`
 - `tron-backend/src/application/chat*`
 - `tron-backend/src/adapters/inbound/http/chats*`
 - `tron-backend/src/adapters/outbound/model/protocol_adapters.rs`
 - `tron-backend/src/adapters/outbound/persistence/sqlite/chat_repository.rs`
 - `tron-backend/migrations/20260527_0018_create_chat_management.sql`
+- `tron-backend/migrations/20260530_0023_add_chat_session_agent_code.sql`
 - `tron-backend/tests/chat_management_api.rs`
 - `tron-frontend/src/domain/chat/**`
+- `tron-frontend/src/domain/chat/model/ChatModel.ts`
+- `tron-frontend/src/domain/chat/mock/data.ts`
 - `tron-frontend/src/router/routes.tsx`
 - `tron-frontend/src/router/pageRegistry.ts`
 - `tron-frontend/src/app/App.tsx`
@@ -39,6 +47,9 @@ All AC rows are implemented and verified. API-mode send was additionally verifie
 ## Commands
 
 - `rtk cargo test --manifest-path tron-backend/Cargo.toml --test chat_management_api -- --nocapture`: passed.
+- `rtk cargo test --manifest-path tron-backend/Cargo.toml --test chat_management_api chat_session_creation_persists_selected_agent_code -- --nocapture`: passed.
+- `rtk cargo test --manifest-path tron-backend/Cargo.toml --test chat_management_api chat_send_uses_codex_system_agent_cli_runtime -- --nocapture`: passed.
+- `rtk cargo test --manifest-path tron-backend/Cargo.toml --test chat_management_api chat_send_uses_opencode_system_agent_cli_runtime -- --nocapture`: passed.
 - `rtk cargo test --manifest-path tron-backend/Cargo.toml --test chat_management_api chat_send_does_not_reuse_existing_run_codes_after_restart -- --nocapture`: passed.
 - `rtk cargo test --manifest-path tron-backend/Cargo.toml --test chat_management_api chat_stream_persists_messages_and_emits_deltas -- --nocapture`: passed.
 - `rtk python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/chat-management --phase spec --complete-spec`: passed.

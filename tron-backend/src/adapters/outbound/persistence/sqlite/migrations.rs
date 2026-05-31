@@ -53,6 +53,16 @@ pub(super) const AGENT_RUN_TOKEN_USAGE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260528_0020_add_agent_run_token_usage.sql");
 pub(super) const CHAT_MANAGEMENT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260527_0018_create_chat_management.sql");
+pub(super) const CHAT_SESSION_AGENT_CODE_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260530_0023_add_chat_session_agent_code.sql");
+pub(super) const CHAT_SESSION_SYSTEM_AGENT_SESSION_ID_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260530_0024_add_chat_session_system_agent_session_id.sql"
+);
+pub(super) const CONVERSATION_RUNTIME_SESSIONS_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260530_0025_create_conversation_runtime_sessions.sql"
+);
+pub(super) const AGENT_RUNTIME_EVENT_REPLAY_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260530_0026_create_agent_runtime_event_replay.sql");
 pub(super) const CHAT_MESSAGE_TOKEN_USAGE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260528_0021_add_chat_message_token_usage.sql");
 pub(super) const AGENT_MANAGEMENT_MIGRATION: &str =

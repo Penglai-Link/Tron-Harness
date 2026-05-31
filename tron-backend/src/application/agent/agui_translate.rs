@@ -1,0 +1,386 @@
+use std::collections::BTreeMap;
+
+use serde_json::{Value, json};
+
+use crate::{
+    domain::agent::{AgentAguiEvent, AgentAguiProtocolEvent},
+    shared::{
+        event_bus::{BusEvent, BusOutcome, BusRouteClass},
+        time::timestamp_from_millis,
+    },
+};
+
+use super::CanonicalRuntimeEvent;
+
+pub fn translate_agui_event(stream_key: &str, event: &BusEvent) -> Option<AgentAguiEvent> {
+    if event.route_class != BusRouteClass::Agui || !event.event_name.starts_with("agent.") {
+        return None;
+    }
+    let canonical_event = CanonicalRuntimeEvent::from_bus_event_name(event.event_name.as_str())?;
+    let run_code = event
+        .subject
+        .as_ref()
+        .and_then(|subject| subject.subject_code.clone());
+    let mut metadata = BTreeMap::new();
+    metadata.insert("producer".into(), event.producer.clone());
+    if let Some(subject) = &event.subject {
+        metadata.insert("subjectType".into(), subject.subject_type.clone());
+    }
+    if let Some(summary) = &event.summary {
+        metadata.insert("summary".into(), summary.clone());
+    }
+    metadata.insert("canonicalEvent".into(), canonical_event.code().into());
+    for attr in &event.attrs {
+        metadata.insert(attr.key.clone(), attr.value.clone());
+    }
+    for field in &event.payload_fields {
+        if matches!(field.key.as_str(), "model_name" | "context_window_limit") {
+            metadata.insert(field.key.clone(), field.value.clone());
+        }
+    }
+    Some(AgentAguiEvent {
+        id: event.event_id.as_decimal_string(),
+        event_type: event.event_name.clone(),
+        event_name: event.event_name.clone(),
+        run_code,
+        stream_key: stream_key.to_string(),
+        occurred_at: timestamp_from_millis(event.occurred_at_ms),
+        outcome: outcome_to_code(event.outcome).into(),
+        metadata,
+    })
+}
+
+pub fn translate_protocol_events(
+    stream_key: &str,
+    event: &BusEvent,
+) -> Vec<AgentAguiProtocolEvent> {
+    if event.route_class != BusRouteClass::Agui || !event.event_name.starts_with("agent.") {
+        return Vec::new();
+    }
+    let Some(canonical_event) =
+        CanonicalRuntimeEvent::from_bus_event_name(event.event_name.as_str())
+    else {
+        return Vec::new();
+    };
+    let run_code = event
+        .subject
+        .as_ref()
+        .and_then(|subject| subject.subject_code.clone())
+        .unwrap_or_else(|| stream_key.to_string());
+    let timestamp = event.occurred_at_ms;
+    let assistant_message_id = format!("{run_code}-assistant");
+    let reasoning_message_id = format!("{run_code}-reasoning");
+
+    match canonical_event {
+        CanonicalRuntimeEvent::RunRequested => Vec::new(),
+        CanonicalRuntimeEvent::RunStarted => vec![protocol_event(
+            "RUN_STARTED",
+            json!({
+                "type": "RUN_STARTED",
+                "threadId": stream_key,
+                "runId": run_code,
+                "timestamp": timestamp,
+            }),
+        )],
+        CanonicalRuntimeEvent::ModelRequested => vec![
+            protocol_event(
+                "REASONING_START",
+                json!({
+                    "type": "REASONING_START",
+                    "threadId": stream_key,
+                    "runId": run_code,
+                    "timestamp": timestamp,
+                }),
+            ),
+            protocol_event(
+                "REASONING_MESSAGE_START",
+                json!({
+                    "type": "REASONING_MESSAGE_START",
+                    "threadId": stream_key,
+                    "runId": run_code,
+                    "messageId": reasoning_message_id,
+                    "timestamp": timestamp,
+                }),
+            ),
+        ],
+        CanonicalRuntimeEvent::ReasoningDelta => payload_delta(event)
+            .map(|delta| {
+                vec![protocol_event(
+                    "REASONING_MESSAGE_CONTENT",
+                    json!({
+                        "type": "REASONING_MESSAGE_CONTENT",
+                        "threadId": stream_key,
+                        "runId": run_code,
+                        "messageId": reasoning_message_id,
+                        "delta": delta,
+                        "timestamp": timestamp,
+                    }),
+                )]
+            })
+            .unwrap_or_default(),
+        CanonicalRuntimeEvent::ReasoningRawDelta => payload_delta(event)
+            .map(|delta| {
+                vec![protocol_event(
+                    "REASONING_TEXT_CONTENT",
+                    json!({
+                        "type": "REASONING_TEXT_CONTENT",
+                        "threadId": stream_key,
+                        "runId": run_code,
+                        "messageId": format!("{run_code}-reasoning-raw"),
+                        "delta": delta,
+                        "timestamp": timestamp,
+                    }),
+                )]
+            })
+            .unwrap_or_default(),
+        CanonicalRuntimeEvent::ModelResponded => vec![
+            protocol_event(
+                "REASONING_MESSAGE_END",
+                json!({
+                    "type": "REASONING_MESSAGE_END",
+                    "threadId": stream_key,
+                    "runId": run_code,
+                    "messageId": reasoning_message_id,
+                    "timestamp": timestamp,
+                }),
+            ),
+            protocol_event(
+                "REASONING_END",
+                json!({
+                    "type": "REASONING_END",
+                    "threadId": stream_key,
+                    "runId": run_code,
+                    "timestamp": timestamp,
+                }),
+            ),
+        ],
+        CanonicalRuntimeEvent::OutputStarted => vec![protocol_event(
+            "TEXT_MESSAGE_START",
+            json!({
+                "type": "TEXT_MESSAGE_START",
+                "threadId": stream_key,
+                "runId": run_code,
+                "messageId": assistant_message_id,
+                "role": "assistant",
+                "timestamp": timestamp,
+            }),
+        )],
+        CanonicalRuntimeEvent::OutputDelta => payload_delta(event)
+            .map(|delta| {
+                vec![protocol_event(
+                    "TEXT_MESSAGE_CONTENT",
+                    json!({
+                        "type": "TEXT_MESSAGE_CONTENT",
+                        "threadId": stream_key,
+                        "runId": run_code,
+                        "messageId": assistant_message_id,
+                        "delta": delta,
+                        "timestamp": timestamp,
+                    }),
+                )]
+            })
+            .unwrap_or_default(),
+        CanonicalRuntimeEvent::OutputCompleted => vec![protocol_event(
+            "TEXT_MESSAGE_END",
+            json!({
+                "type": "TEXT_MESSAGE_END",
+                "threadId": stream_key,
+                "runId": run_code,
+                "messageId": assistant_message_id,
+                "timestamp": timestamp,
+            }),
+        )],
+        CanonicalRuntimeEvent::RunCompleted => vec![protocol_event(
+            "RUN_FINISHED",
+            json!({
+                "type": "RUN_FINISHED",
+                "threadId": stream_key,
+                "runId": run_code,
+                "timestamp": timestamp,
+            }),
+        )],
+        CanonicalRuntimeEvent::RunFailed => vec![protocol_event(
+            "RUN_ERROR",
+            json!({
+                "type": "RUN_ERROR",
+                "threadId": stream_key,
+                "runId": run_code,
+                "message": event.summary.clone().unwrap_or_else(|| "agent run failed".into()),
+                "timestamp": timestamp,
+            }),
+        )],
+        CanonicalRuntimeEvent::ToolSelected => {
+            let tool_name = event_tool_name(event);
+            let tool_call_id = event_tool_call_id(event, &run_code, &tool_name);
+            let tool_args = event_tool_args(event);
+            vec![protocol_event(
+                "TOOL_CALL_ARGS",
+                json!({
+                    "type": "TOOL_CALL_ARGS",
+                    "threadId": stream_key,
+                    "runId": run_code,
+                    "toolCallId": tool_call_id,
+                    "toolCallName": tool_name,
+                    "toolCallArgs": tool_args,
+                    "parentMessageId": assistant_message_id,
+                    "timestamp": timestamp,
+                }),
+            )]
+        }
+        CanonicalRuntimeEvent::ToolStarted => {
+            let tool_name = event_tool_name(event);
+            let tool_call_id = event_tool_call_id(event, &run_code, &tool_name);
+            let tool_args = event_tool_args(event);
+            vec![protocol_event(
+                "TOOL_CALL_START",
+                json!({
+                    "type": "TOOL_CALL_START",
+                    "threadId": stream_key,
+                    "runId": run_code,
+                    "toolCallId": tool_call_id,
+                    "toolCallName": tool_name,
+                    "toolCallArgs": tool_args,
+                    "parentMessageId": assistant_message_id,
+                    "timestamp": timestamp,
+                }),
+            )]
+        }
+        CanonicalRuntimeEvent::ToolCompleted => {
+            let tool_name = event_tool_name(event);
+            let tool_call_id = event_tool_call_id(event, &run_code, &tool_name);
+            let result = event_tool_result(event).unwrap_or_else(|| "completed".into());
+            vec![
+                protocol_event(
+                    "TOOL_CALL_RESULT",
+                    json!({
+                        "type": "TOOL_CALL_RESULT",
+                        "threadId": stream_key,
+                        "runId": run_code,
+                        "messageId": format!("{run_code}-tool-result"),
+                        "toolCallId": tool_call_id,
+                        "toolCallName": tool_name,
+                        "content": result,
+                        "role": "tool",
+                        "timestamp": timestamp,
+                    }),
+                ),
+                protocol_event(
+                    "TOOL_CALL_END",
+                    json!({
+                        "type": "TOOL_CALL_END",
+                        "threadId": stream_key,
+                        "runId": run_code,
+                        "toolCallId": tool_call_id,
+                        "timestamp": timestamp,
+                    }),
+                ),
+            ]
+        }
+        CanonicalRuntimeEvent::ToolFailed => {
+            let tool_name = event_tool_name(event);
+            let tool_call_id = event_tool_call_id(event, &run_code, &tool_name);
+            let result = event_tool_result(event).unwrap_or_else(|| "failed".into());
+            vec![protocol_event(
+                "TOOL_CALL_RESULT",
+                json!({
+                    "type": "TOOL_CALL_RESULT",
+                    "threadId": stream_key,
+                    "runId": run_code,
+                    "messageId": format!("{run_code}-tool-result"),
+                    "toolCallId": tool_call_id,
+                    "toolCallName": tool_name,
+                    "content": result,
+                    "role": "tool",
+                    "timestamp": timestamp,
+                }),
+            )]
+        }
+        CanonicalRuntimeEvent::ObservationCreated => {
+            let tool_name = event_tool_name(event);
+            let tool_call_id = event_tool_call_id(event, &run_code, &tool_name);
+            let log_line = event_tool_result(event).unwrap_or_else(|| "observation created".into());
+            vec![protocol_event(
+                "ACTIVITY_DELTA",
+                json!({
+                    "type": "ACTIVITY_DELTA",
+                    "threadId": stream_key,
+                    "runId": run_code,
+                    "toolCallId": tool_call_id,
+                    "toolCallName": tool_name,
+                    "delta": [{"op":"add","path":"/logs/-","value":log_line}],
+                    "timestamp": timestamp,
+                }),
+            )]
+        }
+    }
+}
+
+fn protocol_event(sse_event: &str, data: Value) -> AgentAguiProtocolEvent {
+    AgentAguiProtocolEvent {
+        sse_event: sse_event.into(),
+        data,
+    }
+}
+
+fn payload_value(event: &BusEvent, key: &str) -> Option<String> {
+    event
+        .payload_fields
+        .iter()
+        .find(|attr| attr.key == key)
+        .map(|attr| attr.value.clone())
+}
+
+fn payload_delta(event: &BusEvent) -> Option<String> {
+    payload_value(event, "delta_json")
+        .and_then(|value| serde_json::from_str::<String>(&value).ok())
+        .or_else(|| payload_value(event, "delta"))
+}
+
+fn attr_value(event: &BusEvent, key: &str) -> Option<String> {
+    event
+        .attrs
+        .iter()
+        .find(|attr| attr.key == key)
+        .map(|attr| attr.value.clone())
+}
+
+fn event_tool_name(event: &BusEvent) -> String {
+    payload_value(event, "tool_name")
+        .or_else(|| event.summary.clone())
+        .or_else(|| attr_value(event, "tool_name"))
+        .unwrap_or_else(|| "tool".into())
+}
+
+fn event_tool_call_id(event: &BusEvent, run_code: &str, tool_name: &str) -> String {
+    payload_value(event, "tool_call_id")
+        .unwrap_or_else(|| fallback_tool_call_id(run_code, tool_name))
+}
+
+fn event_tool_args(event: &BusEvent) -> Value {
+    payload_value(event, "tool_args_json")
+        .map(|value| serde_json::from_str::<Value>(&value).unwrap_or(Value::String(value)))
+        .unwrap_or(Value::Null)
+}
+
+fn event_tool_result(event: &BusEvent) -> Option<String> {
+    payload_value(event, "tool_result_json").or_else(|| payload_value(event, "tool_result"))
+}
+
+fn fallback_tool_call_id(run_code: &str, tool_name: &str) -> String {
+    let suffix = tool_name
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+        .collect::<String>();
+    format!("{run_code}-tool-{suffix}")
+}
+
+fn outcome_to_code(outcome: BusOutcome) -> &'static str {
+    match outcome {
+        BusOutcome::Success => "SUCCESS",
+        BusOutcome::Failure => "FAILURE",
+        BusOutcome::Rejected => "REJECTED",
+        BusOutcome::Started => "STARTED",
+        BusOutcome::Progress => "PROGRESS",
+        BusOutcome::Completed => "COMPLETED",
+    }
+}

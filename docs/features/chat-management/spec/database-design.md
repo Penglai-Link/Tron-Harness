@@ -11,6 +11,7 @@
 
 - Existing `agent_runs` remains the execution-history table.
 - New chat tables use `session_code` as the public conversation key.
+- `chat_sessions` now stores optional `agent_code` to persist session-level invocation routing.
 - Existing migrations are append-only; no data backfill is required for sample chat pages.
 
 ## Proposed Schema
@@ -18,10 +19,10 @@
 ### chat_sessions
 
 - change_type: create
-- fields: `id`, `session_code`, `workspace_code`, `user_code`, `app_code`, `task_code`, `title`, `status`, `last_run_code`, `last_run_status`, `created_at`, `updated_at`
+- fields: `id`, `session_code`, `workspace_code`, `user_code`, `app_code`, `task_code`, `agent_code`, `title`, `status`, `last_run_code`, `last_run_status`, `created_at`, `updated_at`
 - constraints: primary key on `id`, unique `session_code`, required `workspace_code`, required `title`
 - indexes: `(workspace_code, updated_at DESC, id DESC)`, `(task_code, updated_at DESC, id DESC)`
-- notes: `task_code` nullable sessions are grouped as `Unassigned` in API response.
+- notes: `task_code` nullable sessions are grouped as `Unassigned` in API response; nullable `agent_code` defaults to `main-agent` behavior at runtime.
 
 ### chat_messages
 
@@ -40,7 +41,7 @@
 
 ## Migration Plan
 
-Add `20260527_0018_create_chat_management.sql` and include it in SQLite migration constants. Repository startup executes the migration with `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS`.
+Add `20260527_0018_create_chat_management.sql` and include it in SQLite migration constants. Add `20260530_0023_add_chat_session_agent_code.sql` for existing environments. Repository startup executes create/alter migrations with column guard checks.
 
 ## Query And Performance Plan
 

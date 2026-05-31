@@ -90,7 +90,7 @@ export async function streamChatMessage(
       ...Array.from({ length: 18 }, (_, index) => `Reasoning stream segment ${index + 1}: validating latest summary visibility while the card content overflows.`),
     ];
     const reasoningContentEvents: ChatAguiStreamEvent[] = reasoningContent.map((delta, index) => ({
-      type: "REASONING_MESSAGE_CONTENT",
+      type: index === 0 ? "REASONING_TEXT_CONTENT" : "REASONING_MESSAGE_CONTENT",
       threadId: session.sessionCode,
       runId,
       messageId: `${runId}-reasoning`,
@@ -176,6 +176,17 @@ export async function streamChatMessage(
   let buffer = "";
   let result: ChatSendResult | null = null;
 
+  function nextSseFrameBoundary(value: string): { index: number; separatorLength: number } | null {
+    const lfBoundary = value.indexOf("\n\n");
+    const crlfBoundary = value.indexOf("\r\n\r\n");
+    if (lfBoundary < 0 && crlfBoundary < 0) return null;
+    if (lfBoundary < 0) return { index: crlfBoundary, separatorLength: 4 };
+    if (crlfBoundary < 0) return { index: lfBoundary, separatorLength: 2 };
+    return lfBoundary < crlfBoundary
+      ? { index: lfBoundary, separatorLength: 2 }
+      : { index: crlfBoundary, separatorLength: 4 };
+  }
+
   function consumeFrame(frame: string) {
     let eventName = "";
     const dataLines: string[] = [];
@@ -206,12 +217,12 @@ export async function streamChatMessage(
     const { done, value } = await reader.read();
     if (value) {
       buffer += decoder.decode(value, { stream: !done });
-      let boundary = buffer.indexOf("\n\n");
-      while (boundary >= 0) {
-        const frame = buffer.slice(0, boundary);
-        buffer = buffer.slice(boundary + 2);
+      let boundary = nextSseFrameBoundary(buffer);
+      while (boundary) {
+        const frame = buffer.slice(0, boundary.index);
+        buffer = buffer.slice(boundary.index + boundary.separatorLength);
         consumeFrame(frame);
-        boundary = buffer.indexOf("\n\n");
+        boundary = nextSseFrameBoundary(buffer);
       }
     }
     if (done) break;

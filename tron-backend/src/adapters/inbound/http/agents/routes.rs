@@ -7,10 +7,10 @@ use crate::app::AppState;
 
 use super::handler::{
     activate_agui_stream, create_agent_run, deactivate_agui_stream, disable_platform_system_agent,
-    disable_workspace_system_agent, enable_platform_system_agent,
-    enable_workspace_system_agent, get_agent_run, get_main_agent_config, list_agent_runs,
-    list_agui_stream_events, list_platform_system_agents, list_workspace_system_agents,
-    rescan_platform_system_agents, update_main_agent_config,
+    disable_workspace_system_agent, enable_platform_system_agent, enable_workspace_system_agent,
+    get_agent_run, get_main_agent_config, get_runtime_capability, list_agent_runs,
+    list_agui_stream_events, list_platform_system_agents, list_runtime_capabilities,
+    list_workspace_system_agents, rescan_platform_system_agents, update_main_agent_config,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -39,6 +39,11 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/api/v1/agents/registry/system/{agent_code}/disable",
             post(disable_platform_system_agent),
+        )
+        .route("/api/v1/agents/runtimes", get(list_runtime_capabilities))
+        .route(
+            "/api/v1/agents/runtimes/{adapter_key}/capabilities",
+            get(get_runtime_capability),
         )
         .route(
             "/api/v1/agents/workspaces/{workspace_code}/system",

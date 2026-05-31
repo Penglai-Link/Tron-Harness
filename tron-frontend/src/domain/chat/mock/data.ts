@@ -19,6 +19,8 @@ const sessions: ChatSession[] = [
     userCode: "USER-AUTH",
     appCode: "TRON",
     taskCode: "TASK-8842",
+    agentCode: "main-agent",
+    systemAgentSessionId: null,
     title: "Primary investigation",
     status: "ACTIVE",
     lastRunCode: "RUN-42",
@@ -33,6 +35,8 @@ const sessions: ChatSession[] = [
     userCode: "USER-AUTH",
     appCode: "TRON",
     taskCode: "TASK-8842",
+    agentCode: "codex",
+    systemAgentSessionId: "thr_codex_mock_39",
     title: "Refactor discussion",
     status: "ACTIVE",
     lastRunCode: "RUN-39",
@@ -47,6 +51,8 @@ const sessions: ChatSession[] = [
     userCode: "USER-AUTH",
     appCode: null,
     taskCode: null,
+    agentCode: "main-agent",
+    systemAgentSessionId: null,
     title: "Historical trace review",
     status: "ACTIVE",
     lastRunCode: null,
@@ -177,6 +183,8 @@ export function createMockChatSession(input: CreateChatSessionInput): ChatSessio
     userCode: "USER-AUTH",
     appCode: input.appCode ?? null,
     taskCode: input.taskCode ?? null,
+    agentCode: input.agentCode ?? "main-agent",
+    systemAgentSessionId: null,
     title: input.title?.trim() || "New chat",
     status: "ACTIVE",
     lastRunCode: null,
@@ -231,11 +239,15 @@ export function createMockChatSendResult(session: ChatSession, input: SendChatMe
   const now = new Date().toISOString();
   const runCode = `RUN-${Date.now()}`;
   const finalOutput = `**Recorded in ${session.sessionCode}:**\n\n${input.content}`;
+  const systemAgentSessionId = session.agentCode && session.agentCode !== "main-agent"
+    ? session.systemAgentSessionId ?? `ses-${session.sessionCode.toLowerCase()}`
+    : null;
   return {
     session: {
       ...session,
       lastRunCode: runCode,
       lastRunStatus: "COMPLETED",
+      systemAgentSessionId,
       updatedAt: now,
     },
     run: {
@@ -250,6 +262,7 @@ export function createMockChatSendResult(session: ChatSession, input: SendChatMe
         outputTokens: 24,
         totalTokens: 56,
       },
+      systemAgentSessionId,
     },
     messages: [
       {

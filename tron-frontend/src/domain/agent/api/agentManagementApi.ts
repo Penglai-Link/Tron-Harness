@@ -2,6 +2,7 @@ import { requestApi } from "@/shared/api/httpClient";
 
 import type {
   MainAgentConfig,
+  SystemAgentModelRecord,
   PlatformSystemAgentRecord,
   PlatformSystemAgentRescanResult,
   WorkspaceSystemAgentRecord,
@@ -25,10 +26,25 @@ interface ManagedSystemAgentRecordApi {
   status: AgentStatusApi;
   enabled: boolean;
   available: boolean;
+  models?: SystemAgentModelRecord[] | null;
   lastScannedAt: string | null;
   inheritedFrom?: string | null;
   platformEnabled?: boolean;
   workspaceOverrideDisabled?: boolean;
+}
+
+function normalizeAgentModels(models: ManagedSystemAgentRecordApi["models"]) {
+  if (!Array.isArray(models)) return [];
+  return models
+    .map((model) => ({
+      displayName: model.displayName,
+      modelId: model.modelId,
+    }))
+    .filter((model) => model.modelId?.trim().length > 0)
+    .map((model) => ({
+      displayName: model.displayName?.trim() || model.modelId.trim(),
+      modelId: model.modelId.trim(),
+    }));
 }
 
 interface PlatformSystemAgentRescanResultApi {
@@ -68,6 +84,7 @@ function normalizePlatformSystemAgentRecord(
     description: record.description,
     enabled: record.enabled,
     lastScannedAt: record.lastScannedAt,
+    models: normalizeAgentModels(record.models),
     name: record.name,
     source: normalizeAgentSource(record.source),
     status: normalizeAgentStatus(record.status),
@@ -84,6 +101,7 @@ function normalizeWorkspaceSystemAgentRecord(
     enabled: record.enabled,
     inheritedFrom: (record.inheritedFrom ?? "Platform") as WorkspaceSystemAgentRecord["inheritedFrom"],
     lastScannedAt: record.lastScannedAt,
+    models: normalizeAgentModels(record.models),
     name: record.name,
     platformEnabled: record.platformEnabled ?? record.enabled,
     source: normalizeAgentSource(record.source),

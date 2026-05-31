@@ -1,6 +1,7 @@
 use axum::{
     Json,
     extract::{Path, Query, State},
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
 
@@ -73,7 +74,10 @@ pub async fn activate_agui_stream(
     _auth: RequestAuthContext,
     Path(stream_key): Path<String>,
 ) -> Response {
-    let service = AgentAguiStreamService::new(state.agui_events.clone());
+    let service = AgentAguiStreamService::with_replay_store(
+        state.agui_events.clone(),
+        state.agui_replay_store.clone(),
+    );
     match service.activate(&stream_key) {
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => agent_agui_error_response(error),
@@ -107,6 +111,35 @@ pub async fn list_platform_system_agents(
 ) -> Response {
     match agent_management.list_platform_system_agents() {
         Ok(records) => Json(ApiResponse::success(records)).into_response(),
+        Err(error) => agent_management_error_response(error),
+    }
+}
+
+pub async fn list_runtime_capabilities(
+    State(agent_management): State<AgentManagementService>,
+    _auth: RequestAuthContext,
+) -> Response {
+    match agent_management.list_runtime_capabilities() {
+        Ok(records) => Json(ApiResponse::success(records)).into_response(),
+        Err(error) => agent_management_error_response(error),
+    }
+}
+
+pub async fn get_runtime_capability(
+    State(agent_management): State<AgentManagementService>,
+    _auth: RequestAuthContext,
+    Path(adapter_key): Path<String>,
+) -> Response {
+    match agent_management.runtime_capability(&adapter_key) {
+        Ok(Some(record)) => Json(ApiResponse::success(record)).into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(
+                "AGENT_RUNTIME_NOT_FOUND",
+                "runtime adapter capability was not found",
+            )),
+        )
+            .into_response(),
         Err(error) => agent_management_error_response(error),
     }
 }
@@ -181,7 +214,10 @@ pub async fn deactivate_agui_stream(
     _auth: RequestAuthContext,
     Path(stream_key): Path<String>,
 ) -> Response {
-    let service = AgentAguiStreamService::new(state.agui_events.clone());
+    let service = AgentAguiStreamService::with_replay_store(
+        state.agui_events.clone(),
+        state.agui_replay_store.clone(),
+    );
     match service.deactivate(&stream_key) {
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => agent_agui_error_response(error),
@@ -193,7 +229,10 @@ pub async fn list_agui_stream_events(
     _auth: RequestAuthContext,
     Path(stream_key): Path<String>,
 ) -> Response {
-    let service = AgentAguiStreamService::new(state.agui_events.clone());
+    let service = AgentAguiStreamService::with_replay_store(
+        state.agui_events.clone(),
+        state.agui_replay_store.clone(),
+    );
     match service.events(&stream_key) {
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => agent_agui_error_response(error),

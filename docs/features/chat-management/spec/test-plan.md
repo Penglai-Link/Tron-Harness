@@ -2,9 +2,9 @@
 
 ## Test Plan Decision
 
-- status: approved_with_defaults
-- approved_by: implementation request
-- approved_at: 2026-05-27
+- status: waiting_human_decision
+- approved_by: pending
+- approved_at: pending
 
 ## Proof Rows
 
@@ -15,6 +15,8 @@
 - AC-CM-05 | layer: api | case: AG-UI stream contract | red: stream sends chat-internal `delta` and `done` events | green: backend stream test asserts `RUN_STARTED`, `TEXT_MESSAGE_START`, `TEXT_MESSAGE_CONTENT`, `TEXT_MESSAGE_END`, and `RUN_FINISHED` events and rejects internal event names | interaction: not applicable | command_ref: CMD-BE-TEST.
 - AC-CM-06 | layer: frontend | case: AG-UI event cards and Markdown | red: transcript only renders plain chat bubbles and appends raw deltas | green: frontend build verifies AG-UI card rendering branches and assistant Markdown renderer compile against live stream events | interaction: send a mock message -> inspect reasoning/tool/log card labels and incrementally rendered assistant Markdown | command_ref: CMD-FE-CHECK.
 - AC-CM-07 | layer: frontend | case: send completion feedback | red: completed send shows `Message sent` success toast | green: frontend build verifies the send completion path updates transcript/session state without success toast | interaction: send a mock message -> verify transcript updates and no success toast is created | command_ref: CMD-FE-CHECK.
+- AC-CM-08 | layer: interaction | case: selectable chat agent and session persistence | red: composer footer supports model only and session create cannot persist `agentCode` | green: frontend build verifies agent selector renders `main-agent` plus workspace-enabled system agents, create-session request includes selected `agentCode`, and active session restores agent selection | interaction: visit `/chats` -> open agent selector -> choose `codex` -> create session -> verify header/session payload reflect `agentCode=codex` | command_ref: CMD-FE-CHECK.
+- AC-CM-09 | layer: api | case: chat integration with runtime dispatch | red: send path always runs in-process React runtime and ignores workspace system agent policy/command resolution | green: backend tests assert `agentCode=codex` and `agentCode=opencode` consume runtime dispatch capability, parse runtime output/token usage, and persist assistant response under chat message history | interaction: not applicable | command_ref: CMD-BE-TEST.
 
 ## Command Index
 

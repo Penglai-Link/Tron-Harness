@@ -9,6 +9,8 @@
 - AC-CM-05 [must] [api] `POST /api/v1/chats/sessions/{sessionCode}/messages/stream` emits AG-UI standard SSE events instead of chat-internal `delta` and `done` events; proof: @ref:spec/test-plan.md#proof-rows.
 - AC-CM-06 [must] [interaction] The chat transcript renders AG-UI event cards for reasoning, tool calls, tool live logs, and run lifecycle events while streaming assistant Markdown incrementally; proof: @ref:spec/test-plan.md#proof-rows.
 - AC-CM-07 [must] [interaction] Sending a chat message does not show a success bubble/toast after the stream completes; proof: @ref:spec/test-plan.md#proof-rows.
+- AC-CM-08 [must] [interaction] Chat composer footer supports agent selection, including `main-agent` and workspace-enabled system agents; creating sessions persists the selected `agentCode` and re-selects it when the session is active; proof: @ref:spec/test-plan.md#proof-rows.
+- AC-CM-09 [must] [api] Chat send routes invocation by `agentCode` and correctly consumes runtime capabilities (`main-agent` in-process, `codex`/`opencode` system CLI) provided by `react-agent-runtime` evolution; proof: @ref:spec/test-plan.md#proof-rows.
 
 ## Open Decisions
 
