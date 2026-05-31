@@ -10,14 +10,14 @@
 - execution_mode: hybrid
 - main_branch: feature/langtaoxin/rag-search-context-pack/base
 - main_worktree_path: /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-search-context-pack/base
-- status: implementation_dispatched
+- status: complete
 
 ## Repository State
 
 - default_branch: master
 - base_ref: master
 - current_branch: feature/langtaoxin/rag-search-context-pack/base
-- note: 规格与任务文档在 lite-spec base worktree 中生成；后端实现已派发给 backend worker。
+- note: 规格与任务文档在 lite-spec base worktree 中生成；后端实现已由 backend worker 完成并集成回 base。
 
 ## Multi-Agent Base Branch
 
@@ -30,13 +30,13 @@
 
 | agent id | subtask_name | codex_agent_id | codex_agent_name | ac_refs | tdd_phase | branch | worktree_path | base_ref | status | runtime_agent_type |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| backend | search-context-pack | 019e7bd8-5497-7b43-9923-4402f7c17534 | Banach | AC-RSC-01, AC-RSC-02, AC-RSC-03, AC-RSC-04, AC-RSC-05, AC-RSC-06, AC-RSC-07, AC-RSC-08 | tdd | feature/langtaoxin/rag-search-context-pack/backend/search-context-pack | /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-search-context-pack/backend/search-context-pack | feature/langtaoxin/rag-search-context-pack/base | in_progress | worker |
+| backend | search-context-pack | 019e7bd8-5497-7b43-9923-4402f7c17534 | Banach | AC-RSC-01, AC-RSC-02, AC-RSC-03, AC-RSC-04, AC-RSC-05, AC-RSC-06, AC-RSC-07, AC-RSC-08 | tdd | feature/langtaoxin/rag-search-context-pack/backend/search-context-pack | /Users/langtaoxin/.codex/worktrees/tron/feature/langtaoxin/rag-search-context-pack/backend/search-context-pack | feature/langtaoxin/rag-search-context-pack/base | done | worker |
 
 ## Dispatch Decisions
 
 | ac_refs | decision | execution_owner | rationale | worker_ref | status |
 | --- | --- | --- | --- | --- | --- |
-| AC-RSC-01, AC-RSC-02, AC-RSC-03, AC-RSC-04, AC-RSC-05, AC-RSC-06, AC-RSC-07, AC-RSC-08 | spawn | backend-worker | search API、Retrieval Profile、routes、repository 读取、hydrate 和 context assembly 共享同一后端检索面，派发一个 bounded backend worker 执行 RED -> GREEN -> VERIFY | backend/search-context-pack | in_progress |
+| AC-RSC-01, AC-RSC-02, AC-RSC-03, AC-RSC-04, AC-RSC-05, AC-RSC-06, AC-RSC-07, AC-RSC-08 | spawn | backend-worker | search API、Retrieval Profile、routes、repository 读取、hydrate 和 context assembly 共享同一后端检索面，派发一个 bounded backend worker 执行 RED -> GREEN -> VERIFY | backend/search-context-pack | done |
 
 ## Branch And Path Rules
 

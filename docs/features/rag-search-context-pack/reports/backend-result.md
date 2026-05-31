@@ -22,6 +22,9 @@
 
 - CMD-BE-TEST | command: `make be-test` | result: passed | notes: backend unit、integration、HTTP、RAG search、RAG ingest、RAG boundary、architecture tests and doc-tests all passed.
 - CMD-BE-CHECK | command: `make be-check` | result: passed | notes: `cargo check --manifest-path tron-backend/Cargo.toml` finished successfully.
+- CMD-BASE-BE-TEST | command: `make be-test` | result: passed | notes: base 集成分支合并 worker 后完整后端测试通过。
+- CMD-BASE-BE-CHECK | command: `make be-check` | result: passed | notes: base 集成分支合并 worker 后 `cargo check --manifest-path tron-backend/Cargo.toml` 通过。
+- CMD-DOCS-FINAL | command: `python3 /Users/langtaoxin/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/rag-search-context-pack --phase final` | result: passed | notes: feature docs final validation passed after status and evidence updates.
 
 ## Changed Paths
 

@@ -3,8 +3,8 @@
 ## Execution Contract
 
 - feature_slug: rag-search-context-pack
-- status: ready
-- execution_mode: pending_dispatch
+- status: done
+- execution_mode: lead_review
 - canonical_report_target: reports/review-report.md
 - main_agent_owned: true
 
@@ -14,14 +14,14 @@ Review rows run after implementation evidence exists. Review must compare change
 
 ## Task Rows
 
-- AC-RSC-01 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/adapters/inbound/http/rag/* tron-backend/tests/rag_search_api.rs | command_ref: none | status: ready.
-- AC-RSC-02 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/application/rag/* tron-backend/src/domain/rag/* | command_ref: none | status: ready.
-- AC-RSC-03 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/application/rag/* tron-backend/tests/rag_search_contracts.rs | command_ref: none | status: ready.
-- AC-RSC-04 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository/* | command_ref: none | status: ready.
-- AC-RSC-05 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository/* | command_ref: none | status: ready.
-- AC-RSC-06 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/application/rag/* tron-backend/src/application/llm/* | command_ref: none | status: ready.
-- AC-RSC-07 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/application/rag/* | command_ref: none | status: ready.
-- AC-RSC-08 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/adapters/inbound/http/* tron-backend/src/application/rag/* tron-backend/src/application/graph/* tron-backend/src/shared/event_bus/* | command_ref: none | status: ready.
+- AC-RSC-01 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/adapters/inbound/http/rag/* tron-backend/tests/rag_search_api.rs | command_ref: none | status: done.
+- AC-RSC-02 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/application/rag/* tron-backend/src/domain/rag/* | command_ref: none | status: done.
+- AC-RSC-03 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/application/rag/* tron-backend/tests/rag_search_contracts.rs | command_ref: none | status: done.
+- AC-RSC-04 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository/* | command_ref: none | status: done.
+- AC-RSC-05 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository.rs tron-backend/src/adapters/outbound/persistence/sqlite/rag_repository/* | command_ref: none | status: done.
+- AC-RSC-06 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/application/rag/* tron-backend/src/application/llm/* | command_ref: none | status: done.
+- AC-RSC-07 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/application/rag/* | command_ref: none | status: done.
+- AC-RSC-08 | phase: review | owner: lead | scope: docs/features/rag-search-context-pack/reports/* tron-backend/src/adapters/inbound/http/* tron-backend/src/application/rag/* tron-backend/src/application/graph/* tron-backend/src/shared/event_bus/* | command_ref: none | status: done.
 
 ## Worktree Notes
 
