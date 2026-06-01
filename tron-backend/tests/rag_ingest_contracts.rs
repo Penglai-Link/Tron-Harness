@@ -123,6 +123,53 @@ async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_
 }
 
 #[tokio::test]
+async fn project_doc_markdown_heading_depth_controls_split_boundaries() {
+    let depth_two_path = temp_database_path("rag-ingest-project-doc-heading-depth-two");
+    let depth_two_url = depth_two_path.to_string_lossy().to_string();
+    let depth_two_repository = SqliteRagRepository::connect(&depth_two_url).unwrap();
+    set_project_doc_heading_depth(&depth_two_url, 2);
+    let depth_two_service = RagIngestService::new(
+        depth_two_repository,
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::fixed(vec![0.1]).with_document(project_doc_nested_markdown()),
+    );
+
+    let depth_two_result = depth_two_service
+        .ingest(project_doc_request("v1"))
+        .await
+        .unwrap();
+
+    assert_eq!(depth_two_result.text_unit_count, 1);
+    let depth_two_connection = Connection::open(&depth_two_url).unwrap();
+    assert_eq!(
+        query_text_unit_headings(&depth_two_connection),
+        vec!["RAG MVP > Scope"]
+    );
+
+    let depth_three_path = temp_database_path("rag-ingest-project-doc-heading-depth-three");
+    let depth_three_url = depth_three_path.to_string_lossy().to_string();
+    let depth_three_repository = SqliteRagRepository::connect(&depth_three_url).unwrap();
+    set_project_doc_heading_depth(&depth_three_url, 3);
+    let depth_three_service = RagIngestService::new(
+        depth_three_repository,
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::fixed(vec![0.1]).with_document(project_doc_nested_markdown()),
+    );
+
+    let depth_three_result = depth_three_service
+        .ingest(project_doc_request("v1"))
+        .await
+        .unwrap();
+
+    assert_eq!(depth_three_result.text_unit_count, 2);
+    let depth_three_connection = Connection::open(&depth_three_url).unwrap();
+    assert_eq!(
+        query_text_unit_headings(&depth_three_connection),
+        vec!["RAG MVP > Scope > Ingest", "RAG MVP > Scope > Search"]
+    );
+}
+
+#[tokio::test]
 async fn project_doc_ingest_rejects_direct_markdown_payload() {
     let database_path = temp_database_path("rag-ingest-project-doc-direct-content");
     let database_url = database_path.to_string_lossy().to_string();
@@ -481,6 +528,26 @@ fn project_doc_request(source_version: &str) -> RagIngestRequest {
 
 fn project_doc_markdown() -> &'static str {
     "# RAG MVP\nIntro.\n\n## Write Path\nPersist synchronously."
+}
+
+fn project_doc_nested_markdown() -> &'static str {
+    "# RAG MVP\n## Scope\n### Ingest\nRead files.\n### Search\nFind chunks."
+}
+
+fn set_project_doc_heading_depth(database_url: &str, heading_depth: u64) {
+    let connection = Connection::open(database_url).unwrap();
+    let config_json = query_string(
+        &connection,
+        "SELECT config_json FROM rag_profiles WHERE profile_id = 'project-doc-ingest-v1'",
+    );
+    let mut config = serde_json::from_str::<Value>(&config_json).unwrap();
+    config["splitter"]["headingDepth"] = json!(heading_depth);
+    connection
+        .execute(
+            "UPDATE rag_profiles SET config_json = ?1 WHERE profile_id = 'project-doc-ingest-v1'",
+            [config.to_string()],
+        )
+        .unwrap();
 }
 
 fn ingest_profile(profile_id: &str, config: Value) -> RagProfileRecord {

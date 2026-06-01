@@ -180,7 +180,7 @@ fn prepare_project_doc_ref_payload(
         return Err(RagError::DocumentParseFailed);
     }
     let document_code = payload_string(&request.payload, "documentCode");
-    let sections = split_markdown_heading_units(&text);
+    let sections = split_markdown_heading_units(&text, compiled.markdown_heading_depth);
     if sections.is_empty() {
         return Err(RagError::DocumentParseFailed);
     }
@@ -263,19 +263,28 @@ fn payload_metadata(payload: &Value) -> Value {
         .unwrap_or_else(|| json!({}))
 }
 
-fn split_markdown_heading_units(text: &str) -> Vec<(String, String)> {
+fn split_markdown_heading_units(text: &str, heading_depth: usize) -> Vec<(String, String)> {
     let mut sections = Vec::new();
     let mut heading_stack: Vec<(usize, String)> = Vec::new();
     let mut current_heading = String::new();
     let mut current_lines = Vec::new();
+    let mut current_has_body = false;
 
     for line in text.lines() {
         if let Some((level, heading)) = parse_markdown_heading(line) {
-            if !current_heading.is_empty() && !current_lines.is_empty() {
+            if level > heading_depth {
+                if !current_heading.is_empty() {
+                    current_lines.push(line.to_string());
+                    current_has_body = true;
+                }
+                continue;
+            }
+            if !current_heading.is_empty() && !current_lines.is_empty() && current_has_body {
                 sections.push((
                     current_heading.clone(),
                     current_lines.join("\n").trim().to_string(),
                 ));
+                current_lines = Vec::new();
             }
             heading_stack.retain(|(existing_level, _)| *existing_level < level);
             heading_stack.push((level, heading));
@@ -284,8 +293,12 @@ fn split_markdown_heading_units(text: &str) -> Vec<(String, String)> {
                 .map(|(_, heading)| heading.as_str())
                 .collect::<Vec<_>>()
                 .join(" > ");
-            current_lines = vec![line.trim().to_string()];
+            current_lines.push(line.trim().to_string());
+            current_has_body = false;
         } else if !current_heading.is_empty() {
+            if !line.trim().is_empty() {
+                current_has_body = true;
+            }
             current_lines.push(line.to_string());
         }
     }

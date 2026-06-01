@@ -7,6 +7,7 @@ use crate::domain::rag::{RagCorpusRecord, RagError, RagProfileRecord, RagProfile
 use super::{RagStrategyRegistry, StrategyRegistrationStatus};
 
 const DEFAULT_PROJECT_DOC_RESOLVER_MAX_BYTES: usize = 1_048_576;
+const DEFAULT_MARKDOWN_HEADING_DEPTH: usize = 6;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CompiledRagIngestProfile {
@@ -19,6 +20,7 @@ pub struct CompiledRagIngestProfile {
     pub source_resolver_max_bytes: usize,
     pub record_resolver_info: bool,
     pub record_parser_info: bool,
+    pub markdown_heading_depth: usize,
     pub degrade_policy: String,
     pub embedding_model_code: Option<String>,
     pub embedding_version: String,
@@ -128,6 +130,11 @@ where
         .to_string();
     let source_resolver_max_bytes = source_resolver_max_bytes(&profile.config)?;
     let (record_resolver_info, record_parser_info) = metadata_policy_flags(&profile.config);
+    let markdown_heading_depth = if payload_strategy_id == "PROJECT_DOC_MARKDOWN_REF_PAYLOAD_V1" {
+        markdown_heading_depth(&profile.config)?
+    } else {
+        DEFAULT_MARKDOWN_HEADING_DEPTH
+    };
 
     Ok(CompiledRagIngestProfile {
         profile_id: profile.profile_id.clone(),
@@ -139,6 +146,7 @@ where
         source_resolver_max_bytes,
         record_resolver_info,
         record_parser_info,
+        markdown_heading_depth,
         degrade_policy: profile.degrade_policy.clone(),
         embedding_model_code,
         embedding_version,
@@ -228,6 +236,21 @@ fn metadata_policy_flags(config: &Value) -> (bool, bool) {
             .and_then(Value::as_bool)
             .unwrap_or(false),
     )
+}
+
+fn markdown_heading_depth(config: &Value) -> Result<usize, RagError> {
+    let Some(depth) = config
+        .get("splitter")
+        .and_then(Value::as_object)
+        .and_then(|splitter| splitter.get("headingDepth"))
+        .and_then(Value::as_u64)
+    else {
+        return Ok(DEFAULT_MARKDOWN_HEADING_DEPTH);
+    };
+    if !(1..=6).contains(&depth) {
+        return Err(RagError::IngestProfileInvalid);
+    }
+    usize::try_from(depth).map_err(|_| RagError::IngestProfileInvalid)
 }
 
 fn parse_edge(value: &Value) -> Result<(String, String), RagError> {
