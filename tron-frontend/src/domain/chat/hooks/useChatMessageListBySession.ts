@@ -77,6 +77,7 @@ export async function streamChatMessage(
   session: ChatSession,
   input: SendChatMessageInput,
   handlers: StreamChatMessageHandlers = {},
+  signal?: AbortSignal,
 ): Promise<ChatSendResult> {
   if (getServiceDataSource("chat") === "mock") {
     const result = createMockChatSendResult(session, input);
@@ -160,6 +161,7 @@ export async function streamChatMessage(
     credentials: "include",
     headers,
     method: "POST",
+    signal,
   });
 
   if (!response.ok) {

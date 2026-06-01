@@ -11,6 +11,7 @@ import {
   BrainCircuit,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   CircleAlert,
   CircleDot,
@@ -20,10 +21,9 @@ import {
   Hammer,
   LoaderCircle,
   MessageSquareText,
-  PanelLeftClose,
-  PanelLeftOpen,
   Plus,
   Send,
+  Square,
   Terminal,
   UserRound,
   Wrench,
@@ -82,6 +82,39 @@ function formatTime(value: string) {
   }).format(date);
 }
 
+const chatSessionModelSelectionStorageKey = "tron.chat.session.model.selection";
+
+function readChatSessionModelSelections() {
+  if (typeof window === "undefined") return {} as Record<string, string>;
+  try {
+    const raw = window.localStorage.getItem(chatSessionModelSelectionStorageKey);
+    if (!raw) return {} as Record<string, string>;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {} as Record<string, string>;
+    const selections: Record<string, string> = {};
+    Object.entries(parsed).forEach(([sessionCode, optionCode]) => {
+      if (typeof optionCode !== "string" || !optionCode.trim()) return;
+      selections[sessionCode] = optionCode;
+    });
+    return selections;
+  } catch {
+    return {} as Record<string, string>;
+  }
+}
+
+function writeChatSessionModelSelections(selections: Record<string, string>) {
+  if (typeof window === "undefined") return;
+  try {
+    if (!Object.keys(selections).length) {
+      window.localStorage.removeItem(chatSessionModelSelectionStorageKey);
+      return;
+    }
+    window.localStorage.setItem(chatSessionModelSelectionStorageKey, JSON.stringify(selections));
+  } catch {
+    // Ignore local persistence failures and keep in-memory behavior.
+  }
+}
+
 function sessionAgentTagLabel(agentCode: string | null | undefined) {
   const normalized = agentCode?.trim().toLowerCase();
   if (!normalized || normalized === "main-agent") return "MAIN";
@@ -100,6 +133,14 @@ function sessionAgentTagTone(agentCode: string | null | undefined) {
     return "border-sky-200 bg-sky-50 text-sky-700";
   }
   return "border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]";
+}
+
+function sessionAgentIconTone(agentCode: string | null | undefined) {
+  const normalized = agentCode?.trim().toLowerCase();
+  if (!normalized || normalized === "main-agent") return "text-emerald-600";
+  if (normalized === "opencode") return "text-amber-600";
+  if (normalized === "codex") return "text-sky-600";
+  return "text-[var(--color-on-surface-variant)]";
 }
 
 async function copyPlainText(value: string) {
@@ -786,6 +827,20 @@ function fuzzyModelMatch(query: string, model: ChatModelOption) {
   return fuzzyTextMatch(query, model.displayName) || fuzzyTextMatch(query, model.modelName);
 }
 
+function chatSendErrorToastMessage(message: string) {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) return "Chat send failed";
+  if (normalized.includes("missing field `content`") || normalized.includes("missing field \"content\"")) {
+    return "Model request format was rejected by provider. Check model protocol config or switch model.";
+  }
+  return message;
+}
+
+function isAbortError(error: unknown) {
+  if (error instanceof DOMException && error.name === "AbortError") return true;
+  return error instanceof Error && error.name === "AbortError";
+}
+
 function iconButtonClass(active = false) {
   return cn(
     "inline-flex size-8 items-center justify-center rounded-md border border-transparent text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50",
@@ -1240,6 +1295,35 @@ function SessionSidebar({
   const [closedGroups, setClosedGroups] = useState<Set<string>>(() => new Set());
   const [editingSessionCode, setEditingSessionCode] = useState("");
   const [renameDraft, setRenameDraft] = useState("");
+  const [collapsedTooltip, setCollapsedTooltip] = useState<{ label: string; top: number } | null>(null);
+  const collapsedTooltipTimerRef = useRef<number | null>(null);
+  const sidebarRef = useRef<HTMLElement | null>(null);
+
+  function clearCollapsedTooltipTimer() {
+    if (collapsedTooltipTimerRef.current === null) return;
+    window.clearTimeout(collapsedTooltipTimerRef.current);
+    collapsedTooltipTimerRef.current = null;
+  }
+
+  function hideCollapsedTooltip() {
+    clearCollapsedTooltipTimer();
+    setCollapsedTooltip(null);
+  }
+
+  function showCollapsedTooltip(trigger: HTMLButtonElement, session: ChatSession) {
+    clearCollapsedTooltipTimer();
+    const triggerRect = trigger.getBoundingClientRect();
+    const sidebarRect = sidebarRef.current?.getBoundingClientRect();
+    const top = sidebarRect
+      ? triggerRect.top - sidebarRect.top + triggerRect.height / 2
+      : trigger.offsetTop + trigger.offsetHeight / 2;
+    collapsedTooltipTimerRef.current = window.setTimeout(() => {
+      setCollapsedTooltip({
+        label: session.title,
+        top,
+      });
+    }, 120);
+  }
 
   function startInlineRename(session: ChatSession) {
     setEditingSessionCode(session.sessionCode);
@@ -1261,164 +1345,192 @@ function SessionSidebar({
     await onRenameSession(session, title);
     cancelInlineRename();
   }
+  const collapsedSessions = groups.flatMap((group) => group.sessions);
 
-  if (collapsed) {
-    const collapsedSessions = groups.flatMap((group) => group.sessions);
+  useEffect(() => () => clearCollapsedTooltipTimer(), []);
 
-    return (
-      <aside className="flex h-full w-12 flex-col items-center bg-[var(--color-surface-container-lowest)] py-3 shadow-[10px_0_28px_rgba(15,23,42,0.04)]">
-        <button className={iconButtonClass()} type="button" aria-label="Expand sessions" onClick={onCollapseToggle}>
-          <PanelLeftOpen size={17} />
-        </button>
-        <button
-          className={cn(iconButtonClass(), "mt-2")}
-          type="button"
-          aria-label="New session"
-          title="New session"
-          disabled={creatingSession}
-          onClick={onCreateSession}
-        >
-          <Plus size={17} />
-        </button>
-        <div className="mt-4 h-px w-6 bg-[rgba(15,23,42,0.06)]" />
-        <div className="mt-3 flex w-full flex-1 flex-col items-center gap-1 overflow-y-auto px-1">
-          {collapsedSessions.map((session) => (
-            <button
-              className={iconButtonClass(activeSessionCode === session.sessionCode)}
-              key={session.sessionCode}
-              type="button"
-              aria-label={`Open ${session.title}`}
-              title={session.title}
-              onClick={() => onSessionSelect(session.sessionCode)}
-            >
-              <MessageSquareText size={17} />
-            </button>
-          ))}
-        </div>
-      </aside>
-    );
-  }
+  useEffect(() => {
+    if (!collapsed) hideCollapsedTooltip();
+  }, [collapsed]);
 
   return (
-    <aside className="h-full w-[286px] shrink-0 overflow-hidden bg-[var(--color-surface-container-lowest)] shadow-[10px_0_28px_rgba(15,23,42,0.04)]">
-      <div className="flex h-14 items-center justify-between px-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
-        <div className="flex items-center gap-2">
-          <MessageSquareText size={17} />
-          <h2 className="text-sm font-semibold">Sessions</h2>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            className={iconButtonClass()}
-            type="button"
-            aria-label="New session"
-            title="New session"
-            disabled={creatingSession}
-            onClick={onCreateSession}
-          >
-            <Plus size={17} />
-          </button>
-          <button className={iconButtonClass()} type="button" aria-label="Collapse sessions" onClick={onCollapseToggle}>
-            <PanelLeftClose size={17} />
-          </button>
-        </div>
-      </div>
-      <div className="h-[calc(100%-3.5rem)] overflow-y-auto px-3 py-4">
-        {groups.map((group) => {
-          const groupKey = group.taskCode ?? "unassigned";
-          const closed = closedGroups.has(groupKey);
-          return (
-            <section className="mb-4" key={groupKey}>
+    <aside
+      ref={sidebarRef}
+      className={cn(
+        "relative h-full shrink-0 overflow-visible bg-[var(--color-surface-container-lowest)] shadow-[10px_0_28px_rgba(15,23,42,0.04)] transition-[width] duration-200",
+        collapsed ? "w-[64px]" : "w-[286px]",
+      )}
+    >
+      {collapsed ? (
+        <div className="flex h-full flex-col overflow-y-auto px-2 py-3">
+          <div className="flex items-center justify-center">
+            <button
+              className={iconButtonClass()}
+              type="button"
+              aria-label="New session"
+              title="New session"
+              disabled={creatingSession}
+              onClick={onCreateSession}
+            >
+              <Plus size={17} />
+            </button>
+          </div>
+          <div className="mx-auto mt-4 h-px w-6 bg-[rgba(15,23,42,0.06)]" />
+          <div className="mt-3 flex flex-1 flex-col items-center gap-1 overflow-y-auto">
+            {collapsedSessions.map((session) => (
               <button
-                className="mb-2 flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs font-semibold uppercase text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]"
+                className={iconButtonClass(activeSessionCode === session.sessionCode)}
+                key={session.sessionCode}
                 type="button"
-                onClick={() => {
-                  setClosedGroups((current) => {
-                    const next = new Set(current);
-                    if (next.has(groupKey)) next.delete(groupKey);
-                    else next.add(groupKey);
-                    return next;
-                  });
-                }}
+                aria-label={`Open ${session.title}`}
+                onClick={() => onSessionSelect(session.sessionCode)}
+                onMouseEnter={(event) => showCollapsedTooltip(event.currentTarget, session)}
+                onMouseLeave={hideCollapsedTooltip}
+                onFocus={(event) => showCollapsedTooltip(event.currentTarget, session)}
+                onBlur={hideCollapsedTooltip}
               >
-                <span>{group.taskTitle}</span>
-                {closed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                <MessageSquareText className={sessionAgentIconTone(session.agentCode)} size={17} />
               </button>
-              {!closed ? (
-                <div className="space-y-1">
-                  {group.sessions.map((session) => {
-                    const editing = editingSessionCode === session.sessionCode;
-                    const pending = sessionActionPendingCode === session.sessionCode;
+            ))}
+          </div>
+          {collapsedTooltip ? (
+            <div
+              className="pointer-events-none absolute left-full z-40 ml-2 -translate-y-1/2 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-2 py-1 text-xs text-[var(--color-on-surface)] shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
+              style={{ top: collapsedTooltip.top }}
+              role="tooltip"
+            >
+              {collapsedTooltip.label}
+            </div>
+          ) : null}
+        </div>
+      ) : (
+        <>
+          <div className="flex h-14 items-center justify-between px-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
+            <div className="flex items-center gap-2">
+              <MessageSquareText size={17} />
+              <h2 className="text-sm font-semibold">Sessions</h2>
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                className={iconButtonClass()}
+                type="button"
+                aria-label="New session"
+                title="New session"
+                disabled={creatingSession}
+                onClick={onCreateSession}
+              >
+                <Plus size={17} />
+              </button>
+            </div>
+          </div>
+          <div className="h-[calc(100%-3.5rem)] overflow-y-auto px-3 py-4">
+            {groups.map((group) => {
+              const groupKey = group.taskCode ?? "unassigned";
+              const closed = closedGroups.has(groupKey);
+              return (
+                <section className="mb-4" key={groupKey}>
+                  <button
+                    className="mb-2 flex w-full items-center justify-between rounded-md px-2 py-1 text-left text-xs font-semibold uppercase text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]"
+                    type="button"
+                    onClick={() => {
+                      setClosedGroups((current) => {
+                        const next = new Set(current);
+                        if (next.has(groupKey)) next.delete(groupKey);
+                        else next.add(groupKey);
+                        return next;
+                      });
+                    }}
+                  >
+                    <span>{group.taskTitle}</span>
+                    {closed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                  {!closed ? (
+                    <div className="space-y-1">
+                      {group.sessions.map((session) => {
+                        const editing = editingSessionCode === session.sessionCode;
+                        const pending = sessionActionPendingCode === session.sessionCode;
 
-                    return (
-                      <div
-                        className={cn(
-                          "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md px-3 py-2 text-left transition",
-                          activeSessionCode === session.sessionCode
-                            ? "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]"
-                            : "text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]",
-                        )}
-                        key={session.sessionCode}
-                      >
-                        {editing ? (
-                          <input
-                            autoFocus
-                            aria-label={`Rename ${session.title}`}
-                            className="h-8 min-w-0 rounded-md border border-[var(--color-focus-ring)] bg-white px-2 text-sm font-medium text-[var(--color-on-surface)] outline-none"
-                            disabled={pending}
-                            value={renameDraft}
-                            onBlur={() => {
-                              if (!pending) void submitInlineRename(session);
-                            }}
-                            onChange={(event) => setRenameDraft(event.target.value)}
-                            onClick={(event) => event.stopPropagation()}
-                            onFocus={(event) => event.currentTarget.select()}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter") {
-                                event.preventDefault();
-                                void submitInlineRename(session);
-                              }
-                              if (event.key === "Escape") {
-                                event.preventDefault();
-                                cancelInlineRename();
-                              }
-                            }}
-                          />
-                        ) : (
-                          <button className="min-w-0 text-left" type="button" onClick={() => onSessionSelect(session.sessionCode)}>
-                            <span className="block truncate text-sm font-medium">{session.title}</span>
-                            <span className="mt-1 flex items-center gap-1.5 text-xs text-[var(--color-on-surface-variant)]">
-                              <span
-                                className={cn(
-                                  "inline-flex h-4 items-center rounded border px-1 font-mono text-[10px] leading-none",
-                                  sessionAgentTagTone(session.agentCode),
-                                )}
-                              >
-                                {sessionAgentTagLabel(session.agentCode)}
-                              </span>
-                              <span>{formatTime(session.updatedAt)}</span>
-                            </span>
-                          </button>
-                        )}
-                        <SessionRunIndicator
-                          running={runningSessionCode === session.sessionCode}
-                          unseen={unseenSessionCodes.has(session.sessionCode)}
-                        />
-                        <SessionActionMenu
-                          disabled={pending}
-                          session={session}
-                          onArchive={onArchiveSession}
-                          onDelete={onDeleteSession}
-                          onRename={startInlineRename}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
-            </section>
-          );
-        })}
-      </div>
+                        return (
+                          <div
+                            className={cn(
+                              "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md px-3 py-2 text-left transition",
+                              activeSessionCode === session.sessionCode
+                                ? "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]"
+                                : "text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]",
+                            )}
+                            key={session.sessionCode}
+                          >
+                            {editing ? (
+                              <input
+                                autoFocus
+                                aria-label={`Rename ${session.title}`}
+                                className="h-8 min-w-0 rounded-md border border-[var(--color-focus-ring)] bg-white px-2 text-sm font-medium text-[var(--color-on-surface)] outline-none"
+                                disabled={pending}
+                                value={renameDraft}
+                                onBlur={() => {
+                                  if (!pending) void submitInlineRename(session);
+                                }}
+                                onChange={(event) => setRenameDraft(event.target.value)}
+                                onClick={(event) => event.stopPropagation()}
+                                onFocus={(event) => event.currentTarget.select()}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Enter") {
+                                    event.preventDefault();
+                                    void submitInlineRename(session);
+                                  }
+                                  if (event.key === "Escape") {
+                                    event.preventDefault();
+                                    cancelInlineRename();
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <button className="min-w-0 text-left" type="button" onClick={() => onSessionSelect(session.sessionCode)}>
+                                <span className="block truncate text-sm font-medium">{session.title}</span>
+                                <span className="mt-1 flex items-center gap-1.5 text-xs text-[var(--color-on-surface-variant)]">
+                                  <span
+                                    className={cn(
+                                      "inline-flex h-4 items-center rounded border px-1 font-mono text-[10px] leading-none",
+                                      sessionAgentTagTone(session.agentCode),
+                                    )}
+                                  >
+                                    {sessionAgentTagLabel(session.agentCode)}
+                                  </span>
+                                  <span>{formatTime(session.updatedAt)}</span>
+                                </span>
+                              </button>
+                            )}
+                            <SessionRunIndicator
+                              running={runningSessionCode === session.sessionCode}
+                              unseen={unseenSessionCodes.has(session.sessionCode)}
+                            />
+                            <SessionActionMenu
+                              disabled={pending}
+                              session={session}
+                              onArchive={onArchiveSession}
+                              onDelete={onDeleteSession}
+                              onRename={startInlineRename}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })}
+          </div>
+        </>
+      )}
+      <button
+        className="absolute right-[-22px] top-1/2 z-10 inline-flex h-11 w-6 -translate-y-1/2 items-center justify-center rounded-l-none rounded-r-full border-0 bg-[var(--color-surface-container-lowest)] p-0 text-[var(--color-on-surface-variant)] shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-2"
+        type="button"
+        aria-label={collapsed ? "Expand sessions" : "Collapse sessions"}
+        aria-pressed={collapsed}
+        onClick={onCollapseToggle}
+      >
+        {collapsed ? <ChevronRight size={15} strokeWidth={2.4} /> : <ChevronLeft size={15} strokeWidth={2.4} />}
+      </button>
     </aside>
   );
 }
@@ -1535,6 +1647,9 @@ function AguiUserCardShell({
 function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
   const hasContent = card.content.trim().length > 0;
   const detail = hasContent ? card.content : "";
+  const initializingHint = !card.ended && !hasContent && card.runCode === "pending"
+    ? "System agent 正在初始化..."
+    : "";
   const [expanded, setExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const duration = card.endMillis ? formatAguiDuration(Math.max(0, card.endMillis - card.firstMillis)) : "";
@@ -1567,6 +1682,11 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
                 {card.ended && duration ? `Thought for ${duration}` : "Thinking"}
               </span>
             </div>
+            {initializingHint ? (
+              <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
+                {initializingHint}
+              </p>
+            ) : null}
           </div>
         </div>
         <span className="mt-1 shrink-0 text-[var(--color-on-surface-variant)]">
@@ -1574,8 +1694,12 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
         </span>
       </button>
       {expanded && detail ? (
-        <div ref={contentRef} className="mt-3 h-40 min-h-0 overflow-y-scroll overscroll-contain whitespace-pre-wrap rounded-md bg-[var(--color-surface-container-lowest)] p-3 text-sm leading-6 text-[var(--color-on-surface)]">
-          {detail}
+        <div ref={contentRef} className="mt-3 h-40 min-h-0 overflow-y-scroll overscroll-contain rounded-md bg-[var(--color-surface-container-lowest)] p-3">
+          <MarkdownContent
+            ariaLabel="Streaming reasoning markdown"
+            className="min-h-0 py-0 leading-6"
+            content={detail}
+          />
         </div>
       ) : null}
     </article>
@@ -1616,9 +1740,12 @@ function ToolUserCard({ card }: { card: ToolWorkCard }) {
         {complete ? (
           <section className="space-y-1.5">
             <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Result</h3>
-            <div className="whitespace-pre-wrap rounded-md bg-[var(--color-surface-container-lowest)] p-3 text-sm leading-6 text-[var(--color-on-surface)]">
-              {result}
-            </div>
+            <MarkdownContent
+              ariaLabel="Streaming tool result markdown"
+              className="rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-2 leading-6"
+              content={result}
+              emptyMessage="No result payload."
+            />
           </section>
         ) : (
           <section className="space-y-1.5">
@@ -1697,12 +1824,29 @@ function AguiEventRail({ events }: { events: TranscriptAguiEvent[] }) {
 
 function AguiRunWorkRail({
   events,
+  pending,
+  pendingStartedAt,
   preferences,
 }: {
   events: TranscriptAguiEvent[];
+  pending?: boolean;
+  pendingStartedAt?: number | null;
   preferences: AguiDebugPreferences;
 }) {
   const userCards = buildAguiUserWorkCards(events);
+  const displayUserCards: AguiUserWorkCard[] = userCards.length || !pending
+    ? userCards
+    : [{
+      kind: "reasoning",
+      value: {
+        content: "",
+        ended: false,
+        endMillis: null,
+        firstMillis: pendingStartedAt ?? Date.now(),
+        id: "pending-reasoning",
+        runCode: "pending",
+      },
+    }];
   const debugEvents = events.filter((event) => shouldShowAguiEventType(aguiEventType(event), preferences));
   const terminalEvent = terminalAguiEvent(events);
   const terminalRunCode = terminalEvent ? aguiEventRunCode(terminalEvent) : "";
@@ -1712,7 +1856,7 @@ function AguiRunWorkRail({
     setExpanded(!terminalRunCode);
   }, [terminalRunCode]);
 
-  if (!terminalEvent && !userCards.length && !debugEvents.length) return null;
+  if (!terminalEvent && !displayUserCards.length && !debugEvents.length) return null;
 
   return (
     <section className="max-w-[760px] space-y-2" aria-label="AG-UI run work">
@@ -1733,7 +1877,7 @@ function AguiRunWorkRail({
       ) : null}
       {!terminalEvent || expanded ? (
         <>
-          <AguiUserWorkRail cards={userCards} />
+          <AguiUserWorkRail cards={displayUserCards} />
           <AguiEventRail events={debugEvents} />
         </>
       ) : null}
@@ -1757,11 +1901,13 @@ export function ChatManagementPage() {
   const aguiEvents = useChatAguiEvents(activeSession?.sessionCode ?? "");
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
   const [liveAguiEvents, setLiveAguiEvents] = useState<ChatAguiStreamEvent[]>([]);
+  const [liveAguiPendingStartedAt, setLiveAguiPendingStartedAt] = useState<number | null>(null);
   const [liveAguiAnchorMessageCode, setLiveAguiAnchorMessageCode] = useState("");
   const [sending, setSending] = useState(false);
   const [creatingSession, setCreatingSession] = useState(false);
   const [chatModels, setChatModels] = useState<ModelRecord[]>([]);
   const [selectedModelCode, setSelectedModelCode] = useState("");
+  const [sessionModelSelections, setSessionModelSelections] = useState<Record<string, string>>(() => readChatSessionModelSelections());
   const [modelsLoading, setModelsLoading] = useState(false);
   const [chatAgents, setChatAgents] = useState<ChatAgentOption[]>(() => [mainChatAgentOption]);
   const [selectedAgentCode, setSelectedAgentCode] = useState(mainChatAgentOption.agentCode);
@@ -1775,6 +1921,9 @@ export function ChatManagementPage() {
   const [unseenSessionCodes, setUnseenSessionCodes] = useState<Set<string>>(() => new Set());
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const activeSessionCodeRef = useRef("");
+  const modelSelectionSessionRef = useRef("");
+  const streamAbortControllerRef = useRef<AbortController | null>(null);
+  const streamAbortRequestedRef = useRef(false);
   const autoStickToBottomRef = useRef(true);
   const messageScrollRef = useRef<HTMLElement | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
@@ -1914,13 +2063,57 @@ export function ChatManagementPage() {
   }, [activeSession?.agentCode, activeSession?.sessionCode, chatAgents]);
 
   useEffect(() => {
-    const defaultModel = defaultChatModelOption(agentScopedModels, chatModels);
-    setSelectedModelCode((current) => (
-      current && agentScopedModels.some((model) => model.optionCode === current)
+    const sessionCode = activeSession?.sessionCode ?? "";
+    const switchedSession = modelSelectionSessionRef.current !== sessionCode;
+
+    if (switchedSession) {
+      modelSelectionSessionRef.current = sessionCode;
+      const persistedOptionCode = sessionCode ? sessionModelSelections[sessionCode] : "";
+      const defaultModel = defaultChatModelOption(agentScopedModels, chatModels);
+      const restoredOptionCode = persistedOptionCode && agentScopedModels.some((model) => model.optionCode === persistedOptionCode)
+        ? persistedOptionCode
+        : (defaultModel?.optionCode ?? "");
+      setSelectedModelCode(restoredOptionCode);
+      return;
+    }
+
+    setSelectedModelCode((current) => {
+      if (current && agentScopedModels.some((model) => model.optionCode === current)) {
+        return current;
+      }
+      const persistedOptionCode = sessionCode ? sessionModelSelections[sessionCode] : "";
+      if (persistedOptionCode && agentScopedModels.some((model) => model.optionCode === persistedOptionCode)) {
+        return persistedOptionCode;
+      }
+      return defaultChatModelOption(agentScopedModels, chatModels)?.optionCode ?? "";
+    });
+  }, [activeSession?.sessionCode, agentScopedModels, chatModels, sessionModelSelections]);
+
+  useEffect(() => {
+    const sessionCode = activeSession?.sessionCode;
+    if (!sessionCode || !selectedModelCode) return;
+    const activeSessionAgentCode = activeSession.agentCode ?? mainChatAgentOption.agentCode;
+    if (selectedAgentCode !== activeSessionAgentCode) return;
+    if (!agentScopedModels.some((model) => model.optionCode === selectedModelCode)) return;
+    setSessionModelSelections((current) => (
+      current[sessionCode] === selectedModelCode
         ? current
-        : defaultModel?.optionCode ?? ""
+        : {
+          ...current,
+          [sessionCode]: selectedModelCode,
+        }
     ));
-  }, [agentScopedModels, chatModels]);
+  }, [
+    activeSession?.agentCode,
+    activeSession?.sessionCode,
+    agentScopedModels,
+    selectedAgentCode,
+    selectedModelCode,
+  ]);
+
+  useEffect(() => {
+    writeChatSessionModelSelections(sessionModelSelections);
+  }, [sessionModelSelections]);
 
   useEffect(() => {
     if (!activeSessionCode && activeSession) {
@@ -1947,6 +2140,7 @@ export function ChatManagementPage() {
 
   useEffect(() => () => {
     if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
+    streamAbortControllerRef.current?.abort();
   }, []);
 
   useEffect(() => {
@@ -1961,13 +2155,25 @@ export function ChatManagementPage() {
     if (visibleSessionCodeRef.current !== sessionCode) {
       visibleSessionCodeRef.current = sessionCode;
       setLiveAguiEvents([]);
+      setLiveAguiPendingStartedAt(null);
       setLiveAguiAnchorMessageCode("");
     }
   }, [activeSession?.sessionCode, messages]);
 
   const transcriptAguiEvents = useMemo<TranscriptAguiEvent[]>(() => eventsForLatestAguiRun(liveAguiEvents), [liveAguiEvents]);
+  const liveAguiPending = Boolean(
+    sending
+    && activeSession
+    && runningSessionCode === activeSession.sessionCode
+    && !liveAguiEvents.length,
+  );
+  const canAbortCurrentSession = Boolean(
+    sending
+    && activeSession
+    && runningSessionCode === activeSession.sessionCode,
+  );
   const liveAguiAnchorIndex = useMemo(() => {
-    if (!transcriptAguiEvents.length) return -1;
+    if (!transcriptAguiEvents.length && !liveAguiPending) return -1;
 
     const anchoredIndex = visibleMessages.findIndex((message) => message.messageCode === liveAguiAnchorMessageCode);
     if (anchoredIndex >= 0) return anchoredIndex;
@@ -1977,7 +2183,7 @@ export function ChatManagementPage() {
     }
 
     return -1;
-  }, [liveAguiAnchorMessageCode, transcriptAguiEvents.length, visibleMessages]);
+  }, [liveAguiAnchorMessageCode, liveAguiPending, transcriptAguiEvents.length, visibleMessages]);
 
   const rightPanel = useMemo(() => {
     if (!hasActiveSession) return undefined;
@@ -2001,6 +2207,7 @@ export function ChatManagementPage() {
 
   function handleSessionSelect(sessionCode: string) {
     setActiveSessionCode(sessionCode);
+    setLiveAguiPendingStartedAt(null);
     setUnseenSessionCodes((current) => {
       if (!current.has(sessionCode)) return current;
       const next = new Set(current);
@@ -2009,7 +2216,37 @@ export function ChatManagementPage() {
     });
   }
 
+  function handleModelSelect(optionCode: string) {
+    setSelectedModelCode(optionCode);
+    const sessionCode = activeSession?.sessionCode;
+    if (!sessionCode) return;
+    setSessionModelSelections((current) => (
+      current[sessionCode] === optionCode
+        ? current
+        : {
+          ...current,
+          [sessionCode]: optionCode,
+        }
+    ));
+  }
+
+  function handleAbortSend() {
+    if (!sending) return;
+    streamAbortRequestedRef.current = true;
+    streamAbortControllerRef.current?.abort();
+  }
+
+  function forgetSessionModelSelection(sessionCode: string) {
+    setSessionModelSelections((current) => {
+      if (!(sessionCode in current)) return current;
+      const next = { ...current };
+      delete next[sessionCode];
+      return next;
+    });
+  }
+
   async function handleSend() {
+    if (sending) return;
     if (!activeSession) return;
     const content = composer.trim();
     if (!content) {
@@ -2033,6 +2270,9 @@ export function ChatManagementPage() {
       sendInput.modelCode = selectedModel.modelCode;
     }
     const sendingSessionCode = activeSession.sessionCode;
+    const abortController = new AbortController();
+    streamAbortRequestedRef.current = false;
+    streamAbortControllerRef.current = abortController;
     const optimisticUserCode = `LOCAL-${Date.now()}-USER`;
     const optimisticAssistantCode = `LOCAL-${Date.now()}-ASSISTANT`;
     const optimisticCreatedAt = new Date().toISOString();
@@ -2060,6 +2300,7 @@ export function ChatManagementPage() {
     };
     setSending(true);
     setRunningSessionCode(sendingSessionCode);
+    setLiveAguiPendingStartedAt(Date.now());
     setComposer("");
     setLiveAguiEvents([]);
     setLiveAguiAnchorMessageCode(optimisticUserCode);
@@ -2079,6 +2320,7 @@ export function ChatManagementPage() {
         {
           onAguiEvent: (event) => {
             if (event.threadId && event.threadId !== sendingSessionCode) return;
+            setLiveAguiPendingStartedAt(null);
             setLiveAguiEvents((current) => [...current, event]);
           },
           onDelta: (delta) => {
@@ -2099,6 +2341,7 @@ export function ChatManagementPage() {
             });
           },
         },
+        abortController.signal,
       );
       setSessionGroups((current) => replaceSession(current, result.session));
       if (activeSessionCodeRef.current === result.session.sessionCode) {
@@ -2119,25 +2362,32 @@ export function ChatManagementPage() {
         return next;
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Chat send failed";
-      if (activeSessionCodeRef.current === sendingSessionCode) {
-        setVisibleMessages((current) => (
-          current.some((item) => item.messageCode === optimisticAssistantCode)
-            ? current.map((item) => (
-              item.messageCode === optimisticAssistantCode
-                ? { ...item, content: message }
-                : item
-            ))
-            : [
-              ...current,
-              { ...optimisticAssistantMessage, content: message },
-            ]
-        ));
+      const stopped = streamAbortRequestedRef.current || isAbortError(error);
+      if (stopped) {
+        if (activeSessionCodeRef.current === sendingSessionCode) {
+          setVisibleMessages((current) => current.filter((item) => (
+            item.messageCode !== optimisticAssistantCode || Boolean(item.content.trim())
+          )));
+        }
+        toast.info("Current response has been stopped", { title: "Chat stopped" });
+        return;
       }
-      toast.error(message, { title: "Chat send failed" });
+      const rawMessage = error instanceof Error ? error.message : "Chat send failed";
+      const toastMessage = chatSendErrorToastMessage(rawMessage);
+      if (activeSessionCodeRef.current === sendingSessionCode) {
+        setVisibleMessages((current) => current.filter((item) => (
+          item.messageCode !== optimisticAssistantCode || Boolean(item.content.trim())
+        )));
+      }
+      toast.error(toastMessage, { title: "Chat send failed" });
     } finally {
       setSending(false);
       setRunningSessionCode("");
+      setLiveAguiPendingStartedAt(null);
+      if (streamAbortControllerRef.current === abortController) {
+        streamAbortControllerRef.current = null;
+      }
+      streamAbortRequestedRef.current = false;
     }
   }
 
@@ -2183,6 +2433,7 @@ export function ChatManagementPage() {
         handleSessionSelect(firstSession(nextGroups)?.sessionCode ?? "");
         setVisibleMessages([]);
       }
+      forgetSessionModelSelection(archived.sessionCode);
       toast.success("Session archived", { title: archived.sessionCode });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Archive session failed";
@@ -2211,6 +2462,7 @@ export function ChatManagementPage() {
         handleSessionSelect(firstSession(nextGroups)?.sessionCode ?? "");
         setVisibleMessages([]);
       }
+      forgetSessionModelSelection(deleted.sessionCode);
       toast.success("Session deleted", { title: deleted.sessionCode });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Delete session failed";
@@ -2367,7 +2619,12 @@ export function ChatManagementPage() {
                       message={message}
                     />
                     {liveAguiAnchorIndex >= 0 && visibleMessages[liveAguiAnchorIndex]?.messageCode === message.messageCode ? (
-                      <AguiRunWorkRail events={transcriptAguiEvents} preferences={aguiDebugPreferences} />
+                      <AguiRunWorkRail
+                        events={transcriptAguiEvents}
+                        pending={liveAguiPending}
+                        pendingStartedAt={liveAguiPendingStartedAt}
+                        preferences={aguiDebugPreferences}
+                      />
                     ) : null}
                   </Fragment>
                 )) : activeWorkspaceCode ? (
@@ -2410,7 +2667,7 @@ export function ChatManagementPage() {
                   }}
                 />
                 <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <div className="flex min-w-0 max-w-full flex-1 items-center gap-1 overflow-hidden">
+                  <div className="flex min-w-0 max-w-full items-center gap-1">
                     {agentSelectionLocked ? null : (
                       <div className="min-w-0 max-w-[9.5rem] shrink">
                         <ChatAgentSelector
@@ -2422,19 +2679,38 @@ export function ChatManagementPage() {
                         />
                       </div>
                     )}
-                    <div className="min-w-0 flex-1">
+                    <div
+                      className={cn(
+                        "min-w-0 max-w-full",
+                        agentSelectionLocked ? "w-[min(100%,16rem)]" : "w-[min(100%,14rem)]",
+                      )}
+                    >
                       <ChatModelSelector
                         emptyLabel={modelEmptyLabel}
                         loading={modelsLoading}
                         models={agentScopedModels}
                         selectedModelCode={selectedModelCode}
-                        onSelect={setSelectedModelCode}
+                        onSelect={handleModelSelect}
                       />
                     </div>
                   </div>
-                  <Button className="ml-auto shrink-0" disabled={sending || !activeSession || !selectedModel} size="sm" onClick={() => void handleSend()}>
-                    {sending ? <Wrench size={15} /> : <Send size={15} />}
-                    Send
+                  <Button
+                    className={cn(
+                      "ml-auto shrink-0",
+                      canAbortCurrentSession && "bg-[var(--color-error)] text-[var(--color-on-error)] hover:bg-[var(--color-error-container)]",
+                    )}
+                    disabled={!canAbortCurrentSession && (sending || !activeSession || !selectedModel)}
+                    size="sm"
+                    onClick={() => {
+                      if (canAbortCurrentSession) {
+                        handleAbortSend();
+                        return;
+                      }
+                      void handleSend();
+                    }}
+                  >
+                    {canAbortCurrentSession ? <Square size={14} /> : <Send size={15} />}
+                    {canAbortCurrentSession ? "Stop" : "Send"}
                   </Button>
                 </div>
               </div>
