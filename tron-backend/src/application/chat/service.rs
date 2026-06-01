@@ -13,7 +13,7 @@ use crate::{
             SendChatMessageCommand, UpdateChatSessionCommand,
         },
     },
-    domain::agent::ModelTokenUsage,
+    domain::agent::{AgentModelConfig, ModelTokenUsage},
     domain::chat::{
         ChatError, ChatMessage, ChatMessageChannel, ChatMessageRole, ChatSession, ChatSessionGroup,
         ChatSessionStatus,
@@ -22,7 +22,7 @@ use crate::{
 };
 
 const MAIN_AGENT_CODE: &str = "main-agent";
-const MAIN_RUNTIME_ADAPTER_KEY: &str = "MAIN_REACT";
+const MAIN_RUNTIME_ADAPTER_KEY: &str = "REACT";
 const CODEX_RUNTIME_ADAPTER_KEY: &str = "CODEX_EXEC";
 const OPENCODE_RUNTIME_ADAPTER_KEY: &str = "OPENCODE_RUN";
 
@@ -135,29 +135,46 @@ impl ChatService {
         &self,
         session_code: &str,
         command: SendChatMessageCommand,
+        resolved_model: AgentModelConfig,
         user_code: Option<String>,
         agent: AgentInvocationService,
     ) -> Result<ChatSendResult, ChatSendError> {
-        self.send_message_inner(session_code, command, user_code, agent, None)
-            .await
+        self.send_message_inner(
+            session_code,
+            command,
+            resolved_model,
+            user_code,
+            agent,
+            None,
+        )
+        .await
     }
 
     pub async fn send_message_stream(
         &self,
         session_code: &str,
         command: SendChatMessageCommand,
+        resolved_model: AgentModelConfig,
         user_code: Option<String>,
         agent: AgentInvocationService,
         sink: ModelStreamSink,
     ) -> Result<ChatSendResult, ChatSendError> {
-        self.send_message_inner(session_code, command, user_code, agent, Some(sink))
-            .await
+        self.send_message_inner(
+            session_code,
+            command,
+            resolved_model,
+            user_code,
+            agent,
+            Some(sink),
+        )
+        .await
     }
 
     async fn send_message_inner(
         &self,
         session_code: &str,
         command: SendChatMessageCommand,
+        resolved_model: AgentModelConfig,
         user_code: Option<String>,
         agent: AgentInvocationService,
         sink: Option<ModelStreamSink>,
@@ -209,7 +226,8 @@ impl ChatService {
                 .or(session.system_agent_session_id.clone()),
             app_code: command.app_code.or(session.app_code.clone()),
             task_code: command.task_code.or(session.task_code.clone()),
-            model: command.model,
+            model: Some(resolved_model),
+            system_model_id: command.system_model_id,
             limits: command.limits,
             tools: command.tools,
         };

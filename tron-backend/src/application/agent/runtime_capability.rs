@@ -1,4 +1,6 @@
-use crate::domain::agent::{RuntimeAdapterCapabilityRecord, SystemAgentRegistryEntry};
+use crate::domain::agent::{
+    AgentRuntimeType, RuntimeAdapterCapabilityRecord, SystemAgentRegistryEntry,
+};
 
 use super::{RuntimeAdapterKey, runtime_adapter_descriptors};
 
@@ -43,22 +45,26 @@ fn availability_for_descriptor(
     key: RuntimeAdapterKey,
 ) -> (bool, bool) {
     match key {
-        RuntimeAdapterKey::MainReact => (true, true),
-        RuntimeAdapterKey::CodexExec => system_agent_availability(entries, "codex"),
-        RuntimeAdapterKey::OpenCodeRun => system_agent_availability(entries, "opencode"),
+        RuntimeAdapterKey::React => (true, true),
+        RuntimeAdapterKey::CodexExec => {
+            system_runtime_availability(entries, AgentRuntimeType::CodexExec)
+        }
+        RuntimeAdapterKey::OpenCodeRun => {
+            system_runtime_availability(entries, AgentRuntimeType::OpenCodeRun)
+        }
         RuntimeAdapterKey::CodexAppServer
         | RuntimeAdapterKey::OpenCodeServe
         | RuntimeAdapterKey::OpenCodeAcp => (true, true),
     }
 }
 
-fn system_agent_availability(
+fn system_runtime_availability(
     entries: &[SystemAgentRegistryEntry],
-    agent_code: &str,
+    runtime_type: AgentRuntimeType,
 ) -> (bool, bool) {
     let Some(entry) = entries
         .iter()
-        .find(|item| item.agent_code.eq_ignore_ascii_case(agent_code))
+        .find(|item| item.runtime_type == runtime_type)
     else {
         return (false, false);
     };

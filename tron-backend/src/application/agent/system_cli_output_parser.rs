@@ -2,7 +2,7 @@ use serde_json::Value;
 
 use crate::domain::agent::{ModelStreamEvent, ModelTokenUsage};
 
-use super::system_cli_model_client::SystemAgentCliKind;
+use super::runtime_adapter::SystemAgentCliKind;
 
 #[derive(Debug, Default)]
 pub(super) struct ParsedSystemAgentOutput {

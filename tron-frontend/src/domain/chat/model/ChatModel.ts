@@ -82,7 +82,7 @@ export interface SendChatMessageInput {
   taskCode?: string | null;
   agentCode?: string | null;
   modelCode?: string | null;
-  model?: Record<string, unknown>;
+  systemModelId?: string | null;
 }
 
 export interface ChatAguiEvent {

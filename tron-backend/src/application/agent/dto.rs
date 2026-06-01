@@ -11,6 +11,7 @@ pub struct AgentInvocationCommand {
     pub workspace_code: Option<String>,
     pub conversation_code: Option<String>,
     pub agent_code: Option<String>,
+    pub system_model_id: Option<String>,
     #[serde(skip)]
     pub system_agent_session_id: Option<String>,
     pub app_code: Option<String>,

@@ -772,19 +772,6 @@ function fuzzyModelMatch(query: string, model: ChatModelOption) {
   return fuzzyTextMatch(query, model.displayName) || fuzzyTextMatch(query, model.modelName);
 }
 
-function systemAgentModelConfig(modelName: string, contextWindowTokens?: number | null) {
-  return {
-    apiKey: "sk-system-agent",
-    baseUrl: "http://system-agent.local",
-    contextWindowTokens: contextWindowTokens ?? undefined,
-    maxRetries: 0,
-    modelCode: "SYSTEM_AGENT_MODEL",
-    modelName,
-    protocol: "CHAT_COMPLETIONS",
-    timeoutMs: 180_000,
-  };
-}
-
 function iconButtonClass(active = false) {
   return cn(
     "inline-flex size-8 items-center justify-center rounded-md border border-transparent text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50",
@@ -2022,10 +2009,7 @@ export function ChatManagementPage() {
       workspaceCode: activeSession.workspaceCode,
     };
     if (selectedModel.source === "system-agent") {
-      sendInput.model = systemAgentModelConfig(
-        selectedModel.modelName,
-        selectedModel.contextWindowTokens,
-      );
+      sendInput.systemModelId = selectedModel.modelName;
     } else {
       sendInput.modelCode = selectedModel.modelCode;
     }

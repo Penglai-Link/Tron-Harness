@@ -13,10 +13,10 @@ use crate::{
     config::SystemAgentConfig,
     domain::{
         agent::{
-            AgentManagementError, ManagedAgentSource, ManagedAgentType, ManagedSystemAgentRecord,
-            PlatformMainAgentConfig, RuntimeAdapterCapabilityRecord, SystemAgentModelRecord,
-            SystemAgentRegistryEntry, SystemAgentStatus, SystemAgentSyncResult,
-            WorkspaceSystemAgentPolicy,
+            AgentManagementError, AgentRuntimeType, ManagedAgentSource, ManagedAgentType,
+            ManagedSystemAgentRecord, PlatformMainAgentConfig, RuntimeAdapterCapabilityRecord,
+            SystemAgentModelRecord, SystemAgentRegistryEntry, SystemAgentStatus,
+            SystemAgentSyncResult, WorkspaceSystemAgentPolicy,
         },
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceStatus},
     },
@@ -30,11 +30,14 @@ pub struct UpdatePlatformMainAgentCommand {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResolvedSystemAgentRuntime {
+pub struct ResolvedAgentRuntime {
     pub agent_code: String,
-    pub command_name: String,
+    pub runtime_type: AgentRuntimeType,
+    pub command_name: Option<String>,
     pub name: String,
 }
+
+const MAIN_AGENT_CODE: &str = "main-agent";
 
 pub trait AgentManagementRepository: Send {
     fn get_main_agent_config(
@@ -70,6 +73,7 @@ struct SupportedSystemAgentDefinition {
     agent_code: String,
     name: String,
     description: String,
+    runtime_type: AgentRuntimeType,
     command_name: String,
 }
 
@@ -225,6 +229,7 @@ impl AgentManagementService {
                 agent_code: supported.agent_code.clone(),
                 name: supported.name.clone(),
                 description: supported.description.clone(),
+                runtime_type: supported.runtime_type,
                 command_name: supported.command_name.clone(),
                 source: ManagedAgentSource::System,
                 enabled: existing_entry.map(|entry| entry.enabled).unwrap_or(true),
@@ -326,15 +331,26 @@ impl AgentManagementService {
             .collect())
     }
 
-    pub fn resolve_workspace_system_agent_runtime(
+    pub fn resolve_workspace_agent_runtime(
         &self,
         workspace_code: &str,
-        agent_code: &str,
-    ) -> Result<ResolvedSystemAgentRuntime, AgentManagementError> {
+        requested_agent_code: Option<&str>,
+    ) -> Result<ResolvedAgentRuntime, AgentManagementError> {
         self.active_workspace_detail(workspace_code)?;
-        let normalized_agent_code = agent_code.trim();
+        let normalized_agent_code = requested_agent_code
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(MAIN_AGENT_CODE);
         if normalized_agent_code.is_empty() {
             return Err(AgentManagementError::SystemAgentNotFound);
+        }
+        if normalized_agent_code.eq_ignore_ascii_case(MAIN_AGENT_CODE) {
+            return Ok(ResolvedAgentRuntime {
+                agent_code: MAIN_AGENT_CODE.to_string(),
+                runtime_type: AgentRuntimeType::React,
+                command_name: None,
+                name: "Main Agent".to_string(),
+            });
         }
         let entry = self.required_system_agent(normalized_agent_code)?;
         if !entry.available || !entry.enabled || entry.command_name.trim().is_empty() {
@@ -349,9 +365,10 @@ impl AgentManagementService {
         if workspace_override_disabled {
             return Err(AgentManagementError::SystemAgentUnavailable);
         }
-        Ok(ResolvedSystemAgentRuntime {
+        Ok(ResolvedAgentRuntime {
             agent_code: entry.agent_code,
-            command_name: entry.command_name,
+            runtime_type: entry.runtime_type,
+            command_name: Some(entry.command_name),
             name: entry.name,
         })
     }
@@ -476,6 +493,7 @@ fn managed_system_record(
         name: entry.name.clone(),
         description: entry.description.clone(),
         agent_type: ManagedAgentType::System,
+        runtime_type: entry.runtime_type,
         source: entry.source,
         inherited_from: workspace_disabled_override.map(|_| "Platform".to_string()),
         platform_enabled: workspace_disabled_override.map(|_| entry.enabled),
@@ -504,12 +522,14 @@ fn supported_system_agents_from_config(
             agent_code: "codex".into(),
             name: "Codex".into(),
             description: "OpenAI Codex CLI agent runtime.".into(),
+            runtime_type: AgentRuntimeType::CodexExec,
             command_name: config.codex_command.clone(),
         },
         SupportedSystemAgentDefinition {
             agent_code: "opencode".into(),
             name: "OpenCode".into(),
             description: "OpenCode CLI agent runtime.".into(),
+            runtime_type: AgentRuntimeType::OpenCodeRun,
             command_name: config.opencode_command.clone(),
         },
     ]

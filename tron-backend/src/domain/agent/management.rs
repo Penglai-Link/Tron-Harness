@@ -17,6 +17,17 @@ pub enum ManagedAgentType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum AgentRuntimeType {
+    React,
+    CodexExec,
+    CodexAppServer,
+    OpenCodeRun,
+    OpenCodeServe,
+    OpenCodeAcp,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ManagedAgentSource {
     System,
 }
@@ -35,6 +46,7 @@ pub struct SystemAgentRegistryEntry {
     pub agent_code: String,
     pub name: String,
     pub description: String,
+    pub runtime_type: AgentRuntimeType,
     pub command_name: String,
     pub source: ManagedAgentSource,
     pub enabled: bool,
@@ -51,6 +63,7 @@ pub struct ManagedSystemAgentRecord {
     pub name: String,
     pub description: String,
     pub agent_type: ManagedAgentType,
+    pub runtime_type: AgentRuntimeType,
     pub source: ManagedAgentSource,
     pub inherited_from: Option<String>,
     pub platform_enabled: Option<bool>,

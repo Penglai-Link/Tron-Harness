@@ -22,7 +22,7 @@ use crate::{
         },
         outbound::{
             crypto::BcryptPasswordHasher,
-            model::{HttpLlmRuntimeClient, HttpModelClient},
+            model::{HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient},
             persistence::{
                 GrafeoAdapterConfig, GrafeoGraphStore, GrafeoOntologyStore, GrafeoStoreCore,
                 SqliteAgentEventReplayStore, SqliteAgentManagementRepository,
@@ -53,6 +53,7 @@ use crate::{
     health::health,
     shared::{
         event_bus::{AguiEventSink, EventBusHandle, EventBusRuntimeBuilder},
+        http_client::HttpClientPool,
         id::SnowflakedSnowflakeIdProvider,
     },
 };
@@ -74,6 +75,7 @@ pub struct AppState {
     pub agui_events: Arc<AguiEventSink>,
     pub agui_replay_store: Arc<dyn AgentAguiReplayStore>,
     pub agent_model_client: Arc<dyn ModelClient>,
+    pub runtime_http_client: reqwest::Client,
     pub agent_management: AgentManagementService,
     pub agent_runs: AgentRunHistoryService,
     pub agent_tool_registry: Arc<ToolRegistry>,
@@ -107,7 +109,13 @@ impl AppState {
         .register_sink(agui_events.clone())
         .register_sink(agui_replay_store.clone())
         .build();
-        let agent_model_client = Arc::new(HttpModelClient::default());
+        let http_client_pool = HttpClientPool::from_profiles(&config.http_clients)
+            .expect("http client pool should initialize");
+        let model_inference_client = http_client_pool.model_inference_client();
+        let runtime_http_client = http_client_pool.runtime_control_client();
+        let agent_model_client = Arc::new(HttpModelClient::new(Arc::new(
+            HttpModelProviderClient::new(model_inference_client.clone()),
+        )));
         let agent_tool_registry = Arc::new(ToolRegistry::default());
         let users = if config.database_url == ":memory:" {
             GLOBAL_USER_SERVICE
@@ -216,7 +224,7 @@ impl AppState {
         };
         let llm_runtime = LlmRuntimeService::new(
             Arc::new(models.clone()),
-            Arc::new(HttpLlmRuntimeClient::default()),
+            Arc::new(HttpLlmRuntimeClient::new(model_inference_client)),
         );
         let (graphs, ontologies) = if config.graph_storage_path == ":memory:" {
             GLOBAL_GRAPH_SERVICES
@@ -249,6 +257,7 @@ impl AppState {
             agui_events,
             agui_replay_store,
             agent_model_client,
+            runtime_http_client,
             agent_management,
             agent_runs,
             agent_tool_registry,

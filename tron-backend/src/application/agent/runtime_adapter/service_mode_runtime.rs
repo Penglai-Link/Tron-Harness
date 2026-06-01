@@ -24,13 +24,14 @@ impl ServiceModeRuntime {
         capabilities: RuntimeCapabilities,
         endpoint: String,
         working_directory: Option<String>,
+        client: reqwest::Client,
     ) -> Self {
         Self {
             key,
             capabilities,
             endpoint,
             working_directory,
-            client: reqwest::Client::new(),
+            client,
         }
     }
 

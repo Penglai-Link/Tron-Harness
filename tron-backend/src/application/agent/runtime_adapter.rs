@@ -1,22 +1,25 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::{
-    domain::agent::{AgentError, AgentRunContext, AgentRunResult, ToolRegistry},
+    domain::agent::{AgentRunContext, AgentRunResult, ToolRegistry},
     shared::event_bus::EventBusHandle,
 };
 
-use super::{
-    AgentInvocationError, ModelClient, ModelStreamSink, ReactAgentBuilder, SystemAgentCliKind,
-    SystemAgentCliModelClient,
-};
+use super::{AgentInvocationError, ModelClient, ModelStreamSink};
 
+mod react_runtime;
 mod service_mode_runtime;
+mod system_cli_runtime;
 
+use react_runtime::ReactRuntime;
 use service_mode_runtime::ServiceModeRuntime;
+use system_cli_runtime::SystemCliRuntime;
+
+pub(crate) use system_cli_runtime::SystemAgentCliKind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RuntimeAdapterKey {
-    MainReact,
+    React,
     CodexExec,
     CodexAppServer,
     OpenCodeRun,
@@ -27,7 +30,7 @@ pub enum RuntimeAdapterKey {
 impl RuntimeAdapterKey {
     pub fn code(self) -> &'static str {
         match self {
-            Self::MainReact => "MAIN_REACT",
+            Self::React => "REACT",
             Self::CodexExec => "CODEX_EXEC",
             Self::CodexAppServer => "CODEX_APP_SERVER",
             Self::OpenCodeRun => "OPENCODE_RUN",
@@ -38,7 +41,7 @@ impl RuntimeAdapterKey {
 
     pub fn from_code(code: &str) -> Option<Self> {
         match code.trim().to_ascii_uppercase().as_str() {
-            "MAIN_REACT" => Some(Self::MainReact),
+            "REACT" => Some(Self::React),
             "CODEX_EXEC" => Some(Self::CodexExec),
             "CODEX_APP_SERVER" => Some(Self::CodexAppServer),
             "OPENCODE_RUN" => Some(Self::OpenCodeRun),
@@ -50,11 +53,11 @@ impl RuntimeAdapterKey {
 
     pub fn descriptor(self) -> RuntimeAdapterDescriptor {
         match self {
-            Self::MainReact => RuntimeAdapterDescriptor {
+            Self::React => RuntimeAdapterDescriptor {
                 key: self,
-                name: "Main React Runtime",
+                name: "React Runtime",
                 stage: RuntimeAdapterStage::Ga,
-                capabilities: RuntimeCapabilities::main_react(),
+                capabilities: RuntimeCapabilities::react(),
             },
             Self::CodexExec => RuntimeAdapterDescriptor {
                 key: self,
@@ -115,7 +118,7 @@ pub struct RuntimeAdapterDescriptor {
 
 pub fn runtime_adapter_descriptors() -> Vec<RuntimeAdapterDescriptor> {
     [
-        RuntimeAdapterKey::MainReact,
+        RuntimeAdapterKey::React,
         RuntimeAdapterKey::CodexExec,
         RuntimeAdapterKey::CodexAppServer,
         RuntimeAdapterKey::OpenCodeRun,
@@ -137,7 +140,7 @@ pub struct RuntimeCapabilities {
 }
 
 impl RuntimeCapabilities {
-    fn main_react() -> Self {
+    fn react() -> Self {
         Self {
             supports_resume: false,
             supports_cancel: false,
@@ -193,7 +196,7 @@ pub trait AgentRuntime: Send + Sync {
 
 #[derive(Debug, Clone)]
 pub enum RuntimeAdapterSelection {
-    MainReact,
+    React,
     CodexExec {
         command_name: String,
         working_directory: Option<String>,
@@ -221,6 +224,7 @@ pub struct AgentRuntimeRegistry {
     default_model_client: Arc<dyn ModelClient>,
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
+    runtime_http_client: reqwest::Client,
 }
 
 impl AgentRuntimeRegistry {
@@ -228,19 +232,21 @@ impl AgentRuntimeRegistry {
         default_model_client: Arc<dyn ModelClient>,
         tool_registry: Arc<ToolRegistry>,
         event_bus: EventBusHandle,
+        runtime_http_client: reqwest::Client,
     ) -> Self {
         Self {
             default_model_client,
             tool_registry,
             event_bus,
+            runtime_http_client,
         }
     }
 
     pub fn resolve(&self, selection: RuntimeAdapterSelection) -> Arc<dyn AgentRuntime> {
         match selection {
-            RuntimeAdapterSelection::MainReact => Arc::new(ReactAgentRuntime::new(
-                RuntimeAdapterKey::MainReact,
-                RuntimeCapabilities::main_react(),
+            RuntimeAdapterSelection::React => Arc::new(ReactRuntime::new(
+                RuntimeAdapterKey::React,
+                RuntimeCapabilities::react(),
                 self.default_model_client.clone(),
                 self.tool_registry.clone(),
                 self.event_bus.clone(),
@@ -248,30 +254,22 @@ impl AgentRuntimeRegistry {
             RuntimeAdapterSelection::CodexExec {
                 command_name,
                 working_directory,
-            } => Arc::new(ReactAgentRuntime::new(
+            } => Arc::new(SystemCliRuntime::new(
                 RuntimeAdapterKey::CodexExec,
                 RuntimeCapabilities::system_cli(),
-                Arc::new(SystemAgentCliModelClient::new(
-                    SystemAgentCliKind::Codex,
-                    command_name,
-                    working_directory,
-                )),
-                self.tool_registry.clone(),
-                self.event_bus.clone(),
+                SystemAgentCliKind::Codex,
+                command_name,
+                working_directory,
             )),
             RuntimeAdapterSelection::OpenCodeRun {
                 command_name,
                 working_directory,
-            } => Arc::new(ReactAgentRuntime::new(
+            } => Arc::new(SystemCliRuntime::new(
                 RuntimeAdapterKey::OpenCodeRun,
                 RuntimeCapabilities::system_cli(),
-                Arc::new(SystemAgentCliModelClient::new(
-                    SystemAgentCliKind::OpenCode,
-                    command_name,
-                    working_directory,
-                )),
-                self.tool_registry.clone(),
-                self.event_bus.clone(),
+                SystemAgentCliKind::OpenCode,
+                command_name,
+                working_directory,
             )),
             RuntimeAdapterSelection::CodexAppServer {
                 endpoint,
@@ -281,6 +279,7 @@ impl AgentRuntimeRegistry {
                 RuntimeCapabilities::service_mode(),
                 endpoint,
                 working_directory,
+                self.runtime_http_client.clone(),
             )),
             RuntimeAdapterSelection::OpenCodeServe {
                 endpoint,
@@ -290,6 +289,7 @@ impl AgentRuntimeRegistry {
                 RuntimeCapabilities::service_mode(),
                 endpoint,
                 working_directory,
+                self.runtime_http_client.clone(),
             )),
             RuntimeAdapterSelection::OpenCodeAcp {
                 endpoint,
@@ -299,119 +299,8 @@ impl AgentRuntimeRegistry {
                 RuntimeCapabilities::service_mode(),
                 endpoint,
                 working_directory,
+                self.runtime_http_client.clone(),
             )),
-        }
-    }
-}
-
-#[derive(Clone)]
-struct ReactAgentRuntime {
-    key: RuntimeAdapterKey,
-    capabilities: RuntimeCapabilities,
-    model_client: Arc<dyn ModelClient>,
-    tool_registry: Arc<ToolRegistry>,
-    event_bus: EventBusHandle,
-}
-
-impl ReactAgentRuntime {
-    fn new(
-        key: RuntimeAdapterKey,
-        capabilities: RuntimeCapabilities,
-        model_client: Arc<dyn ModelClient>,
-        tool_registry: Arc<ToolRegistry>,
-        event_bus: EventBusHandle,
-    ) -> Self {
-        Self {
-            key,
-            capabilities,
-            model_client,
-            tool_registry,
-            event_bus,
-        }
-    }
-
-    fn run<'a>(
-        &'a self,
-        context: AgentRunContext,
-        sink: Option<ModelStreamSink>,
-    ) -> Pin<Box<dyn Future<Output = Result<AgentRunResult, AgentInvocationError>> + Send + 'a>>
-    {
-        Box::pin(async move {
-            let agent = ReactAgentBuilder::new(
-                self.model_client.clone(),
-                self.tool_registry.clone(),
-                self.event_bus.clone(),
-            )
-            .build()
-            .map_err(map_agent_error)?;
-            match sink {
-                Some(sink) => agent.run_stream(context, sink).await,
-                None => agent.run(context).await,
-            }
-            .map_err(map_agent_error)
-        })
-    }
-}
-
-impl AgentRuntime for ReactAgentRuntime {
-    fn key(&self) -> RuntimeAdapterKey {
-        self.key
-    }
-
-    fn capabilities(&self) -> RuntimeCapabilities {
-        self.capabilities
-    }
-
-    fn start<'a>(
-        &'a self,
-        context: AgentRunContext,
-        sink: Option<ModelStreamSink>,
-    ) -> Pin<Box<dyn Future<Output = Result<AgentRunResult, AgentInvocationError>> + Send + 'a>>
-    {
-        self.run(context, sink)
-    }
-
-    fn resume<'a>(
-        &'a self,
-        session_id: &'a str,
-        mut context: AgentRunContext,
-        sink: Option<ModelStreamSink>,
-    ) -> Pin<Box<dyn Future<Output = Result<AgentRunResult, AgentInvocationError>> + Send + 'a>>
-    {
-        if !self.capabilities.supports_resume {
-            return Box::pin(async move {
-                Err(AgentInvocationError::RuntimeFailed(format!(
-                    "runtime adapter `{}` does not support resume",
-                    self.key.code()
-                )))
-            });
-        }
-        context.system_agent_session_id = Some(session_id.to_string());
-        self.run(context, sink)
-    }
-
-    fn cancel<'a>(
-        &'a self,
-        run_code: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<(), AgentInvocationError>> + Send + 'a>> {
-        Box::pin(async move {
-            Err(AgentInvocationError::RuntimeFailed(format!(
-                "runtime adapter `{}` does not support cancel for run `{run_code}`",
-                self.key.code()
-            )))
-        })
-    }
-}
-
-fn map_agent_error(error: AgentError) -> AgentInvocationError {
-    match error {
-        AgentError::ModelFailure(message) => AgentInvocationError::ModelFailed(message),
-        AgentError::ToolFailure(message)
-        | AgentError::MissingTool(message)
-        | AgentError::UnauthorizedTool(message) => AgentInvocationError::ToolFailed(message),
-        AgentError::MaxStepsExceeded => AgentInvocationError::MaxStepsExceeded,
-        AgentError::InvalidConfiguration(message) | AgentError::EventPublishFailed(message) => {
-            AgentInvocationError::RuntimeFailed(message)
         }
     }
 }

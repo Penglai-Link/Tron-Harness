@@ -9,7 +9,7 @@ use crate::{
 
 use super::protocol_adapters::{ModelProtocolAdapter, adapter_for_protocol};
 
-pub trait ProviderClient: Send + Sync {
+pub trait ModelProviderClient: Send + Sync {
     fn post_json<'a>(
         &'a self,
         config: &'a AgentModelConfig,
@@ -28,19 +28,11 @@ pub trait ProviderClient: Send + Sync {
 
 #[derive(Clone)]
 pub struct HttpModelClient {
-    provider: Arc<dyn ProviderClient>,
-}
-
-impl Default for HttpModelClient {
-    fn default() -> Self {
-        Self {
-            provider: Arc::new(ReqwestProviderClient::default()),
-        }
-    }
+    provider: Arc<dyn ModelProviderClient>,
 }
 
 impl HttpModelClient {
-    pub fn new(provider: Arc<dyn ProviderClient>) -> Self {
+    pub fn new(provider: Arc<dyn ModelProviderClient>) -> Self {
         Self { provider }
     }
 }
@@ -129,12 +121,18 @@ impl HttpModelClient {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct ReqwestProviderClient {
+#[derive(Debug, Clone)]
+pub struct HttpModelProviderClient {
     client: reqwest::Client,
 }
 
-impl ProviderClient for ReqwestProviderClient {
+impl HttpModelProviderClient {
+    pub fn new(client: reqwest::Client) -> Self {
+        Self { client }
+    }
+}
+
+impl ModelProviderClient for HttpModelProviderClient {
     fn post_json<'a>(
         &'a self,
         config: &'a AgentModelConfig,
@@ -187,7 +185,7 @@ impl ProviderClient for ReqwestProviderClient {
     }
 }
 
-impl ReqwestProviderClient {
+impl HttpModelProviderClient {
     fn request(
         &self,
         config: &AgentModelConfig,

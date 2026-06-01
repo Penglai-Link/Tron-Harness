@@ -1,0 +1,62 @@
+bindAddress: 127.0.0.1
+port: 8080
+databaseUrl: tron-backend/target/tron.sqlite3
+graphStoragePath: tron-backend/target/tron.graph.grafeo
+
+systemAgents:
+  codexCommand: codex
+  opencodeCommand: opencode
+
+httpClients:
+  default:
+    connectTimeoutMs: 1500
+    requestTimeoutMs: 30000
+    poolIdleTimeoutMs: 90000
+    poolMaxIdlePerHost: 32
+    tcpKeepaliveMs: 30000
+  modelInference:
+    requestTimeoutMs: 180000
+  runtimeControl:
+    requestTimeoutMs: 20000
+
+auth:
+  jwtSecret: tron-dev-jwt-secret
+  accessTokenTtlSeconds: 900
+  refreshTokenTtlSeconds: 604800
+  cookieSecure: false
+  devOauth2Enabled: false
+  devOauth2Name: OAuth2
+  githubOauth:
+    enabled: false
+    clientId: ""
+    clientSecret: ""
+    redirectUri: http://localhost:5173/api/v1/auth/oauth2/callback/github
+    name: GitHub
+    scope: "read:user user:email"
+    authorizeUrl: https://github.com/login/oauth/authorize
+    tokenUrl: https://github.com/login/oauth/access_token
+    userApiUrl: https://api.github.com/user
+    emailsApiUrl: https://api.github.com/user/emails
+
+eventBus:
+  enabled: true
+  criticalIngressCapacity: 128
+  standardIngressCapacity: 512
+  defaultSinkCapacity: 256
+  maxNameBytes: 96
+  maxProducerBytes: 48
+  maxSummaryBytes: 160
+  maxAttrs: 8
+  maxAttrKeyBytes: 32
+  maxAttrValueBytes: 96
+  maxPayloadFields: 8
+  maxPayloadBytes: 1024
+  maxSubjectTypeBytes: 32
+  maxSubjectCodeBytes: 64
+  maxActorUserCodeBytes: 64
+  maxActorUsernameBytes: 64
+  maxRequestFieldBytes: 64
+  aguiReplayEventsPerStream: 32
+  aguiReplayBytesPerStream: 65536
+  aguiGlobalReplayBytes: 2097152
+  aguiStreamIdleTtlSeconds: 30

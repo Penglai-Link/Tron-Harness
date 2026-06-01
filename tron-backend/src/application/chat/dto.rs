@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     application::agent::AgentInvocationResult,
     domain::{
-        agent::{AgentModelConfig, AgentRunLimits, EffectiveTool},
+        agent::{AgentRunLimits, EffectiveTool},
         chat::{ChatMessage, ChatSession},
     },
 };
@@ -41,7 +41,7 @@ pub struct SendChatMessageCommand {
     pub task_code: Option<String>,
     pub agent_code: Option<String>,
     pub model_code: Option<String>,
-    pub model: Option<AgentModelConfig>,
+    pub system_model_id: Option<String>,
     pub limits: Option<AgentRunLimits>,
     #[serde(default)]
     pub tools: Vec<EffectiveTool>,

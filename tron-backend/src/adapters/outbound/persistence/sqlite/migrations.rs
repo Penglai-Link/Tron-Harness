@@ -67,3 +67,5 @@ pub(super) const CHAT_MESSAGE_TOKEN_USAGE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260528_0021_add_chat_message_token_usage.sql");
 pub(super) const AGENT_MANAGEMENT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260529_0022_create_agent_management.sql");
+pub(super) const AGENT_MANAGEMENT_RUNTIME_TYPE_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260601_0027_add_agent_management_runtime_type.sql");

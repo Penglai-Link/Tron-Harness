@@ -93,6 +93,7 @@ fn registry() -> AgentRuntimeRegistry {
         Arc::new(NoopModelClient),
         Arc::new(ToolRegistry::default()),
         EventBusHandle::disabled(),
+        reqwest::Client::new(),
     )
 }
 
@@ -210,7 +211,7 @@ fn runtime_adapter_descriptors_cover_all_runtime_keys() {
     assert!(
         descriptors
             .iter()
-            .any(|item| item.key == RuntimeAdapterKey::MainReact)
+            .any(|item| item.key == RuntimeAdapterKey::React)
     );
     assert!(
         descriptors
@@ -242,8 +243,8 @@ fn runtime_adapter_descriptors_cover_all_runtime_keys() {
 #[test]
 fn runtime_adapter_key_from_code_parses_known_values() {
     assert_eq!(
-        RuntimeAdapterKey::from_code("main_react"),
-        Some(RuntimeAdapterKey::MainReact)
+        RuntimeAdapterKey::from_code("react"),
+        Some(RuntimeAdapterKey::React)
     );
     assert_eq!(
         RuntimeAdapterKey::from_code("CODEX_APP_SERVER"),

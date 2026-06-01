@@ -17,14 +17,14 @@ use crate::{
     application::{
         agent::{
             AgentAguiStreamService, AgentInvocationError, AgentInvocationService,
-            generate_agent_run_code,
+            ResolvedAgentRuntime, build_system_runtime_model_config, generate_agent_run_code,
         },
         chat::{
             ChatSendError, ChatSendResult, ChatSessionQuery, CreateChatSessionCommand,
             SendChatMessageCommand, UpdateChatSessionCommand,
         },
     },
-    domain::agent::ModelStreamEvent,
+    domain::agent::{AgentModelConfig, AgentRuntimeType, ModelStreamEvent},
     domain::{
         agent::ManagedSystemAgentRecord,
         chat::{ChatError, ChatSession},
@@ -125,14 +125,19 @@ pub async fn send_message(
     State(state): State<AppState>,
     auth: RequestAuthContext,
     Path(session_code): Path<String>,
-    Json(mut request): Json<SendChatMessageCommand>,
+    Json(request): Json<SendChatMessageCommand>,
 ) -> Response {
     let Ok(session) = state.chats.get_session(&session_code) else {
         return chat_error_response(ChatError::SessionNotFound);
     };
-    if let Err(error) = prepare_send_model(&state, &session, &mut request) {
-        return chat_send_error_response(error);
-    }
+    let resolved_runtime = match resolve_chat_agent_runtime(&state, &session, &request) {
+        Ok(runtime) => runtime,
+        Err(error) => return chat_send_error_response(error),
+    };
+    let resolved_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
+        Ok(model) => model,
+        Err(error) => return chat_send_error_response(error),
+    };
 
     let agent_service = AgentInvocationService::new(
         state.workspaces.clone(),
@@ -144,12 +149,14 @@ pub async fn send_message(
         state.event_bus.clone(),
         state.agent_model_client.clone(),
         state.agent_tool_registry.clone(),
+        state.runtime_http_client.clone(),
     );
     match state
         .chats
         .send_message(
             &session_code,
             request,
+            resolved_model,
             Some(auth.user().user_code.clone()),
             agent_service,
         )
@@ -169,11 +176,15 @@ pub async fn stream_message(
     let Ok(session) = state.chats.get_session(&session_code) else {
         return chat_error_response(ChatError::SessionNotFound);
     };
-    let effective_agent_code = effective_agent_code(&session, &request);
-    let system_agent_live_stream = !is_main_agent_code(&effective_agent_code);
-    if let Err(error) = prepare_send_model(&state, &session, &mut request) {
-        return chat_send_error_response(error);
-    }
+    let resolved_runtime = match resolve_chat_agent_runtime(&state, &session, &request) {
+        Ok(runtime) => runtime,
+        Err(error) => return chat_send_error_response(error),
+    };
+    let system_agent_live_stream = uses_system_live_stream(&resolved_runtime);
+    let resolved_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
+        Ok(model) => model,
+        Err(error) => return chat_send_error_response(error),
+    };
 
     let run_code = generate_agent_run_code();
     request.run_code = Some(run_code.clone());
@@ -201,6 +212,7 @@ pub async fn stream_message(
         state.event_bus.clone(),
         state.agent_model_client.clone(),
         state.agent_tool_registry.clone(),
+        state.runtime_http_client.clone(),
     );
     let sink = Arc::new(move |event: ModelStreamEvent| {
         let _ = model_event_sender.send(event);
@@ -211,6 +223,7 @@ pub async fn stream_message(
             .send_message_stream(
                 &session_code_for_task,
                 request,
+                resolved_model,
                 user_code,
                 agent_service,
                 sink,
@@ -432,10 +445,6 @@ fn normalized_optional(value: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-fn is_main_agent_code(agent_code: &str) -> bool {
-    agent_code.trim().eq_ignore_ascii_case("main-agent")
-}
-
 fn effective_agent_code(session: &ChatSession, request: &SendChatMessageCommand) -> String {
     let selected = if session.last_run_code.is_some() {
         session.agent_code.clone()
@@ -445,32 +454,62 @@ fn effective_agent_code(session: &ChatSession, request: &SendChatMessageCommand)
     selected.unwrap_or_else(|| "main-agent".to_string())
 }
 
+fn resolve_chat_agent_runtime(
+    state: &AppState,
+    session: &ChatSession,
+    request: &SendChatMessageCommand,
+) -> Result<ResolvedAgentRuntime, ChatSendError> {
+    let effective_agent_code = effective_agent_code(session, request);
+    state
+        .agent_management
+        .resolve_workspace_agent_runtime(
+            &session.workspace_code,
+            Some(effective_agent_code.as_str()),
+        )
+        .map_err(|error| match error {
+            crate::domain::agent::AgentManagementError::InvalidWorkspace => {
+                ChatSendError::Chat(ChatError::WorkspaceForbidden)
+            }
+            crate::domain::agent::AgentManagementError::SystemAgentNotFound => {
+                ChatSendError::Agent(AgentInvocationError::RuntimeFailed(format!(
+                    "agent `{effective_agent_code}` was not found"
+                )))
+            }
+            crate::domain::agent::AgentManagementError::SystemAgentUnavailable => {
+                ChatSendError::Agent(AgentInvocationError::RuntimeFailed(format!(
+                    "agent `{effective_agent_code}` is unavailable or disabled for this workspace"
+                )))
+            }
+            crate::domain::agent::AgentManagementError::StorageFailure => ChatSendError::Agent(
+                AgentInvocationError::RuntimeFailed("agent runtime resolution failed".into()),
+            ),
+        })
+}
+
+fn uses_system_live_stream(runtime: &ResolvedAgentRuntime) -> bool {
+    !matches!(runtime.runtime_type, AgentRuntimeType::React)
+}
+
 fn prepare_send_model(
     state: &AppState,
     session: &ChatSession,
-    request: &mut SendChatMessageCommand,
-) -> Result<(), ChatSendError> {
-    let effective_agent_code = effective_agent_code(session, request);
-
-    if is_main_agent_code(&effective_agent_code) {
-        if request.model.is_none() {
-            request.model = state
-                .models
-                .text_agent_model_config(&session.workspace_code, request.model_code.as_deref())
-                .map_err(|_| ChatSendError::Chat(ChatError::StorageFailure))?;
-        }
-        return Ok(());
-    }
-
-    if request.model.is_none() {
-        return Err(ChatSendError::Agent(AgentInvocationError::ModelRequired));
+    request: &SendChatMessageCommand,
+    runtime: &ResolvedAgentRuntime,
+) -> Result<AgentModelConfig, ChatSendError> {
+    if matches!(runtime.runtime_type, AgentRuntimeType::React) {
+        return state
+            .models
+            .text_agent_model_config(&session.workspace_code, request.model_code.as_deref())
+            .map_err(|_| ChatSendError::Chat(ChatError::StorageFailure))?
+            .ok_or(ChatSendError::Agent(AgentInvocationError::ModelRequired));
     }
 
     let model_name = request
-        .model
-        .as_ref()
-        .map(|model| model.model_name.trim().to_string())
+        .system_model_id
+        .as_deref()
+        .map(str::trim)
         .filter(|value| !value.is_empty())
+        .map(str::to_string)
         .ok_or(ChatSendError::Agent(AgentInvocationError::ModelRequired))?;
 
     let system_agent = state
@@ -482,49 +521,49 @@ fn prepare_send_model(
             ))
         })?
         .into_iter()
-        .find(|record| {
-            record
-                .agent_code
-                .eq_ignore_ascii_case(&effective_agent_code)
-        })
+        .find(|record| record.agent_code.eq_ignore_ascii_case(&runtime.agent_code))
         .ok_or_else(|| {
             ChatSendError::Agent(AgentInvocationError::RuntimeFailed(format!(
-                "system agent `{effective_agent_code}` was not found"
+                "agent `{}` was not found",
+                runtime.agent_code
             )))
         })?;
 
-    validate_system_agent_model(&system_agent, &model_name)?;
-    Ok(())
+    let matched_model = validate_system_agent_model(&system_agent, &model_name)?;
+    Ok(build_system_runtime_model_config(
+        &model_name,
+        matched_model.and_then(|item| item.context_window_tokens),
+    ))
 }
 
 fn validate_system_agent_model(
     system_agent: &ManagedSystemAgentRecord,
     model_name: &str,
-) -> Result<(), ChatSendError> {
+) -> Result<Option<crate::domain::agent::SystemAgentModelRecord>, ChatSendError> {
     if !system_agent.enabled || !system_agent.available {
         return Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
             format!(
-                "system agent `{}` is unavailable or disabled for this workspace",
+                "agent `{}` is unavailable or disabled for this workspace",
                 system_agent.agent_code
             ),
         )));
     }
 
     if system_agent.models.is_empty() {
-        return Ok(());
+        return Ok(None);
     }
 
     let model_matched = system_agent
         .models
         .iter()
-        .any(|item| item.model_id.eq_ignore_ascii_case(model_name));
-    if model_matched {
-        return Ok(());
+        .find(|item| item.model_id.eq_ignore_ascii_case(model_name));
+    if let Some(model) = model_matched {
+        return Ok(Some(model.clone()));
     }
 
     Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
         format!(
-            "model `{model_name}` is not available for system agent `{}`",
+            "model `{model_name}` is not available for agent `{}`",
             system_agent.agent_code
         ),
     )))

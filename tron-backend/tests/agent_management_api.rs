@@ -544,10 +544,7 @@ async fn runtime_registry_capabilities_are_discoverable() {
     let rows = list_body["data"]
         .as_array()
         .expect("runtime capabilities should be an array");
-    assert!(
-        rows.iter()
-            .any(|row| row["adapterKey"] == json!("MAIN_REACT"))
-    );
+    assert!(rows.iter().any(|row| row["adapterKey"] == json!("REACT")));
     assert!(
         rows.iter()
             .any(|row| row["adapterKey"] == json!("CODEX_EXEC"))

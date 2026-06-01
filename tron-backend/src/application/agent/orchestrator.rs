@@ -291,6 +291,7 @@ mod tests {
             std::sync::Arc::new(NoopModelClient),
             std::sync::Arc::new(crate::domain::agent::ToolRegistry::default()),
             crate::shared::event_bus::EventBusHandle::disabled(),
+            reqwest::Client::new(),
         ))
     }
 
@@ -414,7 +415,7 @@ mod tests {
     async fn falls_back_to_start_when_resume_is_not_supported() {
         let orchestrator = orchestrator();
         let runtime = std::sync::Arc::new(FakeRuntime::new(
-            RuntimeAdapterKey::MainReact,
+            RuntimeAdapterKey::React,
             runtime_caps(false, false),
             vec![Ok(scripted_run("RUN-1", "ok"))],
             0,
@@ -431,7 +432,7 @@ mod tests {
                 .await,
         );
 
-        assert_eq!(result.runtime_adapter_key, "MAIN_REACT");
+        assert_eq!(result.runtime_adapter_key, "REACT");
         assert_eq!(result.lifecycle_state, RunLifecycleState::Completed);
         assert_eq!(
             result.lifecycle_trace,

@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS system_agent_registries (
     agent_code TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     description TEXT NOT NULL,
+    runtime_type TEXT NOT NULL,
     command_name TEXT NOT NULL,
     source TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,

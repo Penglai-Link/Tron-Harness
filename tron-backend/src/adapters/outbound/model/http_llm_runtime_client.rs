@@ -15,6 +15,12 @@ pub struct HttpLlmRuntimeClient {
     client: reqwest::Client,
 }
 
+impl HttpLlmRuntimeClient {
+    pub fn new(client: reqwest::Client) -> Self {
+        Self { client }
+    }
+}
+
 impl LlmRuntimeClient for HttpLlmRuntimeClient {
     fn embed<'a>(
         &'a self,

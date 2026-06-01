@@ -7,12 +7,14 @@ use tokio::{
 };
 
 use crate::domain::agent::{
-    AgentModelConfig, ModelRequest, ModelResponse, ModelStreamEvent, ModelStreamEventKind,
+    AgentRunContext, AgentRunResult, ModelStreamEvent, ModelStreamEventKind, ToolObservation,
 };
 
+use super::super::system_cli_output_parser::{
+    ParsedSystemAgentOutput, parse_complete_stdout, parse_stream_line,
+};
 use super::{
-    ModelClient, ModelStreamSink,
-    system_cli_output_parser::{ParsedSystemAgentOutput, parse_complete_stdout, parse_stream_line},
+    AgentInvocationError, AgentRuntime, ModelStreamSink, RuntimeAdapterKey, RuntimeCapabilities,
 };
 
 const DEFAULT_SYSTEM_AGENT_TIMEOUT_MS: u64 = 180_000;
@@ -24,30 +26,28 @@ pub enum SystemAgentCliKind {
     OpenCode,
 }
 
-impl SystemAgentCliKind {
-    pub fn from_agent_code(agent_code: &str) -> Option<Self> {
-        match agent_code.trim().to_ascii_lowercase().as_str() {
-            "codex" => Some(Self::Codex),
-            "opencode" => Some(Self::OpenCode),
-            _ => None,
-        }
-    }
-}
+impl SystemAgentCliKind {}
 
 #[derive(Debug, Clone)]
-pub struct SystemAgentCliModelClient {
+pub struct SystemCliRuntime {
+    key: RuntimeAdapterKey,
+    capabilities: RuntimeCapabilities,
     command_name: String,
     kind: SystemAgentCliKind,
     working_directory: Option<String>,
 }
 
-impl SystemAgentCliModelClient {
+impl SystemCliRuntime {
     pub fn new(
+        key: RuntimeAdapterKey,
+        capabilities: RuntimeCapabilities,
         kind: SystemAgentCliKind,
         command_name: impl Into<String>,
         working_directory: Option<String>,
     ) -> Self {
         Self {
+            key,
+            capabilities,
             command_name: command_name.into(),
             kind,
             working_directory,
@@ -56,57 +56,66 @@ impl SystemAgentCliModelClient {
 
     async fn invoke(
         &self,
-        config: &AgentModelConfig,
-        request: &ModelRequest,
-    ) -> Result<ModelResponse, String> {
-        let (mut command, timeout_ms) = self.build_command(config, request)?;
+        context: AgentRunContext,
+        sink: Option<ModelStreamSink>,
+    ) -> Result<AgentRunResult, AgentInvocationError> {
+        if sink.is_some() {
+            return self
+                .invoke_stream(context, sink.expect("sink should exist"))
+                .await;
+        }
+
+        let (mut command, timeout_ms) = self.build_command(&context)?;
         let output = timeout(Duration::from_millis(timeout_ms), command.output())
             .await
             .map_err(|_| {
-                format!(
+                AgentInvocationError::RuntimeFailed(format!(
                     "{} command timed out after {}ms",
                     system_agent_name(self.kind),
                     timeout_ms
-                )
+                ))
             })?
             .map_err(|error| {
-                format!(
+                AgentInvocationError::RuntimeFailed(format!(
                     "{} command failed to start: {error}",
                     system_agent_name(self.kind)
-                )
+                ))
             })?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
         if !output.status.success() {
-            return Err(format_command_failure(
+            return Err(AgentInvocationError::RuntimeFailed(format_command_failure(
                 self.kind,
                 output.status.code(),
                 &stdout,
                 &stderr,
-            ));
+            )));
         }
 
         let parsed = parse_complete_stdout(self.kind, &stdout);
-        self.model_response_from_parsed(parsed, stdout, request)
+        self.run_result_from_parsed(context, parsed, stdout)
     }
 
     fn build_command(
         &self,
-        config: &AgentModelConfig,
-        request: &ModelRequest,
-    ) -> Result<(Command, u64), String> {
-        let prompt = prompt_from_request(request);
+        context: &AgentRunContext,
+    ) -> Result<(Command, u64), AgentInvocationError> {
+        let prompt = prompt_from_context(context);
         if prompt.is_empty() {
-            return Err("prompt is required".into());
+            return Err(AgentInvocationError::PromptRequired);
         }
-        let timeout_ms = config.timeout_ms.unwrap_or(DEFAULT_SYSTEM_AGENT_TIMEOUT_MS);
-        let resume_session_id = request
+        let timeout_ms = context
+            .model
+            .timeout_ms
+            .unwrap_or(DEFAULT_SYSTEM_AGENT_TIMEOUT_MS);
+        let resume_session_id = context
             .system_agent_session_id
             .as_deref()
             .map(str::trim)
             .filter(|value| !value.is_empty());
+
         let mut command = Command::new(&self.command_name);
         command.env("NO_COLOR", "1");
         if let Some(working_directory) = self.working_directory.as_deref()
@@ -114,6 +123,7 @@ impl SystemAgentCliModelClient {
         {
             command.current_dir(working_directory);
         }
+
         match self.kind {
             SystemAgentCliKind::Codex => {
                 command.arg("exec");
@@ -122,7 +132,7 @@ impl SystemAgentCliModelClient {
                 }
                 command.arg("--skip-git-repo-check");
                 command.arg("--json");
-                if let Some(model_name) = normalized_value(Some(config.model_name.clone())) {
+                if let Some(model_name) = normalized_value(Some(context.model.model_name.clone())) {
                     command.arg("--model");
                     command.arg(model_name);
                 }
@@ -148,44 +158,47 @@ impl SystemAgentCliModelClient {
                     command.arg("--dir");
                     command.arg(working_directory);
                 }
-                if config.model_name.contains('/') {
+                if context.model.model_name.contains('/') {
                     command.arg("--model");
-                    command.arg(config.model_name.as_str());
+                    command.arg(context.model.model_name.as_str());
                 }
                 command.arg(prompt);
             }
         }
+
         Ok((command, timeout_ms))
     }
 
     async fn invoke_stream(
         &self,
-        config: &AgentModelConfig,
-        request: &ModelRequest,
+        context: AgentRunContext,
         sink: ModelStreamSink,
-    ) -> Result<ModelResponse, String> {
-        let (mut command, timeout_ms) = self.build_command(config, request)?;
+    ) -> Result<AgentRunResult, AgentInvocationError> {
+        let (mut command, timeout_ms) = self.build_command(&context)?;
         command.kill_on_drop(true);
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
+
         let mut child = command.spawn().map_err(|error| {
-            format!(
+            AgentInvocationError::RuntimeFailed(format!(
                 "{} command failed to start: {error}",
                 system_agent_name(self.kind)
-            )
+            ))
         })?;
+
         let stdout = child.stdout.take().ok_or_else(|| {
-            format!(
+            AgentInvocationError::RuntimeFailed(format!(
                 "{} command did not expose stdout stream",
                 system_agent_name(self.kind)
-            )
+            ))
         })?;
         let stderr = child.stderr.take().ok_or_else(|| {
-            format!(
+            AgentInvocationError::RuntimeFailed(format!(
                 "{} command did not expose stderr stream",
                 system_agent_name(self.kind)
-            )
+            ))
         })?;
+
         let kind = self.kind;
         let sink_for_stdout = sink.clone();
         let stdout_task = tokio::spawn(async move {
@@ -208,6 +221,7 @@ impl SystemAgentCliModelClient {
             }
             Ok::<CliStreamOutput, String>(stream_output)
         });
+
         let stderr_task = tokio::spawn(async move {
             let mut lines = BufReader::new(stderr).lines();
             let mut stderr_buffer = String::new();
@@ -221,42 +235,53 @@ impl SystemAgentCliModelClient {
             }
             Ok::<String, String>(stderr_buffer)
         });
+
         let status = match timeout(Duration::from_millis(timeout_ms), child.wait()).await {
             Ok(result) => result.map_err(|error| {
-                format!(
+                AgentInvocationError::RuntimeFailed(format!(
                     "{} command failed while waiting: {error}",
                     system_agent_name(self.kind)
-                )
+                ))
             })?,
             Err(_) => {
                 let _ = child.kill().await;
-                return Err(format!(
+                return Err(AgentInvocationError::RuntimeFailed(format!(
                     "{} command timed out after {}ms",
                     system_agent_name(self.kind),
                     timeout_ms
-                ));
+                )));
             }
         };
-        let stream_output = stdout_task.await.map_err(|error| {
-            format!(
-                "{} stdout task join failed: {error}",
-                system_agent_name(self.kind)
-            )
-        })??;
-        let stderr = stderr_task.await.map_err(|error| {
-            format!(
-                "{} stderr task join failed: {error}",
-                system_agent_name(self.kind)
-            )
-        })??;
+
+        let stream_output = stdout_task
+            .await
+            .map_err(|error| {
+                AgentInvocationError::RuntimeFailed(format!(
+                    "{} stdout task join failed: {error}",
+                    system_agent_name(self.kind)
+                ))
+            })?
+            .map_err(AgentInvocationError::RuntimeFailed)?;
+
+        let stderr = stderr_task
+            .await
+            .map_err(|error| {
+                AgentInvocationError::RuntimeFailed(format!(
+                    "{} stderr task join failed: {error}",
+                    system_agent_name(self.kind)
+                ))
+            })?
+            .map_err(AgentInvocationError::RuntimeFailed)?;
+
         if !status.success() {
-            return Err(format_command_failure(
+            return Err(AgentInvocationError::RuntimeFailed(format_command_failure(
                 self.kind,
                 status.code(),
                 &stream_output.stdout,
                 &stderr,
-            ));
+            )));
         }
+
         if !stream_output.emitted_text_delta
             && let Some(output) = stream_output.parsed.final_output.clone()
             && !output.is_empty()
@@ -265,51 +290,88 @@ impl SystemAgentCliModelClient {
                 sink(ModelStreamEvent::text_delta(chunk));
             }
         }
-        self.model_response_from_parsed(stream_output.parsed, stream_output.stdout, request)
+
+        self.run_result_from_parsed(context, stream_output.parsed, stream_output.stdout)
     }
 
-    fn model_response_from_parsed(
+    fn run_result_from_parsed(
         &self,
+        context: AgentRunContext,
         parsed: ParsedSystemAgentOutput,
         stdout: String,
-        request: &ModelRequest,
-    ) -> Result<ModelResponse, String> {
+    ) -> Result<AgentRunResult, AgentInvocationError> {
         let final_output = parsed
             .final_output
-            .or_else(|| normalized_value(Some(stdout.clone())))
+            .or_else(|| normalized_value(Some(stdout)))
             .ok_or_else(|| {
-                format!(
+                AgentInvocationError::RuntimeFailed(format!(
                     "{} command returned no assistant output",
                     system_agent_name(self.kind)
-                )
+                ))
             })?;
 
-        Ok(ModelResponse::final_output_with_usage_and_session(
+        Ok(AgentRunResult {
+            run_code: context.run_code,
+            conversation_code: context.conversation_code,
+            workspace_code: context.workspace_code,
             final_output,
-            parsed.token_usage,
-            parsed
+            step_count: 1,
+            token_usage: parsed.token_usage,
+            system_agent_session_id: parsed
                 .system_agent_session_id
-                .or_else(|| request.system_agent_session_id.clone()),
-        ))
+                .or(context.system_agent_session_id),
+            observations: Vec::<ToolObservation>::new(),
+        })
     }
 }
 
-impl ModelClient for SystemAgentCliModelClient {
-    fn generate<'a>(
-        &'a self,
-        config: &'a AgentModelConfig,
-        request: &'a ModelRequest,
-    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
-        Box::pin(async move { self.invoke(config, request).await })
+impl AgentRuntime for SystemCliRuntime {
+    fn key(&self) -> RuntimeAdapterKey {
+        self.key
     }
 
-    fn generate_stream<'a>(
+    fn capabilities(&self) -> RuntimeCapabilities {
+        self.capabilities
+    }
+
+    fn start<'a>(
         &'a self,
-        config: &'a AgentModelConfig,
-        request: &'a ModelRequest,
-        sink: ModelStreamSink,
-    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
-        Box::pin(async move { self.invoke_stream(config, request, sink).await })
+        context: AgentRunContext,
+        sink: Option<ModelStreamSink>,
+    ) -> Pin<Box<dyn Future<Output = Result<AgentRunResult, AgentInvocationError>> + Send + 'a>>
+    {
+        Box::pin(async move { self.invoke(context, sink).await })
+    }
+
+    fn resume<'a>(
+        &'a self,
+        session_id: &'a str,
+        mut context: AgentRunContext,
+        sink: Option<ModelStreamSink>,
+    ) -> Pin<Box<dyn Future<Output = Result<AgentRunResult, AgentInvocationError>> + Send + 'a>>
+    {
+        if !self.capabilities.supports_resume {
+            return Box::pin(async move {
+                Err(AgentInvocationError::RuntimeFailed(format!(
+                    "runtime adapter `{}` does not support resume",
+                    self.key.code()
+                )))
+            });
+        }
+        context.system_agent_session_id = Some(session_id.to_string());
+        Box::pin(async move { self.invoke(context, sink).await })
+    }
+
+    fn cancel<'a>(
+        &'a self,
+        run_code: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<(), AgentInvocationError>> + Send + 'a>> {
+        Box::pin(async move {
+            Err(AgentInvocationError::RuntimeFailed(format!(
+                "runtime adapter `{}` does not support cancel for run `{run_code}`",
+                self.key.code()
+            )))
+        })
     }
 }
 
@@ -368,8 +430,8 @@ fn split_stream_chunks(value: &str, max_chars: usize) -> Vec<String> {
     chunks
 }
 
-fn prompt_from_request(request: &ModelRequest) -> String {
-    request
+fn prompt_from_context(context: &AgentRunContext) -> String {
+    context
         .messages
         .iter()
         .rev()
@@ -379,7 +441,7 @@ fn prompt_from_request(request: &ModelRequest) -> String {
                 .filter(|value| !value.is_empty())
         })
         .unwrap_or_else(|| {
-            request
+            context
                 .messages
                 .last()
                 .map(|message| message.content.trim().to_string())

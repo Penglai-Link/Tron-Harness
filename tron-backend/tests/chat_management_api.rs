@@ -239,6 +239,7 @@ async fn chat_send_persists_messages_and_invokes_agent_run() {
     let server = agent_model_mock_server().await;
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
 
     let session_response = request_with_headers(
         &app,
@@ -266,14 +267,7 @@ async fn chat_send_persists_messages_and_invokes_agent_run() {
         Some(json!({
             "content": "continue this session",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "CHAT_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": server.base_url,
-                "apiKey": "sk-chat-api",
-                "modelName": "gpt-chat",
-                "thinkingEnabled": true
-            }
+            "modelCode": model_code.clone()
         })),
         None,
         Some(&authorization),
@@ -320,6 +314,7 @@ async fn chat_stream_persists_messages_and_emits_deltas() {
     let server = agent_model_mock_server().await;
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
 
     let session_response = request_with_headers(
         &app,
@@ -347,14 +342,7 @@ async fn chat_stream_persists_messages_and_emits_deltas() {
         Some(json!({
             "content": "stream this session",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "CHAT_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": server.base_url,
-                "apiKey": "sk-chat-api",
-                "modelName": "gpt-chat",
-                "thinkingEnabled": true
-            }
+            "modelCode": model_code.clone()
         })),
         None,
         Some(&authorization),
@@ -413,6 +401,7 @@ async fn chat_stream_only_emits_events_for_current_run() {
     let server = agent_model_mock_server().await;
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
 
     let session_response = request_with_headers(
         &app,
@@ -440,14 +429,7 @@ async fn chat_stream_only_emits_events_for_current_run() {
         Some(json!({
             "content": "first stream replay guard",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "CHAT_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": server.base_url,
-                "apiKey": "sk-chat-api",
-                "modelName": "gpt-chat",
-                "thinkingEnabled": true
-            }
+            "modelCode": model_code.clone()
         })),
         None,
         Some(&authorization),
@@ -467,14 +449,7 @@ async fn chat_stream_only_emits_events_for_current_run() {
         Some(json!({
             "content": "second stream replay guard",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "CHAT_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": server.base_url,
-                "apiKey": "sk-chat-api",
-                "modelName": "gpt-chat",
-                "thinkingEnabled": true
-            }
+            "modelCode": model_code.clone()
         })),
         None,
         Some(&authorization),
@@ -501,6 +476,7 @@ async fn chat_send_does_not_reuse_existing_run_codes_after_restart() {
     let server = agent_model_mock_server().await;
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
 
     let session_response = request_with_headers(
         &app,
@@ -528,13 +504,7 @@ async fn chat_send_does_not_reuse_existing_run_codes_after_restart() {
         Some(json!({
             "content": "avoid a restarted run code collision",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "CHAT_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": server.base_url,
-                "apiKey": "sk-chat-api",
-                "modelName": "gpt-chat"
-            }
+            "modelCode": model_code.clone()
         })),
         None,
         Some(&authorization),
@@ -674,13 +644,7 @@ async fn chat_send_uses_codex_system_agent_cli_runtime() {
         Some(json!({
             "content": "execute codex system agent",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "SYSTEM_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": "http://invalid.local",
-                "apiKey": "sk-system",
-                "modelName": "gpt-5-codex"
-            }
+            "systemModelId": "gpt-5-codex"
         })),
         None,
         Some(&authorization),
@@ -811,13 +775,7 @@ async fn chat_send_system_agent_rejects_model_outside_scanned_catalog() {
         Some(json!({
             "content": "use unsupported system model",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "SYSTEM_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": "http://invalid.local",
-                "apiKey": "sk-system",
-                "modelName": "gpt-4.1-unsupported"
-            }
+            "systemModelId": "gpt-4.1-unsupported"
         })),
         None,
         Some(&authorization),
@@ -830,7 +788,7 @@ async fn chat_send_system_agent_rejects_model_outside_scanned_catalog() {
     let message = payload["message"]
         .as_str()
         .expect("error message should be returned");
-    assert!(message.contains("is not available for system agent"));
+    assert!(message.contains("is not available for agent"));
 }
 
 #[tokio::test]
@@ -878,13 +836,7 @@ async fn chat_send_uses_opencode_system_agent_cli_runtime() {
         Some(json!({
             "content": "execute opencode system agent",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "SYSTEM_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": "http://invalid.local",
-                "apiKey": "sk-system",
-                "modelName": "openai/gpt-4.1"
-            }
+            "systemModelId": "openai/gpt-4.1"
         })),
         None,
         Some(&authorization),
@@ -959,13 +911,7 @@ async fn chat_stream_uses_opencode_system_agent_cli_runtime_and_emits_live_event
         Some(json!({
             "content": "stream opencode system agent",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "SYSTEM_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": "http://invalid.local",
-                "apiKey": "sk-system",
-                "modelName": "openai/gpt-4.1"
-            }
+            "systemModelId": "openai/gpt-4.1"
         })),
         None,
         Some(&authorization),
@@ -1041,13 +987,7 @@ async fn chat_send_resumes_codex_system_agent_session() {
         Some(json!({
             "content": "first codex turn",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "SYSTEM_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": "http://invalid.local",
-                "apiKey": "sk-system",
-                "modelName": "gpt-5-codex"
-            }
+            "systemModelId": "gpt-5-codex"
         })),
         None,
         Some(&authorization),
@@ -1071,13 +1011,7 @@ async fn chat_send_resumes_codex_system_agent_session() {
         Some(json!({
             "content": "second codex turn",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "SYSTEM_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": "http://invalid.local",
-                "apiKey": "sk-system",
-                "modelName": "gpt-5-codex"
-            }
+            "systemModelId": "gpt-5-codex"
         })),
         None,
         Some(&authorization),
@@ -1166,13 +1100,7 @@ echo '{"type":"step_finish","part":{"tokens":{"input":5,"output":3,"total":8}}}'
         Some(json!({
             "content": "first opencode turn",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "SYSTEM_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": "http://invalid.local",
-                "apiKey": "sk-system",
-                "modelName": "openai/gpt-4.1"
-            }
+            "systemModelId": "openai/gpt-4.1"
         })),
         None,
         Some(&authorization),
@@ -1192,13 +1120,7 @@ echo '{"type":"step_finish","part":{"tokens":{"input":5,"output":3,"total":8}}}'
         Some(json!({
             "content": "second opencode turn",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "SYSTEM_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": "http://invalid.local",
-                "apiKey": "sk-system",
-                "modelName": "openai/gpt-4.1"
-            }
+            "systemModelId": "openai/gpt-4.1"
         })),
         None,
         Some(&authorization),
@@ -1273,13 +1195,7 @@ async fn chat_send_resumes_from_runtime_mapping_when_legacy_session_field_is_emp
         Some(json!({
             "content": "mapping first turn",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "SYSTEM_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": "http://invalid.local",
-                "apiKey": "sk-system",
-                "modelName": "gpt-5-codex"
-            }
+            "systemModelId": "gpt-5-codex"
         })),
         None,
         Some(&authorization),
@@ -1324,13 +1240,7 @@ async fn chat_send_resumes_from_runtime_mapping_when_legacy_session_field_is_emp
         Some(json!({
             "content": "mapping second turn",
             "workspaceCode": "TRON_CORE",
-            "model": {
-                "modelCode": "SYSTEM_MODEL",
-                "protocol": "CHAT_COMPLETIONS",
-                "baseUrl": "http://invalid.local",
-                "apiKey": "sk-system",
-                "modelName": "gpt-5-codex"
-            }
+            "systemModelId": "gpt-5-codex"
         })),
         None,
         Some(&authorization),

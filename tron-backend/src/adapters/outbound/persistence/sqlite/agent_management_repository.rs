@@ -5,7 +5,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use crate::{
     application::agent::AgentManagementRepository,
     domain::agent::{
-        AgentManagementError, ManagedAgentSource, PlatformMainAgentConfig,
+        AgentManagementError, AgentRuntimeType, ManagedAgentSource, PlatformMainAgentConfig,
         SystemAgentRegistryEntry, WorkspaceSystemAgentPolicy,
     },
     shared::time::{
@@ -14,7 +14,7 @@ use crate::{
     },
 };
 
-use super::migrations::AGENT_MANAGEMENT_MIGRATION;
+use super::migrations::{AGENT_MANAGEMENT_MIGRATION, AGENT_MANAGEMENT_RUNTIME_TYPE_MIGRATION};
 
 const MAIN_AGENT_SINGLETON_KEY: &str = "platform";
 
@@ -42,6 +42,12 @@ impl SqliteAgentManagementRepository {
             .connection
             .execute_batch(AGENT_MANAGEMENT_MIGRATION)
             .map_err(storage_error)?;
+        if !column_exists(&repository.connection, "system_agent_registries", "runtime_type")? {
+            repository
+                .connection
+                .execute_batch(AGENT_MANAGEMENT_RUNTIME_TYPE_MIGRATION)
+                .map_err(storage_error)?;
+        }
         Ok(repository)
     }
 }
@@ -114,7 +120,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT agent_code, name, description, command_name, source, enabled, available, last_scanned_at, last_seen_at, last_error
+                "SELECT agent_code, name, description, runtime_type, command_name, source, enabled, available, last_scanned_at, last_seen_at, last_error
                  FROM system_agent_registries
                  ORDER BY agent_code ASC",
             )
@@ -125,16 +131,17 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
                     agent_code: row.get(0)?,
                     name: row.get(1)?,
                     description: row.get(2)?,
-                    command_name: row.get(3)?,
-                    source: match row.get::<_, String>(4)?.as_str() {
+                    runtime_type: runtime_type_from_storage(&row.get::<_, String>(3)?),
+                    command_name: row.get(4)?,
+                    source: match row.get::<_, String>(5)?.as_str() {
                         "SYSTEM" => ManagedAgentSource::System,
                         _ => ManagedAgentSource::System,
                     },
-                    enabled: row.get::<_, i64>(5)? != 0,
-                    available: row.get::<_, i64>(6)? != 0,
-                    last_scanned_at: option_timestamp_from_millis(row.get(7)?),
-                    last_seen_at: option_timestamp_from_millis(row.get(8)?),
-                    last_error: row.get(9)?,
+                    enabled: row.get::<_, i64>(6)? != 0,
+                    available: row.get::<_, i64>(7)? != 0,
+                    last_scanned_at: option_timestamp_from_millis(row.get(8)?),
+                    last_seen_at: option_timestamp_from_millis(row.get(9)?),
+                    last_error: row.get(10)?,
                 })
             })
             .map_err(storage_error)?
@@ -152,6 +159,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
                     agent_code,
                     name,
                     description,
+                    runtime_type,
                     command_name,
                     source,
                     enabled,
@@ -159,10 +167,11 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
                     last_scanned_at,
                     last_seen_at,
                     last_error
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                  ON CONFLICT(agent_code) DO UPDATE SET
                     name = excluded.name,
                     description = excluded.description,
+                    runtime_type = excluded.runtime_type,
                     command_name = excluded.command_name,
                     source = excluded.source,
                     enabled = excluded.enabled,
@@ -174,6 +183,7 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
                     agent.agent_code,
                     agent.name,
                     agent.description,
+                    runtime_type_to_storage(agent.runtime_type),
                     agent.command_name,
                     "SYSTEM",
                     i64::from(agent.enabled),
@@ -276,6 +286,114 @@ fn ensure_database_parent(database_url: &str) -> Result<(), AgentManagementError
     Ok(())
 }
 
+fn column_exists(
+    connection: &Connection,
+    table_name: &str,
+    column_name: &str,
+) -> Result<bool, AgentManagementError> {
+    let pragma = format!("PRAGMA table_info({table_name})");
+    let mut statement = connection.prepare(&pragma).map_err(storage_error)?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(storage_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(storage_error)?;
+    Ok(columns.iter().any(|value| value == column_name))
+}
+
 fn storage_error(_error: rusqlite::Error) -> AgentManagementError {
     AgentManagementError::StorageFailure
+}
+
+fn runtime_type_to_storage(runtime_type: AgentRuntimeType) -> &'static str {
+    match runtime_type {
+        AgentRuntimeType::React => "REACT",
+        AgentRuntimeType::CodexExec => "CODEX_EXEC",
+        AgentRuntimeType::CodexAppServer => "CODEX_APP_SERVER",
+        AgentRuntimeType::OpenCodeRun => "OPENCODE_RUN",
+        AgentRuntimeType::OpenCodeServe => "OPENCODE_SERVE",
+        AgentRuntimeType::OpenCodeAcp => "OPENCODE_ACP",
+    }
+}
+
+fn runtime_type_from_storage(value: &str) -> AgentRuntimeType {
+    match value.trim().to_ascii_uppercase().as_str() {
+        "REACT" => AgentRuntimeType::React,
+        "CODEX_EXEC" => AgentRuntimeType::CodexExec,
+        "CODEX_APP_SERVER" => AgentRuntimeType::CodexAppServer,
+        "OPENCODE_RUN" => AgentRuntimeType::OpenCodeRun,
+        "OPENCODE_SERVE" => AgentRuntimeType::OpenCodeServe,
+        "OPENCODE_ACP" => AgentRuntimeType::OpenCodeAcp,
+        _ => AgentRuntimeType::React,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
+
+    use rusqlite::Connection;
+
+    use super::SqliteAgentManagementRepository;
+
+    #[test]
+    fn connect_backfills_runtime_type_column_for_legacy_schema() {
+        let database_path = temp_database_path("agent-management-legacy-runtime-type");
+        {
+            let connection =
+                Connection::open(&database_path).expect("legacy sqlite database should open");
+            connection
+                .execute_batch(
+                    "CREATE TABLE IF NOT EXISTS system_agent_registries (
+                        agent_code TEXT PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        description TEXT NOT NULL,
+                        command_name TEXT NOT NULL,
+                        source TEXT NOT NULL,
+                        enabled INTEGER NOT NULL DEFAULT 1,
+                        available INTEGER NOT NULL DEFAULT 0,
+                        last_scanned_at INTEGER,
+                        last_seen_at INTEGER,
+                        last_error TEXT
+                    );",
+                )
+                .expect("legacy schema should be created");
+        }
+
+        let _repository = SqliteAgentManagementRepository::connect(
+            database_path
+                .to_str()
+                .expect("temporary database path should be UTF-8"),
+        )
+        .expect("repository should migrate legacy schema");
+
+        let verification_connection =
+            Connection::open(&database_path).expect("verification sqlite database should open");
+        let mut statement = verification_connection
+            .prepare("PRAGMA table_info(system_agent_registries)")
+            .expect("table info query should prepare");
+        let columns = statement
+            .query_map([], |row| row.get::<_, String>(1))
+            .expect("table info query should execute")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("table info rows should decode");
+        assert!(
+            columns.iter().any(|column| column == "runtime_type"),
+            "runtime_type column should be added for legacy schemas"
+        );
+
+        let _ = fs::remove_file(database_path);
+    }
+
+    fn temp_database_path(prefix: &str) -> PathBuf {
+        let millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("current system time should be after unix epoch")
+            .as_millis();
+        std::env::temp_dir().join(format!("{prefix}-{}-{millis}.sqlite3", std::process::id()))
+    }
 }
