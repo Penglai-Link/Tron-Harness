@@ -1574,7 +1574,7 @@ function ChatBubble({
   }
 
   return (
-    <article className={cn("max-w-[760px] rounded-md bg-white px-4 py-3 shadow-[0_8px_22px_rgba(15,23,42,0.06)]", isUser ? "ml-auto bg-[var(--color-surface-container-lowest)]" : "")}>
+    <article className={cn("max-w-[920px] rounded-md bg-white px-4 py-3 shadow-[0_8px_22px_rgba(15,23,42,0.06)]", isUser ? "ml-auto bg-[var(--color-surface-container-lowest)]" : "")}>
       <div className="mb-2 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           {isUser ? <UserRound size={16} /> : <Bot size={16} />}
@@ -1869,7 +1869,7 @@ function AguiRunWorkRail({
   if (!terminalEvent && !displayUserCards.length && !debugEvents.length) return null;
 
   return (
-    <section className="max-w-[760px] space-y-2" aria-label="AG-UI run work">
+    <section className="max-w-[920px] space-y-2" aria-label="AG-UI run work">
       {terminalEvent ? (
         <button
           aria-expanded={expanded}
@@ -2621,7 +2621,7 @@ export function ChatManagementPage() {
               ref={messageScrollRef}
               onScroll={handleTranscriptScroll}
             >
-              <div className="mx-auto flex max-w-4xl flex-col gap-4">
+              <div className="mx-auto flex max-w-6xl flex-col gap-4">
                 {visibleMessages.length ? visibleMessages.map((message) => (
                   <Fragment key={message.messageCode}>
                     <ChatBubble
