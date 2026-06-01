@@ -88,6 +88,20 @@ function sessionAgentTagLabel(agentCode: string | null | undefined) {
   return normalized.toUpperCase();
 }
 
+function sessionAgentTagTone(agentCode: string | null | undefined) {
+  const normalized = agentCode?.trim().toLowerCase();
+  if (!normalized || normalized === "main-agent") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  if (normalized === "opencode") {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+  if (normalized === "codex") {
+    return "border-sky-200 bg-sky-50 text-sky-700";
+  }
+  return "border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]";
+}
+
 async function copyPlainText(value: string) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(value);
@@ -1050,7 +1064,7 @@ function ChatModelSelector({
     <div className="relative min-w-0">
       <button
         ref={triggerRef}
-        className="inline-flex h-8 max-w-[340px] items-center gap-2 rounded-md px-2 text-xs text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
+        className="inline-flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-xs text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
         type="button"
         aria-label="Select chat model"
         aria-expanded={open}
@@ -1146,7 +1160,7 @@ function ChatAgentSelector({
     <div className="relative min-w-0">
       <button
         ref={triggerRef}
-        className="inline-flex h-8 max-w-[320px] items-center gap-2 rounded-md px-2 text-xs text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
+        className="inline-flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-xs text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
         type="button"
         aria-label="Select chat agent"
         aria-expanded={open}
@@ -1373,7 +1387,12 @@ function SessionSidebar({
                           <button className="min-w-0 text-left" type="button" onClick={() => onSessionSelect(session.sessionCode)}>
                             <span className="block truncate text-sm font-medium">{session.title}</span>
                             <span className="mt-1 flex items-center gap-1.5 text-xs text-[var(--color-on-surface-variant)]">
-                              <span className="inline-flex h-4 items-center rounded border border-[var(--color-outline-variant)] px-1 font-mono text-[10px] leading-none">
+                              <span
+                                className={cn(
+                                  "inline-flex h-4 items-center rounded border px-1 font-mono text-[10px] leading-none",
+                                  sessionAgentTagTone(session.agentCode),
+                                )}
+                              >
                                 {sessionAgentTagLabel(session.agentCode)}
                               </span>
                               <span>{formatTime(session.updatedAt)}</span>
@@ -2315,8 +2334,13 @@ export function ChatManagementPage() {
               <p className="mt-0.5 flex items-center gap-2 text-xs text-[var(--color-on-surface-variant)]">
                 <CircleDot size={12} />
                 {activeSession?.sessionCode}
-                <span className="rounded-full bg-[var(--color-surface-container)] px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none text-[var(--color-on-surface-variant)]">
-                  {displayedAgentCode.replace("-agent", "")}
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none",
+                    sessionAgentTagTone(displayedAgentCode),
+                  )}
+                >
+                  {sessionAgentTagLabel(displayedAgentCode)}
                 </span>
               </p>
             ) : (
@@ -2385,24 +2409,30 @@ export function ChatManagementPage() {
                     void handleSend();
                   }}
                 />
-                <div className="mt-2 flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-1">
-                    <ChatAgentSelector
-                      locked={agentSelectionLocked}
-                      loading={agentsLoading}
-                      agents={chatAgents}
-                      selectedAgentCode={selectedAgentCode}
-                      onSelect={setSelectedAgentCode}
-                    />
-                    <ChatModelSelector
-                      emptyLabel={modelEmptyLabel}
-                      loading={modelsLoading}
-                      models={agentScopedModels}
-                      selectedModelCode={selectedModelCode}
-                      onSelect={setSelectedModelCode}
-                    />
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <div className="flex min-w-0 max-w-full flex-1 items-center gap-1 overflow-hidden">
+                    {agentSelectionLocked ? null : (
+                      <div className="min-w-0 max-w-[9.5rem] shrink">
+                        <ChatAgentSelector
+                          locked={agentSelectionLocked}
+                          loading={agentsLoading}
+                          agents={chatAgents}
+                          selectedAgentCode={selectedAgentCode}
+                          onSelect={setSelectedAgentCode}
+                        />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <ChatModelSelector
+                        emptyLabel={modelEmptyLabel}
+                        loading={modelsLoading}
+                        models={agentScopedModels}
+                        selectedModelCode={selectedModelCode}
+                        onSelect={setSelectedModelCode}
+                      />
+                    </div>
                   </div>
-                  <Button className="shrink-0" disabled={sending || !activeSession || !selectedModel} size="sm" onClick={() => void handleSend()}>
+                  <Button className="ml-auto shrink-0" disabled={sending || !activeSession || !selectedModel} size="sm" onClick={() => void handleSend()}>
                     {sending ? <Wrench size={15} /> : <Send size={15} />}
                     Send
                   </Button>

@@ -243,7 +243,6 @@ export function TronShell({
     workspaceSwitcherControllerRef.current?.abort();
     const controller = new AbortController();
     workspaceSwitcherControllerRef.current = controller;
-    setWorkspaceSwitcherSnapshot(getEmptyWorkspaceSwitcher());
     setWorkspaceSwitcherLoading(true);
 
     try {
