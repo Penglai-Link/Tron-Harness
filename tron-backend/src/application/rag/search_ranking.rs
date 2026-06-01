@@ -411,6 +411,8 @@ fn hit_from_row(row: &RagSearchRow) -> RankedCandidate {
             corpus_id: row.corpus_id.clone(),
             source_code: row.source_code.clone(),
             source_version: row.source_version.clone(),
+            scope_type: row.scope_type.clone(),
+            scope_code: row.scope_code.clone(),
             title: row.title.clone(),
             score: 0.0,
             text: row.text.clone(),
