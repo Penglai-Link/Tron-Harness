@@ -102,18 +102,24 @@ pub struct RagEmbeddingCall {
     pub input: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct RagEmbeddingResult {
+    pub model_code: String,
+    pub embedding: Vec<f32>,
+}
+
 pub trait RagEmbeddingRuntime: Clone + Send + Sync + 'static {
     fn embed<'a>(
         &'a self,
         call: RagEmbeddingCall,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>>;
 }
 
 impl RagEmbeddingRuntime for LlmRuntimeService {
     fn embed<'a>(
         &'a self,
         call: RagEmbeddingCall,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
         Box::pin(async move {
             self.embedding_call(LlmEmbeddingCallCommand {
                 workspace_code: call.workspace_code,
@@ -121,7 +127,10 @@ impl RagEmbeddingRuntime for LlmRuntimeService {
                 input: call.input,
             })
             .await
-            .map(|result| result.embedding)
+            .map(|result| RagEmbeddingResult {
+                model_code: result.model_code,
+                embedding: result.embedding,
+            })
             .map_err(|error| error.to_string())
         })
     }
@@ -238,16 +247,11 @@ where
                 })
                 .await
             {
-                Ok(embedding) => text_units.push(
-                    unit.with_embedding(
-                        embedding,
-                        compiled
-                            .embedding_model_code
-                            .as_deref()
-                            .unwrap_or("fake-embedding"),
-                        &compiled.embedding_version,
-                    ),
-                ),
+                Ok(result) => text_units.push(unit.with_embedding(
+                    result.embedding,
+                    result.model_code.as_str(),
+                    &compiled.embedding_version,
+                )),
                 Err(_) if request.corpus_id == "project-doc" => {
                     embedding_failed = true;
                     text_units.push(unit.with_failed_embedding());

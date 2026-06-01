@@ -14,9 +14,9 @@ use serde_json::{Value, json};
 use tron_backend::{
     adapters::outbound::persistence::sqlite::SqliteRagRepository,
     application::rag::{
-        DefaultRagStrategyRegistry, RagConfigRepository, RagEmbeddingCall, RagEmbeddingRuntime,
-        RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService,
-        compile_ingest_profile,
+        DefaultRagStrategyRegistry, RagConfigRepository, RagEmbeddingCall, RagEmbeddingResult,
+        RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRequest, RagIngestScope,
+        RagIngestService, compile_ingest_profile,
     },
     domain::rag::{RagError, RagProfileRecord, RagProfileType, RagStatus},
 };
@@ -55,8 +55,12 @@ async fn memory_plain_text_ingest_writes_source_text_unit_fulltext_and_vector_fi
         json!("Always cite source titles in RAG answers.")
     );
     assert_eq!(unit["embedding_status"], json!("INDEXED"));
-    assert_eq!(unit["embedding_model_code"], json!("fake-embedding"));
+    assert_eq!(
+        unit["embedding_model_code"],
+        json!("workspace-default-embedding")
+    );
     assert_eq!(unit["embedding_dimension"], json!(2));
+    assert_eq!(embeddings.last_model_code(), None);
 }
 
 #[tokio::test]
@@ -262,15 +266,20 @@ fn ingest_boundary_does_not_add_search_debug_retry_or_graph_memory_flow_behavior
 
 #[derive(Clone)]
 struct FakeEmbeddingRuntime {
-    result: Arc<Mutex<Result<Vec<f32>, String>>>,
+    result: Arc<Mutex<Result<RagEmbeddingResult, String>>>,
     calls: Arc<AtomicUsize>,
+    last_model_code: Arc<Mutex<Option<String>>>,
 }
 
 impl FakeEmbeddingRuntime {
     fn fixed(embedding: Vec<f32>) -> Self {
         Self {
-            result: Arc::new(Mutex::new(Ok(embedding))),
+            result: Arc::new(Mutex::new(Ok(RagEmbeddingResult {
+                model_code: "workspace-default-embedding".into(),
+                embedding,
+            }))),
             calls: Arc::new(AtomicUsize::new(0)),
+            last_model_code: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -278,21 +287,27 @@ impl FakeEmbeddingRuntime {
         Self {
             result: Arc::new(Mutex::new(Err(message.to_string()))),
             calls: Arc::new(AtomicUsize::new(0)),
+            last_model_code: Arc::new(Mutex::new(None)),
         }
     }
 
     fn call_count(&self) -> usize {
         self.calls.load(Ordering::SeqCst)
     }
+
+    fn last_model_code(&self) -> Option<String> {
+        self.last_model_code.lock().unwrap().clone()
+    }
 }
 
 impl RagEmbeddingRuntime for FakeEmbeddingRuntime {
     fn embed<'a>(
         &'a self,
-        _call: RagEmbeddingCall,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
+        call: RagEmbeddingCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
         Box::pin(async move {
             self.calls.fetch_add(1, Ordering::SeqCst);
+            *self.last_model_code.lock().unwrap() = call.model_code;
             self.result.lock().unwrap().clone()
         })
     }

@@ -213,28 +213,30 @@ where
     ) -> Result<RagRetryStageResult, RagError> {
         let model = request
             .embedding_model_code
-            .clone()
-            .unwrap_or_else(|| "fake-embedding".into());
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
         let mut updated = 0usize;
         for unit in units {
             match self
                 .embedding_runtime
                 .embed(RagEmbeddingCall {
                     workspace_code: request.workspace_code.clone(),
-                    model_code: Some(model.clone()),
+                    model_code: model.clone(),
                     input: unit.text.clone(),
                 })
                 .await
             {
-                Ok(embedding) => {
+                Ok(result) => {
                     self.repository.update_vector_index(RagRetryVectorUpdate {
                         corpus_id: request.corpus_id.clone(),
                         text_unit_code: unit.text_unit_code.clone(),
-                        embedding_model_code: model.clone(),
+                        embedding_model_code: result.model_code,
                         embedding_version: "v1".into(),
                         embedding_text_hash: format!("retry:{}", unit.text_unit_code),
-                        embedding_dimension: embedding.len() as i64,
-                        embedding: encode_embedding(&embedding),
+                        embedding_dimension: result.embedding.len() as i64,
+                        embedding: encode_embedding(&result.embedding),
                     })?;
                     updated += 1;
                 }

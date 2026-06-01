@@ -11,10 +11,11 @@ use serde_json::{Value, json};
 use tron_backend::{
     adapters::outbound::persistence::sqlite::SqliteRagRepository,
     application::rag::{
-        DefaultRagStrategyRegistry, RagConfigRepository, RagEmbeddingCall, RagEmbeddingRuntime,
-        RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService, RagRerankCall,
-        RagSearchContextRequest, RagSearchRequest, RagSearchRuntime, RagSearchService,
-        RagSearchTraceRequest, compile_retrieval_profile, merge_search_filters,
+        DefaultRagStrategyRegistry, RagConfigRepository, RagEmbeddingCall, RagEmbeddingResult,
+        RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRequest, RagIngestScope,
+        RagIngestService, RagRerankCall, RagSearchContextRequest, RagSearchRequest,
+        RagSearchRuntime, RagSearchService, RagSearchTraceRequest, compile_retrieval_profile,
+        merge_search_filters,
     },
     domain::rag::{RagError, RagProfileRecord, RagProfileType, RagStatus},
 };
@@ -101,12 +102,13 @@ async fn fusion_dedup_and_fake_rerank_produce_stable_ordering() {
         .to_string_lossy()
         .to_string();
     seed_two_memory_fixture(&database_url).await;
+    let runtime = FakeSearchRuntime::new()
+        .with_embedding(vec![1.0, 0.0])
+        .with_rerank(vec![(1, 0.99), (0, 0.10)]);
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new()
-            .with_embedding(vec![1.0, 0.0])
-            .with_rerank(vec![(1, 0.99), (0, 0.10)]),
+        runtime.clone(),
     );
 
     let result = service
@@ -127,6 +129,7 @@ async fn fusion_dedup_and_fake_rerank_produce_stable_ordering() {
         vec!["memory-fulltext", "memory-vector"]
     );
     assert!(result.context_pack.is_none());
+    assert_eq!(runtime.last_rerank_model_code(), None);
 }
 
 #[test]
@@ -307,6 +310,7 @@ fn repository_search_boundary_keeps_graph_summary_and_memory_flow_behavior_out()
 struct FakeSearchRuntime {
     embeddings: Arc<Mutex<VecDeque<Result<Vec<f32>, String>>>>,
     reranks: Arc<Mutex<VecDeque<Result<Vec<RagRerankItem>, String>>>>,
+    last_rerank_model_code: Arc<Mutex<Option<String>>>,
 }
 
 type RagRerankItem = (usize, f64);
@@ -333,6 +337,10 @@ impl FakeSearchRuntime {
         self.reranks.lock().unwrap().push_back(Ok(items));
         self
     }
+
+    fn last_rerank_model_code(&self) -> Option<String> {
+        self.last_rerank_model_code.lock().unwrap().clone()
+    }
 }
 
 impl RagSearchRuntime for FakeSearchRuntime {
@@ -351,9 +359,10 @@ impl RagSearchRuntime for FakeSearchRuntime {
 
     fn rerank<'a>(
         &'a self,
-        _call: RagRerankCall,
+        call: RagRerankCall,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<RagRerankItem>, String>> + Send + 'a>> {
         Box::pin(async move {
+            *self.last_rerank_model_code.lock().unwrap() = call.model_code;
             self.reranks
                 .lock()
                 .unwrap()
@@ -367,8 +376,15 @@ impl RagEmbeddingRuntime for FakeSearchRuntime {
     fn embed<'a>(
         &'a self,
         call: RagEmbeddingCall,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
-        <Self as RagSearchRuntime>::embed(self, call)
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
+        Box::pin(async move {
+            <Self as RagSearchRuntime>::embed(self, call)
+                .await
+                .map(|embedding| RagEmbeddingResult {
+                    model_code: "workspace-default-embedding".into(),
+                    embedding,
+                })
+        })
     }
 }
 

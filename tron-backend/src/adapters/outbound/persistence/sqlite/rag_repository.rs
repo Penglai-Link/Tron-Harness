@@ -21,7 +21,7 @@ use crate::{
 
 use super::migrations::{
     RAG_DOMAIN_FIELDS_MIGRATION, RAG_FOUNDATION_MIGRATION, RAG_INGEST_PROFILES_MIGRATION,
-    RAG_SEARCH_PROFILES_MIGRATION,
+    RAG_OPTIONAL_MODEL_CODES_MIGRATION, RAG_SEARCH_PROFILES_MIGRATION,
 };
 
 pub struct SqliteRagRepository {
@@ -52,7 +52,8 @@ impl SqliteRagRepository {
         self.apply_rag_foundation_migration()?;
         self.apply_rag_domain_fields_migration()?;
         self.apply_rag_ingest_profiles_migration()?;
-        self.apply_rag_search_profiles_migration()
+        self.apply_rag_search_profiles_migration()?;
+        self.apply_rag_optional_model_codes_migration()
     }
 
     pub fn apply_rag_foundation_migration(&self) -> Result<(), RagError> {
@@ -104,6 +105,12 @@ impl SqliteRagRepository {
     pub fn apply_rag_search_profiles_migration(&self) -> Result<(), RagError> {
         self.connection
             .execute_batch(RAG_SEARCH_PROFILES_MIGRATION)
+            .map_err(storage_error)
+    }
+
+    pub fn apply_rag_optional_model_codes_migration(&self) -> Result<(), RagError> {
+        self.connection
+            .execute_batch(RAG_OPTIONAL_MODEL_CODES_MIGRATION)
             .map_err(storage_error)
     }
 

@@ -19,10 +19,10 @@ pub use diagnostics::{
 pub use events::publish_rag_event;
 pub use facade::RagService;
 pub use ingest::{
-    RagEmbeddingCall, RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRepository,
-    RagIngestRequest, RagIngestResult, RagIngestScope, RagIngestService, RagIngestWarning,
-    RagMemorySourceFields, RagPersistIngestCommand, RagProjectDocSourceFields, RagTextUnitWrite,
-    validate_direct_scope,
+    RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime, RagIngestAccessContext,
+    RagIngestRepository, RagIngestRequest, RagIngestResult, RagIngestScope, RagIngestService,
+    RagIngestWarning, RagMemorySourceFields, RagPersistIngestCommand, RagProjectDocSourceFields,
+    RagTextUnitWrite, validate_direct_scope,
 };
 pub use ingest_profile::{CompiledRagIngestProfile, compile_ingest_profile};
 pub use retry::{

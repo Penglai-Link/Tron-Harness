@@ -81,6 +81,9 @@ pub(super) const RAG_INGEST_PROFILES_MIGRATION: &str =
     include_str!("../../../../../migrations/20260531_0024_add_rag_ingest_profiles.sql");
 pub(super) const RAG_SEARCH_PROFILES_MIGRATION: &str =
     include_str!("../../../../../migrations/20260531_0025_add_rag_search_profiles.sql");
+pub(super) const RAG_OPTIONAL_MODEL_CODES_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260601_0026_make_rag_profile_model_codes_optional.sql"
+);
 pub(super) const AGENT_MANAGEMENT_RUNTIME_TYPE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260601_0027_add_agent_management_runtime_type.sql");
 pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_MIGRATION: &str =

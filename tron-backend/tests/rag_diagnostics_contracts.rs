@@ -12,9 +12,9 @@ use tron_backend::{
     adapters::outbound::persistence::sqlite::SqliteRagRepository,
     application::rag::{
         DefaultRagStrategyRegistry, RagDebugSourceRequest, RagDiagnosticsService, RagEmbeddingCall,
-        RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRequest, RagIngestScope,
-        RagIngestService, RagRetryIndexRequest, RagRetryIndexService, RagSearchContextRequest,
-        RagSearchRequest, RagSearchService, RagSearchTraceRequest,
+        RagEmbeddingResult, RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRequest,
+        RagIngestScope, RagIngestService, RagRetryIndexRequest, RagRetryIndexService,
+        RagSearchContextRequest, RagSearchRequest, RagSearchService, RagSearchTraceRequest,
     },
     shared::{
         event_bus::{BusRouteClass, EventBusConfig, EventBusRuntimeBuilder, RecordingEventSink},
@@ -335,13 +335,16 @@ fn ingest_request() -> RagIngestRequest {
 
 #[derive(Clone)]
 struct FakeEmbeddingRuntime {
-    result: Result<Vec<f32>, String>,
+    result: Result<RagEmbeddingResult, String>,
 }
 
 impl FakeEmbeddingRuntime {
     fn fixed(embedding: Vec<f32>) -> Self {
         Self {
-            result: Ok(embedding),
+            result: Ok(RagEmbeddingResult {
+                model_code: "workspace-default-embedding".into(),
+                embedding,
+            }),
         }
     }
 
@@ -356,7 +359,7 @@ impl RagEmbeddingRuntime for FakeEmbeddingRuntime {
     fn embed<'a>(
         &'a self,
         _call: RagEmbeddingCall,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
         Box::pin(async move { self.result.clone() })
     }
 }
@@ -366,7 +369,11 @@ impl tron_backend::application::rag::RagSearchRuntime for FakeEmbeddingRuntime {
         &'a self,
         call: RagEmbeddingCall,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
-        <Self as RagEmbeddingRuntime>::embed(self, call)
+        Box::pin(async move {
+            <Self as RagEmbeddingRuntime>::embed(self, call)
+                .await
+                .map(|result| result.embedding)
+        })
     }
 
     fn rerank<'a>(

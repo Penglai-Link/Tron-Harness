@@ -108,7 +108,11 @@ impl RagSearchRuntime for LlmRuntimeService {
         &'a self,
         call: RagEmbeddingCall,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
-        <Self as super::RagEmbeddingRuntime>::embed(self, call)
+        Box::pin(async move {
+            <Self as super::RagEmbeddingRuntime>::embed(self, call)
+                .await
+                .map(|result| result.embedding)
+        })
     }
 
     fn rerank<'a>(

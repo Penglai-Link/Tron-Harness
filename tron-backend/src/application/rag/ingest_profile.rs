@@ -92,6 +92,8 @@ where
         .config
         .get("embeddingModelCode")
         .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned);
     let embedding_version = profile
         .config
