@@ -1,13 +1,14 @@
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::domain::rag::{RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus};
 
 use super::{RagStrategyRegistry, StrategyRegistrationStatus};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct CompiledRetrievalProfile {
     pub profile_id: String,
     pub corpus_id: String,
+    pub corpus_ids: Vec<String>,
     pub required_source_version: String,
     pub routes: Vec<RetrievalRoute>,
     pub supported_context_strategies: Vec<String>,
@@ -17,10 +18,14 @@ pub struct CompiledRetrievalProfile {
     pub degrade_policy: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RetrievalRoute {
     pub route_id: String,
+    pub corpus_id: String,
     pub retriever: String,
+    pub top_k: usize,
+    pub weight: f64,
+    pub filters: Value,
 }
 
 pub fn compile_retrieval_profile<S>(
@@ -76,6 +81,7 @@ where
     Ok(CompiledRetrievalProfile {
         profile_id: profile.profile_id.clone(),
         corpus_id: corpus.corpus_id.clone(),
+        corpus_ids: profile.corpus_ids.clone(),
         required_source_version,
         routes,
         supported_context_strategies,
@@ -107,10 +113,28 @@ fn parse_routes(
                         .and_then(Value::as_str)
                         .map(ToOwned::to_owned)
                         .unwrap_or_else(|| default_route_id(corpus_id, retriever, index)),
+                    corpus_id: object
+                        .get("corpusId")
+                        .and_then(Value::as_str)
+                        .unwrap_or(corpus_id)
+                        .to_string(),
                     retriever: retriever.to_string(),
+                    top_k: object
+                        .get("topK")
+                        .and_then(Value::as_u64)
+                        .map(|value| value as usize)
+                        .filter(|value| *value > 0)
+                        .unwrap_or(20),
+                    weight: object
+                        .get("weight")
+                        .and_then(Value::as_f64)
+                        .filter(|value| *value > 0.0)
+                        .unwrap_or(1.0),
+                    filters: object.get("filters").cloned().unwrap_or_else(|| json!({})),
                 })
             })
-            .collect();
+            .collect::<Result<Vec<_>, _>>()
+            .and_then(|routes| validate_route_corpora(profile, routes));
     }
 
     profile
@@ -124,10 +148,29 @@ fn parse_routes(
             let retriever = value.as_str().ok_or(RagError::RetrievalProfileInvalid)?;
             Ok(RetrievalRoute {
                 route_id: default_route_id(corpus_id, retriever, index),
+                corpus_id: corpus_id.to_string(),
                 retriever: retriever.to_string(),
+                top_k: 20,
+                weight: 1.0,
+                filters: json!({}),
             })
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>()
+        .and_then(|routes| validate_route_corpora(profile, routes))
+}
+
+fn validate_route_corpora(
+    profile: &RagProfileRecord,
+    routes: Vec<RetrievalRoute>,
+) -> Result<Vec<RetrievalRoute>, RagError> {
+    if routes
+        .iter()
+        .all(|route| profile.corpus_ids.contains(&route.corpus_id))
+    {
+        Ok(routes)
+    } else {
+        Err(RagError::RetrievalProfileInvalid)
+    }
 }
 
 fn default_route_id(corpus_id: &str, retriever: &str, index: usize) -> String {

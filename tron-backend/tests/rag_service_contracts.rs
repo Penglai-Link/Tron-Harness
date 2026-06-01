@@ -11,6 +11,7 @@ use tron_backend::{
     },
     domain::rag::{
         RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus, RagStorageBinding,
+        RagStorageLayout,
     },
 };
 
@@ -27,6 +28,8 @@ fn rag_service_resolves_enabled_corpus_storage_binding_from_repository_port() {
 
     assert_eq!(corpus.corpus_id, "memory-card");
     assert_eq!(corpus.status, RagStatus::Enabled);
+    assert_eq!(corpus.storage_binding.layout, RagStorageLayout::Split);
+    assert_eq!(corpus.storage_binding.table, None);
     assert_eq!(
         corpus.storage_binding.source_table.as_deref(),
         Some("rag_memory_sources")
@@ -661,6 +664,8 @@ fn memory_corpus_record() -> RagCorpusRecord {
             ("scopeType".to_string(), "scope_type".to_string()),
         ]),
         storage_binding: RagStorageBinding {
+            layout: RagStorageLayout::Split,
+            table: None,
             source_table: Some("rag_memory_sources".to_string()),
             text_unit_table: Some("rag_memory_text_units".to_string()),
             diagnostics_table: Some("rag_diagnostics".to_string()),

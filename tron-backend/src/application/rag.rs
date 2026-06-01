@@ -9,6 +9,7 @@ mod search;
 mod search_filter;
 mod search_observability;
 mod search_profile;
+mod search_ranking;
 mod service;
 
 pub use diagnostics::{
@@ -30,9 +31,9 @@ pub use retry::{
     RagRetryStageResult, RagRetryTextUnit, RagRetryVectorUpdate,
 };
 pub use search::{
-    CandidateHit, ContextPack, ContextPackItem, RagRerankCall, RagSearchContextRequest,
-    RagSearchRepository, RagSearchRequest, RagSearchResult, RagSearchRow, RagSearchRuntime,
-    RagSearchScope, RagSearchService, RagSearchTraceRequest, RagTextUnitSearchQuery,
+    CandidateHit, ContextPack, ContextPackItem, RagRerankCall, RagRouteSearchQuery,
+    RagSearchContextRequest, RagSearchRepository, RagSearchRequest, RagSearchResult, RagSearchRow,
+    RagSearchRuntime, RagSearchScope, RagSearchService, RagSearchTraceRequest,
 };
 pub use search_filter::merge_search_filters;
 pub use search_profile::{CompiledRetrievalProfile, RetrievalRoute, compile_retrieval_profile};

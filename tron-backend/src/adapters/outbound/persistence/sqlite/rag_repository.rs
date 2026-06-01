@@ -2,6 +2,7 @@ mod diagnostics;
 mod ingest;
 mod retry;
 mod search;
+mod sql_plan;
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -16,12 +17,14 @@ use crate::{
     application::rag::{RagConfigRepository, RagProfileListQuery},
     domain::rag::{
         RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus, RagStorageBinding,
+        RagStorageLayout,
     },
 };
 
 use super::migrations::{
     RAG_DOMAIN_FIELDS_MIGRATION, RAG_FOUNDATION_MIGRATION, RAG_INGEST_PROFILES_MIGRATION,
     RAG_OPTIONAL_MODEL_CODES_MIGRATION, RAG_SEARCH_PROFILES_MIGRATION,
+    RAG_STORAGE_BINDING_LAYOUT_MIGRATION,
 };
 
 pub struct SqliteRagRepository {
@@ -53,7 +56,8 @@ impl SqliteRagRepository {
         self.apply_rag_domain_fields_migration()?;
         self.apply_rag_ingest_profiles_migration()?;
         self.apply_rag_search_profiles_migration()?;
-        self.apply_rag_optional_model_codes_migration()
+        self.apply_rag_optional_model_codes_migration()?;
+        self.apply_rag_storage_binding_layout_migration()
     }
 
     pub fn apply_rag_foundation_migration(&self) -> Result<(), RagError> {
@@ -111,6 +115,12 @@ impl SqliteRagRepository {
     pub fn apply_rag_optional_model_codes_migration(&self) -> Result<(), RagError> {
         self.connection
             .execute_batch(RAG_OPTIONAL_MODEL_CODES_MIGRATION)
+            .map_err(storage_error)
+    }
+
+    pub fn apply_rag_storage_binding_layout_migration(&self) -> Result<(), RagError> {
+        self.connection
+            .execute_batch(RAG_STORAGE_BINDING_LAYOUT_MIGRATION)
             .map_err(storage_error)
     }
 
@@ -340,7 +350,25 @@ fn map_profile_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RagProfileRecord
 
 fn parse_storage_binding(raw: &str) -> rusqlite::Result<RagStorageBinding> {
     let value: Value = parse_json_value(raw)?;
+    let layout = value
+        .get("layout")
+        .and_then(Value::as_str)
+        .map(RagStorageLayout::try_from)
+        .transpose()
+        .map_err(to_sql_error)?
+        .unwrap_or_else(|| {
+            if value.get("table").and_then(Value::as_str).is_some() {
+                RagStorageLayout::EmbeddedSource
+            } else {
+                RagStorageLayout::Split
+            }
+        });
     Ok(RagStorageBinding {
+        layout,
+        table: value
+            .get("table")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
         source_table: value
             .get("sourceTable")
             .and_then(Value::as_str)

@@ -1,153 +1,196 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::{Transaction, params};
+use rusqlite::{Transaction, params, params_from_iter, types::Value as SqlValue};
 use serde_json::Value;
 
 use crate::{
-    application::rag::{RagIngestRepository, RagPersistIngestCommand},
+    application::rag::{
+        RagConfigRepository, RagIngestRepository, RagPersistIngestCommand, RagTextUnitWrite,
+    },
     domain::rag::RagError,
 };
 
-use super::{SqliteRagRepository, storage_error};
+use super::{
+    SqliteRagRepository,
+    sql_plan::{SqliteRagCorpusPlan, compile_sql_corpus_plan, quote_identifier},
+    storage_error,
+};
 
 impl RagIngestRepository for SqliteRagRepository {
     fn persist_ingest(&self, command: RagPersistIngestCommand) -> Result<(), RagError> {
+        let corpus = self
+            .get_corpus(&command.corpus_id)?
+            .ok_or(RagError::CorpusNotFound)?;
+        let plan = compile_sql_corpus_plan(self, &corpus)?;
         let tx = self
             .connection
             .unchecked_transaction()
             .map_err(storage_error)?;
-        match command.corpus_id.as_str() {
-            "memory-card" => persist_memory_source(&tx, &command)?,
-            "project-doc" => persist_project_doc_source(&tx, &command)?,
-            _ => return Err(RagError::CorpusReserved),
-        }
-        persist_text_units(&tx, &command)?;
-        persist_warnings(&tx, &command)?;
+        persist_source(&tx, &plan, &command)?;
+        persist_text_units(&tx, &plan, &command)?;
+        persist_warnings(&tx, &plan, &command)?;
         tx.commit().map_err(storage_error)
     }
 }
 
-fn persist_memory_source(
+fn persist_source(
     tx: &Transaction<'_>,
+    plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
-    let memory = command
-        .memory
-        .as_ref()
-        .ok_or(RagError::IngestRequestInvalid)?;
+    let Some(table) = plan.source_table.as_deref() else {
+        return Ok(());
+    };
     let now = now_millis();
-    tx.execute(
-        "INSERT INTO rag_memory_sources (
-            source_code, source_version, source_type, scope_type, scope_code, status,
-            title, content_hash, metadata, created_at, updated_at,
-            memory_type, memory_status, review_status, version, importance_score
-        )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10, ?11, ?12, ?13, ?14, ?15)
-        ON CONFLICT (source_code, source_version, scope_type, scope_code) DO UPDATE SET
-            source_type = excluded.source_type,
-            status = excluded.status,
-            title = excluded.title,
-            content_hash = excluded.content_hash,
-            metadata = excluded.metadata,
-            updated_at = excluded.updated_at,
-            memory_type = excluded.memory_type,
-            memory_status = excluded.memory_status,
-            review_status = excluded.review_status,
-            version = excluded.version,
-            importance_score = excluded.importance_score",
-        params![
-            command.source_code,
-            command.source_version,
-            command.source_type,
-            command.scope.scope_type,
-            command.scope.scope_code,
-            command.source_status,
-            command.title,
-            command.content_hash,
-            json_string(&command.metadata)?,
-            now,
-            memory.memory_type,
-            memory.memory_status,
-            memory.review_status,
-            memory.version,
-            memory.importance_score,
-        ],
-    )
-    .map_err(storage_error)?;
+    let mut values = Vec::new();
+    push_text(
+        &mut values,
+        &plan.source_columns,
+        "source_code",
+        &command.source_code,
+    );
+    push_text(
+        &mut values,
+        &plan.source_columns,
+        "source_version",
+        &command.source_version,
+    );
+    push_text(
+        &mut values,
+        &plan.source_columns,
+        "source_type",
+        &command.source_type,
+    );
+    push_text(
+        &mut values,
+        &plan.source_columns,
+        "scope_type",
+        &command.scope.scope_type,
+    );
+    push_text(
+        &mut values,
+        &plan.source_columns,
+        "scope_code",
+        &command.scope.scope_code,
+    );
+    push_dynamic_text(
+        &mut values,
+        &plan.source_columns,
+        &plan.source_status_column,
+        &command.source_status,
+    );
+    push_optional_text(
+        &mut values,
+        &plan.source_columns,
+        "title",
+        command.title.as_deref(),
+    );
+    if let Some(column) = plan.source_content_hash_column.as_deref() {
+        push_dynamic_text(
+            &mut values,
+            &plan.source_columns,
+            column,
+            &command.content_hash,
+        );
+    }
+    if let Some(column) = plan.source_metadata_column.as_deref() {
+        push_dynamic_text(
+            &mut values,
+            &plan.source_columns,
+            column,
+            &json_string(&command.metadata)?,
+        );
+    }
+    if let Some(column) = plan.source_created_at_column.as_deref() {
+        push_integer(&mut values, &plan.source_columns, column, now);
+    }
+    if let Some(column) = plan.source_updated_at_column.as_deref() {
+        push_integer(&mut values, &plan.source_columns, column, now);
+    }
+    push_source_domain_values(&mut values, &plan.source_columns, command);
+    execute_upsert(
+        tx,
+        table,
+        values,
+        &["source_code", "source_version", "scope_type", "scope_code"],
+        &[plan.source_created_at_column.as_deref()],
+    )?;
     Ok(())
 }
 
-fn persist_project_doc_source(
-    tx: &Transaction<'_>,
+fn push_source_domain_values(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &std::collections::BTreeSet<String>,
     command: &RagPersistIngestCommand,
-) -> Result<(), RagError> {
-    let project_doc = command
-        .project_doc
-        .as_ref()
-        .ok_or(RagError::IngestRequestInvalid)?;
-    let now = now_millis();
-    tx.execute(
-        "INSERT INTO rag_project_doc_sources (
-            source_code, source_version, source_type, scope_type, scope_code, status,
-            title, content_hash, document_code, document_type, path, body_hash, metadata,
-            created_at, updated_at, repo_code, module_code, module_name
-        )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?14, ?15, ?16, ?17)
-        ON CONFLICT (source_code, source_version, scope_type, scope_code) DO UPDATE SET
-            source_type = excluded.source_type,
-            status = excluded.status,
-            title = excluded.title,
-            content_hash = excluded.content_hash,
-            document_code = excluded.document_code,
-            document_type = excluded.document_type,
-            path = excluded.path,
-            body_hash = excluded.body_hash,
-            metadata = excluded.metadata,
-            updated_at = excluded.updated_at,
-            repo_code = excluded.repo_code,
-            module_code = excluded.module_code,
-            module_name = excluded.module_name",
-        params![
-            command.source_code,
-            command.source_version,
-            command.source_type,
-            command.scope.scope_type,
-            command.scope.scope_code,
-            command.source_status,
-            command.title,
-            command.content_hash,
-            project_doc.document_code,
-            project_doc.document_type,
-            project_doc.path,
-            project_doc.body_hash,
-            json_string(&command.metadata)?,
-            now,
-            project_doc.repo_code,
-            project_doc.module_code,
-            project_doc.module_name,
-        ],
-    )
-    .map_err(storage_error)?;
-    Ok(())
+) {
+    if let Some(memory) = &command.memory {
+        push_optional_text(
+            values,
+            columns,
+            "memory_type",
+            memory.memory_type.as_deref(),
+        );
+        push_optional_text(
+            values,
+            columns,
+            "memory_status",
+            memory.memory_status.as_deref(),
+        );
+        push_optional_text(
+            values,
+            columns,
+            "review_status",
+            memory.review_status.as_deref(),
+        );
+        push_optional_text(values, columns, "version", memory.version.as_deref());
+        push_optional_integer(values, columns, "importance_score", memory.importance_score);
+    }
+    if let Some(project_doc) = &command.project_doc {
+        push_optional_text(
+            values,
+            columns,
+            "document_code",
+            project_doc.document_code.as_deref(),
+        );
+        push_optional_text(
+            values,
+            columns,
+            "document_type",
+            project_doc.document_type.as_deref(),
+        );
+        push_optional_text(values, columns, "path", project_doc.path.as_deref());
+        push_text(values, columns, "body_hash", &project_doc.body_hash);
+        push_optional_text(
+            values,
+            columns,
+            "repo_code",
+            project_doc.repo_code.as_deref(),
+        );
+        push_optional_text(
+            values,
+            columns,
+            "module_code",
+            project_doc.module_code.as_deref(),
+        );
+        push_optional_text(
+            values,
+            columns,
+            "module_name",
+            project_doc.module_name.as_deref(),
+        );
+    }
 }
 
 fn persist_text_units(
     tx: &Transaction<'_>,
+    plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
-    let table = match command.corpus_id.as_str() {
-        "memory-card" => "rag_memory_text_units",
-        "project-doc" => "rag_project_doc_text_units",
-        _ => return Err(RagError::CorpusReserved),
-    };
     let now = now_millis();
     for unit in &command.text_units {
-        if command.corpus_id == "memory-card" {
-            persist_memory_text_unit(tx, command, unit, now)?;
-        } else {
-            persist_project_doc_text_unit(tx, command, unit, now)?;
-        }
+        persist_text_unit(tx, plan, command, unit, now)?;
     }
+    let table = quote_identifier(&plan.text_unit_table)?;
     let delete_sql = format!(
         "DELETE FROM {table}
          WHERE source_code = ?1
@@ -170,140 +213,175 @@ fn persist_text_units(
     Ok(())
 }
 
-fn persist_memory_text_unit(
+fn persist_text_unit(
     tx: &Transaction<'_>,
+    plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
-    unit: &crate::application::rag::RagTextUnitWrite,
+    unit: &RagTextUnitWrite,
     now: i64,
 ) -> Result<(), RagError> {
-    tx.execute(
-        "INSERT INTO rag_memory_text_units (
-            text_unit_code, source_code, source_version, scope_type, scope_code,
-            unit_type, text, search_text, heading_path, ordinal, token_count,
-            content_hash, status, fulltext_status, embedding_model_code,
-            embedding_version, embedding_text_hash, embedding_dimension, embedding,
-            embedding_status, metadata, created_at, updated_at
-        )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?22)
-        ON CONFLICT (source_code, source_version, ordinal) DO UPDATE SET
-            text_unit_code = excluded.text_unit_code,
-            scope_type = excluded.scope_type,
-            scope_code = excluded.scope_code,
-            unit_type = excluded.unit_type,
-            text = excluded.text,
-            search_text = excluded.search_text,
-            heading_path = excluded.heading_path,
-            token_count = excluded.token_count,
-            content_hash = excluded.content_hash,
-            status = excluded.status,
-            fulltext_status = excluded.fulltext_status,
-            embedding_model_code = excluded.embedding_model_code,
-            embedding_version = excluded.embedding_version,
-            embedding_text_hash = excluded.embedding_text_hash,
-            embedding_dimension = excluded.embedding_dimension,
-            embedding = excluded.embedding,
-            embedding_status = excluded.embedding_status,
-            metadata = excluded.metadata,
-            updated_at = excluded.updated_at",
-        params![
-            unit.text_unit_code,
-            command.source_code,
-            command.source_version,
-            command.scope.scope_type,
-            command.scope.scope_code,
-            unit.unit_type,
-            unit.text,
-            unit.search_text,
-            unit.heading_path,
-            unit.ordinal as i64,
-            unit.token_count,
-            unit.content_hash,
-            unit.status,
-            unit.fulltext_status,
-            unit.embedding_model_code,
-            unit.embedding_version,
-            unit.embedding_text_hash,
-            unit.embedding_dimension,
-            unit.embedding,
-            unit.embedding_status,
-            json_string(&unit.metadata)?,
-            now,
-        ],
-    )
-    .map_err(storage_error)?;
-    Ok(())
-}
-
-fn persist_project_doc_text_unit(
-    tx: &Transaction<'_>,
-    command: &RagPersistIngestCommand,
-    unit: &crate::application::rag::RagTextUnitWrite,
-    now: i64,
-) -> Result<(), RagError> {
-    tx.execute(
-        "INSERT INTO rag_project_doc_text_units (
-            text_unit_code, source_code, source_version, document_code, scope_type, scope_code,
-            unit_type, text, search_text, heading_path, ordinal, token_count,
-            content_hash, status, fulltext_status, embedding_model_code,
-            embedding_version, embedding_text_hash, embedding_dimension, embedding,
-            embedding_status, metadata, created_at, updated_at
-        )
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?23)
-        ON CONFLICT (source_code, source_version, ordinal) DO UPDATE SET
-            text_unit_code = excluded.text_unit_code,
-            document_code = excluded.document_code,
-            scope_type = excluded.scope_type,
-            scope_code = excluded.scope_code,
-            unit_type = excluded.unit_type,
-            text = excluded.text,
-            search_text = excluded.search_text,
-            heading_path = excluded.heading_path,
-            token_count = excluded.token_count,
-            content_hash = excluded.content_hash,
-            status = excluded.status,
-            fulltext_status = excluded.fulltext_status,
-            embedding_model_code = excluded.embedding_model_code,
-            embedding_version = excluded.embedding_version,
-            embedding_text_hash = excluded.embedding_text_hash,
-            embedding_dimension = excluded.embedding_dimension,
-            embedding = excluded.embedding,
-            embedding_status = excluded.embedding_status,
-            metadata = excluded.metadata,
-            updated_at = excluded.updated_at",
-        params![
-            unit.text_unit_code,
-            command.source_code,
-            command.source_version,
-            unit.document_code,
-            command.scope.scope_type,
-            command.scope.scope_code,
-            unit.unit_type,
-            unit.text,
-            unit.search_text,
-            unit.heading_path,
-            unit.ordinal as i64,
-            unit.token_count,
-            unit.content_hash,
-            unit.status,
-            unit.fulltext_status,
-            unit.embedding_model_code,
-            unit.embedding_version,
-            unit.embedding_text_hash,
-            unit.embedding_dimension,
-            unit.embedding,
-            unit.embedding_status,
-            json_string(&unit.metadata)?,
-            now,
-        ],
-    )
-    .map_err(storage_error)?;
+    let mut values = Vec::new();
+    push_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "text_unit_code",
+        &unit.text_unit_code,
+    );
+    push_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "source_code",
+        &command.source_code,
+    );
+    push_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "source_version",
+        &command.source_version,
+    );
+    push_optional_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "document_code",
+        unit.document_code.as_deref(),
+    );
+    push_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "scope_type",
+        &command.scope.scope_type,
+    );
+    push_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "scope_code",
+        &command.scope.scope_code,
+    );
+    push_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "unit_type",
+        &unit.unit_type,
+    );
+    push_text(&mut values, &plan.text_unit_columns, "text", &unit.text);
+    push_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "search_text",
+        &unit.search_text,
+    );
+    push_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "heading_path",
+        &unit.heading_path,
+    );
+    push_integer(
+        &mut values,
+        &plan.text_unit_columns,
+        "ordinal",
+        unit.ordinal as i64,
+    );
+    push_integer(
+        &mut values,
+        &plan.text_unit_columns,
+        "token_count",
+        unit.token_count,
+    );
+    if let Some(column) = plan.text_unit_content_hash_column.as_deref() {
+        push_dynamic_text(
+            &mut values,
+            &plan.text_unit_columns,
+            column,
+            &unit.content_hash,
+        );
+    }
+    push_dynamic_text(
+        &mut values,
+        &plan.text_unit_columns,
+        &plan.text_unit_status_column,
+        &unit.status,
+    );
+    push_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "fulltext_status",
+        &unit.fulltext_status,
+    );
+    push_optional_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "embedding_model_code",
+        unit.embedding_model_code.as_deref(),
+    );
+    push_optional_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "embedding_version",
+        unit.embedding_version.as_deref(),
+    );
+    push_optional_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "embedding_text_hash",
+        unit.embedding_text_hash.as_deref(),
+    );
+    push_optional_integer(
+        &mut values,
+        &plan.text_unit_columns,
+        "embedding_dimension",
+        unit.embedding_dimension,
+    );
+    push_optional_blob(
+        &mut values,
+        &plan.text_unit_columns,
+        "embedding",
+        unit.embedding.as_deref(),
+    );
+    push_text(
+        &mut values,
+        &plan.text_unit_columns,
+        "embedding_status",
+        &unit.embedding_status,
+    );
+    if let Some(column) = plan.text_unit_metadata_column.as_deref() {
+        push_dynamic_text(
+            &mut values,
+            &plan.text_unit_columns,
+            column,
+            &json_string(&unit.metadata)?,
+        );
+    }
+    if let Some(column) = plan.text_unit_created_at_column.as_deref() {
+        push_integer(&mut values, &plan.text_unit_columns, column, now);
+    }
+    if let Some(column) = plan.text_unit_updated_at_column.as_deref() {
+        push_integer(&mut values, &plan.text_unit_columns, column, now);
+    }
+    execute_upsert(
+        tx,
+        &plan.text_unit_table,
+        values,
+        &plan
+            .text_unit_unique_key
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>(),
+        &[plan.text_unit_created_at_column.as_deref()],
+    )?;
     Ok(())
 }
 
 fn persist_warnings(
     tx: &Transaction<'_>,
+    plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
+    let diagnostics_table = plan
+        .diagnostics_table
+        .as_deref()
+        .ok_or(RagError::StorageBindingInvalid)?;
+    let diagnostics_table = quote_identifier(diagnostics_table)?;
     let now = now_millis();
     for warning in &command.warnings {
         let record_code = format!(
@@ -315,8 +393,8 @@ fn persist_warnings(
             command.scope.scope_type,
             warning.stage_id
         );
-        tx.execute(
-            "INSERT INTO rag_diagnostics (
+        let sql = format!(
+            "INSERT INTO {diagnostics_table} (
                 record_type, record_code, corpus_id, profile_id, source_code, source_version,
                 scope_type, scope_code, workspace_code, user_code, agent_code, stage_id,
                 message, payload_json, created_at
@@ -325,7 +403,10 @@ fn persist_warnings(
             ON CONFLICT (record_code) DO UPDATE SET
                 message = excluded.message,
                 payload_json = excluded.payload_json,
-                created_at = excluded.created_at",
+                created_at = excluded.created_at"
+        );
+        tx.execute(
+            &sql,
             params![
                 record_code,
                 command.corpus_id,
@@ -346,6 +427,144 @@ fn persist_warnings(
         .map_err(storage_error)?;
     }
     Ok(())
+}
+
+fn execute_upsert(
+    tx: &Transaction<'_>,
+    table_name: &str,
+    values: Vec<(String, SqlValue)>,
+    conflict_columns: &[&str],
+    skip_update_columns: &[Option<&str>],
+) -> Result<(), RagError> {
+    if values.is_empty() {
+        return Err(RagError::StorageBindingInvalid);
+    }
+    let table = quote_identifier(table_name)?;
+    let columns = values
+        .iter()
+        .map(|(column, _)| quote_identifier(column))
+        .collect::<Result<Vec<_>, _>>()?;
+    let placeholders = (1..=values.len())
+        .map(|index| format!("?{index}"))
+        .collect::<Vec<_>>();
+    let conflict = conflict_columns
+        .iter()
+        .map(|column| quote_identifier(column))
+        .collect::<Result<Vec<_>, _>>()?
+        .join(", ");
+    let skipped = skip_update_columns
+        .iter()
+        .flatten()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    let update_columns = values
+        .iter()
+        .map(|(column, _)| column.as_str())
+        .filter(|column| !conflict_columns.contains(column) && !skipped.contains(column))
+        .collect::<Vec<_>>();
+    let update_sql = if update_columns.is_empty() {
+        "DO NOTHING".to_string()
+    } else {
+        format!(
+            "DO UPDATE SET {}",
+            update_columns
+                .iter()
+                .map(|column| {
+                    let column = quote_identifier(column)?;
+                    Ok(format!("{column} = excluded.{column}"))
+                })
+                .collect::<Result<Vec<_>, RagError>>()?
+                .join(", ")
+        )
+    };
+    let sql = format!(
+        "INSERT INTO {table} ({}) VALUES ({}) ON CONFLICT ({conflict}) {update_sql}",
+        columns.join(", "),
+        placeholders.join(", ")
+    );
+    tx.execute(
+        &sql,
+        params_from_iter(values.into_iter().map(|(_, value)| value)),
+    )
+    .map_err(storage_error)?;
+    Ok(())
+}
+
+fn push_text(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &std::collections::BTreeSet<String>,
+    column: &str,
+    value: &str,
+) {
+    if columns.contains(column) {
+        values.push((column.to_string(), SqlValue::Text(value.to_string())));
+    }
+}
+
+fn push_dynamic_text(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &std::collections::BTreeSet<String>,
+    column: &str,
+    value: &str,
+) {
+    push_text(values, columns, column, value);
+}
+
+fn push_optional_text(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &std::collections::BTreeSet<String>,
+    column: &str,
+    value: Option<&str>,
+) {
+    if columns.contains(column) {
+        values.push((
+            column.to_string(),
+            value
+                .map(|value| SqlValue::Text(value.to_string()))
+                .unwrap_or(SqlValue::Null),
+        ));
+    }
+}
+
+fn push_integer(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &std::collections::BTreeSet<String>,
+    column: &str,
+    value: i64,
+) {
+    if columns.contains(column) {
+        values.push((column.to_string(), SqlValue::Integer(value)));
+    }
+}
+
+fn push_optional_integer(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &std::collections::BTreeSet<String>,
+    column: &str,
+    value: Option<i64>,
+) {
+    if columns.contains(column) {
+        values.push((
+            column.to_string(),
+            value.map(SqlValue::Integer).unwrap_or(SqlValue::Null),
+        ));
+    }
+}
+
+fn push_optional_blob(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &std::collections::BTreeSet<String>,
+    column: &str,
+    value: Option<&[u8]>,
+) {
+    if columns.contains(column) {
+        values.push((
+            column.to_string(),
+            value
+                .map(|value| SqlValue::Blob(value.to_vec()))
+                .unwrap_or(SqlValue::Null),
+        ));
+    }
 }
 
 fn json_string(value: &Value) -> Result<String, RagError> {

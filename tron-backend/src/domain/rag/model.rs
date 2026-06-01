@@ -65,8 +65,37 @@ impl TryFrom<&str> for RagProfileType {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RagStorageLayout {
+    Split,
+    EmbeddedSource,
+}
+
+impl RagStorageLayout {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Split => "SPLIT",
+            Self::EmbeddedSource => "EMBEDDED_SOURCE",
+        }
+    }
+}
+
+impl TryFrom<&str> for RagStorageLayout {
+    type Error = RagError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "SPLIT" => Ok(Self::Split),
+            "EMBEDDED_SOURCE" => Ok(Self::EmbeddedSource),
+            _ => Err(RagError::StorageBindingInvalid),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RagStorageBinding {
+    pub layout: RagStorageLayout,
+    pub table: Option<String>,
     pub source_table: Option<String>,
     pub text_unit_table: Option<String>,
     pub diagnostics_table: Option<String>,

@@ -306,6 +306,41 @@ fn repository_search_boundary_keeps_graph_summary_and_memory_flow_behavior_out()
     }
 }
 
+#[test]
+fn sqlite_rag_repository_uses_template_plans_instead_of_corpus_sql_branches() {
+    let repository_ingest =
+        include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/ingest.rs");
+    let repository_search =
+        include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/search.rs");
+    let repository_retry =
+        include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/retry.rs");
+    let repository_diagnostics =
+        include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/diagnostics.rs");
+
+    for source in [
+        repository_ingest,
+        repository_search,
+        repository_retry,
+        repository_diagnostics,
+    ] {
+        for forbidden in [
+            "rag_memory_sources",
+            "rag_memory_text_units",
+            "rag_project_doc_sources",
+            "rag_project_doc_text_units",
+        ] {
+            assert!(
+                !source.contains(forbidden),
+                "SQLite RAG repository should read RAG table names from storageBinding, not {forbidden}",
+            );
+        }
+        assert!(
+            !source.contains("\"memory-card\" =>") && !source.contains("\"project-doc\" =>"),
+            "SQLite RAG repository should not branch SQL templates by corpus id",
+        );
+    }
+}
+
 #[derive(Clone, Default)]
 struct FakeSearchRuntime {
     embeddings: Arc<Mutex<VecDeque<Result<Vec<f32>, String>>>>,

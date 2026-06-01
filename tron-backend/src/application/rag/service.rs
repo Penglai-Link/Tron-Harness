@@ -7,6 +7,7 @@ use serde_json::{Value, json};
 
 use crate::domain::rag::{
     RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus, RagStorageBinding,
+    RagStorageLayout,
 };
 
 pub trait RagConfigRepository {
@@ -411,11 +412,20 @@ fn validate_storage_binding(
     if *status == RagStatus::Reserved {
         return Ok(());
     }
-    for table_name in [
-        binding.source_table.as_deref(),
-        binding.text_unit_table.as_deref(),
-        binding.diagnostics_table.as_deref(),
-    ] {
+    let required_tables = match binding.layout {
+        RagStorageLayout::Split => vec![
+            binding.source_table.as_deref(),
+            binding.text_unit_table.as_deref(),
+            binding.diagnostics_table.as_deref(),
+        ],
+        RagStorageLayout::EmbeddedSource => {
+            vec![
+                binding.table.as_deref(),
+                binding.diagnostics_table.as_deref(),
+            ]
+        }
+    };
+    for table_name in required_tables {
         let Some(table_name) = table_name else {
             return Err(RagError::StorageBindingInvalid);
         };

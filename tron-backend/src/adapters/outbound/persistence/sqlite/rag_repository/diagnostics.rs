@@ -3,24 +3,29 @@ use serde_json::{Value, json};
 
 use crate::{
     application::rag::{
-        RagDebugSourceRecord, RagDebugSourceRequest, RagDebugSourceResult, RagDebugTextUnitRecord,
-        RagDiagnosticWarningRecord, RagDiagnosticsRepository, RagSearchTraceWrite,
+        RagConfigRepository, RagDebugSourceRecord, RagDebugSourceRequest, RagDebugSourceResult,
+        RagDebugTextUnitRecord, RagDiagnosticWarningRecord, RagDiagnosticsRepository,
+        RagSearchTraceWrite,
     },
     domain::rag::RagError,
 };
 
-use super::{SqliteRagRepository, storage_error};
+use super::{
+    SqliteRagRepository,
+    sql_plan::{SqliteRagCorpusPlan, compile_sql_corpus_plan, quote_identifier},
+    storage_error,
+};
 
 impl RagDiagnosticsRepository for SqliteRagRepository {
     fn debug_source(
         &self,
         request: &RagDebugSourceRequest,
     ) -> Result<Option<RagDebugSourceResult>, RagError> {
-        match request.corpus_id.as_str() {
-            "memory-card" => debug_memory_source(self, request),
-            "project-doc" => debug_project_doc_source(self, request),
-            _ => Err(RagError::CorpusReserved),
-        }
+        let corpus = self
+            .get_corpus(&request.corpus_id)?
+            .ok_or(RagError::CorpusNotFound)?;
+        let plan = compile_sql_corpus_plan(self, &corpus)?;
+        debug_source(self, &plan, request)
     }
 
     fn persist_search_trace(&self, trace: RagSearchTraceWrite) -> Result<(), RagError> {
@@ -53,16 +58,31 @@ impl RagDiagnosticsRepository for SqliteRagRepository {
     }
 }
 
-fn debug_memory_source(
+fn debug_source(
     repository: &SqliteRagRepository,
+    plan: &SqliteRagCorpusPlan,
     request: &RagDebugSourceRequest,
 ) -> Result<Option<RagDebugSourceResult>, RagError> {
+    let source_table = plan
+        .source_table
+        .as_deref()
+        .ok_or(RagError::StorageBindingInvalid)?;
+    let metadata_column = plan
+        .source_metadata_column
+        .as_deref()
+        .ok_or(RagError::StorageBindingInvalid)?;
+    let sql = format!(
+        "SELECT source_code, source_version, scope_type, scope_code, {}, title, {}
+         FROM {}
+         WHERE source_code = ?1 AND source_version = ?2 AND scope_type = ?3 AND scope_code = ?4",
+        quote_identifier(&plan.source_status_column)?,
+        quote_identifier(metadata_column)?,
+        quote_identifier(source_table)?,
+    );
     let source = repository
         .connection
         .query_row(
-            "SELECT source_code, source_version, scope_type, scope_code, status, title, metadata
-             FROM rag_memory_sources
-             WHERE source_code = ?1 AND source_version = ?2 AND scope_type = ?3 AND scope_code = ?4",
+            &sql,
             params![
                 request.source_code,
                 request.source_version,
@@ -71,7 +91,7 @@ fn debug_memory_source(
             ],
             |row| {
                 Ok(RagDebugSourceRecord {
-                    corpus_id: "memory-card".into(),
+                    corpus_id: request.corpus_id.clone(),
                     source_code: row.get(0)?,
                     source_version: row.get(1)?,
                     scope_type: row.get(2)?,
@@ -89,61 +109,12 @@ fn debug_memory_source(
     };
     Ok(Some(RagDebugSourceResult {
         text_units: if request.include_text_units {
-            debug_text_units(repository, "rag_memory_text_units", request)?
+            debug_text_units(repository, plan, request)?
         } else {
             Vec::new()
         },
         warnings: if request.include_warnings {
-            debug_warnings(repository, request)?
-        } else {
-            Vec::new()
-        },
-        source,
-    }))
-}
-
-fn debug_project_doc_source(
-    repository: &SqliteRagRepository,
-    request: &RagDebugSourceRequest,
-) -> Result<Option<RagDebugSourceResult>, RagError> {
-    let source = repository
-        .connection
-        .query_row(
-            "SELECT source_code, source_version, scope_type, scope_code, status, title, metadata
-             FROM rag_project_doc_sources
-             WHERE source_code = ?1 AND source_version = ?2 AND scope_type = ?3 AND scope_code = ?4",
-            params![
-                request.source_code,
-                request.source_version,
-                request.scope_type,
-                request.scope_code
-            ],
-            |row| {
-                Ok(RagDebugSourceRecord {
-                    corpus_id: "project-doc".into(),
-                    source_code: row.get(0)?,
-                    source_version: row.get(1)?,
-                    scope_type: row.get(2)?,
-                    scope_code: row.get(3)?,
-                    status: row.get(4)?,
-                    title: row.get(5)?,
-                    metadata: parse_json(row.get::<_, String>(6)?.as_str()),
-                })
-            },
-        )
-        .optional()
-        .map_err(storage_error)?;
-    let Some(source) = source else {
-        return Ok(None);
-    };
-    Ok(Some(RagDebugSourceResult {
-        text_units: if request.include_text_units {
-            debug_text_units(repository, "rag_project_doc_text_units", request)?
-        } else {
-            Vec::new()
-        },
-        warnings: if request.include_warnings {
-            debug_warnings(repository, request)?
+            debug_warnings(repository, plan, request)?
         } else {
             Vec::new()
         },
@@ -153,15 +124,17 @@ fn debug_project_doc_source(
 
 fn debug_text_units(
     repository: &SqliteRagRepository,
-    table: &str,
+    plan: &SqliteRagCorpusPlan,
     request: &RagDebugSourceRequest,
 ) -> Result<Vec<RagDebugTextUnitRecord>, RagError> {
     let sql = format!(
-        "SELECT text_unit_code, ordinal, status, fulltext_status, embedding_status,
+        "SELECT text_unit_code, ordinal, {}, fulltext_status, embedding_status,
                 embedding_model_code, heading_path, token_count
-         FROM {table}
+         FROM {}
          WHERE source_code = ?1 AND source_version = ?2 AND scope_type = ?3 AND scope_code = ?4
-         ORDER BY ordinal"
+         ORDER BY ordinal",
+        quote_identifier(&plan.text_unit_status_column)?,
+        quote_identifier(&plan.text_unit_table)?,
     );
     let mut statement = repository.connection.prepare(&sql).map_err(storage_error)?;
     let rows = statement
@@ -191,20 +164,24 @@ fn debug_text_units(
 
 fn debug_warnings(
     repository: &SqliteRagRepository,
+    plan: &SqliteRagCorpusPlan,
     request: &RagDebugSourceRequest,
 ) -> Result<Vec<RagDiagnosticWarningRecord>, RagError> {
-    let mut statement = repository
-        .connection
-        .prepare(
-            "SELECT record_code, stage_id, message, payload_json, created_at
-             FROM rag_diagnostics
-             WHERE record_type = 'INDEXING_WARNING'
-               AND corpus_id = ?1
-               AND source_code = ?2
-               AND source_version = ?3
-             ORDER BY created_at DESC",
-        )
-        .map_err(storage_error)?;
+    let diagnostics_table = plan
+        .diagnostics_table
+        .as_deref()
+        .ok_or(RagError::StorageBindingInvalid)?;
+    let sql = format!(
+        "SELECT record_code, stage_id, message, payload_json, created_at
+         FROM {}
+         WHERE record_type = 'INDEXING_WARNING'
+           AND corpus_id = ?1
+           AND source_code = ?2
+           AND source_version = ?3
+         ORDER BY created_at DESC",
+        quote_identifier(diagnostics_table)?,
+    );
+    let mut statement = repository.connection.prepare(&sql).map_err(storage_error)?;
     let rows = statement
         .query_map(
             params![
