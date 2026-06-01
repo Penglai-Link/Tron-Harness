@@ -590,7 +590,7 @@ export function TronShell({
         <div className="flex h-full items-center justify-between gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <Button
-              className="lg:hidden"
+              className="-ml-3 lg:hidden"
               size="icon"
               type="button"
               variant="ghost"

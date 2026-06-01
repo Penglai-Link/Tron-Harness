@@ -1295,7 +1295,11 @@ function SessionSidebar({
   const [closedGroups, setClosedGroups] = useState<Set<string>>(() => new Set());
   const [editingSessionCode, setEditingSessionCode] = useState("");
   const [renameDraft, setRenameDraft] = useState("");
-  const [collapsedTooltip, setCollapsedTooltip] = useState<{ label: string; top: number } | null>(null);
+  const [collapsedTooltip, setCollapsedTooltip] = useState<{
+    agentLabel: string;
+    sessionTitle: string;
+    top: number;
+  } | null>(null);
   const collapsedTooltipTimerRef = useRef<number | null>(null);
   const sidebarRef = useRef<HTMLElement | null>(null);
 
@@ -1319,7 +1323,8 @@ function SessionSidebar({
       : trigger.offsetTop + trigger.offsetHeight / 2;
     collapsedTooltipTimerRef.current = window.setTimeout(() => {
       setCollapsedTooltip({
-        label: session.title,
+        agentLabel: sessionAgentTagLabel(session.agentCode),
+        sessionTitle: session.title,
         top,
       });
     }, 120);
@@ -1395,11 +1400,16 @@ function SessionSidebar({
           </div>
           {collapsedTooltip ? (
             <div
-              className="pointer-events-none absolute left-full z-40 ml-2 -translate-y-1/2 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-2 py-1 text-xs text-[var(--color-on-surface)] shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
+              className="pointer-events-none absolute left-full z-40 ml-2 -translate-y-1/2 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-2 py-1.5 text-xs text-[var(--color-on-surface)] shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
               style={{ top: collapsedTooltip.top }}
               role="tooltip"
             >
-              {collapsedTooltip.label}
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--color-on-surface-variant)]">
+                {collapsedTooltip.agentLabel}
+              </p>
+              <p className="max-w-[220px] truncate text-xs text-[var(--color-on-surface)]">
+                {collapsedTooltip.sessionTitle}
+              </p>
             </div>
           ) : null}
         </div>
