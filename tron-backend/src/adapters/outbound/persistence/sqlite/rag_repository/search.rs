@@ -64,10 +64,11 @@ fn search_route(
     plan: &SqliteRagCorpusPlan,
     query: &RagRouteSearchQuery,
 ) -> Result<Vec<RagSearchRow>, RagError> {
+    let retriever = sqlite_retriever_strategy(&query.retriever)?;
     let select = select_projection(plan)?;
     let from_sql = from_sql(plan)?;
-    let (where_sql, params) = where_sql(plan, query)?;
-    let limit_sql = if query.retriever == "VECTOR" {
+    let (where_sql, params) = where_sql(plan, query, retriever)?;
+    let limit_sql = if retriever.limits_in_application {
         String::new()
     } else {
         " LIMIT ?".to_string()
@@ -77,7 +78,7 @@ fn search_route(
         select.sql
     );
     let mut params = params;
-    if query.retriever != "VECTOR" {
+    if !retriever.limits_in_application {
         params.push(SqlValue::Integer(query.limit.max(1) as i64));
     }
     let mut statement = repository.connection.prepare(&sql).map_err(storage_error)?;
@@ -108,6 +109,9 @@ fn select_projection(plan: &SqliteRagCorpusPlan) -> Result<SelectProjection, Rag
         text_expr("token_count")?,
         optional_text_expr(plan, "embedding")?,
         optional_source_expr(plan, "title", "NULL")?,
+        optional_source_expr(plan, "source_type", "NULL")?,
+        optional_source_column_expr(plan, plan.source_content_hash_column.as_deref(), "NULL")?,
+        text_expr(&plan.text_unit_status_column)?,
         source_metadata_expr(plan)?,
         text_metadata_expr(plan)?,
     ];
@@ -141,6 +145,7 @@ fn from_sql(plan: &SqliteRagCorpusPlan) -> Result<String, RagError> {
 fn where_sql(
     plan: &SqliteRagCorpusPlan,
     query: &RagRouteSearchQuery,
+    retriever: SqliteRetrieverStrategy,
 ) -> Result<(String, Vec<SqlValue>), RagError> {
     let mut clauses = vec![
         "tu.source_version = ?".to_string(),
@@ -162,8 +167,8 @@ fn where_sql(
         ));
     }
 
-    match query.retriever.as_str() {
-        "FULLTEXT" => {
+    match retriever.kind {
+        SqliteRetrieverKind::FulltextLike => {
             clauses.push("tu.fulltext_status = 'INDEXED'".to_string());
             let terms = search_terms(&query.query);
             if !terms.is_empty() {
@@ -182,10 +187,9 @@ fn where_sql(
                 );
             }
         }
-        "VECTOR" => {
+        SqliteRetrieverKind::VectorCosine => {
             clauses.push("tu.embedding_status = 'INDEXED'".to_string());
         }
-        _ => return Err(RagError::SearchRouteUnavailable),
     }
 
     if !query.scopes.is_empty() {
@@ -206,6 +210,32 @@ fn where_sql(
 
     append_filter_clauses(plan, &query.filters, &mut clauses, &mut params)?;
     Ok((format!("WHERE {}", clauses.join(" AND ")), params))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SqliteRetrieverKind {
+    FulltextLike,
+    VectorCosine,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct SqliteRetrieverStrategy {
+    kind: SqliteRetrieverKind,
+    limits_in_application: bool,
+}
+
+fn sqlite_retriever_strategy(strategy_id: &str) -> Result<SqliteRetrieverStrategy, RagError> {
+    match strategy_id {
+        "FULLTEXT" | "FULLTEXT_SQLITE_LIKE_V1" => Ok(SqliteRetrieverStrategy {
+            kind: SqliteRetrieverKind::FulltextLike,
+            limits_in_application: false,
+        }),
+        "VECTOR" | "VECTOR_SQLITE_COSINE_V1" => Ok(SqliteRetrieverStrategy {
+            kind: SqliteRetrieverKind::VectorCosine,
+            limits_in_application: true,
+        }),
+        _ => Err(RagError::SearchRouteUnavailable),
+    }
 }
 
 fn append_filter_clauses(
@@ -231,27 +261,78 @@ fn append_filter_clauses(
             .ok_or(RagError::SearchFilterInvalid)?;
         let raw_value = filter.get("value").ok_or(RagError::SearchFilterInvalid)?;
         match operator {
-            "eq" => {
-                clauses.push(format!("{column} = ?"));
-                params.push(sql_value(raw_value, field_plan.value_type)?);
-            }
-            "in" => {
-                let values = raw_value.as_array().ok_or(RagError::SearchFilterInvalid)?;
-                if values.is_empty() {
-                    return Err(RagError::SearchFilterInvalid);
-                }
-                clauses.push(format!(
-                    "{column} IN ({})",
-                    values.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
-                ));
-                for value in values {
-                    params.push(sql_value(value, field_plan.value_type)?);
+            "and" => {
+                for item in raw_value.as_array().ok_or(RagError::SearchFilterInvalid)? {
+                    append_single_filter_clause(
+                        &column,
+                        field_plan.value_type,
+                        item,
+                        clauses,
+                        params,
+                    )?;
                 }
             }
-            _ => return Err(RagError::SearchFilterInvalid),
+            _ => {
+                append_single_filter_clause(
+                    &column,
+                    field_plan.value_type,
+                    filter,
+                    clauses,
+                    params,
+                )?;
+            }
         }
     }
     Ok(())
+}
+
+fn append_single_filter_clause(
+    column: &str,
+    value_type: SqliteRagValueType,
+    filter: &Value,
+    clauses: &mut Vec<String>,
+    params: &mut Vec<SqlValue>,
+) -> Result<(), RagError> {
+    let operator = filter
+        .get("op")
+        .and_then(Value::as_str)
+        .ok_or(RagError::SearchFilterInvalid)?;
+    let raw_value = filter.get("value").ok_or(RagError::SearchFilterInvalid)?;
+    match operator {
+        "eq" => {
+            clauses.push(format!("{column} = ?"));
+            params.push(sql_value(raw_value, value_type)?);
+        }
+        "in" => {
+            let values = raw_value.as_array().ok_or(RagError::SearchFilterInvalid)?;
+            if values.is_empty() {
+                return Err(RagError::SearchFilterInvalid);
+            }
+            clauses.push(format!(
+                "{column} IN ({})",
+                values.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
+            ));
+            for value in values {
+                params.push(sql_value(value, value_type)?);
+            }
+        }
+        "gt" | "gte" | "lt" | "lte" => {
+            clauses.push(format!("{column} {} ?", sql_comparator(operator)?));
+            params.push(sql_value(raw_value, value_type)?);
+        }
+        _ => return Err(RagError::SearchFilterInvalid),
+    }
+    Ok(())
+}
+
+fn sql_comparator(operator: &str) -> Result<&'static str, RagError> {
+    match operator {
+        "gt" => Ok(">"),
+        "gte" => Ok(">="),
+        "lt" => Ok("<"),
+        "lte" => Ok("<="),
+        _ => Err(RagError::SearchFilterInvalid),
+    }
 }
 
 fn map_row(
@@ -262,7 +343,10 @@ fn map_row(
     let heading_path = split_heading_path(&row.get::<_, String>(7)?);
     let mut source_metadata = json!({
         "title": row.get::<_, Option<String>>(11)?,
-        "payload": parse_json(row.get::<_, String>(12)?.as_str()),
+        "sourceType": row.get::<_, Option<String>>(12)?,
+        "sourceContentHash": row.get::<_, Option<String>>(13)?,
+        "textUnitStatus": row.get::<_, Option<String>>(14)?,
+        "extra": parse_metadata_json(row.get::<_, String>(15)?.as_str()),
     });
     if let Some(object) = source_metadata.as_object_mut() {
         for (offset, column) in plan.source_metadata_columns.iter().enumerate() {
@@ -288,7 +372,7 @@ fn map_row(
             .get::<_, Option<Vec<u8>>>(10)?
             .and_then(decode_embedding),
         source_metadata,
-        text_metadata: parse_json(row.get::<_, String>(13)?.as_str()),
+        text_metadata: parse_metadata_json(row.get::<_, String>(16)?.as_str()),
     })
 }
 
@@ -321,6 +405,18 @@ fn optional_source_expr(
         source_expr(plan, column)
     } else if plan.source_table.is_none() && plan.text_unit_columns.contains(column) {
         text_expr(column)
+    } else {
+        Ok(fallback.into())
+    }
+}
+
+fn optional_source_column_expr(
+    plan: &SqliteRagCorpusPlan,
+    column: Option<&str>,
+    fallback: &str,
+) -> Result<String, RagError> {
+    if let Some(column) = column {
+        source_expr(plan, column)
     } else {
         Ok(fallback.into())
     }
@@ -404,8 +500,11 @@ fn decode_embedding(raw: Vec<u8>) -> Option<Vec<f32>> {
     )
 }
 
-fn parse_json(raw: &str) -> Value {
-    serde_json::from_str(raw).unwrap_or_else(|_| json!({}))
+fn parse_metadata_json(raw: &str) -> Value {
+    serde_json::from_str::<Value>(raw)
+        .ok()
+        .filter(Value::is_object)
+        .unwrap_or_else(|| json!({}))
 }
 
 fn json_string(value: &Value) -> Result<String, RagError> {

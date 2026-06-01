@@ -11,9 +11,10 @@ use serde_json::json;
 use tron_backend::{
     adapters::outbound::persistence::sqlite::SqliteRagRepository,
     application::rag::{
-        DefaultRagStrategyRegistry, RagDebugSourceRequest, RagDiagnosticsService, RagEmbeddingCall,
-        RagEmbeddingResult, RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRequest,
-        RagIngestScope, RagIngestService, RagRetryIndexRequest, RagRetryIndexService,
+        DefaultRagStrategyRegistry, RagDebugSourceRequest, RagDiagnosticsService,
+        RagDocumentSourceCall, RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult,
+        RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRequest, RagIngestScope,
+        RagIngestService, RagResolvedDocument, RagRetryIndexRequest, RagRetryIndexService,
         RagSearchContextRequest, RagSearchRequest, RagSearchService, RagSearchTraceRequest,
     },
     shared::{
@@ -228,7 +229,7 @@ async fn rag_ingest_events_use_safe_payload_and_publish_failure_is_non_blocking(
 
     service.ingest(ingest_request()).await.unwrap();
 
-    assert!(sink.wait_for_len(5, Duration::from_secs(2)));
+    assert!(sink.wait_for_len(7, Duration::from_secs(2)));
     let events = sink.events();
     let names = events
         .iter()
@@ -361,6 +362,21 @@ impl RagEmbeddingRuntime for FakeEmbeddingRuntime {
         _call: RagEmbeddingCall,
     ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
         Box::pin(async move { self.result.clone() })
+    }
+}
+
+impl RagDocumentSourceRuntime for FakeEmbeddingRuntime {
+    fn resolve_project_doc_markdown<'a>(
+        &'a self,
+        _call: RagDocumentSourceCall,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<RagResolvedDocument, tron_backend::domain::rag::RagError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Err(tron_backend::domain::rag::RagError::SourceResolveFailed) })
     }
 }
 

@@ -18,6 +18,7 @@ use self::paths::{
 
 const DEFAULT_BIND_ADDRESS: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 8080;
+const DEFAULT_PROJECT_DOC_ROOT: &str = ".";
 const TEST_DATABASE_URL: &str = ":memory:";
 const DEFAULT_AUTH_JWT_SECRET: &str = "tron-dev-jwt-secret";
 const DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS: i64 = 900;
@@ -52,6 +53,7 @@ pub struct AppConfig {
     pub port: u16,
     pub database_url: String,
     pub graph_storage_path: String,
+    pub project_doc_root: String,
     pub skills_registry_root: String,
     pub system_agents: SystemAgentConfig,
     pub http_clients: HttpClientProfilesConfig,
@@ -150,6 +152,7 @@ impl AppConfig {
             port: DEFAULT_PORT,
             database_url: default_database_url_from_home(),
             graph_storage_path: default_graph_storage_path_from_home(),
+            project_doc_root: DEFAULT_PROJECT_DOC_ROOT.into(),
             skills_registry_root: default_skills_registry_root_from_home(),
             system_agents: SystemAgentConfig {
                 codex_command: DEFAULT_SYSTEM_AGENT_CODEX_COMMAND.into(),
@@ -182,6 +185,9 @@ impl AppConfig {
         }
         if let Some(value) = overrides.graph_storage_path {
             self.graph_storage_path = normalize_storage_path(value);
+        }
+        if let Some(value) = overrides.project_doc_root {
+            self.project_doc_root = value;
         }
         if let Some(value) = overrides.skills_registry_root {
             self.skills_registry_root = value;
@@ -266,6 +272,7 @@ struct AppConfigFile {
     port: Option<u16>,
     database_url: Option<String>,
     graph_storage_path: Option<String>,
+    project_doc_root: Option<String>,
     skills_registry_root: Option<String>,
     system_agents: Option<SystemAgentFileConfig>,
     http_clients: Option<HttpClientProfilesFileConfig>,
@@ -545,6 +552,7 @@ impl Default for AppConfig {
             port: DEFAULT_PORT,
             database_url: TEST_DATABASE_URL.into(),
             graph_storage_path: ":memory:".into(),
+            project_doc_root: std::env::temp_dir().display().to_string(),
             skills_registry_root: std::env::temp_dir()
                 .join("tron-skills-registry-test")
                 .display()

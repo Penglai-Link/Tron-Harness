@@ -136,6 +136,10 @@ pub enum RagError {
     IngestProfileInvalid,
     IngestScopeInvalid,
     IngestStageFailed,
+    SourceResolveFailed,
+    DocumentFormatUnsupported,
+    DocumentParseFailed,
+    DocumentTooLarge,
     EmbeddingFailed,
     SearchRequestInvalid,
     RetrievalProfileInvalid,
@@ -170,6 +174,12 @@ impl fmt::Display for RagError {
             Self::IngestProfileInvalid => formatter.write_str("RAG ingest profile invalid"),
             Self::IngestScopeInvalid => formatter.write_str("RAG ingest scope invalid"),
             Self::IngestStageFailed => formatter.write_str("RAG ingest stage failed"),
+            Self::SourceResolveFailed => formatter.write_str("RAG source resolve failed"),
+            Self::DocumentFormatUnsupported => {
+                formatter.write_str("RAG document format unsupported")
+            }
+            Self::DocumentParseFailed => formatter.write_str("RAG document parse failed"),
+            Self::DocumentTooLarge => formatter.write_str("RAG document too large"),
             Self::EmbeddingFailed => formatter.write_str("RAG embedding failed"),
             Self::SearchRequestInvalid => formatter.write_str("RAG search request invalid"),
             Self::RetrievalProfileInvalid => formatter.write_str("RAG retrieval profile invalid"),

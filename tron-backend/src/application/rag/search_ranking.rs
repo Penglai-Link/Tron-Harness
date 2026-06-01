@@ -1,28 +1,30 @@
 use std::collections::BTreeMap;
 
-use serde_json::json;
+use serde_json::{Map, Value, json};
 
 use crate::domain::rag::RagError;
 
 use super::{
     CandidateHit, CompiledRetrievalProfile, ContextPack, ContextPackItem, RagRerankCall,
     RagSearchRequest, RagSearchRow, RagSearchRuntime, RetrievalRoute,
+    search_strategy::{RetrieverKind, RetrieverStrategy},
 };
 
 pub(super) fn rank_route_rows(
     rows: Vec<RagSearchRow>,
     route: &RetrievalRoute,
+    strategy: &RetrieverStrategy,
     request: &RagSearchRequest,
     query_embedding: Option<&[f32]>,
 ) -> Vec<CandidateHit> {
     let mut hits = rows
         .into_iter()
         .filter_map(|row| {
-            let score = match route.retriever.as_str() {
-                "FULLTEXT" if fulltext_matches(&row.search_text, &request.query) => {
+            let score = match strategy.kind {
+                RetrieverKind::Fulltext if fulltext_matches(&row.search_text, &request.query) => {
                     fulltext_score(&row.search_text, &request.query)
                 }
-                "VECTOR" => row
+                RetrieverKind::Vector => row
                     .embedding
                     .as_deref()
                     .and_then(|embedding| {
@@ -175,16 +177,6 @@ fn cosine_similarity(left: &[f32], right: &[f32]) -> f64 {
 }
 
 fn hit_from_row(row: &RagSearchRow) -> CandidateHit {
-    let mut metadata = row.source_metadata.clone();
-    if let (Some(target), Some(source)) = (metadata.as_object_mut(), row.text_metadata.as_object())
-    {
-        for (key, value) in source {
-            target.insert(key.clone(), value.clone());
-        }
-    }
-    if let Some(target) = metadata.as_object_mut() {
-        target.insert("headingPath".into(), json!(row.heading_path));
-    }
     CandidateHit {
         corpus_id: row.corpus_id.clone(),
         source_code: row.source_code.clone(),
@@ -198,6 +190,154 @@ fn hit_from_row(row: &RagSearchRow) -> CandidateHit {
         preview: row.text.chars().take(160).collect(),
         text: row.text.clone(),
         token_count: row.token_count,
-        metadata,
+        metadata: structured_metadata(row),
     }
 }
+
+fn structured_metadata(row: &RagSearchRow) -> Value {
+    let mut flat = row.source_metadata.as_object().cloned().unwrap_or_default();
+    let mut metadata = Map::new();
+
+    let source = take_group(&mut flat, &["title", "sourceType", "sourceContentHash"]);
+    if !source.is_empty() {
+        metadata.insert("source".into(), Value::Object(source));
+    }
+
+    let memory = take_group(
+        &mut flat,
+        &[
+            "memoryType",
+            "memoryStatus",
+            "reviewStatus",
+            "version",
+            "supersededBy",
+            "conflictGroup",
+            "duplicateGroup",
+            "injectable",
+            "importanceScore",
+            "confidenceScore",
+            "qualityScore",
+            "pinLevel",
+            "expiresAt",
+            "derivedSourceType",
+            "derivedSourceCode",
+        ],
+    );
+    if !memory.is_empty() {
+        metadata.insert("memory".into(), Value::Object(memory));
+    }
+
+    let document = take_group(
+        &mut flat,
+        &[
+            "documentCode",
+            "documentType",
+            "path",
+            "bodyHash",
+            "repoCode",
+            "moduleCode",
+            "moduleName",
+        ],
+    );
+    if !document.is_empty() {
+        metadata.insert("document".into(), Value::Object(document));
+    }
+
+    let mut text_unit = Map::new();
+    text_unit.insert("headingPath".into(), json!(row.heading_path));
+    text_unit.insert("ordinal".into(), json!(row.ordinal));
+    if let Some(status) = flat.remove("textUnitStatus") {
+        text_unit.insert("status".into(), status);
+    }
+    if let Some(text_metadata) = row
+        .text_metadata
+        .as_object()
+        .filter(|object| !object.is_empty())
+    {
+        text_unit.insert("metadata".into(), Value::Object(text_metadata.clone()));
+    }
+    metadata.insert("textUnit".into(), Value::Object(text_unit));
+
+    let mut extra = take_extra(&mut flat);
+    for (key, value) in flat {
+        if !is_promoted_extra_key(&key) && !extra.contains_key(&key) {
+            extra.insert(key, value);
+        }
+    }
+    sanitize_extra_metadata(&mut extra);
+    metadata.insert("extra".into(), Value::Object(extra));
+
+    Value::Object(metadata)
+}
+
+fn take_group(flat: &mut Map<String, Value>, keys: &[&str]) -> Map<String, Value> {
+    let mut group = Map::new();
+    for key in keys {
+        if let Some(value) = flat.remove(*key) {
+            group.insert((*key).into(), value);
+        }
+    }
+    group
+}
+
+fn take_extra(flat: &mut Map<String, Value>) -> Map<String, Value> {
+    let mut extra = match flat.remove("extra") {
+        Some(Value::Object(object)) => object,
+        _ => Map::new(),
+    };
+    let legacy_payload_shape = extra.keys().any(|key| is_promoted_extra_key(key));
+    if legacy_payload_shape {
+        if let Some(Value::Object(nested)) = extra.remove("metadata") {
+            for (key, value) in nested {
+                extra.entry(key).or_insert(value);
+            }
+        } else {
+            extra.remove("metadata");
+        }
+    }
+    sanitize_extra_metadata(&mut extra);
+    extra
+}
+
+fn sanitize_extra_metadata(extra: &mut Map<String, Value>) {
+    for key in PROMOTED_EXTRA_KEYS {
+        extra.remove(*key);
+    }
+}
+
+fn is_promoted_extra_key(key: &str) -> bool {
+    PROMOTED_EXTRA_KEYS.contains(&key)
+}
+
+const PROMOTED_EXTRA_KEYS: &[&str] = &[
+    "title",
+    "text",
+    "sourceType",
+    "sourceContentHash",
+    "sourceMetadata",
+    "payload",
+    "memoryType",
+    "memoryStatus",
+    "reviewStatus",
+    "version",
+    "supersededBy",
+    "conflictGroup",
+    "duplicateGroup",
+    "injectable",
+    "importanceScore",
+    "confidenceScore",
+    "qualityScore",
+    "pinLevel",
+    "expiresAt",
+    "derivedSourceType",
+    "derivedSourceCode",
+    "documentCode",
+    "documentType",
+    "path",
+    "bodyHash",
+    "repoCode",
+    "moduleCode",
+    "moduleName",
+    "headingPath",
+    "textUnitStatus",
+];

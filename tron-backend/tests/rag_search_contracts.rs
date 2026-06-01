@@ -11,11 +11,11 @@ use serde_json::{Value, json};
 use tron_backend::{
     adapters::outbound::persistence::sqlite::SqliteRagRepository,
     application::rag::{
-        DefaultRagStrategyRegistry, RagConfigRepository, RagEmbeddingCall, RagEmbeddingResult,
-        RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRequest, RagIngestScope,
-        RagIngestService, RagRerankCall, RagSearchContextRequest, RagSearchRequest,
-        RagSearchRuntime, RagSearchService, RagSearchTraceRequest, compile_retrieval_profile,
-        merge_search_filters,
+        DefaultRagStrategyRegistry, RagConfigRepository, RagDocumentSourceCall,
+        RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime,
+        RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService, RagRerankCall,
+        RagResolvedDocument, RagSearchContextRequest, RagSearchRequest, RagSearchRuntime,
+        RagSearchService, RagSearchTraceRequest, compile_retrieval_profile, merge_search_filters,
     },
     domain::rag::{RagError, RagProfileRecord, RagProfileType, RagStatus},
 };
@@ -37,7 +37,11 @@ async fn memory_search_returns_active_scoped_fulltext_vector_hits_and_context_pa
             "memory-related-v1",
             "cite source titles",
             "MEMORY_CONTEXT_PACK",
-            json!({ "memoryType": "RULE", "injectable": true }),
+            json!({
+                "memoryType": "RULE",
+                "injectable": true,
+                "importanceScore": { "op": "gte", "value": 80 }
+            }),
         ))
         .await
         .unwrap();
@@ -51,7 +55,20 @@ async fn memory_search_returns_active_scoped_fulltext_vector_hits_and_context_pa
         vec!["memory-fulltext", "memory-vector"]
     );
     assert_eq!(result.hits[0].scope_type, "USER");
-    assert_eq!(result.hits[0].metadata["memoryType"], json!("RULE"));
+    assert_eq!(
+        result.hits[0].metadata["memory"]["memoryType"],
+        json!("RULE")
+    );
+    assert_eq!(
+        result.hits[0].metadata["source"]["title"],
+        json!("RAG citation rule")
+    );
+    assert_eq!(
+        result.hits[0].metadata["extra"]["seed"],
+        json!("search-contract")
+    );
+    assert!(result.hits[0].metadata.get("payload").is_none());
+    assert!(result.hits[0].metadata.get("sourceMetadata").is_none());
     assert!(result.context_pack.unwrap().token_count <= 32);
 }
 
@@ -80,13 +97,13 @@ async fn project_doc_search_hydrates_heading_path_and_document_metadata() {
     let hit = result
         .hits
         .iter()
-        .find(|hit| hit.metadata["headingPath"] == json!(["RAG MVP", "Write Path"]))
+        .find(|hit| hit.metadata["textUnit"]["headingPath"] == json!(["RAG MVP", "Write Path"]))
         .expect("write path text unit should be hydrated");
     assert_eq!(hit.source_code, "doc-rag-mvp");
-    assert_eq!(hit.metadata["title"], json!("RAG MVP"));
-    assert_eq!(hit.metadata["path"], json!("docs/rag-mvp.md"));
+    assert_eq!(hit.metadata["source"]["title"], json!("RAG MVP"));
+    assert_eq!(hit.metadata["document"]["path"], json!("docs/rag-mvp.md"));
     assert_eq!(
-        hit.metadata["headingPath"],
+        hit.metadata["textUnit"]["headingPath"],
         json!(["RAG MVP", "Write Path"])
     );
     assert!(
@@ -345,6 +362,7 @@ fn sqlite_rag_repository_uses_template_plans_instead_of_corpus_sql_branches() {
 struct FakeSearchRuntime {
     embeddings: Arc<Mutex<VecDeque<Result<Vec<f32>, String>>>>,
     reranks: Arc<Mutex<VecDeque<Result<Vec<RagRerankItem>, String>>>>,
+    documents: Arc<Mutex<VecDeque<Result<RagResolvedDocument, RagError>>>>,
     last_rerank_model_code: Arc<Mutex<Option<String>>>,
 }
 
@@ -370,6 +388,18 @@ impl FakeSearchRuntime {
 
     fn with_rerank(self, items: Vec<RagRerankItem>) -> Self {
         self.reranks.lock().unwrap().push_back(Ok(items));
+        self
+    }
+
+    fn with_document(self, content_text: &str) -> Self {
+        self.documents
+            .lock()
+            .unwrap()
+            .push_back(Ok(RagResolvedDocument {
+                document_uri: "project-doc://TRON_CORE/docs/rag-mvp.md".into(),
+                content_length: content_text.len(),
+                content_text: content_text.into(),
+            }));
         self
     }
 
@@ -419,6 +449,21 @@ impl RagEmbeddingRuntime for FakeSearchRuntime {
                     model_code: "workspace-default-embedding".into(),
                     embedding,
                 })
+        })
+    }
+}
+
+impl RagDocumentSourceRuntime for FakeSearchRuntime {
+    fn resolve_project_doc_markdown<'a>(
+        &'a self,
+        _call: RagDocumentSourceCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagResolvedDocument, RagError>> + Send + 'a>> {
+        Box::pin(async move {
+            self.documents
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or(Err(RagError::SourceResolveFailed))
         })
     }
 }
@@ -496,7 +541,9 @@ async fn seed_project_doc_fixture(database_url: &str) {
     let service = RagIngestService::new(
         SqliteRagRepository::connect(database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(vec![0.0, 1.0]),
+        FakeSearchRuntime::new()
+            .with_embedding(vec![0.0, 1.0])
+            .with_document(project_doc_markdown()),
     );
     service.ingest(project_doc_request()).await.unwrap();
 }
@@ -530,7 +577,10 @@ fn memory_request(
             "memoryStatus": "ACTIVE",
             "reviewStatus": "APPROVED",
             "importanceScore": 90,
-            "injectable": true
+            "injectable": true,
+            "metadata": {
+                "seed": "search-contract"
+            }
         }),
     }
 }
@@ -551,10 +601,11 @@ fn project_doc_request() -> RagIngestRequest {
         },
         source_code: "doc-rag-mvp".into(),
         source_version: "v1".into(),
-        source_type: "MARKDOWN".into(),
+        source_type: "PROJECT_DOC_REF".into(),
         payload: json!({
             "title": "RAG MVP",
-            "text": "# RAG MVP\nIntro.\n\n## Write Path\nThe write path uses a synchronous DAG to persist source and text units.",
+            "documentUri": "project-doc://TRON_CORE/docs/rag-mvp.md",
+            "format": "MARKDOWN",
             "documentCode": "DOC_RAG_MVP",
             "documentType": "DESIGN",
             "path": "docs/rag-mvp.md",
@@ -563,6 +614,10 @@ fn project_doc_request() -> RagIngestRequest {
             "moduleName": "RAG"
         }),
     }
+}
+
+fn project_doc_markdown() -> &'static str {
+    "# RAG MVP\nIntro.\n\n## Write Path\nThe write path uses a synchronous DAG to persist source and text units."
 }
 
 fn retrieval_profile(profile_id: &str, version: Option<&str>, config: Value) -> RagProfileRecord {

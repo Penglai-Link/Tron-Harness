@@ -600,6 +600,10 @@ impl RagStrategyRegistry for FakeStrategyRegistry {
         self.resolve(strategy_id)
     }
 
+    fn resolve_payload_strategy(&self, strategy_id: &str) -> StrategyRegistration {
+        self.resolve(strategy_id)
+    }
+
     fn resolve_retriever(&self, strategy_id: &str) -> StrategyRegistration {
         self.resolve(strategy_id)
     }

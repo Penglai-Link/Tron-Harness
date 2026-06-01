@@ -4,11 +4,12 @@ use crate::shared::event_bus::EventBusHandle;
 use super::{
     RagConfigRepository, RagConfigService, RagCorpusView, RagDebugProfileResult,
     RagDebugSourceRequest, RagDebugSourceResult, RagDiagnosticsRepository, RagDiagnosticsService,
-    RagEmbeddingRuntime, RagFilterValidationRequest, RagFilterValidationView, RagIngestRepository,
-    RagIngestRequest, RagIngestResult, RagIngestService, RagProfileListQuery,
-    RagProfileValidationView, RagProfileView, RagRetryIndexRepository, RagRetryIndexRequest,
-    RagRetryIndexResult, RagRetryIndexService, RagSearchRepository, RagSearchRequest,
-    RagSearchResult, RagSearchRuntime, RagSearchService, RagStrategyRegistry,
+    RagDocumentSourceRuntime, RagEmbeddingRuntime, RagFilterValidationRequest,
+    RagFilterValidationView, RagIngestRepository, RagIngestRequest, RagIngestResult,
+    RagIngestService, RagProfileListQuery, RagProfileValidationView, RagProfileView,
+    RagRetryIndexRepository, RagRetryIndexRequest, RagRetryIndexResult, RagRetryIndexService,
+    RagSearchRepository, RagSearchRequest, RagSearchResult, RagSearchRuntime, RagSearchService,
+    RagStrategyRegistry,
 };
 
 #[derive(Clone)]
@@ -93,7 +94,7 @@ where
         + RagRetryIndexRepository
         + Clone,
     S: RagStrategyRegistry,
-    E: RagEmbeddingRuntime + RagSearchRuntime,
+    E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime,
 {
     pub async fn ingest(&self, request: RagIngestRequest) -> Result<RagIngestResult, RagError> {
         RagIngestService::new(

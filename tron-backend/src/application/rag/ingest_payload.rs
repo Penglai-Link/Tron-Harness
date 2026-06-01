@@ -6,7 +6,7 @@ use crate::domain::rag::RagError;
 
 use super::{
     CompiledRagIngestProfile, RagIngestRequest, RagMemorySourceFields, RagProjectDocSourceFields,
-    RagTextUnitWrite,
+    RagTextUnitWrite, ingest_artifact::ArtifactBundle,
 };
 
 #[derive(Debug, Clone)]
@@ -86,11 +86,14 @@ impl RagTextUnitDraft {
 pub(crate) fn prepare_payload(
     request: &RagIngestRequest,
     compiled: &CompiledRagIngestProfile,
+    bundle: &ArtifactBundle,
 ) -> Result<PreparedIngestPayload, RagError> {
-    match request.corpus_id.as_str() {
-        "memory-card" => prepare_memory_payload(request, compiled),
-        "project-doc" => prepare_project_doc_payload(request, compiled),
-        _ => Err(RagError::CorpusReserved),
+    match compiled.payload_strategy_id.as_str() {
+        "MEMORY_PLAIN_TEXT_PAYLOAD_V1" => prepare_memory_payload(request, compiled),
+        "PROJECT_DOC_MARKDOWN_REF_PAYLOAD_V1" => {
+            prepare_project_doc_ref_payload(request, compiled, bundle)
+        }
+        _ => Err(RagError::IngestProfileInvalid),
     }
 }
 
@@ -115,7 +118,7 @@ fn prepare_memory_payload(
     Ok(PreparedIngestPayload {
         title,
         content_hash,
-        metadata: request.payload.clone(),
+        metadata: payload_metadata(&request.payload),
         memory: Some(RagMemorySourceFields {
             memory_type: payload_string(&request.payload, "memoryType"),
             memory_status: payload_string(&request.payload, "memoryStatus"),
@@ -144,18 +147,64 @@ fn prepare_memory_payload(
     })
 }
 
-fn prepare_project_doc_payload(
+fn prepare_project_doc_ref_payload(
     request: &RagIngestRequest,
-    _compiled: &CompiledRagIngestProfile,
+    compiled: &CompiledRagIngestProfile,
+    bundle: &ArtifactBundle,
 ) -> Result<PreparedIngestPayload, RagError> {
-    if request.source_type != "MARKDOWN" {
+    if request.source_type != "PROJECT_DOC_REF" {
         return Err(RagError::IngestRequestInvalid);
     }
-    let text = required_payload_text(&request.payload)?;
+    if request
+        .payload
+        .get("text")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .is_some_and(|value| !value.is_empty())
+    {
+        return Err(RagError::IngestRequestInvalid);
+    }
+    let format =
+        payload_string(&request.payload, "format").ok_or(RagError::DocumentFormatUnsupported)?;
+    if format != "MARKDOWN" {
+        return Err(RagError::DocumentFormatUnsupported);
+    }
+    let document_uri =
+        payload_string(&request.payload, "documentUri").ok_or(RagError::IngestRequestInvalid)?;
+    let parsed_document = bundle.parsed_document()?;
+    if parsed_document.document_uri != document_uri {
+        return Err(RagError::SourceResolveFailed);
+    }
+    let text = parsed_document.content_text.trim().to_string();
+    if text.is_empty() {
+        return Err(RagError::DocumentParseFailed);
+    }
     let document_code = payload_string(&request.payload, "documentCode");
     let sections = split_markdown_heading_units(&text);
     if sections.is_empty() {
-        return Err(RagError::IngestRequestInvalid);
+        return Err(RagError::DocumentParseFailed);
+    }
+    let mut metadata = payload_metadata(&request.payload);
+    if let Value::Object(metadata) = &mut metadata {
+        if compiled.record_resolver_info {
+            metadata.insert(
+                "resolver".into(),
+                json!({
+                    "strategyId": compiled.source_resolver_strategy_id.as_deref().unwrap_or("PROJECT_DOC_MARKDOWN_RESOLVE_SOURCE_V1"),
+                    "documentUri": document_uri,
+                    "contentLength": parsed_document.content_length
+                }),
+            );
+        }
+        if compiled.record_parser_info {
+            metadata.insert(
+                "parser".into(),
+                json!({
+                    "strategyId": compiled.document_parser_strategy_id.as_deref().unwrap_or("PROJECT_DOC_MARKDOWN_PARSE_DOCUMENT_V1"),
+                    "format": format
+                }),
+            );
+        }
     }
     let units = sections
         .into_iter()
@@ -172,7 +221,7 @@ fn prepare_project_doc_payload(
     Ok(PreparedIngestPayload {
         title: payload_string(&request.payload, "title"),
         content_hash: stable_hash(&text),
-        metadata: request.payload.clone(),
+        metadata,
         memory: None,
         project_doc: Some(RagProjectDocSourceFields {
             document_code,
@@ -204,6 +253,14 @@ fn payload_string(payload: &Value, field: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+fn payload_metadata(payload: &Value) -> Value {
+    payload
+        .get("metadata")
+        .and_then(Value::as_object)
+        .map(|object| Value::Object(object.clone()))
+        .unwrap_or_else(|| json!({}))
 }
 
 fn split_markdown_heading_units(text: &str) -> Vec<(String, String)> {

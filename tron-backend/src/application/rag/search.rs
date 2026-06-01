@@ -20,6 +20,7 @@ use super::{
     search_ranking::{
         apply_rerank, assemble_context_pack, fuse_and_dedup, rank_route_rows, stable_hit_order,
     },
+    search_strategy::retriever_strategy,
 };
 
 pub trait RagSearchRepository: RagConfigRepository {
@@ -313,13 +314,18 @@ where
         profile_filters: &Value,
         request: &RagSearchRequest,
     ) -> Result<(Vec<CandidateHit>, Vec<Value>), RagError> {
-        let vector_routes = compiled
+        let embedding_routes = compiled
             .routes
             .iter()
-            .filter(|route| route.retriever == "VECTOR")
+            .filter_map(|route| {
+                retriever_strategy(&route.retriever)
+                    .ok()
+                    .filter(|strategy| strategy.needs_query_embedding())
+                    .map(|_| route)
+            })
             .collect::<Vec<_>>();
         let mut warnings = Vec::new();
-        let query_embedding = if !vector_routes.is_empty() {
+        let query_embedding = if !embedding_routes.is_empty() {
             match self
                 .runtime
                 .embed(RagEmbeddingCall {
@@ -334,11 +340,13 @@ where
                     return Err(RagError::SearchRouteUnavailable);
                 }
                 Err(_) => {
-                    warnings.extend(vector_routes.iter().map(|route| {
-                        json!({
-                            "routeId": route.route_id,
-                            "code": "RAG_VECTOR_ROUTE_UNAVAILABLE",
-                            "message": "Vector route skipped; fulltext route remains available"
+                    warnings.extend(embedding_routes.iter().filter_map(|route| {
+                        retriever_strategy(&route.retriever).ok().map(|strategy| {
+                            json!({
+                                "routeId": route.route_id,
+                                "code": strategy.unavailable_code(),
+                                "message": strategy.unavailable_message()
+                            })
                         })
                     }));
                     None
@@ -349,7 +357,8 @@ where
         };
         let mut route_hits = Vec::new();
         for route in &compiled.routes {
-            if route.retriever == "VECTOR" && query_embedding.is_none() {
+            let strategy = retriever_strategy(&route.retriever)?;
+            if strategy.should_skip_without_embedding() && query_embedding.is_none() {
                 continue;
             }
             let corpus = route_corpora
@@ -362,7 +371,7 @@ where
             let rows = self.repository.search_route(RagRouteSearchQuery {
                 corpus_id: route.corpus_id.clone(),
                 route_id: route.route_id.clone(),
-                retriever: route.retriever.clone(),
+                retriever: strategy.storage_retriever.to_string(),
                 query: request.query.clone(),
                 source_version,
                 scopes: search_scopes(&request.access_context),
@@ -372,6 +381,7 @@ where
             route_hits.extend(rank_route_rows(
                 rows,
                 route,
+                &strategy,
                 request,
                 query_embedding.as_deref(),
             ));

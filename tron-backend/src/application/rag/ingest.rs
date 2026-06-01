@@ -6,6 +6,8 @@ use std::{
 
 use serde_json::{Value, json};
 
+mod executor;
+
 use crate::{
     application::llm::{LlmEmbeddingCallCommand, LlmRuntimeService},
     domain::rag::{RagError, RagStatus},
@@ -13,8 +15,8 @@ use crate::{
 };
 
 use super::{
-    RagConfigRepository, RagStrategyRegistry, ingest_payload::prepare_payload,
-    ingest_profile::compile_ingest_profile, publish_rag_event,
+    RagConfigRepository, RagDocumentSourceRuntime, RagStrategyRegistry,
+    ingest_artifact::ArtifactBundle, ingest_profile::compile_ingest_profile, publish_rag_event,
 };
 
 pub trait RagIngestRepository: RagConfigRepository {
@@ -203,7 +205,7 @@ impl<R, S, E> RagIngestService<R, S, E>
 where
     R: RagIngestRepository,
     S: RagStrategyRegistry,
-    E: RagEmbeddingRuntime,
+    E: RagEmbeddingRuntime + RagDocumentSourceRuntime,
 {
     pub fn new(repository: R, strategy_registry: S, embedding_runtime: E) -> Self {
         Self {
@@ -243,152 +245,42 @@ where
             .ok_or(RagError::ProfileNotFound)?;
         let compiled = compile_ingest_profile(&profile, &corpus, &self.strategy_registry)?;
 
-        let prepared = prepare_payload(&request, &compiled)?;
-        let mut warnings = Vec::new();
-        let mut embedding_failed = false;
-        let mut text_units = Vec::with_capacity(prepared.units.len());
-        for unit in prepared.units {
-            match self
-                .embedding_runtime
-                .embed(RagEmbeddingCall {
-                    workspace_code: request.workspace_code.clone(),
-                    model_code: compiled.embedding_model_code.clone(),
-                    input: unit.text.clone(),
-                })
-                .await
-            {
-                Ok(result) => text_units.push(unit.with_embedding(
-                    result.embedding,
-                    result.model_code.as_str(),
-                    &compiled.embedding_version,
-                )),
-                Err(_) if request.corpus_id == "project-doc" => {
-                    embedding_failed = true;
-                    text_units.push(unit.with_failed_embedding());
-                }
-                Err(_) => {
-                    self.repository.persist_ingest(RagPersistIngestCommand {
-                        corpus_id: request.corpus_id.clone(),
-                        profile_id: compiled.profile_id.clone(),
-                        source_code: request.source_code.clone(),
-                        source_version: request.source_version.clone(),
-                        source_type: request.source_type.clone(),
-                        scope: request.target_scope.clone(),
-                        source_status: "FAILED".into(),
-                        title: prepared.title.clone(),
-                        content_hash: prepared.content_hash.clone(),
-                        metadata: prepared.metadata.clone(),
-                        memory: prepared.memory.clone(),
-                        project_doc: prepared.project_doc.clone(),
-                        text_units: vec![unit.with_failed_embedding()],
-                        warnings: Vec::new(),
-                        workspace_code: request.workspace_code.clone(),
-                        user_code: request.access_context.user_code.clone(),
-                        agent_code: request.access_context.agent_code.clone(),
-                    })?;
-                    publish_ingest_stage_event(
-                        &self.event_bus,
-                        "vectorIndex",
-                        BusOutcome::Failure,
-                        1,
-                        &request,
-                    );
-                    publish_ingest_event(
-                        &self.event_bus,
-                        "rag.ingest.completed",
-                        BusOutcome::Failure,
-                        &request,
-                        "failed",
-                    );
-                    return Err(RagError::EmbeddingFailed);
-                }
-            }
-        }
-
-        if embedding_failed {
-            warnings.push(RagIngestWarning {
-                stage_id: "vectorIndex".into(),
-                code: "RAG_VECTOR_INDEX_WARNING".into(),
-                message: "Project Doc vector indexing failed; fulltext remains available".into(),
-            });
-        }
-
-        let embedding_status = if embedding_failed {
-            "FAILED"
-        } else {
-            "INDEXED"
-        };
-        let text_unit_count = text_units.len();
-        self.repository.persist_ingest(RagPersistIngestCommand {
-            corpus_id: request.corpus_id.clone(),
-            profile_id: compiled.profile_id.clone(),
-            source_code: request.source_code.clone(),
-            source_version: request.source_version.clone(),
-            source_type: request.source_type.clone(),
-            scope: request.target_scope.clone(),
-            source_status: "ACTIVE".into(),
-            title: prepared.title,
-            content_hash: prepared.content_hash,
-            metadata: prepared.metadata,
-            memory: prepared.memory,
-            project_doc: prepared.project_doc,
-            text_units,
-            warnings: warnings.clone(),
-            workspace_code: request.workspace_code.clone(),
-            user_code: request.access_context.user_code.clone(),
-            agent_code: request.access_context.agent_code.clone(),
-        })?;
-        publish_ingest_stage_event(
-            &self.event_bus,
-            "persist",
-            BusOutcome::Completed,
-            text_unit_count,
-            &request,
-        );
-        publish_ingest_stage_event(
-            &self.event_bus,
-            "fulltextIndex",
-            BusOutcome::Completed,
-            text_unit_count,
-            &request,
-        );
-        publish_ingest_stage_event(
-            &self.event_bus,
-            "vectorIndex",
-            if embedding_failed {
-                BusOutcome::Failure
-            } else {
-                BusOutcome::Completed
-            },
-            text_unit_count,
-            &request,
-        );
+        let mut bundle = ArtifactBundle::from_request(&request);
+        let persisted = self
+            .execute_ingest_stages(&request, &compiled, &mut bundle)
+            .await?;
         publish_ingest_event(
             &self.event_bus,
             "rag.ingest.completed",
-            if embedding_failed {
+            if persisted.embedding_status == "FAILED" {
                 BusOutcome::Failure
             } else {
                 BusOutcome::Completed
             },
             &request,
-            if embedding_failed {
+            if persisted.fatal_error.is_some() {
+                "failed"
+            } else if !persisted.warnings.is_empty() {
                 "partial_warning"
             } else {
                 "success"
             },
         );
+        if let Some(error) = persisted.fatal_error.clone() {
+            return Err(error);
+        }
 
         Ok(RagIngestResult {
             corpus_id: request.corpus_id,
             profile_id: compiled.profile_id,
             source_code: request.source_code,
             source_version: request.source_version,
-            status: "ACTIVE".into(),
-            text_unit_count,
-            fulltext_status: "INDEXED".into(),
-            embedding_status: embedding_status.into(),
-            warnings: warnings
+            status: persisted.source_status,
+            text_unit_count: persisted.text_unit_count,
+            fulltext_status: persisted.fulltext_status,
+            embedding_status: persisted.embedding_status,
+            warnings: persisted
+                .warnings
                 .into_iter()
                 .map(|warning| {
                     json!({

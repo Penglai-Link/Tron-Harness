@@ -421,6 +421,7 @@ fn is_common_identity_field(logical_name: &str) -> bool {
             | "scopeCode"
             | "status"
             | "sourceStatus"
+            | "sourceMetadata"
             | "text"
             | "searchText"
             | "embedding"

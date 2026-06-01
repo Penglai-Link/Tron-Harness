@@ -14,6 +14,7 @@ enum FilterType {
 #[derive(Debug, Clone)]
 struct FilterField {
     field_type: FilterType,
+    operators: BTreeSet<String>,
 }
 
 pub fn merge_search_filters(
@@ -26,7 +27,7 @@ pub fn merge_search_filters(
     let request = normalize_filters(&schema, request_filters)?;
     for (field, request_value) in request {
         if let Some(profile_value) = merged.get(&field) {
-            let intersection = intersect_filter_values(profile_value, &request_value)
+            let intersection = merge_filter_values(profile_value, &request_value)
                 .ok_or(RagError::SearchFilterInvalid)?;
             merged.insert(field, intersection);
         } else {
@@ -45,20 +46,24 @@ fn normalize_filters(
     for (field, raw_value) in object {
         let schema_field = schema.get(field).ok_or(RagError::SearchFilterInvalid)?;
         let (operator, value) = extract_operator(raw_value);
-        if !matches!(operator, "eq" | "in") || !value_matches(&schema_field.field_type, value) {
+        if !schema_field.operators.contains(operator)
+            || !value_matches(&schema_field.field_type, operator, value)
+        {
             return Err(RagError::SearchFilterInvalid);
         }
-        let normalized_value = if operator == "in" {
-            json!({ "op": "in", "value": value.clone() })
-        } else {
-            json!({ "op": "eq", "value": value.clone() })
-        };
+        let normalized_value = json!({ "op": operator, "value": value.clone() });
         normalized.insert(field.clone(), normalized_value);
     }
     Ok(normalized)
 }
 
-fn intersect_filter_values(left: &Value, right: &Value) -> Option<Value> {
+fn merge_filter_values(left: &Value, right: &Value) -> Option<Value> {
+    if !is_discrete_filter(left) || !is_discrete_filter(right) {
+        let mut values = Vec::new();
+        append_and_values(left, &mut values)?;
+        append_and_values(right, &mut values)?;
+        return Some(json!({ "op": "and", "value": values }));
+    }
     let left_values = filter_values(left)?;
     let right_values = filter_values(right)?;
     let intersection = left_values
@@ -72,11 +77,20 @@ fn intersect_filter_values(left: &Value, right: &Value) -> Option<Value> {
         .into_iter()
         .map(|value| serde_json::from_str::<Value>(&value).ok())
         .collect::<Option<Vec<_>>>()?;
-    if values.len() == 1 {
-        Some(json!({ "op": "in", "value": values }))
+    Some(json!({ "op": "in", "value": values }))
+}
+
+fn append_and_values(value: &Value, values: &mut Vec<Value>) -> Option<()> {
+    if value.get("op")?.as_str()? == "and" {
+        values.extend(value.get("value")?.as_array()?.iter().cloned());
     } else {
-        Some(json!({ "op": "in", "value": values }))
+        values.push(value.clone());
     }
+    Some(())
+}
+
+fn is_discrete_filter(value: &Value) -> bool {
+    matches!(value.get("op").and_then(Value::as_str), Some("eq" | "in"))
 }
 
 fn filter_values(value: &Value) -> Option<BTreeSet<String>> {
@@ -106,7 +120,27 @@ fn parse_schema(value: &Value) -> BTreeMap<String, FilterField> {
                         Some("boolean") => FilterType::Boolean,
                         _ => FilterType::String,
                     };
-                    (name.clone(), FilterField { field_type })
+                    let mut operators = raw
+                        .get("operators")
+                        .and_then(Value::as_array)
+                        .map(|items| {
+                            items
+                                .iter()
+                                .filter_map(Value::as_str)
+                                .map(ToOwned::to_owned)
+                                .collect::<BTreeSet<_>>()
+                        })
+                        .unwrap_or_else(|| BTreeSet::from(["eq".into(), "in".into()]));
+                    if operators.is_empty() {
+                        operators.extend(["eq".into(), "in".into()]);
+                    }
+                    (
+                        name.clone(),
+                        FilterField {
+                            field_type,
+                            operators,
+                        },
+                    )
                 })
                 .collect()
         })
@@ -129,11 +163,13 @@ fn extract_operator(raw_value: &Value) -> (&str, &Value) {
     }
 }
 
-fn value_matches(field_type: &FilterType, value: &Value) -> bool {
-    if let Some(items) = value.as_array() {
-        return items
-            .iter()
-            .all(|item| single_value_matches(field_type, item));
+fn value_matches(field_type: &FilterType, operator: &str, value: &Value) -> bool {
+    if operator == "in" {
+        return value.as_array().is_some_and(|items| {
+            items
+                .iter()
+                .all(|item| single_value_matches(field_type, item))
+        });
     }
     single_value_matches(field_type, value)
 }

@@ -118,10 +118,11 @@ async fn ingest_api_requires_authenticated_workspace_access() {
             },
             "sourceCode": "doc-rag-mvp",
             "sourceVersion": "v1",
-            "sourceType": "MARKDOWN",
+            "sourceType": "PROJECT_DOC_REF",
             "payload": {
                 "title": "RAG MVP",
-                "text": "# RAG MVP"
+                "documentUri": "project-doc://UNKNOWN_WORKSPACE/docs/rag-mvp.md",
+                "format": "MARKDOWN"
             }
         })),
     )

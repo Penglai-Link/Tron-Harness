@@ -48,6 +48,7 @@ where
 
 pub trait RagStrategyRegistry: Clone + Send + Sync + 'static {
     fn resolve_stage(&self, strategy_id: &str) -> StrategyRegistration;
+    fn resolve_payload_strategy(&self, strategy_id: &str) -> StrategyRegistration;
     fn resolve_retriever(&self, strategy_id: &str) -> StrategyRegistration;
     fn resolve_policy(&self, strategy_id: &str) -> StrategyRegistration;
 }
@@ -242,6 +243,9 @@ where
         for (kind, strategy_id) in collect_strategy_refs(&profile.config) {
             let registration = match kind.as_str() {
                 "stage" => self.strategy_registry.resolve_stage(&strategy_id),
+                "payload" => self
+                    .strategy_registry
+                    .resolve_payload_strategy(&strategy_id),
                 "retriever" => self.strategy_registry.resolve_retriever(&strategy_id),
                 "policy" => self.strategy_registry.resolve_policy(&strategy_id),
                 _ => continue,
@@ -325,55 +329,6 @@ where
             normalized_filters: Value::Object(normalized),
             field_errors,
         })
-    }
-}
-
-#[derive(Clone, Default)]
-pub struct DefaultRagStrategyRegistry;
-
-impl RagStrategyRegistry for DefaultRagStrategyRegistry {
-    fn resolve_stage(&self, strategy_id: &str) -> StrategyRegistration {
-        default_registration(
-            strategy_id,
-            &[
-                "INGEST_CHUNK",
-                "RAG_VALIDATE_SOURCE",
-                "RAG_SPLIT_TEXT",
-                "RAG_FULLTEXT_INDEX",
-                "RAG_VECTOR_INDEX",
-                "RAG_PERSIST_SOURCE",
-            ],
-        )
-    }
-
-    fn resolve_retriever(&self, strategy_id: &str) -> StrategyRegistration {
-        default_registration(strategy_id, &["FULLTEXT", "VECTOR"])
-    }
-
-    fn resolve_policy(&self, strategy_id: &str) -> StrategyRegistration {
-        default_registration(
-            strategy_id,
-            &[
-                "SKIP_VECTOR_ON_UNAVAILABLE",
-                "DEDUP_BY_SOURCE",
-                "HYDRATE_TEXT_UNIT",
-                "CONTEXT_PACK_BASIC",
-            ],
-        )
-    }
-}
-
-fn default_registration(strategy_id: &str, enabled_ids: &[&str]) -> StrategyRegistration {
-    let status = if enabled_ids.contains(&strategy_id) {
-        StrategyRegistrationStatus::Enabled
-    } else if matches!(strategy_id, "GRAPH" | "SUMMARY_TREE") {
-        StrategyRegistrationStatus::Reserved
-    } else {
-        StrategyRegistrationStatus::Unsupported
-    };
-    StrategyRegistration {
-        strategy_id: strategy_id.to_string(),
-        status,
     }
 }
 
@@ -562,6 +517,7 @@ fn collect_strategy_refs_inner(
 fn strategy_kind_for_key(key: &str) -> Option<&'static str> {
     match key {
         "stage" | "stages" | "stageId" | "stageIds" => Some("stage"),
+        "payloadStrategyId" | "payloadStrategy" | "payloadStrategies" => Some("payload"),
         "retriever" | "retrievers" | "retrieverId" | "retrieverIds" | "route" | "routes" => {
             Some("retriever")
         }

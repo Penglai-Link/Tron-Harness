@@ -36,7 +36,7 @@ use crate::{
     application::mcp::McpService,
     application::model::ModelService,
     application::open_app::OpenAppService,
-    application::rag::{DefaultRagStrategyRegistry, RagService},
+    application::rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
     application::role::RoleService,
     application::skill::SkillRegistryService,
     application::task::TaskService,
@@ -69,7 +69,7 @@ static GLOBAL_OPEN_APP_SERVICE: OnceLock<OpenAppService> = OnceLock::new();
 static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService)> = OnceLock::new();
 
 pub type AppRagService =
-    RagService<Arc<Mutex<SqliteRagRepository>>, DefaultRagStrategyRegistry, LlmRuntimeService>;
+    RagService<Arc<Mutex<SqliteRagRepository>>, DefaultRagStrategyRegistry, DefaultRagRuntime>;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -256,7 +256,12 @@ impl AppState {
             Arc::new(models.clone()),
             Arc::new(HttpLlmRuntimeClient::new(model_inference_client)),
         );
-        let rag = build_rag_service(&config.database_url, llm_runtime.clone(), event_bus.clone());
+        let rag = build_rag_service(
+            &config.database_url,
+            llm_runtime.clone(),
+            &config.project_doc_root,
+            event_bus.clone(),
+        );
         let (graphs, ontologies) = if config.graph_storage_path == ":memory:" {
             GLOBAL_GRAPH_SERVICES
                 .get_or_init(|| {
@@ -541,7 +546,6 @@ fn build_model_service(database_url: &str, workspaces: WorkspaceService) -> Mode
     ModelService::new(repository, workspaces)
 }
 
-<<<<<<< HEAD
 fn build_open_app_service(
     database_url: &str,
     users: UserService,
@@ -550,10 +554,12 @@ fn build_open_app_service(
     let repository = SqliteOpenAppRepository::connect(database_url)
         .expect("open-app SQLite repository should initialize");
     OpenAppService::new(repository, users, Aes256SecretBox::new(jwt_secret))
-=======
+}
+
 fn build_rag_service(
     database_url: &str,
     llm_runtime: LlmRuntimeService,
+    project_doc_root: &str,
     event_bus: EventBusHandle,
 ) -> AppRagService {
     let repository = SqliteRagRepository::connect(database_url)
@@ -561,10 +567,9 @@ fn build_rag_service(
     RagService::new(
         Arc::new(Mutex::new(repository)),
         DefaultRagStrategyRegistry::default(),
-        llm_runtime,
+        DefaultRagRuntime::new(llm_runtime, project_doc_root),
     )
     .with_event_bus(event_bus)
->>>>>>> ae264096 (refactor: add rag service facade)
 }
 
 fn build_graph_services(

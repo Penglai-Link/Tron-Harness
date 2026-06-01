@@ -1,4 +1,5 @@
 use std::{
+    collections::VecDeque,
     future::Future,
     path::PathBuf,
     pin::Pin,
@@ -14,9 +15,10 @@ use serde_json::{Value, json};
 use tron_backend::{
     adapters::outbound::persistence::sqlite::SqliteRagRepository,
     application::rag::{
-        DefaultRagStrategyRegistry, RagConfigRepository, RagEmbeddingCall, RagEmbeddingResult,
-        RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRequest, RagIngestScope,
-        RagIngestService, compile_ingest_profile,
+        DefaultRagStrategyRegistry, RagConfigRepository, RagDocumentSourceCall,
+        RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime,
+        RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService,
+        RagResolvedDocument, compile_ingest_profile,
     },
     domain::rag::{RagError, RagProfileRecord, RagProfileType, RagStatus},
 };
@@ -61,6 +63,15 @@ async fn memory_plain_text_ingest_writes_source_text_unit_fulltext_and_vector_fi
     );
     assert_eq!(unit["embedding_dimension"], json!(2));
     assert_eq!(embeddings.last_model_code(), None);
+    let source_metadata = serde_json::from_str::<Value>(&query_string(
+        &connection,
+        "SELECT source_metadata FROM rag_memory_text_units WHERE source_code = 'memory-rag-rule'",
+    ))
+    .unwrap();
+    assert_eq!(
+        source_metadata,
+        json!({"seed": "contract-test", "source": "rag-ingest"})
+    );
 }
 
 #[tokio::test]
@@ -71,7 +82,7 @@ async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(vec![0.1, 0.2, 0.3]),
+        FakeEmbeddingRuntime::fixed(vec![0.1, 0.2, 0.3]).with_document(project_doc_markdown()),
     );
 
     let result = service.ingest(project_doc_request("v1")).await.unwrap();
@@ -87,9 +98,52 @@ async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_
     assert_eq!(source["path"], json!("docs/rag-mvp.md"));
     assert_eq!(source["repo_code"], json!("REPO_TRON"));
     assert_eq!(source["module_code"], json!("MOD_RAG"));
+    let metadata = serde_json::from_str::<Value>(&query_string(
+        &connection,
+        "SELECT metadata FROM rag_project_doc_sources WHERE source_code = 'doc-rag-mvp'",
+    ))
+    .unwrap();
+    assert_eq!(
+        metadata,
+        json!({
+            "resolver": {
+                "strategyId": "PROJECT_DOC_MARKDOWN_RESOLVE_SOURCE_V1",
+                "documentUri": "project-doc://TRON_CORE/docs/rag-mvp.md",
+                "contentLength": project_doc_markdown().len()
+            },
+            "parser": {
+                "strategyId": "PROJECT_DOC_MARKDOWN_PARSE_DOCUMENT_V1",
+                "format": "MARKDOWN"
+            }
+        })
+    );
 
     let headings = query_text_unit_headings(&connection);
     assert_eq!(headings, vec!["RAG MVP", "RAG MVP > Write Path"]);
+}
+
+#[tokio::test]
+async fn project_doc_ingest_rejects_direct_markdown_payload() {
+    let database_path = temp_database_path("rag-ingest-project-doc-direct-content");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::fixed(vec![0.1, 0.2, 0.3]),
+    );
+    let mut request = project_doc_request("v1");
+    request.payload = json!({
+        "title": "RAG MVP",
+        "documentUri": "project-doc://TRON_CORE/docs/rag-mvp.md",
+        "format": "MARKDOWN",
+        "text": project_doc_markdown(),
+    });
+
+    assert_eq!(
+        service.ingest(request).await.unwrap_err(),
+        RagError::IngestRequestInvalid
+    );
 }
 
 #[tokio::test]
@@ -143,7 +197,8 @@ async fn embedding_failure_degrades_project_doc_but_fails_memory() {
     let doc_service = RagIngestService::new(
         doc_repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::failing("fake vector unavailable"),
+        FakeEmbeddingRuntime::failing("fake vector unavailable")
+            .with_document(project_doc_markdown()),
     );
 
     let doc_result = doc_service.ingest(project_doc_request("v1")).await.unwrap();
@@ -267,9 +322,25 @@ fn ingest_boundary_does_not_add_search_debug_retry_or_graph_memory_flow_behavior
     }
 }
 
+#[test]
+fn ingest_executor_uses_artifact_bundle_for_stage_handoffs() {
+    let ingest_source = include_str!("../src/application/rag/ingest.rs");
+    let artifact_source = include_str!("../src/application/rag/ingest_artifact.rs");
+
+    assert!(ingest_source.contains("ArtifactBundle::from_request"));
+    assert!(ingest_source.contains("execute_ingest_stages"));
+    assert!(
+        !ingest_source.contains("Option<RagResolvedDocument>"),
+        "stage handoffs should stay inside ArtifactBundle instead of exposing stage-private types"
+    );
+    assert!(artifact_source.contains("pub(crate) struct RagArtifact"));
+    assert!(artifact_source.contains("pub(crate) enum RagArtifactPayload"));
+}
+
 #[derive(Clone)]
 struct FakeEmbeddingRuntime {
     result: Arc<Mutex<Result<RagEmbeddingResult, String>>>,
+    documents: Arc<Mutex<VecDeque<Result<RagResolvedDocument, RagError>>>>,
     calls: Arc<AtomicUsize>,
     last_model_code: Arc<Mutex<Option<String>>>,
 }
@@ -281,6 +352,7 @@ impl FakeEmbeddingRuntime {
                 model_code: "workspace-default-embedding".into(),
                 embedding,
             }))),
+            documents: Arc::new(Mutex::new(VecDeque::new())),
             calls: Arc::new(AtomicUsize::new(0)),
             last_model_code: Arc::new(Mutex::new(None)),
         }
@@ -289,9 +361,22 @@ impl FakeEmbeddingRuntime {
     fn failing(message: &str) -> Self {
         Self {
             result: Arc::new(Mutex::new(Err(message.to_string()))),
+            documents: Arc::new(Mutex::new(VecDeque::new())),
             calls: Arc::new(AtomicUsize::new(0)),
             last_model_code: Arc::new(Mutex::new(None)),
         }
+    }
+
+    fn with_document(self, content_text: &str) -> Self {
+        self.documents
+            .lock()
+            .unwrap()
+            .push_back(Ok(RagResolvedDocument {
+                document_uri: "project-doc://TRON_CORE/docs/rag-mvp.md".into(),
+                content_length: content_text.len(),
+                content_text: content_text.into(),
+            }));
+        self
     }
 
     fn call_count(&self) -> usize {
@@ -312,6 +397,21 @@ impl RagEmbeddingRuntime for FakeEmbeddingRuntime {
             self.calls.fetch_add(1, Ordering::SeqCst);
             *self.last_model_code.lock().unwrap() = call.model_code;
             self.result.lock().unwrap().clone()
+        })
+    }
+}
+
+impl RagDocumentSourceRuntime for FakeEmbeddingRuntime {
+    fn resolve_project_doc_markdown<'a>(
+        &'a self,
+        _call: RagDocumentSourceCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagResolvedDocument, RagError>> + Send + 'a>> {
+        Box::pin(async move {
+            self.documents
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or(Err(RagError::SourceResolveFailed))
         })
     }
 }
@@ -339,7 +439,11 @@ fn memory_request(source_version: &str) -> RagIngestRequest {
             "memoryType": "RULE",
             "memoryStatus": "ACTIVE",
             "reviewStatus": "APPROVED",
-            "importanceScore": 90
+            "importanceScore": 90,
+            "metadata": {
+                "seed": "contract-test",
+                "source": "rag-ingest"
+            }
         }),
     }
 }
@@ -360,10 +464,11 @@ fn project_doc_request(source_version: &str) -> RagIngestRequest {
         },
         source_code: "doc-rag-mvp".into(),
         source_version: source_version.into(),
-        source_type: "MARKDOWN".into(),
+        source_type: "PROJECT_DOC_REF".into(),
         payload: json!({
             "title": "RAG MVP",
-            "text": "# RAG MVP\nIntro.\n\n## Write Path\nPersist synchronously.",
+            "documentUri": "project-doc://TRON_CORE/docs/rag-mvp.md",
+            "format": "MARKDOWN",
             "documentCode": "DOC_RAG_MVP",
             "documentType": "DESIGN",
             "path": "docs/rag-mvp.md",
@@ -372,6 +477,10 @@ fn project_doc_request(source_version: &str) -> RagIngestRequest {
             "moduleName": "RAG"
         }),
     }
+}
+
+fn project_doc_markdown() -> &'static str {
+    "# RAG MVP\nIntro.\n\n## Write Path\nPersist synchronously."
 }
 
 fn ingest_profile(profile_id: &str, config: Value) -> RagProfileRecord {
@@ -405,7 +514,8 @@ fn valid_dag() -> Value {
             "fulltextIndex": { "strategyId": "RAG_FULLTEXT_INDEX", "inputArtifact": "textUnits", "outputArtifact": "fulltextUnits" },
             "vectorIndex": { "strategyId": "RAG_VECTOR_INDEX", "inputArtifact": "fulltextUnits", "outputArtifact": "vectorUnits" },
             "persistSource": { "strategyId": "RAG_PERSIST_SOURCE", "inputArtifact": "vectorUnits", "outputArtifact": "persisted" }
-        }
+        },
+        "payloadStrategyId": "MEMORY_PLAIN_TEXT_PAYLOAD_V1"
     })
 }
 

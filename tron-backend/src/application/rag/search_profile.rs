@@ -2,6 +2,7 @@ use serde_json::{Value, json};
 
 use crate::domain::rag::{RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus};
 
+use super::search_strategy::{RetrieverKind, retriever_strategy};
 use super::{RagStrategyRegistry, StrategyRegistrationStatus};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -174,15 +175,10 @@ fn validate_route_corpora(
 }
 
 fn default_route_id(corpus_id: &str, retriever: &str, index: usize) -> String {
-    let prefix = match corpus_id {
-        "memory-card" => "memory",
-        "project-doc" => "project-doc",
-        _ => corpus_id,
-    };
-    match retriever {
-        "FULLTEXT" => format!("{prefix}-fulltext"),
-        "VECTOR" => format!("{prefix}-vector"),
-        _ => format!("{prefix}-route-{index}"),
+    match retriever_strategy(retriever).map(|strategy| strategy.kind) {
+        Ok(RetrieverKind::Fulltext) => format!("{corpus_id}-fulltext"),
+        Ok(RetrieverKind::Vector) => format!("{corpus_id}-vector"),
+        _ => format!("{corpus_id}-route-{index}"),
     }
 }
 

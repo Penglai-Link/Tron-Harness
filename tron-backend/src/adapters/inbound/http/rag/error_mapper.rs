@@ -28,6 +28,26 @@ pub fn rag_error_response(error: RagError) -> Response {
             "RAG_INGEST_STAGE_FAILED",
             "rag ingest stage failed",
         ),
+        RagError::SourceResolveFailed => (
+            StatusCode::BAD_GATEWAY,
+            "RAG_SOURCE_RESOLVE_FAILED",
+            "rag source resolve failed",
+        ),
+        RagError::DocumentFormatUnsupported => (
+            StatusCode::BAD_REQUEST,
+            "RAG_DOCUMENT_FORMAT_UNSUPPORTED",
+            "rag document format is unsupported",
+        ),
+        RagError::DocumentParseFailed => (
+            StatusCode::BAD_REQUEST,
+            "RAG_DOCUMENT_PARSE_FAILED",
+            "rag document parse failed",
+        ),
+        RagError::DocumentTooLarge => (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "RAG_DOCUMENT_TOO_LARGE",
+            "rag document is too large",
+        ),
         RagError::EmbeddingFailed => (
             StatusCode::BAD_GATEWAY,
             "RAG_EMBEDDING_FAILED",
