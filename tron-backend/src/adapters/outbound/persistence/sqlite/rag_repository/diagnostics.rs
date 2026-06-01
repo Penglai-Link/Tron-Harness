@@ -66,17 +66,28 @@ fn debug_source(
     let source_table = plan
         .source_table
         .as_deref()
-        .ok_or(RagError::StorageBindingInvalid)?;
-    let metadata_column = plan
+        .unwrap_or(plan.text_unit_table.as_str());
+    let title_expr = if plan.source_columns.contains("title") {
+        quote_identifier("title")?
+    } else {
+        "NULL".to_string()
+    };
+    let metadata_expr = plan
         .source_metadata_column
         .as_deref()
-        .ok_or(RagError::StorageBindingInvalid)?;
+        .map(quote_identifier)
+        .transpose()?
+        .unwrap_or_else(|| "'{}'".to_string());
+    let order_sql = if plan.source_table.is_some() {
+        String::new()
+    } else {
+        " ORDER BY ordinal LIMIT 1".to_string()
+    };
     let sql = format!(
-        "SELECT source_code, source_version, scope_type, scope_code, {}, title, {}
+        "SELECT source_code, source_version, scope_type, scope_code, {}, {title_expr}, {metadata_expr}
          FROM {}
-         WHERE source_code = ?1 AND source_version = ?2 AND scope_type = ?3 AND scope_code = ?4",
+         WHERE source_code = ?1 AND source_version = ?2 AND scope_type = ?3 AND scope_code = ?4{order_sql}",
         quote_identifier(&plan.source_status_column)?,
-        quote_identifier(metadata_column)?,
         quote_identifier(source_table)?,
     );
     let source = repository

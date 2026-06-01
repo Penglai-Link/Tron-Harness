@@ -468,26 +468,18 @@ fn seed_search_fixture(database_url: &str) {
     let connection = Connection::open(database_url).unwrap();
     connection
         .execute(
-            "INSERT INTO rag_memory_sources (
-                source_code, source_version, source_type, scope_type, scope_code, status,
-                title, content_hash, metadata, created_at, updated_at, memory_type,
-                memory_status, review_status, version, injectable
-            )
-            VALUES ('memory-trace', 'v1', 'PLAIN_TEXT', 'SPACE', 'TRON_CORE', 'ACTIVE',
-                'Trace memory rule', 'hash', '{}', 1, 1, 'RULE', 'ACTIVE', 'APPROVED', 'v1', 1)",
-            [],
-        )
-        .unwrap();
-    connection
-        .execute(
             "INSERT INTO rag_memory_text_units (
-                text_unit_code, source_code, source_version, scope_type, scope_code,
+                text_unit_code, source_code, source_version, source_type, scope_type, scope_code,
+                source_status, title, source_content_hash, source_metadata, source_created_at,
+                source_updated_at, memory_type, memory_status, review_status, version, injectable,
                 unit_type, text, search_text, heading_path, ordinal, token_count,
                 content_hash, status, fulltext_status, embedding_model_code, embedding_version,
                 embedding_text_hash, embedding_dimension, embedding, embedding_status, metadata,
                 created_at, updated_at
             )
-            VALUES ('tu-trace-1', 'memory-trace', 'v1', 'SPACE', 'TRON_CORE', 'LEAF',
+            VALUES ('tu-trace-1', 'memory-trace', 'v1', 'PLAIN_TEXT', 'SPACE', 'TRON_CORE',
+                'ACTIVE', 'Trace memory rule', 'hash', '{}', 1, 1, 'RULE', 'ACTIVE', 'APPROVED', 'v1', 1,
+                'LEAF',
                 'Always cite sources in answers.', 'Always cite sources in answers.',
                 '', 0, 5, 'hash', 'ACTIVE', 'INDEXED', 'fake-embedding', 'v1',
                 'hash', 2, x'0000803F00000000', 'INDEXED', '{}', 1, 1)",

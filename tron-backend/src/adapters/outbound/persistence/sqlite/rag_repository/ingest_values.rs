@@ -1,0 +1,337 @@
+use std::{
+    collections::BTreeSet,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+use rusqlite::{Transaction, params_from_iter, types::Value as SqlValue};
+use serde_json::Value;
+
+use crate::{application::rag::RagPersistIngestCommand, domain::rag::RagError};
+
+use super::{
+    sql_plan::{SqliteRagCorpusPlan, quote_identifier},
+    storage_error,
+};
+
+pub(crate) fn push_source_domain_values(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &BTreeSet<String>,
+    command: &RagPersistIngestCommand,
+) {
+    if let Some(memory) = &command.memory {
+        push_optional_text(
+            values,
+            columns,
+            "memory_type",
+            memory.memory_type.as_deref(),
+        );
+        push_optional_text(
+            values,
+            columns,
+            "memory_status",
+            memory.memory_status.as_deref(),
+        );
+        push_optional_text(
+            values,
+            columns,
+            "review_status",
+            memory.review_status.as_deref(),
+        );
+        push_optional_text(values, columns, "version", memory.version.as_deref());
+        push_optional_text(
+            values,
+            columns,
+            "superseded_by",
+            memory.superseded_by.as_deref(),
+        );
+        push_optional_text(
+            values,
+            columns,
+            "conflict_group",
+            memory.conflict_group.as_deref(),
+        );
+        push_optional_text(
+            values,
+            columns,
+            "duplicate_group",
+            memory.duplicate_group.as_deref(),
+        );
+        push_optional_bool_when_present(values, columns, "injectable", memory.injectable);
+        push_optional_integer(values, columns, "importance_score", memory.importance_score);
+        push_optional_integer(values, columns, "confidence_score", memory.confidence_score);
+        push_optional_integer(values, columns, "quality_score", memory.quality_score);
+        push_optional_integer_when_present(values, columns, "pin_level", memory.pin_level);
+        push_optional_integer(values, columns, "expires_at", memory.expires_at);
+        push_optional_text(
+            values,
+            columns,
+            "derived_source_type",
+            memory.derived_source_type.as_deref(),
+        );
+        push_optional_text(
+            values,
+            columns,
+            "derived_source_code",
+            memory.derived_source_code.as_deref(),
+        );
+    }
+    if let Some(project_doc) = &command.project_doc {
+        push_optional_text(
+            values,
+            columns,
+            "document_code",
+            project_doc.document_code.as_deref(),
+        );
+        push_optional_text(
+            values,
+            columns,
+            "document_type",
+            project_doc.document_type.as_deref(),
+        );
+        push_optional_text(values, columns, "path", project_doc.path.as_deref());
+        push_text(values, columns, "body_hash", &project_doc.body_hash);
+        push_optional_text(
+            values,
+            columns,
+            "repo_code",
+            project_doc.repo_code.as_deref(),
+        );
+        push_optional_text(
+            values,
+            columns,
+            "module_code",
+            project_doc.module_code.as_deref(),
+        );
+        push_optional_text(
+            values,
+            columns,
+            "module_name",
+            project_doc.module_name.as_deref(),
+        );
+    }
+}
+
+pub(crate) fn push_embedded_source_values(
+    values: &mut Vec<(String, SqlValue)>,
+    plan: &SqliteRagCorpusPlan,
+    command: &RagPersistIngestCommand,
+    now: i64,
+) -> Result<(), RagError> {
+    push_text(
+        values,
+        &plan.text_unit_columns,
+        "source_type",
+        &command.source_type,
+    );
+    push_dynamic_text(
+        values,
+        &plan.text_unit_columns,
+        &plan.source_status_column,
+        &command.source_status,
+    );
+    push_optional_text(
+        values,
+        &plan.text_unit_columns,
+        "title",
+        command.title.as_deref(),
+    );
+    if let Some(column) = plan.source_content_hash_column.as_deref() {
+        push_dynamic_text(
+            values,
+            &plan.text_unit_columns,
+            column,
+            &command.content_hash,
+        );
+    }
+    if let Some(column) = plan.source_metadata_column.as_deref() {
+        push_dynamic_text(
+            values,
+            &plan.text_unit_columns,
+            column,
+            &json_string(&command.metadata)?,
+        );
+    }
+    if let Some(column) = plan.source_created_at_column.as_deref() {
+        push_integer(values, &plan.text_unit_columns, column, now);
+    }
+    if let Some(column) = plan.source_updated_at_column.as_deref() {
+        push_integer(values, &plan.text_unit_columns, column, now);
+    }
+    push_source_domain_values(values, &plan.text_unit_columns, command);
+    Ok(())
+}
+
+pub(crate) fn execute_upsert(
+    tx: &Transaction<'_>,
+    table_name: &str,
+    values: Vec<(String, SqlValue)>,
+    conflict_columns: &[&str],
+    skip_update_columns: &[Option<&str>],
+) -> Result<(), RagError> {
+    if values.is_empty() {
+        return Err(RagError::StorageBindingInvalid);
+    }
+    let table = quote_identifier(table_name)?;
+    let columns = values
+        .iter()
+        .map(|(column, _)| quote_identifier(column))
+        .collect::<Result<Vec<_>, _>>()?;
+    let placeholders = (1..=values.len())
+        .map(|index| format!("?{index}"))
+        .collect::<Vec<_>>();
+    let conflict = conflict_columns
+        .iter()
+        .map(|column| quote_identifier(column))
+        .collect::<Result<Vec<_>, _>>()?
+        .join(", ");
+    let skipped = skip_update_columns
+        .iter()
+        .flatten()
+        .copied()
+        .collect::<BTreeSet<_>>();
+    let update_columns = values
+        .iter()
+        .map(|(column, _)| column.as_str())
+        .filter(|column| !conflict_columns.contains(column) && !skipped.contains(column))
+        .collect::<Vec<_>>();
+    let update_sql = if update_columns.is_empty() {
+        "DO NOTHING".to_string()
+    } else {
+        format!(
+            "DO UPDATE SET {}",
+            update_columns
+                .iter()
+                .map(|column| {
+                    let column = quote_identifier(column)?;
+                    Ok(format!("{column} = excluded.{column}"))
+                })
+                .collect::<Result<Vec<_>, RagError>>()?
+                .join(", ")
+        )
+    };
+    let sql = format!(
+        "INSERT INTO {table} ({}) VALUES ({}) ON CONFLICT ({conflict}) {update_sql}",
+        columns.join(", "),
+        placeholders.join(", ")
+    );
+    tx.execute(
+        &sql,
+        params_from_iter(values.into_iter().map(|(_, value)| value)),
+    )
+    .map_err(storage_error)?;
+    Ok(())
+}
+
+pub(crate) fn push_text(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &BTreeSet<String>,
+    column: &str,
+    value: &str,
+) {
+    if columns.contains(column) {
+        values.push((column.to_string(), SqlValue::Text(value.to_string())));
+    }
+}
+
+pub(crate) fn push_dynamic_text(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &BTreeSet<String>,
+    column: &str,
+    value: &str,
+) {
+    push_text(values, columns, column, value);
+}
+
+pub(crate) fn push_optional_text(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &BTreeSet<String>,
+    column: &str,
+    value: Option<&str>,
+) {
+    if columns.contains(column) {
+        values.push((
+            column.to_string(),
+            value
+                .map(|value| SqlValue::Text(value.to_string()))
+                .unwrap_or(SqlValue::Null),
+        ));
+    }
+}
+
+pub(crate) fn push_integer(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &BTreeSet<String>,
+    column: &str,
+    value: i64,
+) {
+    if columns.contains(column) {
+        values.push((column.to_string(), SqlValue::Integer(value)));
+    }
+}
+
+pub(crate) fn push_optional_integer(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &BTreeSet<String>,
+    column: &str,
+    value: Option<i64>,
+) {
+    if columns.contains(column) {
+        values.push((
+            column.to_string(),
+            value.map(SqlValue::Integer).unwrap_or(SqlValue::Null),
+        ));
+    }
+}
+
+fn push_optional_integer_when_present(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &BTreeSet<String>,
+    column: &str,
+    value: Option<i64>,
+) {
+    if columns.contains(column)
+        && let Some(value) = value
+    {
+        values.push((column.to_string(), SqlValue::Integer(value)));
+    }
+}
+
+fn push_optional_bool_when_present(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &BTreeSet<String>,
+    column: &str,
+    value: Option<bool>,
+) {
+    if columns.contains(column)
+        && let Some(value) = value
+    {
+        values.push((column.to_string(), SqlValue::Integer(i64::from(value))));
+    }
+}
+
+pub(crate) fn push_optional_blob(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &BTreeSet<String>,
+    column: &str,
+    value: Option<&[u8]>,
+) {
+    if columns.contains(column) {
+        values.push((
+            column.to_string(),
+            value
+                .map(|value| SqlValue::Blob(value.to_vec()))
+                .unwrap_or(SqlValue::Null),
+        ));
+    }
+}
+
+pub(crate) fn json_string(value: &Value) -> Result<String, RagError> {
+    serde_json::to_string(value).map_err(|_| RagError::StorageFailure)
+}
+
+pub(crate) fn now_millis() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0)
+}

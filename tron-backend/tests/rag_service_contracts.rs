@@ -28,16 +28,16 @@ fn rag_service_resolves_enabled_corpus_storage_binding_from_repository_port() {
 
     assert_eq!(corpus.corpus_id, "memory-card");
     assert_eq!(corpus.status, RagStatus::Enabled);
-    assert_eq!(corpus.storage_binding.layout, RagStorageLayout::Split);
-    assert_eq!(corpus.storage_binding.table, None);
     assert_eq!(
-        corpus.storage_binding.source_table.as_deref(),
-        Some("rag_memory_sources")
+        corpus.storage_binding.layout,
+        RagStorageLayout::EmbeddedSource
     );
     assert_eq!(
-        corpus.storage_binding.text_unit_table.as_deref(),
+        corpus.storage_binding.table.as_deref(),
         Some("rag_memory_text_units")
     );
+    assert_eq!(corpus.storage_binding.source_table.as_deref(), None);
+    assert_eq!(corpus.storage_binding.text_unit_table.as_deref(), None);
     assert_eq!(
         corpus.storage_binding.diagnostics_table.as_deref(),
         Some("rag_diagnostics")
@@ -47,6 +47,14 @@ fn rag_service_resolves_enabled_corpus_storage_binding_from_repository_port() {
         Some("source_code")
     );
     assert!(corpus.filter_schema.fields.contains_key("scopeType"));
+    assert_eq!(
+        corpus
+            .filter_schema
+            .fields
+            .get("status")
+            .and_then(|field| field.column.as_deref()),
+        Some("source_status")
+    );
 }
 
 #[test]
@@ -656,7 +664,7 @@ fn memory_corpus_record() -> RagCorpusRecord {
         filter_schema: json!({
             "fields": {
                 "scopeType": { "type": "string", "column": "scope_type" },
-                "status": { "type": "string", "column": "status" }
+                "status": { "type": "string", "column": "source_status" }
             }
         }),
         field_mapping: BTreeMap::from([
@@ -664,10 +672,10 @@ fn memory_corpus_record() -> RagCorpusRecord {
             ("scopeType".to_string(), "scope_type".to_string()),
         ]),
         storage_binding: RagStorageBinding {
-            layout: RagStorageLayout::Split,
-            table: None,
-            source_table: Some("rag_memory_sources".to_string()),
-            text_unit_table: Some("rag_memory_text_units".to_string()),
+            layout: RagStorageLayout::EmbeddedSource,
+            table: Some("rag_memory_text_units".to_string()),
+            source_table: None,
+            text_unit_table: None,
             diagnostics_table: Some("rag_diagnostics".to_string()),
         },
     }

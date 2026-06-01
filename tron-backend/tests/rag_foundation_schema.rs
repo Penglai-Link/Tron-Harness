@@ -16,7 +16,6 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
     let expected_tables = BTreeSet::from([
         "rag_corpora".to_string(),
         "rag_profiles".to_string(),
-        "rag_memory_sources".to_string(),
         "rag_project_doc_sources".to_string(),
         "rag_memory_text_units".to_string(),
         "rag_project_doc_text_units".to_string(),
@@ -48,7 +47,7 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
 }
 
 #[test]
-fn rag_foundation_keeps_source_and_text_unit_storage_split_by_corpus() {
+fn rag_foundation_embeds_memory_source_and_keeps_project_doc_split() {
     let repository =
         SqliteRagRepository::connect(":memory:").expect("RAG repository should connect");
     let forbidden_tables = BTreeSet::from([
@@ -56,6 +55,7 @@ fn rag_foundation_keeps_source_and_text_unit_storage_split_by_corpus() {
         "rag_text_units".to_string(),
         "rag_fulltext".to_string(),
         "rag_vectors".to_string(),
+        "rag_memory_sources".to_string(),
         "rag_memory_fulltext".to_string(),
         "rag_memory_vectors".to_string(),
         "rag_project_doc_fulltext".to_string(),
@@ -67,7 +67,7 @@ fn rag_foundation_keeps_source_and_text_unit_storage_split_by_corpus() {
             .rag_table_names()
             .unwrap()
             .is_disjoint(&forbidden_tables),
-        "RAG storage must stay split by Corpus and keep fulltext/vector fields in TextUnit tables",
+        "Memory source data is embedded in TextUnit while Project Doc keeps separate source storage",
     );
 
     for table in ["rag_memory_text_units", "rag_project_doc_text_units"] {
@@ -103,7 +103,6 @@ fn rag_foundation_preserves_scope_isolation_columns_without_permission_columns()
     assert_eq!(row_scope.scope_code, "space-demo");
 
     for table in [
-        "rag_memory_sources",
         "rag_project_doc_sources",
         "rag_memory_text_units",
         "rag_project_doc_text_units",
@@ -135,8 +134,15 @@ fn rag_domain_fields_migration_adds_memory_governance_columns_and_indexes_idempo
     let repository = SqliteRagRepository::connect(&database_url)
         .expect("second RAG migration should be idempotent");
 
-    let columns = repository.table_columns("rag_memory_sources").unwrap();
+    let columns = repository.table_columns("rag_memory_text_units").unwrap();
     for required in [
+        "source_type",
+        "source_status",
+        "title",
+        "source_content_hash",
+        "source_metadata",
+        "source_created_at",
+        "source_updated_at",
         "memory_type",
         "memory_status",
         "review_status",
@@ -155,21 +161,96 @@ fn rag_domain_fields_migration_adds_memory_governance_columns_and_indexes_idempo
     ] {
         assert!(
             columns.contains(required),
-            "rag_memory_sources should expose {required}",
+            "rag_memory_text_units should expose {required}",
         );
     }
 
-    let indexes = table_indexes(&database_url, "rag_memory_sources");
+    let indexes = table_indexes(&database_url, "rag_memory_text_units");
     for required in [
-        "idx_rag_memory_sources_domain_status",
-        "idx_rag_memory_sources_domain_rank",
-        "idx_rag_memory_sources_expires",
+        "idx_rag_memory_text_units_source_status",
+        "idx_rag_memory_text_units_domain_status",
+        "idx_rag_memory_text_units_domain_rank",
+        "idx_rag_memory_text_units_expires",
     ] {
         assert!(
             indexes.contains(required),
-            "rag_memory_sources should expose {required}",
+            "rag_memory_text_units should expose {required}",
         );
     }
+
+    let _ = fs::remove_file(database_path);
+}
+
+#[test]
+fn rag_memory_embedded_source_migration_backfills_legacy_source_rows() {
+    let database_path = temp_database_path("rag-memory-embedded-source-backfill");
+    let database_url = database_path.to_string_lossy().to_string();
+    let connection = Connection::open(&database_url).expect("legacy database should open");
+    connection
+        .execute_batch(include_str!(
+            "../migrations/20260530_0022_create_rag_foundation.sql"
+        ))
+        .expect("legacy RAG foundation should initialize");
+    connection
+        .execute_batch("ALTER TABLE rag_memory_sources ADD COLUMN memory_type TEXT;")
+        .expect("legacy memory domain column should be added");
+    connection
+        .execute(
+            "INSERT INTO rag_memory_sources (
+                source_code, source_version, source_type, scope_type, scope_code, status,
+                title, content_hash, metadata, created_at, updated_at, memory_type
+            )
+            VALUES ('legacy-memory', 'v1', 'PLAIN_TEXT', 'SPACE', 'TRON_CORE', 'ACTIVE',
+                'Legacy Memory', 'source-hash', '{\"legacy\":true}', 11, 12, 'RULE')",
+            [],
+        )
+        .expect("legacy source should insert");
+    connection
+        .execute(
+            "INSERT INTO rag_memory_text_units (
+                text_unit_code, source_code, source_version, scope_type, scope_code, unit_type,
+                text, search_text, heading_path, ordinal, token_count, content_hash, status,
+                fulltext_status, embedding_status, metadata, created_at, updated_at
+            )
+            VALUES ('legacy-memory:v1:0', 'legacy-memory', 'v1', 'SPACE', 'TRON_CORE', 'LEAF',
+                'Legacy memory text.', 'Legacy memory text.', '', 0, 3, 'unit-hash',
+                'ACTIVE', 'INDEXED', 'FAILED', '{}', 21, 22)",
+            [],
+        )
+        .expect("legacy text unit should insert");
+    drop(connection);
+
+    let repository =
+        SqliteRagRepository::connect(&database_url).expect("new RAG migration should succeed");
+    assert!(
+        !repository
+            .rag_table_names()
+            .unwrap()
+            .contains("rag_memory_sources"),
+        "legacy memory source table should be removed after backfill",
+    );
+    let connection = Connection::open(&database_url).expect("database should reopen");
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT source_status FROM rag_memory_text_units WHERE source_code = 'legacy-memory'"
+        ),
+        "ACTIVE"
+    );
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT title FROM rag_memory_text_units WHERE source_code = 'legacy-memory'"
+        ),
+        "Legacy Memory"
+    );
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT memory_type FROM rag_memory_text_units WHERE source_code = 'legacy-memory'"
+        ),
+        "RULE"
+    );
 
     let _ = fs::remove_file(database_path);
 }
@@ -233,6 +314,10 @@ fn table_indexes(database_url: &str, table_name: &str) -> BTreeSet<String> {
         .expect("index query should run")
         .collect::<Result<BTreeSet<_>, _>>()
         .expect("index names should collect")
+}
+
+fn query_string(connection: &Connection, sql: &str) -> String {
+    connection.query_row(sql, [], |row| row.get(0)).unwrap()
 }
 
 fn temp_database_path(test_name: &str) -> PathBuf {

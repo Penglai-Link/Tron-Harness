@@ -45,7 +45,7 @@ async fn memory_plain_text_ingest_writes_source_text_unit_fulltext_and_vector_fi
     assert_eq!(
         query_string(
             &connection,
-            "SELECT status FROM rag_memory_sources WHERE source_code = 'memory-rag-rule'"
+            "SELECT source_status FROM rag_memory_text_units WHERE source_code = 'memory-rag-rule' LIMIT 1"
         ),
         "ACTIVE"
     );
@@ -109,7 +109,10 @@ async fn same_source_version_is_idempotent_and_multiple_versions_coexist() {
 
     let connection = Connection::open(&database_url).unwrap();
     assert_eq!(
-        query_i64(&connection, "SELECT COUNT(*) FROM rag_memory_sources"),
+        query_i64(
+            &connection,
+            "SELECT COUNT(DISTINCT source_code || ':' || source_version || ':' || scope_type || ':' || scope_code) FROM rag_memory_text_units"
+        ),
         2
     );
     assert_eq!(
@@ -119,14 +122,14 @@ async fn same_source_version_is_idempotent_and_multiple_versions_coexist() {
     assert_eq!(
         query_i64(
             &connection,
-            "SELECT COUNT(*) FROM rag_memory_sources WHERE source_version = 'v1'"
+            "SELECT COUNT(DISTINCT source_code || ':' || source_version || ':' || scope_type || ':' || scope_code) FROM rag_memory_text_units WHERE source_version = 'v1'"
         ),
         1
     );
     assert_eq!(
         query_i64(
             &connection,
-            "SELECT COUNT(*) FROM rag_memory_sources WHERE source_version = 'v2'"
+            "SELECT COUNT(DISTINCT source_code || ':' || source_version || ':' || scope_type || ':' || scope_code) FROM rag_memory_text_units WHERE source_version = 'v2'"
         ),
         1
     );
@@ -184,7 +187,7 @@ async fn embedding_failure_degrades_project_doc_but_fails_memory() {
     assert_eq!(
         query_string(
             &memory_connection,
-            "SELECT status FROM rag_memory_sources WHERE source_code = 'memory-rag-rule'"
+            "SELECT source_status FROM rag_memory_text_units WHERE source_code = 'memory-rag-rule' LIMIT 1"
         ),
         "FAILED"
     );

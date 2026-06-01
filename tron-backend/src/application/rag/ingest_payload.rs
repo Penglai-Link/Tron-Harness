@@ -121,10 +121,23 @@ fn prepare_memory_payload(
             memory_status: payload_string(&request.payload, "memoryStatus"),
             review_status: payload_string(&request.payload, "reviewStatus"),
             version: Some(request.source_version.clone()),
+            superseded_by: payload_string(&request.payload, "supersededBy"),
+            conflict_group: payload_string(&request.payload, "conflictGroup"),
+            duplicate_group: payload_string(&request.payload, "duplicateGroup"),
+            injectable: request.payload.get("injectable").and_then(Value::as_bool),
             importance_score: request
                 .payload
                 .get("importanceScore")
                 .and_then(Value::as_i64),
+            confidence_score: request
+                .payload
+                .get("confidenceScore")
+                .and_then(Value::as_i64),
+            quality_score: request.payload.get("qualityScore").and_then(Value::as_i64),
+            pin_level: request.payload.get("pinLevel").and_then(Value::as_i64),
+            expires_at: request.payload.get("expiresAt").and_then(Value::as_i64),
+            derived_source_type: payload_string(&request.payload, "derivedSourceType"),
+            derived_source_code: payload_string(&request.payload, "derivedSourceCode"),
         }),
         project_doc: None,
         units: vec![unit],

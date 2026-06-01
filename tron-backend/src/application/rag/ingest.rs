@@ -59,7 +59,17 @@ pub struct RagMemorySourceFields {
     pub memory_status: Option<String>,
     pub review_status: Option<String>,
     pub version: Option<String>,
+    pub superseded_by: Option<String>,
+    pub conflict_group: Option<String>,
+    pub duplicate_group: Option<String>,
+    pub injectable: Option<bool>,
     pub importance_score: Option<i64>,
+    pub confidence_score: Option<i64>,
+    pub quality_score: Option<i64>,
+    pub pin_level: Option<i64>,
+    pub expires_at: Option<i64>,
+    pub derived_source_type: Option<String>,
+    pub derived_source_code: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

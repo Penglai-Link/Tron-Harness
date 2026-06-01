@@ -86,6 +86,8 @@ pub(super) const RAG_OPTIONAL_MODEL_CODES_MIGRATION: &str = include_str!(
 );
 pub(super) const RAG_STORAGE_BINDING_LAYOUT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260601_0027_add_rag_storage_binding_layout.sql");
+pub(super) const RAG_MEMORY_EMBEDDED_SOURCE_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260601_0028_embed_rag_memory_source.sql");
 pub(super) const AGENT_MANAGEMENT_RUNTIME_TYPE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260601_0027_add_agent_management_runtime_type.sql");
 pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_MIGRATION: &str =

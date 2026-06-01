@@ -1,5 +1,6 @@
 mod diagnostics;
 mod ingest;
+mod ingest_values;
 mod retry;
 mod search;
 mod sql_plan;
@@ -23,8 +24,8 @@ use crate::{
 
 use super::migrations::{
     RAG_DOMAIN_FIELDS_MIGRATION, RAG_FOUNDATION_MIGRATION, RAG_INGEST_PROFILES_MIGRATION,
-    RAG_OPTIONAL_MODEL_CODES_MIGRATION, RAG_SEARCH_PROFILES_MIGRATION,
-    RAG_STORAGE_BINDING_LAYOUT_MIGRATION,
+    RAG_MEMORY_EMBEDDED_SOURCE_MIGRATION, RAG_OPTIONAL_MODEL_CODES_MIGRATION,
+    RAG_SEARCH_PROFILES_MIGRATION, RAG_STORAGE_BINDING_LAYOUT_MIGRATION,
 };
 
 pub struct SqliteRagRepository {
@@ -57,7 +58,8 @@ impl SqliteRagRepository {
         self.apply_rag_ingest_profiles_migration()?;
         self.apply_rag_search_profiles_migration()?;
         self.apply_rag_optional_model_codes_migration()?;
-        self.apply_rag_storage_binding_layout_migration()
+        self.apply_rag_storage_binding_layout_migration()?;
+        self.apply_rag_memory_embedded_source_migration()
     }
 
     pub fn apply_rag_foundation_migration(&self) -> Result<(), RagError> {
@@ -70,6 +72,48 @@ impl SqliteRagRepository {
         self.ensure_columns(
             "rag_memory_sources",
             &[
+                ("memory_type", "memory_type TEXT"),
+                ("memory_status", "memory_status TEXT"),
+                ("review_status", "review_status TEXT"),
+                ("version", "version TEXT"),
+                ("superseded_by", "superseded_by TEXT"),
+                ("conflict_group", "conflict_group TEXT"),
+                ("duplicate_group", "duplicate_group TEXT"),
+                ("injectable", "injectable INTEGER NOT NULL DEFAULT 1"),
+                ("importance_score", "importance_score INTEGER"),
+                ("confidence_score", "confidence_score INTEGER"),
+                ("quality_score", "quality_score INTEGER"),
+                ("pin_level", "pin_level INTEGER NOT NULL DEFAULT 0"),
+                ("expires_at", "expires_at INTEGER"),
+                ("derived_source_type", "derived_source_type TEXT"),
+                ("derived_source_code", "derived_source_code TEXT"),
+            ],
+        )?;
+        self.ensure_columns(
+            "rag_memory_text_units",
+            &[
+                (
+                    "source_type",
+                    "source_type TEXT NOT NULL DEFAULT 'PLAIN_TEXT'",
+                ),
+                (
+                    "source_status",
+                    "source_status TEXT NOT NULL DEFAULT 'PENDING'",
+                ),
+                ("title", "title TEXT"),
+                ("source_content_hash", "source_content_hash TEXT"),
+                (
+                    "source_metadata",
+                    "source_metadata TEXT NOT NULL DEFAULT '{}'",
+                ),
+                (
+                    "source_created_at",
+                    "source_created_at INTEGER NOT NULL DEFAULT 0",
+                ),
+                (
+                    "source_updated_at",
+                    "source_updated_at INTEGER NOT NULL DEFAULT 0",
+                ),
                 ("memory_type", "memory_type TEXT"),
                 ("memory_status", "memory_status TEXT"),
                 ("review_status", "review_status TEXT"),
@@ -121,6 +165,12 @@ impl SqliteRagRepository {
     pub fn apply_rag_storage_binding_layout_migration(&self) -> Result<(), RagError> {
         self.connection
             .execute_batch(RAG_STORAGE_BINDING_LAYOUT_MIGRATION)
+            .map_err(storage_error)
+    }
+
+    pub fn apply_rag_memory_embedded_source_migration(&self) -> Result<(), RagError> {
+        self.connection
+            .execute_batch(RAG_MEMORY_EMBEDDED_SOURCE_MIGRATION)
             .map_err(storage_error)
     }
 

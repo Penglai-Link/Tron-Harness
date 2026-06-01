@@ -103,12 +103,22 @@ pub(crate) fn compile_sql_corpus_plan(
         validate_identifier(table)?;
     }
 
-    let source_columns = match &source_table {
+    let physical_source_columns = match &source_table {
         Some(table) => repository.table_columns(table)?,
         None => BTreeSet::new(),
     };
     let text_unit_columns = repository.table_columns(&text_unit_table)?;
-    let filter_columns = compile_filter_columns(corpus, &source_columns, &text_unit_columns);
+    let source_columns = if source_table.is_some() {
+        physical_source_columns
+    } else {
+        text_unit_columns.clone()
+    };
+    let filter_columns = compile_filter_columns(
+        corpus,
+        source_table.is_some(),
+        &source_columns,
+        &text_unit_columns,
+    );
     let source_metadata_columns =
         compile_source_metadata_columns(corpus, &source_columns, &filter_columns);
 
@@ -189,14 +199,20 @@ pub(crate) fn validate_identifier(identifier: &str) -> Result<(), RagError> {
 
 fn compile_filter_columns(
     corpus: &RagCorpusRecord,
+    has_source_table: bool,
     source_columns: &BTreeSet<String>,
     text_unit_columns: &BTreeSet<String>,
 ) -> BTreeMap<String, SqliteRagFilterColumn> {
     parse_filter_fields(&corpus.filter_schema)
         .into_iter()
         .filter_map(|(logical_name, (column, value_type))| {
-            let alias =
-                choose_filter_alias(&logical_name, &column, source_columns, text_unit_columns)?;
+            let alias = choose_filter_alias(
+                &logical_name,
+                &column,
+                has_source_table,
+                source_columns,
+                text_unit_columns,
+            )?;
             Some((
                 logical_name,
                 SqliteRagFilterColumn {
@@ -251,13 +267,18 @@ fn compile_source_metadata_columns(
 fn choose_filter_alias(
     logical_name: &str,
     column: &str,
+    has_source_table: bool,
     source_columns: &BTreeSet<String>,
     text_unit_columns: &BTreeSet<String>,
 ) -> Option<SqliteRagTableAlias> {
     if logical_name == "status" || logical_name == "sourceStatus" {
-        return source_columns
-            .contains(column)
-            .then_some(SqliteRagTableAlias::Source);
+        return (has_source_table && source_columns.contains(column))
+            .then_some(SqliteRagTableAlias::Source)
+            .or_else(|| {
+                text_unit_columns
+                    .contains(column)
+                    .then_some(SqliteRagTableAlias::TextUnit)
+            });
     }
     if logical_name == "textUnitStatus" {
         return text_unit_columns
@@ -272,12 +293,15 @@ fn choose_filter_alias(
             .contains(column)
             .then_some(SqliteRagTableAlias::TextUnit)
             .or_else(|| {
+                if !has_source_table {
+                    return None;
+                }
                 source_columns
                     .contains(column)
                     .then_some(SqliteRagTableAlias::Source)
             });
     }
-    if source_columns.contains(column) {
+    if has_source_table && source_columns.contains(column) {
         Some(SqliteRagTableAlias::Source)
     } else if text_unit_columns.contains(column) {
         Some(SqliteRagTableAlias::TextUnit)
