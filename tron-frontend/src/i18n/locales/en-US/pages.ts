@@ -280,7 +280,7 @@ export const pages = {
       },
       toolSelection: {
         allTools: "All platform tools are available for this agent.",
-        clearVisible: "Clear visible",
+        clearVisible: "Clear",
         domainsSummary: "{{visible}} of {{total}} domains visible",
         domainsTitle: "Domains",
         empty: "No tools match the search query.",
@@ -293,7 +293,7 @@ export const pages = {
         searchAria: "Search tools",
         searchPlaceholder: "Search tools...",
         selectedCount: "{{count}} selected",
-        selectVisible: "Select visible",
+        selectVisible: "Select all",
         showingTools: "Showing {{visible}} of {{total}} tools",
         toolsCount: "{{count}} tools",
         title: "Selected tools",

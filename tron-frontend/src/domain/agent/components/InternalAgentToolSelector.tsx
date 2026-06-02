@@ -158,20 +158,8 @@ export function InternalAgentToolSelector({
         </p>
       ) : (
         <div className="grid gap-4 xl:grid-cols-[minmax(288px,336px)_minmax(0,1fr)]">
-          <div className="space-y-3">
-            <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] p-3">
-              <p className="text-sm font-medium text-[var(--color-on-surface)]">
-                {internalPageT("toolSelection.domainsTitle", "Domains")}
-              </p>
-              <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
-                {internalPageT("toolSelection.domainsSummary", "{{visible}} of {{total}} domains visible", {
-                  total: toolDomains.length,
-                  visible: domainEntries.length,
-                })}
-              </p>
-            </div>
-
-            <div className="max-h-[36rem] space-y-2 overflow-auto pr-1">
+          <div>
+            <div className="tron-scrollbar max-h-[36rem] space-y-2 overflow-x-hidden overflow-y-auto overscroll-y-contain pr-1">
               {domainEntries.map((entry) => {
                 const isActive = entry.domain.domainCode === activeDomainCode;
 
@@ -179,10 +167,10 @@ export function InternalAgentToolSelector({
                   <button
                     key={entry.domain.domainCode}
                     className={cn(
-                      "w-full rounded-xl border p-3 text-left transition-colors",
+                      "w-full rounded-[18px] border p-3 text-left shadow-[0_8px_18px_rgba(15,23,42,0.03)] transition-[border-color,background-color,box-shadow]",
                       isActive
-                        ? "border-[var(--color-primary)] bg-[var(--color-primary)]/10 shadow-sm"
-                        : "border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] hover:bg-[var(--color-hover-surface)]",
+                        ? "border-[var(--color-primary)] bg-[var(--color-primary)]/8 shadow-[0_12px_24px_rgba(15,23,42,0.06)]"
+                        : "border-[var(--color-card-border)] bg-[var(--color-surface-container-lowest)] hover:border-[var(--color-outline-variant)] hover:bg-[var(--color-hover-surface)]",
                     )}
                     type="button"
                     onClick={() => {
@@ -234,9 +222,19 @@ export function InternalAgentToolSelector({
                       <p className="text-base font-semibold text-[var(--color-on-surface)]">
                         {activeEntry.domain.name}
                       </p>
-                      <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
-                        {activeEntry.domain.domainCode}
-                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-[var(--color-on-surface-variant)]">
+                        <span>{activeEntry.domain.domainCode}</span>
+                        <span className="rounded-full bg-[var(--color-surface-container-high)] px-2.5 py-1">
+                          {internalPageT("toolSelection.selectedCount", "{{count}} selected", {
+                            count: activeEntry.selectedCount,
+                          })}
+                        </span>
+                        <span className="rounded-full bg-[var(--color-surface-container-high)] px-2.5 py-1">
+                          {activeEntry.domain.hasMutationTools
+                            ? internalPageT("toolSelection.hasMutation", "Contains mutation tools")
+                            : internalPageT("toolSelection.noMutation", "Read-only only")}
+                        </span>
+                      </div>
                       <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
                         {activeEntry.domain.description
                           || internalPageT("toolSelection.noDescription", "No description available.")}
@@ -252,7 +250,7 @@ export function InternalAgentToolSelector({
                           onSetToolsChecked(activeDomainTools.map((tool) => tool.toolCode), true);
                         }}
                       >
-                        {internalPageT("toolSelection.selectVisible", "Select visible")}
+                        {internalPageT("toolSelection.selectVisible", "Select all")}
                       </Button>
                       <Button
                         disabled={busy || !hasAnyActiveToolSelected}
@@ -262,38 +260,12 @@ export function InternalAgentToolSelector({
                           onSetToolsChecked(activeDomainTools.map((tool) => tool.toolCode), false);
                         }}
                       >
-                        {internalPageT("toolSelection.clearVisible", "Clear visible")}
+                        {internalPageT("toolSelection.clearVisible", "Clear")}
                       </Button>
                     </div>
                   </div>
 
-                  <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] text-[var(--color-on-surface-variant)]">
-                    <span className="rounded-full bg-[var(--color-surface-container-high)] px-2.5 py-1">
-                      {internalPageT("toolSelection.selectedCount", "{{count}} selected", {
-                        count: activeEntry.selectedCount,
-                      })}
-                    </span>
-                    <span className="rounded-full bg-[var(--color-surface-container-high)] px-2.5 py-1">
-                      {internalPageT("toolSelection.showingTools", "Showing {{visible}} of {{total}} tools", {
-                        total: activeEntry.domain.toolCount,
-                        visible: activeDomainTools.length,
-                      })}
-                    </span>
-                    <span className="rounded-full bg-[var(--color-surface-container-high)] px-2.5 py-1">
-                      {activeEntry.domain.hasMutationTools
-                        ? internalPageT("toolSelection.hasMutation", "Contains mutation tools")
-                        : internalPageT("toolSelection.noMutation", "Read-only only")}
-                    </span>
-                  </div>
-
-                  <p className="mt-3 text-[11px] text-[var(--color-on-surface-variant)]">
-                    {internalPageT("toolSelection.sampleLabel", "Samples: {{sample}}", {
-                      sample: activeEntry.domain.sampleTools.join(", ")
-                        || internalPageT("toolSelection.sampleFallback", "N/A"),
-                    })}
-                  </p>
-
-                  <ul className="mt-4 max-h-[36rem] space-y-2 overflow-auto pr-1">
+                  <ul className="tron-scrollbar mt-4 max-h-[36rem] space-y-2 overflow-x-hidden overflow-y-auto overscroll-y-contain pr-1">
                     {activeDomainTools.map((tool) => {
                       const checked = selectedToolSet.has(tool.toolCode);
                       return (

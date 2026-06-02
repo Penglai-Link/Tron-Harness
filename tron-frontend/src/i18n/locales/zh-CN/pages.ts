@@ -282,7 +282,7 @@ export const pages = {
       },
       toolSelection: {
         allTools: "该智能体可使用全部平台工具。",
-        clearVisible: "清空可见项",
+        clearVisible: "清空",
         domainsSummary: "共 {{total}} 个领域，当前显示 {{visible}} 个",
         domainsTitle: "领域",
         empty: "没有工具匹配当前搜索条件。",
@@ -295,7 +295,7 @@ export const pages = {
         searchAria: "搜索工具",
         searchPlaceholder: "搜索工具...",
         selectedCount: "已选 {{count}} 个",
-        selectVisible: "选择可见项",
+        selectVisible: "全选",
         showingTools: "显示 {{visible}} / {{total}} 个工具",
         toolsCount: "{{count}} 个工具",
         title: "指定工具",

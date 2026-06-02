@@ -1095,6 +1095,7 @@ function ChatModelSelector({
     [models, searchQuery],
   );
   const disabled = loading || models.length === 0;
+  const selectedModelLabel = loading ? "Loading models..." : selectedModel ? selectedModel.displayName : emptyLabel;
 
   useDismissibleLayer({
     onDismiss: () => setOpen(false),
@@ -1123,12 +1124,13 @@ function ChatModelSelector({
         type="button"
         aria-label="Select chat model"
         aria-expanded={open}
+        title={selectedModelLabel}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       >
         <Bot size={14} />
         <span className="truncate">
-          {loading ? "Loading models..." : selectedModel ? selectedModel.displayName : emptyLabel}
+          {selectedModelLabel}
         </span>
         <ChevronDown size={14} />
       </button>
