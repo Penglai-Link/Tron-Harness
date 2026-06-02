@@ -13,6 +13,7 @@ use crate::{
 
 use super::{
     SqliteRagRepository,
+    indexes::{sync_text_unit_indexes_for_code, sync_text_unit_indexes_for_source},
     sql_plan::{compile_sql_corpus_plan, quote_identifier},
     storage_error,
 };
@@ -67,7 +68,8 @@ impl RagRetryIndexRepository for SqliteRagRepository {
             quote_identifier(updated_at_column)?,
             quote_identifier(&plan.text_unit_status_column)?
         );
-        self.connection
+        let updated = self
+            .connection
             .execute(
                 &sql,
                 params![
@@ -78,7 +80,17 @@ impl RagRetryIndexRepository for SqliteRagRepository {
                     request.scope_code
                 ],
             )
-            .map_err(storage_error)
+            .map_err(storage_error)?;
+        sync_text_unit_indexes_for_source(
+            &self.connection,
+            &plan,
+            &self.sqlite_extensions,
+            &request.source_code,
+            &request.source_version,
+            &request.scope_type,
+            &request.scope_code,
+        )?;
+        Ok(updated)
     }
 
     fn update_vector_index(&self, update: RagRetryVectorUpdate) -> Result<(), RagError> {
@@ -114,6 +126,12 @@ impl RagRetryIndexRepository for SqliteRagRepository {
                 ],
             )
             .map_err(storage_error)?;
+        sync_text_unit_indexes_for_code(
+            &self.connection,
+            &plan,
+            &self.sqlite_extensions,
+            &update.text_unit_code,
+        )?;
         Ok(())
     }
 

@@ -5,4 +5,5 @@ pub mod http_client;
 pub mod id;
 pub mod locale;
 pub mod random;
+pub mod sqlite_extensions;
 pub mod time;

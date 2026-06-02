@@ -7,6 +7,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 use tron_backend::{
     adapters::outbound::persistence::sqlite::SqliteRagRepository,
@@ -354,6 +355,116 @@ async fn vector_route_failure_degrades_to_fulltext_warning_without_trace_payload
     assert!(result.warnings[0].get("embedding").is_none());
 }
 
+#[tokio::test]
+async fn sqlite_extension_retrievers_return_storage_scored_hits_without_breaking_legacy_routes() {
+    let database_url = temp_database_path("rag-search-extension")
+        .to_string_lossy()
+        .to_string();
+    seed_memory_fixture(&database_url).await;
+    insert_extension_memory_profile(&database_url, "memory-extension-v1");
+
+    let legacy_service = RagSearchService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new().with_embedding(vec![1.0, 0.0]),
+    );
+    let legacy_result = legacy_service
+        .search(search_request(
+            "memory-related-v1",
+            "cite source titles",
+            "RESULT_LIST",
+            json!({ "memoryType": "RULE" }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        legacy_result.hits[0].route_ids,
+        vec!["memory-fulltext", "memory-vector"]
+    );
+
+    let extension_service = RagSearchService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new().with_embedding(vec![1.0, 0.0]),
+    );
+    let extension_result = extension_service
+        .search(search_request(
+            "memory-extension-v1",
+            "cite source titles",
+            "RESULT_LIST",
+            json!({ "memoryType": "RULE" }),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(extension_result.hits.len(), 1);
+    assert_eq!(extension_result.hits[0].source_code, "memory-rag-rule");
+    assert_eq!(
+        extension_result.hits[0].route_ids,
+        vec!["memory-fts5", "memory-vec0"]
+    );
+    assert!(extension_result.hits[0].score > 0.0);
+}
+
+#[tokio::test]
+async fn sqlite_extension_indexes_backfill_existing_memory_text_units_on_connect() {
+    let database_url = temp_database_path("rag-search-extension-backfill")
+        .to_string_lossy()
+        .to_string();
+    SqliteRagRepository::connect(&database_url).unwrap();
+
+    let connection = Connection::open(&database_url).unwrap();
+    connection
+        .execute(
+            "INSERT INTO rag_memory_text_units (
+                text_unit_code, source_code, source_version, scope_type, scope_code,
+                source_type, source_status, title, source_metadata, source_created_at,
+                source_updated_at, memory_type, injectable, importance_score,
+                unit_type, text, search_text, heading_path, ordinal, token_count,
+                content_hash, status, fulltext_status, embedding_model_code,
+                embedding_version, embedding_text_hash, embedding_dimension, embedding,
+                embedding_status, metadata, created_at, updated_at
+            )
+            VALUES (
+                'manual-memory:v1:0', 'manual-memory', 'v1', 'USER', 'USR-LARGE-ID',
+                'PLAIN_TEXT', 'ACTIVE', 'Manual Memory', '{}', 1,
+                1, 'RULE', 1, 95,
+                'LEAF', 'Backfilled extension index memory block.',
+                'Backfilled extension index memory block.', '', 0, 6,
+                'hash', 'ACTIVE', 'INDEXED', 'workspace-default-embedding',
+                'v1', 'embedding-hash', 2, ?1,
+                'INDEXED', '{}', 1, 1
+            )",
+            params![encode_embedding(&[0.4, 0.6])],
+        )
+        .unwrap();
+    drop(connection);
+
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    assert!(repository.sqlite_extension_capabilities().fts5);
+    drop(repository);
+    insert_extension_memory_profile(&database_url, "memory-extension-backfill-v1");
+
+    let service = RagSearchService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new().with_embedding(vec![0.4, 0.6]),
+    );
+    let result = service
+        .search(search_request(
+            "memory-extension-backfill-v1",
+            "backfilled memory",
+            "RESULT_LIST",
+            json!({ "memoryType": "RULE" }),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(result.hits.len(), 1);
+    assert_eq!(result.hits[0].source_code, "manual-memory");
+    assert_eq!(result.hits[0].route_ids, vec!["memory-fts5", "memory-vec0"]);
+}
+
 #[test]
 fn repository_search_boundary_keeps_graph_summary_and_memory_flow_behavior_out() {
     let rag_http_routes = include_str!("../src/adapters/inbound/http/rag/routes.rs");
@@ -699,6 +810,49 @@ fn skill_request() -> RagIngestRequest {
 
 fn project_doc_markdown() -> &'static str {
     "# RAG MVP\nIntro.\n\n## Write Path\nThe write path uses a synchronous DAG to persist source and text units."
+}
+
+fn insert_extension_memory_profile(database_url: &str, profile_id: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let config = json!({
+        "routes": [
+            {
+                "routeId": "memory-fts5",
+                "retriever": "FULLTEXT_SQLITE_FTS5_SIMPLE_V1"
+            },
+            {
+                "routeId": "memory-vec0",
+                "retriever": "VECTOR_SQLITE_VEC0_COSINE_V1"
+            }
+        ],
+        "fusionPolicy": {"type": "SUM_SCORE"},
+        "dedupPolicy": {"type": "TEXT_UNIT"},
+        "rerankPolicy": {"enabled": false},
+        "hydratePolicy": {"type": "TEXT_UNIT"},
+        "contextPolicy": {"supportedStrategies": ["RESULT_LIST", "MEMORY_CONTEXT_PACK"]}
+    });
+    connection
+        .execute(
+            "INSERT INTO rag_profiles (
+                profile_id, profile_type, status, primary_corpus_id, corpus_ids_json,
+                required_source_version, config_json, filters_json, degrade_policy,
+                created_at, updated_at
+            )
+            VALUES (?1, 'RETRIEVAL', 'enabled', 'memory-card', '[\"memory-card\"]',
+                'v1', ?2, '{}', 'SKIP_VECTOR_ON_UNAVAILABLE', 1, 1)
+            ON CONFLICT (profile_id) DO UPDATE SET
+                config_json = excluded.config_json,
+                updated_at = excluded.updated_at",
+            params![profile_id, serde_json::to_string(&config).unwrap()],
+        )
+        .unwrap();
+}
+
+fn encode_embedding(values: &[f32]) -> Vec<u8> {
+    values
+        .iter()
+        .flat_map(|value| value.to_le_bytes())
+        .collect::<Vec<_>>()
 }
 
 fn retrieval_profile(profile_id: &str, version: Option<&str>, config: Value) -> RagProfileRecord {

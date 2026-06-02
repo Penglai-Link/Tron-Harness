@@ -9,6 +9,7 @@ use crate::{
 
 use super::{
     SqliteRagRepository,
+    indexes::{delete_text_unit_indexes_for_source, sync_text_unit_indexes_for_source},
     ingest_values::{
         execute_upsert, json_string, now_millis, push_dynamic_text, push_embedded_source_values,
         push_integer, push_optional_blob, push_optional_integer, push_optional_text,
@@ -28,8 +29,26 @@ impl RagIngestRepository for SqliteRagRepository {
             .connection
             .unchecked_transaction()
             .map_err(storage_error)?;
+        delete_text_unit_indexes_for_source(
+            &tx,
+            &plan,
+            &self.sqlite_extensions,
+            &command.source_code,
+            &command.source_version,
+            &command.scope.scope_type,
+            &command.scope.scope_code,
+        )?;
         persist_source(&tx, &plan, &command)?;
         persist_text_units(&tx, &plan, &command)?;
+        sync_text_unit_indexes_for_source(
+            &tx,
+            &plan,
+            &self.sqlite_extensions,
+            &command.source_code,
+            &command.source_version,
+            &command.scope.scope_type,
+            &command.scope.scope_code,
+        )?;
         persist_warnings(&tx, &plan, &command)?;
         tx.commit().map_err(storage_error)
     }

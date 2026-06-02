@@ -20,7 +20,7 @@ pub(super) fn rank_route_rows(
     let mut hits = rows
         .into_iter()
         .filter_map(|row| {
-            let score = match strategy.kind {
+            let score = row.storage_score.unwrap_or_else(|| match strategy.kind {
                 RetrieverKind::Fulltext if fulltext_matches(&row.search_text, &request.query) => {
                     fulltext_score(&row.search_text, &request.query)
                 }
@@ -32,7 +32,7 @@ pub(super) fn rank_route_rows(
                     })
                     .unwrap_or(0.0),
                 _ => 0.0,
-            };
+            });
             (score > 0.0).then(|| {
                 let mut hit = hit_from_row(&row);
                 hit.route_ids.push(route.route_id.clone());

@@ -1,3 +1,5 @@
+mod filters;
+
 use rusqlite::{
     Row, params, params_from_iter,
     types::{Value as SqlValue, ValueRef},
@@ -14,11 +16,14 @@ use crate::{
 
 use super::{
     SqliteRagRepository,
+    indexes::{fts_table_name, supported_vector_dimensions, vec_table_name},
     sql_plan::{
         SqliteRagCorpusPlan, SqliteRagValueType, compile_sql_corpus_plan, quote_identifier,
     },
     storage_error,
 };
+
+use filters::append_filter_clauses;
 
 impl RagSearchRepository for SqliteRagRepository {
     fn search_route(&self, query: RagRouteSearchQuery) -> Result<Vec<RagSearchRow>, RagError> {
@@ -65,19 +70,23 @@ fn search_route(
     query: &RagRouteSearchQuery,
 ) -> Result<Vec<RagSearchRow>, RagError> {
     let retriever = sqlite_retriever_strategy(&query.retriever)?;
-    let select = select_projection(plan)?;
-    let from_sql = from_sql(plan)?;
-    let (where_sql, params) = where_sql(plan, query, retriever)?;
+    validate_retriever_available(repository, plan, query, retriever)?;
+    let select = select_projection(plan, query, retriever)?;
+    let from_sql = from_sql(plan, query, retriever)?;
+    let (where_sql, where_params) = where_sql(plan, query, retriever)?;
     let limit_sql = if retriever.limits_in_application {
         String::new()
     } else {
         " LIMIT ?".to_string()
     };
+    let order_sql = order_sql(plan, query, retriever)?;
     let sql = format!(
-        "SELECT {} {from_sql} {where_sql} ORDER BY tu.source_code, tu.ordinal{limit_sql}",
+        "SELECT {} {from_sql} {where_sql} {order_sql}{limit_sql}",
         select.sql
     );
-    let mut params = params;
+    let mut params = select.params.clone();
+    params.extend(where_params);
+    params.extend(order_params(query, retriever)?);
     if !retriever.limits_in_application {
         params.push(SqlValue::Integer(query.limit.max(1) as i64));
     }
@@ -93,9 +102,15 @@ fn search_route(
 struct SelectProjection {
     sql: String,
     metadata_start: usize,
+    storage_score_index: usize,
+    params: Vec<SqlValue>,
 }
 
-fn select_projection(plan: &SqliteRagCorpusPlan) -> Result<SelectProjection, RagError> {
+fn select_projection(
+    plan: &SqliteRagCorpusPlan,
+    query: &RagRouteSearchQuery,
+    retriever: SqliteRetrieverStrategy,
+) -> Result<SelectProjection, RagError> {
     let mut columns = vec![
         text_expr("text_unit_code")?,
         text_expr("source_code")?,
@@ -119,18 +134,45 @@ fn select_projection(plan: &SqliteRagCorpusPlan) -> Result<SelectProjection, Rag
     for column in &plan.source_metadata_columns {
         columns.push(source_expr(plan, &column.column)?);
     }
+    let storage_score_index = columns.len();
+    let (storage_score_expr, params) = storage_score_expr(plan, query, retriever)?;
+    columns.push(storage_score_expr);
     Ok(SelectProjection {
         sql: columns.join(", "),
         metadata_start,
+        storage_score_index,
+        params,
     })
 }
 
-fn from_sql(plan: &SqliteRagCorpusPlan) -> Result<String, RagError> {
+fn from_sql(
+    plan: &SqliteRagCorpusPlan,
+    query: &RagRouteSearchQuery,
+    retriever: SqliteRetrieverStrategy,
+) -> Result<String, RagError> {
     let text_table = quote_identifier(&plan.text_unit_table)?;
+    let text_source = match retriever.kind {
+        SqliteRetrieverKind::FulltextFts5 => {
+            let fts_table = quote_identifier(&fts_table_name(&plan.text_unit_table))?;
+            format!(
+                "FROM {fts_table}
+                 JOIN {text_table} tu ON tu.id = {fts_table}.rowid"
+            )
+        }
+        SqliteRetrieverKind::VectorVec0 => {
+            let dimension = query_embedding_dimension(query)?;
+            let vec_table = quote_identifier(&vec_table_name(&plan.text_unit_table, dimension))?;
+            format!(
+                "FROM {vec_table} vec
+                 JOIN {text_table} tu ON tu.id = vec.rowid"
+            )
+        }
+        _ => format!("FROM {text_table} tu"),
+    };
     if let Some(source_table) = plan.source_table.as_deref() {
         let source_table = quote_identifier(source_table)?;
         Ok(format!(
-            "FROM {text_table} tu
+            "{text_source}
              JOIN {source_table} src
                ON src.source_code = tu.source_code
               AND src.source_version = tu.source_version
@@ -138,7 +180,93 @@ fn from_sql(plan: &SqliteRagCorpusPlan) -> Result<String, RagError> {
               AND src.scope_code = tu.scope_code"
         ))
     } else {
-        Ok(format!("FROM {text_table} tu"))
+        Ok(text_source)
+    }
+}
+
+fn storage_score_expr(
+    plan: &SqliteRagCorpusPlan,
+    query: &RagRouteSearchQuery,
+    retriever: SqliteRetrieverStrategy,
+) -> Result<(String, Vec<SqlValue>), RagError> {
+    match retriever.kind {
+        SqliteRetrieverKind::FulltextFts5 => {
+            let fts_table = quote_identifier(&fts_table_name(&plan.text_unit_table))?;
+            Ok((format!("-bm25({fts_table})"), Vec::new()))
+        }
+        SqliteRetrieverKind::VectorVec0 => Ok((
+            "1.0 - vec_distance_cosine(vec.embedding, ?)".into(),
+            vec![SqlValue::Text(query_embedding_json(query)?)],
+        )),
+        _ => Ok(("NULL".into(), Vec::new())),
+    }
+}
+
+fn order_sql(
+    plan: &SqliteRagCorpusPlan,
+    query: &RagRouteSearchQuery,
+    retriever: SqliteRetrieverStrategy,
+) -> Result<String, RagError> {
+    match retriever.kind {
+        SqliteRetrieverKind::FulltextFts5 => {
+            let fts_table = quote_identifier(&fts_table_name(&plan.text_unit_table))?;
+            Ok(format!(
+                "ORDER BY -bm25({fts_table}) DESC, tu.source_code, tu.ordinal"
+            ))
+        }
+        SqliteRetrieverKind::VectorVec0 => {
+            query_embedding_json(query)?;
+            Ok(
+                "ORDER BY vec_distance_cosine(vec.embedding, ?) ASC, tu.source_code, tu.ordinal"
+                    .into(),
+            )
+        }
+        _ => Ok("ORDER BY tu.source_code, tu.ordinal".into()),
+    }
+}
+
+fn order_params(
+    query: &RagRouteSearchQuery,
+    retriever: SqliteRetrieverStrategy,
+) -> Result<Vec<SqlValue>, RagError> {
+    match retriever.kind {
+        SqliteRetrieverKind::VectorVec0 => Ok(vec![SqlValue::Text(query_embedding_json(query)?)]),
+        _ => Ok(Vec::new()),
+    }
+}
+
+fn validate_retriever_available(
+    repository: &SqliteRagRepository,
+    _plan: &SqliteRagCorpusPlan,
+    query: &RagRouteSearchQuery,
+    retriever: SqliteRetrieverStrategy,
+) -> Result<(), RagError> {
+    match retriever.kind {
+        SqliteRetrieverKind::FulltextFts5 => {
+            if repository
+                .sqlite_extension_capabilities()
+                .extension_fulltext_available()
+            {
+                Ok(())
+            } else {
+                Err(RagError::SearchRouteUnavailable)
+            }
+        }
+        SqliteRetrieverKind::VectorVec0 => {
+            let dimension = query_embedding_dimension(query)?;
+            if !supported_vector_dimensions().contains(&dimension) {
+                return Err(RagError::SearchRouteUnavailable);
+            }
+            if repository
+                .sqlite_extension_capabilities()
+                .extension_vector_available()
+            {
+                Ok(())
+            } else {
+                Err(RagError::SearchRouteUnavailable)
+            }
+        }
+        _ => Ok(()),
     }
 }
 
@@ -187,8 +315,22 @@ fn where_sql(
                 );
             }
         }
+        SqliteRetrieverKind::FulltextFts5 => {
+            clauses.push("tu.fulltext_status = 'INDEXED'".to_string());
+            let fts_query = fts_query(&query.query);
+            if !fts_query.is_empty() {
+                let fts_table = quote_identifier(&fts_table_name(&plan.text_unit_table))?;
+                clauses.push(format!("{fts_table} MATCH ?"));
+                params.push(SqlValue::Text(fts_query));
+            }
+        }
         SqliteRetrieverKind::VectorCosine => {
             clauses.push("tu.embedding_status = 'INDEXED'".to_string());
+        }
+        SqliteRetrieverKind::VectorVec0 => {
+            clauses.push("tu.embedding_status = 'INDEXED'".to_string());
+            clauses.push("tu.embedding_dimension = ?".to_string());
+            params.push(SqlValue::Integer(query_embedding_dimension(query)?));
         }
     }
 
@@ -215,7 +357,9 @@ fn where_sql(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SqliteRetrieverKind {
     FulltextLike,
+    FulltextFts5,
     VectorCosine,
+    VectorVec0,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -230,108 +374,19 @@ fn sqlite_retriever_strategy(strategy_id: &str) -> Result<SqliteRetrieverStrateg
             kind: SqliteRetrieverKind::FulltextLike,
             limits_in_application: false,
         }),
+        "FULLTEXT_SQLITE_FTS5_SIMPLE_V1" => Ok(SqliteRetrieverStrategy {
+            kind: SqliteRetrieverKind::FulltextFts5,
+            limits_in_application: false,
+        }),
         "VECTOR" | "VECTOR_SQLITE_COSINE_V1" => Ok(SqliteRetrieverStrategy {
             kind: SqliteRetrieverKind::VectorCosine,
             limits_in_application: true,
         }),
+        "VECTOR_SQLITE_VEC0_COSINE_V1" => Ok(SqliteRetrieverStrategy {
+            kind: SqliteRetrieverKind::VectorVec0,
+            limits_in_application: false,
+        }),
         _ => Err(RagError::SearchRouteUnavailable),
-    }
-}
-
-fn append_filter_clauses(
-    plan: &SqliteRagCorpusPlan,
-    filters: &Value,
-    clauses: &mut Vec<String>,
-    params: &mut Vec<SqlValue>,
-) -> Result<(), RagError> {
-    let object = filters.as_object().ok_or(RagError::SearchFilterInvalid)?;
-    for (field, filter) in object {
-        let field_plan = plan
-            .filter_columns
-            .get(field)
-            .ok_or(RagError::SearchFilterInvalid)?;
-        let column = format!(
-            "{}.{}",
-            field_plan.alias.as_str(),
-            quote_identifier(&field_plan.column)?
-        );
-        let operator = filter
-            .get("op")
-            .and_then(Value::as_str)
-            .ok_or(RagError::SearchFilterInvalid)?;
-        let raw_value = filter.get("value").ok_or(RagError::SearchFilterInvalid)?;
-        match operator {
-            "and" => {
-                for item in raw_value.as_array().ok_or(RagError::SearchFilterInvalid)? {
-                    append_single_filter_clause(
-                        &column,
-                        field_plan.value_type,
-                        item,
-                        clauses,
-                        params,
-                    )?;
-                }
-            }
-            _ => {
-                append_single_filter_clause(
-                    &column,
-                    field_plan.value_type,
-                    filter,
-                    clauses,
-                    params,
-                )?;
-            }
-        }
-    }
-    Ok(())
-}
-
-fn append_single_filter_clause(
-    column: &str,
-    value_type: SqliteRagValueType,
-    filter: &Value,
-    clauses: &mut Vec<String>,
-    params: &mut Vec<SqlValue>,
-) -> Result<(), RagError> {
-    let operator = filter
-        .get("op")
-        .and_then(Value::as_str)
-        .ok_or(RagError::SearchFilterInvalid)?;
-    let raw_value = filter.get("value").ok_or(RagError::SearchFilterInvalid)?;
-    match operator {
-        "eq" => {
-            clauses.push(format!("{column} = ?"));
-            params.push(sql_value(raw_value, value_type)?);
-        }
-        "in" => {
-            let values = raw_value.as_array().ok_or(RagError::SearchFilterInvalid)?;
-            if values.is_empty() {
-                return Err(RagError::SearchFilterInvalid);
-            }
-            clauses.push(format!(
-                "{column} IN ({})",
-                values.iter().map(|_| "?").collect::<Vec<_>>().join(", ")
-            ));
-            for value in values {
-                params.push(sql_value(value, value_type)?);
-            }
-        }
-        "gt" | "gte" | "lt" | "lte" => {
-            clauses.push(format!("{column} {} ?", sql_comparator(operator)?));
-            params.push(sql_value(raw_value, value_type)?);
-        }
-        _ => return Err(RagError::SearchFilterInvalid),
-    }
-    Ok(())
-}
-
-fn sql_comparator(operator: &str) -> Result<&'static str, RagError> {
-    match operator {
-        "gt" => Ok(">"),
-        "gte" => Ok(">="),
-        "lt" => Ok("<"),
-        "lte" => Ok("<="),
-        _ => Err(RagError::SearchFilterInvalid),
     }
 }
 
@@ -371,6 +426,7 @@ fn map_row(
         embedding: row
             .get::<_, Option<Vec<u8>>>(10)?
             .and_then(decode_embedding),
+        storage_score: row.get::<_, Option<f64>>(select.storage_score_index)?,
         source_metadata,
         text_metadata: parse_metadata_json(row.get::<_, String>(16)?.as_str()),
     })
@@ -438,23 +494,6 @@ fn text_metadata_expr(plan: &SqliteRagCorpusPlan) -> Result<String, RagError> {
     }
 }
 
-fn sql_value(value: &Value, value_type: SqliteRagValueType) -> Result<SqlValue, RagError> {
-    match value_type {
-        SqliteRagValueType::String => value
-            .as_str()
-            .map(|value| SqlValue::Text(value.to_string()))
-            .ok_or(RagError::SearchFilterInvalid),
-        SqliteRagValueType::Integer => value
-            .as_i64()
-            .map(SqlValue::Integer)
-            .ok_or(RagError::SearchFilterInvalid),
-        SqliteRagValueType::Boolean => value
-            .as_bool()
-            .map(|value| SqlValue::Integer(i64::from(value)))
-            .ok_or(RagError::SearchFilterInvalid),
-    }
-}
-
 fn json_from_row(
     row: &Row<'_>,
     index: usize,
@@ -479,6 +518,37 @@ fn search_terms(query: &str) -> Vec<String> {
         .filter(|term| !term.is_empty())
         .map(|term| term.to_ascii_lowercase())
         .collect()
+}
+
+fn fts_query(query: &str) -> String {
+    query
+        .split_whitespace()
+        .map(str::trim)
+        .filter(|term| !term.is_empty())
+        .map(|term| {
+            let escaped = term.replace('"', "\"\"");
+            format!("\"{escaped}\"")
+        })
+        .collect::<Vec<_>>()
+        .join(" OR ")
+}
+
+fn query_embedding_dimension(query: &RagRouteSearchQuery) -> Result<i64, RagError> {
+    query
+        .query_embedding
+        .as_ref()
+        .map(|embedding| embedding.len() as i64)
+        .filter(|dimension| *dimension > 0)
+        .ok_or(RagError::SearchRouteUnavailable)
+}
+
+fn query_embedding_json(query: &RagRouteSearchQuery) -> Result<String, RagError> {
+    let embedding = query
+        .query_embedding
+        .as_ref()
+        .filter(|embedding| !embedding.is_empty())
+        .ok_or(RagError::SearchRouteUnavailable)?;
+    serde_json::to_string(embedding).map_err(|_| RagError::StorageFailure)
 }
 
 fn split_heading_path(raw: &str) -> Vec<String> {

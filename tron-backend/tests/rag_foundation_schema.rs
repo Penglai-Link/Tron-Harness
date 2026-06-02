@@ -18,9 +18,19 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
         "rag_profiles".to_string(),
         "rag_project_doc_sources".to_string(),
         "rag_memory_text_units".to_string(),
+        "rag_memory_text_units_fts".to_string(),
+        "rag_memory_text_units_vec_d2".to_string(),
+        "rag_memory_text_units_vec_d1536".to_string(),
+        "rag_memory_text_units_vec_d2048".to_string(),
         "rag_project_doc_text_units".to_string(),
         "rag_skill_text_units".to_string(),
+        "rag_project_doc_text_units_fts".to_string(),
+        "rag_project_doc_text_units_vec_d2".to_string(),
+        "rag_project_doc_text_units_vec_d1536".to_string(),
+        "rag_project_doc_text_units_vec_d2048".to_string(),
         "rag_diagnostics".to_string(),
+        "rag_sqlite_extension_capabilities".to_string(),
+        "rag_sqlite_vector_indexes".to_string(),
     ]);
 
     assert_eq!(repository.rag_table_names().unwrap(), expected_tables);

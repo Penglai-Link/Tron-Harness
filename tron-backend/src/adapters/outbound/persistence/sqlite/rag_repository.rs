@@ -1,4 +1,5 @@
 mod diagnostics;
+mod indexes;
 mod ingest;
 mod ingest_values;
 mod retry;
@@ -20,6 +21,7 @@ use crate::{
         RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus, RagStorageBinding,
         RagStorageLayout,
     },
+    shared::sqlite_extensions::{SqliteExtensionCapabilities, default_sqlite_extension_context},
 };
 
 use super::migrations::{
@@ -31,6 +33,7 @@ use super::migrations::{
 
 pub struct SqliteRagRepository {
     connection: Connection,
+    sqlite_extensions: SqliteExtensionCapabilities,
 }
 
 impl SqliteRagRepository {
@@ -48,7 +51,13 @@ impl SqliteRagRepository {
         }
         .map_err(storage_error)?;
 
-        let repository = Self { connection };
+        let sqlite_extensions = default_sqlite_extension_context()
+            .prepare_connection(&connection)
+            .map_err(storage_error)?;
+        let repository = Self {
+            connection,
+            sqlite_extensions,
+        };
         repository.apply_rag_migrations()?;
         Ok(repository)
     }
@@ -61,7 +70,8 @@ impl SqliteRagRepository {
         self.apply_rag_optional_model_codes_migration()?;
         self.apply_rag_storage_binding_layout_migration()?;
         self.apply_rag_memory_embedded_source_migration()?;
-        self.apply_rag_skill_corpus_migration()
+        self.apply_rag_skill_corpus_migration()?;
+        self.apply_rag_sqlite_extension_index_migration()
     }
 
     pub fn apply_rag_foundation_migration(&self) -> Result<(), RagError> {
@@ -182,6 +192,14 @@ impl SqliteRagRepository {
             .map_err(storage_error)
     }
 
+    pub fn apply_rag_sqlite_extension_index_migration(&self) -> Result<(), RagError> {
+        indexes::apply_extension_index_migration(self)
+    }
+
+    pub fn sqlite_extension_capabilities(&self) -> SqliteExtensionCapabilities {
+        self.sqlite_extensions.clone()
+    }
+
     pub fn rag_table_names(&self) -> Result<BTreeSet<String>, RagError> {
         let mut statement = self
             .connection
@@ -193,11 +211,15 @@ impl SqliteRagRepository {
                  ORDER BY name",
             )
             .map_err(storage_error)?;
-        statement
+        let names = statement
             .query_map([], |row| row.get::<_, String>(0))
             .map_err(storage_error)?
             .collect::<Result<BTreeSet<_>, _>>()
-            .map_err(storage_error)
+            .map_err(storage_error)?;
+        Ok(names
+            .into_iter()
+            .filter(|name| !is_rag_extension_shadow_table(name))
+            .collect())
     }
 
     pub fn table_columns(&self, table_name: &str) -> Result<BTreeSet<String>, RagError> {
@@ -249,6 +271,16 @@ impl SqliteRagRepository {
         }
         Ok(statuses)
     }
+}
+
+fn is_rag_extension_shadow_table(name: &str) -> bool {
+    if name.contains("_fts_") {
+        return true;
+    }
+    if let Some((_, suffix)) = name.rsplit_once("_vec_d") {
+        return suffix.contains('_');
+    }
+    false
 }
 
 impl RagConfigRepository for SqliteRagRepository {

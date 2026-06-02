@@ -42,9 +42,17 @@ pub(super) fn retriever_strategy(strategy_id: &str) -> Result<RetrieverStrategy,
             kind: RetrieverKind::Fulltext,
             storage_retriever: "FULLTEXT",
         }),
+        "FULLTEXT_SQLITE_FTS5_SIMPLE_V1" => Ok(RetrieverStrategy {
+            kind: RetrieverKind::Fulltext,
+            storage_retriever: "FULLTEXT_SQLITE_FTS5_SIMPLE_V1",
+        }),
         "VECTOR" | "VECTOR_SQLITE_COSINE_V1" => Ok(RetrieverStrategy {
             kind: RetrieverKind::Vector,
             storage_retriever: "VECTOR",
+        }),
+        "VECTOR_SQLITE_VEC0_COSINE_V1" => Ok(RetrieverStrategy {
+            kind: RetrieverKind::Vector,
+            storage_retriever: "VECTOR_SQLITE_VEC0_COSINE_V1",
         }),
         _ => Err(RagError::SearchRouteUnavailable),
     }

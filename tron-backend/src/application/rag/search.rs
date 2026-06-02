@@ -51,6 +51,7 @@ pub struct RagRouteSearchQuery {
     pub route_id: String,
     pub retriever: String,
     pub query: String,
+    pub query_embedding: Option<Vec<f32>>,
     pub source_version: String,
     pub scopes: Vec<RagSearchScope>,
     pub filters: Value,
@@ -77,6 +78,7 @@ pub struct RagSearchRow {
     pub ordinal: i64,
     pub token_count: i64,
     pub embedding: Option<Vec<f32>>,
+    pub storage_score: Option<f64>,
     pub source_metadata: Value,
     pub text_metadata: Value,
 }
@@ -373,6 +375,9 @@ where
                 route_id: route.route_id.clone(),
                 retriever: strategy.storage_retriever.to_string(),
                 query: request.query.clone(),
+                query_embedding: (strategy.needs_query_embedding())
+                    .then(|| query_embedding.clone())
+                    .flatten(),
                 source_version,
                 scopes: search_scopes(&request.access_context),
                 filters,
