@@ -295,7 +295,7 @@ impl ReactAgent {
         outcome: BusOutcome,
         summary: Option<&str>,
     ) -> Result<(), AgentError> {
-        self.publish_with_payload(context, event_name, outcome, summary, &[])
+        self.publish_with_payload(context, event_name, outcome, summary, Vec::new())
     }
 
     fn publish_tool(
@@ -310,18 +310,18 @@ impl ReactAgent {
         tool_output: Option<&str>,
     ) -> Result<(), AgentError> {
         let mut payload_fields = vec![
-            ("tool_call_id", compact_event_value(tool_call_id)),
-            ("tool_name", compact_event_value(tool_name)),
+            ("tool_call_id".to_string(), compact_event_value(tool_call_id)),
+            ("tool_name".to_string(), compact_event_value(tool_name)),
         ];
         if let Some(tool_input) = tool_input {
             let value = serde_json::to_string(tool_input).unwrap_or_else(|_| "{}".into());
-            payload_fields.push(("tool_args_json", compact_event_value(&value)));
+            payload_fields.push(("tool_args_json".to_string(), value));
         }
         if let Some(tool_output) = tool_output {
-            payload_fields.push(("tool_result_json", compact_event_value(tool_output)));
+            payload_fields.push(("tool_result_json".to_string(), tool_output.to_string()));
         }
 
-        self.publish_with_payload(context, event_name, outcome, summary, &payload_fields)
+        self.publish_with_payload(context, event_name, outcome, summary, payload_fields)
     }
 
     fn publish_with_payload(
@@ -330,7 +330,7 @@ impl ReactAgent {
         event_name: &'static str,
         outcome: BusOutcome,
         summary: Option<&str>,
-        payload_fields: &[(&str, String)],
+        payload_fields: Vec<(String, String)>,
     ) -> Result<(), AgentError> {
         let mut draft = BusEventDraft::agui(event_name, "agent_runtime")
             .outcome(outcome)
@@ -359,7 +359,7 @@ impl ReactAgent {
             draft = draft.attr("task_code", task_code.clone());
         }
         for (key, value) in payload_fields {
-            draft = draft.payload_field(*key, value.clone());
+            draft = draft.payload_field(key, value);
         }
         if let Some(stream_key) = &context.stream_key {
             draft = draft.request(BusRequestRef::with_stream_key(stream_key.clone()));

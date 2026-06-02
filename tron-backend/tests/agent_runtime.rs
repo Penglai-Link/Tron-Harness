@@ -212,6 +212,10 @@ async fn react_agent_executes_allowed_tool_and_keeps_runs_isolated() {
 
 #[tokio::test]
 async fn react_agent_publishes_tool_agui_correlation_payloads() {
+    let long_command = "cargo test --package tron-backend --test agent_runtime ".repeat(3);
+    let expected_args = serde_json::to_string(&json!({ "command": long_command.clone() }))
+        .expect("tool args should serialize");
+    let expected_result = format!("observed:\"{long_command}\"");
     let registry = ToolRegistry::default();
     registry
         .register(Arc::new(InProcessTool::new(
@@ -236,7 +240,7 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
     .build();
     let agent = ReactAgentBuilder::new(
         Arc::new(ScriptedModelClient::new(vec![
-            ModelResponse::tool_call("echo", json!({"command": "cargo test"})),
+            ModelResponse::tool_call("echo", json!({"command": long_command})),
             ModelResponse::final_output("after-tool"),
         ])),
         Arc::new(registry),
@@ -279,21 +283,17 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
         Some("RUN-TOOL-META-tool-1")
     );
     assert_eq!(payload("tool_name", tool_started).as_deref(), Some("echo"));
-    assert!(
-        payload("tool_args_json", tool_started)
-            .as_deref()
-            .expect("tool args should be present")
-            .contains("cargo test")
+    assert_eq!(
+        payload("tool_args_json", tool_started).as_deref(),
+        Some(expected_args.as_str())
     );
     assert_eq!(
         payload("tool_call_id", tool_completed).as_deref(),
         Some("RUN-TOOL-META-tool-1")
     );
-    assert!(
-        payload("tool_result_json", tool_completed)
-            .as_deref()
-            .expect("tool result should be present")
-            .contains("observed")
+    assert_eq!(
+        payload("tool_result_json", tool_completed).as_deref(),
+        Some(expected_result.as_str())
     );
     assert_eq!(
         payload("tool_call_id", observation).as_deref(),

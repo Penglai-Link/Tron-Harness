@@ -506,6 +506,17 @@ function stringifyPreview(value: unknown) {
   }
 }
 
+function formatJsonBlockValue(value: unknown) {
+  if (typeof value === "string") {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2);
+    } catch {
+      return value;
+    }
+  }
+  return stringifyPreview(value);
+}
+
 function truncateLabel(value: string, maxLength = 64) {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (normalized.length <= maxLength) return normalized;
@@ -1719,11 +1730,11 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
 }
 
 function JsonBlock({ value }: { value: unknown }) {
-  const preview = stringifyPreview(value);
+  const preview = formatJsonBlockValue(value);
   if (!preview) return null;
 
   return (
-    <pre className="max-h-52 overflow-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)]">
+    <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)] [overflow-wrap:anywhere]">
       {preview}
     </pre>
   );
@@ -1752,12 +1763,11 @@ function ToolUserCard({ card }: { card: ToolWorkCard }) {
         {complete ? (
           <section className="space-y-1.5">
             <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Result</h3>
-            <MarkdownContent
-              ariaLabel="Streaming tool result markdown"
-              className="rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-2 leading-6"
-              content={result}
-              emptyMessage="No result payload."
-            />
+            {result ? <JsonBlock value={result} /> : (
+              <div className="rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm leading-6 text-[var(--color-on-surface-variant)]">
+                No result payload.
+              </div>
+            )}
           </section>
         ) : (
           <section className="space-y-1.5">

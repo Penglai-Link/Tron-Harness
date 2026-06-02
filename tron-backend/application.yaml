@@ -48,9 +48,9 @@ eventBus:
   maxSummaryBytes: 160
   maxAttrs: 8
   maxAttrKeyBytes: 32
-  maxAttrValueBytes: 96
+  maxAttrValueBytes: 8192
   maxPayloadFields: 8
-  maxPayloadBytes: 1024
+  maxPayloadBytes: 8192
   maxSubjectTypeBytes: 32
   maxSubjectCodeBytes: 64
   maxActorUserCodeBytes: 64

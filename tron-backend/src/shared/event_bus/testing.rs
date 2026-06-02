@@ -123,6 +123,28 @@ mod tests {
     }
 
     #[test]
+    fn event_bus_accepts_large_single_payload_field_within_total_payload_budget() {
+        let config = EventBusConfig::default();
+        let long_payload = "x".repeat(512);
+        let id_generator = Arc::new(FixedSnowflakeIdProvider::new(101));
+        let recording_sink = Arc::new(RecordingEventSink::new("recording"));
+        let handle = EventBusRuntimeBuilder::new(config, id_generator)
+            .register_sink(recording_sink.clone())
+            .build();
+
+        let outcome = handle.publish(
+            BusEventDraft::observe("agent.progress", "agent_runtime")
+                .payload_field("result", long_payload.clone()),
+        );
+
+        assert!(matches!(outcome, PublishOutcome::Accepted { .. }));
+        assert!(recording_sink.wait_for_len(1, Duration::from_millis(300)));
+        let events = recording_sink.events();
+        assert_eq!(events[0].payload_fields[0].key, "result");
+        assert_eq!(events[0].payload_fields[0].value, long_payload);
+    }
+
+    #[test]
     fn event_bus_keeps_critical_capacity_when_standard_lane_is_full() {
         let config = EventBusConfig {
             critical_ingress_capacity: 1,
