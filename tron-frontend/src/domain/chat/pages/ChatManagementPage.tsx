@@ -115,6 +115,11 @@ function writeChatSessionModelSelections(selections: Record<string, string>) {
   }
 }
 
+function shouldAutoFocusChatComposer() {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+}
+
 function sessionAgentTagLabel(agentCode: string | null | undefined) {
   const normalized = agentCode?.trim().toLowerCase();
   if (!normalized || normalized === "main-agent") return "MAIN";
@@ -1948,6 +1953,7 @@ export function ChatManagementPage() {
   const streamAbortRequestedRef = useRef(false);
   const autoStickToBottomRef = useRef(true);
   const messageScrollRef = useRef<HTMLElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
   const visibleSessionCodeRef = useRef("");
   const effectiveAgentCode = selectedAgentCode || mainChatAgentOption.agentCode;
@@ -2170,6 +2176,20 @@ export function ChatManagementPage() {
     setShowScrollToBottom(false);
     scrollToLatestMessage("auto");
   }, [activeSession?.sessionCode]);
+
+  useEffect(() => {
+    if (!activeSession?.sessionCode || editingTitle || deleteTargetSession || !shouldAutoFocusChatComposer()) {
+      return;
+    }
+    const composerElement = composerRef.current;
+    if (!composerElement) return;
+    const focusId = window.requestAnimationFrame(() => {
+      composerElement.focus();
+    });
+    return () => {
+      window.cancelAnimationFrame(focusId);
+    };
+  }, [activeSession?.sessionCode, deleteTargetSession, editingTitle]);
 
   useEffect(() => {
     const sessionCode = activeSession?.sessionCode ?? "";
@@ -2674,6 +2694,7 @@ export function ChatManagementPage() {
               ) : null}
               <div className="flex min-h-28 w-full flex-col rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.055)]">
                 <TextArea
+                  ref={composerRef}
                   className="min-h-16 w-full flex-1 resize-none rounded-none border-0 bg-transparent p-0 text-sm shadow-none focus:border-transparent focus:ring-0"
                   placeholder="Enter to send, Shift+Enter for newline"
                   value={composer}

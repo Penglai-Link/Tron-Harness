@@ -350,6 +350,50 @@ test("new sessions always start on main agent after browsing a system agent sess
   await expect(sessionHeader.getByText("MAIN", { exact: true })).toBeVisible();
 });
 
+test("composer autofocuses when opening or creating a session on desktop", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.addInitScript((snapshot) => {
+    window.localStorage.setItem("tron.auth.mock.session", JSON.stringify({
+      authMethod: "internal",
+      authenticated: true,
+      provider: null,
+      user: {
+        displayName: "Auth Operator",
+        email: "auth.operator@tron.ai",
+        roleCodes: ["ADMIN", "DEVELOPER"],
+        spaceCodes: ["PLATFORM", "TRON_CORE"],
+        status: "Active",
+        userCode: "USR-AUTH-0001",
+        username: "auth.operator",
+      },
+    }));
+    window.localStorage.removeItem("tron.auth.mock.loggedOut");
+    window.localStorage.setItem("tron-app-shell", JSON.stringify({
+      state: {
+        openSections: { Core: true },
+        selectedPrimarySpaceId: "ENTERPRISE",
+        selectedSecondarySpaceId: "TRON_CORE",
+        rightSidebarCollapsed: false,
+        sidebarCollapsed: false,
+        workspaceSwitcherSnapshot: snapshot,
+      },
+      version: 4,
+    }));
+  }, getWorkspaceSwitcherMock());
+
+  await page.goto(`${frontendBaseUrl}/chats`);
+  await expect(page).toHaveURL(/\/chats$/);
+
+  const composer = page.getByPlaceholder("Enter to send, Shift+Enter for newline");
+  await expect(composer).toBeFocused();
+
+  await page.getByText("Refactor discussion", { exact: true }).first().click();
+  await expect(composer).toBeFocused();
+
+  await page.locator("[aria-label='New session']").first().click();
+  await expect(composer).toBeFocused();
+});
+
 test("system agent sessions show history snapshot in context sidebar", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.addInitScript((snapshot) => {

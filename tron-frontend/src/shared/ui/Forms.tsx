@@ -47,9 +47,13 @@ export const TextInput = forwardRef(function TextInput(
   );
 });
 
-export function TextArea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export const TextArea = forwardRef(function TextArea(
+  { className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>,
+  ref: ForwardedRef<HTMLTextAreaElement>,
+) {
   return (
     <textarea
+      ref={ref}
       className={cn(
         "min-h-28 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm text-[var(--color-on-surface)] outline-none transition-colors placeholder:text-[var(--color-outline)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-focus-ring)]/20",
         disabledControlClasses,
@@ -58,7 +62,7 @@ export function TextArea({ className, ...props }: TextareaHTMLAttributes<HTMLTex
       {...props}
     />
   );
-}
+});
 
 export function SelectInput({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
