@@ -109,7 +109,7 @@ fn persist_source(
     if let Some(column) = plan.source_updated_at_column.as_deref() {
         push_integer(&mut values, &plan.source_columns, column, now);
     }
-    push_source_domain_values(&mut values, &plan.source_columns, command);
+    push_source_domain_values(&mut values, &plan.source_columns, plan, command)?;
     execute_upsert(
         tx,
         table,

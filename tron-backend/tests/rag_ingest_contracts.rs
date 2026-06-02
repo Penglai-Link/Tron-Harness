@@ -75,6 +75,48 @@ async fn memory_plain_text_ingest_writes_source_text_unit_fulltext_and_vector_fi
 }
 
 #[tokio::test]
+async fn skill_ingest_writes_name_description_scope_fulltext_and_vector_fields() {
+    let database_path = temp_database_path("rag-ingest-skill-success");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    let embeddings = FakeEmbeddingRuntime::fixed(vec![0.5, 0.25]);
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        embeddings.clone(),
+    );
+
+    let result = service.ingest(skill_request("v1")).await.unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(result.text_unit_count, 1);
+    assert_eq!(result.fulltext_status, "INDEXED");
+    assert_eq!(result.embedding_status, "INDEXED");
+    assert_eq!(embeddings.call_count(), 1);
+
+    let connection = Connection::open(&database_url).unwrap();
+    let unit = query_skill_unit(&connection);
+    assert_eq!(unit["scope_type"], json!("SPACE"));
+    assert_eq!(unit["scope_code"], json!("TRON_CORE"));
+    assert_eq!(unit["skill_name"], json!("rag-reviewer"));
+    assert_eq!(
+        unit["skill_description"],
+        json!("Reviews RAG retrieval changes before release.")
+    );
+    assert_eq!(
+        unit["search_text"],
+        json!("Skill: rag-reviewer\nDescription: Reviews RAG retrieval changes before release.")
+    );
+    assert_eq!(unit["embedding_status"], json!("INDEXED"));
+    assert_eq!(unit["embedding_dimension"], json!(2));
+    assert!(
+        !table_columns(&connection, "rag_skill_text_units")
+            .iter()
+            .any(|column| column == "workspace_code")
+    );
+}
+
+#[tokio::test]
 async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_units() {
     let database_path = temp_database_path("rag-ingest-project-doc");
     let database_url = database_path.to_string_lossy().to_string();
@@ -495,6 +537,33 @@ fn memory_request(source_version: &str) -> RagIngestRequest {
     }
 }
 
+fn skill_request(source_version: &str) -> RagIngestRequest {
+    RagIngestRequest {
+        corpus_id: "skill".into(),
+        ingest_profile_id: "skill-ingest-v1".into(),
+        workspace_code: "TRON_CORE".into(),
+        access_context: RagIngestAccessContext {
+            user_code: "USR-LARGE-ID".into(),
+            agent_code: "AGENT_CODEX".into(),
+            workspace_code: "TRON_CORE".into(),
+        },
+        target_scope: RagIngestScope {
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+        },
+        source_code: "skill:TRON_CORE:rag-reviewer".into(),
+        source_version: source_version.into(),
+        source_type: "SKILL".into(),
+        payload: json!({
+            "skillName": "rag-reviewer",
+            "skillDescription": "Reviews RAG retrieval changes before release.",
+            "metadata": {
+                "source": "skill-registry"
+            }
+        }),
+    }
+}
+
 fn project_doc_request(source_version: &str) -> RagIngestRequest {
     RagIngestRequest {
         corpus_id: "project-doc".into(),
@@ -655,6 +724,40 @@ fn query_unit(connection: &Connection, table: &str) -> Value {
                 "embedding_dimension": row.get::<_, i64>(3)?,
             }))
         })
+        .unwrap()
+}
+
+fn query_skill_unit(connection: &Connection) -> Value {
+    connection
+        .query_row(
+            "SELECT scope_type, scope_code, skill_name, skill_description, search_text,
+                    embedding_status, embedding_dimension
+             FROM rag_skill_text_units
+             ORDER BY ordinal",
+            [],
+            |row| {
+                Ok(json!({
+                    "scope_type": row.get::<_, String>(0)?,
+                    "scope_code": row.get::<_, String>(1)?,
+                    "skill_name": row.get::<_, String>(2)?,
+                    "skill_description": row.get::<_, String>(3)?,
+                    "search_text": row.get::<_, String>(4)?,
+                    "embedding_status": row.get::<_, String>(5)?,
+                    "embedding_dimension": row.get::<_, i64>(6)?,
+                }))
+            },
+        )
+        .unwrap()
+}
+
+fn table_columns(connection: &Connection, table: &str) -> Vec<String> {
+    let mut statement = connection
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .unwrap();
+    statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
         .unwrap()
 }
 

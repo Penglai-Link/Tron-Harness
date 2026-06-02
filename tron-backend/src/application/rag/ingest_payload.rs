@@ -1,21 +1,26 @@
-use std::hash::{Hash, Hasher};
+use std::{
+    collections::BTreeMap,
+    hash::{Hash, Hasher},
+};
 
 use serde_json::{Value, json};
 
 use crate::domain::rag::RagError;
 
 use super::{
-    CompiledRagIngestProfile, RagIngestRequest, RagMemorySourceFields, RagProjectDocSourceFields,
-    RagTextUnitWrite, ingest_artifact::ArtifactBundle,
+    CompiledRagIngestProfile, RagIngestRequest, RagTextUnitWrite, ingest_artifact::ArtifactBundle,
 };
+
+mod json_text;
+
+use json_text::prepare_json_text_payload;
 
 #[derive(Debug, Clone)]
 pub(crate) struct PreparedIngestPayload {
     pub(crate) title: Option<String>,
     pub(crate) content_hash: String,
     pub(crate) metadata: Value,
-    pub(crate) memory: Option<RagMemorySourceFields>,
-    pub(crate) project_doc: Option<RagProjectDocSourceFields>,
+    pub(crate) domain_fields: BTreeMap<String, Value>,
     pub(crate) units: Vec<RagTextUnitDraft>,
 }
 
@@ -90,6 +95,7 @@ pub(crate) fn prepare_payload(
 ) -> Result<PreparedIngestPayload, RagError> {
     match compiled.payload_strategy_id.as_str() {
         "MEMORY_PLAIN_TEXT_PAYLOAD_V1" => prepare_memory_payload(request, compiled),
+        "RAG_JSON_TEXT_PAYLOAD_V1" => prepare_json_text_payload(request, compiled),
         "PROJECT_DOC_MARKDOWN_REF_PAYLOAD_V1" => {
             prepare_project_doc_ref_payload(request, compiled, bundle)
         }
@@ -107,6 +113,84 @@ fn prepare_memory_payload(
     let text = required_payload_text(&request.payload)?;
     let title = payload_string(&request.payload, "title");
     let content_hash = stable_hash(&text);
+    let mut domain_fields = BTreeMap::new();
+    insert_optional_string(
+        &mut domain_fields,
+        "memoryType",
+        payload_string(&request.payload, "memoryType"),
+    );
+    insert_optional_string(
+        &mut domain_fields,
+        "memoryStatus",
+        payload_string(&request.payload, "memoryStatus"),
+    );
+    insert_optional_string(
+        &mut domain_fields,
+        "reviewStatus",
+        payload_string(&request.payload, "reviewStatus"),
+    );
+    insert_string(
+        &mut domain_fields,
+        "version",
+        request.source_version.clone(),
+    );
+    insert_optional_string(
+        &mut domain_fields,
+        "supersededBy",
+        payload_string(&request.payload, "supersededBy"),
+    );
+    insert_optional_string(
+        &mut domain_fields,
+        "conflictGroup",
+        payload_string(&request.payload, "conflictGroup"),
+    );
+    insert_optional_string(
+        &mut domain_fields,
+        "duplicateGroup",
+        payload_string(&request.payload, "duplicateGroup"),
+    );
+    if let Some(value) = request.payload.get("injectable").and_then(Value::as_bool) {
+        domain_fields.insert("injectable".into(), Value::Bool(value));
+    }
+    insert_optional_integer(
+        &mut domain_fields,
+        "importanceScore",
+        request
+            .payload
+            .get("importanceScore")
+            .and_then(Value::as_i64),
+    );
+    insert_optional_integer(
+        &mut domain_fields,
+        "confidenceScore",
+        request
+            .payload
+            .get("confidenceScore")
+            .and_then(Value::as_i64),
+    );
+    insert_optional_integer(
+        &mut domain_fields,
+        "qualityScore",
+        request.payload.get("qualityScore").and_then(Value::as_i64),
+    );
+    if let Some(value) = request.payload.get("pinLevel").and_then(Value::as_i64) {
+        domain_fields.insert("pinLevel".into(), json!(value));
+    }
+    insert_optional_integer(
+        &mut domain_fields,
+        "expiresAt",
+        request.payload.get("expiresAt").and_then(Value::as_i64),
+    );
+    insert_optional_string(
+        &mut domain_fields,
+        "derivedSourceType",
+        payload_string(&request.payload, "derivedSourceType"),
+    );
+    insert_optional_string(
+        &mut domain_fields,
+        "derivedSourceCode",
+        payload_string(&request.payload, "derivedSourceCode"),
+    );
     let unit = RagTextUnitDraft {
         text_unit_code: text_unit_code(&request.source_code, &request.source_version, 0),
         document_code: None,
@@ -119,30 +203,7 @@ fn prepare_memory_payload(
         title,
         content_hash,
         metadata: payload_metadata(&request.payload),
-        memory: Some(RagMemorySourceFields {
-            memory_type: payload_string(&request.payload, "memoryType"),
-            memory_status: payload_string(&request.payload, "memoryStatus"),
-            review_status: payload_string(&request.payload, "reviewStatus"),
-            version: Some(request.source_version.clone()),
-            superseded_by: payload_string(&request.payload, "supersededBy"),
-            conflict_group: payload_string(&request.payload, "conflictGroup"),
-            duplicate_group: payload_string(&request.payload, "duplicateGroup"),
-            injectable: request.payload.get("injectable").and_then(Value::as_bool),
-            importance_score: request
-                .payload
-                .get("importanceScore")
-                .and_then(Value::as_i64),
-            confidence_score: request
-                .payload
-                .get("confidenceScore")
-                .and_then(Value::as_i64),
-            quality_score: request.payload.get("qualityScore").and_then(Value::as_i64),
-            pin_level: request.payload.get("pinLevel").and_then(Value::as_i64),
-            expires_at: request.payload.get("expiresAt").and_then(Value::as_i64),
-            derived_source_type: payload_string(&request.payload, "derivedSourceType"),
-            derived_source_code: payload_string(&request.payload, "derivedSourceCode"),
-        }),
-        project_doc: None,
+        domain_fields,
         units: vec![unit],
     })
 }
@@ -180,6 +241,34 @@ fn prepare_project_doc_ref_payload(
         return Err(RagError::DocumentParseFailed);
     }
     let document_code = payload_string(&request.payload, "documentCode");
+    let mut domain_fields = BTreeMap::new();
+    insert_optional_string(&mut domain_fields, "documentCode", document_code.clone());
+    insert_optional_string(
+        &mut domain_fields,
+        "documentType",
+        payload_string(&request.payload, "documentType"),
+    );
+    insert_optional_string(
+        &mut domain_fields,
+        "path",
+        payload_string(&request.payload, "path"),
+    );
+    insert_string(&mut domain_fields, "bodyHash", stable_hash(&text));
+    insert_optional_string(
+        &mut domain_fields,
+        "repoCode",
+        payload_string(&request.payload, "repoCode"),
+    );
+    insert_optional_string(
+        &mut domain_fields,
+        "moduleCode",
+        payload_string(&request.payload, "moduleCode"),
+    );
+    insert_optional_string(
+        &mut domain_fields,
+        "moduleName",
+        payload_string(&request.payload, "moduleName"),
+    );
     let sections = split_markdown_heading_units(&text, compiled.markdown_heading_depth);
     if sections.is_empty() {
         return Err(RagError::DocumentParseFailed);
@@ -222,18 +311,24 @@ fn prepare_project_doc_ref_payload(
         title: payload_string(&request.payload, "title"),
         content_hash: stable_hash(&text),
         metadata,
-        memory: None,
-        project_doc: Some(RagProjectDocSourceFields {
-            document_code,
-            document_type: payload_string(&request.payload, "documentType"),
-            path: payload_string(&request.payload, "path"),
-            body_hash: stable_hash(&text),
-            repo_code: payload_string(&request.payload, "repoCode"),
-            module_code: payload_string(&request.payload, "moduleCode"),
-            module_name: payload_string(&request.payload, "moduleName"),
-        }),
+        domain_fields,
         units,
     })
+}
+
+fn insert_string(fields: &mut BTreeMap<String, Value>, key: &str, value: String) {
+    fields.insert(key.into(), Value::String(value));
+}
+
+fn insert_optional_string(fields: &mut BTreeMap<String, Value>, key: &str, value: Option<String>) {
+    fields.insert(key.into(), value.map(Value::String).unwrap_or(Value::Null));
+}
+
+fn insert_optional_integer(fields: &mut BTreeMap<String, Value>, key: &str, value: Option<i64>) {
+    fields.insert(
+        key.into(),
+        value.map(|value| json!(value)).unwrap_or(Value::Null),
+    );
 }
 
 fn required_payload_text(payload: &Value) -> Result<String, RagError> {
@@ -336,6 +431,112 @@ fn stable_hash(value: &str) -> String {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     value.hash(&mut hasher);
     format!("{:016x}", hasher.finish())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::application::rag::{RagIngestAccessContext, RagIngestScope};
+
+    #[test]
+    fn prepares_skill_payload_from_name_and_description() {
+        let request = skill_request(json!({
+            "skillName": "reviewer",
+            "skillDescription": "Reviews code changes before release.",
+            "metadata": {
+                "source": "registry"
+            }
+        }));
+        let bundle = ArtifactBundle::from_request(&request);
+
+        let prepared = prepare_payload(&request, &skill_profile(), &bundle).unwrap();
+
+        assert_eq!(prepared.title.as_deref(), Some("reviewer"));
+        assert_eq!(
+            prepared.domain_fields.get("skillName"),
+            Some(&json!("reviewer"))
+        );
+        assert_eq!(
+            prepared.domain_fields.get("skillDescription"),
+            Some(&json!("Reviews code changes before release."))
+        );
+        assert_eq!(prepared.units.len(), 1);
+        assert_eq!(prepared.units[0].heading_path, "reviewer");
+        assert_eq!(
+            prepared.units[0].text,
+            "Skill: reviewer\nDescription: Reviews code changes before release."
+        );
+    }
+
+    #[test]
+    fn rejects_skill_payload_without_description() {
+        let request = skill_request(json!({
+            "skillName": "reviewer"
+        }));
+        let bundle = ArtifactBundle::from_request(&request);
+
+        let error = prepare_payload(&request, &skill_profile(), &bundle).unwrap_err();
+
+        assert_eq!(error, RagError::IngestRequestInvalid);
+    }
+
+    fn skill_request(payload: Value) -> RagIngestRequest {
+        RagIngestRequest {
+            corpus_id: "skill".into(),
+            ingest_profile_id: "skill-ingest-v1".into(),
+            workspace_code: "workspace-alpha".into(),
+            access_context: RagIngestAccessContext {
+                user_code: "user-alpha".into(),
+                agent_code: "agent-alpha".into(),
+                workspace_code: "workspace-alpha".into(),
+            },
+            target_scope: RagIngestScope {
+                scope_type: "SPACE".into(),
+                scope_code: "workspace-alpha".into(),
+            },
+            source_code: "skill:workspace-alpha:reviewer".into(),
+            source_version: "v1".into(),
+            source_type: "SKILL".into(),
+            payload,
+        }
+    }
+
+    fn skill_profile() -> CompiledRagIngestProfile {
+        CompiledRagIngestProfile {
+            profile_id: "skill-ingest-v1".into(),
+            corpus_id: "skill".into(),
+            stage_order: vec![],
+            payload_strategy_id: "RAG_JSON_TEXT_PAYLOAD_V1".into(),
+            payload_mapping: json!({
+                "supportedSourceTypes": ["SKILL"],
+                "required": ["skillName", "skillDescription"],
+                "title": "$.skillName",
+                "textTemplate": "Skill: {{skillName}}\nDescription: {{skillDescription}}",
+                "metadataFrom": "$.metadata",
+                "fields": {
+                    "skillName": {
+                        "path": "$.skillName",
+                        "target": "skill_name",
+                        "type": "string"
+                    },
+                    "skillDescription": {
+                        "path": "$.skillDescription",
+                        "target": "skill_description",
+                        "type": "string"
+                    }
+                }
+            }),
+            source_resolver_strategy_id: None,
+            document_parser_strategy_id: None,
+            source_resolver_max_bytes: 1024,
+            record_resolver_info: false,
+            record_parser_info: false,
+            markdown_heading_depth: 6,
+            degrade_policy: "SKIP_VECTOR_WITH_WARNING".into(),
+            embedding_model_code: None,
+            embedding_version: "v1".into(),
+        }
+    }
 }
 
 fn encode_embedding(values: &[f32]) -> Vec<u8> {

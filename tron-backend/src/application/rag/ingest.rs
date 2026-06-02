@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeMap,
     future::Future,
     pin::Pin,
     sync::{Arc, Mutex},
@@ -46,43 +47,12 @@ pub struct RagPersistIngestCommand {
     pub title: Option<String>,
     pub content_hash: String,
     pub metadata: Value,
-    pub memory: Option<RagMemorySourceFields>,
-    pub project_doc: Option<RagProjectDocSourceFields>,
+    pub domain_fields: BTreeMap<String, Value>,
     pub text_units: Vec<RagTextUnitWrite>,
     pub warnings: Vec<RagIngestWarning>,
     pub workspace_code: String,
     pub user_code: String,
     pub agent_code: String,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RagMemorySourceFields {
-    pub memory_type: Option<String>,
-    pub memory_status: Option<String>,
-    pub review_status: Option<String>,
-    pub version: Option<String>,
-    pub superseded_by: Option<String>,
-    pub conflict_group: Option<String>,
-    pub duplicate_group: Option<String>,
-    pub injectable: Option<bool>,
-    pub importance_score: Option<i64>,
-    pub confidence_score: Option<i64>,
-    pub quality_score: Option<i64>,
-    pub pin_level: Option<i64>,
-    pub expires_at: Option<i64>,
-    pub derived_source_type: Option<String>,
-    pub derived_source_code: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RagProjectDocSourceFields {
-    pub document_code: Option<String>,
-    pub document_type: Option<String>,
-    pub path: Option<String>,
-    pub body_hash: String,
-    pub repo_code: Option<String>,
-    pub module_code: Option<String>,
-    pub module_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

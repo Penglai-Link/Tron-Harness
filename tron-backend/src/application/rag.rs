@@ -28,8 +28,7 @@ pub use facade::RagService;
 pub use ingest::{
     RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime, RagIngestAccessContext,
     RagIngestRepository, RagIngestRequest, RagIngestResult, RagIngestScope, RagIngestService,
-    RagIngestWarning, RagMemorySourceFields, RagPersistIngestCommand, RagProjectDocSourceFields,
-    RagTextUnitWrite, validate_direct_scope,
+    RagIngestWarning, RagPersistIngestCommand, RagTextUnitWrite, validate_direct_scope,
 };
 pub use ingest_profile::{CompiledRagIngestProfile, compile_ingest_profile};
 pub use retry::{

@@ -73,6 +73,54 @@ async fn memory_search_returns_active_scoped_fulltext_vector_hits_and_context_pa
 }
 
 #[tokio::test]
+async fn skill_search_returns_scoped_fulltext_and_vector_hits() {
+    let database_url = temp_database_path("rag-search-skill")
+        .to_string_lossy()
+        .to_string();
+    seed_skill_fixture(&database_url).await;
+    let service = RagSearchService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new().with_embedding(vec![0.5, 0.25]),
+    );
+
+    let result = service
+        .search(search_request(
+            "skill-related-v1",
+            "rag reviewer",
+            "RESULT_LIST",
+            json!({ "skillName": "rag-reviewer" }),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(result.context_strategy, "RESULT_LIST");
+    assert_eq!(result.hits.len(), 1);
+    assert_eq!(result.hits[0].corpus_id, "skill");
+    assert_eq!(result.hits[0].source_code, "skill:TRON_CORE:rag-reviewer");
+    assert_eq!(result.hits[0].source_version, "v1");
+    assert_eq!(
+        result.hits[0].route_ids,
+        vec!["skill-fulltext", "skill-vector"]
+    );
+    assert_eq!(result.hits[0].scope_type, "SPACE");
+    assert_eq!(result.hits[0].scope_code, "TRON_CORE");
+    assert_eq!(
+        result.hits[0].metadata["source"]["title"],
+        json!("rag-reviewer")
+    );
+    assert_eq!(
+        result.hits[0].metadata["extra"]["skillName"],
+        json!("rag-reviewer")
+    );
+    assert_eq!(
+        result.hits[0].metadata["extra"]["skillDescription"],
+        json!("Reviews RAG retrieval changes before release.")
+    );
+    assert!(result.context_pack.is_none());
+}
+
+#[tokio::test]
 async fn project_doc_search_hydrates_heading_path_and_document_metadata() {
     let database_url = temp_database_path("rag-search-doc")
         .to_string_lossy()
@@ -548,6 +596,15 @@ async fn seed_project_doc_fixture(database_url: &str) {
     service.ingest(project_doc_request()).await.unwrap();
 }
 
+async fn seed_skill_fixture(database_url: &str) {
+    let service = RagIngestService::new(
+        SqliteRagRepository::connect(database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new().with_embedding(vec![0.5, 0.25]),
+    );
+    service.ingest(skill_request()).await.unwrap();
+}
+
 fn memory_request(
     source_code: &str,
     source_version: &str,
@@ -612,6 +669,30 @@ fn project_doc_request() -> RagIngestRequest {
             "repoCode": "REPO_TRON",
             "moduleCode": "MOD_RAG",
             "moduleName": "RAG"
+        }),
+    }
+}
+
+fn skill_request() -> RagIngestRequest {
+    RagIngestRequest {
+        corpus_id: "skill".into(),
+        ingest_profile_id: "skill-ingest-v1".into(),
+        workspace_code: "TRON_CORE".into(),
+        access_context: RagIngestAccessContext {
+            user_code: "USR-LARGE-ID".into(),
+            agent_code: "AGENT_CODEX".into(),
+            workspace_code: "TRON_CORE".into(),
+        },
+        target_scope: RagIngestScope {
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+        },
+        source_code: "skill:TRON_CORE:rag-reviewer".into(),
+        source_version: "v1".into(),
+        source_type: "SKILL".into(),
+        payload: json!({
+            "skillName": "rag-reviewer",
+            "skillDescription": "Reviews RAG retrieval changes before release."
         }),
     }
 }

@@ -27,6 +27,7 @@ impl RagStrategyRegistry for DefaultRagStrategyRegistry {
             strategy_id,
             &[
                 "MEMORY_PLAIN_TEXT_PAYLOAD_V1",
+                "RAG_JSON_TEXT_PAYLOAD_V1",
                 "PROJECT_DOC_MARKDOWN_REF_PAYLOAD_V1",
             ],
         )

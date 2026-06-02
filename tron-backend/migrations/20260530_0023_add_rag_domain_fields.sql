@@ -23,6 +23,6 @@ WHERE corpus_id = 'memory-card';
 UPDATE rag_corpora
 SET
     filter_schema_json = '{"fields":{"scopeType":{"type":"string","column":"scope_type"},"scopeCode":{"type":"string","column":"scope_code"},"sourceCode":{"type":"string","column":"source_code"},"sourceVersion":{"type":"string","column":"source_version"},"status":{"type":"string","column":"status"},"documentCode":{"type":"string","column":"document_code"},"documentType":{"type":"string","column":"document_type"},"path":{"type":"string","column":"path"},"repoCode":{"type":"string","column":"repo_code"},"moduleCode":{"type":"string","column":"module_code"},"moduleName":{"type":"string","column":"module_name"}}}',
-    field_mapping_json = '{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","status":"status","documentCode":"document_code","documentType":"document_type","path":"path","repoCode":"repo_code","moduleCode":"module_code","moduleName":"module_name","text":"text","searchText":"search_text","embedding":"embedding"}',
+    field_mapping_json = '{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","status":"status","documentCode":"document_code","documentType":"document_type","path":"path","bodyHash":"body_hash","repoCode":"repo_code","moduleCode":"module_code","moduleName":"module_name","text":"text","searchText":"search_text","embedding":"embedding"}',
     updated_at = 1772294400000
 WHERE corpus_id = 'project-doc';

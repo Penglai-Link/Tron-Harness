@@ -19,6 +19,7 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
         "rag_project_doc_sources".to_string(),
         "rag_memory_text_units".to_string(),
         "rag_project_doc_text_units".to_string(),
+        "rag_skill_text_units".to_string(),
         "rag_diagnostics".to_string(),
     ]);
 
@@ -29,6 +30,7 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
             ("code-graph".to_string(), "reserved".to_string()),
             ("memory-card".to_string(), "enabled".to_string()),
             ("project-doc".to_string(), "enabled".to_string()),
+            ("skill".to_string(), "enabled".to_string()),
         ]),
     );
 
@@ -42,6 +44,7 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
             ("code-graph".to_string(), "reserved".to_string()),
             ("memory-card".to_string(), "enabled".to_string()),
             ("project-doc".to_string(), "enabled".to_string()),
+            ("skill".to_string(), "enabled".to_string()),
         ]),
     );
 }
@@ -70,7 +73,11 @@ fn rag_foundation_embeds_memory_source_and_keeps_project_doc_split() {
         "Memory source data is embedded in TextUnit while Project Doc keeps separate source storage",
     );
 
-    for table in ["rag_memory_text_units", "rag_project_doc_text_units"] {
+    for table in [
+        "rag_memory_text_units",
+        "rag_project_doc_text_units",
+        "rag_skill_text_units",
+    ] {
         let columns = repository.table_columns(table).unwrap();
         for required in [
             "search_text",
@@ -106,6 +113,7 @@ fn rag_foundation_preserves_scope_isolation_columns_without_permission_columns()
         "rag_project_doc_sources",
         "rag_memory_text_units",
         "rag_project_doc_text_units",
+        "rag_skill_text_units",
     ] {
         let columns = repository.table_columns(table).unwrap();
         assert!(columns.contains("scope_type"), "{table} keeps scope_type");

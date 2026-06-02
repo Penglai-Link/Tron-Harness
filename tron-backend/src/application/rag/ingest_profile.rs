@@ -15,6 +15,7 @@ pub struct CompiledRagIngestProfile {
     pub corpus_id: String,
     pub stage_order: Vec<String>,
     pub payload_strategy_id: String,
+    pub payload_mapping: Value,
     pub source_resolver_strategy_id: Option<String>,
     pub document_parser_strategy_id: Option<String>,
     pub source_resolver_max_bytes: usize,
@@ -86,6 +87,14 @@ where
     {
         return Err(RagError::IngestProfileInvalid);
     }
+    let payload_mapping = profile
+        .config
+        .get("payloadMapping")
+        .cloned()
+        .unwrap_or(Value::Null);
+    if payload_strategy_id == "RAG_JSON_TEXT_PAYLOAD_V1" {
+        validate_json_text_payload_mapping(&payload_mapping, corpus)?;
+    }
     let source_resolver_strategy_id = optional_stage_strategy_id(stages, "resolveSource")?;
     let document_parser_strategy_id = optional_stage_strategy_id(stages, "parseDocument")?;
     if payload_strategy_id == "PROJECT_DOC_MARKDOWN_REF_PAYLOAD_V1" {
@@ -141,6 +150,7 @@ where
         corpus_id: corpus.corpus_id.clone(),
         stage_order: ordered,
         payload_strategy_id,
+        payload_mapping,
         source_resolver_strategy_id,
         document_parser_strategy_id,
         source_resolver_max_bytes,
@@ -172,6 +182,51 @@ fn payload_strategy_id(config: &Value) -> Result<String, RagError> {
         Some("markdownHeading") => Ok("PROJECT_DOC_MARKDOWN_REF_PAYLOAD_V1".into()),
         _ => Err(RagError::IngestProfileInvalid),
     }
+}
+
+fn validate_json_text_payload_mapping(
+    payload_mapping: &Value,
+    corpus: &RagCorpusRecord,
+) -> Result<(), RagError> {
+    let mapping = payload_mapping
+        .as_object()
+        .ok_or(RagError::IngestProfileInvalid)?;
+    let supported = mapping
+        .get("supportedSourceTypes")
+        .and_then(Value::as_array)
+        .ok_or(RagError::IngestProfileInvalid)?;
+    if supported.is_empty()
+        || supported
+            .iter()
+            .any(|value| value.as_str().map(str::is_empty).unwrap_or(true))
+    {
+        return Err(RagError::IngestProfileInvalid);
+    }
+    if mapping.get("textTemplate").is_none() && mapping.get("text").is_none() {
+        return Err(RagError::IngestProfileInvalid);
+    }
+    let Some(fields) = mapping.get("fields").and_then(Value::as_object) else {
+        return Ok(());
+    };
+    for (logical_name, field) in fields {
+        let field = field.as_object().ok_or(RagError::IngestProfileInvalid)?;
+        field
+            .get("path")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or(RagError::IngestProfileInvalid)?;
+        let target = field
+            .get("target")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or(RagError::IngestProfileInvalid)?;
+        if corpus.field_mapping.get(logical_name).map(String::as_str) != Some(target) {
+            return Err(RagError::IngestProfileInvalid);
+        }
+    }
+    Ok(())
 }
 
 fn validate_project_doc_ref_stages(

@@ -16,99 +16,20 @@ use super::{
 pub(crate) fn push_source_domain_values(
     values: &mut Vec<(String, SqlValue)>,
     columns: &BTreeSet<String>,
+    plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
-) {
-    if let Some(memory) = &command.memory {
-        push_optional_text(
-            values,
-            columns,
-            "memory_type",
-            memory.memory_type.as_deref(),
-        );
-        push_optional_text(
-            values,
-            columns,
-            "memory_status",
-            memory.memory_status.as_deref(),
-        );
-        push_optional_text(
-            values,
-            columns,
-            "review_status",
-            memory.review_status.as_deref(),
-        );
-        push_optional_text(values, columns, "version", memory.version.as_deref());
-        push_optional_text(
-            values,
-            columns,
-            "superseded_by",
-            memory.superseded_by.as_deref(),
-        );
-        push_optional_text(
-            values,
-            columns,
-            "conflict_group",
-            memory.conflict_group.as_deref(),
-        );
-        push_optional_text(
-            values,
-            columns,
-            "duplicate_group",
-            memory.duplicate_group.as_deref(),
-        );
-        push_optional_bool_when_present(values, columns, "injectable", memory.injectable);
-        push_optional_integer(values, columns, "importance_score", memory.importance_score);
-        push_optional_integer(values, columns, "confidence_score", memory.confidence_score);
-        push_optional_integer(values, columns, "quality_score", memory.quality_score);
-        push_optional_integer_when_present(values, columns, "pin_level", memory.pin_level);
-        push_optional_integer(values, columns, "expires_at", memory.expires_at);
-        push_optional_text(
-            values,
-            columns,
-            "derived_source_type",
-            memory.derived_source_type.as_deref(),
-        );
-        push_optional_text(
-            values,
-            columns,
-            "derived_source_code",
-            memory.derived_source_code.as_deref(),
-        );
+) -> Result<(), RagError> {
+    for (logical_name, value) in &command.domain_fields {
+        let column = plan
+            .field_mapping
+            .get(logical_name)
+            .ok_or(RagError::StorageBindingInvalid)?;
+        if !columns.contains(column) {
+            return Err(RagError::StorageBindingInvalid);
+        }
+        values.push((column.clone(), json_to_sql_value(value)?));
     }
-    if let Some(project_doc) = &command.project_doc {
-        push_optional_text(
-            values,
-            columns,
-            "document_code",
-            project_doc.document_code.as_deref(),
-        );
-        push_optional_text(
-            values,
-            columns,
-            "document_type",
-            project_doc.document_type.as_deref(),
-        );
-        push_optional_text(values, columns, "path", project_doc.path.as_deref());
-        push_text(values, columns, "body_hash", &project_doc.body_hash);
-        push_optional_text(
-            values,
-            columns,
-            "repo_code",
-            project_doc.repo_code.as_deref(),
-        );
-        push_optional_text(
-            values,
-            columns,
-            "module_code",
-            project_doc.module_code.as_deref(),
-        );
-        push_optional_text(
-            values,
-            columns,
-            "module_name",
-            project_doc.module_name.as_deref(),
-        );
-    }
+    Ok(())
 }
 
 pub(crate) fn push_embedded_source_values(
@@ -157,7 +78,7 @@ pub(crate) fn push_embedded_source_values(
     if let Some(column) = plan.source_updated_at_column.as_deref() {
         push_integer(values, &plan.text_unit_columns, column, now);
     }
-    push_source_domain_values(values, &plan.text_unit_columns, command);
+    push_source_domain_values(values, &plan.text_unit_columns, plan, command)?;
     Ok(())
 }
 
@@ -222,6 +143,21 @@ pub(crate) fn execute_upsert(
     Ok(())
 }
 
+fn json_to_sql_value(value: &Value) -> Result<SqlValue, RagError> {
+    match value {
+        Value::Null => Ok(SqlValue::Null),
+        Value::Bool(value) => Ok(SqlValue::Integer(i64::from(*value))),
+        Value::Number(value) => value
+            .as_i64()
+            .or_else(|| value.as_u64().and_then(|value| i64::try_from(value).ok()))
+            .map(SqlValue::Integer)
+            .or_else(|| value.as_f64().map(|value| SqlValue::Real(value)))
+            .ok_or(RagError::StorageBindingInvalid),
+        Value::String(value) => Ok(SqlValue::Text(value.to_string())),
+        value => json_string(value).map(SqlValue::Text),
+    }
+}
+
 pub(crate) fn push_text(
     values: &mut Vec<(String, SqlValue)>,
     columns: &BTreeSet<String>,
@@ -280,32 +216,6 @@ pub(crate) fn push_optional_integer(
             column.to_string(),
             value.map(SqlValue::Integer).unwrap_or(SqlValue::Null),
         ));
-    }
-}
-
-fn push_optional_integer_when_present(
-    values: &mut Vec<(String, SqlValue)>,
-    columns: &BTreeSet<String>,
-    column: &str,
-    value: Option<i64>,
-) {
-    if columns.contains(column)
-        && let Some(value) = value
-    {
-        values.push((column.to_string(), SqlValue::Integer(value)));
-    }
-}
-
-fn push_optional_bool_when_present(
-    values: &mut Vec<(String, SqlValue)>,
-    columns: &BTreeSet<String>,
-    column: &str,
-    value: Option<bool>,
-) {
-    if columns.contains(column)
-        && let Some(value) = value
-    {
-        values.push((column.to_string(), SqlValue::Integer(i64::from(value))));
     }
 }
 

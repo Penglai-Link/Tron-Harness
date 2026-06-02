@@ -25,7 +25,8 @@ use crate::{
 use super::migrations::{
     RAG_DOMAIN_FIELDS_MIGRATION, RAG_FOUNDATION_MIGRATION, RAG_INGEST_PROFILES_MIGRATION,
     RAG_MEMORY_EMBEDDED_SOURCE_MIGRATION, RAG_OPTIONAL_MODEL_CODES_MIGRATION,
-    RAG_SEARCH_PROFILES_MIGRATION, RAG_STORAGE_BINDING_LAYOUT_MIGRATION,
+    RAG_SEARCH_PROFILES_MIGRATION, RAG_SKILL_CORPUS_MIGRATION,
+    RAG_STORAGE_BINDING_LAYOUT_MIGRATION,
 };
 
 pub struct SqliteRagRepository {
@@ -59,7 +60,8 @@ impl SqliteRagRepository {
         self.apply_rag_search_profiles_migration()?;
         self.apply_rag_optional_model_codes_migration()?;
         self.apply_rag_storage_binding_layout_migration()?;
-        self.apply_rag_memory_embedded_source_migration()
+        self.apply_rag_memory_embedded_source_migration()?;
+        self.apply_rag_skill_corpus_migration()
     }
 
     pub fn apply_rag_foundation_migration(&self) -> Result<(), RagError> {
@@ -171,6 +173,12 @@ impl SqliteRagRepository {
     pub fn apply_rag_memory_embedded_source_migration(&self) -> Result<(), RagError> {
         self.connection
             .execute_batch(RAG_MEMORY_EMBEDDED_SOURCE_MIGRATION)
+            .map_err(storage_error)
+    }
+
+    pub fn apply_rag_skill_corpus_migration(&self) -> Result<(), RagError> {
+        self.connection
+            .execute_batch(RAG_SKILL_CORPUS_MIGRATION)
             .map_err(storage_error)
     }
 
@@ -459,4 +467,89 @@ fn ensure_database_parent(database_url: &str) -> Result<(), RagError> {
 
 fn storage_error(_error: rusqlite::Error) -> RagError {
     RagError::StorageFailure
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        application::rag::{RagConfigRepository, RagProfileListQuery},
+        domain::rag::{RagProfileType, RagStatus, RagStorageLayout},
+    };
+
+    use super::SqliteRagRepository;
+
+    #[test]
+    fn skill_corpus_migration_seeds_embedded_table_and_profiles() {
+        let repository = SqliteRagRepository::connect(":memory:").unwrap();
+
+        let table_names = repository.rag_table_names().unwrap();
+        assert!(table_names.contains("rag_skill_text_units"));
+
+        let columns = repository.table_columns("rag_skill_text_units").unwrap();
+        assert!(columns.contains("scope_code"));
+        assert!(columns.contains("skill_name"));
+        assert!(columns.contains("skill_description"));
+        assert!(!columns.contains("workspace_code"));
+
+        let corpus = repository.get_corpus("skill").unwrap().unwrap();
+        assert_eq!(corpus.status, RagStatus::Enabled);
+        assert_eq!(
+            corpus.storage_binding.layout,
+            RagStorageLayout::EmbeddedSource
+        );
+        assert_eq!(
+            corpus.storage_binding.table.as_deref(),
+            Some("rag_skill_text_units")
+        );
+        assert_eq!(
+            corpus.field_mapping.get("skillName").map(String::as_str),
+            Some("skill_name")
+        );
+        assert!(!corpus.field_mapping.contains_key("workspaceCode"));
+
+        let profiles = repository
+            .list_profiles(RagProfileListQuery {
+                profile_type: None,
+                status: Some(RagStatus::Enabled),
+                corpus_id: Some("skill".into()),
+            })
+            .unwrap();
+        let profile_ids = profiles
+            .iter()
+            .map(|profile| profile.profile_id.as_str())
+            .collect::<Vec<_>>();
+        assert!(profile_ids.contains(&"skill-ingest-v1"));
+        assert!(profile_ids.contains(&"skill-related-v1"));
+        assert!(
+            profiles
+                .iter()
+                .any(|profile| profile.profile_type == RagProfileType::Ingest)
+        );
+        let ingest_profile = profiles
+            .iter()
+            .find(|profile| profile.profile_id == "skill-ingest-v1")
+            .expect("skill ingest profile should be seeded");
+        assert_eq!(
+            ingest_profile
+                .config
+                .get("payloadStrategyId")
+                .and_then(serde_json::Value::as_str),
+            Some("RAG_JSON_TEXT_PAYLOAD_V1")
+        );
+        assert_eq!(
+            ingest_profile
+                .config
+                .get("payloadMapping")
+                .and_then(|mapping| mapping.get("fields"))
+                .and_then(|fields| fields.get("skillName"))
+                .and_then(|field| field.get("target"))
+                .and_then(serde_json::Value::as_str),
+            Some("skill_name")
+        );
+        assert!(
+            profiles
+                .iter()
+                .any(|profile| profile.profile_type == RagProfileType::Retrieval)
+        );
+    }
 }
