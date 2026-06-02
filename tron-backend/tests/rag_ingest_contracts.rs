@@ -24,7 +24,7 @@ use tron_backend::{
 };
 
 #[tokio::test]
-async fn memory_plain_text_ingest_writes_business_text_unit_and_sidecar_indexes() {
+async fn memory_json_text_ingest_writes_business_text_unit_and_sidecar_indexes() {
     let database_path = temp_database_path("rag-ingest-memory-success");
     let database_url = database_path.to_string_lossy().to_string();
     let repository = SqliteRagRepository::connect(&database_url).unwrap();
@@ -68,6 +68,37 @@ async fn memory_plain_text_ingest_writes_business_text_unit_and_sidecar_indexes(
     assert_eq!(
         source_metadata,
         json!({"seed": "contract-test", "source": "rag-ingest"})
+    );
+}
+
+#[tokio::test]
+async fn memory_ingest_maps_business_version_from_payload() {
+    let database_path = temp_database_path("rag-ingest-memory-payload-version");
+    let database_url = database_path.to_string_lossy().to_string();
+    let service = RagIngestService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)),
+    );
+    let mut request = memory_request("storage-v1");
+    request.payload["version"] = json!("business-v9");
+
+    service.ingest(request).await.unwrap();
+
+    let connection = Connection::open(&database_url).unwrap();
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT source_version FROM rag_memory_text_units WHERE source_code = 'memory-rag-rule'"
+        ),
+        "storage-v1"
+    );
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT version FROM rag_memory_text_units WHERE source_code = 'memory-rag-rule'"
+        ),
+        "business-v9"
     );
 }
 
@@ -530,6 +561,7 @@ fn memory_request(source_version: &str) -> RagIngestRequest {
         payload: json!({
             "title": "RAG citation rule",
             "text": "Always cite source titles in RAG answers.",
+            "version": source_version,
             "memoryType": "RULE",
             "memoryStatus": "ACTIVE",
             "reviewStatus": "APPROVED",
@@ -656,7 +688,21 @@ fn valid_dag() -> Value {
             "vectorIndex": { "strategyId": "RAG_VECTOR_INDEX", "inputArtifact": "fulltextUnits", "outputArtifact": "vectorUnits" },
             "persistSource": { "strategyId": "RAG_PERSIST_SOURCE", "inputArtifact": "vectorUnits", "outputArtifact": "persisted" }
         },
-        "payloadStrategyId": "MEMORY_PLAIN_TEXT_PAYLOAD_V1"
+        "payloadStrategyId": "RAG_JSON_TEXT_PAYLOAD_V1",
+        "payloadMapping": {
+            "supportedSourceTypes": ["PLAIN_TEXT"],
+            "required": ["text", "version"],
+            "title": "$.title",
+            "text": "$.text",
+            "metadataFrom": "$.metadata",
+            "fields": {
+                "version": {
+                    "path": "$.version",
+                    "target": "version",
+                    "type": "string"
+                }
+            }
+        }
     })
 }
 

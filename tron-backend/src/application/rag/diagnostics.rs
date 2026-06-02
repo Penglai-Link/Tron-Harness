@@ -187,9 +187,6 @@ fn validate_debug_source_request(request: &RagDebugSourceRequest) -> Result<(), 
             return Err(RagError::DebugRequestInvalid);
         }
     }
-    if !matches!(request.corpus_id.as_str(), "memory-card" | "project-doc") {
-        return Err(RagError::CorpusReserved);
-    }
     Ok(())
 }
 

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use serde_json::{Map, Value, json};
 
-use crate::domain::rag::RagError;
+use crate::domain::rag::{RagCorpusRecord, RagError};
 
 use super::{
     CandidateHit, CompiledRetrievalProfile, ContextPack, ContextPackItem, RagRerankCall,
@@ -12,11 +12,13 @@ use super::{
 
 pub(super) fn rank_route_rows(
     rows: Vec<RagSearchRow>,
+    corpus: &RagCorpusRecord,
     route: &RetrievalRoute,
     strategy: &RetrieverStrategy,
     request: &RagSearchRequest,
     query_embedding: Option<&[f32]>,
 ) -> Vec<CandidateHit> {
+    let metadata_groups = metadata_groups(corpus);
     let mut hits = rows
         .into_iter()
         .filter_map(|row| {
@@ -34,7 +36,7 @@ pub(super) fn rank_route_rows(
                 _ => 0.0,
             });
             (score > 0.0).then(|| {
-                let mut hit = hit_from_row(&row);
+                let mut hit = hit_from_row(&row, &metadata_groups);
                 hit.route_ids.push(route.route_id.clone());
                 hit.score = score * route.weight;
                 hit
@@ -176,7 +178,13 @@ fn cosine_similarity(left: &[f32], right: &[f32]) -> f64 {
     }
 }
 
-fn hit_from_row(row: &RagSearchRow) -> CandidateHit {
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct MetadataGroup {
+    name: String,
+    fields: Vec<String>,
+}
+
+fn hit_from_row(row: &RagSearchRow, metadata_groups: &[MetadataGroup]) -> CandidateHit {
     CandidateHit {
         corpus_id: row.corpus_id.clone(),
         source_code: row.source_code.clone(),
@@ -190,11 +198,11 @@ fn hit_from_row(row: &RagSearchRow) -> CandidateHit {
         preview: row.text.chars().take(160).collect(),
         text: row.text.clone(),
         token_count: row.token_count,
-        metadata: structured_metadata(row),
+        metadata: structured_metadata(row, metadata_groups),
     }
 }
 
-fn structured_metadata(row: &RagSearchRow) -> Value {
+fn structured_metadata(row: &RagSearchRow, metadata_groups: &[MetadataGroup]) -> Value {
     let mut flat = row.source_metadata.as_object().cloned().unwrap_or_default();
     let mut metadata = Map::new();
 
@@ -203,44 +211,11 @@ fn structured_metadata(row: &RagSearchRow) -> Value {
         metadata.insert("source".into(), Value::Object(source));
     }
 
-    let memory = take_group(
-        &mut flat,
-        &[
-            "memoryType",
-            "memoryStatus",
-            "reviewStatus",
-            "version",
-            "supersededBy",
-            "conflictGroup",
-            "duplicateGroup",
-            "injectable",
-            "importanceScore",
-            "confidenceScore",
-            "qualityScore",
-            "pinLevel",
-            "expiresAt",
-            "derivedSourceType",
-            "derivedSourceCode",
-        ],
-    );
-    if !memory.is_empty() {
-        metadata.insert("memory".into(), Value::Object(memory));
-    }
-
-    let document = take_group(
-        &mut flat,
-        &[
-            "documentCode",
-            "documentType",
-            "path",
-            "bodyHash",
-            "repoCode",
-            "moduleCode",
-            "moduleName",
-        ],
-    );
-    if !document.is_empty() {
-        metadata.insert("document".into(), Value::Object(document));
+    for group in metadata_groups {
+        let fields = take_dynamic_group(&mut flat, &group.fields);
+        if !fields.is_empty() {
+            metadata.insert(group.name.clone(), Value::Object(fields));
+        }
     }
 
     let mut text_unit = Map::new();
@@ -258,16 +233,47 @@ fn structured_metadata(row: &RagSearchRow) -> Value {
     }
     metadata.insert("textUnit".into(), Value::Object(text_unit));
 
-    let mut extra = take_extra(&mut flat);
+    let mut extra = take_extra(&mut flat, metadata_groups);
     for (key, value) in flat {
-        if !is_promoted_extra_key(&key) && !extra.contains_key(&key) {
+        if !is_promoted_extra_key(&key, metadata_groups) && !extra.contains_key(&key) {
             extra.insert(key, value);
         }
     }
-    sanitize_extra_metadata(&mut extra);
+    sanitize_extra_metadata(&mut extra, metadata_groups);
     metadata.insert("extra".into(), Value::Object(extra));
 
     Value::Object(metadata)
+}
+
+fn metadata_groups(corpus: &RagCorpusRecord) -> Vec<MetadataGroup> {
+    corpus
+        .capabilities
+        .get("metadataGroups")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|group| {
+            let group = group.as_object()?;
+            let name = group
+                .get("name")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())?;
+            let fields = group
+                .get("fields")
+                .and_then(Value::as_array)?
+                .iter()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+                .collect::<Vec<_>>();
+            (!fields.is_empty()).then(|| MetadataGroup {
+                name: name.to_string(),
+                fields,
+            })
+        })
+        .collect()
 }
 
 fn take_group(flat: &mut Map<String, Value>, keys: &[&str]) -> Map<String, Value> {
@@ -280,12 +286,27 @@ fn take_group(flat: &mut Map<String, Value>, keys: &[&str]) -> Map<String, Value
     group
 }
 
-fn take_extra(flat: &mut Map<String, Value>) -> Map<String, Value> {
+fn take_dynamic_group(flat: &mut Map<String, Value>, keys: &[String]) -> Map<String, Value> {
+    let mut group = Map::new();
+    for key in keys {
+        if let Some(value) = flat.remove(key) {
+            group.insert(key.clone(), value);
+        }
+    }
+    group
+}
+
+fn take_extra(
+    flat: &mut Map<String, Value>,
+    metadata_groups: &[MetadataGroup],
+) -> Map<String, Value> {
     let mut extra = match flat.remove("extra") {
         Some(Value::Object(object)) => object,
         _ => Map::new(),
     };
-    let legacy_payload_shape = extra.keys().any(|key| is_promoted_extra_key(key));
+    let legacy_payload_shape = extra
+        .keys()
+        .any(|key| is_promoted_extra_key(key, metadata_groups));
     if legacy_payload_shape {
         if let Some(Value::Object(nested)) = extra.remove("metadata") {
             for (key, value) in nested {
@@ -295,49 +316,35 @@ fn take_extra(flat: &mut Map<String, Value>) -> Map<String, Value> {
             extra.remove("metadata");
         }
     }
-    sanitize_extra_metadata(&mut extra);
+    sanitize_extra_metadata(&mut extra, metadata_groups);
     extra
 }
 
-fn sanitize_extra_metadata(extra: &mut Map<String, Value>) {
-    for key in PROMOTED_EXTRA_KEYS {
+fn sanitize_extra_metadata(extra: &mut Map<String, Value>, metadata_groups: &[MetadataGroup]) {
+    for key in CORE_PROMOTED_EXTRA_KEYS {
         extra.remove(*key);
+    }
+    for group in metadata_groups {
+        for key in &group.fields {
+            extra.remove(key);
+        }
     }
 }
 
-fn is_promoted_extra_key(key: &str) -> bool {
-    PROMOTED_EXTRA_KEYS.contains(&key)
+fn is_promoted_extra_key(key: &str, metadata_groups: &[MetadataGroup]) -> bool {
+    CORE_PROMOTED_EXTRA_KEYS.contains(&key)
+        || metadata_groups
+            .iter()
+            .any(|group| group.fields.iter().any(|field| field == key))
 }
 
-const PROMOTED_EXTRA_KEYS: &[&str] = &[
+const CORE_PROMOTED_EXTRA_KEYS: &[&str] = &[
     "title",
     "text",
     "sourceType",
     "sourceContentHash",
     "sourceMetadata",
     "payload",
-    "memoryType",
-    "memoryStatus",
-    "reviewStatus",
-    "version",
-    "supersededBy",
-    "conflictGroup",
-    "duplicateGroup",
-    "injectable",
-    "importanceScore",
-    "confidenceScore",
-    "qualityScore",
-    "pinLevel",
-    "expiresAt",
-    "derivedSourceType",
-    "derivedSourceCode",
-    "documentCode",
-    "documentType",
-    "path",
-    "bodyHash",
-    "repoCode",
-    "moduleCode",
-    "moduleName",
     "headingPath",
     "textUnitStatus",
 ];

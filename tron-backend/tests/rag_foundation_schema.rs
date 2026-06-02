@@ -54,6 +54,60 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
 }
 
 #[test]
+fn extension_indexes_use_configured_enabled_corpus_text_unit_tables() {
+    let database_path = temp_database_path("rag-configured-extension-indexes");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository =
+        SqliteRagRepository::connect(&database_url).expect("RAG repository should connect");
+
+    let connection = Connection::open(&database_url).expect("database should open");
+    connection
+        .execute_batch(
+            "CREATE TABLE rag_custom_text_units (
+                id INTEGER PRIMARY KEY,
+                text_unit_code TEXT NOT NULL UNIQUE,
+                source_code TEXT NOT NULL,
+                source_version TEXT NOT NULL,
+                scope_type TEXT NOT NULL,
+                scope_code TEXT NOT NULL,
+                text TEXT NOT NULL,
+                heading_path TEXT NOT NULL,
+                ordinal INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                metadata TEXT NOT NULL DEFAULT '{}'
+             );
+             INSERT INTO rag_corpora (
+                corpus_id, display_name, status, description, capabilities_json,
+                filter_schema_json, field_mapping_json, storage_binding_json, created_at, updated_at
+             )
+             VALUES (
+                'custom-corpus', 'Custom Corpus', 'enabled', 'Custom test corpus.',
+                '{\"fulltext\":true,\"vector\":true,\"reserved\":false}',
+                '{\"fields\":{\"scopeType\":{\"type\":\"string\",\"column\":\"scope_type\"}}}',
+                '{\"sourceCode\":\"source_code\",\"sourceVersion\":\"source_version\",\"scopeType\":\"scope_type\",\"scopeCode\":\"scope_code\",\"text\":\"text\"}',
+                '{\"layout\":\"EMBEDDED_SOURCE\",\"table\":\"rag_custom_text_units\",\"diagnosticsTable\":\"rag_diagnostics\"}',
+                1780339200000, 1780339200000
+             );",
+        )
+        .expect("custom corpus should seed");
+    drop(connection);
+
+    repository
+        .apply_rag_sqlite_extension_index_migration()
+        .expect("extension migration should use configured corpus tables");
+    let connection = Connection::open(&database_url).expect("database should reopen");
+
+    assert_eq!(
+        schema_object_count(&connection, "rag_custom_text_units_fts"),
+        1
+    );
+    assert_eq!(
+        schema_object_count(&connection, "rag_custom_text_units_vec_d4096"),
+        1
+    );
+}
+
+#[test]
 fn rag_foundation_embeds_memory_source_and_keeps_project_doc_split() {
     let repository =
         SqliteRagRepository::connect(":memory:").expect("RAG repository should connect");
@@ -341,6 +395,16 @@ fn table_indexes(database_url: &str, table_name: &str) -> BTreeSet<String> {
 
 fn query_string(connection: &Connection, sql: &str) -> String {
     connection.query_row(sql, [], |row| row.get(0)).unwrap()
+}
+
+fn schema_object_count(connection: &Connection, name: &str) -> i64 {
+    connection
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = ?1",
+            [name],
+            |row| row.get(0),
+        )
+        .unwrap()
 }
 
 fn temp_database_path(test_name: &str) -> PathBuf {

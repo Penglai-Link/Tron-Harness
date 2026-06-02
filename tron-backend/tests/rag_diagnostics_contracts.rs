@@ -323,6 +323,7 @@ fn ingest_request() -> RagIngestRequest {
         payload: json!({
             "title": "RAG citation rule",
             "text": "Always cite sources.",
+            "version": "v1",
             "memoryType": "RULE",
             "memoryStatus": "ACTIVE",
             "reviewStatus": "APPROVED",

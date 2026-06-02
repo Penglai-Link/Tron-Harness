@@ -295,9 +295,6 @@ fn validate_retry_request(request: &RagRetryIndexRequest) -> Result<(), RagError
     {
         return Err(RagError::RetryStageUnsupported);
     }
-    if !matches!(request.corpus_id.as_str(), "memory-card" | "project-doc") {
-        return Err(RagError::CorpusReserved);
-    }
     Ok(())
 }
 

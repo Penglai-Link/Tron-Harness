@@ -13,7 +13,7 @@ use super::{
 
 mod json_text;
 
-use json_text::prepare_json_text_payload;
+use json_text::{extract_domain_fields, payload_metadata_from_mapping, prepare_json_text_payload};
 
 #[derive(Debug, Clone)]
 pub(crate) struct PreparedIngestPayload {
@@ -94,118 +94,12 @@ pub(crate) fn prepare_payload(
     bundle: &ArtifactBundle,
 ) -> Result<PreparedIngestPayload, RagError> {
     match compiled.payload_strategy_id.as_str() {
-        "MEMORY_PLAIN_TEXT_PAYLOAD_V1" => prepare_memory_payload(request, compiled),
         "RAG_JSON_TEXT_PAYLOAD_V1" => prepare_json_text_payload(request, compiled),
         "PROJECT_DOC_MARKDOWN_REF_PAYLOAD_V1" => {
             prepare_project_doc_ref_payload(request, compiled, bundle)
         }
         _ => Err(RagError::IngestProfileInvalid),
     }
-}
-
-fn prepare_memory_payload(
-    request: &RagIngestRequest,
-    _compiled: &CompiledRagIngestProfile,
-) -> Result<PreparedIngestPayload, RagError> {
-    if request.source_type != "PLAIN_TEXT" {
-        return Err(RagError::IngestRequestInvalid);
-    }
-    let text = required_payload_text(&request.payload)?;
-    let title = payload_string(&request.payload, "title");
-    let content_hash = stable_hash(&text);
-    let mut domain_fields = BTreeMap::new();
-    insert_optional_string(
-        &mut domain_fields,
-        "memoryType",
-        payload_string(&request.payload, "memoryType"),
-    );
-    insert_optional_string(
-        &mut domain_fields,
-        "memoryStatus",
-        payload_string(&request.payload, "memoryStatus"),
-    );
-    insert_optional_string(
-        &mut domain_fields,
-        "reviewStatus",
-        payload_string(&request.payload, "reviewStatus"),
-    );
-    insert_string(
-        &mut domain_fields,
-        "version",
-        request.source_version.clone(),
-    );
-    insert_optional_string(
-        &mut domain_fields,
-        "supersededBy",
-        payload_string(&request.payload, "supersededBy"),
-    );
-    insert_optional_string(
-        &mut domain_fields,
-        "conflictGroup",
-        payload_string(&request.payload, "conflictGroup"),
-    );
-    insert_optional_string(
-        &mut domain_fields,
-        "duplicateGroup",
-        payload_string(&request.payload, "duplicateGroup"),
-    );
-    if let Some(value) = request.payload.get("injectable").and_then(Value::as_bool) {
-        domain_fields.insert("injectable".into(), Value::Bool(value));
-    }
-    insert_optional_integer(
-        &mut domain_fields,
-        "importanceScore",
-        request
-            .payload
-            .get("importanceScore")
-            .and_then(Value::as_i64),
-    );
-    insert_optional_integer(
-        &mut domain_fields,
-        "confidenceScore",
-        request
-            .payload
-            .get("confidenceScore")
-            .and_then(Value::as_i64),
-    );
-    insert_optional_integer(
-        &mut domain_fields,
-        "qualityScore",
-        request.payload.get("qualityScore").and_then(Value::as_i64),
-    );
-    if let Some(value) = request.payload.get("pinLevel").and_then(Value::as_i64) {
-        domain_fields.insert("pinLevel".into(), json!(value));
-    }
-    insert_optional_integer(
-        &mut domain_fields,
-        "expiresAt",
-        request.payload.get("expiresAt").and_then(Value::as_i64),
-    );
-    insert_optional_string(
-        &mut domain_fields,
-        "derivedSourceType",
-        payload_string(&request.payload, "derivedSourceType"),
-    );
-    insert_optional_string(
-        &mut domain_fields,
-        "derivedSourceCode",
-        payload_string(&request.payload, "derivedSourceCode"),
-    );
-    let unit = RagTextUnitDraft {
-        text_unit_code: text_unit_code(&request.source_code, &request.source_version, 0),
-        document_code: None,
-        text,
-        heading_path: String::new(),
-        ordinal: 0,
-        content_hash: content_hash.clone(),
-    };
-    Ok(PreparedIngestPayload {
-        title,
-        content_hash,
-        metadata: payload_metadata(&request.payload),
-        domain_fields,
-        units: vec![unit],
-    })
 }
 
 fn prepare_project_doc_ref_payload(
@@ -240,40 +134,22 @@ fn prepare_project_doc_ref_payload(
     if text.is_empty() {
         return Err(RagError::DocumentParseFailed);
     }
-    let document_code = payload_string(&request.payload, "documentCode");
-    let mut domain_fields = BTreeMap::new();
-    insert_optional_string(&mut domain_fields, "documentCode", document_code.clone());
-    insert_optional_string(
-        &mut domain_fields,
-        "documentType",
-        payload_string(&request.payload, "documentType"),
-    );
-    insert_optional_string(
-        &mut domain_fields,
-        "path",
-        payload_string(&request.payload, "path"),
-    );
-    insert_string(&mut domain_fields, "bodyHash", stable_hash(&text));
-    insert_optional_string(
-        &mut domain_fields,
-        "repoCode",
-        payload_string(&request.payload, "repoCode"),
-    );
-    insert_optional_string(
-        &mut domain_fields,
-        "moduleCode",
-        payload_string(&request.payload, "moduleCode"),
-    );
-    insert_optional_string(
-        &mut domain_fields,
-        "moduleName",
-        payload_string(&request.payload, "moduleName"),
-    );
+    let mapping = compiled
+        .payload_mapping
+        .as_object()
+        .ok_or(RagError::IngestProfileInvalid)?;
+    let mut domain_fields = extract_domain_fields(mapping, &request.payload)?;
+    insert_project_doc_computed_fields(mapping, &mut domain_fields, &text)?;
+    let document_code = domain_fields
+        .get("documentCode")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .or_else(|| payload_string(&request.payload, "documentCode"));
     let sections = split_markdown_heading_units(&text, compiled.markdown_heading_depth);
     if sections.is_empty() {
         return Err(RagError::DocumentParseFailed);
     }
-    let mut metadata = payload_metadata(&request.payload);
+    let mut metadata = payload_metadata_from_mapping(mapping, &request.payload);
     if let Value::Object(metadata) = &mut metadata {
         if compiled.record_resolver_info {
             metadata.insert(
@@ -316,29 +192,32 @@ fn prepare_project_doc_ref_payload(
     })
 }
 
-fn insert_string(fields: &mut BTreeMap<String, Value>, key: &str, value: String) {
-    fields.insert(key.into(), Value::String(value));
-}
-
-fn insert_optional_string(fields: &mut BTreeMap<String, Value>, key: &str, value: Option<String>) {
-    fields.insert(key.into(), value.map(Value::String).unwrap_or(Value::Null));
-}
-
-fn insert_optional_integer(fields: &mut BTreeMap<String, Value>, key: &str, value: Option<i64>) {
-    fields.insert(
-        key.into(),
-        value.map(|value| json!(value)).unwrap_or(Value::Null),
-    );
-}
-
-fn required_payload_text(payload: &Value) -> Result<String, RagError> {
-    payload
-        .get("text")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .ok_or(RagError::IngestRequestInvalid)
+fn insert_project_doc_computed_fields(
+    mapping: &serde_json::Map<String, Value>,
+    domain_fields: &mut BTreeMap<String, Value>,
+    text: &str,
+) -> Result<(), RagError> {
+    let Some(computed_fields) = mapping.get("computedFields").and_then(Value::as_object) else {
+        return Ok(());
+    };
+    for (logical_name, raw_field) in computed_fields {
+        let raw_field = raw_field
+            .as_object()
+            .ok_or(RagError::IngestProfileInvalid)?;
+        let source = raw_field
+            .get("source")
+            .and_then(Value::as_str)
+            .ok_or(RagError::IngestProfileInvalid)?;
+        let compute = raw_field
+            .get("compute")
+            .and_then(Value::as_str)
+            .ok_or(RagError::IngestProfileInvalid)?;
+        if source != "parsedDocument.contentText" || compute != "stableHash" {
+            return Err(RagError::IngestProfileInvalid);
+        }
+        domain_fields.insert(logical_name.clone(), Value::String(stable_hash(text)));
+    }
+    Ok(())
 }
 
 fn payload_string(payload: &Value, field: &str) -> Option<String> {
@@ -348,14 +227,6 @@ fn payload_string(payload: &Value, field: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
-}
-
-fn payload_metadata(payload: &Value) -> Value {
-    payload
-        .get("metadata")
-        .and_then(Value::as_object)
-        .map(|object| Value::Object(object.clone()))
-        .unwrap_or_else(|| json!({}))
 }
 
 fn split_markdown_heading_units(text: &str, heading_depth: usize) -> Vec<(String, String)> {

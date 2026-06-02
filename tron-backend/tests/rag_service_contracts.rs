@@ -170,6 +170,42 @@ fn project_doc_corpus_seed_maps_repo_module_logical_fields_to_physical_columns()
 }
 
 #[test]
+fn ingest_profiles_declare_payload_mappings_for_memory_and_project_doc() {
+    let service = RagConfigService::new(
+        SqliteRagRepository::connect(":memory:").expect("RAG repository should connect"),
+        DefaultRagStrategyRegistry::default(),
+    );
+
+    let memory = service
+        .get_profile("memory-card-ingest-v1")
+        .expect("memory ingest profile should be readable");
+    assert_eq!(
+        memory.config["payloadStrategyId"],
+        json!("RAG_JSON_TEXT_PAYLOAD_V1")
+    );
+    assert_eq!(
+        memory.config["payloadMapping"]["fields"]["version"]["path"],
+        json!("$.version")
+    );
+    assert_eq!(
+        memory.config["payloadMapping"]["fields"]["version"]["target"],
+        json!("version")
+    );
+
+    let project_doc = service
+        .get_profile("project-doc-ingest-v1")
+        .expect("project-doc ingest profile should be readable");
+    assert_eq!(
+        project_doc.config["payloadMapping"]["fields"]["repoCode"]["target"],
+        json!("repo_code")
+    );
+    assert_eq!(
+        project_doc.config["payloadMapping"]["computedFields"]["bodyHash"]["compute"],
+        json!("stableHash")
+    );
+}
+
+#[test]
 fn rag_service_lists_and_reads_profile_configuration_without_sqlite_details() {
     let service = RagConfigService::new(
         SqliteRagRepository::connect(":memory:").expect("RAG repository should connect"),

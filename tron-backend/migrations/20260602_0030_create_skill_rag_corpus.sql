@@ -72,7 +72,7 @@ VALUES
         'Skill',
         'enabled',
         'Workspace-scoped skill names and descriptions.',
-        '{"fulltext":true,"vector":true,"reserved":false}',
+        '{"fulltext":true,"vector":true,"reserved":false,"metadataGroups":[{"name":"skill","fields":["skillName","skillDescription"]}]}',
         '{"fields":{"scopeType":{"type":"string","column":"scope_type"},"scopeCode":{"type":"string","column":"scope_code"},"sourceCode":{"type":"string","column":"source_code"},"sourceVersion":{"type":"string","column":"source_version"},"status":{"type":"string","column":"source_status"},"sourceStatus":{"type":"string","column":"source_status"},"textUnitStatus":{"type":"string","column":"status"},"skillName":{"type":"string","column":"skill_name"}}}',
         '{"sourceCode":"source_code","sourceVersion":"source_version","sourceType":"source_type","scopeType":"scope_type","scopeCode":"scope_code","status":"source_status","sourceStatus":"source_status","textUnitStatus":"status","title":"title","sourceContentHash":"source_content_hash","sourceMetadata":"source_metadata","skillName":"skill_name","skillDescription":"skill_description","text":"text","searchText":"search_text","embedding":"embedding"}',
         '{"layout":"EMBEDDED_SOURCE","table":"rag_skill_text_units","diagnosticsTable":"rag_diagnostics"}',

@@ -1,7 +1,8 @@
 use rusqlite::{Connection, params};
 
 use crate::{
-    domain::rag::RagError,
+    application::rag::RagConfigRepository,
+    domain::rag::{RagError, RagStatus, RagStorageLayout},
     shared::sqlite_extensions::{
         sqlite_fts5_available, sqlite_simple_tokenizer_available, sqlite_vec_available,
     },
@@ -21,12 +22,12 @@ pub(super) fn apply_extension_index_migration(
     repository: &SqliteRagRepository,
 ) -> Result<(), RagError> {
     drop_retired_extension_tables(&repository.connection)?;
-    for table in ["rag_memory_text_units", "rag_project_doc_text_units"] {
-        if !table_exists(&repository.connection, table)? {
+    for table in configured_text_unit_tables(repository)? {
+        if !table_exists(&repository.connection, &table)? {
             continue;
         }
-        ensure_fts_table(&repository.connection, table)?;
-        ensure_vector_tables(&repository.connection, table)?;
+        ensure_fts_table(&repository.connection, &table)?;
+        ensure_vector_tables(&repository.connection, &table)?;
     }
     rebuild_all_extension_indexes(repository)?;
     drop_retired_text_unit_index_columns(&repository.connection)
@@ -53,6 +54,28 @@ fn drop_retired_extension_tables(connection: &Connection) -> Result<(), RagError
             .map_err(storage_error)?;
     }
     Ok(())
+}
+
+fn configured_text_unit_tables(repository: &SqliteRagRepository) -> Result<Vec<String>, RagError> {
+    let mut tables = Vec::new();
+    for corpus in repository.list_corpora()? {
+        if corpus.status != RagStatus::Enabled {
+            continue;
+        }
+        let table = match corpus.storage_binding.layout {
+            RagStorageLayout::EmbeddedSource => corpus.storage_binding.table,
+            RagStorageLayout::Split => corpus.storage_binding.text_unit_table,
+        };
+        let Some(table) = table else {
+            continue;
+        };
+        if tables.contains(&table) {
+            continue;
+        }
+        quote_identifier(&table)?;
+        tables.push(table);
+    }
+    Ok(tables)
 }
 
 fn drop_retired_text_unit_index_columns(connection: &Connection) -> Result<(), RagError> {
@@ -220,11 +243,11 @@ fn rebuild_project_doc_text_units_without_index_payload(
 }
 
 fn rebuild_all_extension_indexes(repository: &SqliteRagRepository) -> Result<(), RagError> {
-    for table in ["rag_memory_text_units", "rag_project_doc_text_units"] {
-        if !table_exists(&repository.connection, table)? {
+    for table in configured_text_unit_tables(repository)? {
+        if !table_exists(&repository.connection, &table)? {
             continue;
         }
-        rebuild_table_indexes(&repository.connection, table)?;
+        rebuild_table_indexes(&repository.connection, &table)?;
     }
     Ok(())
 }

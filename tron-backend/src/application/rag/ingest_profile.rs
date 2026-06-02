@@ -103,6 +103,9 @@ where
             source_resolver_strategy_id.as_deref(),
             document_parser_strategy_id.as_deref(),
         )?;
+        if payload_mapping.is_object() {
+            validate_project_doc_payload_mapping(&payload_mapping, corpus)?;
+        }
     }
 
     let edges = dag
@@ -164,24 +167,13 @@ where
 }
 
 fn payload_strategy_id(config: &Value) -> Result<String, RagError> {
-    if let Some(strategy_id) = config
+    config
         .get("payloadStrategyId")
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-    {
-        return Ok(strategy_id.to_string());
-    }
-    match config
-        .get("splitter")
-        .and_then(Value::as_object)
-        .and_then(|splitter| splitter.get("type"))
-        .and_then(Value::as_str)
-    {
-        Some("plainText") => Ok("MEMORY_PLAIN_TEXT_PAYLOAD_V1".into()),
-        Some("markdownHeading") => Ok("PROJECT_DOC_MARKDOWN_REF_PAYLOAD_V1".into()),
-        _ => Err(RagError::IngestProfileInvalid),
-    }
+        .map(ToOwned::to_owned)
+        .ok_or(RagError::IngestProfileInvalid)
 }
 
 fn validate_json_text_payload_mapping(
@@ -191,6 +183,40 @@ fn validate_json_text_payload_mapping(
     let mapping = payload_mapping
         .as_object()
         .ok_or(RagError::IngestProfileInvalid)?;
+    validate_payload_supported_source_types(mapping)?;
+    if mapping.get("textTemplate").is_none() && mapping.get("text").is_none() {
+        return Err(RagError::IngestProfileInvalid);
+    }
+    validate_payload_mapping_fields(mapping, corpus)
+}
+
+fn validate_project_doc_payload_mapping(
+    payload_mapping: &Value,
+    corpus: &RagCorpusRecord,
+) -> Result<(), RagError> {
+    let mapping = payload_mapping
+        .as_object()
+        .ok_or(RagError::IngestProfileInvalid)?;
+    validate_payload_supported_source_types(mapping)?;
+    validate_payload_mapping_fields(mapping, corpus)?;
+    let Some(computed_fields) = mapping.get("computedFields").and_then(Value::as_object) else {
+        return Ok(());
+    };
+    for (logical_name, field) in computed_fields {
+        let field = field.as_object().ok_or(RagError::IngestProfileInvalid)?;
+        let source = non_empty_str(field, "source")?;
+        let compute = non_empty_str(field, "compute")?;
+        if source != "parsedDocument.contentText" || compute != "stableHash" {
+            return Err(RagError::IngestProfileInvalid);
+        }
+        validate_payload_field_target(logical_name, field, corpus)?;
+    }
+    Ok(())
+}
+
+fn validate_payload_supported_source_types(
+    mapping: &serde_json::Map<String, Value>,
+) -> Result<(), RagError> {
     let supported = mapping
         .get("supportedSourceTypes")
         .and_then(Value::as_array)
@@ -202,31 +228,46 @@ fn validate_json_text_payload_mapping(
     {
         return Err(RagError::IngestProfileInvalid);
     }
-    if mapping.get("textTemplate").is_none() && mapping.get("text").is_none() {
-        return Err(RagError::IngestProfileInvalid);
-    }
+    Ok(())
+}
+
+fn validate_payload_mapping_fields(
+    mapping: &serde_json::Map<String, Value>,
+    corpus: &RagCorpusRecord,
+) -> Result<(), RagError> {
     let Some(fields) = mapping.get("fields").and_then(Value::as_object) else {
         return Ok(());
     };
     for (logical_name, field) in fields {
         let field = field.as_object().ok_or(RagError::IngestProfileInvalid)?;
-        field
-            .get("path")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .ok_or(RagError::IngestProfileInvalid)?;
-        let target = field
-            .get("target")
-            .and_then(Value::as_str)
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .ok_or(RagError::IngestProfileInvalid)?;
-        if corpus.field_mapping.get(logical_name).map(String::as_str) != Some(target) {
-            return Err(RagError::IngestProfileInvalid);
-        }
+        non_empty_str(field, "path")?;
+        validate_payload_field_target(logical_name, field, corpus)?;
     }
     Ok(())
+}
+
+fn validate_payload_field_target(
+    logical_name: &str,
+    field: &serde_json::Map<String, Value>,
+    corpus: &RagCorpusRecord,
+) -> Result<(), RagError> {
+    let target = non_empty_str(field, "target")?;
+    if corpus.field_mapping.get(logical_name).map(String::as_str) != Some(target) {
+        return Err(RagError::IngestProfileInvalid);
+    }
+    Ok(())
+}
+
+fn non_empty_str<'a>(
+    object: &'a serde_json::Map<String, Value>,
+    key: &str,
+) -> Result<&'a str, RagError> {
+    object
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or(RagError::IngestProfileInvalid)
 }
 
 fn validate_project_doc_ref_stages(

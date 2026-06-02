@@ -111,11 +111,11 @@ async fn skill_search_returns_scoped_fulltext_and_vector_hits() {
         json!("rag-reviewer")
     );
     assert_eq!(
-        result.hits[0].metadata["extra"]["skillName"],
+        result.hits[0].metadata["skill"]["skillName"],
         json!("rag-reviewer")
     );
     assert_eq!(
-        result.hits[0].metadata["extra"]["skillDescription"],
+        result.hits[0].metadata["skill"]["skillDescription"],
         json!("Reviews RAG retrieval changes before release.")
     );
     assert!(result.context_pack.is_none());
@@ -795,6 +795,7 @@ fn memory_request(
         payload: json!({
             "title": "RAG citation rule",
             "text": "Always cite source titles in RAG answers for retrieval ordering.",
+            "version": source_version,
             "memoryType": "RULE",
             "memoryStatus": "ACTIVE",
             "reviewStatus": "APPROVED",
