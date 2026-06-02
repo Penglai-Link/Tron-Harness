@@ -7,7 +7,9 @@ use axum::{Router, extract::FromRef, routing::get};
 use crate::{
     adapters::{
         inbound::http::{
-            auth::routes as auth_routes, mcp::routes::transport_routes as mcp_transport_routes,
+            frontend::routes as frontend_routes,
+            auth::routes as auth_routes,
+            mcp::routes::transport_routes as mcp_transport_routes,
         },
         outbound::{
             crypto::BcryptPasswordHasher,
@@ -453,6 +455,7 @@ pub fn build_router(config: AppConfig) -> Router {
         .merge(mcp_transport_routes())
         .merge(protected_routes)
         .merge(open_api_routes)
+        .merge(frontend_routes())
         .with_state(state)
 }
 

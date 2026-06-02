@@ -3,7 +3,7 @@ mod parsing;
 mod paths;
 
 use std::{fs, net::SocketAddr, path::Path};
-
+use std::{fs, net::SocketAddr, path::Path};
 use serde::Deserialize;
 
 use crate::shared::event_bus::EventBusConfig;
@@ -18,6 +18,7 @@ use self::paths::{
 
 const DEFAULT_BIND_ADDRESS: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 8080;
+const DEFAULT_FRONTEND_DIST_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/resources/frontend");
 const DEFAULT_PROJECT_DOC_ROOT: &str = ".";
 const TEST_DATABASE_URL: &str = ":memory:";
 const DEFAULT_AUTH_JWT_SECRET: &str = "tron-dev-jwt-secret";
@@ -53,6 +54,7 @@ pub struct AppConfig {
     pub port: u16,
     pub database_url: String,
     pub graph_storage_path: String,
+    pub frontend_dist_dir: String,
     pub project_doc_root: String,
     pub skills_registry_root: String,
     pub system_agents: SystemAgentConfig,
@@ -152,6 +154,7 @@ impl AppConfig {
             port: DEFAULT_PORT,
             database_url: default_database_url_from_home(),
             graph_storage_path: default_graph_storage_path_from_home(),
+            frontend_dist_dir: DEFAULT_FRONTEND_DIST_DIR.into(),
             project_doc_root: DEFAULT_PROJECT_DOC_ROOT.into(),
             skills_registry_root: default_skills_registry_root_from_home(),
             system_agents: SystemAgentConfig {
@@ -186,8 +189,11 @@ impl AppConfig {
         if let Some(value) = overrides.graph_storage_path {
             self.graph_storage_path = normalize_storage_path(value);
         }
+        if let Some(value) = overrides.frontend_dist_dir {
+            self.frontend_dist_dir = normalize_storage_path(value);
+        }
         if let Some(value) = overrides.project_doc_root {
-            self.project_doc_root = value;
+            self.project_doc_root = normalize_storage_path(value);
         }
         if let Some(value) = overrides.skills_registry_root {
             self.skills_registry_root = value;
@@ -216,6 +222,16 @@ impl AppConfig {
         }
         if let Some(value) = env_graph_storage_path_override() {
             self.graph_storage_path = value;
+        }
+        if let Ok(value) = std::env::var("TRON_BACKEND_FRONTEND_DIST_DIR")
+            && !value.trim().is_empty()
+        {
+            self.frontend_dist_dir = normalize_storage_path(value);
+        }
+        if let Ok(value) = std::env::var("TRON_PROJECT_DOC_ROOT")
+            && !value.trim().is_empty()
+        {
+            self.project_doc_root = normalize_storage_path(value);
         }
         if let Some(value) = ldap_env_override().transpose()? {
             self.auth.ldap = Some(value);
@@ -272,6 +288,7 @@ struct AppConfigFile {
     port: Option<u16>,
     database_url: Option<String>,
     graph_storage_path: Option<String>,
+    frontend_dist_dir: Option<String>,
     project_doc_root: Option<String>,
     skills_registry_root: Option<String>,
     system_agents: Option<SystemAgentFileConfig>,
@@ -544,7 +561,6 @@ impl EventBusConfig {
         }
     }
 }
-
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -552,6 +568,10 @@ impl Default for AppConfig {
             port: DEFAULT_PORT,
             database_url: TEST_DATABASE_URL.into(),
             graph_storage_path: ":memory:".into(),
+            frontend_dist_dir: std::env::temp_dir()
+                .join("tron-frontend-test")
+                .display()
+                .to_string(),
             project_doc_root: std::env::temp_dir().display().to_string(),
             skills_registry_root: std::env::temp_dir()
                 .join("tron-skills-registry-test")

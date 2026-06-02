@@ -1,5 +1,7 @@
 bindAddress: 127.0.0.1
 port: 8080
+frontendDistDir: tron-backend/resources/frontend
+projectDocRoot: .
 
 systemAgents:
   codexCommand: codex

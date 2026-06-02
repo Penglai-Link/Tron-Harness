@@ -16,6 +16,9 @@ tron-backend/resources/frontend/
 node_modules
 node_modules/
 
+# Integrated frontend build output
+tron-backend/resources/frontend/
+
 # Archives
 *.tar.gz
 *.tar

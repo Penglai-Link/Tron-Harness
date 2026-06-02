@@ -12,9 +12,16 @@ export default defineConfig(({ mode }) => {
   };
   const apiBaseUrl = runtimeEnv.VITE_TRON_API_BASE_URL ?? "";
   const backendProxyTarget = runtimeEnv.TRON_FRONTEND_API_PROXY_TARGET ?? DEFAULT_BACKEND_PROXY_TARGET;
+  const frontendOutDir = runtimeEnv.TRON_FRONTEND_OUT_DIR;
 
   return {
     plugins: [react(), tailwindcss()],
+    build: frontendOutDir
+      ? {
+          emptyOutDir: true,
+          outDir: frontendOutDir,
+        }
+      : undefined,
     server: {
       host: "0.0.0.0",
       proxy: apiBaseUrl
