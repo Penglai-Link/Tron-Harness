@@ -16,4 +16,4 @@ Application bootstrapping, routing, domain modules, shared UI, global state, and
 - **i18next + react-i18next**: React internationalization runtime and translation hook/component layer
 - **npm**: package management
 - **reactbit**: dynamic login background
-- **
+- **AntV G6**: G6 is a graph visualization engine. It provides capabilities for graph drawing, layout, analysis, interaction, animation, and other aspects of graph visualization. It aims to offer developers a set of tools that are easy to use, professionally reliable, and highly customizable for graph visualization development.
