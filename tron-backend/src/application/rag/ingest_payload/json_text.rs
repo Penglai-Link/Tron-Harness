@@ -97,7 +97,7 @@ fn validate_required_fields(
     Ok(())
 }
 
-fn extract_domain_fields(
+pub(super) fn extract_domain_fields(
     mapping: &serde_json::Map<String, Value>,
     payload: &Value,
 ) -> Result<BTreeMap<String, Value>, RagError> {
@@ -114,6 +114,14 @@ fn extract_domain_fields(
             .and_then(Value::as_str)
             .ok_or(RagError::IngestProfileInvalid)?;
         let value = path_value(payload, path).cloned().unwrap_or(Value::Null);
+        if value.is_null()
+            && raw_field
+                .get("omitIfMissing")
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        {
+            continue;
+        }
         let value = match value {
             Value::String(value) => Value::String(value.trim().to_string()),
             value => value,
@@ -123,7 +131,7 @@ fn extract_domain_fields(
     Ok(domain_fields)
 }
 
-fn payload_metadata_from_mapping(
+pub(super) fn payload_metadata_from_mapping(
     mapping: &serde_json::Map<String, Value>,
     payload: &Value,
 ) -> Value {
