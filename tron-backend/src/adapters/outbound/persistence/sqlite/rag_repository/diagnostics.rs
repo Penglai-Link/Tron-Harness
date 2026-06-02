@@ -12,6 +12,7 @@ use crate::{
 
 use super::{
     SqliteRagRepository,
+    indexes::{fts_table_name, supported_vector_dimensions, table_exists, vec_table_name},
     sql_plan::{SqliteRagCorpusPlan, compile_sql_corpus_plan, quote_identifier},
     storage_error,
 };
@@ -138,14 +139,43 @@ fn debug_text_units(
     plan: &SqliteRagCorpusPlan,
     request: &RagDebugSourceRequest,
 ) -> Result<Vec<RagDebugTextUnitRecord>, RagError> {
+    let text_table = quote_identifier(&plan.text_unit_table)?;
+    let fts_table_name = fts_table_name(&plan.text_unit_table);
+    let (fulltext_status_expr, fts_join) = if table_exists(&repository.connection, &fts_table_name)?
+    {
+        let fts_table = quote_identifier(&fts_table_name)?;
+        (
+            format!("CASE WHEN {fts_table}.rowid IS NULL THEN 'PENDING' ELSE 'INDEXED' END"),
+            format!("LEFT JOIN {fts_table} ON {fts_table}.rowid = tu.id"),
+        )
+    } else {
+        ("'PENDING'".to_string(), String::new())
+    };
+    let vector_dimension = supported_vector_dimensions()
+        .first()
+        .copied()
+        .ok_or(RagError::StorageBindingInvalid)?;
+    let vec_table_name = vec_table_name(&plan.text_unit_table, vector_dimension);
+    let (embedding_status_expr, vec_join) =
+        if table_exists(&repository.connection, &vec_table_name)? {
+            let vec_table = quote_identifier(&vec_table_name)?;
+            (
+                format!("CASE WHEN {vec_table}.rowid IS NULL THEN 'PENDING' ELSE 'INDEXED' END"),
+                format!("LEFT JOIN {vec_table} ON {vec_table}.rowid = tu.id"),
+            )
+        } else {
+            ("'PENDING'".to_string(), String::new())
+        };
     let sql = format!(
-        "SELECT text_unit_code, ordinal, {}, fulltext_status, embedding_status,
-                embedding_model_code, heading_path, token_count
-         FROM {}
-         WHERE source_code = ?1 AND source_version = ?2 AND scope_type = ?3 AND scope_code = ?4
-         ORDER BY ordinal",
+        "SELECT tu.text_unit_code, tu.ordinal, tu.{}, {fulltext_status_expr}, {embedding_status_expr},
+                NULL, tu.heading_path, tu.token_count
+         FROM {text_table} tu
+         {fts_join}
+         {vec_join}
+         WHERE tu.source_code = ?1 AND tu.source_version = ?2
+           AND tu.scope_type = ?3 AND tu.scope_code = ?4
+         ORDER BY tu.ordinal",
         quote_identifier(&plan.text_unit_status_column)?,
-        quote_identifier(&plan.text_unit_table)?,
     );
     let mut statement = repository.connection.prepare(&sql).map_err(storage_error)?;
     let rows = statement

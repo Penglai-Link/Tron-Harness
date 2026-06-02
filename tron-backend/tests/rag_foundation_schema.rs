@@ -19,18 +19,12 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
         "rag_project_doc_sources".to_string(),
         "rag_memory_text_units".to_string(),
         "rag_memory_text_units_fts".to_string(),
-        "rag_memory_text_units_vec_d2".to_string(),
-        "rag_memory_text_units_vec_d1536".to_string(),
-        "rag_memory_text_units_vec_d2048".to_string(),
+        "rag_memory_text_units_vec_d4096".to_string(),
         "rag_project_doc_text_units".to_string(),
         "rag_skill_text_units".to_string(),
         "rag_project_doc_text_units_fts".to_string(),
-        "rag_project_doc_text_units_vec_d2".to_string(),
-        "rag_project_doc_text_units_vec_d1536".to_string(),
-        "rag_project_doc_text_units_vec_d2048".to_string(),
+        "rag_project_doc_text_units_vec_d4096".to_string(),
         "rag_diagnostics".to_string(),
-        "rag_sqlite_extension_capabilities".to_string(),
-        "rag_sqlite_vector_indexes".to_string(),
     ]);
 
     assert_eq!(repository.rag_table_names().unwrap(), expected_tables);
@@ -89,7 +83,7 @@ fn rag_foundation_embeds_memory_source_and_keeps_project_doc_split() {
         "rag_skill_text_units",
     ] {
         let columns = repository.table_columns(table).unwrap();
-        for required in [
+        for forbidden in [
             "search_text",
             "fulltext_status",
             "embedding_model_code",
@@ -100,10 +94,21 @@ fn rag_foundation_embeds_memory_source_and_keeps_project_doc_split() {
             "embedding_status",
         ] {
             assert!(
-                columns.contains(required),
-                "{table} should own {required} without separate fulltext/vector tables",
+                !columns.contains(forbidden),
+                "{table} should keep index payload out of the business table",
             );
         }
+    }
+    for sidecar in [
+        "rag_memory_text_units_fts",
+        "rag_memory_text_units_vec_d4096",
+        "rag_project_doc_text_units_fts",
+        "rag_project_doc_text_units_vec_d4096",
+    ] {
+        assert!(
+            repository.rag_table_names().unwrap().contains(sidecar),
+            "{sidecar} should provide the reusable search index contract",
+        );
     }
 }
 
@@ -227,12 +232,12 @@ fn rag_memory_embedded_source_migration_backfills_legacy_source_rows() {
         .execute(
             "INSERT INTO rag_memory_text_units (
                 text_unit_code, source_code, source_version, scope_type, scope_code, unit_type,
-                text, search_text, heading_path, ordinal, token_count, content_hash, status,
-                fulltext_status, embedding_status, metadata, created_at, updated_at
+                text, heading_path, ordinal, token_count, content_hash, status,
+                metadata, created_at, updated_at
             )
             VALUES ('legacy-memory:v1:0', 'legacy-memory', 'v1', 'SPACE', 'TRON_CORE', 'LEAF',
-                'Legacy memory text.', 'Legacy memory text.', '', 0, 3, 'unit-hash',
-                'ACTIVE', 'INDEXED', 'FAILED', '{}', 21, 22)",
+                'Legacy memory text.', '', 0, 3, 'unit-hash',
+                'ACTIVE', '{}', 21, 22)",
             [],
         )
         .expect("legacy text unit should insert");

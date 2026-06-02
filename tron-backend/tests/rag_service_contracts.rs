@@ -194,6 +194,14 @@ fn rag_service_lists_and_reads_profile_configuration_without_sqlite_details() {
     assert_eq!(profile.primary_corpus_id.as_deref(), Some("memory-card"));
     assert_eq!(profile.corpus_ids, vec!["memory-card".to_string()]);
     assert_eq!(profile.degrade_policy, "SKIP_VECTOR_ON_UNAVAILABLE");
+    assert_eq!(
+        profile.config["routes"][0]["retriever"],
+        json!("FULLTEXT_SQLITE_FTS5_SIMPLE_V1")
+    );
+    assert_eq!(
+        profile.config["routes"][1]["retriever"],
+        json!("VECTOR_SQLITE_VEC0_COSINE_V1")
+    );
 }
 
 #[test]

@@ -13,7 +13,7 @@ use crate::{
 
 use super::{
     SqliteRagRepository,
-    indexes::{sync_text_unit_indexes_for_code, sync_text_unit_indexes_for_source},
+    indexes::{rebuild_fulltext_indexes_for_source, upsert_vector_index_for_code},
     sql_plan::{compile_sql_corpus_plan, quote_identifier},
     storage_error,
 };
@@ -62,7 +62,7 @@ impl RagRetryIndexRepository for SqliteRagRepository {
             .ok_or(RagError::StorageBindingInvalid)?;
         let sql = format!(
             "UPDATE {table}
-             SET search_text = text, fulltext_status = 'INDEXED', {} = ?1
+             SET {} = ?1
              WHERE source_code = ?2 AND source_version = ?3 AND scope_type = ?4 AND scope_code = ?5
                AND {} = 'ACTIVE'",
             quote_identifier(updated_at_column)?,
@@ -81,10 +81,9 @@ impl RagRetryIndexRepository for SqliteRagRepository {
                 ],
             )
             .map_err(storage_error)?;
-        sync_text_unit_indexes_for_source(
+        rebuild_fulltext_indexes_for_source(
             &self.connection,
             &plan,
-            &self.sqlite_extensions,
             &request.source_code,
             &request.source_version,
             &request.scope_type,
@@ -102,35 +101,19 @@ impl RagRetryIndexRepository for SqliteRagRepository {
             .ok_or(RagError::StorageBindingInvalid)?;
         let sql = format!(
             "UPDATE {table}
-             SET embedding_model_code = ?1,
-                 embedding_version = ?2,
-                 embedding_text_hash = ?3,
-                 embedding_dimension = ?4,
-                 embedding = ?5,
-                 embedding_status = 'INDEXED',
-                 {} = ?6
-             WHERE text_unit_code = ?7",
+             SET {} = ?1
+             WHERE text_unit_code = ?2",
             quote_identifier(updated_at_column)?
         );
         self.connection
-            .execute(
-                &sql,
-                params![
-                    update.embedding_model_code,
-                    update.embedding_version,
-                    update.embedding_text_hash,
-                    update.embedding_dimension,
-                    update.embedding,
-                    now_millis(),
-                    update.text_unit_code
-                ],
-            )
+            .execute(&sql, params![now_millis(), update.text_unit_code])
             .map_err(storage_error)?;
-        sync_text_unit_indexes_for_code(
+        upsert_vector_index_for_code(
             &self.connection,
             &plan,
-            &self.sqlite_extensions,
             &update.text_unit_code,
+            update.embedding_dimension,
+            &update.embedding,
         )?;
         Ok(())
     }
@@ -144,7 +127,7 @@ impl RagRetryIndexRepository for SqliteRagRepository {
             .ok_or(RagError::StorageBindingInvalid)?;
         let sql = format!(
             "UPDATE {table}
-             SET embedding_status = 'FAILED', {} = ?1
+             SET {} = ?1
              WHERE source_code = ?2 AND source_version = ?3 AND scope_type = ?4 AND scope_code = ?5"
             ,
             quote_identifier(updated_at_column)?

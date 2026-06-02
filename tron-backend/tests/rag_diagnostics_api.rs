@@ -117,12 +117,16 @@ async fn retry_api_rejects_unsupported_stage_and_rebuilds_indexes() {
         body["data"]["stageResults"][0]["stageId"],
         json!("fulltextIndex")
     );
+    let debug = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/rag/debug/source?workspaceCode=TRON_CORE&corpusId=project-doc&sourceCode=doc-api&sourceVersion=v1&scopeType=SPACE&scopeCode=TRON_CORE",
+        None,
+    )
+    .await;
     assert_eq!(
-        query_string(
-            &Connection::open(&database_url).unwrap(),
-            "SELECT fulltext_status FROM rag_project_doc_text_units WHERE source_code = 'doc-api'"
-        ),
-        "INDEXED"
+        response_json(debug).await["data"]["textUnits"][0]["fulltextStatus"],
+        json!("INDEXED")
     );
 }
 
@@ -197,12 +201,11 @@ fn seed_source_fixture(database_url: &str) {
         .execute(
             "INSERT INTO rag_project_doc_text_units (
                 text_unit_code, source_code, source_version, document_code, scope_type, scope_code,
-                unit_type, text, search_text, heading_path, ordinal, token_count,
-                content_hash, status, fulltext_status, embedding_status, metadata, created_at, updated_at
+                unit_type, text, heading_path, ordinal, token_count,
+                content_hash, status, metadata, created_at, updated_at
             )
             VALUES ('tu-api-1', 'doc-api', 'v1', 'DOC_API', 'SPACE', 'TRON_CORE', 'LEAF',
-                'Retry API text.', '', 'API', 0, 3, 'hash', 'ACTIVE', 'FAILED',
-                'FAILED', '{}', 1, 1)",
+                'Retry API text.', 'API', 0, 3, 'hash', 'ACTIVE', '{}', 1, 1)",
             [],
         )
         .unwrap();
@@ -217,21 +220,17 @@ fn seed_search_fixture(database_url: &str) {
                 text_unit_code, source_code, source_version, source_type, scope_type, scope_code,
                 source_status, title, source_content_hash, source_metadata, source_created_at,
                 source_updated_at, memory_type, memory_status, review_status, version, injectable,
-                unit_type, text, search_text, heading_path, ordinal, token_count,
-                content_hash, status, fulltext_status, embedding_status, metadata, created_at, updated_at
+                unit_type, text, heading_path, ordinal, token_count,
+                content_hash, status, metadata, created_at, updated_at
             )
             VALUES ('tu-trace-api-1', 'memory-trace-api', 'v1', 'PLAIN_TEXT', 'SPACE', 'TRON_CORE',
                 'ACTIVE', 'Trace memory rule', 'hash', '{}', 1, 1, 'RULE', 'ACTIVE', 'APPROVED', 'v1', 1,
                 'LEAF',
-                'Always cite sources in API answers.', 'Always cite sources in API answers.',
-                '', 0, 6, 'hash', 'ACTIVE', 'INDEXED', 'FAILED', '{}', 1, 1)",
+                'Always cite sources in API answers.',
+                '', 0, 6, 'hash', 'ACTIVE', '{}', 1, 1)",
             [],
         )
         .unwrap();
-}
-
-fn query_string(connection: &Connection, sql: &str) -> String {
-    connection.query_row(sql, [], |row| row.get(0)).unwrap()
 }
 
 fn query_i64(connection: &Connection, sql: &str) -> i64 {

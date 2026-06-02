@@ -1,7 +1,7 @@
 use std::{
     env, fs,
     path::{Path, PathBuf},
-    sync::{Arc, Mutex, OnceLock},
+    sync::OnceLock,
 };
 
 use rusqlite::{Connection, LoadExtensionGuard, OptionalExtension, params};
@@ -65,33 +65,11 @@ impl SqliteExtensionMode {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct SqliteExtensionCapabilities {
-    pub fts5: bool,
-    pub simple_tokenizer: bool,
-    pub jieba_query: bool,
-    pub sqlite_vec: bool,
-    pub simple_version: Option<String>,
-    pub vec_version: Option<String>,
-    pub last_error: Option<String>,
-}
-
-impl SqliteExtensionCapabilities {
-    pub fn extension_fulltext_available(&self) -> bool {
-        self.fts5
-    }
-
-    pub fn extension_vector_available(&self) -> bool {
-        self.sqlite_vec
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct SqliteExtensionContext {
     mode: SqliteExtensionMode,
     runtime_root: PathBuf,
     system: SqliteSystemInfo,
-    capabilities: Arc<Mutex<SqliteExtensionCapabilities>>,
 }
 
 impl SqliteExtensionContext {
@@ -103,7 +81,6 @@ impl SqliteExtensionContext {
             mode: SqliteExtensionMode::from_env(),
             runtime_root,
             system: SqliteSystemInfo::detect(),
-            capabilities: Arc::new(Mutex::new(SqliteExtensionCapabilities::default())),
         }
     }
 
@@ -115,39 +92,23 @@ impl SqliteExtensionContext {
         &self.system
     }
 
-    pub fn capabilities(&self) -> SqliteExtensionCapabilities {
-        self.capabilities.lock().unwrap().clone()
-    }
-
-    pub fn prepare_connection(
-        &self,
-        connection: &Connection,
-    ) -> Result<SqliteExtensionCapabilities, rusqlite::Error> {
+    pub fn prepare_connection(&self, connection: &Connection) -> Result<(), rusqlite::Error> {
         if self.mode == SqliteExtensionMode::Disabled {
-            let capabilities = probe_capabilities(connection);
-            *self.capabilities.lock().unwrap() = capabilities.clone();
-            return Ok(capabilities);
+            return Ok(());
         }
 
-        let mut last_error = None;
         if let Err(error) = self.load_simple(connection) {
-            last_error = Some(error.to_string());
             if self.mode == SqliteExtensionMode::Required {
                 return Err(error);
             }
         }
         if let Err(error) = self.load_vec(connection) {
-            last_error = Some(error.to_string());
             if self.mode == SqliteExtensionMode::Required {
                 return Err(error);
             }
         }
 
-        let mut capabilities = probe_capabilities(connection);
-        capabilities.last_error = last_error;
-        self.persist_capabilities(connection, &capabilities)?;
-        *self.capabilities.lock().unwrap() = capabilities.clone();
-        Ok(capabilities)
+        Ok(())
     }
 
     fn load_simple(&self, connection: &Connection) -> Result<(), rusqlite::Error> {
@@ -219,56 +180,6 @@ impl SqliteExtensionContext {
         copy_dir_once(&source_root, &target_root)?;
         Ok(target_root)
     }
-
-    fn persist_capabilities(
-        &self,
-        connection: &Connection,
-        capabilities: &SqliteExtensionCapabilities,
-    ) -> Result<(), rusqlite::Error> {
-        connection.execute_batch(
-            "CREATE TABLE IF NOT EXISTS rag_sqlite_extension_capabilities (
-                capability_code TEXT PRIMARY KEY,
-                status TEXT NOT NULL,
-                version TEXT,
-                detail_json TEXT NOT NULL DEFAULT '{}',
-                checked_at INTEGER NOT NULL
-            );",
-        )?;
-        let checked_at = now_millis();
-        for (code, status, version) in [
-            ("FTS5", capabilities.fts5, None),
-            (
-                "SQLITE_SIMPLE",
-                capabilities.simple_tokenizer,
-                capabilities.simple_version.as_deref(),
-            ),
-            ("JIEBA_QUERY", capabilities.jieba_query, None),
-            (
-                "SQLITE_VEC",
-                capabilities.sqlite_vec,
-                capabilities.vec_version.as_deref(),
-            ),
-            ("VEC0", capabilities.sqlite_vec, None),
-        ] {
-            connection.execute(
-                "INSERT INTO rag_sqlite_extension_capabilities (
-                    capability_code, status, version, detail_json, checked_at
-                )
-                VALUES (?1, ?2, ?3, '{}', ?4)
-                ON CONFLICT (capability_code) DO UPDATE SET
-                    status = excluded.status,
-                    version = excluded.version,
-                    checked_at = excluded.checked_at",
-                params![
-                    code,
-                    if status { "AVAILABLE" } else { "UNAVAILABLE" },
-                    version,
-                    checked_at
-                ],
-            )?;
-        }
-        Ok(())
-    }
 }
 
 trait AbsolutePath {
@@ -294,17 +205,16 @@ fn load_extension(connection: &Connection, path: &Path) -> Result<(), rusqlite::
     }
 }
 
-fn probe_capabilities(connection: &Connection) -> SqliteExtensionCapabilities {
-    SqliteExtensionCapabilities {
-        fts5: probe_fts5(connection),
-        simple_tokenizer: probe_simple_tokenizer(connection),
-        jieba_query: probe_jieba_query(connection),
-        sqlite_vec: probe_vec_version(connection).is_some(),
-        simple_version: Some(SQLITE_SIMPLE_VERSION.to_string())
-            .filter(|_| probe_simple_tokenizer(connection)),
-        vec_version: probe_vec_version(connection),
-        last_error: None,
-    }
+pub fn sqlite_fts5_available(connection: &Connection) -> bool {
+    probe_fts5(connection)
+}
+
+pub fn sqlite_simple_tokenizer_available(connection: &Connection) -> bool {
+    probe_simple_tokenizer(connection)
+}
+
+pub fn sqlite_vec_available(connection: &Connection) -> bool {
+    probe_vec_version(connection).is_some()
 }
 
 fn probe_fts5(connection: &Connection) -> bool {
@@ -425,13 +335,6 @@ fn copy_dir_once(source_root: &Path, target_root: &Path) -> Result<(), rusqlite:
     Ok(())
 }
 
-fn now_millis() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as i64)
-        .unwrap_or(0)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -456,12 +359,10 @@ mod tests {
             runtime_root: env::temp_dir()
                 .join(format!("tron-sqlite-extension-test-{}", std::process::id())),
             system: SqliteSystemInfo::detect(),
-            capabilities: Arc::new(Mutex::new(SqliteExtensionCapabilities::default())),
         };
 
-        let capabilities = context.prepare_connection(&connection).unwrap();
+        context.prepare_connection(&connection).unwrap();
 
-        assert!(capabilities.fts5);
-        assert_eq!(context.capabilities().fts5, capabilities.fts5);
+        assert!(sqlite_fts5_available(&connection));
     }
 }

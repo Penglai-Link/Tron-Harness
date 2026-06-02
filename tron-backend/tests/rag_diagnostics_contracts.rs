@@ -28,7 +28,7 @@ async fn debug_source_returns_warnings_without_embedding_payload() {
     let database_url = temp_database_path("rag-debug-source")
         .to_string_lossy()
         .to_string();
-    seed_project_doc_debug_fixture(&database_url);
+    seed_project_doc_debug_fixture(&database_url).await;
 
     let service = RagDiagnosticsService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
@@ -67,7 +67,7 @@ async fn retry_rebuilds_fulltext_and_vector_from_persisted_text_units() {
 
     let service = RagRetryIndexService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
-        FakeEmbeddingRuntime::fixed(vec![0.5, 0.25]),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25)),
     );
 
     let result = service
@@ -88,28 +88,25 @@ async fn retry_rebuilds_fulltext_and_vector_from_persisted_text_units() {
 
     assert_eq!(result.status, "success");
     assert_eq!(result.stage_results.len(), 2);
-    let connection = Connection::open(&database_url).unwrap();
-    assert_eq!(
-        query_string(
-            &connection,
-            "SELECT fulltext_status FROM rag_project_doc_text_units WHERE source_code = 'doc-retry'"
-        ),
-        "INDEXED"
+    let diagnostics = RagDiagnosticsService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
     );
-    assert_eq!(
-        query_string(
-            &connection,
-            "SELECT embedding_status FROM rag_project_doc_text_units WHERE source_code = 'doc-retry'"
-        ),
-        "INDEXED"
-    );
-    assert_eq!(
-        query_i64(
-            &connection,
-            "SELECT embedding_dimension FROM rag_project_doc_text_units WHERE source_code = 'doc-retry'"
-        ),
-        2
-    );
+    let debug = diagnostics
+        .debug_source(RagDebugSourceRequest {
+            workspace_code: "TRON_CORE".into(),
+            corpus_id: "project-doc".into(),
+            source_code: "doc-retry".into(),
+            source_version: "v1".into(),
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+            include_text_units: true,
+            include_warnings: false,
+        })
+        .unwrap();
+    assert_eq!(debug.text_units[0].fulltext_status, "INDEXED");
+    assert_eq!(debug.text_units[0].embedding_status, "INDEXED");
+    assert_eq!(debug.text_units[0].embedding_model_code, None);
 }
 
 #[tokio::test]
@@ -160,12 +157,12 @@ async fn search_trace_writes_lightweight_ttl_row_only_when_enabled() {
     let database_url = temp_database_path("rag-search-trace")
         .to_string_lossy()
         .to_string();
-    seed_search_fixture(&database_url);
+    seed_search_fixture(&database_url).await;
 
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(vec![1.0, 0.0]),
+        FakeEmbeddingRuntime::fixed(embedding_4096(1.0, 0.0)),
     );
     service
         .search(search_request(false))
@@ -223,7 +220,7 @@ async fn rag_ingest_events_use_safe_payload_and_publish_failure_is_non_blocking(
     let service = RagIngestService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(vec![0.5, 0.25]),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25)),
     )
     .with_event_bus(event_bus);
 
@@ -249,7 +246,7 @@ async fn rag_search_events_use_safe_payload_and_publish_failure_is_non_blocking(
     let database_url = temp_database_path("rag-search-events")
         .to_string_lossy()
         .to_string();
-    seed_search_fixture(&database_url);
+    seed_search_fixture(&database_url).await;
     let sink = Arc::new(RecordingEventSink::with_route_class(
         "rag-events",
         BusRouteClass::Audit,
@@ -263,7 +260,7 @@ async fn rag_search_events_use_safe_payload_and_publish_failure_is_non_blocking(
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(vec![1.0, 0.0]),
+        FakeEmbeddingRuntime::fixed(embedding_4096(1.0, 0.0)),
     )
     .with_event_bus(event_bus);
 
@@ -400,8 +397,27 @@ impl tron_backend::application::rag::RagSearchRuntime for FakeEmbeddingRuntime {
     }
 }
 
-fn seed_project_doc_debug_fixture(database_url: &str) {
+async fn seed_project_doc_debug_fixture(database_url: &str) {
     seed_retry_fixture(database_url);
+    let retry_service = RagRetryIndexService::new(
+        SqliteRagRepository::connect(database_url).unwrap(),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.0, 0.0)),
+    );
+    retry_service
+        .retry_index(RagRetryIndexRequest {
+            workspace_code: "TRON_CORE".into(),
+            corpus_id: "project-doc".into(),
+            source_code: "doc-debug".into(),
+            source_version: "v1".into(),
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+            stages: vec!["fulltextIndex".into(), "vectorIndex".into()],
+            embedding_model_code: Some("fake-embedding".into()),
+            user_code: "USR-AUTH-0001".into(),
+            agent_code: "AGENT_CODEX".into(),
+        })
+        .await
+        .unwrap();
     let connection = Connection::open(database_url).unwrap();
     connection
         .execute(
@@ -439,12 +455,12 @@ fn seed_retry_fixture(database_url: &str) {
         .execute(
             "INSERT INTO rag_project_doc_text_units (
                 text_unit_code, source_code, source_version, document_code, scope_type, scope_code,
-                unit_type, text, search_text, heading_path, ordinal, token_count,
-                content_hash, status, fulltext_status, embedding_status, metadata, created_at, updated_at
+                unit_type, text, heading_path, ordinal, token_count,
+                content_hash, status, metadata, created_at, updated_at
             )
             VALUES ('tu-retry-1', ?1, 'v1', 'DOC_DEBUG', 'SPACE', 'TRON_CORE', 'LEAF',
-                'Retry can rebuild persisted text only.', '', 'Debug', 0, 7,
-                'hash', 'ACTIVE', 'FAILED', 'FAILED', '{}', 1, 1)",
+                'Retry can rebuild persisted text only.', 'Debug', 0, 7,
+                'hash', 'ACTIVE', '{}', 1, 1)",
             params!["doc-retry"],
         )
         .unwrap();
@@ -465,43 +481,24 @@ fn seed_retry_fixture(database_url: &str) {
         .execute(
             "INSERT INTO rag_project_doc_text_units (
                 text_unit_code, source_code, source_version, document_code, scope_type, scope_code,
-                unit_type, text, search_text, heading_path, ordinal, token_count,
-                content_hash, status, fulltext_status, embedding_model_code, embedding_version,
-                embedding_text_hash, embedding_dimension, embedding, embedding_status, metadata,
-                created_at, updated_at
+                unit_type, text, heading_path, ordinal, token_count,
+                content_hash, status, metadata, created_at, updated_at
             )
             VALUES ('tu-debug-1', 'doc-debug', 'v1', 'DOC_DEBUG', 'SPACE', 'TRON_CORE',
-                'LEAF', 'Debug visible text.', 'Debug visible text.', 'Debug', 0, 3,
-                'hash', 'ACTIVE', 'INDEXED', 'fake-embedding', 'v1', 'hash', 2,
-                x'0000000000000000', 'INDEXED', '{}', 1, 1)",
+                'LEAF', 'Debug visible text.', 'Debug', 0, 3,
+                'hash', 'ACTIVE', '{}', 1, 1)",
             [],
         )
         .unwrap();
 }
 
-fn seed_search_fixture(database_url: &str) {
-    SqliteRagRepository::connect(database_url).expect("RAG schema should initialize");
-    let connection = Connection::open(database_url).unwrap();
-    connection
-        .execute(
-            "INSERT INTO rag_memory_text_units (
-                text_unit_code, source_code, source_version, source_type, scope_type, scope_code,
-                source_status, title, source_content_hash, source_metadata, source_created_at,
-                source_updated_at, memory_type, memory_status, review_status, version, injectable,
-                unit_type, text, search_text, heading_path, ordinal, token_count,
-                content_hash, status, fulltext_status, embedding_model_code, embedding_version,
-                embedding_text_hash, embedding_dimension, embedding, embedding_status, metadata,
-                created_at, updated_at
-            )
-            VALUES ('tu-trace-1', 'memory-trace', 'v1', 'PLAIN_TEXT', 'SPACE', 'TRON_CORE',
-                'ACTIVE', 'Trace memory rule', 'hash', '{}', 1, 1, 'RULE', 'ACTIVE', 'APPROVED', 'v1', 1,
-                'LEAF',
-                'Always cite sources in answers.', 'Always cite sources in answers.',
-                '', 0, 5, 'hash', 'ACTIVE', 'INDEXED', 'fake-embedding', 'v1',
-                'hash', 2, x'0000803F00000000', 'INDEXED', '{}', 1, 1)",
-            [],
-        )
-        .unwrap();
+async fn seed_search_fixture(database_url: &str) {
+    let service = RagIngestService::new(
+        SqliteRagRepository::connect(database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::fixed(embedding_4096(1.0, 0.0)),
+    );
+    service.ingest(ingest_request()).await.unwrap();
 }
 
 fn query_string(connection: &Connection, sql: &str) -> String {
@@ -510,6 +507,13 @@ fn query_string(connection: &Connection, sql: &str) -> String {
 
 fn query_i64(connection: &Connection, sql: &str) -> i64 {
     connection.query_row(sql, [], |row| row.get(0)).unwrap()
+}
+
+fn embedding_4096(first: f32, second: f32) -> Vec<f32> {
+    let mut embedding = vec![0.0; 4096];
+    embedding[0] = first;
+    embedding[1] = second;
+    embedding
 }
 
 fn temp_database_path(test_name: &str) -> PathBuf {

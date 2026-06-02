@@ -9,11 +9,10 @@ use crate::{
 
 use super::{
     SqliteRagRepository,
-    indexes::{delete_text_unit_indexes_for_source, sync_text_unit_indexes_for_source},
+    indexes::{delete_text_unit_indexes_for_source, sync_text_unit_indexes_for_units},
     ingest_values::{
         execute_upsert, json_string, now_millis, push_dynamic_text, push_embedded_source_values,
-        push_integer, push_optional_blob, push_optional_integer, push_optional_text,
-        push_source_domain_values, push_text,
+        push_integer, push_optional_text, push_source_domain_values, push_text,
     },
     sql_plan::{SqliteRagCorpusPlan, compile_sql_corpus_plan, quote_identifier},
     storage_error,
@@ -32,7 +31,6 @@ impl RagIngestRepository for SqliteRagRepository {
         delete_text_unit_indexes_for_source(
             &tx,
             &plan,
-            &self.sqlite_extensions,
             &command.source_code,
             &command.source_version,
             &command.scope.scope_type,
@@ -40,15 +38,7 @@ impl RagIngestRepository for SqliteRagRepository {
         )?;
         persist_source(&tx, &plan, &command)?;
         persist_text_units(&tx, &plan, &command)?;
-        sync_text_unit_indexes_for_source(
-            &tx,
-            &plan,
-            &self.sqlite_extensions,
-            &command.source_code,
-            &command.source_version,
-            &command.scope.scope_type,
-            &command.scope.scope_code,
-        )?;
+        sync_text_unit_indexes_for_units(&tx, &plan, &command.text_units)?;
         persist_warnings(&tx, &plan, &command)?;
         tx.commit().map_err(storage_error)
     }
@@ -228,12 +218,6 @@ fn persist_text_unit(
     push_text(
         &mut values,
         &plan.text_unit_columns,
-        "search_text",
-        &unit.search_text,
-    );
-    push_text(
-        &mut values,
-        &plan.text_unit_columns,
         "heading_path",
         &unit.heading_path,
     );
@@ -262,48 +246,6 @@ fn persist_text_unit(
         &plan.text_unit_columns,
         &plan.text_unit_status_column,
         &unit.status,
-    );
-    push_text(
-        &mut values,
-        &plan.text_unit_columns,
-        "fulltext_status",
-        &unit.fulltext_status,
-    );
-    push_optional_text(
-        &mut values,
-        &plan.text_unit_columns,
-        "embedding_model_code",
-        unit.embedding_model_code.as_deref(),
-    );
-    push_optional_text(
-        &mut values,
-        &plan.text_unit_columns,
-        "embedding_version",
-        unit.embedding_version.as_deref(),
-    );
-    push_optional_text(
-        &mut values,
-        &plan.text_unit_columns,
-        "embedding_text_hash",
-        unit.embedding_text_hash.as_deref(),
-    );
-    push_optional_integer(
-        &mut values,
-        &plan.text_unit_columns,
-        "embedding_dimension",
-        unit.embedding_dimension,
-    );
-    push_optional_blob(
-        &mut values,
-        &plan.text_unit_columns,
-        "embedding",
-        unit.embedding.as_deref(),
-    );
-    push_text(
-        &mut values,
-        &plan.text_unit_columns,
-        "embedding_status",
-        &unit.embedding_status,
     );
     if let Some(column) = plan.text_unit_metadata_column.as_deref() {
         push_dynamic_text(

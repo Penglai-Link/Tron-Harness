@@ -84,8 +84,8 @@ async fn search_api_returns_uniform_success_envelope_for_result_list() {
     let database_url = temp_database_path("rag-search-api-success")
         .to_string_lossy()
         .to_string();
-    let router = app_with_database(&database_url);
     seed_search_fixture(&database_url);
+    let router = app_with_database(&database_url);
 
     let response = authenticated_request(
         &router,
@@ -175,14 +175,14 @@ fn seed_search_fixture(database_url: &str) {
                 text_unit_code, source_code, source_version, source_type, scope_type, scope_code,
                 source_status, title, source_content_hash, source_metadata, source_created_at,
                 source_updated_at, memory_type, memory_status, review_status, version, injectable,
-                unit_type, text, search_text, heading_path, ordinal, token_count,
-                content_hash, status, fulltext_status, embedding_status, metadata, created_at, updated_at
+                unit_type, text, heading_path, ordinal, token_count,
+                content_hash, status, metadata, created_at, updated_at
             )
             VALUES (?1, ?2, 'v1', 'PLAIN_TEXT', 'SPACE', 'TRON_CORE',
                 'ACTIVE', 'API memory rule', 'hash', '{}', 1, 1, 'RULE', 'ACTIVE', 'APPROVED', 'v1', 1,
                 'LEAF',
-                'Always cite sources in API answers.', 'Always cite sources in API answers.',
-                '', 0, 6, 'hash', 'ACTIVE', 'INDEXED', 'FAILED', '{}', 1, 1)",
+                'Always cite sources in API answers.',
+                '', 0, 6, 'hash', 'ACTIVE', '{}', 1, 1)",
             params!["api-memory-rule:v1:0", "api-memory-rule"],
         )
         .unwrap();

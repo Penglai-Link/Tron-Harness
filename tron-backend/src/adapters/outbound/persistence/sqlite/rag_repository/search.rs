@@ -12,11 +12,12 @@ use crate::{
         RagSearchTraceWrite,
     },
     domain::rag::RagError,
+    shared::sqlite_extensions::{sqlite_fts5_available, sqlite_vec_available},
 };
 
 use super::{
     SqliteRagRepository,
-    indexes::{fts_table_name, supported_vector_dimensions, vec_table_name},
+    indexes::{fts_table_name, supported_vector_dimensions, table_exists, vec_table_name},
     sql_plan::{
         SqliteRagCorpusPlan, SqliteRagValueType, compile_sql_corpus_plan, quote_identifier,
     },
@@ -118,11 +119,11 @@ fn select_projection(
         text_expr("scope_type")?,
         text_expr("scope_code")?,
         text_expr("text")?,
-        text_expr("search_text")?,
+        search_text_expr(plan, retriever)?,
         text_expr("heading_path")?,
         text_expr("ordinal")?,
         text_expr("token_count")?,
-        optional_text_expr(plan, "embedding")?,
+        "NULL".into(),
         optional_source_expr(plan, "title", "NULL")?,
         optional_source_expr(plan, "source_type", "NULL")?,
         optional_source_column_expr(plan, plan.source_content_hash_column.as_deref(), "NULL")?,
@@ -152,14 +153,14 @@ fn from_sql(
 ) -> Result<String, RagError> {
     let text_table = quote_identifier(&plan.text_unit_table)?;
     let text_source = match retriever.kind {
-        SqliteRetrieverKind::FulltextFts5 => {
+        SqliteRetrieverKind::FulltextLike | SqliteRetrieverKind::FulltextFts5 => {
             let fts_table = quote_identifier(&fts_table_name(&plan.text_unit_table))?;
             format!(
                 "FROM {fts_table}
                  JOIN {text_table} tu ON tu.id = {fts_table}.rowid"
             )
         }
-        SqliteRetrieverKind::VectorVec0 => {
+        SqliteRetrieverKind::VectorCosine | SqliteRetrieverKind::VectorVec0 => {
             let dimension = query_embedding_dimension(query)?;
             let vec_table = quote_identifier(&vec_table_name(&plan.text_unit_table, dimension))?;
             format!(
@@ -167,7 +168,6 @@ fn from_sql(
                  JOIN {text_table} tu ON tu.id = vec.rowid"
             )
         }
-        _ => format!("FROM {text_table} tu"),
     };
     if let Some(source_table) = plan.source_table.as_deref() {
         let source_table = quote_identifier(source_table)?;
@@ -194,7 +194,7 @@ fn storage_score_expr(
             let fts_table = quote_identifier(&fts_table_name(&plan.text_unit_table))?;
             Ok((format!("-bm25({fts_table})"), Vec::new()))
         }
-        SqliteRetrieverKind::VectorVec0 => Ok((
+        SqliteRetrieverKind::VectorCosine | SqliteRetrieverKind::VectorVec0 => Ok((
             "1.0 - vec_distance_cosine(vec.embedding, ?)".into(),
             vec![SqlValue::Text(query_embedding_json(query)?)],
         )),
@@ -214,7 +214,7 @@ fn order_sql(
                 "ORDER BY -bm25({fts_table}) DESC, tu.source_code, tu.ordinal"
             ))
         }
-        SqliteRetrieverKind::VectorVec0 => {
+        SqliteRetrieverKind::VectorCosine | SqliteRetrieverKind::VectorVec0 => {
             query_embedding_json(query)?;
             Ok(
                 "ORDER BY vec_distance_cosine(vec.embedding, ?) ASC, tu.source_code, tu.ordinal"
@@ -230,43 +230,48 @@ fn order_params(
     retriever: SqliteRetrieverStrategy,
 ) -> Result<Vec<SqlValue>, RagError> {
     match retriever.kind {
-        SqliteRetrieverKind::VectorVec0 => Ok(vec![SqlValue::Text(query_embedding_json(query)?)]),
+        SqliteRetrieverKind::VectorCosine | SqliteRetrieverKind::VectorVec0 => {
+            Ok(vec![SqlValue::Text(query_embedding_json(query)?)])
+        }
         _ => Ok(Vec::new()),
     }
 }
 
 fn validate_retriever_available(
     repository: &SqliteRagRepository,
-    _plan: &SqliteRagCorpusPlan,
+    plan: &SqliteRagCorpusPlan,
     query: &RagRouteSearchQuery,
     retriever: SqliteRetrieverStrategy,
 ) -> Result<(), RagError> {
     match retriever.kind {
-        SqliteRetrieverKind::FulltextFts5 => {
-            if repository
-                .sqlite_extension_capabilities()
-                .extension_fulltext_available()
+        SqliteRetrieverKind::FulltextLike | SqliteRetrieverKind::FulltextFts5 => {
+            if sqlite_fts5_available(&repository.connection)
+                && table_exists(
+                    &repository.connection,
+                    &fts_table_name(&plan.text_unit_table),
+                )?
             {
                 Ok(())
             } else {
                 Err(RagError::SearchRouteUnavailable)
             }
         }
-        SqliteRetrieverKind::VectorVec0 => {
+        SqliteRetrieverKind::VectorCosine | SqliteRetrieverKind::VectorVec0 => {
             let dimension = query_embedding_dimension(query)?;
             if !supported_vector_dimensions().contains(&dimension) {
                 return Err(RagError::SearchRouteUnavailable);
             }
-            if repository
-                .sqlite_extension_capabilities()
-                .extension_vector_available()
+            if sqlite_vec_available(&repository.connection)
+                && table_exists(
+                    &repository.connection,
+                    &vec_table_name(&plan.text_unit_table, dimension),
+                )?
             {
                 Ok(())
             } else {
                 Err(RagError::SearchRouteUnavailable)
             }
         }
-        _ => Ok(()),
     }
 }
 
@@ -297,14 +302,14 @@ fn where_sql(
 
     match retriever.kind {
         SqliteRetrieverKind::FulltextLike => {
-            clauses.push("tu.fulltext_status = 'INDEXED'".to_string());
             let terms = search_terms(&query.query);
             if !terms.is_empty() {
+                let fts_table = quote_identifier(&fts_table_name(&plan.text_unit_table))?;
                 clauses.push(format!(
                     "({})",
                     terms
                         .iter()
-                        .map(|_| "LOWER(tu.search_text) LIKE ?".to_string())
+                        .map(|_| format!("LOWER({fts_table}.search_text) LIKE ?"))
                         .collect::<Vec<_>>()
                         .join(" OR ")
                 ));
@@ -316,7 +321,6 @@ fn where_sql(
             }
         }
         SqliteRetrieverKind::FulltextFts5 => {
-            clauses.push("tu.fulltext_status = 'INDEXED'".to_string());
             let fts_query = fts_query(&query.query);
             if !fts_query.is_empty() {
                 let fts_table = quote_identifier(&fts_table_name(&plan.text_unit_table))?;
@@ -324,13 +328,8 @@ fn where_sql(
                 params.push(SqlValue::Text(fts_query));
             }
         }
-        SqliteRetrieverKind::VectorCosine => {
-            clauses.push("tu.embedding_status = 'INDEXED'".to_string());
-        }
-        SqliteRetrieverKind::VectorVec0 => {
-            clauses.push("tu.embedding_status = 'INDEXED'".to_string());
-            clauses.push("tu.embedding_dimension = ?".to_string());
-            params.push(SqlValue::Integer(query_embedding_dimension(query)?));
+        SqliteRetrieverKind::VectorCosine | SqliteRetrieverKind::VectorVec0 => {
+            query_embedding_dimension(query)?;
         }
     }
 
@@ -380,7 +379,7 @@ fn sqlite_retriever_strategy(strategy_id: &str) -> Result<SqliteRetrieverStrateg
         }),
         "VECTOR" | "VECTOR_SQLITE_COSINE_V1" => Ok(SqliteRetrieverStrategy {
             kind: SqliteRetrieverKind::VectorCosine,
-            limits_in_application: true,
+            limits_in_application: false,
         }),
         "VECTOR_SQLITE_VEC0_COSINE_V1" => Ok(SqliteRetrieverStrategy {
             kind: SqliteRetrieverKind::VectorVec0,
@@ -436,19 +435,24 @@ fn text_expr(column: &str) -> Result<String, RagError> {
     Ok(format!("tu.{}", quote_identifier(column)?))
 }
 
+fn search_text_expr(
+    plan: &SqliteRagCorpusPlan,
+    retriever: SqliteRetrieverStrategy,
+) -> Result<String, RagError> {
+    match retriever.kind {
+        SqliteRetrieverKind::FulltextLike | SqliteRetrieverKind::FulltextFts5 => {
+            let fts_table = quote_identifier(&fts_table_name(&plan.text_unit_table))?;
+            Ok(format!("{fts_table}.search_text"))
+        }
+        SqliteRetrieverKind::VectorCosine | SqliteRetrieverKind::VectorVec0 => text_expr("text"),
+    }
+}
+
 fn source_expr(plan: &SqliteRagCorpusPlan, column: &str) -> Result<String, RagError> {
     if plan.source_table.is_some() {
         Ok(format!("src.{}", quote_identifier(column)?))
     } else {
         Ok(format!("tu.{}", quote_identifier(column)?))
-    }
-}
-
-fn optional_text_expr(plan: &SqliteRagCorpusPlan, column: &str) -> Result<String, RagError> {
-    if plan.text_unit_columns.contains(column) {
-        text_expr(column)
-    } else {
-        Ok("NULL".into())
     }
 }
 
@@ -512,25 +516,62 @@ fn json_from_row(
 }
 
 fn search_terms(query: &str) -> Vec<String> {
-    query
-        .split_whitespace()
-        .map(str::trim)
-        .filter(|term| !term.is_empty())
+    query_terms(query)
+        .into_iter()
         .map(|term| term.to_ascii_lowercase())
         .collect()
 }
 
 fn fts_query(query: &str) -> String {
-    query
-        .split_whitespace()
-        .map(str::trim)
-        .filter(|term| !term.is_empty())
+    query_terms(query)
+        .into_iter()
         .map(|term| {
             let escaped = term.replace('"', "\"\"");
             format!("\"{escaped}\"")
         })
         .collect::<Vec<_>>()
         .join(" OR ")
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum QueryTermClass {
+    Ascii,
+    Unicode,
+}
+
+fn query_terms(query: &str) -> Vec<String> {
+    let mut terms = Vec::new();
+    let mut current = String::new();
+    let mut current_class = None;
+    for character in query.chars() {
+        let class = if character.is_ascii_alphanumeric() || character == '_' {
+            Some(QueryTermClass::Ascii)
+        } else if character.is_alphanumeric() {
+            Some(QueryTermClass::Unicode)
+        } else {
+            None
+        };
+        let Some(class) = class else {
+            push_query_term(&mut terms, &mut current);
+            current_class = None;
+            continue;
+        };
+        if current_class.is_some_and(|existing| existing != class) {
+            push_query_term(&mut terms, &mut current);
+        }
+        current.push(character);
+        current_class = Some(class);
+    }
+    push_query_term(&mut terms, &mut current);
+    terms
+}
+
+fn push_query_term(terms: &mut Vec<String>, current: &mut String) {
+    let term = current.trim();
+    if !term.is_empty() {
+        terms.push(term.to_string());
+    }
+    current.clear();
 }
 
 fn query_embedding_dimension(query: &RagRouteSearchQuery) -> Result<i64, RagError> {

@@ -370,7 +370,7 @@ where
                 merge_search_filters(corpus, profile_filters, &route.filters)?;
             let (filters, source_version) =
                 filters_and_version(corpus, &route_profile_filters, request, compiled)?;
-            let rows = self.repository.search_route(RagRouteSearchQuery {
+            let query = RagRouteSearchQuery {
                 corpus_id: route.corpus_id.clone(),
                 route_id: route.route_id.clone(),
                 retriever: strategy.storage_retriever.to_string(),
@@ -382,7 +382,19 @@ where
                 scopes: search_scopes(&request.access_context),
                 filters,
                 limit: route.top_k.max(request.limit).max(1) * 4,
-            })?;
+            };
+            let rows = match self.repository.search_route(query) {
+                Ok(rows) => rows,
+                Err(RagError::SearchRouteUnavailable) if compiled.degrade_policy != "FAIL_FAST" => {
+                    warnings.push(json!({
+                        "routeId": route.route_id,
+                        "code": strategy.unavailable_code(),
+                        "message": strategy.unavailable_message()
+                    }));
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
             route_hits.extend(rank_route_rows(
                 rows,
                 route,

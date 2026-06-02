@@ -24,11 +24,11 @@ use tron_backend::{
 };
 
 #[tokio::test]
-async fn memory_plain_text_ingest_writes_source_text_unit_fulltext_and_vector_fields() {
+async fn memory_plain_text_ingest_writes_business_text_unit_and_sidecar_indexes() {
     let database_path = temp_database_path("rag-ingest-memory-success");
     let database_url = database_path.to_string_lossy().to_string();
     let repository = SqliteRagRepository::connect(&database_url).unwrap();
-    let embeddings = FakeEmbeddingRuntime::fixed(vec![0.25, 0.75]);
+    let embeddings = FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75));
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
@@ -53,15 +53,12 @@ async fn memory_plain_text_ingest_writes_source_text_unit_fulltext_and_vector_fi
     );
     let unit = query_unit(&connection, "rag_memory_text_units");
     assert_eq!(
-        unit["search_text"],
+        unit["text"],
         json!("Always cite source titles in RAG answers.")
     );
-    assert_eq!(unit["embedding_status"], json!("INDEXED"));
-    assert_eq!(
-        unit["embedding_model_code"],
-        json!("workspace-default-embedding")
-    );
-    assert_eq!(unit["embedding_dimension"], json!(2));
+    assert_index_payload_columns_absent(&connection, "rag_memory_text_units");
+    assert!(table_exists(&connection, "rag_memory_text_units_fts"));
+    assert!(table_exists(&connection, "rag_memory_text_units_vec_d4096"));
     assert_eq!(embeddings.last_model_code(), None);
     let source_metadata = serde_json::from_str::<Value>(&query_string(
         &connection,
@@ -124,7 +121,7 @@ async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(vec![0.1, 0.2, 0.3]).with_document(project_doc_markdown()),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)).with_document(project_doc_markdown()),
     );
 
     let result = service.ingest(project_doc_request("v1")).await.unwrap();
@@ -162,6 +159,12 @@ async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_
 
     let headings = query_text_unit_headings(&connection);
     assert_eq!(headings, vec!["RAG MVP", "RAG MVP > Write Path"]);
+    assert_index_payload_columns_absent(&connection, "rag_project_doc_text_units");
+    assert!(table_exists(&connection, "rag_project_doc_text_units_fts"));
+    assert!(table_exists(
+        &connection,
+        "rag_project_doc_text_units_vec_d4096"
+    ));
 }
 
 #[tokio::test]
@@ -173,7 +176,8 @@ async fn project_doc_markdown_heading_depth_controls_split_boundaries() {
     let depth_two_service = RagIngestService::new(
         depth_two_repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(vec![0.1]).with_document(project_doc_nested_markdown()),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.0))
+            .with_document(project_doc_nested_markdown()),
     );
 
     let depth_two_result = depth_two_service
@@ -195,7 +199,8 @@ async fn project_doc_markdown_heading_depth_controls_split_boundaries() {
     let depth_three_service = RagIngestService::new(
         depth_three_repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(vec![0.1]).with_document(project_doc_nested_markdown()),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.0))
+            .with_document(project_doc_nested_markdown()),
     );
 
     let depth_three_result = depth_three_service
@@ -219,7 +224,7 @@ async fn project_doc_ingest_rejects_direct_markdown_payload() {
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(vec![0.1, 0.2, 0.3]),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)),
     );
     let mut request = project_doc_request("v1");
     request.payload = json!({
@@ -243,7 +248,7 @@ async fn same_source_version_is_idempotent_and_multiple_versions_coexist() {
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(vec![1.0]),
+        FakeEmbeddingRuntime::fixed(embedding_4096(1.0, 0.0)),
     );
 
     service.ingest(memory_request("v1")).await.unwrap();
@@ -712,16 +717,11 @@ fn query_string(connection: &Connection, sql: &str) -> String {
 }
 
 fn query_unit(connection: &Connection, table: &str) -> Value {
-    let sql = format!(
-        "SELECT search_text, embedding_status, embedding_model_code, embedding_dimension FROM {table} ORDER BY ordinal"
-    );
+    let sql = format!("SELECT text FROM {table} ORDER BY ordinal");
     connection
         .query_row(&sql, [], |row| {
             Ok(json!({
-                "search_text": row.get::<_, String>(0)?,
-                "embedding_status": row.get::<_, String>(1)?,
-                "embedding_model_code": row.get::<_, String>(2)?,
-                "embedding_dimension": row.get::<_, i64>(3)?,
+                "text": row.get::<_, String>(0)?,
             }))
         })
         .unwrap()
@@ -750,6 +750,25 @@ fn query_skill_unit(connection: &Connection) -> Value {
         .unwrap()
 }
 
+fn assert_index_payload_columns_absent(connection: &Connection, table: &str) {
+    let columns = table_columns(connection, table);
+    for forbidden in [
+        "search_text",
+        "fulltext_status",
+        "embedding_model_code",
+        "embedding_version",
+        "embedding_text_hash",
+        "embedding_dimension",
+        "embedding",
+        "embedding_status",
+    ] {
+        assert!(
+            !columns.iter().any(|column| column == forbidden),
+            "{table} should not persist {forbidden} in the business table",
+        );
+    }
+}
+
 fn table_columns(connection: &Connection, table: &str) -> Vec<String> {
     let mut statement = connection
         .prepare(&format!("PRAGMA table_info({table})"))
@@ -759,6 +778,16 @@ fn table_columns(connection: &Connection, table: &str) -> Vec<String> {
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap()
+}
+
+fn table_exists(connection: &Connection, table: &str) -> bool {
+    connection
+        .query_row(
+            "SELECT 1 FROM sqlite_schema WHERE name = ?1 LIMIT 1",
+            [table],
+            |_| Ok(()),
+        )
+        .is_ok()
 }
 
 fn query_project_doc_source(connection: &Connection) -> Value {
@@ -790,6 +819,13 @@ fn query_text_unit_headings(connection: &Connection) -> Vec<String> {
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap()
+}
+
+fn embedding_4096(first: f32, second: f32) -> Vec<f32> {
+    let mut embedding = vec![0.0; 4096];
+    embedding[0] = first;
+    embedding[1] = second;
+    embedding
 }
 
 fn temp_database_path(test_name: &str) -> PathBuf {

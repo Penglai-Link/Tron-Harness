@@ -30,7 +30,7 @@ async fn memory_search_returns_active_scoped_fulltext_vector_hits_and_context_pa
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(vec![1.0, 0.0]),
+        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
     );
 
     let result = service
@@ -122,6 +122,33 @@ async fn skill_search_returns_scoped_fulltext_and_vector_hits() {
 }
 
 #[tokio::test]
+async fn default_fts5_search_tokenizes_mixed_identifier_and_chinese_query() {
+    let database_url = temp_database_path("rag-search-mixed-query")
+        .to_string_lossy()
+        .to_string();
+    seed_memory_fixture(&database_url).await;
+    let service = RagSearchService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new().with_embedding(embedding_1536(1.0, 0.0)),
+    );
+
+    let result = service
+        .search(search_request(
+            "memory-related-v1",
+            "retrieval是什么？",
+            "RESULT_LIST",
+            json!({ "memoryType": "RULE" }),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(result.hits.len(), 1);
+    assert_eq!(result.hits[0].source_code, "memory-rag-rule");
+    assert_eq!(result.hits[0].route_ids, vec!["memory-fulltext"]);
+}
+
+#[tokio::test]
 async fn project_doc_search_hydrates_heading_path_and_document_metadata() {
     let database_url = temp_database_path("rag-search-doc")
         .to_string_lossy()
@@ -130,7 +157,7 @@ async fn project_doc_search_hydrates_heading_path_and_document_metadata() {
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(vec![0.0, 1.0]),
+        FakeSearchRuntime::new().with_embedding(embedding_4096(0.0, 1.0)),
     );
 
     let result = service
@@ -156,9 +183,12 @@ async fn project_doc_search_hydrates_heading_path_and_document_metadata() {
         json!(["RAG MVP", "Write Path"])
     );
     assert!(
-        result.context_pack.unwrap().items[0]
-            .text
-            .contains("synchronous DAG")
+        result
+            .context_pack
+            .unwrap()
+            .items
+            .iter()
+            .any(|item| item.text.contains("synchronous DAG"))
     );
 }
 
@@ -169,7 +199,7 @@ async fn fusion_dedup_and_fake_rerank_produce_stable_ordering() {
         .to_string();
     seed_two_memory_fixture(&database_url).await;
     let runtime = FakeSearchRuntime::new()
-        .with_embedding(vec![1.0, 0.0])
+        .with_embedding(embedding_4096(1.0, 0.0))
         .with_rerank(vec![(1, 0.99), (0, 0.10)]);
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
@@ -303,7 +333,7 @@ async fn context_assembly_supports_all_required_strategy_shapes() {
         let service = RagSearchService::new(
             SqliteRagRepository::connect(&database_url).unwrap(),
             DefaultRagStrategyRegistry::default(),
-            FakeSearchRuntime::new().with_embedding(vec![0.0, 1.0]),
+            FakeSearchRuntime::new().with_embedding(embedding_4096(0.0, 1.0)),
         );
         let mut request = search_request(
             "project-doc-related-v1",
@@ -356,19 +386,51 @@ async fn vector_route_failure_degrades_to_fulltext_warning_without_trace_payload
 }
 
 #[tokio::test]
-async fn sqlite_extension_retrievers_return_storage_scored_hits_without_breaking_legacy_routes() {
+async fn vector_dimension_mismatch_degrades_to_fulltext_warning_without_route_error() {
+    let database_url = temp_database_path("rag-search-vector-dimension-warning")
+        .to_string_lossy()
+        .to_string();
+    seed_project_doc_fixture(&database_url).await;
+    let service = RagSearchService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new().with_embedding(embedding_1536(0.0, 1.0)),
+    );
+
+    let result = service
+        .search(search_request(
+            "project-doc-related-v1",
+            "sync dag",
+            "RESULT_LIST",
+            json!({ "repoCode": "REPO_TRON" }),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(result.hits.len(), 1);
+    assert_eq!(result.hits[0].route_ids, vec!["project-doc-fulltext"]);
+    assert!(
+        result
+            .warnings
+            .iter()
+            .any(|warning| warning["code"] == json!("RAG_VECTOR_ROUTE_UNAVAILABLE"))
+    );
+}
+
+#[tokio::test]
+async fn default_and_custom_extension_retrievers_return_storage_scored_hits() {
     let database_url = temp_database_path("rag-search-extension")
         .to_string_lossy()
         .to_string();
     seed_memory_fixture(&database_url).await;
     insert_extension_memory_profile(&database_url, "memory-extension-v1");
 
-    let legacy_service = RagSearchService::new(
+    let default_service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(vec![1.0, 0.0]),
+        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
     );
-    let legacy_result = legacy_service
+    let default_result = default_service
         .search(search_request(
             "memory-related-v1",
             "cite source titles",
@@ -378,14 +440,15 @@ async fn sqlite_extension_retrievers_return_storage_scored_hits_without_breaking
         .await
         .unwrap();
     assert_eq!(
-        legacy_result.hits[0].route_ids,
+        default_result.hits[0].route_ids,
         vec!["memory-fulltext", "memory-vector"]
     );
+    assert!(default_result.hits[0].score > 0.0);
 
     let extension_service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(vec![1.0, 0.0]),
+        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
     );
     let extension_result = extension_service
         .search(search_request(
@@ -407,53 +470,44 @@ async fn sqlite_extension_retrievers_return_storage_scored_hits_without_breaking
 }
 
 #[tokio::test]
-async fn sqlite_extension_indexes_backfill_existing_memory_text_units_on_connect() {
+async fn sqlite_extension_indexes_survive_reconnect_without_main_index_payload() {
     let database_url = temp_database_path("rag-search-extension-backfill")
         .to_string_lossy()
         .to_string();
-    SqliteRagRepository::connect(&database_url).unwrap();
-
-    let connection = Connection::open(&database_url).unwrap();
-    connection
-        .execute(
-            "INSERT INTO rag_memory_text_units (
-                text_unit_code, source_code, source_version, scope_type, scope_code,
-                source_type, source_status, title, source_metadata, source_created_at,
-                source_updated_at, memory_type, injectable, importance_score,
-                unit_type, text, search_text, heading_path, ordinal, token_count,
-                content_hash, status, fulltext_status, embedding_model_code,
-                embedding_version, embedding_text_hash, embedding_dimension, embedding,
-                embedding_status, metadata, created_at, updated_at
-            )
-            VALUES (
-                'manual-memory:v1:0', 'manual-memory', 'v1', 'USER', 'USR-LARGE-ID',
-                'PLAIN_TEXT', 'ACTIVE', 'Manual Memory', '{}', 1,
-                1, 'RULE', 1, 95,
-                'LEAF', 'Backfilled extension index memory block.',
-                'Backfilled extension index memory block.', '', 0, 6,
-                'hash', 'ACTIVE', 'INDEXED', 'workspace-default-embedding',
-                'v1', 'embedding-hash', 2, ?1,
-                'INDEXED', '{}', 1, 1
-            )",
-            params![encode_embedding(&[0.4, 0.6])],
-        )
-        .unwrap();
-    drop(connection);
+    seed_memory_fixture(&database_url).await;
 
     let repository = SqliteRagRepository::connect(&database_url).unwrap();
-    assert!(repository.sqlite_extension_capabilities().fts5);
+    assert!(
+        !repository
+            .table_columns("rag_memory_text_units")
+            .unwrap()
+            .contains("embedding")
+    );
     drop(repository);
+
+    let connection = Connection::open(&database_url).unwrap();
+    let sidecar_count = connection
+        .query_row(
+            "SELECT COUNT(*)
+             FROM sqlite_schema
+             WHERE name = 'rag_memory_text_units_vec_d4096'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .unwrap();
+    assert_eq!(sidecar_count, 1);
+    drop(connection);
     insert_extension_memory_profile(&database_url, "memory-extension-backfill-v1");
 
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(vec![0.4, 0.6]),
+        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
     );
     let result = service
         .search(search_request(
             "memory-extension-backfill-v1",
-            "backfilled memory",
+            "cite source titles",
             "RESULT_LIST",
             json!({ "memoryType": "RULE" }),
         ))
@@ -461,7 +515,7 @@ async fn sqlite_extension_indexes_backfill_existing_memory_text_units_on_connect
         .unwrap();
 
     assert_eq!(result.hits.len(), 1);
-    assert_eq!(result.hits[0].source_code, "manual-memory");
+    assert_eq!(result.hits[0].source_code, "memory-rag-rule");
     assert_eq!(result.hits[0].route_ids, vec!["memory-fts5", "memory-vec0"]);
 }
 
@@ -577,7 +631,7 @@ impl RagSearchRuntime for FakeSearchRuntime {
                 .lock()
                 .unwrap()
                 .pop_front()
-                .unwrap_or_else(|| Ok(vec![1.0, 0.0]))
+                .unwrap_or_else(|| Ok(embedding_4096(1.0, 0.0)))
         })
     }
 
@@ -656,7 +710,7 @@ async fn seed_memory_fixture(database_url: &str) {
     let service = RagIngestService::new(
         SqliteRagRepository::connect(database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(vec![1.0, 0.0]),
+        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
     );
     service
         .ingest(memory_request(
@@ -683,7 +737,7 @@ async fn seed_two_memory_fixture(database_url: &str) {
     let service = RagIngestService::new(
         SqliteRagRepository::connect(database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(vec![0.9, 0.1]),
+        FakeSearchRuntime::new().with_embedding(embedding_4096(0.9, 0.1)),
     );
     service
         .ingest(memory_request(
@@ -701,7 +755,7 @@ async fn seed_project_doc_fixture(database_url: &str) {
         SqliteRagRepository::connect(database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
         FakeSearchRuntime::new()
-            .with_embedding(vec![0.0, 1.0])
+            .with_embedding(embedding_4096(0.0, 1.0))
             .with_document(project_doc_markdown()),
     );
     service.ingest(project_doc_request()).await.unwrap();
@@ -848,11 +902,18 @@ fn insert_extension_memory_profile(database_url: &str, profile_id: &str) {
         .unwrap();
 }
 
-fn encode_embedding(values: &[f32]) -> Vec<u8> {
-    values
-        .iter()
-        .flat_map(|value| value.to_le_bytes())
-        .collect::<Vec<_>>()
+fn embedding_4096(first: f32, second: f32) -> Vec<f32> {
+    let mut embedding = vec![0.0; 4096];
+    embedding[0] = first;
+    embedding[1] = second;
+    embedding
+}
+
+fn embedding_1536(first: f32, second: f32) -> Vec<f32> {
+    let mut embedding = vec![0.0; 1536];
+    embedding[0] = first;
+    embedding[1] = second;
+    embedding
 }
 
 fn retrieval_profile(profile_id: &str, version: Option<&str>, config: Value) -> RagProfileRecord {

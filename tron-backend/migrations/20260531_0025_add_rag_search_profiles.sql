@@ -19,7 +19,7 @@ VALUES
         'memory-card',
         '["memory-card"]',
         'v1',
-        '{"routes":[{"routeId":"memory-fulltext","retriever":"FULLTEXT_SQLITE_LIKE_V1"},{"routeId":"memory-vector","retriever":"VECTOR_SQLITE_COSINE_V1"}],"fusionPolicy":{"type":"SUM_SCORE"},"dedupPolicy":{"type":"TEXT_UNIT"},"rerankPolicy":{"enabled":true},"hydratePolicy":{"type":"TEXT_UNIT"},"contextPolicy":{"supportedStrategies":["RESULT_LIST","TOKEN_BUDGET_PACK","MEMORY_CONTEXT_PACK","DOC_QA_CONTEXT_PACK"]}}',
+        '{"routes":[{"routeId":"memory-fulltext","retriever":"FULLTEXT_SQLITE_FTS5_SIMPLE_V1"},{"routeId":"memory-vector","retriever":"VECTOR_SQLITE_VEC0_COSINE_V1"}],"fusionPolicy":{"type":"SUM_SCORE"},"dedupPolicy":{"type":"TEXT_UNIT"},"rerankPolicy":{"enabled":true},"hydratePolicy":{"type":"TEXT_UNIT"},"contextPolicy":{"supportedStrategies":["RESULT_LIST","TOKEN_BUDGET_PACK","MEMORY_CONTEXT_PACK","DOC_QA_CONTEXT_PACK"]}}',
         '{}',
         'SKIP_VECTOR_ON_UNAVAILABLE',
         1772380800000,
@@ -32,7 +32,7 @@ VALUES
         'project-doc',
         '["project-doc"]',
         'v1',
-        '{"routes":[{"routeId":"project-doc-fulltext","retriever":"FULLTEXT_SQLITE_LIKE_V1"},{"routeId":"project-doc-vector","retriever":"VECTOR_SQLITE_COSINE_V1"}],"fusionPolicy":{"type":"SUM_SCORE"},"dedupPolicy":{"type":"TEXT_UNIT"},"rerankPolicy":{"enabled":true},"hydratePolicy":{"type":"TEXT_UNIT"},"contextPolicy":{"supportedStrategies":["RESULT_LIST","TOKEN_BUDGET_PACK","MEMORY_CONTEXT_PACK","DOC_QA_CONTEXT_PACK"]}}',
+        '{"routes":[{"routeId":"project-doc-fulltext","retriever":"FULLTEXT_SQLITE_FTS5_SIMPLE_V1"},{"routeId":"project-doc-vector","retriever":"VECTOR_SQLITE_VEC0_COSINE_V1"}],"fusionPolicy":{"type":"SUM_SCORE"},"dedupPolicy":{"type":"TEXT_UNIT"},"rerankPolicy":{"enabled":true},"hydratePolicy":{"type":"TEXT_UNIT"},"contextPolicy":{"supportedStrategies":["RESULT_LIST","TOKEN_BUDGET_PACK","MEMORY_CONTEXT_PACK","DOC_QA_CONTEXT_PACK"]}}',
         '{}',
         'SKIP_VECTOR_ON_UNAVAILABLE',
         1772380800000,
@@ -48,15 +48,3 @@ ON CONFLICT (profile_id) DO UPDATE SET
     filters_json = excluded.filters_json,
     degrade_policy = excluded.degrade_policy,
     updated_at = excluded.updated_at;
-
-CREATE INDEX IF NOT EXISTS idx_rag_memory_text_units_search_scope
-    ON rag_memory_text_units (source_version, scope_type, scope_code, status, fulltext_status);
-
-CREATE INDEX IF NOT EXISTS idx_rag_project_doc_text_units_search_scope
-    ON rag_project_doc_text_units (source_version, scope_type, scope_code, status, fulltext_status);
-
-CREATE INDEX IF NOT EXISTS idx_rag_memory_text_units_vector
-    ON rag_memory_text_units (embedding_model_code, embedding_version, embedding_status);
-
-CREATE INDEX IF NOT EXISTS idx_rag_project_doc_text_units_vector
-    ON rag_project_doc_text_units (embedding_model_code, embedding_version, embedding_status);
