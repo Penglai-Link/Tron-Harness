@@ -26,6 +26,20 @@ App management is implemented as a workspace-scoped registry under `/apps`, back
 - intent: Replace placeholder app UI and mock-only concepts with a stable workspace-scoped app registry that the task feature can trust.
 - outcome: `/apps` becomes a complete CRUD + lifecycle feature and task pages use active apps from the selected workspace.
 
+## Product Source Slices
+
+- selected_feature: `Feature: App Management`
+- selected_page: `Page: /apps`, `Page: /apps/new`, `Page: /apps/detail`, `Page: /apps/edit`
+- selected_interactions: `Interaction: Browse Workspace Apps`; `Interaction: Create App`; `Interaction: Edit App`; `Interaction: Archive And Restore App`
+- selected_rules: `Rule: Workspace Scoped App Registry`; `Rule: Active Apps Only In Task Selection`; `Rule: Runtime Role Narrowing`
+- selected_exceptions: `Exception: Invalid Task App Selection`; `Exception: Archived Apps Cannot Be Edited`
+- selected_acceptance_source: `Acceptance: App Management`
+- selected_workspace: `docs/features/app-management`
+- feature_inventory_summary: app management turns the former placeholder page into a real workspace-owned registry with task assignment integration
+- shared_requirement_summary: shell workspace context drives tenancy and task-management consumes active app options from the same workspace
+- dependency_map_summary: workspace-management supplies workspace selection and task-management consumes the active app registry contract
+- implementation_order_summary: registry CRUD and lifecycle land first, then task app-option integration and browser verification align to the live registry
+
 ## Scope Boundary
 
 ### Assumptions

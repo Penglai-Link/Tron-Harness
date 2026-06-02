@@ -26,6 +26,20 @@ Task Management evolves from the original persisted v1 loop into a superpower-al
 - intent: Replace the original generic task lifecycle with a role-aware status system keyed by `taskType` and `parentTaskCode`, while keeping the existing task pages, routes, and persistence loop lightweight.
 - outcome: The task board, task detail page, create flow, backend contracts, SQLite persistence, and mock/demo data all use the new `Feature | Bug` model, role-based allowed statuses, backend-owned default statuses, and development-stage backend task reset behavior.
 
+## Product Source Slices
+
+- selected_feature: `Feature: Task Management`
+- selected_page: `Page: /tasks`, `Page: /tasks/new`, `Page: /tasks/detail`
+- selected_interactions: `Interaction: Search Task Board`; `Interaction: Create Task`; `Interaction: Edit Task Detail`; `Interaction: Add Subtask`
+- selected_rules: `Rule: Task Role Status Matrix`; `Rule: Workspace Scoped Task Ownership`; `Rule: Parent Child Same Workspace`
+- selected_exceptions: `Exception: Archive Active Subtasks First`; `Exception: Invalid Workspace Or Assignee`
+- selected_acceptance_source: `Acceptance: Task Management`
+- selected_workspace: `docs/features/task-management`
+- feature_inventory_summary: task management keeps one lightweight task surface while replacing the old global lifecycle with role-aware status behavior
+- shared_requirement_summary: backend status rules and defaults stay authoritative; frontend reflects them through the existing routes and shared Toast feedback
+- dependency_map_summary: workspace-management supplies workspace context and user-management-model supplies effective-user semantics; shared-ui-feedback supplies user-visible toast feedback
+- implementation_order_summary: backend contract and persistence reset land first, then frontend task pages and browser smoke align to the new role-aware flow
+
 ## Scope Boundary
 
 ### Assumptions

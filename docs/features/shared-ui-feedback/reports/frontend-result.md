@@ -4,20 +4,11 @@
 
 Generated framework. Fill only outcome deltas, evidence links, blockers, and conclusion.
 
-## Task Results
+## Evidence Rows
 
-- @ref:tasks/frontend-task.md#FE-GREEN-01: GREEN implementation integrated; evidence: @ref:reports/agents/frontend-green-toast-provider.md#implementation-evidence and @ref:orchestration/integration-log.md#EVT-004; status: green_passed.
-
-## TDD Evidence
-
-- @ref:spec/test-plan.md#TDD-FEEDBACK-01: `ToastProvider`, `useToast`, shared export, and app root provider mount are implemented.
-- @ref:spec/test-plan.md#TDD-FEEDBACK-02: `/shared-shell-preview` `Export Scan` uses the shared toast API and renders the required status message.
-- @ref:spec/test-plan.md#TDD-FEEDBACK-03: shared toast default auto-dismiss and named dismiss control are implemented.
-- @ref:spec/test-plan.md#TDD-FEEDBACK-04: changed paths stayed frontend-only plus feature report fragments.
-
-## Worktree Evidence
-
-- @ref:orchestration/worktree-plan.md#agent-worktrees: `frontend/green-toast-provider` merged through @ref:orchestration/integration-log.md#EVT-004.
+- AC-FEEDBACK-01 | red: the app had no shared Toast provider, hook, or public export, so feature pages relied on one-off feedback state. | green: `ToastProvider`, `useToast`, the shared export, and the app-root mount are implemented and `rtk make fe-check` passes. | command_ref: CMD-FE-CHECK | browser: clicks=open `/shared-shell-preview`; inputs=none; network=no backend/API request required for provider wiring; feedback=shared feedback API is available to routed pages and compiles from the shared boundary; artifacts=`tron-frontend/src/shared/ui/Toast.tsx`, `tron-frontend/src/shared/index.ts`, `tron-frontend/src/app/App.tsx` | status: done.
+- AC-FEEDBACK-02 | red: clicking `Export Scan` produced no shared top-right toast. | green: `/shared-shell-preview` now triggers a shared toast with visible text and fixed top-right placement under explicit mock auth/data mode. | command_ref: CMD-FEEDBACK-BROWSER | browser: clicks=`Export Scan`; inputs=none; network=no backend/API request expected for frontend-only local toast state; feedback=`Export queued` and `Scan export requested` appear in a shared `role=\"status\"` toast near the top-right viewport; artifacts=`tron-frontend/src/domain/shared-shell/pages/SharedShellPreviewPage.tsx`, `tron-frontend/tests/shared-ui-feedback.spec.ts` | status: done.
+- AC-FEEDBACK-03 | red: no shared toast existed to prove auto-dismiss or manual dismissal. | green: focused Playwright proves the shared toast auto-dismisses after its configured duration and a second toast can be dismissed through the close control. | command_ref: CMD-FEEDBACK-BROWSER | browser: clicks=`Export Scan`, `Export Scan`, `Dismiss toast`; inputs=none; network=no backend/API request expected for lifecycle-only UI behavior; feedback=the first toast disappears automatically and the second toast is removed by the close control; artifacts=`tron-frontend/src/shared/ui/Toast.tsx`, `tron-frontend/tests/shared-ui-feedback.spec.ts` | status: done.
 
 ## Changed Paths
 
@@ -35,16 +26,6 @@ Generated framework. Fill only outcome deltas, evidence links, blockers, and con
 ## Command Cost Evidence
 
 - slow/browser commands: reuse existing VERIFY evidence unless missing, failed, stale, or explicitly requested.
-
-## Browser Verify Evidence
-
-- Not applicable.
-
-## Acceptance Mapping
-
-- @ref:spec/acceptance.md#AC-FEEDBACK-01: shared provider/hook/export evidence recorded in @ref:reports/agents/frontend-green-toast-provider.md#implementation-evidence.
-- @ref:spec/acceptance.md#AC-FEEDBACK-02: top-right shared toast evidence recorded in @ref:reports/agents/frontend-green-toast-provider.md#browser-evidence-notes.
-- @ref:spec/acceptance.md#AC-FEEDBACK-03: auto-dismiss and manual dismissal evidence recorded in @ref:reports/agents/frontend-green-toast-provider.md#browser-evidence-notes.
 
 ## Blockers
 

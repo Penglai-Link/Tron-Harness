@@ -297,7 +297,7 @@ test("chat agent and model selectors are linked and agent locks after first turn
   await expect(page.getByText("lock agent after first turn").first()).toBeVisible();
   await expect(page.getByText("Recorded in")).toBeVisible();
 
-  await expect(agentSelector).toBeDisabled();
+  await expect(agentSelector).toHaveCount(0);
   await expect(modelSelector).toBeEnabled();
 
   await modelSelector.click();
@@ -347,8 +347,9 @@ test("system agent sessions show history snapshot in context sidebar", async ({ 
   if ((await openRightSidebarButton.count()) > 0) {
     await openRightSidebarButton.first().click();
   }
-  await expect(page.getByText("System Agent History", { exact: true })).toBeVisible();
+  await expect(page.getByText("Run Context", { exact: true })).toBeVisible();
+  await expect(page.getByText("System Agent Session", { exact: true })).toBeVisible();
   await expect(page.getByText("thr_codex_mock_39", { exact: true })).toBeVisible();
-  await expect(page.getByText(/^U: Keep the refactor focused on the connector boundary\.$/)).toBeVisible();
-  await expect(page.getByText(/^A: I will keep persistence and runtime dispatch untouched/)).toBeVisible();
+  await expect(page.getByText("codex", { exact: true })).toBeVisible();
+  await expect(page.getByText(/rollout-\*?-thr_codex_mock_39\.jsonl/)).toBeVisible();
 });

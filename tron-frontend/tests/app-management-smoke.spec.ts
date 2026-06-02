@@ -95,6 +95,21 @@ const workspaceSwitcher = {
   }],
 };
 
+async function seedTronCoreShellSelection(page: Page) {
+  await page.addInitScript((snapshot) => {
+    window.localStorage.setItem("tron-app-shell", JSON.stringify({
+      state: {
+        openSections: { Core: true },
+        selectedPrimarySpaceId: "ENTERPRISE",
+        selectedSecondarySpaceId: "TRON_CORE",
+        sidebarCollapsed: false,
+        workspaceSwitcherSnapshot: snapshot,
+      },
+      version: 4,
+    }));
+  }, workspaceSwitcher);
+}
+
 function appRecord(values: Partial<AppRecord> & Pick<AppRecord, "appCode" | "name" | "workspaceCode">): AppRecord {
   return {
     appCode: values.appCode,
@@ -364,6 +379,7 @@ test("app management supports workspace list create detail edit archive restore 
     }),
   ];
   await routeApi(page, requests, apps);
+  await seedTronCoreShellSelection(page);
 
   await page.goto(`${frontendBaseUrl}/apps`);
 
@@ -462,6 +478,7 @@ test("app detail does not fall back to mock data when the API request fails", as
       "APP-TRON-API": 500,
     },
   });
+  await seedTronCoreShellSelection(page);
 
   await page.goto(`${frontendBaseUrl}/apps/detail?appCode=APP-TRON-API`);
 

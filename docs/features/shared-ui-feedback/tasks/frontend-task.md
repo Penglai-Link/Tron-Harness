@@ -4,6 +4,7 @@
 
 - feature_slug: shared-ui-feedback
 - status: done
+- execution_mode: hybrid
 - canonical_report_target: reports/frontend-result.md
 - main_agent_owned: false
 
@@ -11,11 +12,11 @@
 
 Frontend GREEN implementation starts only after `TEST-RED-01` is integrated into the multi-agent base branch.
 
-## Task Index
+## Task Rows
 
-| id | phase | owner | depends | scope | ac | status |
-| --- | --- | --- | --- | --- | --- | --- |
-| FE-GREEN-01 | green | frontend | TEST-RED-01 | tron-frontend/src/shared/ui/Toast.tsx; tron-frontend/src/shared/index.ts; tron-frontend/src/app/App.tsx; tron-frontend/src/domain/shared-shell/pages/SharedShellPreviewPage.tsx | AC-FEEDBACK-01, AC-FEEDBACK-02, AC-FEEDBACK-03 | done |
+- AC-FEEDBACK-01 | phase: green | owner: frontend | scope: `tron-frontend/src/shared/ui/Toast.tsx`; `tron-frontend/src/shared/index.ts`; `tron-frontend/src/app/App.tsx` | command_ref: CMD-FE-CHECK | status: done.
+- AC-FEEDBACK-02 | phase: green | owner: frontend | scope: `tron-frontend/src/shared/ui/Toast.tsx`; `tron-frontend/src/domain/shared-shell/pages/SharedShellPreviewPage.tsx` | command_ref: CMD-FEEDBACK-BROWSER | status: done.
+- AC-FEEDBACK-03 | phase: green | owner: frontend | scope: `tron-frontend/src/shared/ui/Toast.tsx`; `tron-frontend/src/domain/shared-shell/pages/SharedShellPreviewPage.tsx` | command_ref: CMD-FEEDBACK-BROWSER | status: done.
 
 ## Worktree Notes
 

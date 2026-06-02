@@ -8,7 +8,7 @@
 
 ## Proof Rows
 
-- AC-APP-01 | layer: browser | case: `/apps` reflects current workspace, filters, and no import actions | red: placeholder app page exposed import buttons and non-workspace fields | green: app-management Playwright smoke proves workspace scoping, filters, and missing import button | interaction: open `/apps` -> switch status/runtime filters -> observe only workspace rows and no import action -> network `GET /api/v1/apps/workspaces/TRON_CORE*` | command_ref: CMD-PW-APP.
+- AC-APP-01 | layer: browser | case: `/apps` reflects current workspace, filters, and no import actions | red: placeholder app page exposed import buttons and non-workspace fields | green: app-management Playwright smoke proves workspace scoping, filters, and missing import button | interaction: preload the persisted shell selection as `TRON_CORE` -> open `/apps` -> switch status/runtime filters -> observe only workspace rows and no import action -> network `GET /api/v1/apps/workspaces/TRON_CORE*` | command_ref: CMD-PW-APP.
 - AC-APP-02 | layer: browser | case: create app through `/apps/new` | red: no create page or persisted create flow existed | green: smoke creates `Playwright Runtime` and lands on detail | interaction: click `Create App` -> fill form -> save -> detail page visible -> network `POST /api/v1/apps/workspaces/TRON_CORE` | command_ref: CMD-PW-APP.
 - AC-APP-03 | layer: browser | case: detail + edit pages update app metadata | red: no detail/edit routes existed | green: smoke edits name/runtime role/branch/tags and detail reflects updates | interaction: open detail -> edit -> save -> detail shows updated values -> network `PATCH /api/v1/apps/{appCode}` | command_ref: CMD-PW-APP.
 - AC-APP-04 | layer: api | case: archive/restore removes and re-adds task options | red: no app lifecycle endpoints or app option registry existed | green: backend integration tests prove archive/restore and options exclusion/reinclusion | interaction: not applicable | command_ref: CMD-BE-TEST.
@@ -22,8 +22,8 @@
 
 - CMD-BE-TEST | command: make be-test | cost: medium | when: green/verify | rerun: affected backend or API validation changes | expect: backend app + task integration tests pass.
 - CMD-FE-CHECK | command: make fe-check | cost: medium | when: green/verify | rerun: affected frontend route, model, or component changes | expect: TypeScript check and production build pass.
-- CMD-PW-APP | command: cd tron-frontend && npx playwright test tests/app-management-smoke.spec.ts | cost: slow/browser | when: verify | rerun: review-if-stale | expect: real browser flow for app list/create/detail/edit/archive/restore.
-- CMD-PW-TASK | command: cd tron-frontend && npx playwright test tests/task-management-smoke.spec.ts | cost: slow/browser | when: verify | rerun: review-if-stale | expect: task selector migration, legacy app behavior, and workspace-scoped app requests.
+- CMD-PW-APP | command: rtk make fe-test TEST='tests/app-management-smoke.spec.ts' | cost: slow/browser | when: verify | rerun: review-if-stale | expect: real browser flow for app list/create/detail/edit/archive/restore.
+- CMD-PW-TASK | command: rtk make fe-test TEST='tests/task-management-smoke.spec.ts' | cost: slow/browser | when: verify | rerun: review-if-stale | expect: task selector migration, legacy app behavior, and workspace-scoped app requests.
 - CMD-DOC-VALIDATE | command: python3 /Users/clouds3n/.agents/skills/eliteforge-codex-superpower/scripts/validate_feature_docs.py docs/features/app-management --phase final | cost: fast | when: final | rerun: after doc changes | expect: AC workspace passes validator.
 
 ## Evidence Rules

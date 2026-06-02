@@ -4,40 +4,11 @@
 
 Generated framework. Fill only worktree deltas, integration result, blockers, and conclusion.
 
-## Task Results
+## Evidence Rows
 
-- @ref:tasks/test-task.md#TEST-RED-01: done.
-- @ref:tasks/frontend-task.md#FE-GREEN-01: done.
-- @ref:tasks/test-task.md#TEST-VERIFY-01: done.
-- @ref:tasks/review-task.md#REVIEW-01: done.
-
-## TDD Evidence
-
-- @ref:spec/test-plan.md#TDD-FEEDBACK-01: branch and worktree evidence complete.
-- @ref:spec/test-plan.md#TDD-FEEDBACK-02: branch and worktree evidence complete.
-- @ref:spec/test-plan.md#TDD-FEEDBACK-03: branch and worktree evidence complete.
-- @ref:spec/test-plan.md#TDD-FEEDBACK-04: branch and worktree evidence complete.
-
-## Worktree Registry
-
-- @ref:orchestration/worktree-plan.md#agent-worktrees: `test/red-feedback-runtime`, `frontend/green-toast-provider`, `test/verify-feedback-runtime`, and `review/final-review` completed and merged.
-
-## Branch Registry
-
-- @ref:orchestration/worktree-plan.md#multi-agent-base-branch: `feature/clouds3n/shared-ui-feedback/base` provisioned at @ref:orchestration/integration-log.md#EVT-002 and integrated RED at @ref:orchestration/integration-log.md#EVT-003.
-
-## Integration Evidence
-
-- @ref:orchestration/integration-log.md#EVT-001: spec planning validation passed.
-- @ref:orchestration/integration-log.md#EVT-002: Lite Spec base worktree provisioned.
-- @ref:orchestration/integration-log.md#EVT-003: RED worker branch merged into base.
-- @ref:orchestration/integration-log.md#EVT-004: GREEN frontend branch merged into base.
-- @ref:orchestration/integration-log.md#EVT-005: VERIFY worker branch merged into base.
-- @ref:orchestration/integration-log.md#EVT-006: REVIEW worker branch merged into base.
-
-## Validation Evidence
-
-- @ref:spec/test-plan.md#command-index: `rtk make fe-check` and focused Playwright VERIFY passed; see @ref:orchestration/integration-log.md#validation-after-integration.
+- AC-FEEDBACK-01 | red: no worker flow existed to prove the shared provider, hook, export, and app-root mount. | green: RED, GREEN, VERIFY, and REVIEW worktrees were created, merged, and recorded for the shared feedback API surface on the base branch. | command_ref: CMD-DOCS-FINAL | browser: clicks=open `/shared-shell-preview`; inputs=none; network=no backend/API request involved in worktree orchestration; feedback=worktree sequencing now maps cleanly to the shared feedback API proof chain; artifacts=`orchestration/worktree-plan.md`, `orchestration/integration-log.md` | status: done.
+- AC-FEEDBACK-02 | red: the worktree registry had no concrete browser-evidence path for shared top-right toast placement. | green: the RED, VERIFY, and REVIEW worktrees now all point at the focused browser proof for `Export Scan` and top-right toast placement. | command_ref: CMD-FEEDBACK-BROWSER | browser: clicks=`Export Scan`; inputs=none; network=no backend/API request expected; feedback=browser evidence is traceable from worktree planning through verify and review artifacts; artifacts=`orchestration/worktree-plan.md`, `orchestration/integration-log.md`, `reports/agents/test-verify-feedback-runtime.md` | status: done.
+- AC-FEEDBACK-03 | red: the worktree chain had no concrete lifecycle proof for auto-dismiss and manual dismissal. | green: worktree and integration logs now trace the focused browser proof covering auto-dismiss and manual-dismiss behavior end to end. | command_ref: CMD-FEEDBACK-BROWSER | browser: clicks=`Export Scan`, `Export Scan`, `Dismiss toast`; inputs=none; network=no backend/API request expected; feedback=verify and review artifacts both reference the lifecycle proof for shared toast dismissal behavior; artifacts=`orchestration/worktree-plan.md`, `orchestration/integration-log.md`, `reports/agents/test-verify-feedback-runtime.md` | status: done.
 
 ## Changed Paths
 
@@ -54,16 +25,6 @@ Generated framework. Fill only worktree deltas, integration result, blockers, an
 - `rtk make fe-check`
 - `rtk npm --prefix tron-frontend exec playwright -- test shared-ui-feedback.spec.ts --reporter=line`
 - `rtk git diff --check`
-
-## Browser Verify Evidence
-
-- Browser evidence is recorded in @ref:reports/test-report.md#browser-verify-evidence and @ref:reports/agents/test-verify-feedback-runtime.md#browser-verify-evidence.
-
-## Acceptance Mapping
-
-- @ref:spec/acceptance.md#AC-FEEDBACK-01: all planned worktrees merged.
-- @ref:spec/acceptance.md#AC-FEEDBACK-02: all planned worktrees merged.
-- @ref:spec/acceptance.md#AC-FEEDBACK-03: all planned worktrees merged.
 
 ## Blockers
 

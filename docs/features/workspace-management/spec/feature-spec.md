@@ -22,6 +22,20 @@
 
 Tron needs `/admin/workspace` to become a real admin console for a single hierarchiable workspace tree so operators can create and maintain workspaces, move them while enforcing structure rules, archive or restore subtrees, manage direct-user and role-based access grants, and inspect the effective accessible-user set produced by those grants.
 
+## Product Source Slices
+
+- selected_feature: `Feature: Workspace Management`
+- selected_page: `Page: /admin/workspace`; `Page: shell workspace switcher`
+- selected_interactions: `Interaction: Create Root Workspace`; `Interaction: Create Child Workspace`; `Interaction: Move Workspace`; `Interaction: Replace Access Grants`
+- selected_rules: `Rule: Three Level Workspace Tree`; `Rule: Effective User Derivation`; `Rule: Archive Restore Subtree`
+- selected_exceptions: `Exception: Invalid Parent Move`; `Exception: Archived Ancestor Blocks Restore`
+- selected_acceptance_source: `Acceptance: Workspace Management`
+- selected_workspace: `docs/features/workspace-management`
+- feature_inventory_summary: workspace management owns the canonical admin tree and the selector projections consumed by the shell and workspace-scoped features
+- shared_requirement_summary: authenticated admin shell and shared response envelope stay stable while selector projections replace shell mocks
+- dependency_map_summary: auth and user-management-model feed permissions and access derivation; task-management and other workspace-scoped features consume the selector outputs
+- implementation_order_summary: backend tree and access contracts land first, then admin UI and shell switcher wiring align to the live workspace projections
+
 ## Scope Boundary
 
 This slice owns the full-stack workspace-management boundary. It includes the `/admin/workspace` admin console plus selector-focused workspace projections consumed by task dropdowns and the shell workspace switcher. It does not introduce broader authorization policy or resource-binding inheritance features outside those projections.

@@ -1058,18 +1058,18 @@ test("workspace management page supports hierarchy and separated access grants",
   await expect(page).toHaveURL(workspaceUrl);
   await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Platform");
 
-  await page.getByRole("button", { name: "New", exact: true }).first().click();
+  await page.getByRole("button", { name: "Root", exact: true }).click();
   await page.getByRole("textbox", { name: "Workspace name" }).fill("Risk");
   await page.getByRole("textbox", { name: "Workspace description" }).fill("Risk governance workspace");
-  await page.getByRole("textbox", { name: "Workspace name" }).locator("xpath=ancestor::section[1]").getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).first().click();
   await expect(sharedToastMessage(page, "Workspace WS-0000000000000001 created")).toBeVisible();
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces" && request.method === "POST")).toBe(true);
   await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk");
 
-  await page.getByRole("tab", { name: "Create", exact: true }).click();
+  await page.getByRole("button", { name: "Child", exact: true }).click();
   await page.getByRole("textbox", { name: "Workspace name" }).fill("Risk Review");
   await page.getByRole("textbox", { name: "Workspace description" }).fill("Child workspace for risk reviews");
-  await page.getByRole("textbox", { name: "Workspace name" }).locator("xpath=ancestor::section[1]").getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).first().click();
   await expect(sharedToastMessage(page, "Workspace WS-0000000000000002 created")).toBeVisible();
   await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk Review");
 

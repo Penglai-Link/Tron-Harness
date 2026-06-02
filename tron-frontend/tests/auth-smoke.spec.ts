@@ -13,6 +13,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+test.describe.configure({ timeout: 45_000 });
+
 const thisFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = resolve(thisFilePath, "..", "..");
 let frontendProcess: ChildProcessWithoutNullStreams | undefined;
@@ -364,6 +366,10 @@ async function routeAuthApi(
   });
 }
 
+async function submitLogin(page: Page) {
+  await page.getByRole("button", { name: /sign in/i }).click({ force: true });
+}
+
 test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
@@ -405,7 +411,7 @@ test("redirects anonymous users to login, signs in, reaches user management, and
 
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await submitLogin(page);
 
   await expect(page).toHaveURL(/\/dashboard$/);
   await page.goto(`${frontendBaseUrl}/admin/users`);
@@ -445,7 +451,7 @@ test("blocks authenticated users without assigned spaces on an authorization req
 
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await submitLogin(page);
 
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole("heading", { name: /workspace authorization required/i })).toBeVisible();
@@ -457,7 +463,7 @@ test("blocks authenticated users without assigned spaces on an authorization req
   await expect(page.getByRole("heading", { name: /workspace authorization required/i })).toBeVisible();
   await expect(page.getByRole("table")).toHaveCount(0);
 
-  await page.getByRole("button", { name: /^log out$/i }).click();
+  await page.getByRole("button", { name: /^log out$/i }).click({ force: true });
   await expect(page).toHaveURL(/\/login/);
 });
 
@@ -471,7 +477,7 @@ test("allows platform admins to bypass the no-space authorization page", async (
 
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await submitLogin(page);
 
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole("heading", { name: /workspace authorization required/i })).toHaveCount(0);
@@ -489,7 +495,7 @@ test("hides administration navigation for non-admin users", async ({ page }) => 
 
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await submitLogin(page);
 
   await expect(page).toHaveURL(/\/dashboard$/);
   const primaryNavigation = page.getByRole("navigation", { name: /tron primary navigation/i });

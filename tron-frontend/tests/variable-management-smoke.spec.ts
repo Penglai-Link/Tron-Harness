@@ -123,6 +123,21 @@ const workspaceLineages = {
   ],
 } as const;
 
+async function seedTronCoreShellSelection(page: Page) {
+  await page.addInitScript((snapshot) => {
+    window.localStorage.setItem("tron-app-shell", JSON.stringify({
+      state: {
+        openSections: { Core: true },
+        selectedPrimarySpaceId: "ENTERPRISE",
+        selectedSecondarySpaceId: "TRON_CORE",
+        sidebarCollapsed: false,
+        workspaceSwitcherSnapshot: snapshot,
+      },
+      version: 4,
+    }));
+  }, workspaceSwitcher);
+}
+
 function successEnvelope(data: unknown) {
   return { code: "SUCCESS", message: "ok", data };
 }
@@ -405,6 +420,7 @@ test("variable management supports inheritance override revert local CRUD and wo
     },
   ];
   await routeApi(page, requests, variables);
+  await seedTronCoreShellSelection(page);
 
   await page.goto(`${frontendBaseUrl}/variables`);
 
@@ -441,7 +457,7 @@ test("variable management supports inheritance override revert local CRUD and wo
   ))).toBe(true);
   await expect(variableInspector.getByText("Inherited From", { exact: true })).toBeVisible();
 
-  await variableInspector.getByRole("button", { name: "New", exact: true }).click();
+  await page.getByRole("button", { name: "New", exact: true }).first().click();
   await page.getByLabel("Variable key").fill("MAX_CONTEXT_WINDOW");
   await page.getByLabel("Variable value").fill("128000");
   await page.getByLabel("Variable description").fill("Local window size");

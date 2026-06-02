@@ -93,6 +93,21 @@ const workspaceSwitcher = {
   }],
 } as const;
 
+async function seedTronCoreShellSelection(page: Page) {
+  await page.addInitScript((snapshot) => {
+    window.localStorage.setItem("tron-app-shell", JSON.stringify({
+      state: {
+        openSections: { Core: true },
+        selectedPrimarySpaceId: "ENTERPRISE",
+        selectedSecondarySpaceId: "TRON_CORE",
+        sidebarCollapsed: false,
+        workspaceSwitcherSnapshot: snapshot,
+      },
+      version: 4,
+    }));
+  }, workspaceSwitcher);
+}
+
 function successEnvelope(data: unknown) {
   return { code: "SUCCESS", message: "ok", data };
 }
@@ -477,6 +492,7 @@ test("automation management supports workspace-scoped list create detail execute
     workspaceCode: "TRON_CORE",
   }];
   await routeApi(page, requests, automations, executions);
+  await seedTronCoreShellSelection(page);
 
   await page.goto(`${frontendBaseUrl}/automations`);
   await expect(page.getByRole("heading", { name: "Automations" })).toBeVisible();

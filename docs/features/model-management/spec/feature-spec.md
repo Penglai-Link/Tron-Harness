@@ -34,6 +34,20 @@ Platform and workspace verify actions must always validate the current form payl
 
 Platform defaults and workspace defaults are keyed by the coarse `modelType` slot, not by fine-grained capability labels such as `Text Generation` or `Deep Thinking`. Multiple capability labels may map into the same `modelType` slot. If a platform `modelType` slot has no explicit default yet, the first enabled platform root model created in that slot must materialize the platform default assignment automatically.
 
+## Product Source Slices
+
+- selected_feature: `Feature: Model Management`
+- selected_page: `Page: /models`; `Page: /models/detail`; `Page: /models/new`; `Page: /settings/models`
+- selected_interactions: `Interaction: Browse Effective Workspace Models`; `Interaction: Edit Inherited Model`; `Interaction: Verify Draft Without Save`; `Interaction: Set Workspace Default`
+- selected_rules: `Rule: Local Inherited Override Semantics`; `Rule: Slot Based Defaults`; `Rule: Draft First Verify`
+- selected_exceptions: `Exception: Inherited Rows Cannot Be Deleted`; `Exception: Disable Does Not Relabel Source`; `Exception: Revert Returns To Inherited`
+- selected_acceptance_source: `Acceptance: Model Management`
+- selected_workspace: `docs/features/model-management`
+- feature_inventory_summary: model management resolves one effective workspace catalog while preserving platform authoring as the upstream source of truth
+- shared_requirement_summary: workspace-management supplies active workspace context and shared-ui-feedback supplies toast feedback for verify and mutation actions
+- dependency_map_summary: platform model settings feed workspace-effective model resolution, and workspace defaults feed later agent consumers
+- implementation_order_summary: backend resolution and default-slot semantics land first, then workspace and platform pages align their visible source labels and verify flows
+
 ## Scope Boundary
 
 This feature evolution rewrites the model-management contract across backend resolution logic, frontend workspace model pages, mock data, migrations, focused API tests, browser smoke coverage, and the feature docs themselves.

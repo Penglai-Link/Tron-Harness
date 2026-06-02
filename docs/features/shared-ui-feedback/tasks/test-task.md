@@ -4,6 +4,7 @@
 
 - feature_slug: shared-ui-feedback
 - status: done
+- execution_mode: hybrid
 - canonical_report_target: reports/test-report.md
 - main_agent_owned: false
 
@@ -11,12 +12,11 @@
 
 RED rows create tests before production behavior. GREEN rows depend on matching RED evidence. VERIFY records runtime evidence after GREEN integration.
 
-## Task Index
+## Task Rows
 
-| id | phase | owner | depends | scope | ac | status |
-| --- | --- | --- | --- | --- | --- | --- |
-| TEST-RED-01 | red | test | none | tron-frontend/tests/shared-ui-feedback.spec.ts | AC-FEEDBACK-01, AC-FEEDBACK-02, AC-FEEDBACK-03 | done |
-| TEST-VERIFY-01 | verify | test | FE-GREEN-01 | tron-frontend/tests/shared-ui-feedback.spec.ts; docs/features/shared-ui-feedback/reports/test-report.md | AC-FEEDBACK-01, AC-FEEDBACK-02, AC-FEEDBACK-03 | done |
+- AC-FEEDBACK-01 | phase: tdd | owner: test | scope: `tron-frontend/tests/shared-ui-feedback.spec.ts` provider, export, and root-mount assertions | command_ref: CMD-FE-CHECK | status: done.
+- AC-FEEDBACK-02 | phase: tdd | owner: test | scope: `tron-frontend/tests/shared-ui-feedback.spec.ts` top-right shared toast runtime assertions | command_ref: CMD-FEEDBACK-BROWSER | status: done.
+- AC-FEEDBACK-03 | phase: tdd | owner: test | scope: `tron-frontend/tests/shared-ui-feedback.spec.ts` auto-dismiss and manual-dismiss runtime assertions | command_ref: CMD-FEEDBACK-BROWSER | status: done.
 
 ## Worktree Notes
 

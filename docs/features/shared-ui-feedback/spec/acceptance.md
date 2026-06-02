@@ -7,6 +7,12 @@
 - best_practice_defaults_applied: yes
 - user_confirmation_status: approved_with_defaults
 
+## Acceptance Index
+
+- AC-FEEDBACK-01 [must] [business] The application exposes a shared Toast provider and hook for feature pages through the shared UI boundary; proof: @ref:spec/test-plan.md#proof-rows.
+- AC-FEEDBACK-02 [must] [business] User interaction feedback renders as a top-right floating toast using shared UI styles; proof: @ref:spec/test-plan.md#proof-rows.
+- AC-FEEDBACK-03 [must] [business] Toast messages automatically disappear by default and support manual dismissal; proof: @ref:spec/test-plan.md#proof-rows.
+
 ## Acceptance Criteria
 
 | id | criterion | evidence type | expected evidence | priority |
@@ -65,3 +71,7 @@ Not applicable.
 | Shared provider/hook implementation. | AC-FEEDBACK-01 | TDD-FEEDBACK-01 | RED type/source assertion fails before implementation; GREEN `rtk make fe-check` passes. |
 | Shared action displays top-right toast. | AC-FEEDBACK-02 | TDD-FEEDBACK-02 | RED Playwright assertion fails before implementation; GREEN browser evidence records click and visible toast placement. |
 | Auto-dismiss and manual dismissal. | AC-FEEDBACK-03 | TDD-FEEDBACK-03 | RED Playwright assertion fails before implementation; GREEN browser evidence records disappearance after timeout and close control behavior. |
+
+## Open Decisions
+
+- None.

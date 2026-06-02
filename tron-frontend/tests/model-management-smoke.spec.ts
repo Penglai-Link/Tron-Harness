@@ -1294,7 +1294,23 @@ async function routeApi(page: Page, configure?: (state: ReturnType<typeof create
   });
 }
 
+async function seedTronCoreShellSelection(page: Page) {
+  await page.addInitScript((snapshot) => {
+    window.localStorage.setItem("tron-app-shell", JSON.stringify({
+      state: {
+        openSections: { Core: true },
+        selectedPrimarySpaceId: "ENTERPRISE",
+        selectedSecondarySpaceId: "TRON_CORE",
+        sidebarCollapsed: false,
+        workspaceSwitcherSnapshot: snapshot,
+      },
+      version: 4,
+    }));
+  }, workspaceSwitcher);
+}
+
 async function openModelsPage(page: Page) {
+  await seedTronCoreShellSelection(page);
   await page.goto(`${frontendBaseUrl}/models`);
   await expect(page.getByRole("heading", { name: "Models" })).toBeVisible();
 }

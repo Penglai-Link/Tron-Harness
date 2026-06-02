@@ -4,6 +4,7 @@
 
 - feature_slug: shared-ui-feedback
 - status: not_applicable
+- execution_mode: solo
 - canonical_report_target: reports/database-result.md
 - main_agent_owned: true
 
@@ -11,11 +12,11 @@
 
 No database behavior changes are in scope.
 
-## Task Index
+## Task Rows
 
-| id | phase | owner | depends | scope | ac | status |
-| --- | --- | --- | --- | --- | --- | --- |
-| DB-NONE-01 | docs | lead | none | docs/features/shared-ui-feedback/spec/database-design.md | none | not_applicable |
+- AC-FEEDBACK-01 | phase: docs | owner: lead | scope: no database schema or migration surface | command_ref: CMD-DOCS-FINAL | status: not_applicable.
+- AC-FEEDBACK-02 | phase: docs | owner: lead | scope: no persisted feedback state | command_ref: CMD-DOCS-FINAL | status: not_applicable.
+- AC-FEEDBACK-03 | phase: docs | owner: lead | scope: no database lifecycle state for toast messages | command_ref: CMD-DOCS-FINAL | status: not_applicable.
 
 ## Worktree Notes
 

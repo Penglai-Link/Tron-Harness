@@ -4,6 +4,7 @@
 
 - feature_slug: shared-ui-feedback
 - main_agent: Codex lead agent
+- execution_mode: hybrid
 - git_skill: eliteforge-git-feature-oriented-lite-spec
 - main_branch: feature/clouds3n/shared-ui-feedback/base
 - main_worktree_path: /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/base
@@ -32,6 +33,14 @@
 | frontend | green-toast-provider | 019e221c-9607-7732-9b77-f94acf2db265 | Cicero | FE-GREEN-01 | green | feature/clouds3n/shared-ui-feedback/frontend/green-toast-provider | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/frontend/green-toast-provider | feature/clouds3n/shared-ui-feedback/base | merged_green |
 | test | verify-feedback-runtime | 019e2225-8f0c-76c0-a25a-2f8b898b56f9 | Ampere | TEST-VERIFY-01 | verify | feature/clouds3n/shared-ui-feedback/test/verify-feedback-runtime | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/test/verify-feedback-runtime | feature/clouds3n/shared-ui-feedback/base | merged_verify |
 | review | final-review | 019e222b-5f7f-7233-8a00-84a88def76a1 | Harvey | REVIEW-01 | review | feature/clouds3n/shared-ui-feedback/review/final-review | /Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/shared-ui-feedback/review/final-review | feature/clouds3n/shared-ui-feedback/base | merged_review |
+
+## Dispatch Decisions
+
+| ac_refs | decision | execution_owner | rationale | worker_ref | status |
+| --- | --- | --- | --- | --- | --- |
+| AC-FEEDBACK-01 | spawn | frontend-worker plus test-worker | provider, export, and app-root mount needed RED -> GREEN -> VERIFY flow before review | frontend/green-toast-provider | done |
+| AC-FEEDBACK-02 | spawn | frontend-worker plus test-worker | top-right toast placement required focused browser evidence after implementation | test/verify-feedback-runtime | done |
+| AC-FEEDBACK-03 | spawn | frontend-worker plus test-worker | auto-dismiss and manual-dismiss lifecycle required focused browser evidence after implementation | test/verify-feedback-runtime | done |
 
 ## Branch And Path Rules
 

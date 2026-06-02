@@ -4,20 +4,11 @@
 
 Generated framework. Fill only outcome deltas, evidence links, blockers, and conclusion.
 
-## Task Results
+## Evidence Rows
 
-- @ref:tasks/backend-task.md#BE-NONE-01: no backend work required; evidence: @ref:spec/api-contract.md#frontend-backend-boundary and @ref:reports/agents/review-final-review.md#implementation-review; status: not_applicable.
-
-## TDD Evidence
-
-- @ref:spec/test-plan.md#TDD-FEEDBACK-01: not backend-scoped.
-- @ref:spec/test-plan.md#TDD-FEEDBACK-02: not backend-scoped.
-- @ref:spec/test-plan.md#TDD-FEEDBACK-03: not backend-scoped.
-- @ref:spec/test-plan.md#TDD-FEEDBACK-04: backend boundary verified as unchanged.
-
-## Worktree Evidence
-
-- @ref:orchestration/worktree-plan.md#agent-worktrees: no backend worker required by approved scope.
+- AC-FEEDBACK-01 | red: there was no backend work required for a shared frontend-only provider and hook. | green: backend remained untouched while the shared feedback API was introduced entirely in frontend code and validated through `CMD-DOCS-FINAL`. | command_ref: CMD-DOCS-FINAL | browser:not applicable | status: not_applicable.
+- AC-FEEDBACK-02 | red: no backend route or transport was needed for top-right toast rendering. | green: toast placement and visible feedback remain frontend-only and no backend API surface was added. | command_ref: CMD-DOCS-FINAL | browser:not applicable | status: not_applicable.
+- AC-FEEDBACK-03 | red: no backend lifecycle state or persistence was needed for auto-dismiss or manual dismissal. | green: toast lifecycle remains frontend-only and no backend or API storage contract changed. | command_ref: CMD-DOCS-FINAL | browser:not applicable | status: not_applicable.
 
 ## Changed Paths
 
@@ -30,16 +21,6 @@ Generated framework. Fill only outcome deltas, evidence links, blockers, and con
 ## Command Cost Evidence
 
 - slow/browser commands: reuse existing VERIFY evidence unless missing, failed, stale, or explicitly requested.
-
-## Browser Verify Evidence
-
-- Not applicable.
-
-## Acceptance Mapping
-
-- @ref:spec/acceptance.md#AC-FEEDBACK-01: backend not applicable.
-- @ref:spec/acceptance.md#AC-FEEDBACK-02: backend not applicable.
-- @ref:spec/acceptance.md#AC-FEEDBACK-03: backend not applicable.
 
 ## Blockers
 

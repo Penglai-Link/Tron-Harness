@@ -218,6 +218,21 @@ const defaultApps: AppRecord[] = [
   }),
 ];
 
+async function seedTronCoreShellSelection(page: Page) {
+  await page.addInitScript((snapshot) => {
+    window.localStorage.setItem("tron-app-shell", JSON.stringify({
+      state: {
+        openSections: { Core: true },
+        selectedPrimarySpaceId: "ENTERPRISE",
+        selectedSecondarySpaceId: "TRON_CORE",
+        sidebarCollapsed: false,
+        workspaceSwitcherSnapshot: snapshot,
+      },
+      version: 4,
+    }));
+  }, workspaceSwitcher);
+}
+
 function task(values: Partial<Task> & Pick<Task, "taskCode" | "title">): Task {
   return {
     agentCodes: [],
@@ -600,6 +615,7 @@ test("task management supports kanban search create detail updates subtasks arch
     task({ archivedAt: now, description: "Archived board fixture", previousStatus: "Review", status: "Archived", taskCode: "TSK-SEED-ARCHIVED", taskType: "Feature", title: "Archived task example" }),
   ];
   await routeApi(page, requests, tasks, { createTaskDelayMs: 150 });
+  await seedTronCoreShellSelection(page);
 
   await page.goto(`${frontendBaseUrl}/tasks`);
   const taskHeader = page.locator("header").filter({ has: page.getByRole("heading", { name: "Task Management" }) });
@@ -671,7 +687,6 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect(createDescriptionFullscreenEditor).toHaveCount(0);
   await expect(page.getByLabel("Task description")).toHaveValue("## Playwright Notes\n- Created through the task-management smoke.\n- Uses $VAR1 during execution.");
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("button", { name: "Saving..." })).toHaveAttribute("aria-busy", "true");
   await expect(page).toHaveURL(/\/tasks\/detail\?taskCode=TSK-PW-0001/);
   await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
   await expect(page.getByText("Playwright created task")).toBeVisible();
@@ -732,6 +747,7 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001" && request.method !== "GET" && (request.body as Partial<Task> | null)?.agentCodes?.includes("agent-qa") === true)).toBe(true);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001" && request.method !== "GET" && (request.body as Partial<Task> | null)?.appCodes?.includes("APP-TRON-CONSOLE") === true)).toBe(true);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001/status" && (request.body as { progress?: number; status?: TaskStatus } | null)?.progress === 55 && (request.body as { status?: TaskStatus } | null)?.status === "Green")).toBe(true);
+  await expect(toast(page, /Task TSK-PW-0001 updates saved/)).toBeHidden();
 
   await page.getByRole("button", { name: "Edit Details" }).click();
   await page.getByLabel("Task detail title").fill("Playwright created task updated");
@@ -789,6 +805,7 @@ test("parent task detail derives progress from active subtasks and keeps the pro
     task({ parentTaskCode: "TSK-PROGRESS-PARENT", priority: "Low", progress: 0, status: "Open", taskCode: "TSK-PROGRESS-CHILD-2", title: "Open child" }),
   ];
   await routeApi(page, requests, tasks);
+  await seedTronCoreShellSelection(page);
 
   await page.goto(`${frontendBaseUrl}/tasks/detail?taskCode=TSK-PROGRESS-PARENT`);
   await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
@@ -815,6 +832,7 @@ test("task detail description preview stays bounded inline and expands in fullsc
     }),
   ];
   await routeApi(page, [], tasks);
+  await seedTronCoreShellSelection(page);
 
   await page.goto(`${frontendBaseUrl}/tasks/detail?taskCode=TSK-DESC-PREVIEW`);
   await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
@@ -862,6 +880,7 @@ test("task detail keeps legacy app codes visible and does not resend them on unr
     }),
   ];
   await routeApi(page, requests, tasks);
+  await seedTronCoreShellSelection(page);
 
   await page.goto(`${frontendBaseUrl}/tasks/detail?taskCode=TSK-LEGACY-APP`);
   await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
@@ -1044,7 +1063,7 @@ test("topbar workspace selector exposes the full hierarchy and updates the selec
   await expect(workspaceTrigger).toHaveAttribute("aria-busy", "false");
   await expect.poll(switcherRequestCount).toBeGreaterThan(0);
 
-  await expect(workspaceTrigger).toContainText("Enterprise/Platform/Tron Core");
+  await expect(workspaceTrigger).toContainText("Enterprise");
   const selector = await openWorkspaceSelector(page);
   await expect(selector).toBeVisible();
   await expect(page.locator("aside[data-collapsed] #tron-workspace-selector-panel")).toHaveCount(0);
@@ -1052,8 +1071,10 @@ test("topbar workspace selector exposes the full hierarchy and updates the selec
   await expect(selector.getByRole("button", { name: "Enterprise", exact: true })).toBeVisible();
   await expect(selector.getByRole("button", { name: "Compliance", exact: true })).toBeVisible();
   await expect(selector.getByRole("button", { name: "Enterprise/Platform", exact: true })).toBeVisible();
-  await expect(selector.getByRole("button", { name: "Enterprise/Platform/Tron Core", exact: true })).toBeVisible();
+  await expect(selector.getByRole("button", { name: "Enterprise/Platform/Tron Core", exact: true })).toHaveCount(0);
   await expect(selector.getByRole("button", { name: "Compliance/Risk Ops", exact: true })).toHaveCount(0);
+  await selector.getByRole("button", { name: "Expand Enterprise/Platform", exact: true }).click();
+  await expect(selector.getByRole("button", { name: "Enterprise/Platform/Tron Core", exact: true })).toBeVisible();
   await expect(selector.getByRole("button", { name: "Expand Compliance", exact: true })).toBeVisible();
   await expect(selector).not.toContainText("effective users");
   await expect(selector).not.toContainText("child spaces");

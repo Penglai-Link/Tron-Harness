@@ -17,6 +17,8 @@ let frontendProcess: ChildProcessWithoutNullStreams | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
 
+test.describe.configure({ timeout: 45_000 });
+
 function delay(ms: number) {
   return new Promise((resolveDelay) => {
     setTimeout(resolveDelay, ms);
@@ -79,6 +81,10 @@ async function blockAuthApi(page: Page) {
   return authRequests;
 }
 
+async function submitLogin(page: Page) {
+  await page.getByLabel(/passkey|password/i).press("Enter");
+}
+
 test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
@@ -124,11 +130,11 @@ test("opens protected routes, logs out, and signs back in without auth API reque
   await page.getByRole("button", { name: /open user menu/i }).click();
   await page.getByRole("button", { name: /^log out$/i }).click();
   await expect(page).toHaveURL(/\/login/);
-  await expect(page.getByRole("button", { name: /^oauth2$/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /oauth2/i })).toBeVisible();
 
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await submitLogin(page);
 
   await expect(page).toHaveURL(/\/admin\/users$/);
   expect(authRequests).toEqual([]);

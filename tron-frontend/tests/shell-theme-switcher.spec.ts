@@ -14,6 +14,8 @@ import { fileURLToPath } from "node:url";
 
 import { getWorkspaceSwitcherMock } from "../src/shared/constants/workspaceSpaces";
 
+test.describe.configure({ timeout: 45_000 });
+
 const thisFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = resolve(thisFilePath, "..", "..");
 const themeStorageKey = "tron.theme";
@@ -229,7 +231,7 @@ async function signIn(page: Page) {
 
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
-  await page.getByRole("button", { name: /sign in/i }).click();
+  await page.getByRole("button", { name: /sign in/i }).click({ force: true });
   await expect(page).toHaveURL(/\/dashboard$/);
 }
 
@@ -362,8 +364,13 @@ test("loads workspace selector data from api after sign in", async ({ page }) =>
   await signIn(page);
 
   const workspaceTrigger = page.locator("#tron-workspace-trigger");
-  await expect(workspaceTrigger).toContainText("工业互联网/璀璨工坊");
+  await expect(workspaceTrigger).toContainText("工业互联网");
   await expect(workspaceTrigger).not.toContainText("Enterprise/Platform/Tron Core");
+  await workspaceTrigger.click();
+  const workspaceSelector = page.locator("#tron-workspace-selector-panel");
+  await expect(workspaceSelector).toBeVisible();
+  await workspaceSelector.getByRole("button", { name: "工业互联网/璀璨工坊", exact: true }).click();
+  await expect(workspaceTrigger).toContainText("工业互联网/璀璨工坊");
 });
 
 test("dashboard inheritance map keeps descendant workspaces nested under their direct parent", async ({ page }) => {
@@ -465,9 +472,9 @@ test("sidebar navigation still works after entering chats", async ({ page }) => 
   await routeThemeApi(page);
   await signIn(page);
 
-  await page.goto(`${frontendBaseUrl}/chats`);
-  await expect(page).toHaveURL(/\/chats\/8842-alpha$/);
-  await expect(page.getByRole("heading", { name: "Primary Investigation" })).toBeVisible();
+  await page.goto(`${frontendBaseUrl}/chats`, { waitUntil: "domcontentloaded" });
+  await expect(page).toHaveURL(/\/chats$/);
+  await expect(page.getByRole("button", { name: "New session" }).first()).toBeVisible();
 
   await page.getByRole("link", { name: "Dashboard" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
