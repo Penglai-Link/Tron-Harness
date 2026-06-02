@@ -131,6 +131,38 @@ fn chat_stream_request_asks_for_usage_chunk() {
 }
 
 #[test]
+fn request_builders_downgrade_tool_observations_to_user_messages() {
+    let config = AgentModelConfig {
+        model_code: "MODEL-1".into(),
+        protocol: AgentModelProtocol::ChatCompletions,
+        base_url: "https://provider.test/v1".into(),
+        api_path: None,
+        api_key: "sk-test".into(),
+        model_name: "gpt-test".into(),
+        thinking_enabled: false,
+        temperature: None,
+        max_tokens: None,
+        context_window_tokens: None,
+        top_p: None,
+        timeout_ms: None,
+        max_retries: None,
+    };
+    let request = ModelRequest {
+        messages: vec![AgentMessage::tool("tool:workspace.list\nresult:\n[]")],
+        tools: vec![],
+        system_agent_session_id: None,
+    };
+
+    let chat = chat_completions_request(&config, &request);
+    assert_eq!(chat["messages"][0]["role"], json!("user"));
+    assert_eq!(chat["messages"][0]["content"], json!("tool:workspace.list\nresult:\n[]"));
+
+    let responses = responses_request(&config, &request);
+    assert_eq!(responses["input"][0]["role"], json!("user"));
+    assert_eq!(responses["input"][0]["content"], json!("tool:workspace.list\nresult:\n[]"));
+}
+
+#[test]
 fn chat_stream_maps_reasoning_content_to_summary_delta() {
     let event = ChatCompletionsAdapter
         .parse_stream_event(&json!({

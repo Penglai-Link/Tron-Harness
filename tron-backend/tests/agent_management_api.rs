@@ -753,7 +753,7 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
         .as_array()
         .expect("second request messages should be an array");
     assert!(second_messages.iter().any(|message| {
-        message["role"] == json!("tool")
+        message["role"] == json!("user")
             && message["content"]
                 .as_str()
                 .is_some_and(|content| content.contains("discovery.expand_tool_domain"))
@@ -763,7 +763,7 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
         .as_array()
         .expect("third request messages should be an array");
     assert!(third_messages.iter().any(|message| {
-        message["role"] == json!("tool")
+        message["role"] == json!("user")
             && message["content"]
                 .as_str()
                 .is_some_and(|content| content.contains("workspace.list"))

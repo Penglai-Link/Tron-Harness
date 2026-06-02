@@ -2422,7 +2422,7 @@ export function ChatManagementPage() {
     setCreatingSession(true);
     try {
       const session = await createChatSession({
-        agentCode: selectedAgentCode || mainChatAgentOption.agentCode,
+        agentCode: mainChatAgentOption.agentCode,
         title: "New chat",
         workspaceCode: activeWorkspaceCode,
       });
