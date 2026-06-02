@@ -11,7 +11,8 @@ use crate::{
         agent::{
             AgentExecutionScope, AgentKind, AgentManagementError, AgentMessage, AgentModelConfig,
             AgentModelProtocol, AgentRunContext, AgentRunHistoryRecord, AgentRunStatus,
-            AgentRuntimeType, EffectiveSkill, EffectiveVariable, ToolRegistry,
+            AgentRuntimeType, AgentToolExposureState, EffectiveSkill, EffectiveVariable,
+            ToolAvailabilityState, ToolExposureMode, ToolRegistry,
         },
         skill::WorkspaceSkillListQuery,
         variable::VariableCatalogQuery,
@@ -22,8 +23,10 @@ use crate::{
 
 use super::{
     AgentInvocationCommand, AgentInvocationError, AgentInvocationResult, AgentManagementService,
-    AgentOrchestrator, AgentRunHistoryService, AgentRuntimeRegistry, ModelClient, ModelStreamSink,
-    ResolvedAgentRuntime, RuntimeAdapterSelection,
+    AgentOrchestrator, AgentRunHistoryService, AgentRuntimeRegistry, BusinessToolCatalog,
+    ModelClient, ModelStreamSink, ResolvedAgentRuntime, RuntimeAdapterSelection,
+    build_domain_discovery_guidance, discovery_expand_tool_definition,
+    tool_record_to_effective_tool,
 };
 
 const MAIN_AGENT_CODE: &str = "main-agent";
@@ -73,17 +76,20 @@ impl AgentInvocationService {
         &self,
         command: AgentInvocationCommand,
         user_code: Option<String>,
+        locale: Option<String>,
     ) -> Result<AgentInvocationResult, AgentInvocationError> {
-        self.invoke_with_stream(command, user_code, None).await
+        self.invoke_with_stream(command, user_code, locale, None)
+            .await
     }
 
     pub async fn invoke_stream(
         &self,
         command: AgentInvocationCommand,
         user_code: Option<String>,
+        locale: Option<String>,
         sink: ModelStreamSink,
     ) -> Result<AgentInvocationResult, AgentInvocationError> {
-        self.invoke_with_stream(command, user_code, Some(sink))
+        self.invoke_with_stream(command, user_code, locale, Some(sink))
             .await
     }
 
@@ -91,6 +97,7 @@ impl AgentInvocationService {
         &self,
         command: AgentInvocationCommand,
         user_code: Option<String>,
+        locale: Option<String>,
         sink: Option<ModelStreamSink>,
     ) -> Result<AgentInvocationResult, AgentInvocationError> {
         let AgentInvocationCommand {
@@ -140,6 +147,55 @@ impl AgentInvocationService {
         let model =
             resolve_invocation_model(&resolved_agent, requested_model, requested_system_model_id)?;
         let model_code = model.model_code.clone();
+        let locale = locale.unwrap_or_else(|| "en-US".to_string());
+        let mut tools = requested_tools;
+        let mut tool_exposure = AgentToolExposureState::default();
+        if tools.is_empty() && is_internal_agent(&resolved_agent.agent_code) {
+            let policy = self
+                .management
+                .workspace_internal_agent_policy(
+                    &workspace.workspace_code,
+                    &resolved_agent.agent_code,
+                )
+                .map_err(|error| map_agent_error(&resolved_agent.agent_code, error.clone()))?;
+            let effective_tool_records = self
+                .management
+                .resolve_internal_agent_effective_tool_definitions(
+                    &workspace.workspace_code,
+                    &resolved_agent.agent_code,
+                    &locale,
+                )
+                .map_err(|error| map_agent_error(&resolved_agent.agent_code, error))?
+                .into_iter()
+                .filter(|tool| tool.availability_state == ToolAvailabilityState::Available)
+                .collect::<Vec<_>>();
+            match policy.tool_exposure_mode {
+                ToolExposureMode::DirectList => {
+                    tools = effective_tool_records
+                        .into_iter()
+                        .map(tool_record_to_effective_tool)
+                        .collect();
+                }
+                ToolExposureMode::DomainDiscovery => {
+                    let visible_domains =
+                        BusinessToolCatalog::domains_for_records(&effective_tool_records, &locale);
+                    let hidden_tools = effective_tool_records
+                        .into_iter()
+                        .map(tool_record_to_effective_tool)
+                        .collect::<Vec<_>>();
+                    tools = vec![discovery_expand_tool_definition(&locale)];
+                    tool_exposure = AgentToolExposureState {
+                        tool_exposure_mode: Some(policy.tool_exposure_mode),
+                        expanded_domain_persistence_mode: Some(
+                            policy.expanded_domain_persistence_mode,
+                        ),
+                        visible_domains,
+                        hidden_tools,
+                        expanded_domain_codes: Vec::new(),
+                    };
+                }
+            }
+        }
         let variables = self
             .variables
             .list_variables(
@@ -180,6 +236,18 @@ impl AgentInvocationService {
                 messages.push(AgentMessage::system(guidance));
             }
         }
+        if tool_exposure.tool_exposure_mode == Some(ToolExposureMode::DomainDiscovery)
+            && !tool_exposure.visible_domains.is_empty()
+        {
+            let persistence_mode = tool_exposure
+                .expanded_domain_persistence_mode
+                .expect("domain discovery mode should include persistence mode");
+            messages.push(AgentMessage::system(build_domain_discovery_guidance(
+                &tool_exposure.visible_domains,
+                persistence_mode,
+                &locale,
+            )));
+        }
         messages.push(AgentMessage::user(prompt));
         let local_directory = app.as_ref().map(|app| app.local_directory.clone());
         let branch_name = app.as_ref().and_then(|app| app.default_branch.clone());
@@ -202,6 +270,7 @@ impl AgentInvocationService {
             run_code: run_code.clone(),
             workspace_code: workspace.workspace_code.clone(),
             user_code: user_code.clone(),
+            locale,
             request_id: None,
             stream_key: requested_conversation_code
                 .clone()
@@ -211,7 +280,8 @@ impl AgentInvocationService {
             model,
             variables,
             skills,
-            tools: requested_tools,
+            tools,
+            tool_exposure,
             execution_scope: AgentExecutionScope {
                 app_code: app_code.clone(),
                 repository_url,
@@ -373,6 +443,15 @@ fn runtime_selection_for_agent(
 fn map_agent_error(agent_code: &str, error: AgentManagementError) -> AgentInvocationError {
     match error {
         AgentManagementError::InvalidWorkspace => AgentInvocationError::WorkspaceInvalid,
+        AgentManagementError::InternalAgentNotFound => AgentInvocationError::RuntimeFailed(
+            format!("internal agent `{agent_code}` was not found"),
+        ),
+        AgentManagementError::InternalToolAssignmentStale(message)
+        | AgentManagementError::InternalToolUnknown(message) => {
+            AgentInvocationError::RuntimeFailed(format!(
+                "internal tool policy is invalid: {message}"
+            ))
+        }
         AgentManagementError::SystemAgentNotFound => {
             AgentInvocationError::RuntimeFailed(format!("agent `{agent_code}` was not found"))
         }
@@ -392,6 +471,10 @@ fn normalize_optional(value: Option<String>) -> Option<String> {
 }
 
 fn is_main_agent(agent_code: &str) -> bool {
+    agent_code.eq_ignore_ascii_case(MAIN_AGENT_CODE)
+}
+
+fn is_internal_agent(agent_code: &str) -> bool {
     agent_code.eq_ignore_ascii_case(MAIN_AGENT_CODE)
 }
 

@@ -1,10 +1,27 @@
 import type { MainAgentConfigPayload } from "@/domain/agent/api/agentManagementApi";
 import type {
+  ExpandedDomainPersistenceMode,
+  ListToolsQuery,
   MainAgentConfig,
   PlatformSystemAgentRecord,
   PlatformSystemAgentRescanResult,
+  PlatformToolRecord,
+  ToolCatalogDomainRecord,
+  ToolExposureMode,
+  ToolAssignmentMode,
+  WorkspaceInternalAgentPolicyPayload,
+  WorkspaceInternalAgentRecord,
   WorkspaceSystemAgentRecord,
 } from "@/domain/agent/model";
+
+const scanBaseMs = Date.parse("2026-05-29T09:30:00Z");
+let scanSequence = 0;
+
+let mainAgentConfig: MainAgentConfig = {
+  instructions: "Coordinate coding tasks with clear ownership boundaries, keep outputs concise, and require validation before close-out.",
+  personality: "Direct, accountable, and precise. Push for concrete next steps and expose tradeoffs plainly.",
+  updatedAt: "2026-05-29T09:30:00Z",
+};
 
 type SystemAgentSeed = {
   agentCode: string;
@@ -17,16 +34,7 @@ type SystemAgentSeed = {
   lastScannedAt: string | null;
 };
 
-const scanBaseMs = Date.parse("2026-05-29T09:30:00Z");
-let scanSequence = 0;
-
-let mainAgentConfig: MainAgentConfig = {
-  personality: "Direct, accountable, and precise. Push for concrete next steps and expose tradeoffs plainly.",
-  instructions: "Coordinate coding tasks with clear ownership boundaries, keep outputs concise, and require validation before close-out.",
-  updatedAt: "2026-05-29T09:30:00Z",
-};
-
-let systemAgentRegistry: SystemAgentSeed[] = [
+const systemAgentRegistry: SystemAgentSeed[] = [
   {
     agentCode: "codex",
     available: true,
@@ -55,12 +63,136 @@ let systemAgentRegistry: SystemAgentSeed[] = [
   },
 ];
 
-let workspaceDisabledOverrides: Record<string, string[]> = {
-  COMPLIANCE: [],
-  ENTERPRISE: [],
-  PLATFORM: [],
-  TRON_CORE: [],
+type ToolDomainSeed = {
+  domainCode: string;
+  name: string;
+  description: string;
+  sampleTools: string[];
+  hasMutationTools: boolean;
 };
+
+const toolDomainSeed: ToolDomainSeed[] = [
+  {
+    domainCode: "workspace",
+    description: "Workspace discovery, metadata lookup, and lifecycle actions for platform workspaces.",
+    hasMutationTools: true,
+    name: "Workspace",
+    sampleTools: ["workspace.list", "workspace.get", "workspace.create"],
+  },
+  {
+    domainCode: "agent",
+    description: "Introspection and lifecycle actions for registered internal agents and policies.",
+    hasMutationTools: true,
+    name: "Agent",
+    sampleTools: ["agents.get", "agents.workspace.get"],
+  },
+  {
+    domainCode: "model",
+    description: "Read and inspect platform and workspace model catalogs.",
+    hasMutationTools: true,
+    name: "Model",
+    sampleTools: ["models.platform.list", "models.workspace.list", "models.bind.set_default"],
+  },
+];
+
+type ToolSeed = {
+  toolCode: string;
+  domainCode: string;
+  name: string;
+  description: string;
+  operationKind: PlatformToolRecord["operationKind"];
+};
+
+const toolSeed: ToolSeed[] = [
+  {
+    description: "List readable workspaces and workspace metadata.",
+    domainCode: "workspace",
+    name: "List Workspaces",
+    operationKind: "query",
+    toolCode: "workspace.list",
+  },
+  {
+    description: "Get workspace details and inherited policy summary.",
+    domainCode: "workspace",
+    name: "Get Workspace",
+    operationKind: "query",
+    toolCode: "workspace.get",
+  },
+  {
+    description: "Create a workspace with policy defaults and model bindings.",
+    domainCode: "workspace",
+    name: "Create Workspace",
+    operationKind: "command",
+    toolCode: "workspace.create",
+  },
+  {
+    description: "Get a single internal or system agent profile.",
+    domainCode: "agent",
+    name: "Get Agent",
+    operationKind: "query",
+    toolCode: "agents.get",
+  },
+  {
+    description: "Get per-workspace internal-agent policy and assignment context.",
+    domainCode: "agent",
+    name: "Get Workspace Agent",
+    operationKind: "query",
+    toolCode: "agents.workspace.get",
+  },
+  {
+    description: "Patch internal-agent policy mode and exposure behavior.",
+    domainCode: "agent",
+    name: "Patch Workspace Agent Policy",
+    operationKind: "command",
+    toolCode: "agents.workspace.patch_policy",
+  },
+  {
+    description: "List all platform models with protocol and capability metadata.",
+    domainCode: "model",
+    name: "List Platform Models",
+    operationKind: "query",
+    toolCode: "models.platform.list",
+  },
+  {
+    description: "List workspace model bindings with inheritance status.",
+    domainCode: "model",
+    name: "List Workspace Models",
+    operationKind: "query",
+    toolCode: "models.workspace.list",
+  },
+  {
+    description: "Set the default workspace model for a protocol-capability pair.",
+    domainCode: "model",
+    name: "Set Default Model",
+    operationKind: "command",
+    toolCode: "models.bind.set_default",
+  },
+];
+
+type WorkspaceInternalAgentSeed = {
+  agentCode: string;
+  description: string;
+  expandedDomainPersistenceMode: ExpandedDomainPersistenceMode;
+  name: string;
+  selectedToolCodes: string[];
+  toolAssignmentMode: ToolAssignmentMode;
+  toolExposureMode: ToolExposureMode;
+};
+
+const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
+  {
+    agentCode: "main-agent",
+    description: "Primary platform internal agent used for workspace chat runtime policy.",
+    expandedDomainPersistenceMode: "sticky_expanded",
+    name: "Main Agent",
+    selectedToolCodes: [],
+    toolAssignmentMode: "all_platform_tools",
+    toolExposureMode: "direct_list",
+  },
+];
+
+let workspaceOverrides: Record<string, WorkspaceInternalAgentSeed[]> = {};
+let workspaceSystemAgentOverrides: Record<string, string[]> = {};
 
 function nextScanTimestamp() {
   const timestamp = new Date(scanBaseMs + scanSequence * 60_000).toISOString();
@@ -76,19 +208,19 @@ function cloneMainAgentConfig(config: MainAgentConfig): MainAgentConfig {
   };
 }
 
-function clonePlatformAgentRecord(record: PlatformSystemAgentRecord): PlatformSystemAgentRecord {
-  return { ...record };
+function cloneSystemAgentRecord(record: PlatformSystemAgentRecord | WorkspaceSystemAgentRecord) {
+  return {
+    ...record,
+    models: [...record.models],
+  };
 }
 
-function normalizeWorkspaceOverrides(workspaceCode: string) {
-  if (!workspaceDisabledOverrides[workspaceCode]) {
-    workspaceDisabledOverrides = {
-      ...workspaceDisabledOverrides,
-      [workspaceCode]: [],
-    };
-  }
+function cloneToolDomainRecord(record: ToolCatalogDomainRecord): ToolCatalogDomainRecord {
+  return { ...record, sampleTools: [...record.sampleTools] };
+}
 
-  return workspaceDisabledOverrides[workspaceCode];
+function cloneToolRecord(record: PlatformToolRecord): PlatformToolRecord {
+  return { ...record };
 }
 
 function buildPlatformStatus(record: SystemAgentSeed) {
@@ -111,12 +243,9 @@ function buildPlatformRecord(record: SystemAgentSeed): PlatformSystemAgentRecord
   };
 }
 
-function buildWorkspaceRecord(
-  workspaceCode: string,
-  record: SystemAgentSeed,
-): WorkspaceSystemAgentRecord {
-  const overrides = normalizeWorkspaceOverrides(workspaceCode);
-  const workspaceOverrideDisabled = overrides.includes(record.agentCode);
+function buildWorkspaceSystemRecord(workspaceCode: string, record: SystemAgentSeed): WorkspaceSystemAgentRecord {
+  const workspaceAgentOverrides = workspaceSystemAgentOverrides[workspaceCode] ?? [];
+  const workspaceOverrideDisabled = workspaceAgentOverrides.includes(record.agentCode);
   const enabled = record.available && record.platformEnabled && !workspaceOverrideDisabled;
   const status = !record.available
     ? "Unavailable"
@@ -140,18 +269,105 @@ function buildWorkspaceRecord(
   };
 }
 
-function findSystemAgentSeed(agentCode: string) {
-  const record = systemAgentRegistry.find((item) => item.agentCode === agentCode);
-  if (!record) {
-    throw new Error(`System agent ${agentCode} was not found.`);
-  }
-
-  return record;
+function cloneWorkspaceSystemRecord(workspaceCode: string, record: SystemAgentSeed): WorkspaceSystemAgentRecord {
+  const workspaceRecord = buildWorkspaceSystemRecord(workspaceCode, record);
+  return {
+    ...workspaceRecord,
+    models: [...workspaceRecord.models],
+  };
 }
 
-function assertSystemAgentMutable(record: SystemAgentSeed) {
-  if (!record.available) {
-    throw new Error(`${record.name} is unavailable and cannot be updated.`);
+function normalizeToolCatalogDomain(record: ToolDomainSeed): ToolCatalogDomainRecord {
+  const normalizedTools = toolSeed.filter((tool) => tool.domainCode === record.domainCode);
+  const validTools = normalizedTools
+    .filter((tool) => tool.operationKind)
+    .map((tool) => tool.toolCode);
+  const hasMutationTools = normalizedTools.some((tool) => tool.operationKind === "command");
+
+  return {
+    domainCode: record.domainCode,
+    description: record.description,
+    hasMutationTools,
+    name: record.name,
+    sampleTools: (record.sampleTools.length ? record.sampleTools : validTools).filter((toolCode) => validTools.includes(toolCode)),
+    toolCount: normalizedTools.length,
+  };
+}
+
+function getToolDomains() {
+  return toolDomainSeed.map(normalizeToolCatalogDomain);
+}
+
+function getTools(): PlatformToolRecord[] {
+  return toolSeed.map((tool) => ({ ...tool }));
+}
+
+function getWorkspaceInternalAgentOverrides(workspaceCode: string) {
+  if (!workspaceOverrides[workspaceCode]) {
+    workspaceOverrides[workspaceCode] = [];
+  }
+  return workspaceOverrides[workspaceCode];
+}
+
+function getWorkspaceInternalAgentOverride(workspaceCode: string, agentCode: string) {
+  return getWorkspaceInternalAgentOverrides(workspaceCode).find((item) => item.agentCode === agentCode) ?? null;
+}
+
+function upsertWorkspaceInternalAgentOverride(workspaceCode: string, next: WorkspaceInternalAgentSeed) {
+  const overrides = getWorkspaceInternalAgentOverrides(workspaceCode)
+    .filter((item) => item.agentCode !== next.agentCode);
+  workspaceOverrides = {
+    ...workspaceOverrides,
+    [workspaceCode]: [...overrides, next],
+  };
+}
+
+function normalizeWorkspaceInternalAgentSelectedTools(toolCodes: string[] = []) {
+  const validToolCodeSet = new Set(toolSeed.map((tool) => tool.toolCode));
+  return [...new Set(toolCodes)].filter((toolCode) => validToolCodeSet.has(toolCode));
+}
+
+function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: string): WorkspaceInternalAgentRecord {
+  const base = workspaceInternalAgentSeed.find((item) => item.agentCode === agentCode);
+  if (!base) {
+    throw new Error(`Internal agent ${agentCode} was not found.`);
+  }
+
+  const override = getWorkspaceInternalAgentOverride(workspaceCode, agentCode);
+  const effective = override ? { ...base, ...override } : { ...base };
+  const source = override ? "workspace_override" : "platform_default";
+
+  const selectedToolCodes = effective.toolAssignmentMode === "all_platform_tools"
+    ? []
+    : normalizeWorkspaceInternalAgentSelectedTools(effective.selectedToolCodes);
+
+  return {
+    agentCode: effective.agentCode,
+    description: effective.description,
+    expandedDomainPersistenceMode: effective.expandedDomainPersistenceMode,
+    name: effective.name,
+    selectedToolCodes,
+    source,
+    toolAssignmentMode: effective.toolAssignmentMode,
+    toolExposureMode: effective.toolExposureMode,
+  };
+}
+
+function listWorkspaceInternalAgentRecords(workspaceCode: string) {
+  return workspaceInternalAgentSeed
+    .map((agent) => buildWorkspaceInternalAgentRecord(workspaceCode, agent.agentCode));
+}
+
+function validateInternalAgentPatch(payload: WorkspaceInternalAgentPolicyPayload) {
+  const invalidKey = Object.keys(payload).find((key) => {
+    if (["toolAssignmentMode", "toolExposureMode", "expandedDomainPersistenceMode"].includes(key)) {
+      return false;
+    }
+    return true;
+  });
+
+  if (invalidKey) {
+    throw new Error(`Unsupported internal-agent policy field: ${invalidKey}`);
   }
 }
 
@@ -168,19 +384,134 @@ export function updateMainAgentConfigMock(payload: MainAgentConfigPayload) {
   return cloneMainAgentConfig(mainAgentConfig);
 }
 
+export function listWorkspaceInternalAgentsMock(workspaceCode: string) {
+  return listWorkspaceInternalAgentRecords(workspaceCode);
+}
+
+export function fetchWorkspaceInternalAgentMock(workspaceCode: string, agentCode: string) {
+  return buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
+}
+
+export function patchWorkspaceInternalAgentPolicyMock(
+  workspaceCode: string,
+  agentCode: string,
+  payload: WorkspaceInternalAgentPolicyPayload,
+) {
+  validateInternalAgentPatch(payload);
+  const base = workspaceInternalAgentSeed.find((item) => item.agentCode === agentCode);
+  if (!base) {
+    throw new Error(`Internal agent ${agentCode} was not found.`);
+  }
+
+  const next: WorkspaceInternalAgentSeed = {
+    ...base,
+    ...getWorkspaceInternalAgentOverride(workspaceCode, agentCode),
+    ...payload,
+    agentCode,
+    description: base.description,
+    name: base.name,
+  };
+
+  upsertWorkspaceInternalAgentOverride(workspaceCode, next);
+  return buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
+}
+
+export function updateWorkspaceInternalAgentToolAssignmentsMock(
+  workspaceCode: string,
+  agentCode: string,
+  toolCodes: string[],
+) {
+  const base = workspaceInternalAgentSeed.find((item) => item.agentCode === agentCode);
+  if (!base) {
+    throw new Error(`Internal agent ${agentCode} was not found.`);
+  }
+
+  const next: WorkspaceInternalAgentSeed = {
+    ...base,
+    ...getWorkspaceInternalAgentOverride(workspaceCode, agentCode),
+    agentCode,
+    selectedToolCodes: normalizeWorkspaceInternalAgentSelectedTools(toolCodes),
+    toolAssignmentMode: "selected_tools",
+  };
+
+  upsertWorkspaceInternalAgentOverride(workspaceCode, next);
+  return buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
+}
+
+export function resetWorkspaceInternalAgentPolicyMock(workspaceCode: string, agentCode: string) {
+  const overrides = getWorkspaceInternalAgentOverrides(workspaceCode)
+    .filter((override) => override.agentCode !== agentCode);
+  workspaceOverrides = {
+    ...workspaceOverrides,
+    [workspaceCode]: [...overrides],
+  };
+  return buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
+}
+
+export function listToolDomainsMock(query: ListToolsQuery = {}) {
+  const normalizedSearch = query.search?.trim().toLowerCase() ?? "";
+  const domains = getToolDomains();
+  if (!normalizedSearch) {
+    return domains.map(cloneToolDomainRecord);
+  }
+
+  return domains
+    .filter((domain) => [
+      domain.domainCode,
+      domain.name,
+      domain.description,
+    ].join(" ").toLowerCase().includes(normalizedSearch))
+    .map(cloneToolDomainRecord);
+}
+
+export function listToolsMock(payload: ListToolsQuery = {}) {
+  const normalizedSearch = payload.search?.trim().toLowerCase() ?? "";
+  const domainFilter = payload.domainCode?.trim();
+  const normalizedDomainFilter = domainFilter?.toLowerCase() ?? "";
+
+  return getTools()
+    .filter((tool) => {
+      if (domainFilter && tool.domainCode.toLowerCase() !== normalizedDomainFilter) {
+        return false;
+      }
+
+      if (!normalizedSearch) {
+        return true;
+      }
+
+      return [
+        tool.toolCode,
+        tool.domainCode,
+        tool.name,
+        tool.description,
+        tool.operationKind,
+      ].join(" ").toLowerCase().includes(normalizedSearch);
+    })
+    .map(cloneToolRecord);
+}
+
+export function listWorkspaceToolDomainsMock(query: ListToolsQuery = {}) {
+  return listToolDomainsMock(query);
+}
+
+export function listWorkspaceToolsMock(payload: ListToolsQuery = {}) {
+  return listToolsMock(payload);
+}
+
 export function listPlatformSystemAgentsMock() {
-  return systemAgentRegistry.map((record) => clonePlatformAgentRecord(buildPlatformRecord(record)));
+  return systemAgentRegistry.map((record) => cloneSystemAgentRecord(buildPlatformRecord(record)));
 }
 
 export function rescanPlatformSystemAgentsMock() {
   const scannedAt = nextScanTimestamp();
-  systemAgentRegistry = systemAgentRegistry.map((record) => ({
-    ...record,
-    available: record.agentCode === "opencode" ? false : record.available,
-    lastScannedAt: scannedAt,
-  }));
+  systemAgentRegistry.forEach((record) => {
+    record.lastScannedAt = scannedAt;
+    if (record.agentCode === "opencode") {
+      record.available = false;
+    }
+  });
 
-  const records = listPlatformSystemAgentsMock();
+  const records = listWorkspaceSystemAgentsMock("TRON_CORE");
   return {
     availableCount: records.filter((record) => record.available).length,
     records,
@@ -190,18 +521,24 @@ export function rescanPlatformSystemAgentsMock() {
 }
 
 export function setPlatformSystemAgentEnabledMock(agentCode: string, enabled: boolean) {
-  const record = findSystemAgentSeed(agentCode);
-  assertSystemAgentMutable(record);
-  systemAgentRegistry = systemAgentRegistry.map((item) => (
-    item.agentCode === agentCode
-      ? { ...item, platformEnabled: enabled }
-      : item
-  ));
-  return buildPlatformRecord(findSystemAgentSeed(agentCode));
+  const record = systemAgentRegistry.find((item) => item.agentCode === agentCode);
+  if (!record) {
+    throw new Error(`System agent ${agentCode} was not found.`);
+  }
+  if (!record.available) {
+    throw new Error(`${record.name} is unavailable and cannot be updated.`);
+  }
+
+  record.platformEnabled = enabled;
+  return cloneSystemAgentRecord(buildPlatformRecord(record));
 }
 
 export function listWorkspaceSystemAgentsMock(workspaceCode: string) {
-  return systemAgentRegistry.map((record) => buildWorkspaceRecord(workspaceCode, record));
+  if (!workspaceSystemAgentOverrides[workspaceCode]) {
+    workspaceSystemAgentOverrides[workspaceCode] = [];
+  }
+  return systemAgentRegistry
+    .map((record) => cloneWorkspaceSystemRecord(workspaceCode, record));
 }
 
 export function setWorkspaceSystemAgentEnabledMock(
@@ -209,21 +546,25 @@ export function setWorkspaceSystemAgentEnabledMock(
   agentCode: string,
   enabled: boolean,
 ) {
-  const record = findSystemAgentSeed(agentCode);
-  assertSystemAgentMutable(record);
-  const overrides = normalizeWorkspaceOverrides(workspaceCode);
-  const overrideSet = new Set(overrides);
-
-  if (enabled) {
-    overrideSet.delete(agentCode);
-  } else {
-    overrideSet.add(agentCode);
+  const record = systemAgentRegistry.find((item) => item.agentCode === agentCode);
+  if (!record) {
+    throw new Error(`System agent ${agentCode} was not found.`);
+  }
+  if (!record.available) {
+    throw new Error(`${record.name} is unavailable and cannot be updated.`);
   }
 
-  workspaceDisabledOverrides = {
-    ...workspaceDisabledOverrides,
-    [workspaceCode]: [...overrideSet],
+  const overrides = new Set(workspaceSystemAgentOverrides[workspaceCode] ?? []);
+  if (enabled) {
+    overrides.delete(agentCode);
+  } else {
+    overrides.add(agentCode);
+  }
+
+  workspaceSystemAgentOverrides = {
+    ...workspaceSystemAgentOverrides,
+    [workspaceCode]: [...overrides],
   };
 
-  return buildWorkspaceRecord(workspaceCode, record);
+  return cloneWorkspaceSystemRecord(workspaceCode, record);
 }

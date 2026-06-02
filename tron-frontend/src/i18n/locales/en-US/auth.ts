@@ -40,5 +40,9 @@ export const auth = {
   signingIn: "Entering workspace...",
   status: "Enterprise access required",
   title: "Tron",
+  userMenu: {
+    loggingOut: "Logging out...",
+    signedIn: "Signed in",
+  },
   usernamePlaceholder: "auth.operator or auth.operator@tron.ai",
 } as const;

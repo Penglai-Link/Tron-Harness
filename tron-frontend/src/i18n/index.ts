@@ -5,12 +5,17 @@ import {
 } from "react-i18next";
 
 import { enUS } from "./locales/en-US";
+import { zhCN } from "./locales/zh-CN";
 
 export const fallbackLocale = "en-US";
 export const supportedLocales = [
   {
     code: "en-US",
     labelKey: "common:locale.english",
+  },
+  {
+    code: "zh-CN",
+    labelKey: "common:locale.simplifiedChinese",
   },
 ] as const;
 
@@ -53,6 +58,7 @@ void i18n.use(initReactI18next).init({
   ns: ["common", "shell", "auth", "home", "console", "pages"],
   resources: {
     "en-US": enUS,
+    "zh-CN": zhCN,
   },
   returnEmptyString: false,
   saveMissing: import.meta.env.DEV,

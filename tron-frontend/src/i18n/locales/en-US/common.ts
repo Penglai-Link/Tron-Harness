@@ -14,8 +14,14 @@ export const common = {
   },
   locale: {
     english: "English",
+    simplifiedChinese: "Simplified Chinese",
     label: "Language",
-    unavailable: "Additional locales will be enabled after translation resources are approved.",
+    unavailable: "Changes apply immediately and remain active after reload.",
+  },
+  agentStatus: {
+    disabled: "Disabled",
+    enabled: "Enabled",
+    unavailable: "Unavailable",
   },
   pagination: {
     itemLabel: "records",
@@ -32,6 +38,10 @@ export const common = {
   search: {
     ariaLabel: "Search",
     clear: "Clear search",
+  },
+  toolOperationKind: {
+    command: "command",
+    query: "query",
   },
   table: {
     empty: "No records match the current filters.",

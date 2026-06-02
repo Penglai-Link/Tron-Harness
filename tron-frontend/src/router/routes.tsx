@@ -72,6 +72,7 @@ export const appRoutes: AppRoute[] = [
   { pageId: "variables.details", route: "/variables/details", activeNav: "Variables", title: "Variable Details", archetype: "split-pane" },
   { pageId: "settings.general", route: "/settings/general", activeNav: "Settings", title: "General Settings", archetype: "settings", layout: "settings", settingsNav: "General" },
   { pageId: "settings.agents", route: "/settings/agents", activeNav: "Settings", title: "Agent Management", archetype: "settings", layout: "settings", settingsNav: "Agents" },
+  { pageId: "settings.tools", route: "/settings/tools", activeNav: "Settings", title: "Platform Tools", archetype: "settings", layout: "settings", settingsNav: "Tools" },
   { pageId: "settings.models", route: "/settings/models", activeNav: "Settings", title: "Platform Models", archetype: "settings", layout: "settings", settingsNav: "Models" },
   { pageId: "settings.modelsNew", route: "/settings/models/new", activeNav: "Settings", title: "Create Platform Model", archetype: "settings", layout: "settings", settingsNav: "Models" },
   { pageId: "settings.modelsDetail", route: "/settings/models/detail", activeNav: "Settings", title: "Platform Model Detail", archetype: "settings", layout: "settings", settingsNav: "Models" },

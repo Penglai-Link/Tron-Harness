@@ -69,3 +69,5 @@ pub(super) const AGENT_MANAGEMENT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260529_0022_create_agent_management.sql");
 pub(super) const AGENT_MANAGEMENT_RUNTIME_TYPE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260601_0027_add_agent_management_runtime_type.sql");
+pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260602_0001_add_internal_agent_policy_tables.sql");

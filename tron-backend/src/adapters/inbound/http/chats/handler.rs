@@ -158,6 +158,7 @@ pub async fn send_message(
             request,
             resolved_model,
             Some(auth.user().user_code.clone()),
+            Some(auth.locale.clone()),
             agent_service,
         )
         .await
@@ -225,6 +226,7 @@ pub async fn stream_message(
                 request,
                 resolved_model,
                 user_code,
+                Some(auth.locale.clone()),
                 agent_service,
                 sink,
             )
@@ -478,6 +480,13 @@ fn resolve_chat_agent_runtime(
             crate::domain::agent::AgentManagementError::SystemAgentUnavailable => {
                 ChatSendError::Agent(AgentInvocationError::RuntimeFailed(format!(
                     "agent `{effective_agent_code}` is unavailable or disabled for this workspace"
+                )))
+            }
+            crate::domain::agent::AgentManagementError::InternalAgentNotFound
+            | crate::domain::agent::AgentManagementError::InternalToolAssignmentStale(_)
+            | crate::domain::agent::AgentManagementError::InternalToolUnknown(_) => {
+                ChatSendError::Agent(AgentInvocationError::RuntimeFailed(format!(
+                    "agent `{effective_agent_code}` is not available for this workspace"
                 )))
             }
             crate::domain::agent::AgentManagementError::StorageFailure => ChatSendError::Agent(

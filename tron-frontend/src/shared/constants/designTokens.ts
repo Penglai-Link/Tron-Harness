@@ -21,7 +21,7 @@ export const typeScale = [
 ] as const;
 
 export const componentPrinciples = [
-  "Fixed 280px agent sidebar with fluid main canvas",
+  "Fixed 240px agent sidebar with fluid main canvas",
   "Top bar plus optional contextual right panel for management views",
   "High-density lists with 8px vertical rhythm and tabular numeric data",
   "Primary action in near-black; accent blue reserved for active and focus states",

@@ -83,6 +83,9 @@ interface ConsoleShellConfigController {
 
 type WorkspaceSwitcherTreeNode = WorkspaceTreeNode<WorkspaceSwitcherData["secondarySpaces"][number]>;
 
+const TRON_DESKTOP_SIDEBAR_EXPANDED_WIDTH_CLASS = "w-[240px]";
+const TRON_DESKTOP_SIDEBAR_EXPANDED_PADDING_CLASS = "lg:pl-[240px]";
+
 export const ConsoleShellConfigContext = createContext<ConsoleShellConfigController | null>(null);
 
 export function useConsoleShellConfig(config: ConsoleShellConfig) {
@@ -809,7 +812,7 @@ export function TronShell({
       <aside
         className={cn(
           "fixed bottom-0 left-0 top-14 z-50 hidden flex-col overflow-visible bg-[var(--color-elevated-surface)] shadow-[10px_0_28px_rgba(15,23,42,0.04)] transition-[width] duration-200 lg:flex",
-          sidebarCollapsed ? "w-[76px]" : "w-[280px]",
+          sidebarCollapsed ? "w-[76px]" : TRON_DESKTOP_SIDEBAR_EXPANDED_WIDTH_CLASS,
         )}
         data-collapsed={sidebarCollapsed}
       >
@@ -837,7 +840,7 @@ export function TronShell({
         </div>
       ) : null}
 
-      <section className={cn("relative z-0 min-w-0 pt-14 transition-[padding-left] duration-200", sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-[280px]")}>
+      <section className={cn("relative z-0 min-w-0 pt-14 transition-[padding-left] duration-200", sidebarCollapsed ? "lg:pl-[76px]" : TRON_DESKTOP_SIDEBAR_EXPANDED_PADDING_CLASS)}>
         <div className={cn("relative z-0 grid min-h-[calc(100vh-3.5rem)] grid-cols-1", showDesktopRightSidebar ? "lg:grid-cols-[minmax(0,1fr)_360px]" : "")}>
           <main className={cn("relative z-0 min-w-0 overflow-x-hidden px-6 py-6", contentClassName)}>{children}</main>
           {showDesktopRightSidebar ? (

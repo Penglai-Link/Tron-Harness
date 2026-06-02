@@ -7,11 +7,14 @@ use std::{
 use crate::{
     domain::agent::{
         AgentError, AgentKind, AgentMessage, AgentModelConfig, AgentRunContext, AgentRunResult,
-        ModelRequest, ModelResponse, ModelStreamEvent, ModelStreamEventKind, ModelTokenUsage,
-        ToolRegistry, ToolRequest,
+        ExpandedDomainPersistenceMode, ModelRequest, ModelResponse, ModelStreamEvent,
+        ModelStreamEventKind, ModelTokenUsage, ToolContextDelta, ToolExposureMode, ToolRegistry,
+        ToolRequest,
     },
     shared::event_bus::{BusEventDraft, BusOutcome, BusRequestRef, EventBusHandle, PublishOutcome},
 };
+
+use super::{DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, discovery_expand_tool_definition};
 
 pub type ModelStreamSink = Arc<dyn Fn(ModelStreamEvent) + Send + Sync>;
 
@@ -226,7 +229,9 @@ impl ReactAgent {
                         },
                         &context,
                     ) {
-                        Ok(observation) => {
+                        Ok(execution) => {
+                            let observation = execution.observation;
+                            apply_tool_context_delta(context, execution.context_delta);
                             self.publish_tool(
                                 &context,
                                 "agent.tool.completed",
@@ -237,11 +242,15 @@ impl ReactAgent {
                                 None,
                                 Some(observation.output.as_str()),
                             )?;
-                            context.messages.push(AgentMessage::tool(format!(
-                                "tool:{}",
-                                observation.tool_name
-                            )));
+                            context.messages.push(AgentMessage::tool(
+                                format_tool_observation_message(&observation),
+                            ));
+                            let completed_tool_name = observation.tool_name.clone();
                             context.observations.push(observation);
+                            collapse_ephemeral_expanded_domains(
+                                context,
+                                completed_tool_name.as_str(),
+                            );
                             self.publish_tool(
                                 &context,
                                 "agent.observation.created",
@@ -510,16 +519,62 @@ fn validate_context(context: &AgentRunContext) -> Result<(), AgentError> {
 }
 
 fn model_request_from_context(context: &AgentRunContext) -> ModelRequest {
-    let mut messages = context.messages.clone();
-    for observation in &context.observations {
-        messages.push(AgentMessage::tool(format!(
-            "tool:{}",
-            observation.tool_name
-        )));
-    }
     ModelRequest {
-        messages,
+        messages: context.messages.clone(),
         tools: context.tools.clone(),
         system_agent_session_id: context.system_agent_session_id.clone(),
     }
+}
+
+fn format_tool_observation_message(observation: &crate::domain::agent::ToolObservation) -> String {
+    format!(
+        "tool:{}\nresult:\n{}",
+        observation.tool_name, observation.output
+    )
+}
+
+fn apply_tool_context_delta(context: &mut AgentRunContext, delta: ToolContextDelta) {
+    if !delta.add_tools.is_empty() {
+        for tool in delta.add_tools {
+            if context
+                .tools
+                .iter()
+                .all(|existing| existing.tool_name != tool.tool_name)
+            {
+                context.tools.push(tool);
+            }
+        }
+    }
+    for domain_code in delta.expanded_domain_codes {
+        if context
+            .tool_exposure
+            .expanded_domain_codes
+            .iter()
+            .all(|existing| !existing.eq_ignore_ascii_case(&domain_code))
+        {
+            context
+                .tool_exposure
+                .expanded_domain_codes
+                .push(domain_code);
+        }
+    }
+}
+
+fn collapse_ephemeral_expanded_domains(context: &mut AgentRunContext, tool_name: &str) {
+    if context.tool_exposure.tool_exposure_mode != Some(ToolExposureMode::DomainDiscovery) {
+        return;
+    }
+    if context.tool_exposure.expanded_domain_persistence_mode
+        != Some(ExpandedDomainPersistenceMode::EphemeralExpanded)
+    {
+        return;
+    }
+    if context.tool_exposure.expanded_domain_codes.is_empty() {
+        return;
+    }
+    if tool_name == DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL {
+        return;
+    }
+    context.tools = vec![discovery_expand_tool_definition(&context.locale)];
+    context.tool_exposure.expanded_domain_codes.clear();
 }

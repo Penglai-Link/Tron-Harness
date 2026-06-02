@@ -107,7 +107,7 @@ export function SharedShellPreviewPage() {
       <div className="grid gap-4 xl:grid-cols-3">
         <MetricCard icon={<Activity size={18} aria-hidden="true" />} label="Console pages" trend="Routed pages are organized by product area" value="30" />
         <MetricCard icon={<ShieldCheck size={18} aria-hidden="true" />} label="Primary archetypes" trend="Kanban, split-pane, graph, chat, forms, tables" value="9" />
-        <MetricCard label="Shell width" trend="Matches design doc fixed agent sidebar" value="280px" />
+        <MetricCard label="Shell width" trend="Matches design doc fixed agent sidebar" value="240px" />
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">

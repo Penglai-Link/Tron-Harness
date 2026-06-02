@@ -1,0 +1,109 @@
+mod definitions;
+mod localization;
+
+use std::collections::BTreeMap;
+
+use crate::{
+    domain::agent::{ToolCatalogRecord, ToolDomainRecord},
+    shared::locale::SupportedLocale,
+};
+
+use self::{
+    definitions::tool_definitions,
+    localization::{localize_domain_record, localize_tool_record},
+};
+
+#[derive(Default)]
+pub struct BusinessToolCatalog;
+
+impl BusinessToolCatalog {
+    pub fn domains(locale: &str) -> Vec<ToolDomainRecord> {
+        Self::domains_for_records(&Self::list_tools(None, None, locale), locale)
+    }
+
+    pub fn domains_for_records(
+        records: &[ToolCatalogRecord],
+        locale: &str,
+    ) -> Vec<ToolDomainRecord> {
+        let locale = SupportedLocale::from_raw(locale);
+        let mut grouped = BTreeMap::<String, Vec<&ToolCatalogRecord>>::new();
+        for tool in records {
+            grouped
+                .entry(tool.domain_code.clone())
+                .or_default()
+                .push(tool);
+        }
+
+        grouped
+            .into_iter()
+            .map(|(domain_code, items)| localize_domain_record(locale, &domain_code, &items))
+            .collect()
+    }
+
+    pub fn list_tools(
+        domain_code: Option<&str>,
+        search: Option<&str>,
+        locale: &str,
+    ) -> Vec<ToolCatalogRecord> {
+        let locale = SupportedLocale::from_raw(locale);
+        let normalized_domain = domain_code
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_ascii_lowercase());
+        let normalized_search = search
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_ascii_lowercase());
+
+        tool_definitions()
+            .into_iter()
+            .map(|definition| localize_tool_record(locale, definition))
+            .filter(|tool| {
+                normalized_domain
+                    .as_ref()
+                    .is_none_or(|target| tool.domain_code.eq_ignore_ascii_case(target))
+            })
+            .filter(|tool| {
+                normalized_search.as_ref().is_none_or(|query| {
+                    format!(
+                        "{} {} {} {} {}",
+                        tool.tool_code,
+                        tool.domain_code,
+                        tool.name,
+                        tool.description,
+                        tool.module_owner
+                    )
+                    .to_ascii_lowercase()
+                    .contains(query)
+                })
+            })
+            .collect()
+    }
+
+    pub fn tool(tool_code: &str, locale: &str) -> Option<ToolCatalogRecord> {
+        let definition = Self::tool_definition(tool_code)?;
+        Some(localize_tool_record(
+            SupportedLocale::from_raw(locale),
+            definition,
+        ))
+    }
+
+    pub fn tool_codes() -> Vec<String> {
+        tool_definitions()
+            .into_iter()
+            .map(|tool| tool.tool_code.to_string())
+            .collect()
+    }
+
+    fn tool_definition(tool_code: &str) -> Option<definitions::ToolCatalogDefinition> {
+        let code = tool_code.trim();
+        if code.is_empty() {
+            return None;
+        }
+        tool_definitions()
+            .into_iter()
+            .find(|tool| tool.tool_code.eq_ignore_ascii_case(code))
+    }
+}
+
+pub(crate) use localization::{materialize_schema, translate};

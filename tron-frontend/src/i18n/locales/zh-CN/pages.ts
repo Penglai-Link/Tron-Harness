@@ -1,0 +1,311 @@
+export const pages = {
+  settingsTools: {
+    catalog: {
+      domains: {
+        app: {
+          name: "应用工具",
+          description: "查看工作区应用和执行目标。",
+        },
+        model: {
+          name: "模型工具",
+          description: "查看生效中的模型目录配置。",
+        },
+        skill: {
+          name: "技能工具",
+          description: "查看工作区技能绑定和注册项。",
+        },
+        task: {
+          name: "任务工具",
+          description: "读取并创建工作区任务。",
+        },
+        variable: {
+          name: "变量工具",
+          description: "查看工作区生效变量。",
+        },
+        workspace: {
+          name: "工作区工具",
+          description: "查看工作区层级和元数据。",
+        },
+      },
+      tools: {
+        appList: {
+          name: "列出应用",
+          description: "列出当前或指定工作区中的应用。",
+        },
+        modelList: {
+          name: "列出模型",
+          description: "列出当前或指定工作区中生效的模型定义。",
+        },
+        skillList: {
+          name: "列出技能",
+          description: "列出工作区技能绑定和注册项。",
+        },
+        taskCreate: {
+          name: "创建任务",
+          description: "在当前或指定工作区中创建任务。",
+        },
+        taskList: {
+          name: "列出任务",
+          description: "列出当前或指定工作区中的任务。",
+        },
+        variableList: {
+          name: "列出变量",
+          description: "列出当前或指定工作区中的生效变量。",
+        },
+        workspaceGet: {
+          name: "获取工作区",
+          description: "根据工作区编码读取工作区元数据。",
+        },
+        workspaceList: {
+          name: "列出工作区",
+          description: "列出当前操作者可见的工作区。",
+        },
+      },
+    },
+    errors: {
+      load: "无法加载平台工具",
+    },
+    domains: {
+      columns: {
+        description: "说明",
+        domainCode: "领域",
+        mutation: "变更能力",
+        samples: "示例工具",
+        toolCount: "工具数",
+      },
+      empty: "当前筛选下没有匹配的领域。",
+      itemLabel: "工具领域",
+      mutationNo: "只读",
+      mutationYes: "包含变更",
+      sampleFallback: "无",
+      searchAria: "搜索工具领域",
+      searchPlaceholder: "搜索工具领域...",
+      title: "工具领域",
+    },
+    title: "平台工具",
+    tools: {
+      columns: {
+        description: "说明",
+        domainCode: "领域",
+        name: "名称",
+        operationKind: "类型",
+        toolCode: "工具编码",
+      },
+      domainFilterAll: "全部领域",
+      domainFilterAria: "按领域筛选平台工具",
+      empty: "当前筛选下没有匹配的工具。",
+      itemLabel: "工具",
+      searchAria: "搜索平台工具",
+      searchPlaceholder: "搜索平台工具...",
+      title: "工具",
+    },
+  },
+  settingsAgents: {
+    actions: {
+      save: "保存",
+      saving: "保存中...",
+      scan: "扫描",
+      scanning: "扫描中...",
+    },
+    errors: {
+      load: "无法加载智能体管理数据",
+      save: "无法保存 Main Agent",
+      scan: "系统智能体扫描失败",
+      toggle: "系统智能体策略更新失败",
+    },
+    mainAgent: {
+      description: "运行时 Main Agent 路径使用的平台级指导信息。",
+      hint: "v1 仅允许编辑 personality 和 instructions。",
+      instructions: "Instructions",
+      instructionsPlaceholder: "会被持续注入运行时 main-agent 路径的固定指令。",
+      personality: "Personality",
+      personalityPlaceholder: "平台 Main Agent 应该如何表现？",
+      title: "Main Agent",
+      updated: "更新于 {{value}}",
+    },
+    messages: {
+      disabled: "{{name}} 已禁用",
+      enabled: "{{name}} 已启用",
+      saved: "Main Agent 已保存",
+      scanned: "已扫描 {{count}} 个系统智能体",
+      scannedPartial: "已扫描 {{count}} 个系统智能体；其中 {{unavailable}} 个不可用",
+    },
+    pagination: {
+      itemLabel: "系统智能体",
+    },
+    table: {
+      catalog: {
+        codex: {
+          description: "OpenAI Codex CLI 智能体运行时。",
+        },
+        opencode: {
+          description: "OpenCode CLI 智能体运行时。",
+        },
+      },
+      columns: {
+        actions: "操作",
+        agent: "智能体",
+        lastScanned: "最近扫描",
+        source: "来源",
+        status: "状态",
+      },
+      disable: "禁用",
+      disableLabel: "禁用 {{name}}",
+      empty: "当前筛选下没有匹配的系统智能体。",
+      enable: "启用",
+      enableLabel: "启用 {{name}}",
+      readOnly: "只读",
+      searchAria: "搜索系统智能体",
+      searchPlaceholder: "搜索系统智能体...",
+      title: "系统智能体",
+    },
+    title: "智能体管理",
+  },
+  workspaceAgents: {
+    emptyWorkspace: "请选择一个工作区来管理继承的系统智能体策略。",
+    errors: {
+      load: "无法加载工作区智能体",
+      reset: "内部智能体策略重置失败",
+      save: "内部智能体策略更新失败",
+      toggle: "工作区智能体策略更新失败",
+    },
+    messages: {
+      disabled: "{{name}} 已在 {{workspace}} 中禁用",
+      enabled: "{{name}} 现在遵循平台策略",
+      stillDisabled: "{{name}} 继续遵循平台策略，且仍然处于禁用状态",
+    },
+    pagination: {
+      itemLabel: "工作区智能体",
+    },
+    table: {
+      catalog: {
+        codex: {
+          description: "OpenAI Codex CLI 智能体运行时。",
+        },
+        opencode: {
+          description: "OpenCode CLI 智能体运行时。",
+        },
+      },
+      columns: {
+        actions: "操作",
+        agent: "智能体",
+        description: "说明",
+        inheritedFrom: "继承自",
+        source: "来源",
+        policy: "策略",
+        status: "状态",
+      },
+      disable: "禁用",
+      disableLabel: "禁用 {{name}}",
+      empty: "当前筛选下没有匹配的工作区智能体。",
+      enable: "启用",
+      enableLabel: "启用 {{name}}",
+      policyInherited: "平台基线",
+      policyLocalDisable: "本地禁用",
+      policyPlatformDisabled: "平台已禁用",
+      policyUnavailable: "不可用",
+      readOnly: "只读",
+      searchAria: "搜索工作区智能体",
+      searchPlaceholder: "搜索工作区智能体...",
+      title: "继承的系统智能体",
+      unavailableLabel: "{{name}} 不可用",
+      platformDisabledLabel: "{{name}} 已被平台策略禁用",
+      values: {
+        inheritedPlatform: "平台",
+        systemScan: "系统扫描",
+      },
+    },
+    title: "智能体",
+    internal: {
+      actions: {
+        reset: "重置",
+        resetting: "重置中...",
+        save: "保存",
+        saving: "保存中...",
+      },
+      catalog: {
+        mainAgent: {
+          name: "主智能体",
+          description: "拥有平台业务工具访问能力的主工作区内部智能体。",
+        },
+      },
+      description: "管理当前工作区内部智能体的策略和工具分配。",
+      empty: "当前工作区没有内部智能体。",
+      agentCode: "编码：{{code}}",
+      errors: {
+        reset: "内部智能体策略重置失败",
+        save: "内部智能体策略更新失败",
+      },
+      help: {
+        optionLabel: "选项说明",
+        expandedDomainPersistenceMode: {
+          ariaLabel: "解释展开领域持久化模式",
+          summary: "控制 discovery 展开出来的工具在一次运行里保留多久。",
+          optionOne: "持续展开：某个领域一旦被展开，该领域下的工具会在本次运行剩余阶段持续可用。",
+          optionTwo: "临时展开：展开出来的工具只临时可用，相关步骤结束后可以被回收。",
+        },
+        toolAssignmentMode: {
+          ariaLabel: "解释工具分配模式",
+          summary: "控制这个内部智能体最终被分配哪些平台业务工具。",
+          optionOne: "全部平台工具：把当前注册表里的全部平台工具都分配给该智能体。",
+          optionTwo: "指定工具：只分配你在下方明确勾选的工具。",
+        },
+        toolExposureMode: {
+          ariaLabel: "解释工具暴露模式",
+          summary: "控制已分配工具在运行时如何暴露给模型。",
+          optionOne: "直接列表：启动时直接把具体工具 schema 提供给模型。",
+          optionTwo: "领域发现：先给模型领域目录，再按需展开具体领域并加载工具。",
+        },
+      },
+      labels: {
+        expandedDomainPersistenceMode: "展开领域持久化模式",
+        toolAssignmentMode: "工具分配模式",
+        toolExposureMode: "工具暴露模式",
+      },
+      messages: {
+        reset: "内部智能体策略已重置",
+        saved: "内部智能体策略已保存",
+      },
+      modes: {
+        allTools: "全部平台工具",
+        directList: "直接列表",
+        domainDiscovery: "领域发现",
+        ephemeralExpanded: "临时展开",
+        selectedTools: "指定工具",
+        stickyExpanded: "持续展开",
+      },
+      status: {
+        error: "自动保存失败，再次修改会重试",
+        pending: "修改后将自动保存",
+        saved: "已自动保存",
+        saving: "正在保存...",
+      },
+      toolSelection: {
+        allTools: "该智能体可使用全部平台工具。",
+        clearVisible: "清空可见项",
+        domainsSummary: "共 {{total}} 个领域，当前显示 {{visible}} 个",
+        domainsTitle: "领域",
+        empty: "没有工具匹配当前搜索条件。",
+        emptyPanel: "请选择一个领域查看其工具详情。",
+        hasMutation: "包含变更工具",
+        noMutation: "仅只读工具",
+        noDescription: "暂无描述。",
+        sampleFallback: "无",
+        sampleLabel: "示例：{{sample}}",
+        searchAria: "搜索工具",
+        searchPlaceholder: "搜索工具...",
+        selectedCount: "已选 {{count}} 个",
+        selectVisible: "选择可见项",
+        showingTools: "显示 {{visible}} / {{total}} 个工具",
+        toolsCount: "{{count}} 个工具",
+        title: "指定工具",
+      },
+      title: "内部智能体",
+    },
+    workspace: {
+      description: "继承的系统智能体默认遵循平台策略，除非当前工作区增加本地禁用覆盖。",
+      label: "当前工作区",
+      unselected: "未选择工作区",
+    },
+  },
+} as const;

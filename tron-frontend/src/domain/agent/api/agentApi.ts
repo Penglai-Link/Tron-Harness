@@ -1,4 +1,6 @@
 export const agentApiEndpoints = {
+  getToolDomains: "GET /api/v1/tools/domains",
+  getTools: "GET /api/v1/tools",
   listMainAgentMessages: "GET /api/v1/agent/main/messages",
   getMainAgentConfig: "GET /api/v1/agents/registry/main-agent",
   updateMainAgentConfig: "PATCH /api/v1/agents/registry/main-agent",
@@ -9,4 +11,12 @@ export const agentApiEndpoints = {
   listWorkspaceSystemAgents: "GET /api/v1/agents/workspaces/{workspaceCode}/system",
   enableWorkspaceSystemAgent: "POST /api/v1/agents/workspaces/{workspaceCode}/system/{agentCode}/enable",
   disableWorkspaceSystemAgent: "POST /api/v1/agents/workspaces/{workspaceCode}/system/{agentCode}/disable",
+  listWorkspaceInternalAgents: "GET /api/v1/agents/workspaces/{workspaceCode}/internal",
+  getWorkspaceInternalAgent: "GET /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}",
+  patchWorkspaceInternalAgentPolicy:
+    "PATCH /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}/policy",
+  updateWorkspaceInternalAgentToolAssignments:
+    "PUT /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}/tool-assignments",
+  resetWorkspaceInternalAgentPolicy:
+    "POST /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}/reset-policy",
 } as const;

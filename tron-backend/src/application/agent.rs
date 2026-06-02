@@ -1,5 +1,6 @@
 mod agui_stream;
 pub(crate) mod agui_translate;
+mod business_tools;
 mod canonical_event;
 mod dto;
 mod error;
@@ -13,8 +14,13 @@ mod runtime_adapter;
 mod runtime_capability;
 mod system_agent_model_probe;
 mod system_cli_output_parser;
+mod tool_catalog;
 
 pub use agui_stream::{AgentAguiReplayStore, AgentAguiStreamError, AgentAguiStreamService};
+pub use business_tools::{
+    DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, build_domain_discovery_guidance,
+    discovery_expand_tool_definition, register_default_agent_tools, tool_record_to_effective_tool,
+};
 pub use canonical_event::CanonicalRuntimeEvent;
 pub use dto::{AgentInvocationCommand, AgentInvocationResult};
 pub use error::AgentInvocationError;
@@ -23,7 +29,7 @@ pub(crate) use invocation::build_system_runtime_model_config;
 pub use invocation::{AgentInvocationService, generate_agent_run_code};
 pub use management::{
     AgentManagementRepository, AgentManagementService, ResolvedAgentRuntime,
-    UpdatePlatformMainAgentCommand,
+    UpdatePlatformMainAgentCommand, UpdateWorkspaceInternalAgentPolicyCommand,
 };
 pub use orchestrator::{AgentOrchestrator, OrchestratedRunResult, RunLifecycleState};
 pub use port::AgentRunHistoryRepository;
@@ -32,3 +38,4 @@ pub use runtime_adapter::{
     AgentRuntime, AgentRuntimeRegistry, RuntimeAdapterDescriptor, RuntimeAdapterKey,
     RuntimeAdapterSelection, RuntimeAdapterStage, RuntimeCapabilities, runtime_adapter_descriptors,
 };
+pub use tool_catalog::BusinessToolCatalog;

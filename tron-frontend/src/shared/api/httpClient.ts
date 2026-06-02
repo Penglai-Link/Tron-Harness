@@ -1,3 +1,5 @@
+import { fallbackLocale, i18n } from "@/i18n";
+
 export type EndpointParams = Record<string, string | number | boolean | null | undefined>;
 
 interface ApiRequestOptions {
@@ -68,6 +70,11 @@ function resolveHeaders(body: ApiRequestOptions["body"], headers?: HeadersInit) 
 
   if (apiAccessToken && !resolved.has("Authorization")) {
     resolved.set("Authorization", `Bearer ${apiAccessToken}`);
+  }
+
+  if (!resolved.has("Accept-Language")) {
+    const locale = i18n.resolvedLanguage ?? i18n.language ?? fallbackLocale;
+    resolved.set("Accept-Language", locale);
   }
 
   return resolved;

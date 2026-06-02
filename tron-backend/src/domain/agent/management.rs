@@ -1,3 +1,5 @@
+use serde_json::Value;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -13,6 +15,72 @@ pub struct PlatformMainAgentConfig {
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ManagedAgentType {
     System,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ToolAssignmentMode {
+    AllPlatformTools,
+    SelectedTools,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ToolExposureMode {
+    DirectList,
+    DomainDiscovery,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ExpandedDomainPersistenceMode {
+    StickyExpanded,
+    EphemeralExpanded,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum InternalAgentPolicySource {
+    PlatformDefault,
+    WorkspaceOverride,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceInternalAgentPolicy {
+    pub workspace_code: String,
+    pub agent_code: String,
+    pub tool_assignment_mode: ToolAssignmentMode,
+    pub tool_exposure_mode: ToolExposureMode,
+    pub expanded_domain_persistence_mode: ExpandedDomainPersistenceMode,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceInternalAgentToolAssignment {
+    pub workspace_code: String,
+    pub agent_code: String,
+    pub tool_code: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalAgentToolPolicy {
+    pub workspace_code: String,
+    pub agent_code: String,
+    pub name: String,
+    pub description: String,
+    pub source: InternalAgentPolicySource,
+    pub tool_assignment_mode: ToolAssignmentMode,
+    pub tool_exposure_mode: ToolExposureMode,
+    pub expanded_domain_persistence_mode: ExpandedDomainPersistenceMode,
+    pub selected_tool_codes: Vec<String>,
+    pub assigned_tool_count: usize,
+    pub effective_tool_count: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -125,7 +193,49 @@ pub struct RuntimeAdapterCapabilityRecord {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentManagementError {
     InvalidWorkspace,
+    InternalAgentNotFound,
     SystemAgentNotFound,
+    InternalToolAssignmentStale(String),
+    InternalToolUnknown(String),
     SystemAgentUnavailable,
     StorageFailure,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolDomainRecord {
+    pub domain_code: String,
+    pub name: String,
+    pub description: String,
+    pub tool_count: usize,
+    pub sample_tools: Vec<String>,
+    pub has_mutation_tools: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ToolOperationKind {
+    Query,
+    Command,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ToolAvailabilityState {
+    Available,
+    Disabled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCatalogRecord {
+    pub tool_code: String,
+    pub domain_code: String,
+    pub name: String,
+    pub description: String,
+    pub operation_kind: ToolOperationKind,
+    pub input_schema: Value,
+    pub module_owner: String,
+    pub availability_state: ToolAvailabilityState,
+    pub sample_result_summary: String,
 }

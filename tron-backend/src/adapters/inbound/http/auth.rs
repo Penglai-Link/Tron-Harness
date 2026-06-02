@@ -14,6 +14,7 @@ use axum::{
 use crate::{
     application::user::UserService,
     domain::auth::{AuthError, AuthenticatedUser, CurrentSession},
+    shared::locale::resolve_request_locale,
 };
 
 pub use routes::routes;
@@ -23,6 +24,7 @@ use self::error_mapper::auth_error_response;
 #[derive(Debug, Clone)]
 pub struct RequestAuthContext {
     pub access_token: String,
+    pub locale: String,
     pub session: CurrentSession,
 }
 
@@ -94,9 +96,16 @@ pub async fn require_auth(
     let access_token = read_access_token(request.headers());
     match users.authenticate_access_token(access_token.as_deref()) {
         Ok(session) => {
+            let locale = resolve_request_locale(
+                request
+                    .headers()
+                    .get(header::ACCEPT_LANGUAGE)
+                    .and_then(|value| value.to_str().ok()),
+            );
             request.extensions_mut().insert(RequestAuthContext {
                 access_token: access_token
                     .expect("authenticated requests must include an access token"),
+                locale,
                 session,
             });
             next.run(request).await

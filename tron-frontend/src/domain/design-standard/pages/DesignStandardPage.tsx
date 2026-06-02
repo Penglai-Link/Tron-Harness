@@ -25,7 +25,7 @@ import {
 export function DesignStandardPage() {
   return (
     <main className="min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]">
-      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[280px_1fr]">
+      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[240px_1fr]">
         <aside className="border-r border-[var(--color-outline-variant)] bg-white px-4 py-5">
           <div className="flex items-center gap-3 px-2">
             <div className="flex size-9 items-center justify-center rounded-xl bg-[var(--color-primary)] text-[var(--color-on-primary)]">

@@ -51,6 +51,7 @@ export const routePages: Record<string, RoutePageComponent> = {
   "settings.variablesNew": lazy(() => import("@/domain/variable/pages/CreatePlatformVariablePage").then((module) => ({ default: module.CreatePlatformVariablePage }))),
   "settings.skills": lazy(() => import("@/domain/skill/pages/InstalledSkillsPage").then((module) => ({ default: module.InstalledSkillsPage }))),
   "settings.skillsSync": lazy(() => import("@/domain/skill/pages/CreateSkillPage").then((module) => ({ default: module.CreateSkillPage }))),
+  "settings.tools": lazy(() => import("@/domain/agent/pages/PlatformToolsPage").then((module) => ({ default: module.PlatformToolsPage }))),
   "skills.bind": lazy(() => import("@/domain/skill/pages/BindSkillPage").then((module) => ({ default: module.BindSkillPage }))),
   "skills.index": lazy(() => import("@/domain/skill/pages/SkillsPage").then((module) => ({ default: module.SkillsPage }))),
   "tasks.detail": lazy(() => import("@/domain/task/pages/TaskDetailsPage").then((module) => ({ default: module.TaskDetailsPage }))),

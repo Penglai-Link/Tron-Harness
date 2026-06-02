@@ -1,6 +1,7 @@
 mod common;
 
 use std::{
+    collections::VecDeque,
     path::PathBuf,
     sync::{
         Arc, Mutex,
@@ -11,16 +12,26 @@ use std::{
 
 use axum::{
     Json, Router,
-    http::{Method, StatusCode},
+    body::Body,
+    http::{Method, Request, StatusCode, header},
     routing::post,
 };
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
+use tower::ServiceExt;
 use tron_backend::config::{AppConfig, SystemAgentConfig};
 
-use common::{app_with_config, authenticated_bearer_token, request_with_headers, response_json};
+use common::{
+    app, app_with_config, authenticated_bearer_token, request_with_headers, response_json,
+};
 
 struct RecordingModelServer {
+    base_url: String,
+    requests: Arc<Mutex<Vec<Value>>>,
+    _task: JoinHandle<()>,
+}
+
+struct ScriptedModelServer {
     base_url: String,
     requests: Arc<Mutex<Vec<Value>>>,
     _task: JoinHandle<()>,
@@ -51,6 +62,30 @@ async fn recording_model_server() -> RecordingModelServer {
     }
 }
 
+async fn scripted_model_server(responses: Vec<Value>) -> ScriptedModelServer {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("agent scripted mock server should bind");
+    let address = listener
+        .local_addr()
+        .expect("agent scripted mock server should expose address");
+    let requests = Arc::new(Mutex::new(Vec::<Value>::new()));
+    let responses = Arc::new(Mutex::new(VecDeque::from(responses)));
+    let app = Router::new()
+        .route("/v1/chat/completions", post(scripted_chat_completion))
+        .with_state((requests.clone(), responses));
+    let task = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("agent scripted mock server should stay available");
+    });
+    ScriptedModelServer {
+        base_url: format!("http://{address}/v1"),
+        requests,
+        _task: task,
+    }
+}
+
 async fn record_chat_completion(
     axum::extract::State(requests): axum::extract::State<Arc<Mutex<Vec<Value>>>>,
     Json(payload): Json<Value>,
@@ -72,6 +107,34 @@ async fn record_chat_completion(
             }
         }]
     }))
+}
+
+async fn scripted_chat_completion(
+    axum::extract::State((requests, responses)): axum::extract::State<(
+        Arc<Mutex<Vec<Value>>>,
+        Arc<Mutex<VecDeque<Value>>>,
+    )>,
+    Json(payload): Json<Value>,
+) -> Json<Value> {
+    requests
+        .lock()
+        .expect("recording model request mutex poisoned")
+        .push(payload);
+    let response = responses
+        .lock()
+        .expect("scripted model response mutex poisoned")
+        .pop_front()
+        .unwrap_or_else(|| {
+            json!({
+                "choices": [{
+                    "message": {
+                        "role": "assistant",
+                        "content": "scripted fallback"
+                    }
+                }]
+            })
+        });
+    Json(response)
 }
 
 fn temp_database_url(test_name: &str) -> String {
@@ -109,6 +172,36 @@ fn write_executable_script(path: &PathBuf, script: &str) {
         .permissions();
     permissions.set_mode(0o755);
     std::fs::set_permissions(path, permissions).expect("fake command should be executable");
+}
+
+async fn request_with_locale(
+    app: &Router,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+    authorization_header: &str,
+    locale: &str,
+) -> axum::response::Response {
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(header::AUTHORIZATION, authorization_header)
+        .header(header::ACCEPT_LANGUAGE, locale);
+    let request_body = if let Some(json_body) = body {
+        builder = builder.header(header::CONTENT_TYPE, "application/json");
+        Body::from(json_body.to_string())
+    } else {
+        Body::empty()
+    };
+
+    app.clone()
+        .oneshot(
+            builder
+                .body(request_body)
+                .expect("request should be constructible"),
+        )
+        .await
+        .expect("router should return a response")
 }
 
 fn test_config(codex_command: &PathBuf, opencode_command: &PathBuf) -> AppConfig {
@@ -520,6 +613,246 @@ async fn main_agent_config_is_persisted_and_only_main_agent_runs_receive_guidanc
 }
 
 #[tokio::test]
+async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() {
+    let codex_command = temp_command_path("codex-domain-discovery");
+    let opencode_command = temp_command_path("opencode-domain-discovery");
+    write_fake_command(&codex_command);
+    write_fake_command(&opencode_command);
+
+    let model_server = scripted_model_server(vec![
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "function": {
+                            "name": "discovery.expand_tool_domain",
+                            "arguments": "{\"domainCode\":\"workspace\"}"
+                        }
+                    }]
+                }
+            }]
+        }),
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "function": {
+                            "name": "workspace.list",
+                            "arguments": "{}"
+                        }
+                    }]
+                }
+            }]
+        }),
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "expanded and executed"
+                }
+            }]
+        }),
+    ])
+    .await;
+    let app = app_with_config(test_config(&codex_command, &opencode_command));
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let patch_policy = request_with_headers(
+        &app,
+        Method::PATCH,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
+        Some(json!({
+            "toolExposureMode": "domain_discovery",
+            "expandedDomainPersistenceMode": "sticky_expanded"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(patch_policy.status(), StatusCode::OK);
+
+    let run_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/agents/runs",
+        Some(json!({
+            "prompt": "Inspect the workspace catalog.",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "TEST_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": model_server.base_url,
+                "apiKey": "sk-test-api",
+                "modelName": "gpt-test"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(run_response.status(), StatusCode::OK);
+    let run_body = response_json(run_response).await;
+    assert_eq!(
+        run_body["data"]["finalOutput"],
+        json!("expanded and executed")
+    );
+
+    let recorded_requests = model_server
+        .requests
+        .lock()
+        .expect("recorded scripted model request mutex poisoned")
+        .clone();
+    assert_eq!(recorded_requests.len(), 3);
+
+    let first_tools = recorded_requests[0]["tools"]
+        .as_array()
+        .expect("first request tools should be an array");
+    assert_eq!(first_tools.len(), 1);
+    assert_eq!(
+        first_tools[0]["function"]["name"],
+        json!("discovery.expand_tool_domain")
+    );
+    let first_messages = recorded_requests[0]["messages"]
+        .as_array()
+        .expect("first request messages should be an array");
+    assert!(first_messages.iter().any(|message| {
+        message["role"] == json!("system")
+            && message["content"]
+                .as_str()
+                .is_some_and(|content| content.contains("domain_discovery"))
+    }));
+    assert!(first_messages.iter().any(|message| {
+        message["role"] == json!("system")
+            && message["content"]
+                .as_str()
+                .is_some_and(|content| content.contains("\"domainCode\": \"workspace\""))
+    }));
+
+    let second_tools = recorded_requests[1]["tools"]
+        .as_array()
+        .expect("second request tools should be an array");
+    assert!(
+        second_tools
+            .iter()
+            .any(|tool| { tool["function"]["name"] == json!("discovery.expand_tool_domain") })
+    );
+    assert!(
+        second_tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == json!("workspace.list"))
+    );
+    assert!(
+        second_tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == json!("workspace.get"))
+    );
+    let second_messages = recorded_requests[1]["messages"]
+        .as_array()
+        .expect("second request messages should be an array");
+    assert!(second_messages.iter().any(|message| {
+        message["role"] == json!("tool")
+            && message["content"]
+                .as_str()
+                .is_some_and(|content| content.contains("discovery.expand_tool_domain"))
+    }));
+
+    let third_messages = recorded_requests[2]["messages"]
+        .as_array()
+        .expect("third request messages should be an array");
+    assert!(third_messages.iter().any(|message| {
+        message["role"] == json!("tool")
+            && message["content"]
+                .as_str()
+                .is_some_and(|content| content.contains("workspace.list"))
+    }));
+}
+
+#[tokio::test]
+async fn internal_agent_domain_discovery_uses_request_locale_for_discovery_schema() {
+    let codex_command = temp_command_path("codex-domain-discovery-zh");
+    let opencode_command = temp_command_path("opencode-domain-discovery-zh");
+    write_fake_command(&codex_command);
+    write_fake_command(&opencode_command);
+
+    let model_server = recording_model_server().await;
+    let app = app_with_config(test_config(&codex_command, &opencode_command));
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let patch_policy = request_with_headers(
+        &app,
+        Method::PATCH,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
+        Some(json!({
+            "toolExposureMode": "domain_discovery",
+            "expandedDomainPersistenceMode": "sticky_expanded"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(patch_policy.status(), StatusCode::OK);
+
+    let run_response = request_with_locale(
+        &app,
+        Method::POST,
+        "/api/v1/agents/runs",
+        Some(json!({
+            "prompt": "先看看有哪些 domain。",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "TEST_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": model_server.base_url,
+                "apiKey": "sk-test-api",
+                "modelName": "gpt-test"
+            }
+        })),
+        &authorization,
+        "zh-CN",
+    )
+    .await;
+    assert_eq!(run_response.status(), StatusCode::OK);
+
+    let recorded_requests = model_server
+        .requests
+        .lock()
+        .expect("recorded model request mutex poisoned")
+        .clone();
+    assert_eq!(recorded_requests.len(), 1);
+
+    let tools = recorded_requests[0]["tools"]
+        .as_array()
+        .expect("tools should be an array");
+    assert_eq!(tools.len(), 1);
+    assert_eq!(
+        tools[0]["function"]["name"],
+        json!("discovery.expand_tool_domain")
+    );
+    assert_eq!(
+        tools[0]["function"]["description"],
+        json!("展开一个可见工具领域，加载其中可直接调用的具体工具。")
+    );
+    assert_eq!(
+        tools[0]["function"]["parameters"]["properties"]["domainCode"]["description"],
+        json!("需要展开的可见领域编码。")
+    );
+
+    let messages = recorded_requests[0]["messages"]
+        .as_array()
+        .expect("messages should be an array");
+    assert!(messages.iter().any(|message| {
+        message["role"] == json!("system")
+            && message["content"].as_str().is_some_and(|content| {
+                content.contains("当前 tool exposure mode 为 domain_discovery")
+            })
+    }));
+}
+
+#[tokio::test]
 async fn runtime_registry_capabilities_are_discoverable() {
     let codex_command = temp_command_path("codex-runtime-discovery");
     let opencode_command = temp_command_path("opencode-runtime-discovery");
@@ -601,4 +934,234 @@ async fn runtime_registry_capabilities_are_discoverable() {
     assert_eq!(missing_response.status(), StatusCode::NOT_FOUND);
     let missing_body = response_json(missing_response).await;
     assert_eq!(missing_body["code"], json!("AGENT_RUNTIME_NOT_FOUND"));
+}
+
+#[tokio::test]
+async fn tool_catalog_read_apis_are_available() {
+    let app = app();
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let domains_response = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/tools/domains",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(domains_response.status(), StatusCode::OK);
+    let domains_body = response_json(domains_response).await;
+    let domains = domains_body["data"]
+        .as_array()
+        .expect("tool domains should be an array");
+    assert!(!domains.is_empty());
+    assert!(
+        domains
+            .iter()
+            .any(|row| row["domainCode"] == json!("workspace"))
+    );
+    assert!(domains.iter().any(|row| row["domainCode"] == json!("task")));
+
+    let tools_response = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/tools?domainCode=task&search=create",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(tools_response.status(), StatusCode::OK);
+    let tools_body = response_json(tools_response).await;
+    let tools = tools_body["data"]
+        .as_array()
+        .expect("tools should be an array");
+    assert!(
+        tools
+            .iter()
+            .any(|row| row["toolCode"] == json!("task.create"))
+    );
+
+    let tool_response = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/tools/task.create",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(tool_response.status(), StatusCode::OK);
+    let tool_body = response_json(tool_response).await;
+    assert_eq!(tool_body["data"]["toolCode"], json!("task.create"));
+}
+
+#[tokio::test]
+async fn tool_catalog_read_apis_follow_accept_language() {
+    let app = app();
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let domains_response = request_with_locale(
+        &app,
+        Method::GET,
+        "/api/v1/tools/domains",
+        None,
+        &authorization,
+        "zh-CN",
+    )
+    .await;
+    assert_eq!(domains_response.status(), StatusCode::OK);
+    let domains_body = response_json(domains_response).await;
+    let workspace_domain = domains_body["data"]
+        .as_array()
+        .and_then(|rows| {
+            rows.iter()
+                .find(|row| row["domainCode"] == json!("workspace"))
+        })
+        .expect("workspace domain should be present");
+    assert_eq!(workspace_domain["name"], json!("工作区工具"));
+    assert_eq!(
+        workspace_domain["description"],
+        json!("查看工作区层级和元数据。")
+    );
+
+    let tool_response = request_with_locale(
+        &app,
+        Method::GET,
+        "/api/v1/tools/task.create",
+        None,
+        &authorization,
+        "zh-CN",
+    )
+    .await;
+    assert_eq!(tool_response.status(), StatusCode::OK);
+    let tool_body = response_json(tool_response).await;
+    assert_eq!(tool_body["data"]["name"], json!("创建任务"));
+    assert_eq!(
+        tool_body["data"]["description"],
+        json!("在当前或指定工作区中创建任务。")
+    );
+    assert_eq!(
+        tool_body["data"]["inputSchema"]["properties"]["title"]["description"],
+        json!("任务标题。")
+    );
+    assert_eq!(
+        tool_body["data"]["inputSchema"]["properties"]["sourceType"]["description"],
+        json!("来源类型，可选值：internal、github、gitlab。")
+    );
+}
+
+#[tokio::test]
+async fn workspace_internal_agent_policies_can_be_read_and_updated() {
+    let codex_command = temp_command_path("codex-internal-policy");
+    let opencode_command = temp_command_path("opencode-internal-policy");
+    write_fake_command(&codex_command);
+    write_fake_command(&opencode_command);
+
+    let app = app_with_config(test_config(&codex_command, &opencode_command));
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let list_response = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/agents/workspaces/TRON_CORE/internal",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_body = response_json(list_response).await;
+    let rows = list_body["data"]
+        .as_array()
+        .expect("internal agents should be an array");
+    let main_row = rows
+        .iter()
+        .find(|row| row["agentCode"] == json!("main-agent"))
+        .expect("main-agent should be in workspace internal agents");
+    assert_eq!(main_row["source"], json!("PLATFORM_DEFAULT"));
+    assert_eq!(main_row["name"], json!("Main Agent"));
+    assert!(
+        main_row["selectedToolCodes"]
+            .as_array()
+            .is_some_and(|rows| !rows.is_empty())
+    );
+
+    let get_response = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let get_body = response_json(get_response).await;
+    assert_eq!(get_body["data"]["agentCode"], json!("main-agent"));
+    assert_eq!(
+        get_body["data"]["toolAssignmentMode"],
+        json!("ALL_PLATFORM_TOOLS")
+    );
+    assert_eq!(get_body["data"]["toolExposureMode"], json!("DIRECT_LIST"));
+
+    let patch_response = request_with_headers(
+        &app,
+        Method::PATCH,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
+        Some(json!({
+            "toolAssignmentMode": "selected_tools",
+            "toolExposureMode": "direct_list",
+            "expandedDomainPersistenceMode": "ephemeral_expanded"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(patch_response.status(), StatusCode::OK);
+    let patched = response_json(patch_response).await;
+    assert_eq!(
+        patched["data"]["toolAssignmentMode"],
+        json!("SELECTED_TOOLS")
+    );
+    assert_eq!(
+        patched["data"]["expandedDomainPersistenceMode"],
+        json!("EPHEMERAL_EXPANDED")
+    );
+
+    let assign_response = request_with_headers(
+        &app,
+        Method::PUT,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/tool-assignments",
+        Some(json!({
+            "toolCodes": ["app.list", "workspace.list", "app.list"]
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(assign_response.status(), StatusCode::OK);
+    let assigned = response_json(assign_response).await;
+    assert_eq!(assigned["data"]["assignedToolCount"], json!(2));
+    assert_eq!(
+        assigned["data"]["selectedToolCodes"],
+        json!(["app.list", "workspace.list"])
+    );
+
+    let reset_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/reset-policy",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(reset_response.status(), StatusCode::OK);
+    let reset = response_json(reset_response).await;
+    assert_eq!(reset["data"]["source"], json!("PLATFORM_DEFAULT"));
 }

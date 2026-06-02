@@ -101,6 +101,8 @@ test.beforeAll(async () => {
       cwd: frontendRoot,
       env: {
         ...process.env,
+        VITE_TRON_ADMIN_DATA_SOURCE: "mock",
+        VITE_TRON_AGENT_DATA_SOURCE: "mock",
         VITE_TRON_API_BASE_URL: "",
         VITE_TRON_AUTH_DATA_SOURCE: "mock",
         VITE_TRON_DATA_SOURCE: "mock",
@@ -129,11 +131,80 @@ test.afterAll(async () => {
 
 test("agent management works fully in mock mode without backend requests", async ({ page }) => {
   const blockedRequests = await blockApiRequests(page);
+  await page.addInitScript(() => {
+    localStorage.setItem("tron-app-shell", JSON.stringify({
+      state: {
+        openSections: { Core: true },
+        selectedPrimarySpaceId: "ENTERPRISE",
+        selectedSecondarySpaceId: "TRON_CORE",
+        sidebarCollapsed: false,
+        workspaceSwitcherSnapshot: {
+          primarySpaces: [
+            {
+              workspaceCode: "ENTERPRISE",
+              name: "Enterprise",
+              description: "Global governance and shared AI resource policy.",
+              childCount: 1,
+              status: "Active",
+            },
+            {
+              workspaceCode: "COMPLIANCE",
+              name: "Compliance",
+              description: "Audit, retention, permission, and regulated resource controls.",
+              childCount: 0,
+              status: "Active",
+            },
+          ],
+          secondarySpaces: [
+            {
+              workspaceCode: "ENTERPRISE",
+              primaryWorkspaceCode: "ENTERPRISE",
+              parentWorkspaceCode: null,
+              label: "Enterprise",
+              name: "Enterprise",
+              description: "Global governance and shared AI resource policy.",
+              status: "Active",
+              depth: 1,
+              childCount: 1,
+              effectiveUserCount: 1,
+            },
+            {
+              workspaceCode: "PLATFORM",
+              primaryWorkspaceCode: "ENTERPRISE",
+              parentWorkspaceCode: "ENTERPRISE",
+              label: "Enterprise / Platform",
+              name: "Platform",
+              description: "Agent runtime governance and admin operations.",
+              status: "Active",
+              depth: 2,
+              childCount: 1,
+              effectiveUserCount: 3,
+            },
+            {
+              workspaceCode: "TRON_CORE",
+              primaryWorkspaceCode: "ENTERPRISE",
+              parentWorkspaceCode: "PLATFORM",
+              label: "Enterprise / Platform / Tron Core",
+              name: "Tron Core",
+              description: "Main Tron console workspace.",
+              status: "Active",
+              depth: 3,
+              childCount: 0,
+              effectiveUserCount: 2,
+            },
+          ],
+        },
+      },
+      version: 4,
+    }));
+  });
 
   await page.goto(`${frontendBaseUrl}/agents`);
   await expect(page).toHaveURL(/\/agents$/);
   await expect(page.getByRole("heading", { name: "Agents", exact: true })).toBeVisible();
-  await expect(page.getByText("Current Workspace")).toBeVisible();
+  await expect(page.getByText("Manage internal agent policy and tool assignment for the selected workspace.")).toHaveCount(0);
+  await expect(page.getByText("Current Workspace")).toHaveCount(0);
+  await expect(page.getByText("All platform tools are available for this agent.")).toHaveCount(0);
 
   const workspaceTable = page.locator("table").first();
   await expect(workspaceTable).not.toContainText("Main Agent");
@@ -141,17 +212,35 @@ test("agent management works fully in mock mode without backend requests", async
   const openCodeWorkspaceRow = rowByName(page, "OpenCode");
   await expect(openCodeWorkspaceRow.locator("td").nth(4)).toContainText("Disabled");
   await expect(openCodeWorkspaceRow.locator("td").nth(5)).toContainText("Platform disabled");
-  await expect(openCodeWorkspaceRow.locator("td").nth(6)).toContainText("Read only");
   await expect(openCodeWorkspaceRow.getByRole("button")).toHaveCount(0);
 
+  const mainAgentSection = page.locator("section").filter({ has: page.getByRole("heading", { name: "Internal Agents", exact: true }) });
+  const mainAgentHeader = mainAgentSection.getByRole("heading", { name: "Main Agent", exact: true }).first();
+  const internalAgentComboboxes = mainAgentSection.getByRole("combobox");
+  const toolAssignmentSelect = internalAgentComboboxes.nth(0);
+  const toolExposureSelect = internalAgentComboboxes.nth(1);
+  const expandedPersistenceSelect = internalAgentComboboxes.nth(2);
+  await expect(mainAgentHeader).toBeVisible();
+  await expect(toolAssignmentSelect).toBeVisible();
+  await expect(toolExposureSelect).toBeVisible();
+  await expect(expandedPersistenceSelect).toBeVisible();
+  await expect(mainAgentSection.getByRole("button", { name: "Explain tool assignment mode" })).toBeVisible();
+  await expect(mainAgentSection.getByRole("button", { name: "Explain tool exposure mode" })).toBeVisible();
+  await expect(mainAgentSection.getByRole("button", { name: "Explain expanded domain persistence mode" })).toBeVisible();
+  await expect(mainAgentSection.getByRole("button", { name: /^save$/i })).toHaveCount(0);
+  await expect(mainAgentSection.getByRole("button", { name: /^reset$/i })).toHaveCount(0);
+  await expect(toolAssignmentSelect).toHaveValue("all_platform_tools");
+  await expect(toolExposureSelect).toHaveValue("direct_list");
+  await expect(expandedPersistenceSelect).toHaveValue("sticky_expanded");
+
   const codexWorkspaceRow = rowByName(page, "Codex");
-  await expect(rowActionButton(codexWorkspaceRow)).toHaveText("Disable");
+  await expect(rowActionButton(codexWorkspaceRow)).toHaveAttribute("aria-label", /Disable Codex/i);
   await rowActionButton(codexWorkspaceRow).click();
   await expect(page.getByRole("status").filter({ hasText: "Codex disabled in" })).toBeVisible();
   await expect(codexWorkspaceRow.locator("td").nth(4)).toContainText("Disabled");
   await expect(codexWorkspaceRow.locator("td").nth(5)).toContainText("Local disable");
 
-  await expect(rowActionButton(codexWorkspaceRow)).toHaveText("Enable");
+  await expect(rowActionButton(codexWorkspaceRow)).toHaveAttribute("aria-label", /Enable Codex/i);
   await rowActionButton(codexWorkspaceRow).click();
   await expect(page.getByRole("status").filter({ hasText: "Codex now follows platform policy" })).toBeVisible();
   await expect(codexWorkspaceRow.locator("td").nth(4)).toContainText("Enabled");
@@ -183,20 +272,26 @@ test("agent management works fully in mock mode without backend requests", async
   await expect(page.getByRole("status").filter({ hasText: "Scanned 2 system agents; 1 unavailable" })).toBeVisible();
   await expect(codexSettingsRow.locator("td").nth(3)).not.toHaveText("");
 
-  await expect(rowActionButton(codexSettingsRow)).toHaveText("Disable");
+  await expect(rowActionButton(codexSettingsRow)).toHaveAttribute("aria-label", /Disable Codex/i);
   await rowActionButton(codexSettingsRow).click();
   await expect(page.getByRole("status").filter({ hasText: "Codex disabled" })).toBeVisible();
   await expect(codexSettingsRow.locator("td").nth(2)).toContainText("Disabled");
 
-  await expect(rowActionButton(codexSettingsRow)).toHaveText("Enable");
+  await expect(rowActionButton(codexSettingsRow)).toHaveAttribute("aria-label", /Enable Codex/i);
   await rowActionButton(codexSettingsRow).click();
   await expect(page.getByRole("status").filter({ hasText: "Codex enabled" })).toBeVisible();
   await expect(codexSettingsRow.locator("td").nth(2)).toContainText("Enabled");
 
   const openCodeSettingsRow = rowByName(page, "OpenCode");
   await expect(openCodeSettingsRow.locator("td").nth(2)).toContainText("Unavailable");
-  await expect(openCodeSettingsRow.locator("td").nth(4)).toContainText("Read only");
   await expect(openCodeSettingsRow.getByRole("button")).toHaveCount(0);
+
+  await page.goto(`${frontendBaseUrl}/settings/tools`);
+  await expect(page).toHaveURL(/\/settings\/tools$/);
+  await expect(page.getByRole("heading", { name: "Platform Tools" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tool Domains" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tools", exact: true })).toBeVisible();
+  await expect(page.getByText("workspace.list", { exact: true })).toBeVisible();
 
   expect(blockedRequests).toEqual([]);
 });

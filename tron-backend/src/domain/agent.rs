@@ -14,8 +14,8 @@ pub use agui::{
     AgentAguiEvent, AgentAguiEventSnapshot, AgentAguiProtocolEvent, AgentAguiStreamState,
 };
 pub use context::{
-    AgentExecutionScope, AgentRunContext, AgentRunLimits, EffectiveSkill, EffectiveTool,
-    EffectiveVariable,
+    AgentExecutionScope, AgentRunContext, AgentRunLimits, AgentToolExposureState, EffectiveSkill,
+    EffectiveTool, EffectiveVariable,
 };
 pub use error::AgentError;
 pub use history::{
@@ -23,10 +23,13 @@ pub use history::{
 };
 pub use kind::{AgentKind, AgentModelProtocol, AgentRuntimeKind};
 pub use management::{
-    AgentManagementError, AgentRuntimeType, ManagedAgentSource, ManagedAgentType,
+    AgentManagementError, AgentRuntimeType, ExpandedDomainPersistenceMode,
+    InternalAgentPolicySource, InternalAgentToolPolicy, ManagedAgentSource, ManagedAgentType,
     ManagedSystemAgentRecord, PlatformMainAgentConfig, RuntimeAdapterCapabilityRecord,
     SystemAgentModelRecord, SystemAgentRegistryEntry, SystemAgentStatus, SystemAgentSyncResult,
-    WorkspaceSystemAgentPolicy,
+    ToolAssignmentMode, ToolAvailabilityState, ToolCatalogRecord, ToolDomainRecord,
+    ToolExposureMode, ToolOperationKind, WorkspaceInternalAgentPolicy,
+    WorkspaceInternalAgentToolAssignment, WorkspaceSystemAgentPolicy,
 };
 pub use message::AgentMessage;
 pub use model_config::AgentModelConfig;
@@ -34,4 +37,7 @@ pub use model_exchange::{
     ModelRequest, ModelResponse, ModelStreamEvent, ModelStreamEventKind, ModelTokenUsage, ToolCall,
 };
 pub use run::{AgentRunResult, AgentRunStatus};
-pub use tool::{InProcessTool, Tool, ToolError, ToolObservation, ToolRegistry, ToolRequest};
+pub use tool::{
+    InProcessTool, Tool, ToolContextDelta, ToolError, ToolExecutionResult, ToolObservation,
+    ToolRegistry, ToolRequest,
+};

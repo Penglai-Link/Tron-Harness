@@ -10,9 +10,11 @@ use crate::{
     app::AppState,
     application::agent::{
         AgentAguiStreamService, AgentInvocationCommand, AgentInvocationService,
-        AgentManagementService,
+        AgentManagementService, UpdateWorkspaceInternalAgentPolicyCommand,
     },
-    domain::agent::AgentRunHistoryQuery,
+    domain::agent::{
+        AgentRunHistoryQuery, ExpandedDomainPersistenceMode, ToolAssignmentMode, ToolExposureMode,
+    },
     response::ApiResponse,
 };
 
@@ -20,7 +22,10 @@ use super::error_mapper::{
     agent_agui_error_response, agent_error_response, agent_history_error_response,
     agent_management_error_response,
 };
-use super::request::UpdateMainAgentConfigRequest;
+use super::request::{
+    ListToolsQuery, ReplaceInternalAgentToolAssignmentsRequest, UpdateInternalAgentPolicyRequest,
+    UpdateMainAgentConfigRequest,
+};
 
 pub async fn create_agent_run(
     State(state): State<AppState>,
@@ -40,7 +45,11 @@ pub async fn create_agent_run(
         state.runtime_http_client.clone(),
     );
     match service
-        .invoke(request, Some(auth.user().user_code.clone()))
+        .invoke(
+            request,
+            Some(auth.user().user_code.clone()),
+            Some(auth.locale.clone()),
+        )
         .await
     {
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
@@ -102,6 +111,119 @@ pub async fn update_main_agent_config(
 ) -> Response {
     match agent_management.update_main_agent_config(request.into()) {
         Ok(config) => Json(ApiResponse::success(config)).into_response(),
+        Err(error) => agent_management_error_response(error),
+    }
+}
+
+pub async fn list_tool_domains(
+    State(agent_management): State<AgentManagementService>,
+    auth: RequestAuthContext,
+) -> Response {
+    Json(ApiResponse::success(
+        agent_management.list_tool_domains(&auth.locale),
+    ))
+    .into_response()
+}
+
+pub async fn list_tools(
+    State(agent_management): State<AgentManagementService>,
+    auth: RequestAuthContext,
+    Query(query): Query<ListToolsQuery>,
+) -> Response {
+    let tools = agent_management.list_tools(
+        query.domain_code.as_deref(),
+        query.search.as_deref(),
+        &auth.locale,
+    );
+    Json(ApiResponse::success(tools)).into_response()
+}
+
+pub async fn get_tool(
+    State(agent_management): State<AgentManagementService>,
+    auth: RequestAuthContext,
+    Path(tool_code): Path<String>,
+) -> Response {
+    match agent_management.tool(&tool_code, &auth.locale) {
+        Some(tool) => Json(ApiResponse::success(tool)).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error(
+                "AGENT_TOOL_NOT_FOUND",
+                "tool was not found in platform catalog",
+            )),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn list_workspace_internal_agents(
+    State(agent_management): State<AgentManagementService>,
+    _auth: RequestAuthContext,
+    Path(workspace_code): Path<String>,
+) -> Response {
+    match agent_management.list_workspace_internal_agents(&workspace_code) {
+        Ok(records) => Json(ApiResponse::success(records)).into_response(),
+        Err(error) => agent_management_error_response(error),
+    }
+}
+
+pub async fn get_workspace_internal_agent(
+    State(agent_management): State<AgentManagementService>,
+    _auth: RequestAuthContext,
+    Path((workspace_code, agent_code)): Path<(String, String)>,
+) -> Response {
+    match agent_management.workspace_internal_agent_policy(&workspace_code, &agent_code) {
+        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Err(error) => agent_management_error_response(error),
+    }
+}
+
+pub async fn update_workspace_internal_agent_policy(
+    State(agent_management): State<AgentManagementService>,
+    _auth: RequestAuthContext,
+    Path((workspace_code, agent_code)): Path<(String, String)>,
+    Json(request): Json<UpdateInternalAgentPolicyRequest>,
+) -> Response {
+    let command = match to_internal_agent_policy_command(request) {
+        Ok(command) => command,
+        Err((code, message)) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::error(code, message)),
+            )
+                .into_response();
+        }
+    };
+    match agent_management.update_internal_agent_policy(&workspace_code, &agent_code, command) {
+        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Err(error) => agent_management_error_response(error),
+    }
+}
+
+pub async fn replace_workspace_internal_agent_tool_assignments(
+    State(agent_management): State<AgentManagementService>,
+    _auth: RequestAuthContext,
+    Path((workspace_code, agent_code)): Path<(String, String)>,
+    Json(request): Json<ReplaceInternalAgentToolAssignmentsRequest>,
+) -> Response {
+    let tool_codes = normalize_tool_codes(request.tool_codes);
+    match agent_management.replace_internal_agent_tool_assignments(
+        &workspace_code,
+        &agent_code,
+        tool_codes,
+    ) {
+        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Err(error) => agent_management_error_response(error),
+    }
+}
+
+pub async fn reset_workspace_internal_agent_policy(
+    State(agent_management): State<AgentManagementService>,
+    _auth: RequestAuthContext,
+    Path((workspace_code, agent_code)): Path<(String, String)>,
+) -> Response {
+    match agent_management.reset_internal_agent_policy(&workspace_code, &agent_code) {
+        Ok(record) => Json(ApiResponse::success(record)).into_response(),
         Err(error) => agent_management_error_response(error),
     }
 }
@@ -223,6 +345,87 @@ pub async fn deactivate_agui_stream(
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => agent_agui_error_response(error),
     }
+}
+
+fn to_internal_agent_policy_command(
+    request: UpdateInternalAgentPolicyRequest,
+) -> Result<UpdateWorkspaceInternalAgentPolicyCommand, (&'static str, &'static str)> {
+    let tool_assignment_mode = match request.tool_assignment_mode {
+        Some(value) => Some(parse_tool_assignment_mode(&value)?),
+        None => None,
+    };
+    let tool_exposure_mode = match request.tool_exposure_mode {
+        Some(value) => Some(parse_tool_exposure_mode(&value)?),
+        None => None,
+    };
+    let expanded_domain_persistence_mode = match request.expanded_domain_persistence_mode {
+        Some(value) => Some(parse_expanded_domain_persistence_mode(&value)?),
+        None => None,
+    };
+
+    Ok(UpdateWorkspaceInternalAgentPolicyCommand {
+        tool_assignment_mode,
+        tool_exposure_mode,
+        expanded_domain_persistence_mode,
+    })
+}
+
+fn parse_tool_assignment_mode(
+    raw: &str,
+) -> Result<ToolAssignmentMode, (&'static str, &'static str)> {
+    match normalize_mode_token(raw).as_str() {
+        "all_platform_tools" => Ok(ToolAssignmentMode::AllPlatformTools),
+        "selected_tools" => Ok(ToolAssignmentMode::SelectedTools),
+        _ => Err((
+            "AGENT_TOOL_ASSIGNMENT_MODE_INVALID",
+            "invalid tool assignment mode",
+        )),
+    }
+}
+
+fn parse_tool_exposure_mode(raw: &str) -> Result<ToolExposureMode, (&'static str, &'static str)> {
+    match normalize_mode_token(raw).as_str() {
+        "direct_list" => Ok(ToolExposureMode::DirectList),
+        "domain_discovery" => Ok(ToolExposureMode::DomainDiscovery),
+        _ => Err((
+            "AGENT_TOOL_EXPOSURE_MODE_INVALID",
+            "invalid tool exposure mode",
+        )),
+    }
+}
+
+fn parse_expanded_domain_persistence_mode(
+    raw: &str,
+) -> Result<ExpandedDomainPersistenceMode, (&'static str, &'static str)> {
+    match normalize_mode_token(raw).as_str() {
+        "sticky_expanded" => Ok(ExpandedDomainPersistenceMode::StickyExpanded),
+        "ephemeral_expanded" => Ok(ExpandedDomainPersistenceMode::EphemeralExpanded),
+        _ => Err((
+            "AGENT_TOOL_EXPANDED_DOMAIN_PERSISTENCE_MODE_INVALID",
+            "invalid expanded domain persistence mode",
+        )),
+    }
+}
+
+fn normalize_tool_codes(values: Vec<String>) -> Vec<String> {
+    let mut deduped = Vec::new();
+    for value in values {
+        let normalized = value.trim().to_string();
+        if normalized.is_empty() {
+            continue;
+        }
+        if !deduped
+            .iter()
+            .any(|item: &String| item.eq_ignore_ascii_case(&normalized))
+        {
+            deduped.push(normalized);
+        }
+    }
+    deduped
+}
+
+fn normalize_mode_token(raw: &str) -> String {
+    raw.trim().to_ascii_lowercase().replace('-', "_")
 }
 
 pub async fn list_agui_stream_events(

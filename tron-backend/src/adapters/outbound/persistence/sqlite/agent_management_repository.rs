@@ -1,12 +1,13 @@
-use std::{fs, path::Path};
+mod codecs;
 
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params, params_from_iter};
 
 use crate::{
     application::agent::AgentManagementRepository,
     domain::agent::{
-        AgentManagementError, AgentRuntimeType, ManagedAgentSource, PlatformMainAgentConfig,
-        SystemAgentRegistryEntry, WorkspaceSystemAgentPolicy,
+        AgentManagementError, ManagedAgentSource, PlatformMainAgentConfig,
+        SystemAgentRegistryEntry, WorkspaceInternalAgentPolicy,
+        WorkspaceInternalAgentToolAssignment, WorkspaceSystemAgentPolicy,
     },
     shared::time::{
         option_timestamp_from_millis, option_timestamp_to_millis, timestamp_from_millis,
@@ -14,6 +15,15 @@ use crate::{
     },
 };
 
+use self::codecs::{
+    column_exists, ensure_database_parent, expanded_domain_persistence_mode_from_storage,
+    expanded_domain_persistence_mode_to_storage, runtime_type_from_storage,
+    runtime_type_to_storage, storage_error, tool_assignment_mode_from_storage,
+    tool_assignment_mode_to_storage, tool_exposure_mode_from_storage,
+    tool_exposure_mode_to_storage,
+};
+
+use super::migrations::AGENT_MANAGEMENT_INTERNAL_AGENT_MIGRATION;
 use super::migrations::{AGENT_MANAGEMENT_MIGRATION, AGENT_MANAGEMENT_RUNTIME_TYPE_MIGRATION};
 
 const MAIN_AGENT_SINGLETON_KEY: &str = "platform";
@@ -42,12 +52,20 @@ impl SqliteAgentManagementRepository {
             .connection
             .execute_batch(AGENT_MANAGEMENT_MIGRATION)
             .map_err(storage_error)?;
-        if !column_exists(&repository.connection, "system_agent_registries", "runtime_type")? {
+        if !column_exists(
+            &repository.connection,
+            "system_agent_registries",
+            "runtime_type",
+        )? {
             repository
                 .connection
                 .execute_batch(AGENT_MANAGEMENT_RUNTIME_TYPE_MIGRATION)
                 .map_err(storage_error)?;
         }
+        repository
+            .connection
+            .execute_batch(AGENT_MANAGEMENT_INTERNAL_AGENT_MIGRATION)
+            .map_err(storage_error)?;
         Ok(repository)
     }
 }
@@ -272,59 +290,193 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
             .map_err(storage_error)?;
         Ok(deleted > 0)
     }
-}
 
-fn ensure_database_parent(database_url: &str) -> Result<(), AgentManagementError> {
-    if database_url == ":memory:" || database_url.starts_with("file:") {
-        return Ok(());
+    fn list_workspace_internal_agent_policies(
+        &mut self,
+        workspace_code: Option<&str>,
+    ) -> Result<Vec<WorkspaceInternalAgentPolicy>, AgentManagementError> {
+        let sql = match workspace_code {
+            Some(_workspace_code) => {
+                "SELECT workspace_code, agent_code, tool_assignment_mode, tool_exposure_mode, expanded_domain_persistence_mode, created_at, updated_at
+                 FROM workspace_internal_agent_policies
+                 WHERE workspace_code = ?1
+                 ORDER BY agent_code ASC"
+            }
+            None => {
+                "SELECT workspace_code, agent_code, tool_assignment_mode, tool_exposure_mode, expanded_domain_persistence_mode, created_at, updated_at
+                 FROM workspace_internal_agent_policies
+                 ORDER BY workspace_code ASC, agent_code ASC"
+            }
+        };
+        let mut statement = self.connection.prepare(sql).map_err(storage_error)?;
+        let map_row = |row: &rusqlite::Row<'_>| {
+            Ok(WorkspaceInternalAgentPolicy {
+                workspace_code: row.get(0)?,
+                agent_code: row.get(1)?,
+                tool_assignment_mode: tool_assignment_mode_from_storage(row.get::<_, String>(2)?),
+                tool_exposure_mode: tool_exposure_mode_from_storage(row.get::<_, String>(3)?),
+                expanded_domain_persistence_mode: expanded_domain_persistence_mode_from_storage(
+                    row.get::<_, String>(4)?,
+                ),
+                created_at: timestamp_from_millis(row.get(5)?),
+                updated_at: timestamp_from_millis(row.get(6)?),
+            })
+        };
+        let rows = if let Some(workspace_code) = workspace_code {
+            statement.query_map(params![workspace_code], map_row)
+        } else {
+            statement.query_map(params![], map_row)
+        };
+        rows.map_err(storage_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(storage_error)
     }
-    if let Some(parent) = Path::new(database_url).parent()
-        && !parent.as_os_str().is_empty()
-    {
-        fs::create_dir_all(parent).map_err(|_| AgentManagementError::StorageFailure)?;
+
+    fn upsert_workspace_internal_agent_policy(
+        &mut self,
+        policy: &WorkspaceInternalAgentPolicy,
+    ) -> Result<(), AgentManagementError> {
+        self.connection
+            .execute(
+                "INSERT INTO workspace_internal_agent_policies (
+                    workspace_code,
+                    agent_code,
+                    tool_assignment_mode,
+                    tool_exposure_mode,
+                    expanded_domain_persistence_mode,
+                    created_at,
+                    updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT(workspace_code, agent_code) DO UPDATE SET
+                    tool_assignment_mode = excluded.tool_assignment_mode,
+                    tool_exposure_mode = excluded.tool_exposure_mode,
+                    expanded_domain_persistence_mode = excluded.expanded_domain_persistence_mode,
+                    updated_at = excluded.updated_at",
+                params![
+                    policy.workspace_code,
+                    policy.agent_code,
+                    tool_assignment_mode_to_storage(policy.tool_assignment_mode),
+                    tool_exposure_mode_to_storage(policy.tool_exposure_mode),
+                    expanded_domain_persistence_mode_to_storage(
+                        policy.expanded_domain_persistence_mode
+                    ),
+                    timestamp_to_millis(&policy.created_at),
+                    timestamp_to_millis(&policy.updated_at),
+                ],
+            )
+            .map_err(storage_error)?;
+        Ok(())
     }
-    Ok(())
-}
 
-fn column_exists(
-    connection: &Connection,
-    table_name: &str,
-    column_name: &str,
-) -> Result<bool, AgentManagementError> {
-    let pragma = format!("PRAGMA table_info({table_name})");
-    let mut statement = connection.prepare(&pragma).map_err(storage_error)?;
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(storage_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)?;
-    Ok(columns.iter().any(|value| value == column_name))
-}
-
-fn storage_error(_error: rusqlite::Error) -> AgentManagementError {
-    AgentManagementError::StorageFailure
-}
-
-fn runtime_type_to_storage(runtime_type: AgentRuntimeType) -> &'static str {
-    match runtime_type {
-        AgentRuntimeType::React => "REACT",
-        AgentRuntimeType::CodexExec => "CODEX_EXEC",
-        AgentRuntimeType::CodexAppServer => "CODEX_APP_SERVER",
-        AgentRuntimeType::OpenCodeRun => "OPENCODE_RUN",
-        AgentRuntimeType::OpenCodeServe => "OPENCODE_SERVE",
-        AgentRuntimeType::OpenCodeAcp => "OPENCODE_ACP",
+    fn delete_workspace_internal_agent_policy(
+        &mut self,
+        workspace_code: &str,
+        agent_code: &str,
+    ) -> Result<bool, AgentManagementError> {
+        let deleted = self
+            .connection
+            .execute(
+                "DELETE FROM workspace_internal_agent_policies
+                 WHERE workspace_code = ?1 AND agent_code = ?2",
+                params![workspace_code, agent_code],
+            )
+            .map_err(storage_error)?;
+        Ok(deleted > 0)
     }
-}
 
-fn runtime_type_from_storage(value: &str) -> AgentRuntimeType {
-    match value.trim().to_ascii_uppercase().as_str() {
-        "REACT" => AgentRuntimeType::React,
-        "CODEX_EXEC" => AgentRuntimeType::CodexExec,
-        "CODEX_APP_SERVER" => AgentRuntimeType::CodexAppServer,
-        "OPENCODE_RUN" => AgentRuntimeType::OpenCodeRun,
-        "OPENCODE_SERVE" => AgentRuntimeType::OpenCodeServe,
-        "OPENCODE_ACP" => AgentRuntimeType::OpenCodeAcp,
-        _ => AgentRuntimeType::React,
+    fn list_workspace_internal_agent_tool_assignments(
+        &mut self,
+        workspace_code: Option<&str>,
+        agent_code: Option<&str>,
+    ) -> Result<Vec<WorkspaceInternalAgentToolAssignment>, AgentManagementError> {
+        let (sql, arguments): (&str, Option<Vec<&str>>) = match (workspace_code, agent_code) {
+            (Some(workspace_code), Some(agent_code)) => (
+                "SELECT workspace_code, agent_code, tool_code, created_at, updated_at
+                 FROM workspace_internal_agent_tool_assignments
+                WHERE workspace_code = ?1 AND agent_code = ?2
+                ORDER BY tool_code ASC",
+                Some(vec![workspace_code, agent_code]),
+            ),
+            (Some(workspace_code), None) => (
+                "SELECT workspace_code, agent_code, tool_code, created_at, updated_at
+                 FROM workspace_internal_agent_tool_assignments
+                WHERE workspace_code = ?1
+                ORDER BY agent_code ASC, tool_code ASC",
+                Some(vec![workspace_code]),
+            ),
+            (None, Some(agent_code)) => (
+                "SELECT workspace_code, agent_code, tool_code, created_at, updated_at
+                 FROM workspace_internal_agent_tool_assignments
+                WHERE agent_code = ?1
+                ORDER BY workspace_code ASC, agent_code ASC, tool_code ASC",
+                Some(vec![agent_code]),
+            ),
+            (None, None) => (
+                "SELECT workspace_code, agent_code, tool_code, created_at, updated_at
+                 FROM workspace_internal_agent_tool_assignments
+                ORDER BY workspace_code ASC, agent_code ASC, tool_code ASC",
+                None,
+            ),
+        };
+        let mut statement = self.connection.prepare(sql).map_err(storage_error)?;
+        let map_row = |row: &rusqlite::Row<'_>| {
+            Ok(WorkspaceInternalAgentToolAssignment {
+                workspace_code: row.get(0)?,
+                agent_code: row.get(1)?,
+                tool_code: row.get(2)?,
+                created_at: timestamp_from_millis(row.get(3)?),
+                updated_at: timestamp_from_millis(row.get(4)?),
+            })
+        };
+        let rows = if let Some(args) = arguments {
+            statement.query_map(params_from_iter(args), map_row)
+        } else {
+            statement.query_map(params![], map_row)
+        };
+        let rows = rows.map_err(storage_error)?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(storage_error)
+    }
+
+    fn upsert_workspace_internal_agent_tool_assignment(
+        &mut self,
+        assignment: &WorkspaceInternalAgentToolAssignment,
+    ) -> Result<(), AgentManagementError> {
+        self.connection
+            .execute(
+                "INSERT INTO workspace_internal_agent_tool_assignments (
+                    workspace_code,
+                    agent_code,
+                    tool_code,
+                    created_at,
+                    updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5)
+                 ON CONFLICT(workspace_code, agent_code, tool_code) DO UPDATE SET
+                    updated_at = excluded.updated_at",
+                params![
+                    assignment.workspace_code,
+                    assignment.agent_code,
+                    assignment.tool_code,
+                    timestamp_to_millis(&assignment.created_at),
+                    timestamp_to_millis(&assignment.updated_at),
+                ],
+            )
+            .map_err(storage_error)?;
+        Ok(())
+    }
+
+    fn delete_workspace_internal_agent_tool_assignments(
+        &mut self,
+        workspace_code: &str,
+        agent_code: &str,
+    ) -> Result<(), AgentManagementError> {
+        self.connection
+            .execute(
+                "DELETE FROM workspace_internal_agent_tool_assignments
+                 WHERE workspace_code = ?1 AND agent_code = ?2",
+                params![workspace_code, agent_code],
+            )
+            .map_err(storage_error)?;
+        Ok(())
     }
 }
 

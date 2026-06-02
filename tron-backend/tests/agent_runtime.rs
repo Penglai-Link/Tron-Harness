@@ -56,6 +56,7 @@ fn base_context(run_code: &str) -> AgentRunContext {
         run_code: run_code.into(),
         workspace_code: "TRON_CORE".into(),
         user_code: Some("USR-1".into()),
+        locale: "en-US".into(),
         request_id: Some("REQ-1".into()),
         stream_key: Some("CONV-1".into()),
         agent_kind: AgentKind::React,
@@ -88,11 +89,13 @@ fn base_context(run_code: &str) -> AgentRunContext {
         }],
         tools: vec![EffectiveTool {
             tool_name: "echo".into(),
+            domain_code: None,
             description: "Echo input".into(),
             input_schema: json!({"type": "object"}),
             skill_name: Some("planner".into()),
             required_variable_keys: vec![],
         }],
+        tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope {
             app_code: Some("APP-1".into()),
             repository_url: Some("https://example.test/repo.git".into()),
@@ -341,6 +344,7 @@ async fn model_request_builders_use_frozen_model_config() {
         messages: vec![AgentMessage::user("hi")],
         tools: vec![EffectiveTool {
             tool_name: "echo".into(),
+            domain_code: None,
             description: "Echo".into(),
             input_schema: json!({"type": "object"}),
             skill_name: None,

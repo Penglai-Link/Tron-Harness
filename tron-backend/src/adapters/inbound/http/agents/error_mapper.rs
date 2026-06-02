@@ -89,6 +89,11 @@ pub fn agent_management_error_response(error: AgentManagementError) -> Response 
             "AGENT_WORKSPACE_INVALID",
             "workspace must reference an active workspace".to_string(),
         ),
+        AgentManagementError::InternalAgentNotFound => (
+            StatusCode::NOT_FOUND,
+            "AGENT_INTERNAL_NOT_FOUND",
+            "internal agent was not found".to_string(),
+        ),
         AgentManagementError::SystemAgentNotFound => (
             StatusCode::NOT_FOUND,
             "AGENT_SYSTEM_NOT_FOUND",
@@ -98,6 +103,16 @@ pub fn agent_management_error_response(error: AgentManagementError) -> Response 
             StatusCode::BAD_REQUEST,
             "AGENT_SYSTEM_UNAVAILABLE",
             "system agent is unavailable on the current machine".to_string(),
+        ),
+        AgentManagementError::InternalToolAssignmentStale(message) => (
+            StatusCode::BAD_REQUEST,
+            "AGENT_INTERNAL_TOOL_ASSIGNMENT_STALE",
+            format!("internal tool assignment is stale: {message}"),
+        ),
+        AgentManagementError::InternalToolUnknown(message) => (
+            StatusCode::BAD_REQUEST,
+            "AGENT_INTERNAL_TOOL_UNKNOWN",
+            format!("unknown internal tool: {message}"),
         ),
         AgentManagementError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,

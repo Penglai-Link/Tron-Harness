@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { LogOut } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router";
 
 import { LOGIN_PATH } from "@/domain/auth/constants";
@@ -7,6 +8,7 @@ import { Button } from "@/shared/ui/Button";
 import { useAuthStore } from "@/store/authStore";
 
 export function AuthUserMenuPanel() {
+  const { t } = useTranslation(["auth", "common"]);
   const navigate = useNavigate();
   const location = useLocation();
   const logout = useAuthStore((state) => state.logout);
@@ -35,7 +37,7 @@ export function AuthUserMenuPanel() {
     <div className="space-y-3">
       <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-3 py-3">
         <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">
-          Signed in
+          {t("auth:userMenu.signedIn")}
         </p>
         <p className="mt-2 text-sm font-medium text-[var(--color-on-surface)]">{session.user.displayName}</p>
         <p className="text-[12px] text-[var(--color-on-surface-variant)]">{session.user.email}</p>
@@ -53,7 +55,7 @@ export function AuthUserMenuPanel() {
         onClick={() => void handleLogout()}
       >
         <LogOut size={16} aria-hidden="true" />
-        {submitting ? "Logging out..." : "Log out"}
+        {submitting ? t("auth:userMenu.loggingOut") : t("common:actions.logout")}
       </Button>
     </div>
   );

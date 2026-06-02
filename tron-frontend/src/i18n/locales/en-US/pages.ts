@@ -1,4 +1,105 @@
 export const pages = {
+  settingsTools: {
+    catalog: {
+      domains: {
+        app: {
+          name: "App Tools",
+          description: "Browse workspace apps and execution targets.",
+        },
+        model: {
+          name: "Model Tools",
+          description: "Inspect effective model catalog configuration.",
+        },
+        skill: {
+          name: "Skill Tools",
+          description: "Inspect workspace skill bindings and registry entries.",
+        },
+        task: {
+          name: "Task Tools",
+          description: "Read and create workspace tasks.",
+        },
+        variable: {
+          name: "Variable Tools",
+          description: "Inspect effective workspace variables.",
+        },
+        workspace: {
+          name: "Workspace Tools",
+          description: "Inspect workspace hierarchy and metadata.",
+        },
+      },
+      tools: {
+        appList: {
+          name: "List apps",
+          description: "List apps in the current or specified workspace.",
+        },
+        modelList: {
+          name: "List models",
+          description: "List effective model definitions for the current or specified workspace.",
+        },
+        skillList: {
+          name: "List skills",
+          description: "List workspace skill bindings and registry entries.",
+        },
+        taskCreate: {
+          name: "Create task",
+          description: "Create a new task in the current or specified workspace.",
+        },
+        taskList: {
+          name: "List tasks",
+          description: "List tasks in the current or specified workspace.",
+        },
+        variableList: {
+          name: "List variables",
+          description: "List effective variables in the current or specified workspace.",
+        },
+        workspaceGet: {
+          name: "Get workspace",
+          description: "Read workspace metadata by workspace code.",
+        },
+        workspaceList: {
+          name: "List workspaces",
+          description: "List workspaces visible to the current actor.",
+        },
+      },
+    },
+    errors: {
+      load: "Platform tools could not be loaded",
+    },
+    domains: {
+      columns: {
+        description: "Description",
+        domainCode: "Domain",
+        mutation: "Mutation",
+        samples: "Sample Tools",
+        toolCount: "Tools",
+      },
+      empty: "No domains match the current filters.",
+      itemLabel: "tool domains",
+      mutationNo: "Read-only",
+      mutationYes: "Has mutations",
+      sampleFallback: "N/A",
+      searchAria: "Search tool domains",
+      searchPlaceholder: "Search tool domains...",
+      title: "Tool Domains",
+    },
+    title: "Platform Tools",
+    tools: {
+      columns: {
+        description: "Description",
+        domainCode: "Domain",
+        name: "Name",
+        operationKind: "Kind",
+        toolCode: "Tool Code",
+      },
+      domainFilterAll: "All domains",
+      domainFilterAria: "Filter platform tools by domain",
+      empty: "No tools match the current filters.",
+      itemLabel: "tools",
+      searchAria: "Search platform tools",
+      searchPlaceholder: "Search platform tools...",
+      title: "Tools",
+    },
+  },
   settingsAgents: {
     actions: {
       save: "Save",
@@ -33,6 +134,14 @@ export const pages = {
       itemLabel: "system agents",
     },
     table: {
+      catalog: {
+        codex: {
+          description: "OpenAI Codex CLI agent runtime.",
+        },
+        opencode: {
+          description: "OpenCode CLI agent runtime.",
+        },
+      },
       columns: {
         actions: "Actions",
         agent: "Agent",
@@ -56,6 +165,8 @@ export const pages = {
     emptyWorkspace: "Select a workspace to manage inherited system-agent policy.",
     errors: {
       load: "Workspace agents could not be loaded",
+      reset: "Internal policy reset failed",
+      save: "Internal agent policy update failed",
       toggle: "Workspace agent policy update failed",
     },
     messages: {
@@ -67,6 +178,14 @@ export const pages = {
       itemLabel: "workspace agents",
     },
     table: {
+      catalog: {
+        codex: {
+          description: "OpenAI Codex CLI agent runtime.",
+        },
+        opencode: {
+          description: "OpenCode CLI agent runtime.",
+        },
+      },
       columns: {
         actions: "Actions",
         agent: "Agent",
@@ -89,8 +208,98 @@ export const pages = {
       searchAria: "Search workspace agents",
       searchPlaceholder: "Search workspace agents...",
       title: "Inherited System Agents",
+      values: {
+        inheritedPlatform: "Platform",
+        systemScan: "System Scan",
+      },
     },
     title: "Agents",
+    internal: {
+      actions: {
+        reset: "Reset",
+        resetting: "Resetting...",
+        save: "Save",
+        saving: "Saving...",
+      },
+      catalog: {
+        mainAgent: {
+          name: "Main Agent",
+          description: "Primary workspace internal agent with access to platform business tools.",
+        },
+      },
+      description: "Manage internal agent policy and tool assignment for the selected workspace.",
+      empty: "No internal agents found for this workspace.",
+      agentCode: "Code: {{code}}",
+      errors: {
+        reset: "Internal policy reset failed",
+        save: "Internal agent policy update failed",
+      },
+      help: {
+        optionLabel: "Options",
+        expandedDomainPersistenceMode: {
+          ariaLabel: "Explain expanded domain persistence mode",
+          summary: "Controls how long domain-expanded tools stay available during a run after discovery loads them.",
+          optionOne: "Sticky expanded: once a domain is expanded, its tools stay available for the rest of the run.",
+          optionTwo: "Ephemeral expanded: expanded tools are temporary and can be dropped after the relevant step.",
+        },
+        toolAssignmentMode: {
+          ariaLabel: "Explain tool assignment mode",
+          summary: "Controls which platform business tools are assigned to this internal agent.",
+          optionOne: "All platform tools: assign every platform tool in the registry to this agent.",
+          optionTwo: "Selected tools: assign only the specific tools you choose below.",
+        },
+        toolExposureMode: {
+          ariaLabel: "Explain tool exposure mode",
+          summary: "Controls how the assigned tools are exposed to the model at runtime.",
+          optionOne: "Direct list: send the concrete tool schemas to the model at startup.",
+          optionTwo: "Domain discovery: send the domain catalog first, then expand a domain before concrete tools are loaded.",
+        },
+      },
+      labels: {
+        expandedDomainPersistenceMode: "Expanded domain persistence mode",
+        toolAssignmentMode: "Tool assignment mode",
+        toolExposureMode: "Tool exposure mode",
+      },
+      messages: {
+        reset: "Internal agent policy reset",
+        saved: "Internal agent policy saved",
+      },
+      modes: {
+        allTools: "All platform tools",
+        directList: "Direct list",
+        domainDiscovery: "Domain discovery",
+        ephemeralExpanded: "Ephemeral expanded",
+        selectedTools: "Selected tools",
+        stickyExpanded: "Sticky expanded",
+      },
+      status: {
+        error: "Autosave failed. Update again to retry.",
+        pending: "Changes will be saved automatically",
+        saved: "Saved automatically",
+        saving: "Saving...",
+      },
+      toolSelection: {
+        allTools: "All platform tools are available for this agent.",
+        clearVisible: "Clear visible",
+        domainsSummary: "{{visible}} of {{total}} domains visible",
+        domainsTitle: "Domains",
+        empty: "No tools match the search query.",
+        emptyPanel: "Select a domain to review its tools.",
+        hasMutation: "Contains mutation tools",
+        noMutation: "Read-only only",
+        noDescription: "No description available.",
+        sampleFallback: "N/A",
+        sampleLabel: "Samples: {{sample}}",
+        searchAria: "Search tools",
+        searchPlaceholder: "Search tools...",
+        selectedCount: "{{count}} selected",
+        selectVisible: "Select visible",
+        showingTools: "Showing {{visible}} of {{total}} tools",
+        toolsCount: "{{count}} tools",
+        title: "Selected tools",
+      },
+      title: "Internal Agents",
+    },
     workspace: {
       description: "Inherited system agents follow platform policy unless this workspace adds a local disable override.",
       label: "Current Workspace",

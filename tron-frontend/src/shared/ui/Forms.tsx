@@ -13,7 +13,7 @@ interface FieldProps {
   children: ReactNode;
   error?: string;
   hint?: string;
-  label: string;
+  label: ReactNode;
 }
 
 const disabledControlClasses =

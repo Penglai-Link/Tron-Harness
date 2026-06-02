@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::{AgentKind, AgentMessage, AgentModelConfig, ToolObservation};
+use super::{
+    AgentKind, AgentMessage, AgentModelConfig, ExpandedDomainPersistenceMode, ToolDomainRecord,
+    ToolExposureMode, ToolObservation,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -24,10 +27,28 @@ pub struct EffectiveSkill {
 #[serde(rename_all = "camelCase")]
 pub struct EffectiveTool {
     pub tool_name: String,
+    #[serde(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub domain_code: Option<String>,
     pub description: String,
     pub input_schema: Value,
     pub skill_name: Option<String>,
     pub required_variable_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentToolExposureState {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_exposure_mode: Option<ToolExposureMode>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expanded_domain_persistence_mode: Option<ExpandedDomainPersistenceMode>,
+    #[serde(default)]
+    pub visible_domains: Vec<ToolDomainRecord>,
+    #[serde(default)]
+    pub hidden_tools: Vec<EffectiveTool>,
+    #[serde(default)]
+    pub expanded_domain_codes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -63,6 +84,7 @@ pub struct AgentRunContext {
     pub run_code: String,
     pub workspace_code: String,
     pub user_code: Option<String>,
+    pub locale: String,
     pub request_id: Option<String>,
     pub stream_key: Option<String>,
     pub agent_kind: AgentKind,
@@ -71,6 +93,8 @@ pub struct AgentRunContext {
     pub variables: Vec<EffectiveVariable>,
     pub skills: Vec<EffectiveSkill>,
     pub tools: Vec<EffectiveTool>,
+    #[serde(default)]
+    pub tool_exposure: AgentToolExposureState,
     pub execution_scope: AgentExecutionScope,
     pub limits: AgentRunLimits,
     pub messages: Vec<AgentMessage>,

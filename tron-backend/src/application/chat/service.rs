@@ -137,6 +137,7 @@ impl ChatService {
         command: SendChatMessageCommand,
         resolved_model: AgentModelConfig,
         user_code: Option<String>,
+        locale: Option<String>,
         agent: AgentInvocationService,
     ) -> Result<ChatSendResult, ChatSendError> {
         self.send_message_inner(
@@ -144,6 +145,7 @@ impl ChatService {
             command,
             resolved_model,
             user_code,
+            locale,
             agent,
             None,
         )
@@ -156,6 +158,7 @@ impl ChatService {
         command: SendChatMessageCommand,
         resolved_model: AgentModelConfig,
         user_code: Option<String>,
+        locale: Option<String>,
         agent: AgentInvocationService,
         sink: ModelStreamSink,
     ) -> Result<ChatSendResult, ChatSendError> {
@@ -164,6 +167,7 @@ impl ChatService {
             command,
             resolved_model,
             user_code,
+            locale,
             agent,
             Some(sink),
         )
@@ -176,6 +180,7 @@ impl ChatService {
         command: SendChatMessageCommand,
         resolved_model: AgentModelConfig,
         user_code: Option<String>,
+        locale: Option<String>,
         agent: AgentInvocationService,
         sink: Option<ModelStreamSink>,
     ) -> Result<ChatSendResult, ChatSendError> {
@@ -232,9 +237,11 @@ impl ChatService {
             tools: command.tools,
         };
         let run = if let Some(sink) = sink {
-            agent.invoke_stream(invocation, user_code, sink).await
+            agent
+                .invoke_stream(invocation, user_code, locale.clone(), sink)
+                .await
         } else {
-            agent.invoke(invocation, user_code).await
+            agent.invoke(invocation, user_code, locale).await
         }
         .map_err(ChatSendError::Agent)?;
         let assistant_message = self.create_message(

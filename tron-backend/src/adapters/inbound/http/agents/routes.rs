@@ -1,6 +1,6 @@
 use axum::{
     Router,
-    routing::{get, post},
+    routing::{get, patch, post, put},
 };
 
 use crate::app::AppState;
@@ -8,9 +8,13 @@ use crate::app::AppState;
 use super::handler::{
     activate_agui_stream, create_agent_run, deactivate_agui_stream, disable_platform_system_agent,
     disable_workspace_system_agent, enable_platform_system_agent, enable_workspace_system_agent,
-    get_agent_run, get_main_agent_config, get_runtime_capability, list_agent_runs,
-    list_agui_stream_events, list_platform_system_agents, list_runtime_capabilities,
-    list_workspace_system_agents, rescan_platform_system_agents, update_main_agent_config,
+    get_agent_run, get_main_agent_config, get_runtime_capability, get_tool,
+    get_workspace_internal_agent, list_agent_runs, list_agui_stream_events,
+    list_platform_system_agents, list_runtime_capabilities, list_tool_domains, list_tools,
+    list_workspace_internal_agents, list_workspace_system_agents,
+    replace_workspace_internal_agent_tool_assignments, rescan_platform_system_agents,
+    reset_workspace_internal_agent_policy, update_main_agent_config,
+    update_workspace_internal_agent_policy,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -56,6 +60,29 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/api/v1/agents/workspaces/{workspace_code}/system/{agent_code}/disable",
             post(disable_workspace_system_agent),
+        )
+        .route("/api/v1/tools/domains", get(list_tool_domains))
+        .route("/api/v1/tools", get(list_tools))
+        .route("/api/v1/tools/{tool_code}", get(get_tool))
+        .route(
+            "/api/v1/agents/workspaces/{workspace_code}/internal",
+            get(list_workspace_internal_agents),
+        )
+        .route(
+            "/api/v1/agents/workspaces/{workspace_code}/internal/{agent_code}",
+            get(get_workspace_internal_agent),
+        )
+        .route(
+            "/api/v1/agents/workspaces/{workspace_code}/internal/{agent_code}/policy",
+            patch(update_workspace_internal_agent_policy),
+        )
+        .route(
+            "/api/v1/agents/workspaces/{workspace_code}/internal/{agent_code}/tool-assignments",
+            put(replace_workspace_internal_agent_tool_assignments),
+        )
+        .route(
+            "/api/v1/agents/workspaces/{workspace_code}/internal/{agent_code}/reset-policy",
+            post(reset_workspace_internal_agent_policy),
         )
         .route(
             "/api/v1/agents/agui/streams/{stream_key}",

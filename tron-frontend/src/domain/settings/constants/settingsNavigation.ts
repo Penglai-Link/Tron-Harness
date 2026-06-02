@@ -4,6 +4,7 @@ import {
   Package,
   Settings2,
   Sparkles,
+  Wrench,
 } from "lucide-react";
 
 export const settingsNavigation = [
@@ -24,6 +25,12 @@ export const settingsNavigation = [
     href: "/settings/agents",
     icon: Bot,
     translationKey: "shell:settings.items.agents",
+  },
+  {
+    label: "Tools",
+    href: "/settings/tools",
+    icon: Wrench,
+    translationKey: "shell:settings.items.tools",
   },
   {
     label: "Variables",

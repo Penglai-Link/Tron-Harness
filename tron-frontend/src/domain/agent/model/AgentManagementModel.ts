@@ -1,5 +1,10 @@
 export type AgentStatus = "Enabled" | "Disabled" | "Unavailable";
 
+export type ToolAssignmentMode = "all_platform_tools" | "selected_tools";
+export type ToolExposureMode = "direct_list" | "domain_discovery";
+export type ExpandedDomainPersistenceMode = "sticky_expanded" | "ephemeral_expanded";
+export type WorkspaceInternalAgentPolicySource = "platform_default" | "workspace_override";
+
 export interface SystemAgentModelRecord {
   modelId: string;
   displayName: string;
@@ -37,4 +42,43 @@ export interface WorkspaceSystemAgentRecord extends SystemAgentBaseRecord {
   inheritedFrom: "Platform";
   platformEnabled: boolean;
   workspaceOverrideDisabled: boolean;
+}
+
+export interface ToolCatalogDomainRecord {
+  domainCode: string;
+  name: string;
+  description: string;
+  toolCount: number;
+  sampleTools: string[];
+  hasMutationTools: boolean;
+}
+
+export interface PlatformToolRecord {
+  toolCode: string;
+  domainCode: string;
+  name: string;
+  description: string;
+  operationKind: "query" | "command";
+}
+
+export interface WorkspaceInternalAgentRecord {
+  agentCode: string;
+  name: string;
+  description: string;
+  toolAssignmentMode: ToolAssignmentMode;
+  toolExposureMode: ToolExposureMode;
+  expandedDomainPersistenceMode: ExpandedDomainPersistenceMode;
+  selectedToolCodes: string[];
+  source: WorkspaceInternalAgentPolicySource;
+}
+
+export interface WorkspaceInternalAgentPolicyPayload {
+  toolAssignmentMode?: ToolAssignmentMode;
+  toolExposureMode?: ToolExposureMode;
+  expandedDomainPersistenceMode?: ExpandedDomainPersistenceMode;
+}
+
+export interface ListToolsQuery {
+  search?: string;
+  domainCode?: string;
 }

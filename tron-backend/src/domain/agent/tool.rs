@@ -8,7 +8,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::AgentRunContext;
+use super::{AgentRunContext, EffectiveTool};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +22,32 @@ pub struct ToolRequest {
 pub struct ToolObservation {
     pub tool_name: String,
     pub output: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolContextDelta {
+    #[serde(default)]
+    pub add_tools: Vec<EffectiveTool>,
+    #[serde(default)]
+    pub expanded_domain_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolExecutionResult {
+    pub observation: ToolObservation,
+    #[serde(default)]
+    pub context_delta: ToolContextDelta,
+}
+
+impl ToolExecutionResult {
+    pub fn observation(observation: ToolObservation) -> Self {
+        Self {
+            observation,
+            context_delta: ToolContextDelta::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,11 +71,11 @@ impl Error for ToolError {}
 
 pub trait Tool: Send + Sync {
     fn name(&self) -> &str;
-    fn execute(
+    fn exec(
         &self,
         request: ToolRequest,
         context: &AgentRunContext,
-    ) -> Result<ToolObservation, ToolError>;
+    ) -> Result<ToolExecutionResult, ToolError>;
 }
 
 pub struct InProcessTool<F>
@@ -80,12 +106,12 @@ where
         &self.name
     }
 
-    fn execute(
+    fn exec(
         &self,
         request: ToolRequest,
         _context: &AgentRunContext,
-    ) -> Result<ToolObservation, ToolError> {
-        (self.handler)(request)
+    ) -> Result<ToolExecutionResult, ToolError> {
+        (self.handler)(request).map(ToolExecutionResult::observation)
     }
 }
 
@@ -111,7 +137,7 @@ impl ToolRegistry {
         &self,
         request: ToolRequest,
         context: &AgentRunContext,
-    ) -> Result<ToolObservation, ToolError> {
+    ) -> Result<ToolExecutionResult, ToolError> {
         if !context
             .tools
             .iter()
@@ -126,6 +152,6 @@ impl ToolRegistry {
             .get(&request.tool_name)
             .cloned()
             .ok_or_else(|| ToolError::MissingTool(request.tool_name.clone()))?;
-        tool.execute(request, context)
+        tool.exec(request, context)
     }
 }

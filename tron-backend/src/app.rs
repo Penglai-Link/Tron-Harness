@@ -35,6 +35,7 @@ use crate::{
     },
     application::agent::{
         AgentAguiReplayStore, AgentManagementService, AgentRunHistoryService, ModelClient,
+        register_default_agent_tools,
     },
     application::app::AppService,
     application::automation::AutomationService,
@@ -116,7 +117,6 @@ impl AppState {
         let agent_model_client = Arc::new(HttpModelClient::new(Arc::new(
             HttpModelProviderClient::new(model_inference_client.clone()),
         )));
-        let agent_tool_registry = Arc::new(ToolRegistry::default());
         let users = if config.database_url == ":memory:" {
             GLOBAL_USER_SERVICE
                 .get_or_init(|| build_user_service(&config, event_bus.clone()))
@@ -222,6 +222,17 @@ impl AppState {
         } else {
             build_model_service(&config.database_url, workspaces.clone())
         };
+        let agent_tool_registry = Arc::new(ToolRegistry::default());
+        register_default_agent_tools(
+            agent_tool_registry.as_ref(),
+            workspaces.clone(),
+            apps.clone(),
+            tasks.clone(),
+            models.clone(),
+            skills.clone(),
+            variables.clone(),
+        )
+        .expect("default agent tools should register");
         let llm_runtime = LlmRuntimeService::new(
             Arc::new(models.clone()),
             Arc::new(HttpLlmRuntimeClient::new(model_inference_client)),

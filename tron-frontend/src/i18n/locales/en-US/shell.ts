@@ -59,6 +59,7 @@ export const shell = {
       agents: "Agents",
       general: "General",
       models: "Models",
+      tools: "Tools",
       skillCenter: "Skill Center",
       variables: "Variables",
     },
