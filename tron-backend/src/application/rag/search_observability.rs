@@ -11,15 +11,15 @@ use crate::{
 };
 
 use super::{
-    CandidateHit, CompiledRetrievalProfile, ContextPack, RagSearchRepository, RagSearchRequest,
-    RagSearchTraceWrite, publish_rag_event, safe_trace_payload,
+    CompiledRetrievalProfile, ContextPack, RagSearchRepository, RagSearchRequest,
+    RagSearchTraceWrite, publish_rag_event, safe_trace_payload, search::RankedCandidate,
 };
 
 pub(super) fn persist_trace_if_enabled<R: RagSearchRepository>(
     repository: &R,
     request: &RagSearchRequest,
     compiled: &CompiledRetrievalProfile,
-    hits: &[CandidateHit],
+    hits: &[RankedCandidate],
     context_pack: Option<&ContextPack>,
     warnings: &mut Vec<Value>,
 ) -> Result<Option<String>, RagError> {
@@ -39,6 +39,11 @@ pub(super) fn persist_trace_if_enabled<R: RagSearchRepository>(
             "contextTokens": context_pack.map_or(0, |pack| pack.token_count)
         },
         "contextStrategy": request.context.strategy,
+        "rankingPolicy": {
+            "fusion": compiled.fusion_policy.type_name(),
+            "dedup": compiled.dedup_policy.type_name(),
+            "semantic": compiled.topic_policy.trace_type_name()
+        },
     });
     if let Err(error) = safe_trace_payload(&payload) {
         warnings.push(json!({
@@ -88,7 +93,7 @@ pub(super) fn publish_search_event(
 
 pub(super) fn publish_route_events(
     event_bus: &EventBusHandle,
-    hits: &[CandidateHit],
+    hits: &[RankedCandidate],
     request: &RagSearchRequest,
 ) {
     for (route_id, count) in route_counts(hits) {
@@ -106,18 +111,18 @@ pub(super) fn publish_route_events(
     }
 }
 
-fn candidate_ref(hit: &CandidateHit) -> Value {
+fn candidate_ref(hit: &RankedCandidate) -> Value {
     json!({
-        "corpusId": hit.corpus_id,
-        "sourceCode": hit.source_code,
-        "sourceVersion": hit.source_version,
-        "targetType": hit.target_type,
+        "corpusId": hit.result.corpus_id,
+        "sourceCode": hit.result.source_code,
+        "sourceVersion": hit.result.source_version,
+        "targetType": "TEXT_UNIT",
         "targetCode": hit.target_code,
         "routeIds": hit.route_ids,
     })
 }
 
-fn route_counts(hits: &[CandidateHit]) -> BTreeMap<String, usize> {
+fn route_counts(hits: &[RankedCandidate]) -> BTreeMap<String, usize> {
     let mut counts = BTreeMap::new();
     for hit in hits {
         for route in &hit.route_ids {

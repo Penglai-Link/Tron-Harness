@@ -19,7 +19,7 @@ pub(crate) struct SqliteRagCorpusPlan {
     pub source_field_mapping: BTreeMap<String, String>,
     pub text_unit_field_mapping: BTreeMap<String, String>,
     pub filter_columns: BTreeMap<String, SqliteRagFilterColumn>,
-    pub source_metadata_columns: Vec<SqliteRagMetadataColumn>,
+    pub return_field_columns: BTreeMap<String, SqliteRagProjectionColumn>,
     pub source_status_column: String,
     pub text_unit_status_column: String,
     pub source_content_hash_column: Option<String>,
@@ -63,9 +63,10 @@ pub(crate) struct SqliteRagFilterColumn {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct SqliteRagMetadataColumn {
+pub(crate) struct SqliteRagProjectionColumn {
     pub logical_name: String,
     pub column: String,
+    pub alias: SqliteRagTableAlias,
     pub value_type: SqliteRagValueType,
 }
 
@@ -122,8 +123,8 @@ pub(crate) fn compile_sql_corpus_plan(
         &source_columns,
         &text_unit_columns,
     );
-    let source_metadata_columns =
-        compile_source_metadata_columns(corpus, &source_columns, &filter_columns);
+    let return_field_columns =
+        compile_return_field_columns(corpus, &source_columns, &text_unit_columns, &filter_columns);
 
     let source_status_column = match binding.layout {
         RagStorageLayout::Split => first_existing(&source_columns, &["source_status", "status"]),
@@ -182,7 +183,7 @@ pub(crate) fn compile_sql_corpus_plan(
         source_columns,
         text_unit_columns,
         filter_columns,
-        source_metadata_columns,
+        return_field_columns,
     })
 }
 
@@ -231,48 +232,70 @@ fn compile_filter_columns(
         .collect()
 }
 
-fn compile_source_metadata_columns(
+fn compile_return_field_columns(
     corpus: &RagCorpusRecord,
     source_columns: &BTreeSet<String>,
+    text_unit_columns: &BTreeSet<String>,
     filter_columns: &BTreeMap<String, SqliteRagFilterColumn>,
-) -> Vec<SqliteRagMetadataColumn> {
-    let mut metadata_columns = BTreeMap::<String, SqliteRagMetadataColumn>::new();
+) -> BTreeMap<String, SqliteRagProjectionColumn> {
+    let mut return_columns = BTreeMap::<String, SqliteRagProjectionColumn>::new();
     let source_mapping = if corpus.source_field_mapping.is_empty() {
         &corpus.field_mapping
     } else {
         &corpus.source_field_mapping
     };
     for (logical_name, column) in source_mapping {
-        if source_columns.contains(column) && !is_common_identity_field(logical_name) {
+        if source_columns.contains(column) && !is_return_field_reserved(logical_name) {
             let value_type = filter_columns
                 .get(logical_name)
                 .map(|field| field.value_type)
                 .unwrap_or(SqliteRagValueType::String);
-            metadata_columns.insert(
+            return_columns.insert(
                 logical_name.clone(),
-                SqliteRagMetadataColumn {
+                SqliteRagProjectionColumn {
                     logical_name: logical_name.clone(),
                     column: column.clone(),
+                    alias: SqliteRagTableAlias::Source,
                     value_type,
                 },
             );
         }
     }
-    for (logical_name, filter_column) in filter_columns {
-        if filter_column.alias == SqliteRagTableAlias::Source
-            && source_columns.contains(&filter_column.column)
-            && !is_common_identity_field(logical_name)
-        {
-            metadata_columns
+    for (logical_name, column) in &corpus.text_unit_field_mapping {
+        if text_unit_columns.contains(column) && !is_return_field_reserved(logical_name) {
+            let value_type = filter_columns
+                .get(logical_name)
+                .map(|field| field.value_type)
+                .unwrap_or(SqliteRagValueType::String);
+            return_columns
                 .entry(logical_name.clone())
-                .or_insert_with(|| SqliteRagMetadataColumn {
+                .or_insert_with(|| SqliteRagProjectionColumn {
+                    logical_name: logical_name.clone(),
+                    column: column.clone(),
+                    alias: SqliteRagTableAlias::TextUnit,
+                    value_type,
+                });
+        }
+    }
+    for (logical_name, filter_column) in filter_columns {
+        let physical_columns = match filter_column.alias {
+            SqliteRagTableAlias::Source => source_columns,
+            SqliteRagTableAlias::TextUnit => text_unit_columns,
+        };
+        if physical_columns.contains(&filter_column.column)
+            && !is_return_field_reserved(logical_name)
+        {
+            return_columns
+                .entry(logical_name.clone())
+                .or_insert_with(|| SqliteRagProjectionColumn {
                     logical_name: logical_name.clone(),
                     column: filter_column.column.clone(),
+                    alias: filter_column.alias,
                     value_type: filter_column.value_type,
                 });
         }
     }
-    metadata_columns.into_values().collect()
+    return_columns
 }
 
 fn choose_filter_alias(
@@ -423,17 +446,24 @@ fn unique_indexes(
     Ok(indexes)
 }
 
-fn is_common_identity_field(logical_name: &str) -> bool {
+fn is_return_field_reserved(logical_name: &str) -> bool {
     matches!(
         logical_name,
         "sourceCode"
             | "sourceVersion"
+            | "title"
+            | "score"
+            | "text"
+            | "metadata"
             | "scopeType"
             | "scopeCode"
+            | "targetType"
+            | "targetCode"
+            | "routeIds"
+            | "preview"
             | "status"
             | "sourceStatus"
             | "sourceMetadata"
-            | "text"
             | "searchText"
             | "embedding"
     )

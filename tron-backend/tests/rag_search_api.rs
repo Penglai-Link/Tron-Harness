@@ -1,6 +1,7 @@
 mod common;
 
 use std::{
+    collections::BTreeSet,
     path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -124,7 +125,68 @@ async fn search_api_returns_uniform_success_envelope_for_result_list() {
         body["data"]["hits"][0]["sourceCode"],
         json!("api-memory-rule")
     );
+    assert_eq!(body["data"]["hits"][0]["title"], json!("API memory rule"));
+    assert_eq!(body["data"]["hits"][0]["metadata"], json!({}));
+    let hit = body["data"]["hits"][0].as_object().unwrap();
+    let keys = hit.keys().map(String::as_str).collect::<BTreeSet<_>>();
+    assert_eq!(
+        keys,
+        BTreeSet::from([
+            "corpusId",
+            "sourceCode",
+            "sourceVersion",
+            "title",
+            "score",
+            "text",
+            "metadata",
+        ])
+    );
     assert_eq!(body["data"]["contextPack"], json!(null));
+}
+
+#[tokio::test]
+async fn search_api_flattens_requested_logical_return_fields() {
+    let database_url = temp_database_path("rag-search-api-return-fields")
+        .to_string_lossy()
+        .to_string();
+    seed_search_fixture(&database_url);
+    let router = app_with_database(&database_url);
+    let mut payload = search_payload(json!({
+        "userCode": "USR-AUTH-0001",
+        "agentCode": "AGENT_CODEX",
+        "workspaceCode": "TRON_CORE"
+    }));
+    payload["context"]["returnFields"] = json!(["memoryType"]);
+
+    let response =
+        authenticated_request(&router, Method::POST, "/api/v1/rag/search", Some(payload)).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["data"]["hits"][0]["memoryType"], json!("RULE"));
+    assert!(body["data"]["hits"][0].get("memory_type").is_none());
+}
+
+#[tokio::test]
+async fn search_api_rejects_physical_return_field_names() {
+    let database_url = temp_database_path("rag-search-api-physical-return-field")
+        .to_string_lossy()
+        .to_string();
+    seed_search_fixture(&database_url);
+    let router = app_with_database(&database_url);
+    let mut payload = search_payload(json!({
+        "userCode": "USR-AUTH-0001",
+        "agentCode": "AGENT_CODEX",
+        "workspaceCode": "TRON_CORE"
+    }));
+    payload["context"]["returnFields"] = json!(["memory_type"]);
+
+    let response =
+        authenticated_request(&router, Method::POST, "/api/v1/rag/search", Some(payload)).await;
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = response_json(response).await;
+    assert_eq!(body["code"], json!("RAG_SEARCH_REQUEST_INVALID"));
 }
 
 #[tokio::test]

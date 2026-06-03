@@ -130,6 +130,8 @@ pub struct RagSearchHttpRequest {
 pub struct RagSearchContextHttpRequest {
     #[serde(default)]
     pub strategy: Option<String>,
+    #[serde(default)]
+    pub return_fields: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -159,6 +161,12 @@ impl RagSearchHttpRequest {
             token_budget: self.token_budget.unwrap_or(1200),
             context: RagSearchContextRequest {
                 strategy: context.strategy.unwrap_or_else(|| "RESULT_LIST".into()),
+                return_fields: context
+                    .return_fields
+                    .into_iter()
+                    .map(|field| field.trim().to_string())
+                    .filter(|field| !field.is_empty())
+                    .collect(),
             },
             trace: RagSearchTraceRequest {
                 enabled: trace.enabled.unwrap_or(false),
@@ -169,7 +177,10 @@ impl RagSearchHttpRequest {
 
 impl Default for RagSearchContextHttpRequest {
     fn default() -> Self {
-        Self { strategy: None }
+        Self {
+            strategy: None,
+            return_fields: Vec::new(),
+        }
     }
 }
 

@@ -43,7 +43,10 @@ pub use search::{
     RagSearchRuntime, RagSearchScope, RagSearchService, RagSearchTraceRequest,
 };
 pub use search_filter::merge_search_filters;
-pub use search_profile::{CompiledRetrievalProfile, RetrievalRoute, compile_retrieval_profile};
+pub use search_profile::{
+    CompiledRetrievalProfile, DedupPolicy, EmbeddingMmrPolicy, FusionPolicy, RetrievalRoute,
+    TopicFallback, TopicPolicy, compile_retrieval_profile,
+};
 pub use service::{
     RagConfigRepository, RagConfigService, RagCorpusView, RagFilterFieldError, RagFilterSchema,
     RagFilterSchemaField, RagFilterValidationRequest, RagFilterValidationView, RagFilterValueType,

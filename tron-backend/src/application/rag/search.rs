@@ -1,11 +1,11 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     future::Future,
     pin::Pin,
     sync::{Arc, Mutex},
 };
 
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use crate::{
     application::llm::{LlmRerankCallCommand, LlmRuntimeService},
@@ -18,7 +18,8 @@ use super::{
     RagSearchTraceWrite, RagStrategyRegistry, compile_retrieval_profile, merge_search_filters,
     search_observability::{persist_trace_if_enabled, publish_route_events, publish_search_event},
     search_ranking::{
-        apply_rerank, assemble_context_pack, fuse_and_dedup, rank_route_rows, stable_hit_order,
+        apply_rerank, apply_topic_policy, assemble_context_pack, fuse_and_dedup, rank_route_rows,
+        stable_hit_order,
     },
     search_strategy::retriever_strategy,
 };
@@ -55,6 +56,7 @@ pub struct RagRouteSearchQuery {
     pub source_version: String,
     pub scopes: Vec<RagSearchScope>,
     pub filters: Value,
+    pub return_fields: Vec<String>,
     pub limit: usize,
 }
 
@@ -72,6 +74,7 @@ pub struct RagSearchRow {
     pub target_code: String,
     pub scope_type: String,
     pub scope_code: String,
+    pub title: Option<String>,
     pub text: String,
     pub search_text: String,
     pub heading_path: Vec<String>,
@@ -81,6 +84,7 @@ pub struct RagSearchRow {
     pub storage_score: Option<f64>,
     pub source_metadata: Value,
     pub text_metadata: Value,
+    pub field_values: Map<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -157,6 +161,7 @@ pub struct RagSearchRequest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RagSearchContextRequest {
     pub strategy: String,
+    pub return_fields: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -180,16 +185,30 @@ pub struct CandidateHit {
     pub corpus_id: String,
     pub source_code: String,
     pub source_version: String,
-    pub target_type: String,
+    pub title: Option<String>,
+    pub score: f64,
+    pub text: String,
+    pub metadata: Value,
+    pub fields: Map<String, Value>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct RankedCandidate {
+    pub result: CandidateHit,
     pub target_code: String,
     pub route_ids: Vec<String>,
-    pub score: f64,
-    pub scope_type: String,
-    pub scope_code: String,
-    pub preview: String,
-    pub text: String,
+    pub route_ranks: Vec<CandidateRouteRank>,
     pub token_count: i64,
-    pub metadata: Value,
+    pub embedding: Option<Vec<f32>>,
+    pub identity_key: String,
+    pub canonical_dedup_key: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct CandidateRouteRank {
+    pub route_id: String,
+    pub rank: usize,
+    pub weight: f64,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -260,6 +279,7 @@ where
             return Err(RagError::RetrievalProfileInvalid);
         }
         let route_corpora = self.load_route_corpora(&compiled)?;
+        validate_return_fields(&request.context.return_fields, &route_corpora)?;
         let (mut ranked_hits, mut warnings) = self
             .execute_routes(&compiled, &route_corpora, &profile.filters, &request)
             .await?;
@@ -279,12 +299,16 @@ where
             &mut warnings,
         )?;
         publish_search_event(&self.event_bus, "rag.search.completed", &request);
+        let hits = ranked_hits
+            .into_iter()
+            .map(|candidate| candidate.result)
+            .collect();
 
         Ok(RagSearchResult {
             profile_id: compiled.profile_id,
             query: request.query,
             context_strategy: request.context.strategy,
-            hits: ranked_hits,
+            hits,
             context_pack,
             warnings,
             trace_code,
@@ -315,7 +339,7 @@ where
         route_corpora: &BTreeMap<String, crate::domain::rag::RagCorpusRecord>,
         profile_filters: &Value,
         request: &RagSearchRequest,
-    ) -> Result<(Vec<CandidateHit>, Vec<Value>), RagError> {
+    ) -> Result<(Vec<RankedCandidate>, Vec<Value>), RagError> {
         let embedding_routes = compiled
             .routes
             .iter()
@@ -381,6 +405,7 @@ where
                 source_version,
                 scopes: search_scopes(&request.access_context),
                 filters,
+                return_fields: request.context.return_fields.clone(),
                 limit: route.top_k.max(request.limit).max(1) * 4,
             };
             let rows = match self.repository.search_route(query) {
@@ -397,15 +422,15 @@ where
             };
             route_hits.extend(rank_route_rows(
                 rows,
-                corpus,
                 route,
                 &strategy,
                 request,
                 query_embedding.as_deref(),
             ));
         }
-        let mut hits = fuse_and_dedup(route_hits);
+        let mut hits = fuse_and_dedup(&compiled, route_hits);
         hits.sort_by(stable_hit_order);
+        apply_topic_policy(&compiled, &mut hits);
         if compiled.rerank_enabled && hits.len() > 1 {
             apply_rerank(&self.runtime, compiled, request, &mut hits).await?;
         }
@@ -430,7 +455,72 @@ fn validate_request(request: &RagSearchRequest) -> Result<(), RagError> {
     if request.workspace_code != request.access_context.workspace_code || request.limit == 0 {
         return Err(RagError::SearchRequestInvalid);
     }
+    if request
+        .context
+        .return_fields
+        .iter()
+        .any(|field| field.trim().is_empty())
+    {
+        return Err(RagError::SearchRequestInvalid);
+    }
     Ok(())
+}
+
+fn validate_return_fields(
+    fields: &[String],
+    corpora: &BTreeMap<String, crate::domain::rag::RagCorpusRecord>,
+) -> Result<(), RagError> {
+    if fields.is_empty() {
+        return Ok(());
+    }
+    let available = corpora
+        .values()
+        .flat_map(corpus_return_field_names)
+        .collect::<BTreeSet<_>>();
+    for field in fields {
+        if is_reserved_return_field(field) || !available.contains(field) {
+            return Err(RagError::SearchRequestInvalid);
+        }
+    }
+    Ok(())
+}
+
+fn corpus_return_field_names(corpus: &crate::domain::rag::RagCorpusRecord) -> BTreeSet<String> {
+    let mut names = BTreeSet::new();
+    names.extend(corpus.field_mapping.keys().cloned());
+    names.extend(corpus.source_field_mapping.keys().cloned());
+    names.extend(corpus.text_unit_field_mapping.keys().cloned());
+    names.extend(
+        corpus
+            .filter_schema
+            .get("fields")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flat_map(|fields| fields.keys().cloned()),
+    );
+    names
+        .into_iter()
+        .filter(|field| !is_reserved_return_field(field))
+        .collect()
+}
+
+fn is_reserved_return_field(field: &str) -> bool {
+    matches!(
+        field,
+        "corpusId"
+            | "sourceCode"
+            | "sourceVersion"
+            | "title"
+            | "score"
+            | "text"
+            | "metadata"
+            | "targetType"
+            | "targetCode"
+            | "routeIds"
+            | "scopeType"
+            | "scopeCode"
+            | "preview"
+    )
 }
 
 fn filters_and_version(

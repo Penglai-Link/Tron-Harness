@@ -1,5 +1,5 @@
 use serde::Serialize;
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::application::rag::{
     CandidateHit, ContextPack, RagDebugProfileResult, RagDebugSourceResult, RagIngestResult,
@@ -54,15 +54,12 @@ pub struct RagCandidateHitResponse {
     pub corpus_id: String,
     pub source_code: String,
     pub source_version: String,
-    pub target_type: String,
-    pub target_code: String,
-    pub route_ids: Vec<String>,
+    pub title: Option<String>,
     pub score: f64,
-    pub scope_type: String,
-    pub scope_code: String,
-    pub preview: String,
     pub text: String,
     pub metadata: Value,
+    #[serde(flatten)]
+    pub fields: Map<String, Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -105,15 +102,11 @@ impl From<CandidateHit> for RagCandidateHitResponse {
             corpus_id: hit.corpus_id,
             source_code: hit.source_code,
             source_version: hit.source_version,
-            target_type: hit.target_type,
-            target_code: hit.target_code,
-            route_ids: hit.route_ids,
+            title: hit.title,
             score: hit.score,
-            scope_type: hit.scope_type,
-            scope_code: hit.scope_code,
-            preview: hit.preview,
             text: hit.text,
             metadata: hit.metadata,
+            fields: hit.fields,
         }
     }
 }

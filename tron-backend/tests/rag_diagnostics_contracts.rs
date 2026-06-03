@@ -297,6 +297,7 @@ fn search_request(trace_enabled: bool) -> RagSearchRequest {
         token_budget: 100,
         context: RagSearchContextRequest {
             strategy: "RESULT_LIST".into(),
+            return_fields: Vec::new(),
         },
         trace: RagSearchTraceRequest {
             enabled: trace_enabled,

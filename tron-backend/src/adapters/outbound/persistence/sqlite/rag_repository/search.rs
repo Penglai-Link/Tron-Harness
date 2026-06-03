@@ -5,7 +5,7 @@ use rusqlite::{
     Row, params, params_from_iter,
     types::{Value as SqlValue, ValueRef},
 };
-use serde_json::{Value, json};
+use serde_json::{Map, Value, json};
 
 use crate::{
     application::rag::{
@@ -20,7 +20,8 @@ use super::{
     SqliteRagRepository,
     indexes::{fts_table_name, supported_vector_dimensions, table_exists, vec_table_name},
     sql_plan::{
-        SqliteRagCorpusPlan, SqliteRagValueType, compile_sql_corpus_plan, quote_identifier,
+        SqliteRagCorpusPlan, SqliteRagProjectionColumn, SqliteRagTableAlias, SqliteRagValueType,
+        compile_sql_corpus_plan, quote_identifier,
     },
     storage_error,
 };
@@ -104,7 +105,8 @@ fn search_route(
 
 struct SelectProjection {
     sql: String,
-    metadata_start: usize,
+    return_field_start: usize,
+    return_field_columns: Vec<SqliteRagProjectionColumn>,
     storage_score_index: usize,
     params: Vec<SqlValue>,
 }
@@ -125,24 +127,26 @@ fn select_projection(
         text_expr("heading_path")?,
         text_expr("ordinal")?,
         text_expr("token_count")?,
-        "NULL".into(),
+        embedding_expr(plan, retriever)?,
         optional_source_expr(plan, "title", "NULL")?,
-        optional_source_expr(plan, "source_type", "NULL")?,
-        optional_source_column_expr(plan, plan.source_content_hash_column.as_deref(), "NULL")?,
-        text_expr(&plan.text_unit_status_column)?,
         source_metadata_expr(plan)?,
         text_metadata_expr(plan)?,
     ];
-    let metadata_start = columns.len();
-    for column in &plan.source_metadata_columns {
-        columns.push(source_expr(plan, &column.column)?);
+    let return_field_start = columns.len();
+    let mut return_field_columns = Vec::new();
+    for field in &query.return_fields {
+        if let Some(column) = plan.return_field_columns.get(field) {
+            columns.push(return_field_expr(plan, column)?);
+            return_field_columns.push(column.clone());
+        }
     }
     let storage_score_index = columns.len();
     let (storage_score_expr, params) = storage_score_expr(plan, query, retriever)?;
     columns.push(storage_score_expr);
     Ok(SelectProjection {
         sql: columns.join(", "),
-        metadata_start,
+        return_field_start,
+        return_field_columns,
         storage_score_index,
         params,
     })
@@ -397,19 +401,11 @@ fn map_row(
     select: &SelectProjection,
 ) -> rusqlite::Result<RagSearchRow> {
     let heading_path = split_heading_path(&row.get::<_, String>(7)?);
-    let mut source_metadata = json!({
-        "title": row.get::<_, Option<String>>(11)?,
-        "sourceType": row.get::<_, Option<String>>(12)?,
-        "sourceContentHash": row.get::<_, Option<String>>(13)?,
-        "textUnitStatus": row.get::<_, Option<String>>(14)?,
-        "extra": parse_metadata_json(row.get::<_, String>(15)?.as_str()),
-    });
-    if let Some(object) = source_metadata.as_object_mut() {
-        for (offset, column) in plan.source_metadata_columns.iter().enumerate() {
-            object.insert(
-                column.logical_name.clone(),
-                json_from_row(row, select.metadata_start + offset, column.value_type)?,
-            );
+    let mut field_values = Map::new();
+    for (offset, column) in select.return_field_columns.iter().enumerate() {
+        let value = json_from_row(row, select.return_field_start + offset, column.value_type)?;
+        if !value.is_null() {
+            field_values.insert(column.logical_name.clone(), value);
         }
     }
     Ok(RagSearchRow {
@@ -419,17 +415,21 @@ fn map_row(
         target_code: row.get(0)?,
         scope_type: row.get(3)?,
         scope_code: row.get(4)?,
+        title: row.get(11)?,
         text: row.get(5)?,
         search_text: row.get(6)?,
         heading_path,
         ordinal: row.get(8)?,
         token_count: row.get::<_, Option<i64>>(9)?.unwrap_or(0),
-        embedding: row
-            .get::<_, Option<Vec<u8>>>(10)?
-            .and_then(decode_embedding),
+        embedding: embedding_from_row(row, 10)?,
         storage_score: row.get::<_, Option<f64>>(select.storage_score_index)?,
-        source_metadata,
-        text_metadata: parse_metadata_json(row.get::<_, String>(16)?.as_str()),
+        source_metadata: parse_metadata_json(
+            row.get::<_, Option<String>>(12)?.as_deref().unwrap_or("{}"),
+        ),
+        text_metadata: parse_metadata_json(
+            row.get::<_, Option<String>>(13)?.as_deref().unwrap_or("{}"),
+        ),
+        field_values,
     })
 }
 
@@ -450,11 +450,36 @@ fn search_text_expr(
     }
 }
 
+fn embedding_expr(
+    plan: &SqliteRagCorpusPlan,
+    retriever: SqliteRetrieverStrategy,
+) -> Result<String, RagError> {
+    if plan.text_unit_columns.contains("embedding") {
+        return text_expr("embedding");
+    }
+    match retriever.kind {
+        SqliteRetrieverKind::VectorCosine | SqliteRetrieverKind::VectorVec0 => {
+            Ok("vec.embedding".into())
+        }
+        _ => Ok("NULL".into()),
+    }
+}
+
 fn source_expr(plan: &SqliteRagCorpusPlan, column: &str) -> Result<String, RagError> {
     if plan.source_table.is_some() {
         Ok(format!("src.{}", quote_identifier(column)?))
     } else {
         Ok(format!("tu.{}", quote_identifier(column)?))
+    }
+}
+
+fn return_field_expr(
+    plan: &SqliteRagCorpusPlan,
+    column: &SqliteRagProjectionColumn,
+) -> Result<String, RagError> {
+    match column.alias {
+        SqliteRagTableAlias::Source => source_expr(plan, &column.column),
+        SqliteRagTableAlias::TextUnit => text_expr(&column.column),
     }
 }
 
@@ -467,18 +492,6 @@ fn optional_source_expr(
         source_expr(plan, column)
     } else if plan.source_table.is_none() && plan.text_unit_columns.contains(column) {
         text_expr(column)
-    } else {
-        Ok(fallback.into())
-    }
-}
-
-fn optional_source_column_expr(
-    plan: &SqliteRagCorpusPlan,
-    column: Option<&str>,
-    fallback: &str,
-) -> Result<String, RagError> {
-    if let Some(column) = column {
-        source_expr(plan, column)
     } else {
         Ok(fallback.into())
     }
@@ -514,6 +527,18 @@ fn json_from_row(
         ValueRef::Real(value) => Ok(json!(value)),
         ValueRef::Text(value) => Ok(json!(String::from_utf8_lossy(value).to_string())),
         ValueRef::Blob(_) => Ok(Value::Null),
+    }
+}
+
+fn embedding_from_row(row: &Row<'_>, index: usize) -> rusqlite::Result<Option<Vec<f32>>> {
+    match row.get_ref(index)? {
+        ValueRef::Null => Ok(None),
+        ValueRef::Blob(raw) => {
+            Ok(decode_embedding(raw.to_vec())
+                .or_else(|| serde_json::from_slice::<Vec<f32>>(raw).ok()))
+        }
+        ValueRef::Text(raw) => Ok(serde_json::from_slice::<Vec<f32>>(raw).ok()),
+        _ => Ok(None),
     }
 }
 

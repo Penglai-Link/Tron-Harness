@@ -16,6 +16,9 @@ pub struct CompiledRetrievalProfile {
     pub embedding_model_code: Option<String>,
     pub rerank_model_code: Option<String>,
     pub rerank_enabled: bool,
+    pub fusion_policy: FusionPolicy,
+    pub dedup_policy: DedupPolicy,
+    pub topic_policy: TopicPolicy,
     pub degrade_policy: String,
 }
 
@@ -27,6 +30,65 @@ pub struct RetrievalRoute {
     pub top_k: usize,
     pub weight: f64,
     pub filters: Value,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FusionPolicy {
+    SumScore,
+    Rrf { rank_constant: f64 },
+}
+
+impl FusionPolicy {
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Self::SumScore => "SUM_SCORE",
+            Self::Rrf { .. } => "RRF",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DedupPolicy {
+    TextUnit,
+    CanonicalTextUnit,
+}
+
+impl DedupPolicy {
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Self::TextUnit => "TEXT_UNIT",
+            Self::CanonicalTextUnit => "CANONICAL_TEXT_UNIT",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TopicPolicy {
+    Disabled,
+    EmbeddingMmr(EmbeddingMmrPolicy),
+}
+
+impl TopicPolicy {
+    pub fn trace_type_name(&self) -> &'static str {
+        match self {
+            Self::Disabled => "DISABLED",
+            Self::EmbeddingMmr(_) => "VECTOR_MMR_V1",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EmbeddingMmrPolicy {
+    pub candidate_window: usize,
+    pub lambda: f64,
+    pub similarity_threshold: f64,
+    pub max_per_topic: usize,
+    pub fallback: TopicFallback,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TopicFallback {
+    KeepOrder,
 }
 
 pub fn compile_retrieval_profile<S>(
@@ -89,6 +151,9 @@ where
         embedding_model_code: string_config(&profile.config, "embeddingModelCode"),
         rerank_model_code: string_config(&profile.config, "rerankModelCode"),
         rerank_enabled,
+        fusion_policy: parse_fusion_policy(&profile.config)?,
+        dedup_policy: parse_dedup_policy(&profile.config)?,
+        topic_policy: parse_topic_policy(&profile.config)?,
         degrade_policy: profile.degrade_policy.clone(),
     })
 }
@@ -218,6 +283,102 @@ fn is_supported_context_strategy(strategy: &str) -> bool {
         strategy,
         "RESULT_LIST" | "TOKEN_BUDGET_PACK" | "MEMORY_CONTEXT_PACK" | "DOC_QA_CONTEXT_PACK"
     )
+}
+
+fn parse_fusion_policy(config: &Value) -> Result<FusionPolicy, RagError> {
+    let Some(policy) = config.get("fusionPolicy").and_then(Value::as_object) else {
+        return Ok(FusionPolicy::SumScore);
+    };
+    match policy
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or("SUM_SCORE")
+    {
+        "SUM_SCORE" => Ok(FusionPolicy::SumScore),
+        "RRF" => {
+            let rank_constant = policy
+                .get("rankConstant")
+                .and_then(Value::as_f64)
+                .filter(|value| *value > 0.0)
+                .unwrap_or(60.0);
+            Ok(FusionPolicy::Rrf { rank_constant })
+        }
+        _ => Err(RagError::RetrievalProfileInvalid),
+    }
+}
+
+fn parse_dedup_policy(config: &Value) -> Result<DedupPolicy, RagError> {
+    let Some(policy) = config.get("dedupPolicy").and_then(Value::as_object) else {
+        return Ok(DedupPolicy::TextUnit);
+    };
+    match policy
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or("TEXT_UNIT")
+    {
+        "TEXT_UNIT" => Ok(DedupPolicy::TextUnit),
+        "CANONICAL_TEXT_UNIT" => Ok(DedupPolicy::CanonicalTextUnit),
+        _ => Err(RagError::RetrievalProfileInvalid),
+    }
+}
+
+fn parse_topic_policy(config: &Value) -> Result<TopicPolicy, RagError> {
+    let Some(policy) = config.get("topicPolicy").and_then(Value::as_object) else {
+        return Ok(TopicPolicy::Disabled);
+    };
+    if !policy
+        .get("enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        return Ok(TopicPolicy::Disabled);
+    }
+    match policy.get("type").and_then(Value::as_str) {
+        Some("EMBEDDING_MMR_V1") => {}
+        _ => return Err(RagError::RetrievalProfileInvalid),
+    }
+    if policy
+        .get("applyStage")
+        .and_then(Value::as_str)
+        .is_some_and(|stage| stage != "BEFORE_RERANK")
+    {
+        return Err(RagError::RetrievalProfileInvalid);
+    }
+    if policy
+        .get("fallback")
+        .and_then(Value::as_str)
+        .is_some_and(|fallback| fallback != "KEEP_ORDER")
+    {
+        return Err(RagError::RetrievalProfileInvalid);
+    }
+    let candidate_window = policy
+        .get("candidateWindow")
+        .and_then(Value::as_u64)
+        .map(|value| value as usize)
+        .filter(|value| *value > 0)
+        .unwrap_or(50);
+    let lambda = policy
+        .get("lambda")
+        .and_then(Value::as_f64)
+        .filter(|value| (0.0..=1.0).contains(value))
+        .unwrap_or(0.72);
+    let similarity_threshold = policy
+        .get("similarityThreshold")
+        .and_then(Value::as_f64)
+        .filter(|value| (0.0..=1.0).contains(value))
+        .unwrap_or(0.82);
+    let max_per_topic = policy
+        .get("maxPerTopic")
+        .and_then(Value::as_u64)
+        .map(|value| value as usize)
+        .unwrap_or(0);
+    Ok(TopicPolicy::EmbeddingMmr(EmbeddingMmrPolicy {
+        candidate_window,
+        lambda,
+        similarity_threshold,
+        max_per_topic,
+        fallback: TopicFallback::KeepOrder,
+    }))
 }
 
 fn string_config(config: &Value, field: &str) -> Option<String> {

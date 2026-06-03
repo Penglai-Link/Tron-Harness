@@ -2,23 +2,23 @@ use std::collections::BTreeMap;
 
 use serde_json::{Map, Value, json};
 
-use crate::domain::rag::{RagCorpusRecord, RagError};
+use crate::domain::rag::RagError;
 
 use super::{
     CandidateHit, CompiledRetrievalProfile, ContextPack, ContextPackItem, RagRerankCall,
     RagSearchRequest, RagSearchRow, RagSearchRuntime, RetrievalRoute,
+    search::{CandidateRouteRank, RankedCandidate},
+    search_profile::{DedupPolicy, EmbeddingMmrPolicy, FusionPolicy, TopicPolicy},
     search_strategy::{RetrieverKind, RetrieverStrategy},
 };
 
 pub(super) fn rank_route_rows(
     rows: Vec<RagSearchRow>,
-    corpus: &RagCorpusRecord,
     route: &RetrievalRoute,
     strategy: &RetrieverStrategy,
     request: &RagSearchRequest,
     query_embedding: Option<&[f32]>,
-) -> Vec<CandidateHit> {
-    let metadata_groups = metadata_groups(corpus);
+) -> Vec<RankedCandidate> {
     let mut hits = rows
         .into_iter()
         .filter_map(|row| {
@@ -36,49 +36,73 @@ pub(super) fn rank_route_rows(
                 _ => 0.0,
             });
             (score > 0.0).then(|| {
-                let mut hit = hit_from_row(&row, &metadata_groups);
-                hit.route_ids.push(route.route_id.clone());
-                hit.score = score * route.weight;
+                let mut hit = hit_from_row(&row);
+                hit.result.score = score * route.weight;
                 hit
             })
         })
         .collect::<Vec<_>>();
     hits.sort_by(stable_hit_order);
     hits.truncate(route.top_k);
+    for (index, hit) in hits.iter_mut().enumerate() {
+        hit.route_ids.push(route.route_id.clone());
+        hit.route_ranks.push(CandidateRouteRank {
+            route_id: route.route_id.clone(),
+            rank: index + 1,
+            weight: route.weight,
+        });
+    }
     hits
 }
 
-pub(super) fn fuse_and_dedup(hits: Vec<CandidateHit>) -> Vec<CandidateHit> {
-    let mut by_target = BTreeMap::<String, CandidateHit>::new();
+pub(super) fn fuse_and_dedup(
+    compiled: &CompiledRetrievalProfile,
+    hits: Vec<RankedCandidate>,
+) -> Vec<RankedCandidate> {
+    let mut by_target = BTreeMap::<String, RankedCandidate>::new();
     for hit in hits {
-        match by_target.entry(hit.target_code.clone()) {
+        let dedup_key = dedup_key(&compiled.dedup_policy, &hit);
+        match by_target.entry(dedup_key) {
             std::collections::btree_map::Entry::Vacant(entry) => {
                 entry.insert(hit);
             }
             std::collections::btree_map::Entry::Occupied(mut entry) => {
-                let existing = entry.get_mut();
-                for route_id in hit.route_ids {
-                    if !existing.route_ids.contains(&route_id) {
-                        existing.route_ids.push(route_id);
-                    }
-                }
-                existing.score += hit.score;
+                merge_candidate(entry.get_mut(), hit, &compiled.fusion_policy);
             }
         }
     }
-    by_target.into_values().collect()
+    let mut values = by_target.into_values().collect::<Vec<_>>();
+    if let FusionPolicy::Rrf { rank_constant } = compiled.fusion_policy {
+        for hit in &mut values {
+            hit.result.score = rrf_score(hit, rank_constant);
+        }
+    }
+    values
+}
+
+pub(super) fn apply_topic_policy(
+    compiled: &CompiledRetrievalProfile,
+    hits: &mut Vec<RankedCandidate>,
+) {
+    match &compiled.topic_policy {
+        TopicPolicy::Disabled => {}
+        TopicPolicy::EmbeddingMmr(policy) => apply_embedding_mmr(policy, hits),
+    }
 }
 
 pub(super) async fn apply_rerank<E>(
     runtime: &E,
     compiled: &CompiledRetrievalProfile,
     request: &RagSearchRequest,
-    hits: &mut Vec<CandidateHit>,
+    hits: &mut Vec<RankedCandidate>,
 ) -> Result<(), RagError>
 where
     E: RagSearchRuntime,
 {
-    let documents = hits.iter().map(|hit| hit.text.clone()).collect::<Vec<_>>();
+    let documents = hits
+        .iter()
+        .map(|hit| hit.result.text.clone())
+        .collect::<Vec<_>>();
     let order = runtime
         .rerank(RagRerankCall {
             workspace_code: request.workspace_code.clone(),
@@ -95,7 +119,7 @@ where
     let mut ranked = Vec::new();
     for (index, score) in order {
         if let Some(mut hit) = hits.get(index).cloned() {
-            hit.score = score;
+            hit.result.score = score;
             ranked.push(hit);
         }
     }
@@ -105,18 +129,22 @@ where
     Ok(())
 }
 
-pub(super) fn stable_hit_order(left: &CandidateHit, right: &CandidateHit) -> std::cmp::Ordering {
+pub(super) fn stable_hit_order(
+    left: &RankedCandidate,
+    right: &RankedCandidate,
+) -> std::cmp::Ordering {
     right
+        .result
         .score
-        .partial_cmp(&left.score)
+        .partial_cmp(&left.result.score)
         .unwrap_or(std::cmp::Ordering::Equal)
-        .then_with(|| left.source_code.cmp(&right.source_code))
+        .then_with(|| left.result.source_code.cmp(&right.result.source_code))
         .then_with(|| left.target_code.cmp(&right.target_code))
 }
 
 pub(super) fn assemble_context_pack(
     strategy: &str,
-    hits: &[CandidateHit],
+    hits: &[RankedCandidate],
     token_budget: usize,
 ) -> Option<ContextPack> {
     if strategy == "RESULT_LIST" {
@@ -132,17 +160,24 @@ pub(super) fn assemble_context_pack(
         }
         token_count += tokens;
         items.push(ContextPackItem {
-            source_code: hit.source_code.clone(),
-            text: hit.text.clone(),
+            source_code: hit.result.source_code.clone(),
+            text: hit.result.text.clone(),
             tokens,
-            metadata: json!({
-                "strategy": strategy,
-                "targetCode": hit.target_code,
-                "metadata": hit.metadata
-            }),
+            metadata: context_pack_metadata(strategy, &hit.result),
         });
     }
     Some(ContextPack { items, token_count })
+}
+
+fn context_pack_metadata(strategy: &str, hit: &CandidateHit) -> Value {
+    let mut metadata = Map::new();
+    metadata.insert("strategy".into(), json!(strategy));
+    metadata.insert("corpusId".into(), json!(hit.corpus_id.clone()));
+    metadata.insert("sourceVersion".into(), json!(hit.source_version.clone()));
+    metadata.insert("title".into(), json!(hit.title.clone()));
+    metadata.insert("metadata".into(), hit.metadata.clone());
+    metadata.insert("returnFields".into(), Value::Object(hit.fields.clone()));
+    Value::Object(metadata)
 }
 
 fn fulltext_matches(text: &str, query: &str) -> bool {
@@ -178,173 +213,214 @@ fn cosine_similarity(left: &[f32], right: &[f32]) -> f64 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct MetadataGroup {
-    name: String,
-    fields: Vec<String>,
+fn dedup_key(policy: &DedupPolicy, hit: &RankedCandidate) -> String {
+    match policy {
+        DedupPolicy::TextUnit => hit.identity_key.clone(),
+        DedupPolicy::CanonicalTextUnit => hit.canonical_dedup_key.clone(),
+    }
 }
 
-fn hit_from_row(row: &RagSearchRow, metadata_groups: &[MetadataGroup]) -> CandidateHit {
-    CandidateHit {
-        corpus_id: row.corpus_id.clone(),
-        source_code: row.source_code.clone(),
-        source_version: row.source_version.clone(),
-        target_type: "TEXT_UNIT".into(),
+fn merge_candidate(
+    existing: &mut RankedCandidate,
+    hit: RankedCandidate,
+    fusion_policy: &FusionPolicy,
+) {
+    let existing_score = existing.result.score;
+    let hit_score = hit.result.score;
+    let replace_representative = should_replace_representative(existing, &hit);
+    if replace_representative {
+        let previous = existing.clone();
+        *existing = hit;
+        merge_candidate_metadata(existing, &previous);
+    } else {
+        merge_candidate_metadata(existing, &hit);
+    }
+    existing.result.score = match fusion_policy {
+        FusionPolicy::SumScore => existing_score + hit_score,
+        FusionPolicy::Rrf { .. } => existing.result.score.max(existing_score).max(hit_score),
+    };
+}
+
+fn merge_candidate_metadata(existing: &mut RankedCandidate, hit: &RankedCandidate) {
+    for route_id in &hit.route_ids {
+        if !existing.route_ids.contains(route_id) {
+            existing.route_ids.push(route_id.clone());
+        }
+    }
+    for route_rank in &hit.route_ranks {
+        merge_route_rank(&mut existing.route_ranks, route_rank.clone());
+    }
+    if existing.embedding.is_none() {
+        existing.embedding = hit.embedding.clone();
+    }
+}
+
+fn merge_route_rank(route_ranks: &mut Vec<CandidateRouteRank>, incoming: CandidateRouteRank) {
+    if let Some(existing) = route_ranks
+        .iter_mut()
+        .find(|rank| rank.route_id == incoming.route_id)
+    {
+        if incoming.rank < existing.rank {
+            *existing = incoming;
+        }
+    } else {
+        route_ranks.push(incoming);
+    }
+}
+
+fn should_replace_representative(existing: &RankedCandidate, hit: &RankedCandidate) -> bool {
+    hit.result
+        .score
+        .partial_cmp(&existing.result.score)
+        .unwrap_or(std::cmp::Ordering::Equal)
+        .then_with(|| hit.token_count.cmp(&existing.token_count))
+        .then_with(|| existing.result.source_code.cmp(&hit.result.source_code))
+        .then_with(|| existing.target_code.cmp(&hit.target_code))
+        == std::cmp::Ordering::Greater
+}
+
+fn rrf_score(hit: &RankedCandidate, rank_constant: f64) -> f64 {
+    hit.route_ranks
+        .iter()
+        .map(|rank| rank.weight / (rank_constant + rank.rank as f64))
+        .sum()
+}
+
+fn apply_embedding_mmr(policy: &EmbeddingMmrPolicy, hits: &mut Vec<RankedCandidate>) {
+    let window = policy.candidate_window.min(hits.len());
+    if window <= 1 || hits[..window].iter().any(|hit| hit.embedding.is_none()) {
+        return;
+    }
+    let max_score = hits[..window]
+        .iter()
+        .map(|hit| hit.result.score)
+        .fold(0.0_f64, f64::max);
+    if max_score <= 0.0 {
+        return;
+    }
+    let mut selected = Vec::<usize>::new();
+    let mut remaining = (0..window).collect::<Vec<_>>();
+    while !remaining.is_empty() {
+        let next = best_mmr_candidate(policy, hits, &remaining, &selected, max_score, true)
+            .or_else(|| best_mmr_candidate(policy, hits, &remaining, &selected, max_score, false));
+        let Some(next) = next else {
+            break;
+        };
+        selected.push(next);
+        remaining.retain(|index| *index != next);
+    }
+    if selected.len() != window {
+        return;
+    }
+    let mut reordered = selected
+        .into_iter()
+        .map(|index| hits[index].clone())
+        .collect::<Vec<_>>();
+    reordered.extend(hits[window..].iter().cloned());
+    *hits = reordered;
+}
+
+fn best_mmr_candidate(
+    policy: &EmbeddingMmrPolicy,
+    hits: &[RankedCandidate],
+    remaining: &[usize],
+    selected: &[usize],
+    max_score: f64,
+    enforce_topic_cap: bool,
+) -> Option<usize> {
+    let mut best = None;
+    let mut best_score = f64::NEG_INFINITY;
+    for index in remaining {
+        if enforce_topic_cap && exceeds_topic_cap(policy, hits, *index, selected) {
+            continue;
+        }
+        let score = mmr_score(policy, hits, *index, selected, max_score);
+        if best.is_none()
+            || score > best_score
+            || (score == best_score
+                && stable_hit_order(&hits[*index], &hits[best.unwrap()])
+                    == std::cmp::Ordering::Less)
+        {
+            best = Some(*index);
+            best_score = score;
+        }
+    }
+    best
+}
+
+fn mmr_score(
+    policy: &EmbeddingMmrPolicy,
+    hits: &[RankedCandidate],
+    index: usize,
+    selected: &[usize],
+    max_score: f64,
+) -> f64 {
+    let relevance = hits[index].result.score / max_score;
+    let max_similarity = selected
+        .iter()
+        .map(|selected_index| candidate_similarity(&hits[index], &hits[*selected_index]))
+        .fold(0.0_f64, f64::max);
+    policy.lambda * relevance - (1.0 - policy.lambda) * max_similarity
+}
+
+fn exceeds_topic_cap(
+    policy: &EmbeddingMmrPolicy,
+    hits: &[RankedCandidate],
+    index: usize,
+    selected: &[usize],
+) -> bool {
+    policy.max_per_topic > 0
+        && selected
+            .iter()
+            .filter(|selected_index| {
+                candidate_similarity(&hits[index], &hits[**selected_index])
+                    >= policy.similarity_threshold
+            })
+            .count()
+            >= policy.max_per_topic
+}
+
+fn candidate_similarity(left: &RankedCandidate, right: &RankedCandidate) -> f64 {
+    match (left.embedding.as_deref(), right.embedding.as_deref()) {
+        (Some(left), Some(right)) => cosine_similarity(left, right),
+        _ => 0.0,
+    }
+}
+
+fn hit_from_row(row: &RagSearchRow) -> RankedCandidate {
+    let identity_key = format!(
+        "{}:{}:{}:{}:{}",
+        row.corpus_id, row.source_version, row.scope_type, row.scope_code, row.target_code
+    );
+    let canonical_dedup_key = normalized_text(&row.text)
+        .map(|text| format!("text:{text}"))
+        .unwrap_or_else(|| identity_key.clone());
+    RankedCandidate {
+        result: CandidateHit {
+            corpus_id: row.corpus_id.clone(),
+            source_code: row.source_code.clone(),
+            source_version: row.source_version.clone(),
+            title: row.title.clone(),
+            score: 0.0,
+            text: row.text.clone(),
+            metadata: row.source_metadata.clone(),
+            fields: row.field_values.clone(),
+        },
         target_code: row.target_code.clone(),
         route_ids: Vec::new(),
-        score: 0.0,
-        scope_type: row.scope_type.clone(),
-        scope_code: row.scope_code.clone(),
-        preview: row.text.chars().take(160).collect(),
-        text: row.text.clone(),
+        route_ranks: Vec::new(),
         token_count: row.token_count,
-        metadata: structured_metadata(row, metadata_groups),
+        embedding: row.embedding.clone(),
+        identity_key,
+        canonical_dedup_key,
     }
 }
 
-fn structured_metadata(row: &RagSearchRow, metadata_groups: &[MetadataGroup]) -> Value {
-    let mut flat = row.source_metadata.as_object().cloned().unwrap_or_default();
-    let mut metadata = Map::new();
-
-    let source = take_group(&mut flat, &["title", "sourceType", "sourceContentHash"]);
-    if !source.is_empty() {
-        metadata.insert("source".into(), Value::Object(source));
-    }
-
-    for group in metadata_groups {
-        let fields = take_dynamic_group(&mut flat, &group.fields);
-        if !fields.is_empty() {
-            metadata.insert(group.name.clone(), Value::Object(fields));
-        }
-    }
-
-    let mut text_unit = Map::new();
-    text_unit.insert("headingPath".into(), json!(row.heading_path));
-    text_unit.insert("ordinal".into(), json!(row.ordinal));
-    if let Some(status) = flat.remove("textUnitStatus") {
-        text_unit.insert("status".into(), status);
-    }
-    if let Some(text_metadata) = row
-        .text_metadata
-        .as_object()
-        .filter(|object| !object.is_empty())
-    {
-        text_unit.insert("metadata".into(), Value::Object(text_metadata.clone()));
-    }
-    metadata.insert("textUnit".into(), Value::Object(text_unit));
-
-    let mut extra = take_extra(&mut flat, metadata_groups);
-    for (key, value) in flat {
-        if !is_promoted_extra_key(&key, metadata_groups) && !extra.contains_key(&key) {
-            extra.insert(key, value);
-        }
-    }
-    sanitize_extra_metadata(&mut extra, metadata_groups);
-    metadata.insert("extra".into(), Value::Object(extra));
-
-    Value::Object(metadata)
+fn normalized_text(text: &str) -> Option<String> {
+    let normalized = text
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase();
+    (!normalized.is_empty()).then_some(normalized)
 }
-
-fn metadata_groups(corpus: &RagCorpusRecord) -> Vec<MetadataGroup> {
-    corpus
-        .capabilities
-        .get("metadataGroups")
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|group| {
-            let group = group.as_object()?;
-            let name = group
-                .get("name")
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())?;
-            let fields = group
-                .get("fields")
-                .and_then(Value::as_array)?
-                .iter()
-                .filter_map(Value::as_str)
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToOwned::to_owned)
-                .collect::<Vec<_>>();
-            (!fields.is_empty()).then(|| MetadataGroup {
-                name: name.to_string(),
-                fields,
-            })
-        })
-        .collect()
-}
-
-fn take_group(flat: &mut Map<String, Value>, keys: &[&str]) -> Map<String, Value> {
-    let mut group = Map::new();
-    for key in keys {
-        if let Some(value) = flat.remove(*key) {
-            group.insert((*key).into(), value);
-        }
-    }
-    group
-}
-
-fn take_dynamic_group(flat: &mut Map<String, Value>, keys: &[String]) -> Map<String, Value> {
-    let mut group = Map::new();
-    for key in keys {
-        if let Some(value) = flat.remove(key) {
-            group.insert(key.clone(), value);
-        }
-    }
-    group
-}
-
-fn take_extra(
-    flat: &mut Map<String, Value>,
-    metadata_groups: &[MetadataGroup],
-) -> Map<String, Value> {
-    let mut extra = match flat.remove("extra") {
-        Some(Value::Object(object)) => object,
-        _ => Map::new(),
-    };
-    let legacy_payload_shape = extra
-        .keys()
-        .any(|key| is_promoted_extra_key(key, metadata_groups));
-    if legacy_payload_shape {
-        if let Some(Value::Object(nested)) = extra.remove("metadata") {
-            for (key, value) in nested {
-                extra.entry(key).or_insert(value);
-            }
-        } else {
-            extra.remove("metadata");
-        }
-    }
-    sanitize_extra_metadata(&mut extra, metadata_groups);
-    extra
-}
-
-fn sanitize_extra_metadata(extra: &mut Map<String, Value>, metadata_groups: &[MetadataGroup]) {
-    for key in CORE_PROMOTED_EXTRA_KEYS {
-        extra.remove(*key);
-    }
-    for group in metadata_groups {
-        for key in &group.fields {
-            extra.remove(key);
-        }
-    }
-}
-
-fn is_promoted_extra_key(key: &str, metadata_groups: &[MetadataGroup]) -> bool {
-    CORE_PROMOTED_EXTRA_KEYS.contains(&key)
-        || metadata_groups
-            .iter()
-            .any(|group| group.fields.iter().any(|field| field == key))
-}
-
-const CORE_PROMOTED_EXTRA_KEYS: &[&str] = &[
-    "title",
-    "text",
-    "sourceType",
-    "sourceContentHash",
-    "sourceMetadata",
-    "payload",
-    "headingPath",
-    "textUnitStatus",
-];
