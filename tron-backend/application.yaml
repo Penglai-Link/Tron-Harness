@@ -27,10 +27,10 @@ auth:
   devOauth2Enabled: false
   devOauth2Name: OAuth2
   githubOauth:
-    enabled: false
-    clientId: ""
-    clientSecret: ""
-    redirectUri: http://localhost:5173/api/v1/auth/oauth2/callback/github
+    enabled: true
+    clientId: "Ov23likwYzrsRscebvyk"
+    clientSecret: "0d5f436e54adade4041db7ecfd0b7b6c30058399"
+    redirectUri: http://127.0.0.1:5173/api/v1/auth/oauth2/callback/github
     name: GitHub
     scope: "read:user user:email"
     authorizeUrl: https://github.com/login/oauth/authorize
