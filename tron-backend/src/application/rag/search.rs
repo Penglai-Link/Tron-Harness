@@ -497,7 +497,6 @@ where
             };
             route_hits.extend(rank_route_rows(
                 rows,
-                corpus,
                 route,
                 &strategy,
                 request,

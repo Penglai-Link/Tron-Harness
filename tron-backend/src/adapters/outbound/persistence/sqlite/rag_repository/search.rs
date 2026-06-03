@@ -464,6 +464,21 @@ fn embedding_expr(
     }
 }
 
+fn embedding_expr(
+    plan: &SqliteRagCorpusPlan,
+    retriever: SqliteRetrieverStrategy,
+) -> Result<String, RagError> {
+    if plan.text_unit_columns.contains("embedding") {
+        return text_expr("embedding");
+    }
+    match retriever.kind {
+        SqliteRetrieverKind::VectorCosine | SqliteRetrieverKind::VectorVec0 => {
+            Ok("vec.embedding".into())
+        }
+        _ => Ok("NULL".into()),
+    }
+}
+
 fn source_expr(plan: &SqliteRagCorpusPlan, column: &str) -> Result<String, RagError> {
     if plan.source_table.is_some() {
         Ok(format!("src.{}", quote_identifier(column)?))
