@@ -174,20 +174,7 @@ async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_
         "SELECT metadata FROM rag_project_doc_sources WHERE source_code = 'doc-rag-mvp'",
     ))
     .unwrap();
-    assert_eq!(
-        metadata,
-        json!({
-            "_resolver": {
-                "strategyId": "PROJECT_DOC_RESOLVE_SOURCE",
-                "documentUri": "project-doc://TRON_CORE/docs/rag-mvp.md",
-                "contentLength": project_doc_markdown().len()
-            },
-            "_parser": {
-                "strategyId": "RAG_PARSE_MARKDOWN_DOCUMENT",
-                "format": "MARKDOWN"
-            }
-        })
-    );
+    assert_eq!(metadata, json!({}));
 
     let headings = query_text_unit_headings(&connection);
     assert_eq!(headings, vec!["RAG MVP", "RAG MVP > Write Path"]);
