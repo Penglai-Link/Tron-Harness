@@ -22,6 +22,8 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
         "rag_memory_text_units_vec_d4096".to_string(),
         "rag_project_doc_text_units".to_string(),
         "rag_skill_text_units".to_string(),
+        "rag_skill_text_units_fts".to_string(),
+        "rag_skill_text_units_vec_d4096".to_string(),
         "rag_project_doc_text_units_fts".to_string(),
         "rag_project_doc_text_units_vec_d4096".to_string(),
         "rag_diagnostics".to_string(),
@@ -158,6 +160,8 @@ fn rag_foundation_embeds_memory_source_and_keeps_project_doc_split() {
         "rag_memory_text_units_vec_d4096",
         "rag_project_doc_text_units_fts",
         "rag_project_doc_text_units_vec_d4096",
+        "rag_skill_text_units_fts",
+        "rag_skill_text_units_vec_d4096",
     ] {
         assert!(
             repository.rag_table_names().unwrap().contains(sidecar),

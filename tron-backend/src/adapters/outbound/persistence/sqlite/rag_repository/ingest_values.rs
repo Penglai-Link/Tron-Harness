@@ -205,62 +205,6 @@ pub(crate) fn push_integer(
     }
 }
 
-pub(crate) fn push_optional_integer(
-    values: &mut Vec<(String, SqlValue)>,
-    columns: &BTreeSet<String>,
-    column: &str,
-    value: Option<i64>,
-) {
-    if columns.contains(column) {
-        values.push((
-            column.to_string(),
-            value.map(SqlValue::Integer).unwrap_or(SqlValue::Null),
-        ));
-    }
-}
-
-pub(crate) fn push_optional_blob(
-    values: &mut Vec<(String, SqlValue)>,
-    columns: &BTreeSet<String>,
-    column: &str,
-    value: Option<&[u8]>,
-) {
-    if columns.contains(column) {
-        values.push((
-            column.to_string(),
-            value
-                .map(|value| SqlValue::Blob(value.to_vec()))
-                .unwrap_or(SqlValue::Null),
-        ));
-    }
-}
-
-fn push_optional_integer_when_present(
-    values: &mut Vec<(String, SqlValue)>,
-    columns: &BTreeSet<String>,
-    column: &str,
-    value: Option<i64>,
-) {
-    if columns.contains(column)
-        && let Some(value) = value
-    {
-        values.push((column.to_string(), SqlValue::Integer(value)));
-    }
-}
-
-fn push_optional_bool_when_present(
-    values: &mut Vec<(String, SqlValue)>,
-    columns: &BTreeSet<String>,
-    column: &str,
-    value: Option<bool>,
-) {
-    if columns.contains(column)
-        && let Some(value) = value
-    {
-        values.push((column.to_string(), SqlValue::Integer(i64::from(value))));
-    }
-}
-
 pub(crate) fn json_string(value: &Value) -> Result<String, RagError> {
     serde_json::to_string(value).map_err(|_| RagError::StorageFailure)
 }

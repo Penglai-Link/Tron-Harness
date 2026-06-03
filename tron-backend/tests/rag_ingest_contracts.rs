@@ -107,7 +107,7 @@ async fn skill_ingest_writes_name_description_scope_fulltext_and_vector_fields()
     let database_path = temp_database_path("rag-ingest-skill-success");
     let database_url = database_path.to_string_lossy().to_string();
     let repository = SqliteRagRepository::connect(&database_url).unwrap();
-    let embeddings = FakeEmbeddingRuntime::fixed(vec![0.5, 0.25]);
+    let embeddings = FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25));
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
@@ -132,11 +132,12 @@ async fn skill_ingest_writes_name_description_scope_fulltext_and_vector_fields()
         json!("Reviews RAG retrieval changes before release.")
     );
     assert_eq!(
-        unit["search_text"],
+        unit["text"],
         json!("Skill: rag-reviewer\nDescription: Reviews RAG retrieval changes before release.")
     );
-    assert_eq!(unit["embedding_status"], json!("INDEXED"));
-    assert_eq!(unit["embedding_dimension"], json!(2));
+    assert_index_payload_columns_absent(&connection, "rag_skill_text_units");
+    assert!(table_exists(&connection, "rag_skill_text_units_fts"));
+    assert!(table_exists(&connection, "rag_skill_text_units_vec_d4096"));
     assert!(
         !table_columns(&connection, "rag_skill_text_units")
             .iter()
@@ -776,8 +777,7 @@ fn query_unit(connection: &Connection, table: &str) -> Value {
 fn query_skill_unit(connection: &Connection) -> Value {
     connection
         .query_row(
-            "SELECT scope_type, scope_code, skill_name, skill_description, search_text,
-                    embedding_status, embedding_dimension
+            "SELECT scope_type, scope_code, skill_name, skill_description, text
              FROM rag_skill_text_units
              ORDER BY ordinal",
             [],
@@ -787,9 +787,7 @@ fn query_skill_unit(connection: &Connection) -> Value {
                     "scope_code": row.get::<_, String>(1)?,
                     "skill_name": row.get::<_, String>(2)?,
                     "skill_description": row.get::<_, String>(3)?,
-                    "search_text": row.get::<_, String>(4)?,
-                    "embedding_status": row.get::<_, String>(5)?,
-                    "embedding_dimension": row.get::<_, i64>(6)?,
+                    "text": row.get::<_, String>(4)?,
                 }))
             },
         )

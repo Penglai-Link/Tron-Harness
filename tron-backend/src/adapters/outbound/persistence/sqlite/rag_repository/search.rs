@@ -1,4 +1,5 @@
 mod filters;
+mod terms;
 
 use rusqlite::{
     Row, params, params_from_iter,
@@ -25,6 +26,7 @@ use super::{
 };
 
 use filters::append_filter_clauses;
+use terms::{fts_query, search_terms};
 
 impl RagSearchRepository for SqliteRagRepository {
     fn search_route(&self, query: RagRouteSearchQuery) -> Result<Vec<RagSearchRow>, RagError> {
@@ -513,65 +515,6 @@ fn json_from_row(
         ValueRef::Text(value) => Ok(json!(String::from_utf8_lossy(value).to_string())),
         ValueRef::Blob(_) => Ok(Value::Null),
     }
-}
-
-fn search_terms(query: &str) -> Vec<String> {
-    query_terms(query)
-        .into_iter()
-        .map(|term| term.to_ascii_lowercase())
-        .collect()
-}
-
-fn fts_query(query: &str) -> String {
-    query_terms(query)
-        .into_iter()
-        .map(|term| {
-            let escaped = term.replace('"', "\"\"");
-            format!("\"{escaped}\"")
-        })
-        .collect::<Vec<_>>()
-        .join(" OR ")
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum QueryTermClass {
-    Ascii,
-    Unicode,
-}
-
-fn query_terms(query: &str) -> Vec<String> {
-    let mut terms = Vec::new();
-    let mut current = String::new();
-    let mut current_class = None;
-    for character in query.chars() {
-        let class = if character.is_ascii_alphanumeric() || character == '_' {
-            Some(QueryTermClass::Ascii)
-        } else if character.is_alphanumeric() {
-            Some(QueryTermClass::Unicode)
-        } else {
-            None
-        };
-        let Some(class) = class else {
-            push_query_term(&mut terms, &mut current);
-            current_class = None;
-            continue;
-        };
-        if current_class.is_some_and(|existing| existing != class) {
-            push_query_term(&mut terms, &mut current);
-        }
-        current.push(character);
-        current_class = Some(class);
-    }
-    push_query_term(&mut terms, &mut current);
-    terms
-}
-
-fn push_query_term(terms: &mut Vec<String>, current: &mut String) {
-    let term = current.trim();
-    if !term.is_empty() {
-        terms.push(term.to_string());
-    }
-    current.clear();
 }
 
 fn query_embedding_dimension(query: &RagRouteSearchQuery) -> Result<i64, RagError> {

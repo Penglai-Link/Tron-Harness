@@ -82,7 +82,7 @@ async fn skill_search_returns_scoped_fulltext_and_vector_hits() {
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(vec![0.5, 0.25]),
+        FakeSearchRuntime::new().with_embedding(embedding_4096(0.5, 0.25)),
     );
 
     let result = service
@@ -765,7 +765,7 @@ async fn seed_skill_fixture(database_url: &str) {
     let service = RagIngestService::new(
         SqliteRagRepository::connect(database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(vec![0.5, 0.25]),
+        FakeSearchRuntime::new().with_embedding(embedding_4096(0.5, 0.25)),
     );
     service.ingest(skill_request()).await.unwrap();
 }

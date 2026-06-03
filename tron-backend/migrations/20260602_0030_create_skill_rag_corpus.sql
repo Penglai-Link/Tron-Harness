@@ -16,40 +16,19 @@ CREATE TABLE IF NOT EXISTS rag_skill_text_units (
     skill_description TEXT NOT NULL,
     unit_type TEXT NOT NULL CHECK (unit_type IN ('LEAF', 'SUMMARY', 'SYMBOL', 'NOTE')),
     text TEXT NOT NULL,
-    search_text TEXT NOT NULL,
     heading_path TEXT NOT NULL,
     ordinal INTEGER NOT NULL,
     token_count INTEGER,
     content_hash TEXT,
     status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'DISABLED', 'DELETED')),
-    fulltext_status TEXT NOT NULL CHECK (fulltext_status IN ('PENDING', 'INDEXED', 'FAILED', 'SKIPPED')),
-    embedding_model_code TEXT,
-    embedding_version TEXT,
-    embedding_text_hash TEXT,
-    embedding_dimension INTEGER,
-    embedding BLOB,
-    embedding_status TEXT NOT NULL CHECK (embedding_status IN ('PENDING', 'INDEXED', 'FAILED', 'SKIPPED')),
     metadata TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
-    UNIQUE (source_code, source_version, scope_type, scope_code, ordinal),
-    CHECK (
-        embedding_status <> 'INDEXED'
-        OR (
-            embedding_model_code IS NOT NULL
-            AND embedding_version IS NOT NULL
-            AND embedding_text_hash IS NOT NULL
-            AND embedding_dimension IS NOT NULL
-            AND embedding IS NOT NULL
-        )
-    )
+    UNIQUE (source_code, source_version, scope_type, scope_code, ordinal)
 );
 
 CREATE INDEX IF NOT EXISTS idx_rag_skill_text_units_scope_search
-    ON rag_skill_text_units (source_version, scope_type, scope_code, status, fulltext_status);
-
-CREATE INDEX IF NOT EXISTS idx_rag_skill_text_units_vector
-    ON rag_skill_text_units (embedding_model_code, embedding_version, embedding_status);
+    ON rag_skill_text_units (source_version, scope_type, scope_code, status);
 
 CREATE INDEX IF NOT EXISTS idx_rag_skill_text_units_skill_name
     ON rag_skill_text_units (scope_type, scope_code, skill_name);
@@ -74,7 +53,7 @@ VALUES
         'Workspace-scoped skill names and descriptions.',
         '{"fulltext":true,"vector":true,"reserved":false,"metadataGroups":[{"name":"skill","fields":["skillName","skillDescription"]}]}',
         '{"fields":{"scopeType":{"type":"string","column":"scope_type"},"scopeCode":{"type":"string","column":"scope_code"},"sourceCode":{"type":"string","column":"source_code"},"sourceVersion":{"type":"string","column":"source_version"},"status":{"type":"string","column":"source_status"},"sourceStatus":{"type":"string","column":"source_status"},"textUnitStatus":{"type":"string","column":"status"},"skillName":{"type":"string","column":"skill_name"}}}',
-        '{"sourceCode":"source_code","sourceVersion":"source_version","sourceType":"source_type","scopeType":"scope_type","scopeCode":"scope_code","status":"source_status","sourceStatus":"source_status","textUnitStatus":"status","title":"title","sourceContentHash":"source_content_hash","sourceMetadata":"source_metadata","skillName":"skill_name","skillDescription":"skill_description","text":"text","searchText":"search_text","embedding":"embedding"}',
+        '{"sourceCode":"source_code","sourceVersion":"source_version","sourceType":"source_type","scopeType":"scope_type","scopeCode":"scope_code","status":"source_status","sourceStatus":"source_status","textUnitStatus":"status","title":"title","sourceContentHash":"source_content_hash","sourceMetadata":"source_metadata","skillName":"skill_name","skillDescription":"skill_description","text":"text"}',
         '{"layout":"EMBEDDED_SOURCE","table":"rag_skill_text_units","diagnosticsTable":"rag_diagnostics"}',
         1780339200000,
         1780339200000
