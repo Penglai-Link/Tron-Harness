@@ -118,6 +118,7 @@ fn base_context(run_code: &str) -> AgentRunContext {
             key: "REGION".into(),
             value: "us".into(),
             source: "LOCAL".into(),
+            sensitive: false,
         }],
         skills: vec![EffectiveSkill {
             skill_name: "planner".into(),

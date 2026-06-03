@@ -28,6 +28,31 @@ pub fn auth_error_response(error: AuthError) -> Response {
             "AUTH_REFRESH_INVALID",
             "refresh session is invalid",
         ),
+        AuthError::StepUpFailed => (
+            StatusCode::BAD_REQUEST,
+            "VARIABLE_STEP_UP_FAILED",
+            "Password step-up failed",
+        ),
+        AuthError::StepUpExpired => (
+            StatusCode::BAD_REQUEST,
+            "VARIABLE_STEP_UP_EXPIRED",
+            "Password step-up token expired",
+        ),
+        AuthError::StepUpUnsupported => (
+            StatusCode::BAD_REQUEST,
+            "VARIABLE_STEP_UP_UNSUPPORTED",
+            "Password step-up is unsupported for this user",
+        ),
+        AuthError::StepUpTokenMismatch => (
+            StatusCode::BAD_REQUEST,
+            "VARIABLE_STEP_UP_TOKEN_MISMATCH",
+            "Password step-up token does not match this request",
+        ),
+        AuthError::StepUpScopeInvalid => (
+            StatusCode::BAD_REQUEST,
+            "VARIABLE_STEP_UP_SCOPE_INVALID",
+            "Password step-up target is invalid",
+        ),
         AuthError::ProviderNotFound => (
             StatusCode::NOT_FOUND,
             "AUTH_PROVIDER_NOT_FOUND",

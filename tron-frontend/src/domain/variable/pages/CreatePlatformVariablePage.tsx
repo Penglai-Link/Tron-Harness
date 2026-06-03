@@ -38,6 +38,8 @@ export function CreatePlatformVariablePage() {
         key,
         value: form.value,
         description: normalizePlatformVariableDescription(form.description),
+        isSensitive: form.isSensitive,
+        valueMode: "REPLACE" as const,
       };
       const saved = dataSource === "api"
         ? await createPlatformVariable(payload)

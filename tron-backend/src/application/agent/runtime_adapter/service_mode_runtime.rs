@@ -47,6 +47,9 @@ impl ServiceModeRuntime {
             if let Some(session_id) = requested_session_id.as_ref() {
                 context.system_agent_session_id = Some(session_id.clone());
             }
+            if context.variables.iter().any(|variable| variable.sensitive) {
+                return Err(AgentInvocationError::RuntimeSecretDeliveryUntrusted);
+            }
             let endpoint = normalized_endpoint(&self.endpoint).ok_or_else(|| {
                 AgentInvocationError::RuntimeFailed(format!(
                     "runtime adapter `{}` endpoint is required",

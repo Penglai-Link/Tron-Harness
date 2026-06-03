@@ -15,10 +15,14 @@ import {
 import {
   deletePlatformVariable,
   fetchPlatformVariables,
+  revealPlatformVariable,
+  verifyStepUpPassword,
 } from "@/domain/variable/api";
 import {
   deletePlatformVariableRecord,
   listPlatformVariableRecords,
+  revealPlatformVariableRecord,
+  verifyStepUpPasswordRecord,
 } from "@/domain/variable/mock/data";
 import type { PlatformVariableRecord } from "@/domain/variable/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
@@ -32,8 +36,14 @@ import {
 
 import {
   ReadValue,
+  SensitiveRevealAction,
+  SensitiveValueCode,
+  StepUpRevealDialog,
   findPlatformVariable,
   formatPlatformVariableTimestamp,
+  getSensitiveDisplayValue,
+  getSensitiveState,
+  isSensitiveRecord,
 } from "./platformVariablePageHelpers";
 
 export function PlatformVariableDetailsPage() {
@@ -45,6 +55,10 @@ export function PlatformVariableDetailsPage() {
   const [record, setRecord] = useState<PlatformVariableRecord | null>(null);
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [revealedValue, setRevealedValue] = useState("");
+  const [revealDialogOpen, setRevealDialogOpen] = useState(false);
+  const [revealPending, setRevealPending] = useState(false);
+  const [revealError, setRevealError] = useState("");
 
   useEffect(() => {
     if (!variableKey) return;
@@ -57,7 +71,12 @@ export function PlatformVariableDetailsPage() {
         const records = dataSource === "api"
           ? await fetchPlatformVariables()
           : listPlatformVariableRecords();
-        if (active) setRecord(findPlatformVariable(records, variableKey));
+        if (active) {
+          setRecord(findPlatformVariable(records, variableKey));
+          setRevealedValue("");
+          setRevealDialogOpen(false);
+          setRevealError("");
+        }
       } catch (error) {
         if (active) toast.error(error instanceof Error ? error.message : "Platform variable could not be loaded");
       } finally {
@@ -91,6 +110,42 @@ export function PlatformVariableDetailsPage() {
       toast.error(error instanceof Error ? error.message : "Platform variable could not be deleted");
     } finally {
       setDeleting(false);
+    }
+  }
+
+  async function revealSensitiveValue(password: string) {
+    if (!record) return;
+    setRevealPending(true);
+    setRevealError("");
+    try {
+      const stepUp = dataSource === "api"
+        ? await verifyStepUpPassword({
+          password,
+          target: {
+            scope: "platform",
+            variableKey: record.key,
+          },
+        })
+        : verifyStepUpPasswordRecord({
+          password,
+          target: {
+            scope: "platform",
+            variableKey: record.key,
+          },
+        });
+      const revealed = dataSource === "api"
+        ? await revealPlatformVariable({
+          variableKey: record.key,
+          stepUpToken: stepUp.stepUpToken,
+        })
+        : revealPlatformVariableRecord(record.key, stepUp.stepUpToken);
+      setRevealedValue(revealed.value);
+      setRevealDialogOpen(false);
+      setRevealError("");
+    } catch (error) {
+      setRevealError(error instanceof Error ? error.message : "Sensitive value could not be revealed");
+    } finally {
+      setRevealPending(false);
     }
   }
 
@@ -160,7 +215,25 @@ export function PlatformVariableDetailsPage() {
             <div className="md:col-span-2">
               <Field label="Variable Value">
                 <div className="min-h-32 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
-                  <code className="whitespace-pre-wrap break-words text-sm leading-6 text-[var(--color-on-surface)]">{record.value}</code>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <SensitiveValueCode
+                      className="min-w-0 flex-1"
+                      state={getSensitiveState(isSensitiveRecord(record), revealedValue)}
+                      testId={`platform-sensitive-value-${record.key}`}
+                    >
+                      {getSensitiveDisplayValue(record, revealedValue)}
+                    </SensitiveValueCode>
+                    <SensitiveRevealAction
+                      isSensitive={isSensitiveRecord(record)}
+                      onHide={() => setRevealedValue("")}
+                      onReveal={() => {
+                        setRevealError("");
+                        setRevealDialogOpen(true);
+                      }}
+                      revealed={Boolean(revealedValue)}
+                      variableKey={record.key}
+                    />
+                  </div>
                 </div>
               </Field>
             </div>
@@ -174,6 +247,17 @@ export function PlatformVariableDetailsPage() {
           </div>
         </SurfaceCard>
       </div>
+      <StepUpRevealDialog
+        error={revealError}
+        onCancel={() => {
+          setRevealDialogOpen(false);
+          setRevealError("");
+        }}
+        onSubmit={(password) => void revealSensitiveValue(password)}
+        open={revealDialogOpen}
+        pending={revealPending}
+        variableKey={record.key}
+      />
     </>
   );
 }

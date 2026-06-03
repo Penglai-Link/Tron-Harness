@@ -21,6 +21,11 @@ pub enum AuthError {
     TokenDecodingFailed,
     PasswordVerifyFailed,
     StorageFailure,
+    StepUpFailed,
+    StepUpExpired,
+    StepUpUnsupported,
+    StepUpTokenMismatch,
+    StepUpScopeInvalid,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]

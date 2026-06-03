@@ -28,7 +28,7 @@ use tron_backend::{
         app::AppRepository, open_app::OpenAppRepository, role::RoleRepository,
         user::UserRepository, variable::VariableRepository, workspace::WorkspaceRepository,
     },
-    config::{AppConfig, AuthConfig, GitHubOAuthConfig},
+    config::{AppConfig, AuthConfig, GitHubOAuthConfig, VariableCryptoConfig},
     domain::{
         app::{App, AppRuntimeRole, AppStatus, AppTag},
         open_app::{
@@ -121,6 +121,10 @@ pub fn prepared_config(mut config: AppConfig) -> AppConfig {
         config.database_url = temp_database_path("integration")
             .to_string_lossy()
             .into_owned();
+    }
+    if config.variable_crypto.active_key_version.is_none() && config.variable_crypto.keys.is_empty()
+    {
+        config.variable_crypto = VariableCryptoConfig::test_default();
     }
     seed_default_fixture_data(&config);
     config
@@ -718,6 +722,11 @@ fn seeded_variables() -> Vec<Variable> {
             key: "DEFAULT_REGION".into(),
             value: "us-east-1".into(),
             description: Some("Shared default deployment region.".into()),
+            is_sensitive: false,
+            value_nonce: None,
+            value_tag: None,
+            value_algorithm: None,
+            value_key_version: None,
             created_at: "2026-05-18T00:00:00Z".into(),
             updated_at: "2026-05-18T00:00:00Z".into(),
         },
@@ -727,6 +736,11 @@ fn seeded_variables() -> Vec<Variable> {
             key: "ROUTER_TIMEOUT_MS".into(),
             value: "800".into(),
             description: Some("Root timeout for interactive routing.".into()),
+            is_sensitive: false,
+            value_nonce: None,
+            value_tag: None,
+            value_algorithm: None,
+            value_key_version: None,
             created_at: "2026-05-18T00:00:00Z".into(),
             updated_at: "2026-05-18T00:00:00Z".into(),
         },
@@ -736,6 +750,11 @@ fn seeded_variables() -> Vec<Variable> {
             key: "OPENAI_API_BASE_URL".into(),
             value: "https://api.openai.com/v1".into(),
             description: Some("Shared OpenAI gateway base URL.".into()),
+            is_sensitive: false,
+            value_nonce: None,
+            value_tag: None,
+            value_algorithm: None,
+            value_key_version: None,
             created_at: "2026-05-18T00:00:00Z".into(),
             updated_at: "2026-05-18T00:00:00Z".into(),
         },
@@ -745,6 +764,11 @@ fn seeded_variables() -> Vec<Variable> {
             key: "ROUTER_TIMEOUT_MS".into(),
             value: "600".into(),
             description: Some("Platform override for interactive latency.".into()),
+            is_sensitive: false,
+            value_nonce: None,
+            value_tag: None,
+            value_algorithm: None,
+            value_key_version: None,
             created_at: "2026-05-18T00:00:00Z".into(),
             updated_at: "2026-05-18T00:00:00Z".into(),
         },
@@ -754,6 +778,11 @@ fn seeded_variables() -> Vec<Variable> {
             key: "OPENAI_API_KEY".into(),
             value: "sk-tron-core-demo".into(),
             description: Some("Workspace secret used by the demo workspace.".into()),
+            is_sensitive: false,
+            value_nonce: None,
+            value_tag: None,
+            value_algorithm: None,
+            value_key_version: None,
             created_at: "2026-05-18T00:00:00Z".into(),
             updated_at: "2026-05-18T00:00:00Z".into(),
         },
@@ -763,6 +792,11 @@ fn seeded_variables() -> Vec<Variable> {
             key: "ROUTER_TIMEOUT_MS".into(),
             value: "400".into(),
             description: Some("Tron Core override for agent console flows.".into()),
+            is_sensitive: false,
+            value_nonce: None,
+            value_tag: None,
+            value_algorithm: None,
+            value_key_version: None,
             created_at: "2026-05-18T00:00:00Z".into(),
             updated_at: "2026-05-18T00:00:00Z".into(),
         },
@@ -772,6 +806,11 @@ fn seeded_variables() -> Vec<Variable> {
             key: "AUDIT_RETENTION_DAYS".into(),
             value: "365".into(),
             description: Some("Retention period for compliance exports.".into()),
+            is_sensitive: false,
+            value_nonce: None,
+            value_tag: None,
+            value_algorithm: None,
+            value_key_version: None,
             created_at: "2026-05-18T00:00:00Z".into(),
             updated_at: "2026-05-18T00:00:00Z".into(),
         },

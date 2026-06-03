@@ -12,6 +12,7 @@ base64 = "0.22"
 bcrypt = "0.17"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 cron = "0.12"
+gmcrypto-core = { version = "1.0.0", features = ["sm4-aead"] }
 grafeo = { version = "0.5.42", default-features = false, features = ["embedded", "storage"] }
 hex = "0.4"
 hmac = "0.12"

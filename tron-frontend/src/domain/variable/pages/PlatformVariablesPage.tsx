@@ -33,7 +33,11 @@ import {
 } from "@/shared";
 
 import {
+  SensitiveValueCode,
   formatPlatformVariableTimestamp,
+  getSensitiveDisplayValue,
+  getSensitiveState,
+  isSensitiveRecord,
   matchesPlatformVariableSearch,
 } from "./platformVariablePageHelpers";
 
@@ -222,7 +226,13 @@ export function PlatformVariablesPage() {
             id: "value",
             header: "Value",
             width: "30%",
-            render: (row) => <span className="block max-w-[28rem] truncate font-mono text-[13px]">{row.value}</span>,
+            render: (row) => (
+              <span className="block max-w-[28rem] truncate font-mono text-[13px]">
+                <SensitiveValueCode state={getSensitiveState(isSensitiveRecord(row), undefined)}>
+                  {getSensitiveDisplayValue(row)}
+                </SensitiveValueCode>
+              </span>
+            ),
           },
           {
             id: "updatedAt",

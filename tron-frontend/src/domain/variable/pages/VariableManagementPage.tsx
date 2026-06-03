@@ -11,6 +11,7 @@ import {
   Plus,
   RefreshCcw,
   Save,
+  ShieldCheck,
   Trash2,
   Undo2,
   X,
@@ -41,17 +42,33 @@ import {
 import {
   createVariable,
   deleteVariable,
+  revealWorkspaceVariable,
   updateVariable,
+  verifyStepUpPassword,
 } from "@/domain/variable/api";
 import { getVariableSourceTone } from "@/domain/variable/constants";
 import { useVariableCatalog } from "@/domain/variable/hooks";
 import {
   createVariableRecord,
   deleteVariableRecord,
+  revealWorkspaceVariableRecord,
   updateVariableRecord,
+  verifyStepUpPasswordRecord,
 } from "@/domain/variable/mock/data";
-import type { VariableRecord } from "@/domain/variable/model";
+import type {
+  VariableRecord,
+  VariableValueMode,
+} from "@/domain/variable/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+
+import {
+  SensitiveRevealAction,
+  SensitiveValueCode,
+  StepUpRevealDialog,
+  getSensitiveDisplayValue,
+  getSensitiveState,
+  isSensitiveRecord,
+} from "./platformVariablePageHelpers";
 
 type PanelMode = "create" | "override" | "selected";
 type VariableSourceFilter = VariableRecord["sourceKind"] | "All";
@@ -67,15 +84,19 @@ interface RowMenuState {
 
 interface VariableFormState {
   description: string;
+  isSensitive: boolean;
   key: string;
   value: string;
+  valueMode: VariableValueMode;
 }
 
 function emptyForm(): VariableFormState {
   return {
     description: "",
+    isSensitive: false,
     key: "",
     value: "",
+    valueMode: "REPLACE",
   };
 }
 
@@ -94,7 +115,7 @@ function matchesVariableSearch(record: VariableRecord, search: string) {
   if (!search.trim()) return true;
   const value = [
     record.key,
-    record.value,
+    isSensitiveRecord(record) ? "" : record.value,
     record.description ?? "",
     record.sourceLabel,
     record.sourceWorkspaceCode,
@@ -106,10 +127,13 @@ function matchesVariableSearch(record: VariableRecord, search: string) {
 }
 
 function formFromVariable(record: VariableRecord): VariableFormState {
+  const isSensitive = isSensitiveRecord(record);
   return {
     description: record.description ?? "",
+    isSensitive,
     key: record.key,
-    value: record.value,
+    value: isSensitive ? "" : record.value,
+    valueMode: isSensitive ? "PRESERVE" : "REPLACE",
   };
 }
 
@@ -135,6 +159,17 @@ function getInheritedWorkspace(record: VariableRecord) {
   };
 }
 
+function formFromOverride(record: VariableRecord): VariableFormState {
+  const isSensitive = isSensitiveRecord(record);
+  return {
+    description: record.description ?? "",
+    isSensitive,
+    key: record.key,
+    value: isSensitive ? "" : record.value,
+    valueMode: "REPLACE",
+  };
+}
+
 export function VariableManagementPage() {
   const toast = useToast();
   const openRightSidebar = useOpenRightSidebar();
@@ -154,7 +189,23 @@ export function VariableManagementPage() {
   const [deleting, setDeleting] = useState(false);
   const [rowBusyKey, setRowBusyKey] = useState("");
   const [openRowMenu, setOpenRowMenu] = useState<RowMenuState | null>(null);
+  const [revealedValues, setRevealedValues] = useState<Record<string, string>>({});
+  const [revealTargetKey, setRevealTargetKey] = useState("");
+  const [revealDialogOpen, setRevealDialogOpen] = useState(false);
+  const [revealPending, setRevealPending] = useState(false);
+  const [revealError, setRevealError] = useState("");
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
+
+  function clearRevealedValues() {
+    setRevealedValues({});
+    setRevealDialogOpen(false);
+    setRevealTargetKey("");
+    setRevealError("");
+  }
+
+  useEffect(() => {
+    clearRevealedValues();
+  }, [activeWorkspaceCode, variables]);
 
   useEffect(() => {
     if (!variables.length) {
@@ -211,6 +262,7 @@ export function VariableManagementPage() {
 
   function resetToSelected() {
     setPanelMode("selected");
+    clearRevealedValues();
     if (selectedVariable) {
       setForm(formFromVariable(selectedVariable));
       return;
@@ -221,13 +273,15 @@ export function VariableManagementPage() {
   function beginCreate() {
     setPanelMode("create");
     setForm(emptyForm());
+    clearRevealedValues();
     openRightSidebar();
   }
 
   function beginOverride() {
     if (!selectedVariable) return;
     setPanelMode("override");
-    setForm(formFromVariable(selectedVariable));
+    setForm(formFromOverride(selectedVariable));
+    clearRevealedValues();
     openRightSidebar();
   }
 
@@ -240,8 +294,9 @@ export function VariableManagementPage() {
   function beginOverrideFor(record: VariableRecord) {
     setSelectedKey(record.key);
     setPanelMode("override");
-    setForm(formFromVariable(record));
+    setForm(formFromOverride(record));
     setOpenRowMenu(null);
+    clearRevealedValues();
     openRightSidebar();
   }
 
@@ -279,6 +334,19 @@ export function VariableManagementPage() {
       toast.error("Variable key is required");
       return;
     }
+    const selectedIsSensitive = selectedVariable ? isSensitiveRecord(selectedVariable) : false;
+    if (selectedIsSensitive && !form.isSensitive && panelMode === "selected" && !form.value.trim()) {
+      toast.error("New value is required before turning off sensitivity");
+      return;
+    }
+    if (!selectedIsSensitive && form.isSensitive && panelMode === "selected" && !form.value.trim()) {
+      toast.error("Sensitive value is required before turning on sensitivity");
+      return;
+    }
+    if (selectedIsSensitive && panelMode === "override" && !form.isSensitive) {
+      toast.error("Inherited sensitive variables must stay sensitive when overridden");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -289,29 +357,34 @@ export function VariableManagementPage() {
             key: trimmedKey,
             value: form.value,
             description: normalizeDescription(form.description),
+            isSensitive: form.isSensitive,
+            valueMode: "REPLACE",
           })
           : createVariableRecord(activeWorkspaceCode, {
             key: trimmedKey,
             value: form.value,
             description: normalizeDescription(form.description),
+            isSensitive: form.isSensitive,
+            valueMode: "REPLACE",
           });
         toast.success(panelMode === "override" ? `${saved.key} overridden in ${activeWorkspaceCode}` : `${saved.key} created`);
       } else if (selectedVariable) {
+        const payload = {
+          description: normalizeDescription(form.description),
+          isSensitive: form.isSensitive,
+          valueMode: form.isSensitive ? form.valueMode : "REPLACE" as const,
+          ...(form.isSensitive && form.valueMode === "PRESERVE" ? {} : { value: form.value }),
+        };
         saved = dataSource === "api"
-          ? await updateVariable(activeWorkspaceCode, selectedVariable.key, {
-            value: form.value,
-            description: normalizeDescription(form.description),
-          })
-          : updateVariableRecord(activeWorkspaceCode, selectedVariable.key, {
-            value: form.value,
-            description: normalizeDescription(form.description),
-          });
+          ? await updateVariable(activeWorkspaceCode, selectedVariable.key, payload)
+          : updateVariableRecord(activeWorkspaceCode, selectedVariable.key, payload);
         toast.success(`${saved.key} saved`);
       } else {
         setSubmitting(false);
         return;
       }
 
+      clearRevealedValues();
       setSelectedKey(saved.key);
       setPanelMode("selected");
       refresh();
@@ -333,6 +406,7 @@ export function VariableManagementPage() {
         deleteVariableRecord(activeWorkspaceCode, selectedVariable.key);
       }
       toast.success(selectedVariable.sourceKind === "Override" ? `${selectedVariable.key} reverted to inherited value` : `${selectedVariable.key} deleted`);
+      clearRevealedValues();
       setPanelMode("selected");
       refresh();
     } catch (error) {
@@ -354,6 +428,7 @@ export function VariableManagementPage() {
         deleteVariableRecord(activeWorkspaceCode, record.key);
       }
       toast.success(record.sourceKind === "Override" ? `${record.key} reverted to inherited value` : `${record.key} deleted`);
+      clearRevealedValues();
       setSelectedKey((current) => (current === record.key ? "" : current));
       setPanelMode("selected");
       refresh();
@@ -363,6 +438,90 @@ export function VariableManagementPage() {
     } finally {
       setRowBusyKey("");
     }
+  }
+
+  async function revealSensitiveValue(password: string) {
+    const target = variables.find((record) => record.key === revealTargetKey);
+    if (!target || !activeWorkspaceCode) return;
+
+    setRevealPending(true);
+    setRevealError("");
+    try {
+      const stepUp = dataSource === "api"
+        ? await verifyStepUpPassword({
+          password,
+          target: {
+            scope: "workspace",
+            workspaceCode: activeWorkspaceCode,
+            variableKey: target.key,
+          },
+        })
+        : verifyStepUpPasswordRecord({
+          password,
+          target: {
+            scope: "workspace",
+            workspaceCode: activeWorkspaceCode,
+            variableKey: target.key,
+          },
+        });
+      const revealed = dataSource === "api"
+        ? await revealWorkspaceVariable({
+          workspaceCode: activeWorkspaceCode,
+          variableKey: target.key,
+          stepUpToken: stepUp.stepUpToken,
+        })
+        : revealWorkspaceVariableRecord(activeWorkspaceCode, target.key, stepUp.stepUpToken);
+      setRevealedValues((current) => ({ ...current, [target.key]: revealed.value }));
+      setRevealDialogOpen(false);
+      setRevealTargetKey("");
+      setRevealError("");
+    } catch (error) {
+      setRevealError(error instanceof Error ? error.message : "Sensitive value could not be revealed");
+    } finally {
+      setRevealPending(false);
+    }
+  }
+
+  function openRevealDialog(record: VariableRecord) {
+    setRevealTargetKey(record.key);
+    setRevealError("");
+    setRevealDialogOpen(true);
+  }
+
+  function hideSensitiveValue(record: VariableRecord) {
+    setRevealedValues((current) => {
+      const next = { ...current };
+      delete next[record.key];
+      return next;
+    });
+  }
+
+  function refreshAndClear() {
+    clearRevealedValues();
+    refresh();
+  }
+
+  function renderSensitiveValue(record: VariableRecord, testId?: string) {
+    const revealedValue = revealedValues[record.key];
+
+    return (
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+        <SensitiveValueCode
+          className="min-w-0 flex-1"
+          state={getSensitiveState(isSensitiveRecord(record), revealedValue)}
+          testId={testId}
+        >
+          {getSensitiveDisplayValue(record, revealedValue)}
+        </SensitiveValueCode>
+        <SensitiveRevealAction
+          isSensitive={isSensitiveRecord(record)}
+          onHide={() => hideSensitiveValue(record)}
+          onReveal={() => openRevealDialog(record)}
+          revealed={Boolean(revealedValue)}
+          variableKey={record.key}
+        />
+      </div>
+    );
   }
 
   const inspectorTitle = panelMode === "create"
@@ -407,9 +566,31 @@ export function VariableManagementPage() {
                 onChange={(event) => setForm((current) => ({ ...current, key: event.target.value }))}
               />
             </Field>
+            <Field label="Sensitivity">
+              <Button
+                type="button"
+                variant={form.isSensitive ? "primary" : "secondary"}
+                aria-pressed={form.isSensitive}
+                disabled={panelMode === "override" && Boolean(selectedVariable && isSensitiveRecord(selectedVariable))}
+                onClick={() => {
+                  if (panelMode === "override" && selectedVariable && isSensitiveRecord(selectedVariable)) return;
+                  setForm((current) => ({
+                    ...current,
+                    isSensitive: !current.isSensitive,
+                    value: !current.isSensitive ? "" : current.value,
+                    valueMode: "REPLACE",
+                  }));
+                }}
+              >
+                <ShieldCheck size={16} aria-hidden="true" />
+                Sensitive value
+              </Button>
+            </Field>
             <Field
               label="Variable Value"
-              hint={panelMode === "override" ? "Start from the inherited value, then save a local override." : "Value is stored exactly as entered; no data typing is applied."}
+              hint={form.isSensitive
+                ? "The sensitive value is submitted once and returns to a mask after save."
+                : panelMode === "override" ? "Start from the inherited value, then save a local override." : "Value is stored exactly as entered; no data typing is applied."}
             >
               <TextArea
                 aria-label="Variable value"
@@ -448,7 +629,10 @@ export function VariableManagementPage() {
             <DetailField label="Current Workspace" value={activeWorkspaceLabel} />
             <DetailField label="Inherited From" value={`${selectedVariable.sourceLabel} (${selectedVariable.sourceWorkspaceCode})`} />
             <DetailField label="Updated" value={formatTimestamp(selectedVariable.updatedAt)} />
-            <DetailField label="Value" value={selectedVariable.value} />
+            <DetailField
+              label="Value"
+              value={renderSensitiveValue(selectedVariable, `variable-sensitive-value-${selectedVariable.key}`)}
+            />
             <DetailField label="Description" value={selectedVariable.description ?? "No description"} />
           </div>
           <div className="rounded-2xl bg-[var(--color-surface-container-low)] p-4 text-sm text-[var(--color-on-surface-variant)]">
@@ -472,15 +656,70 @@ export function VariableManagementPage() {
             <Field label="Variable Key" hint="Renaming is intentionally disabled so overrides remain stable by key.">
               <TextInput aria-label="Variable key" disabled value={form.key} />
             </Field>
+            {isSensitiveRecord(selectedVariable) ? (
+              <Field
+                label="Current Value"
+                hint="The stored sensitive value is not loaded into the edit form."
+              >
+                <div className="rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
+                  {renderSensitiveValue(selectedVariable, `variable-sensitive-value-${selectedVariable.key}`)}
+                </div>
+              </Field>
+            ) : null}
+            <Field label="Sensitivity">
+              <Button
+                type="button"
+                variant={form.isSensitive ? "primary" : "secondary"}
+                aria-pressed={form.isSensitive}
+                onClick={() => setForm((current) => ({
+                  ...current,
+                  isSensitive: !current.isSensitive,
+                  value: !current.isSensitive ? "" : current.value,
+                  valueMode: "REPLACE",
+                }))}
+              >
+                <ShieldCheck size={16} aria-hidden="true" />
+                Sensitive value
+              </Button>
+            </Field>
+            {form.isSensitive ? (
+              <Field label="Sensitive Value Mode" hint="Preserve keeps the stored encrypted value; replace submits a new value.">
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant={form.valueMode === "PRESERVE" ? "primary" : "secondary"}
+                    aria-label="Keep existing sensitive value"
+                    aria-pressed={form.valueMode === "PRESERVE"}
+                    onClick={() => setForm((current) => ({ ...current, value: "", valueMode: "PRESERVE" }))}
+                  >
+                    Keep existing sensitive value
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={form.valueMode === "REPLACE" ? "primary" : "secondary"}
+                    aria-label="Replace sensitive value"
+                    aria-pressed={form.valueMode === "REPLACE"}
+                    onClick={() => setForm((current) => ({ ...current, valueMode: "REPLACE" }))}
+                  >
+                    Replace sensitive value
+                  </Button>
+                </div>
+              </Field>
+            ) : null}
             <Field
               label="Variable Value"
-              hint={selectedVariable.sourceKind === "Override" && selectedVariable.shadowedLabel
-                ? `This local value overrides ${selectedVariable.shadowedLabel}.`
-                : "Value is scoped to the current workspace only."}
+              hint={form.isSensitive
+                ? form.valueMode === "PRESERVE"
+                  ? "The current sensitive value stays encrypted and is not loaded into the form."
+                  : "The replacement is sent once and returns to a mask after save."
+                : selectedVariable.sourceKind === "Override" && selectedVariable.shadowedLabel
+                  ? `This local value overrides ${selectedVariable.shadowedLabel}.`
+                  : "Value is scoped to the current workspace only."}
             >
               <TextArea
                 aria-label="Variable value"
                 className="min-h-32 font-mono"
+                disabled={form.isSensitive && form.valueMode === "PRESERVE"}
                 value={form.value}
                 onChange={(event) => setForm((current) => ({ ...current, value: event.target.value }))}
               />
@@ -524,6 +763,7 @@ export function VariableManagementPage() {
     form,
     inspectorTitle,
     panelMode,
+    revealedValues,
     selectedVariable,
     submitting,
   ]);
@@ -536,7 +776,7 @@ export function VariableManagementPage() {
         title="Variable Management"
         actions={(
           <>
-            <Button variant="secondary" disabled={loading} aria-busy={loading} onClick={refresh}>
+            <Button variant="secondary" disabled={loading} aria-busy={loading} onClick={refreshAndClear}>
               <RefreshCcw size={16} aria-hidden="true" />
               {loading ? "Refreshing..." : "Refresh"}
             </Button>
@@ -600,7 +840,13 @@ export function VariableManagementPage() {
                 id: "value",
                 header: "Value",
                 width: "22%",
-                render: (row) => <span className="block max-w-[20rem] truncate font-mono text-[13px]">{row.value}</span>,
+                render: (row) => (
+                  <span className="block max-w-[20rem] truncate font-mono text-[13px]">
+                    <SensitiveValueCode state={getSensitiveState(isSensitiveRecord(row), undefined)}>
+                      {getSensitiveDisplayValue(row)}
+                    </SensitiveValueCode>
+                  </span>
+                ),
               },
               {
                 id: "sourceKind",
@@ -723,6 +969,18 @@ export function VariableManagementPage() {
           document.body,
         )
         : null}
+      <StepUpRevealDialog
+        error={revealError}
+        onCancel={() => {
+          setRevealDialogOpen(false);
+          setRevealTargetKey("");
+          setRevealError("");
+        }}
+        onSubmit={(password) => void revealSensitiveValue(password)}
+        open={revealDialogOpen}
+        pending={revealPending}
+        variableKey={revealTargetKey || selectedVariable?.key || "Variable"}
+      />
     </>
   );
 }

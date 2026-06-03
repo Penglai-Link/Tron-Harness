@@ -6,6 +6,7 @@ pub enum AgentInvocationError {
     ModelRequired,
     HistoryStorageFailed,
     RuntimeFailed(String),
+    RuntimeSecretDeliveryUntrusted,
     ModelFailed(String),
     ToolFailed(String),
     MaxStepsExceeded,
@@ -21,6 +22,7 @@ impl AgentInvocationError {
             Self::ModelRequired => "AGENT_MODEL_REQUIRED",
             Self::HistoryStorageFailed => "AGENT_HISTORY_STORAGE_FAILED",
             Self::RuntimeFailed(_) => "AGENT_RUNTIME_FAILED",
+            Self::RuntimeSecretDeliveryUntrusted => "VARIABLE_RUNTIME_SECRET_DELIVERY_UNTRUSTED",
             Self::ModelFailed(_) => "AGENT_MODEL_FAILED",
             Self::ToolFailed(_) => "AGENT_TOOL_FAILED",
             Self::MaxStepsExceeded => "AGENT_MAX_STEPS_EXCEEDED",
@@ -38,6 +40,9 @@ impl AgentInvocationError {
             Self::RuntimeFailed(message)
             | Self::ModelFailed(message)
             | Self::ToolFailed(message) => message.clone(),
+            Self::RuntimeSecretDeliveryUntrusted => {
+                "Sensitive runtime variable delivery is not trusted".into()
+            }
             Self::MaxStepsExceeded => "agent run exceeded max steps".into(),
             Self::MaxToolCallsExceeded => "agent run exceeded max tool calls".into(),
         }

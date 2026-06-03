@@ -330,4 +330,129 @@ impl UserService {
             },
         })
     }
+
+    pub fn verify_step_up_password(
+        &self,
+        user_code: &str,
+        password: &str,
+        target: &StepUpVariableRevealTarget,
+    ) -> Result<crate::application::user::StepUpToken, AuthError> {
+        let target = normalized_step_up_target(target)?;
+        let mut repository = self
+            .repository
+            .lock()
+            .expect("user repository mutex poisoned");
+        let user = repository
+            .get_user(user_code)
+            .map_err(map_user_error_to_auth)?;
+        ensure_active_user(&user)?;
+        if user.password_hash.trim().is_empty() {
+            return Err(AuthError::StepUpUnsupported);
+        }
+        if !self
+            .password_hasher
+            .verify_password(password, &user.password_hash)?
+        {
+            return Err(AuthError::StepUpFailed);
+        }
+
+        let now = now_seconds();
+        let expires_at_seconds = now + 300;
+        let claims = StepUpClaims {
+            sub: user.user_code,
+            purpose: "variable-reveal".into(),
+            scope: step_up_scope_claim(target.scope).into(),
+            workspace_code: target.workspace_code,
+            variable_key: target.variable_key,
+            exp: to_usize(expires_at_seconds)?,
+            iat: to_usize(now)?,
+            kind: "variable-step-up".into(),
+        };
+        let token = encode(
+            &Header::new(Algorithm::HS256),
+            &claims,
+            &EncodingKey::from_secret(self.auth_config.jwt_secret.as_bytes()),
+        )
+        .map_err(|_| AuthError::TokenEncodingFailed)?;
+        let expires_at = chrono::DateTime::from_timestamp(expires_at_seconds, 0)
+            .ok_or(AuthError::TokenEncodingFailed)?
+            .to_rfc3339();
+        Ok(crate::application::user::StepUpToken { token, expires_at })
+    }
+
+    pub fn verify_step_up_token(
+        &self,
+        user_code: &str,
+        step_up_token: &str,
+        target: &StepUpVariableRevealTarget,
+    ) -> Result<(), AuthError> {
+        let target = normalized_step_up_target(target)?;
+        let claims = decode::<StepUpClaims>(
+            step_up_token,
+            &DecodingKey::from_secret(self.auth_config.jwt_secret.as_bytes()),
+            &token_validation(),
+        )
+        .map_err(|error| match error.kind() {
+            JwtErrorKind::ExpiredSignature => AuthError::StepUpExpired,
+            _ => AuthError::StepUpTokenMismatch,
+        })?
+        .claims;
+        if claims.kind != "variable-step-up" {
+            return Err(AuthError::StepUpTokenMismatch);
+        }
+        if claims.purpose != "variable-reveal" {
+            return Err(AuthError::StepUpTokenMismatch);
+        }
+        if claims.sub != user_code {
+            return Err(AuthError::StepUpTokenMismatch);
+        }
+        if claims.scope != step_up_scope_claim(target.scope) {
+            return Err(AuthError::StepUpTokenMismatch);
+        }
+        if claims.workspace_code != target.workspace_code {
+            return Err(AuthError::StepUpTokenMismatch);
+        }
+        if claims.variable_key != target.variable_key {
+            return Err(AuthError::StepUpTokenMismatch);
+        }
+        Ok(())
+    }
+}
+
+fn normalized_step_up_target(
+    target: &StepUpVariableRevealTarget,
+) -> Result<StepUpVariableRevealTarget, AuthError> {
+    let variable_key = target.variable_key.trim().to_string();
+    if variable_key.is_empty() {
+        return Err(AuthError::StepUpScopeInvalid);
+    }
+
+    match target.scope {
+        StepUpVariableRevealScope::Platform => Ok(StepUpVariableRevealTarget {
+            scope: StepUpVariableRevealScope::Platform,
+            workspace_code: None,
+            variable_key,
+        }),
+        StepUpVariableRevealScope::Workspace => {
+            let workspace_code = target
+                .workspace_code
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .ok_or(AuthError::StepUpScopeInvalid)?
+                .to_string();
+            Ok(StepUpVariableRevealTarget {
+                scope: StepUpVariableRevealScope::Workspace,
+                workspace_code: Some(workspace_code),
+                variable_key,
+            })
+        }
+    }
+}
+
+fn step_up_scope_claim(scope: StepUpVariableRevealScope) -> &'static str {
+    match scope {
+        StepUpVariableRevealScope::Platform => "platform-variable",
+        StepUpVariableRevealScope::Workspace => "workspace-variable",
+    }
 }

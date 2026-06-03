@@ -12,7 +12,7 @@ use crate::{
             mcp::routes::transport_routes as mcp_transport_routes,
         },
         outbound::{
-            crypto::BcryptPasswordHasher,
+            crypto::{BcryptPasswordHasher, Sm4GcmVariableCipher},
             model::{HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient},
             persistence::{
                 GrafeoAdapterConfig, GrafeoGraphStore, GrafeoOntologyStore, GrafeoStoreCore,
@@ -28,8 +28,8 @@ use crate::{
         },
     },
     application::agent::{
-        AgentAguiReplayStore, AgentManagementService, AgentRunHistoryService, ModelClient,
-        register_default_agent_tools,
+        register_default_agent_tools, AgentAguiReplayStore, AgentManagementService,
+        AgentRunHistoryService, ModelClient,
     },
     application::app::AppService,
     application::automation::AutomationService,
@@ -49,7 +49,6 @@ use crate::{
     application::workspace::WorkspaceService,
     config::AppConfig,
     domain::agent::ToolRegistry,
-    health::health,
     shared::{
         crypto::Aes256SecretBox,
         event_bus::{AguiEventSink, EventBusHandle, EventBusRuntimeBuilder},
@@ -189,10 +188,10 @@ impl AppState {
         };
         let variables = if config.database_url == ":memory:" {
             GLOBAL_VARIABLE_SERVICE
-                .get_or_init(|| build_variable_service(":memory:", workspaces.clone()))
+                .get_or_init(|| build_variable_service(":memory:", workspaces.clone(), &config))
                 .clone()
         } else {
-            build_variable_service(&config.database_url, workspaces.clone())
+            build_variable_service(&config.database_url, workspaces.clone(), &config)
         };
         let mcp = build_mcp_service(
             &config.database_url,
@@ -445,7 +444,6 @@ impl FromRef<AppState> for McpService {
         state.mcp.clone()
     }
 }
-
 pub fn build_router(config: AppConfig) -> Router {
     let state = AppState::new(config);
     let protected_routes = build_protected_routes(&state);
@@ -456,8 +454,8 @@ pub fn build_router(config: AppConfig) -> Router {
         .merge(auth_routes())
         .merge(mcp_transport_routes())
         .merge(protected_routes)
-        .merge(open_api_routes)
         .merge(frontend_routes())
+        .merge(open_api_routes)
         .with_state(state)
 }
 
@@ -522,10 +520,16 @@ fn build_chat_service(database_url: &str) -> ChatService {
     ChatService::new(repository)
 }
 
-fn build_variable_service(database_url: &str, workspaces: WorkspaceService) -> VariableService {
+fn build_variable_service(
+    database_url: &str,
+    workspaces: WorkspaceService,
+    config: &AppConfig,
+) -> VariableService {
     let repository = SqliteVariableRepository::connect(database_url)
         .expect("variable SQLite repository should initialize");
-    VariableService::new(repository, workspaces)
+    let cipher = Sm4GcmVariableCipher::from_config(config.variable_crypto.clone())
+        .expect("variable crypto should initialize");
+    VariableService::new(repository, workspaces, cipher)
 }
 
 fn build_mcp_service(

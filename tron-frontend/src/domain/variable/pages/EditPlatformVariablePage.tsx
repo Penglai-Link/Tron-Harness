@@ -33,6 +33,7 @@ import {
   PlatformVariableFormFields,
   emptyPlatformVariableForm,
   findPlatformVariable,
+  isSensitiveRecord,
   normalizePlatformVariableDescription,
   platformVariableFormFromRecord,
 } from "./platformVariablePageHelpers";
@@ -83,12 +84,23 @@ export function EditPlatformVariablePage() {
 
   async function saveVariable() {
     if (!record) return;
+    const wasSensitive = isSensitiveRecord(record);
+    if (wasSensitive && !form.isSensitive && !form.value.trim()) {
+      toast.error("New value is required before turning off sensitivity");
+      return;
+    }
+    if (!wasSensitive && form.isSensitive && !form.value.trim()) {
+      toast.error("Sensitive value is required before turning on sensitivity");
+      return;
+    }
 
     setSubmitting(true);
     try {
       const payload = {
-        value: form.value,
         description: normalizePlatformVariableDescription(form.description),
+        isSensitive: form.isSensitive,
+        valueMode: form.isSensitive ? form.valueMode : "REPLACE" as const,
+        ...(form.isSensitive && form.valueMode === "PRESERVE" ? {} : { value: form.value }),
       };
       const saved = dataSource === "api"
         ? await updatePlatformVariable(record.key, payload)

@@ -1,12 +1,16 @@
 import type {
   PlatformVariableRecord,
+  VariableValueMode,
   VariableRecord,
   VariableSourceKind,
 } from "@/domain/variable/model";
 import { workspaceOptionMocks } from "@/shared/constants/workspaceSpaces";
 
+const sensitiveMask = "********";
+
 interface VariableSeed {
   description: string | null;
+  isSensitive?: boolean;
   key: string;
   updatedAt: string;
   value: string;
@@ -47,8 +51,9 @@ const mockVariables: VariableSeed[] = [
   {
     workspaceCode: "TRON_CORE",
     key: "OPENAI_API_KEY",
-    value: "sk-tron-core-demo",
+    value: sensitiveMask,
     description: "Workspace secret used by the demo workspace.",
+    isSensitive: true,
     updatedAt: now,
   },
   {
@@ -84,13 +89,44 @@ const mockPlatformVariables: PlatformVariableRecord[] = [
     createdAt: now,
     updatedAt: now,
   },
+  {
+    id: "734500000000100003",
+    key: "PLATFORM_PROVIDER_CREDENTIAL",
+    value: sensitiveMask,
+    description: "Masked provider credential for platform inheritance.",
+    createdAt: now,
+    updatedAt: now,
+    isSensitive: true,
+    valueMasked: true,
+    hasValue: true,
+  },
 ];
 
 export interface VariableWritePayload {
   description?: string | null;
+  isSensitive?: boolean;
   key: string;
-  value: string;
+  value?: string;
+  valueMode?: VariableValueMode;
 }
+
+export type StepUpTarget =
+  | {
+    scope: "platform";
+    variableKey: string;
+  }
+  | {
+    scope: "workspace";
+    variableKey: string;
+    workspaceCode: string;
+  };
+
+export interface StepUpPasswordMockPayload {
+  password: string;
+  target: StepUpTarget;
+}
+
+const mockStepUpTargets = new Map<string, StepUpTarget>();
 
 export function listVariableCatalog(workspaceCode: string): VariableRecord[] {
   const lineage = workspaceLineage(workspaceCode);
@@ -103,6 +139,9 @@ export function listVariableCatalog(workspaceCode: string): VariableRecord[] {
       key: variable.key,
       value: variable.value,
       description: variable.description,
+      isSensitive: Boolean(variable.isSensitive),
+      valueMasked: Boolean(variable.isSensitive),
+      hasValue: Boolean(variable.value),
       sourceKind: "Inherited",
       sourceWorkspaceCode: "PLATFORM",
       sourceWorkspaceName: "Platform Configuration",
@@ -126,6 +165,9 @@ export function listVariableCatalog(workspaceCode: string): VariableRecord[] {
         key: variable.key,
         value: variable.value,
         description: variable.description,
+        isSensitive: Boolean(variable.isSensitive),
+        valueMasked: Boolean(variable.isSensitive),
+        hasValue: Boolean(variable.value),
         sourceKind,
         sourceWorkspaceCode: workspace.workspaceCode,
         sourceWorkspaceName: workspace.name,
@@ -156,10 +198,13 @@ export function createPlatformVariableRecord(payload: VariableWritePayload) {
   const record: PlatformVariableRecord = {
     id: (734500000000100000n + BigInt(mockPlatformVariables.length + 1)).toString(),
     key,
-    value: payload.value,
+    value: payload.isSensitive ? sensitiveMask : payload.value ?? "",
     description: normalizeDescription(payload.description),
     createdAt: now,
     updatedAt: now,
+    isSensitive: Boolean(payload.isSensitive),
+    valueMasked: Boolean(payload.isSensitive),
+    hasValue: Boolean(payload.value),
   };
   mockPlatformVariables.push(record);
   return { ...record };
@@ -168,7 +213,14 @@ export function createPlatformVariableRecord(payload: VariableWritePayload) {
 export function updatePlatformVariableRecord(key: string, payload: Omit<VariableWritePayload, "key">) {
   const existing = mockPlatformVariables.find((variable) => variable.key === key);
   if (!existing) throw new Error("Variable was not found");
-  existing.value = payload.value;
+  existing.isSensitive = Boolean(payload.isSensitive);
+  existing.valueMasked = Boolean(payload.isSensitive);
+  if (payload.valueMode === "PRESERVE" && existing.hasValue) {
+    existing.value = existing.isSensitive ? sensitiveMask : existing.value;
+  } else {
+    existing.value = existing.isSensitive ? sensitiveMask : payload.value ?? "";
+    existing.hasValue = Boolean(payload.value);
+  }
   existing.description = normalizeDescription(payload.description);
   existing.updatedAt = now;
   return { ...existing };
@@ -190,8 +242,9 @@ export function createVariableRecord(workspaceCode: string, payload: VariableWri
   mockVariables.push({
     workspaceCode,
     key,
-    value: payload.value,
+    value: payload.isSensitive ? sensitiveMask : payload.value ?? "",
     description: normalizeDescription(payload.description),
+    isSensitive: Boolean(payload.isSensitive),
     updatedAt: now,
   });
   return listVariableCatalog(workspaceCode).find((variable) => variable.key === key)!;
@@ -205,7 +258,12 @@ export function updateVariableRecord(workspaceCode: string, key: string, payload
     }
     throw new Error("Variable was not found");
   }
-  existing.value = payload.value;
+  existing.isSensitive = Boolean(payload.isSensitive);
+  if (payload.valueMode === "PRESERVE" && existing.value) {
+    existing.value = existing.isSensitive ? sensitiveMask : existing.value;
+  } else {
+    existing.value = existing.isSensitive ? sensitiveMask : payload.value ?? "";
+  }
   existing.description = normalizeDescription(payload.description);
   existing.updatedAt = now;
   return listVariableCatalog(workspaceCode).find((variable) => variable.key === key)!;
@@ -225,6 +283,50 @@ export function deleteVariableRecord(workspaceCode: string, key: string) {
 
 function normalizeDescription(value?: string | null) {
   return value?.trim() ? value.trim() : null;
+}
+
+export function verifyStepUpPasswordRecord(payload: StepUpPasswordMockPayload) {
+  if (!payload.password.trim()) throw new Error("Step-up password is required");
+  if (!payload.target.variableKey.trim()) throw new Error("Step-up target variable key is required");
+  if (payload.target.scope === "workspace" && !payload.target.workspaceCode.trim()) {
+    throw new Error("Step-up target workspace is required");
+  }
+  const stepUpToken = `mock-step-up-${Date.now()}-${mockStepUpTargets.size + 1}`;
+  mockStepUpTargets.set(stepUpToken, payload.target);
+  return {
+    stepUpToken,
+    expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+  };
+}
+
+export function revealWorkspaceVariableRecord(workspaceCode: string, variableKey: string, stepUpToken: string) {
+  if (!stepUpToken.trim()) throw new Error("Step-up token is required");
+  const target = mockStepUpTargets.get(stepUpToken);
+  if (target?.scope !== "workspace" || target.workspaceCode !== workspaceCode || target.variableKey !== variableKey) {
+    throw new Error("Step-up token target mismatch");
+  }
+  const record = listVariableCatalog(workspaceCode).find((variable) => variable.key === variableKey);
+  if (!record) throw new Error("Variable was not found");
+  return {
+    value: record.isSensitive ? revealedPlaceholder(workspaceCode, variableKey) : record.value,
+  };
+}
+
+export function revealPlatformVariableRecord(variableKey: string, stepUpToken: string) {
+  if (!stepUpToken.trim()) throw new Error("Step-up token is required");
+  const target = mockStepUpTargets.get(stepUpToken);
+  if (target?.scope !== "platform" || target.variableKey !== variableKey) {
+    throw new Error("Step-up token target mismatch");
+  }
+  const record = mockPlatformVariables.find((variable) => variable.key === variableKey);
+  if (!record) throw new Error("Variable was not found");
+  return {
+    value: record.isSensitive ? revealedPlaceholder("platform", variableKey) : record.value,
+  };
+}
+
+function revealedPlaceholder(scope: string, key: string) {
+  return ["revealed", scope.toLowerCase(), key.toLowerCase(), "value"].join("-");
 }
 
 function workspaceLineage(workspaceCode: string) {

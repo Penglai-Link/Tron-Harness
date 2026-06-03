@@ -323,6 +323,7 @@ mod tests {
                 key: "REGION".into(),
                 value: "us".into(),
                 source: "LOCAL".into(),
+                sensitive: false,
             }],
             skills: vec![EffectiveSkill {
                 skill_name: "planner".into(),

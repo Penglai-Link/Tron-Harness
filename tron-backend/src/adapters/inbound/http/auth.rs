@@ -1,4 +1,4 @@
-mod error_mapper;
+pub(crate) mod error_mapper;
 mod handler;
 mod request;
 mod response;

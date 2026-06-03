@@ -11,7 +11,9 @@ use crate::{
     },
 };
 
-use super::migrations::{PLATFORM_VARIABLES_MIGRATION, VARIABLES_MIGRATION};
+use super::migrations::{
+    PLATFORM_VARIABLES_MIGRATION, VARIABLE_SENSITIVE_METADATA_MIGRATION, VARIABLES_MIGRATION,
+};
 
 pub struct SqliteVariableRepository {
     connection: Connection,
@@ -43,7 +45,13 @@ impl SqliteVariableRepository {
             .map_err(storage_error)?;
         self.connection
             .execute_batch(PLATFORM_VARIABLES_MIGRATION)
-            .map_err(storage_error)
+            .map_err(storage_error)?;
+        if !column_exists(&self.connection, "workspace_variables", "is_sensitive")? {
+            self.connection
+                .execute_batch(VARIABLE_SENSITIVE_METADATA_MIGRATION)
+                .map_err(storage_error)?;
+        }
+        Ok(())
     }
 }
 
@@ -52,7 +60,9 @@ impl VariableRepository for SqliteVariableRepository {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT id, workspace_code, variable_key, variable_value, description, created_at, updated_at
+                "SELECT id, workspace_code, variable_key, variable_value, description,
+                        is_sensitive, value_nonce, value_tag, value_algorithm, value_key_version,
+                        created_at, updated_at
                  FROM workspace_variables
                  ORDER BY workspace_code ASC, variable_key ASC",
             )
@@ -65,8 +75,13 @@ impl VariableRepository for SqliteVariableRepository {
                     key: row.get(2)?,
                     value: row.get(3)?,
                     description: row.get(4)?,
-                    created_at: timestamp_from_millis(row.get(5)?),
-                    updated_at: timestamp_from_millis(row.get(6)?),
+                    is_sensitive: int_to_bool(row.get(5)?),
+                    value_nonce: row.get(6)?,
+                    value_tag: row.get(7)?,
+                    value_algorithm: row.get(8)?,
+                    value_key_version: row.get(9)?,
+                    created_at: timestamp_from_millis(row.get(10)?),
+                    updated_at: timestamp_from_millis(row.get(11)?),
                 })
             })
             .map_err(storage_error)?
@@ -78,7 +93,9 @@ impl VariableRepository for SqliteVariableRepository {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT id, variable_key, variable_value, description, created_at, updated_at
+                "SELECT id, variable_key, variable_value, description,
+                        is_sensitive, value_nonce, value_tag, value_algorithm, value_key_version,
+                        created_at, updated_at
                  FROM platform_variables
                  ORDER BY variable_key ASC",
             )
@@ -90,8 +107,13 @@ impl VariableRepository for SqliteVariableRepository {
                     key: row.get(1)?,
                     value: row.get(2)?,
                     description: row.get(3)?,
-                    created_at: timestamp_from_millis(row.get(4)?),
-                    updated_at: timestamp_from_millis(row.get(5)?),
+                    is_sensitive: int_to_bool(row.get(4)?),
+                    value_nonce: row.get(5)?,
+                    value_tag: row.get(6)?,
+                    value_algorithm: row.get(7)?,
+                    value_key_version: row.get(8)?,
+                    created_at: timestamp_from_millis(row.get(9)?),
+                    updated_at: timestamp_from_millis(row.get(10)?),
                 })
             })
             .map_err(storage_error)?
@@ -113,14 +135,23 @@ impl VariableRepository for SqliteVariableRepository {
     fn create_variable(&mut self, variable: &Variable) -> Result<(), VariableError> {
         self.connection
             .execute(
-                "INSERT INTO workspace_variables (id, workspace_code, variable_key, variable_value, description, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO workspace_variables (
+                     id, workspace_code, variable_key, variable_value, description,
+                     is_sensitive, value_nonce, value_tag, value_algorithm, value_key_version,
+                     created_at, updated_at
+                 )
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
                 params![
                     variable.id.value(),
                     variable.workspace_code,
                     variable.key,
                     variable.value,
                     variable.description,
+                    bool_to_int(variable.is_sensitive),
+                    variable.value_nonce,
+                    variable.value_tag,
+                    variable.value_algorithm,
+                    variable.value_key_version,
                     timestamp_to_millis(&variable.created_at),
                     timestamp_to_millis(&variable.updated_at),
                 ],
@@ -135,13 +166,22 @@ impl VariableRepository for SqliteVariableRepository {
     ) -> Result<(), VariableError> {
         self.connection
             .execute(
-                "INSERT INTO platform_variables (id, variable_key, variable_value, description, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO platform_variables (
+                     id, variable_key, variable_value, description,
+                     is_sensitive, value_nonce, value_tag, value_algorithm, value_key_version,
+                     created_at, updated_at
+                 )
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
                 params![
                     variable.id.value(),
                     variable.key,
                     variable.value,
                     variable.description,
+                    bool_to_int(variable.is_sensitive),
+                    variable.value_nonce,
+                    variable.value_tag,
+                    variable.value_algorithm,
+                    variable.value_key_version,
                     timestamp_to_millis(&variable.created_at),
                     timestamp_to_millis(&variable.updated_at),
                 ],
@@ -157,13 +197,23 @@ impl VariableRepository for SqliteVariableRepository {
                 "UPDATE workspace_variables
                  SET variable_value = ?3,
                      description = ?4,
-                     updated_at = ?5
+                     is_sensitive = ?5,
+                     value_nonce = ?6,
+                     value_tag = ?7,
+                     value_algorithm = ?8,
+                     value_key_version = ?9,
+                     updated_at = ?10
                  WHERE workspace_code = ?1 AND variable_key = ?2",
                 params![
                     variable.workspace_code,
                     variable.key,
                     variable.value,
                     variable.description,
+                    bool_to_int(variable.is_sensitive),
+                    variable.value_nonce,
+                    variable.value_tag,
+                    variable.value_algorithm,
+                    variable.value_key_version,
                     timestamp_to_millis(&variable.updated_at),
                 ],
             )
@@ -184,12 +234,22 @@ impl VariableRepository for SqliteVariableRepository {
                 "UPDATE platform_variables
                  SET variable_value = ?2,
                      description = ?3,
-                     updated_at = ?4
+                     is_sensitive = ?4,
+                     value_nonce = ?5,
+                     value_tag = ?6,
+                     value_algorithm = ?7,
+                     value_key_version = ?8,
+                     updated_at = ?9
                  WHERE variable_key = ?1",
                 params![
                     variable.key,
                     variable.value,
                     variable.description,
+                    bool_to_int(variable.is_sensitive),
+                    variable.value_nonce,
+                    variable.value_tag,
+                    variable.value_algorithm,
+                    variable.value_key_version,
                     timestamp_to_millis(&variable.updated_at),
                 ],
             )
@@ -238,4 +298,28 @@ fn ensure_database_parent(database_url: &str) -> Result<(), VariableError> {
 
 fn storage_error(_error: rusqlite::Error) -> VariableError {
     VariableError::StorageFailure
+}
+
+fn bool_to_int(value: bool) -> i64 {
+    i64::from(value)
+}
+
+fn int_to_bool(value: i64) -> bool {
+    value != 0
+}
+
+fn column_exists(
+    connection: &Connection,
+    table_name: &str,
+    column_name: &str,
+) -> Result<bool, VariableError> {
+    let mut statement = connection
+        .prepare(&format!("PRAGMA table_info({table_name})"))
+        .map_err(storage_error)?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(storage_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(storage_error)?;
+    Ok(columns.iter().any(|column| column == column_name))
 }

@@ -7,7 +7,8 @@ use crate::{
     application::workspace::WorkspaceService,
     domain::{
         variable::{
-            EffectiveVariable, PlatformVariable, Variable, VariableCatalogQuery, VariableError,
+            EffectiveVariable, EncryptedVariableValue, PlatformVariable, PlatformVariableDisplay,
+            RuntimeVariable, VARIABLE_MASK, Variable, VariableCatalogQuery, VariableError,
             VariableMutationResult, VariableSourceKind, validate_variable_key,
         },
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceStatus},
@@ -25,12 +26,32 @@ pub struct CreateVariableCommand {
     pub key: String,
     pub value: String,
     pub description: Option<String>,
+    pub is_sensitive: Option<bool>,
+    pub value_mode: Option<VariableValueMode>,
 }
 
 #[derive(Debug, Clone)]
 pub struct UpdateVariableCommand {
-    pub value: String,
+    pub value: Option<String>,
     pub description: Option<String>,
+    pub is_sensitive: Option<bool>,
+    pub value_mode: Option<VariableValueMode>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VariableValueMode {
+    Replace,
+    Preserve,
+}
+
+pub trait VariableCipher: Send + Sync {
+    fn encrypt(&self, plaintext: &str, aad: &[u8])
+    -> Result<EncryptedVariableValue, VariableError>;
+    fn decrypt(
+        &self,
+        encrypted: &EncryptedVariableValue,
+        aad: &[u8],
+    ) -> Result<String, VariableError>;
 }
 
 pub trait VariableRepository: Send {
@@ -55,6 +76,7 @@ pub trait VariableRepository: Send {
 pub struct VariableService {
     repository: Arc<Mutex<Box<dyn VariableRepository>>>,
     workspaces: WorkspaceService,
+    cipher: Arc<dyn VariableCipher>,
 }
 
 #[derive(Clone)]
@@ -79,10 +101,12 @@ impl VariableService {
     pub fn new(
         repository: impl VariableRepository + 'static,
         workspaces: WorkspaceService,
+        cipher: impl VariableCipher + 'static,
     ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             workspaces,
+            cipher: Arc::new(cipher),
         }
     }
 
@@ -120,7 +144,7 @@ impl VariableService {
             .list_platform_variables()
     }
 
-    fn effective_variable(
+    fn effective_display_variable(
         &self,
         workspace_code: &str,
         key: &str,
@@ -131,23 +155,49 @@ impl VariableService {
             .ok_or(VariableError::NotFound)
     }
 
+    fn inherited_variable_in_lineage(
+        &self,
+        workspace: &WorkspaceDetail,
+        variables: &[Variable],
+        key: &str,
+    ) -> Option<Variable> {
+        let lineage_codes: HashMap<_, _> = workspace
+            .path
+            .iter()
+            .map(|item| (item.workspace_code.as_str(), ()))
+            .collect();
+        variables
+            .iter()
+            .find(|variable| {
+                variable.key == key
+                    && variable.workspace_code != workspace.workspace_code
+                    && lineage_codes.contains_key(variable.workspace_code.as_str())
+            })
+            .cloned()
+            .or_else(|| {
+                self.all_platform_variables()
+                    .ok()?
+                    .into_iter()
+                    .find(|variable| variable.key == key)
+                    .map(platform_to_variable)
+            })
+    }
+
     fn key_exists_in_lineage(
         &self,
         workspace: &WorkspaceDetail,
         variables: &[Variable],
         key: &str,
     ) -> bool {
-        let lineage_codes: HashMap<_, _> = workspace
-            .path
-            .iter()
-            .map(|item| (item.workspace_code.as_str(), ()))
-            .collect();
-        variables.iter().any(|variable| {
-            variable.key == key && lineage_codes.contains_key(variable.workspace_code.as_str())
-        }) || self
-            .all_platform_variables()
-            .map(|variables| variables.iter().any(|variable| variable.key == key))
-            .unwrap_or(false)
+        self.inherited_variable_in_lineage(workspace, variables, key)
+            .is_some()
+            || variables.iter().any(|variable| {
+                variable.key == key && variable.workspace_code == workspace.workspace_code
+            })
+            || self
+                .all_platform_variables()
+                .map(|variables| variables.iter().any(|variable| variable.key == key))
+                .unwrap_or(false)
     }
 
     fn resolve_variables(
@@ -181,15 +231,7 @@ impl VariableService {
                     shadowed_label: None,
                     shadowed_workspace_code: None,
                     shadowed_workspace_name: None,
-                    variable: Variable {
-                        id: variable.id,
-                        workspace_code: "PLATFORM".to_string(),
-                        key: variable.key,
-                        value: variable.value,
-                        description: variable.description,
-                        created_at: variable.created_at,
-                        updated_at: variable.updated_at,
-                    },
+                    variable: platform_to_variable(variable),
                 },
             );
         }
@@ -238,18 +280,63 @@ impl VariableService {
         Ok(resolved_by_key
             .into_values()
             .map(|record| EffectiveVariable {
-                key: record.variable.key,
-                value: record.variable.value,
-                description: record.variable.description,
+                key: record.variable.key.clone(),
+                value: display_value(&record.variable),
+                description: record.variable.description.clone(),
                 source_kind: record.source_kind,
-                source_workspace_code: record.variable.workspace_code,
+                source_workspace_code: record.variable.workspace_code.clone(),
                 source_workspace_name: record.source_workspace_name,
                 source_label: record.source_label,
                 shadowed_workspace_code: record.shadowed_workspace_code,
                 shadowed_workspace_name: record.shadowed_workspace_name,
                 shadowed_label: record.shadowed_label,
+                is_sensitive: record.variable.is_sensitive,
+                value_masked: record.variable.is_sensitive,
+                has_value: !record.variable.value.is_empty(),
                 updated_at: record.variable.updated_at,
             })
             .collect())
+    }
+}
+
+fn platform_to_variable(variable: PlatformVariable) -> Variable {
+    Variable {
+        id: variable.id,
+        workspace_code: "PLATFORM".to_string(),
+        key: variable.key,
+        value: variable.value,
+        description: variable.description,
+        is_sensitive: variable.is_sensitive,
+        value_nonce: variable.value_nonce,
+        value_tag: variable.value_tag,
+        value_algorithm: variable.value_algorithm,
+        value_key_version: variable.value_key_version,
+        created_at: variable.created_at,
+        updated_at: variable.updated_at,
+    }
+}
+
+fn display_value(variable: &Variable) -> String {
+    if variable.is_sensitive {
+        VARIABLE_MASK.into()
+    } else {
+        variable.value.clone()
+    }
+}
+
+fn display_platform_variable(variable: PlatformVariable) -> PlatformVariableDisplay {
+    let has_value = !variable.value.is_empty();
+    PlatformVariableDisplay {
+        key: variable.key,
+        value: if variable.is_sensitive {
+            VARIABLE_MASK.into()
+        } else {
+            variable.value
+        },
+        description: variable.description,
+        is_sensitive: variable.is_sensitive,
+        value_masked: variable.is_sensitive,
+        has_value,
+        updated_at: variable.updated_at,
     }
 }

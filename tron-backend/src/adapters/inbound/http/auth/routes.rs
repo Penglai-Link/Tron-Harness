@@ -7,7 +7,7 @@ use crate::app::AppState;
 
 use super::handler::{
     current_session, login, login_ldap, logout, oauth2_authorize, oauth2_callback, providers,
-    refresh,
+    refresh, verify_step_up_password,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -18,6 +18,10 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/auth/session", get(current_session))
         .route("/api/v1/auth/refresh", post(refresh))
         .route("/api/v1/auth/logout", post(logout))
+        .route(
+            "/api/v1/auth/verify-step-up-password",
+            post(verify_step_up_password),
+        )
         .route(
             "/api/v1/auth/oauth2/authorize/{provider_code}",
             get(oauth2_authorize),

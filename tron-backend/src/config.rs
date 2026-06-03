@@ -1,8 +1,9 @@
 mod error;
 mod parsing;
 mod paths;
+mod defaults;
+mod variable_crypto;
 
-use std::{fs, net::SocketAddr, path::Path};
 use std::{fs, net::SocketAddr, path::Path};
 use serde::Deserialize;
 
@@ -10,6 +11,7 @@ use crate::shared::event_bus::EventBusConfig;
 
 pub use self::error::ConfigError;
 use self::parsing::{env_port_override, ldap_env_override, required_config_string};
+pub use variable_crypto::{VariableCryptoConfig, VariableCryptoKeyConfig};
 use self::paths::{
     default_database_url_from_home, default_graph_storage_path_from_home,
     default_skills_registry_root_from_home, env_database_url_override,
@@ -58,6 +60,7 @@ pub struct AppConfig {
     pub project_doc_root: String,
     pub skills_registry_root: String,
     pub system_agents: SystemAgentConfig,
+    pub variable_crypto: VariableCryptoConfig,
     pub http_clients: HttpClientProfilesConfig,
     pub auth: AuthConfig,
     pub event_bus: EventBusConfig,
@@ -161,6 +164,7 @@ impl AppConfig {
                 codex_command: DEFAULT_SYSTEM_AGENT_CODEX_COMMAND.into(),
                 opencode_command: DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND.into(),
             },
+            variable_crypto: VariableCryptoConfig::default(),
             http_clients: HttpClientProfilesConfig::default_profiles(),
             auth: AuthConfig {
                 jwt_secret: DEFAULT_AUTH_JWT_SECRET.into(),
@@ -200,6 +204,9 @@ impl AppConfig {
         }
         if let Some(value) = overrides.system_agents {
             self.system_agents.apply_overrides(value);
+        }
+        if let Some(value) = overrides.variable_crypto {
+            self.variable_crypto.apply_overrides(value);
         }
         if let Some(value) = overrides.http_clients {
             self.http_clients.apply_overrides(value);
@@ -292,6 +299,7 @@ struct AppConfigFile {
     project_doc_root: Option<String>,
     skills_registry_root: Option<String>,
     system_agents: Option<SystemAgentFileConfig>,
+    variable_crypto: Option<variable_crypto::VariableCryptoFileConfig>,
     http_clients: Option<HttpClientProfilesFileConfig>,
     auth: Option<AuthFileConfig>,
     event_bus: Option<EventBusFileConfig>,
@@ -561,6 +569,7 @@ impl EventBusConfig {
         }
     }
 }
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -581,6 +590,7 @@ impl Default for AppConfig {
                 codex_command: DEFAULT_SYSTEM_AGENT_CODEX_COMMAND.into(),
                 opencode_command: DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND.into(),
             },
+            variable_crypto: VariableCryptoConfig::default(),
             http_clients: HttpClientProfilesConfig::default_profiles(),
             auth: AuthConfig {
                 jwt_secret: DEFAULT_AUTH_JWT_SECRET.into(),

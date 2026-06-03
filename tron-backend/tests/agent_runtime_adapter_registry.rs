@@ -67,6 +67,7 @@ fn base_context() -> AgentRunContext {
             key: "REGION".into(),
             value: "us".into(),
             source: "LOCAL".into(),
+            sensitive: false,
         }],
         skills: vec![EffectiveSkill {
             skill_name: "planner".into(),
@@ -350,4 +351,36 @@ async fn service_mode_runtime_factory_supports_all_service_adapters() {
             .expect("service-mode runtime should start successfully");
         assert_eq!(run.workspace_code, "TRON_CORE");
     }
+}
+
+#[tokio::test]
+async fn service_mode_runtime_rejects_sensitive_variables_before_posting() {
+    let server = service_runtime_mock_server().await;
+    let runtime = registry().resolve(RuntimeAdapterSelection::CodexAppServer {
+        endpoint: server.base_url.clone(),
+        working_directory: Some("/workspace".into()),
+    });
+    let mut context = base_context();
+    context.variables = vec![EffectiveVariable {
+        key: "VSD_RUNTIME_TOKEN".into(),
+        value: "runtime-sensitive-value".into(),
+        source: "PLATFORM".into(),
+        sensitive: true,
+    }];
+
+    let error = runtime
+        .start(context, None)
+        .await
+        .expect_err("AC-VSD-06 RED: untrusted service mode must reject sensitive variables");
+    assert_eq!(error.code(), "VARIABLE_RUNTIME_SECRET_DELIVERY_UNTRUSTED");
+
+    let requests = server
+        .requests
+        .lock()
+        .expect("service runtime requests mutex poisoned")
+        .clone();
+    assert!(
+        requests.is_empty(),
+        "AC-VSD-06 RED: sensitive context must fail before external POST"
+    );
 }
