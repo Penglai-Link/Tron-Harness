@@ -30,7 +30,7 @@ impl ArtifactBundle {
             request,
             ARTIFACT_RAW_SOURCE,
             RagArtifactPayload::RawSource(request.payload.clone()),
-            json!({ "sourceType": request.source_type }),
+            json!({ "sourceType": request.source.source_type }),
         );
         bundle
     }
@@ -46,12 +46,12 @@ impl ArtifactBundle {
         self.artifacts.push(RagArtifact {
             artifact_id: format!(
                 "{}:{}:{}:{}",
-                request.source_code, request.source_version, artifact_type, ordinal
+                request.source.code, request.source.version, artifact_type, ordinal
             ),
             artifact_type: artifact_type.to_string(),
             corpus_id: request.corpus_id.clone(),
-            source_code: request.source_code.clone(),
-            source_version: request.source_version.clone(),
+            source_code: request.source.code.clone(),
+            source_version: request.source.version.clone(),
             scope: request.target_scope.clone(),
             payload,
             schema_version: "v1".into(),

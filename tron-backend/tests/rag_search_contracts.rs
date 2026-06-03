@@ -14,9 +14,10 @@ use tron_backend::{
     application::rag::{
         DefaultRagStrategyRegistry, RagConfigRepository, RagDocumentSourceCall,
         RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime,
-        RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService, RagRerankCall,
-        RagResolvedDocument, RagSearchContextRequest, RagSearchRequest, RagSearchRuntime,
-        RagSearchService, RagSearchTraceRequest, compile_retrieval_profile, merge_search_filters,
+        RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService,
+        RagIngestSource, RagRerankCall, RagResolvedDocument, RagSearchContextRequest,
+        RagSearchRequest, RagSearchRuntime, RagSearchService, RagSearchTraceRequest,
+        compile_retrieval_profile, merge_search_filters,
     },
     domain::rag::{RagError, RagProfileRecord, RagProfileType, RagStatus},
 };
@@ -789,20 +790,29 @@ fn memory_request(
             scope_type: scope_type.into(),
             scope_code: scope_code.into(),
         },
-        source_code: source_code.into(),
-        source_version: source_version.into(),
-        source_type: "PLAIN_TEXT".into(),
+        source: RagIngestSource {
+            code: source_code.into(),
+            version: source_version.into(),
+            source_type: "MEMORY_CARD".into(),
+        },
         payload: json!({
+            "source": {
+                "code": source_code,
+                "version": source_version,
+                "type": "MEMORY_CARD"
+            },
             "title": "RAG citation rule",
             "text": "Always cite source titles in RAG answers for retrieval ordering.",
-            "version": source_version,
-            "memoryType": "RULE",
-            "memoryStatus": "ACTIVE",
-            "reviewStatus": "APPROVED",
-            "importanceScore": 90,
-            "injectable": true,
             "metadata": {
                 "seed": "search-contract"
+            },
+            "domainFields": {
+                "version": source_version,
+                "memoryType": "RULE",
+                "memoryStatus": "ACTIVE",
+                "reviewStatus": "APPROVED",
+                "importanceScore": 90,
+                "injectable": true
             }
         }),
     }
@@ -822,19 +832,30 @@ fn project_doc_request() -> RagIngestRequest {
             scope_type: "SPACE".into(),
             scope_code: "TRON_CORE".into(),
         },
-        source_code: "doc-rag-mvp".into(),
-        source_version: "v1".into(),
-        source_type: "PROJECT_DOC_REF".into(),
+        source: RagIngestSource {
+            code: "doc-rag-mvp".into(),
+            version: "v1".into(),
+            source_type: "PROJECT_DOC_REF".into(),
+        },
         payload: json!({
+            "source": {
+                "code": "doc-rag-mvp",
+                "version": "v1",
+                "type": "PROJECT_DOC_REF"
+            },
             "title": "RAG MVP",
-            "documentUri": "project-doc://TRON_CORE/docs/rag-mvp.md",
-            "format": "MARKDOWN",
-            "documentCode": "DOC_RAG_MVP",
-            "documentType": "DESIGN",
-            "path": "docs/rag-mvp.md",
-            "repoCode": "REPO_TRON",
-            "moduleCode": "MOD_RAG",
-            "moduleName": "RAG"
+            "document": {
+                "uri": "project-doc://TRON_CORE/docs/rag-mvp.md",
+                "format": "MARKDOWN"
+            },
+            "domainFields": {
+                "documentCode": "DOC_RAG_MVP",
+                "documentType": "DESIGN",
+                "path": "docs/rag-mvp.md",
+                "repoCode": "REPO_TRON",
+                "moduleCode": "MOD_RAG",
+                "moduleName": "RAG"
+            }
         }),
     }
 }
@@ -853,12 +874,23 @@ fn skill_request() -> RagIngestRequest {
             scope_type: "SPACE".into(),
             scope_code: "TRON_CORE".into(),
         },
-        source_code: "skill:TRON_CORE:rag-reviewer".into(),
-        source_version: "v1".into(),
-        source_type: "SKILL".into(),
+        source: RagIngestSource {
+            code: "skill:TRON_CORE:rag-reviewer".into(),
+            version: "v1".into(),
+            source_type: "SKILL".into(),
+        },
         payload: json!({
-            "skillName": "rag-reviewer",
-            "skillDescription": "Reviews RAG retrieval changes before release."
+            "source": {
+                "code": "skill:TRON_CORE:rag-reviewer",
+                "version": "v1",
+                "type": "SKILL"
+            },
+            "title": "rag-reviewer",
+            "text": "Skill: rag-reviewer\nDescription: Reviews RAG retrieval changes before release.",
+            "domainFields": {
+                "skillName": "rag-reviewer",
+                "skillDescription": "Reviews RAG retrieval changes before release."
+            }
         }),
     }
 }

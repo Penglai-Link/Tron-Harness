@@ -11,8 +11,9 @@ use super::{
     SqliteRagRepository,
     indexes::{delete_text_unit_indexes_for_source, sync_text_unit_indexes_for_units},
     ingest_values::{
-        execute_upsert, json_string, now_millis, push_dynamic_text, push_embedded_source_values,
-        push_integer, push_optional_text, push_source_domain_values, push_text,
+        execute_upsert, json_string, now_millis, push_domain_values, push_dynamic_text,
+        push_embedded_source_values, push_integer, push_optional_text, push_text,
+        validate_domain_field_targets,
     },
     sql_plan::{SqliteRagCorpusPlan, compile_sql_corpus_plan, quote_identifier},
     storage_error,
@@ -24,6 +25,7 @@ impl RagIngestRepository for SqliteRagRepository {
             .get_corpus(&command.corpus_id)?
             .ok_or(RagError::CorpusNotFound)?;
         let plan = compile_sql_corpus_plan(self, &corpus)?;
+        validate_domain_field_targets(&plan, &command)?;
         let tx = self
             .connection
             .unchecked_transaction()
@@ -104,6 +106,12 @@ fn persist_source(
             &command.content_hash,
         );
     }
+    push_optional_text(
+        &mut values,
+        &plan.source_columns,
+        "body_hash",
+        command.body_hash.as_deref(),
+    );
     if let Some(column) = plan.source_metadata_column.as_deref() {
         push_dynamic_text(
             &mut values,
@@ -118,7 +126,12 @@ fn persist_source(
     if let Some(column) = plan.source_updated_at_column.as_deref() {
         push_integer(&mut values, &plan.source_columns, column, now);
     }
-    push_source_domain_values(&mut values, &plan.source_columns, plan, command)?;
+    let mapping = if plan.source_field_mapping.is_empty() {
+        &plan.field_mapping
+    } else {
+        &plan.source_field_mapping
+    };
+    push_domain_values(&mut values, &plan.source_columns, mapping, command)?;
     execute_upsert(
         tx,
         table,
@@ -186,12 +199,6 @@ fn persist_text_unit(
         &plan.text_unit_columns,
         "source_version",
         &command.source_version,
-    );
-    push_optional_text(
-        &mut values,
-        &plan.text_unit_columns,
-        "document_code",
-        unit.document_code.as_deref(),
     );
     push_text(
         &mut values,
@@ -261,6 +268,12 @@ fn persist_text_unit(
     if let Some(column) = plan.text_unit_updated_at_column.as_deref() {
         push_integer(&mut values, &plan.text_unit_columns, column, now);
     }
+    push_domain_values(
+        &mut values,
+        &plan.text_unit_columns,
+        &plan.text_unit_field_mapping,
+        command,
+    )?;
     execute_upsert(
         tx,
         &plan.text_unit_table,

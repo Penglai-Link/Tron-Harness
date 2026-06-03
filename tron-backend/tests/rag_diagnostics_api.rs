@@ -144,7 +144,6 @@ async fn search_api_writes_trace_only_when_enabled() {
         "/api/v1/rag/search",
         Some(json!({
             "profileId": "memory-related-v1",
-            "workspaceCode": "TRON_CORE",
             "query": "cite sources",
             "accessContext": {
                 "userCode": "USR-AUTH-0001",
@@ -223,7 +222,7 @@ fn seed_search_fixture(database_url: &str) {
                 unit_type, text, heading_path, ordinal, token_count,
                 content_hash, status, metadata, created_at, updated_at
             )
-            VALUES ('tu-trace-api-1', 'memory-trace-api', 'v1', 'PLAIN_TEXT', 'SPACE', 'TRON_CORE',
+            VALUES ('tu-trace-api-1', 'memory-trace-api', 'v1', 'MEMORY_CARD', 'SPACE', 'TRON_CORE',
                 'ACTIVE', 'Trace memory rule', 'hash', '{}', 1, 1, 'RULE', 'ACTIVE', 'APPROVED', 'v1', 1,
                 'LEAF',
                 'Always cite sources in API answers.',

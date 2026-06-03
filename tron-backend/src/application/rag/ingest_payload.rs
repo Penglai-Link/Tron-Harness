@@ -11,14 +11,11 @@ use super::{
     CompiledRagIngestProfile, RagIngestRequest, RagTextUnitWrite, ingest_artifact::ArtifactBundle,
 };
 
-mod json_text;
-
-use json_text::{extract_domain_fields, payload_metadata_from_mapping, prepare_json_text_payload};
-
 #[derive(Debug, Clone)]
 pub(crate) struct PreparedIngestPayload {
     pub(crate) title: Option<String>,
     pub(crate) content_hash: String,
+    pub(crate) body_hash: Option<String>,
     pub(crate) metadata: Value,
     pub(crate) domain_fields: BTreeMap<String, Value>,
     pub(crate) units: Vec<RagTextUnitDraft>,
@@ -27,7 +24,6 @@ pub(crate) struct PreparedIngestPayload {
 #[derive(Debug, Clone)]
 pub(crate) struct RagTextUnitDraft {
     pub(crate) text_unit_code: String,
-    pub(crate) document_code: Option<String>,
     pub(crate) text: String,
     pub(crate) heading_path: String,
     pub(crate) ordinal: usize,
@@ -44,7 +40,6 @@ impl RagTextUnitDraft {
         let embedding_text_hash = stable_hash(&self.text);
         RagTextUnitWrite {
             text_unit_code: self.text_unit_code,
-            document_code: self.document_code,
             unit_type: "LEAF".into(),
             token_count: token_count(&self.text),
             search_text: self.text.clone(),
@@ -67,7 +62,6 @@ impl RagTextUnitDraft {
     pub(crate) fn with_failed_embedding(self) -> RagTextUnitWrite {
         RagTextUnitWrite {
             text_unit_code: self.text_unit_code,
-            document_code: self.document_code,
             unit_type: "LEAF".into(),
             token_count: token_count(&self.text),
             search_text: self.text.clone(),
@@ -94,20 +88,51 @@ pub(crate) fn prepare_payload(
     bundle: &ArtifactBundle,
 ) -> Result<PreparedIngestPayload, RagError> {
     match compiled.payload_strategy_id.as_str() {
-        "RAG_JSON_TEXT_PAYLOAD_V1" => prepare_json_text_payload(request, compiled),
-        "PROJECT_DOC_MARKDOWN_REF_PAYLOAD_V1" => {
-            prepare_project_doc_ref_payload(request, compiled, bundle)
+        "RAG_TEXT_CONTRACT_PAYLOAD_V1" => prepare_text_contract_payload(request, compiled),
+        "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1" => {
+            prepare_document_ref_contract_payload(request, compiled, bundle)
         }
         _ => Err(RagError::IngestProfileInvalid),
     }
 }
 
-fn prepare_project_doc_ref_payload(
+fn prepare_text_contract_payload(
+    request: &RagIngestRequest,
+    compiled: &CompiledRagIngestProfile,
+) -> Result<PreparedIngestPayload, RagError> {
+    validate_contract_source_type(request, compiled)?;
+    let text = payload_string(&request.payload, "text").ok_or(RagError::IngestRequestInvalid)?;
+    let text = text.trim().to_string();
+    if text.is_empty() {
+        return Err(RagError::IngestRequestInvalid);
+    }
+    let title = payload_string(&request.payload, "title");
+    let domain_fields = contract_domain_fields(&request.payload)?;
+    let content_hash = stable_hash(&text);
+    let unit = RagTextUnitDraft {
+        text_unit_code: text_unit_code(&request.source.code, &request.source.version, 0),
+        text,
+        heading_path: title.clone().unwrap_or_default(),
+        ordinal: 0,
+        content_hash: content_hash.clone(),
+    };
+    Ok(PreparedIngestPayload {
+        title,
+        content_hash,
+        body_hash: None,
+        metadata: contract_metadata(&request.payload)?,
+        domain_fields,
+        units: vec![unit],
+    })
+}
+
+fn prepare_document_ref_contract_payload(
     request: &RagIngestRequest,
     compiled: &CompiledRagIngestProfile,
     bundle: &ArtifactBundle,
 ) -> Result<PreparedIngestPayload, RagError> {
-    if request.source_type != "PROJECT_DOC_REF" {
+    validate_contract_source_type(request, compiled)?;
+    if request.source.source_type != "PROJECT_DOC_REF" {
         return Err(RagError::IngestRequestInvalid);
     }
     if request
@@ -119,13 +144,13 @@ fn prepare_project_doc_ref_payload(
     {
         return Err(RagError::IngestRequestInvalid);
     }
-    let format =
-        payload_string(&request.payload, "format").ok_or(RagError::DocumentFormatUnsupported)?;
-    if format != "MARKDOWN" {
+    let format = document_payload_string(&request.payload, "format")
+        .ok_or(RagError::DocumentFormatUnsupported)?;
+    if format != compiled.document_format {
         return Err(RagError::DocumentFormatUnsupported);
     }
     let document_uri =
-        payload_string(&request.payload, "documentUri").ok_or(RagError::IngestRequestInvalid)?;
+        document_payload_string(&request.payload, "uri").ok_or(RagError::IngestRequestInvalid)?;
     let parsed_document = bundle.parsed_document()?;
     if parsed_document.document_uri != document_uri {
         return Err(RagError::SourceResolveFailed);
@@ -134,28 +159,18 @@ fn prepare_project_doc_ref_payload(
     if text.is_empty() {
         return Err(RagError::DocumentParseFailed);
     }
-    let mapping = compiled
-        .payload_mapping
-        .as_object()
-        .ok_or(RagError::IngestProfileInvalid)?;
-    let mut domain_fields = extract_domain_fields(mapping, &request.payload)?;
-    insert_project_doc_computed_fields(mapping, &mut domain_fields, &text)?;
-    let document_code = domain_fields
-        .get("documentCode")
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned)
-        .or_else(|| payload_string(&request.payload, "documentCode"));
+    let domain_fields = contract_domain_fields(&request.payload)?;
     let sections = split_markdown_heading_units(&text, compiled.markdown_heading_depth);
     if sections.is_empty() {
         return Err(RagError::DocumentParseFailed);
     }
-    let mut metadata = payload_metadata_from_mapping(mapping, &request.payload);
+    let mut metadata = contract_metadata(&request.payload)?;
     if let Value::Object(metadata) = &mut metadata {
         if compiled.record_resolver_info {
             metadata.insert(
-                "resolver".into(),
+                "_resolver".into(),
                 json!({
-                    "strategyId": compiled.source_resolver_strategy_id.as_deref().unwrap_or("PROJECT_DOC_MARKDOWN_RESOLVE_SOURCE_V1"),
+                    "strategyId": compiled.source_resolver_strategy_id.as_deref().unwrap_or("PROJECT_DOC_RESOLVE_SOURCE"),
                     "documentUri": document_uri,
                     "contentLength": parsed_document.content_length
                 }),
@@ -163,9 +178,9 @@ fn prepare_project_doc_ref_payload(
         }
         if compiled.record_parser_info {
             metadata.insert(
-                "parser".into(),
+                "_parser".into(),
                 json!({
-                    "strategyId": compiled.document_parser_strategy_id.as_deref().unwrap_or("PROJECT_DOC_MARKDOWN_PARSE_DOCUMENT_V1"),
+                    "strategyId": compiled.document_parser_strategy_id.as_deref().unwrap_or("RAG_PARSE_MARKDOWN_DOCUMENT"),
                     "format": format
                 }),
             );
@@ -175,8 +190,7 @@ fn prepare_project_doc_ref_payload(
         .into_iter()
         .enumerate()
         .map(|(ordinal, (heading_path, section_text))| RagTextUnitDraft {
-            text_unit_code: text_unit_code(&request.source_code, &request.source_version, ordinal),
-            document_code: document_code.clone(),
+            text_unit_code: text_unit_code(&request.source.code, &request.source.version, ordinal),
             content_hash: stable_hash(&section_text),
             text: section_text,
             heading_path,
@@ -186,38 +200,11 @@ fn prepare_project_doc_ref_payload(
     Ok(PreparedIngestPayload {
         title: payload_string(&request.payload, "title"),
         content_hash: stable_hash(&text),
+        body_hash: Some(stable_hash(&text)),
         metadata,
         domain_fields,
         units,
     })
-}
-
-fn insert_project_doc_computed_fields(
-    mapping: &serde_json::Map<String, Value>,
-    domain_fields: &mut BTreeMap<String, Value>,
-    text: &str,
-) -> Result<(), RagError> {
-    let Some(computed_fields) = mapping.get("computedFields").and_then(Value::as_object) else {
-        return Ok(());
-    };
-    for (logical_name, raw_field) in computed_fields {
-        let raw_field = raw_field
-            .as_object()
-            .ok_or(RagError::IngestProfileInvalid)?;
-        let source = raw_field
-            .get("source")
-            .and_then(Value::as_str)
-            .ok_or(RagError::IngestProfileInvalid)?;
-        let compute = raw_field
-            .get("compute")
-            .and_then(Value::as_str)
-            .ok_or(RagError::IngestProfileInvalid)?;
-        if source != "parsedDocument.contentText" || compute != "stableHash" {
-            return Err(RagError::IngestProfileInvalid);
-        }
-        domain_fields.insert(logical_name.clone(), Value::String(stable_hash(text)));
-    }
-    Ok(())
 }
 
 fn payload_string(payload: &Value, field: &str) -> Option<String> {
@@ -227,6 +214,60 @@ fn payload_string(payload: &Value, field: &str) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+fn document_payload_string(payload: &Value, field: &str) -> Option<String> {
+    payload
+        .get("document")
+        .and_then(|document| document.get(field))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+fn contract_domain_fields(payload: &Value) -> Result<BTreeMap<String, Value>, RagError> {
+    let Some(value) = payload.get("domainFields") else {
+        return Ok(BTreeMap::new());
+    };
+    let object = value.as_object().ok_or(RagError::IngestRequestInvalid)?;
+    Ok(object
+        .iter()
+        .map(|(field, value)| {
+            let value = match value {
+                Value::String(value) => Value::String(value.trim().to_string()),
+                value => value.clone(),
+            };
+            (field.clone(), value)
+        })
+        .collect())
+}
+
+fn contract_metadata(payload: &Value) -> Result<Value, RagError> {
+    let Some(value) = payload.get("metadata") else {
+        return Ok(json!({}));
+    };
+    let object = value.as_object().ok_or(RagError::IngestRequestInvalid)?;
+    if object.keys().any(|key| key.starts_with('_')) {
+        return Err(RagError::IngestRequestInvalid);
+    }
+    Ok(Value::Object(object.clone()))
+}
+
+fn validate_contract_source_type(
+    request: &RagIngestRequest,
+    compiled: &CompiledRagIngestProfile,
+) -> Result<(), RagError> {
+    if compiled.supported_source_types.is_empty()
+        || compiled
+            .supported_source_types
+            .iter()
+            .any(|source_type| source_type == &request.source.source_type)
+    {
+        Ok(())
+    } else {
+        Err(RagError::IngestRequestInvalid)
+    }
 }
 
 fn split_markdown_heading_units(text: &str, heading_depth: usize) -> Vec<(String, String)> {
@@ -307,15 +348,24 @@ fn stable_hash(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::application::rag::{RagIngestAccessContext, RagIngestScope};
+    use crate::application::rag::{RagIngestAccessContext, RagIngestScope, RagIngestSource};
 
     #[test]
-    fn prepares_skill_payload_from_name_and_description() {
+    fn prepares_text_contract_payload_from_text_and_domain_fields() {
         let request = skill_request(json!({
-            "skillName": "reviewer",
-            "skillDescription": "Reviews code changes before release.",
+            "source": {
+                "code": "skill:workspace-alpha:reviewer",
+                "version": "v1",
+                "type": "SKILL"
+            },
+            "title": "reviewer",
+            "text": "Skill: reviewer\nDescription: Reviews code changes before release.",
             "metadata": {
                 "source": "registry"
+            },
+            "domainFields": {
+                "skillName": "reviewer",
+                "skillDescription": "Reviews code changes before release."
             }
         }));
         let bundle = ArtifactBundle::from_request(&request);
@@ -340,9 +390,17 @@ mod tests {
     }
 
     #[test]
-    fn rejects_skill_payload_without_description() {
+    fn rejects_text_contract_payload_without_text() {
         let request = skill_request(json!({
-            "skillName": "reviewer"
+            "source": {
+                "code": "skill:workspace-alpha:reviewer",
+                "version": "v1",
+                "type": "SKILL"
+            },
+            "title": "reviewer",
+            "domainFields": {
+                "skillName": "reviewer"
+            }
         }));
         let bundle = ArtifactBundle::from_request(&request);
 
@@ -365,9 +423,11 @@ mod tests {
                 scope_type: "SPACE".into(),
                 scope_code: "workspace-alpha".into(),
             },
-            source_code: "skill:workspace-alpha:reviewer".into(),
-            source_version: "v1".into(),
-            source_type: "SKILL".into(),
+            source: RagIngestSource {
+                code: "skill:workspace-alpha:reviewer".into(),
+                version: "v1".into(),
+                source_type: "SKILL".into(),
+            },
             payload,
         }
     }
@@ -377,32 +437,15 @@ mod tests {
             profile_id: "skill-ingest-v1".into(),
             corpus_id: "skill".into(),
             stage_order: vec![],
-            payload_strategy_id: "RAG_JSON_TEXT_PAYLOAD_V1".into(),
-            payload_mapping: json!({
-                "supportedSourceTypes": ["SKILL"],
-                "required": ["skillName", "skillDescription"],
-                "title": "$.skillName",
-                "textTemplate": "Skill: {{skillName}}\nDescription: {{skillDescription}}",
-                "metadataFrom": "$.metadata",
-                "fields": {
-                    "skillName": {
-                        "path": "$.skillName",
-                        "target": "skill_name",
-                        "type": "string"
-                    },
-                    "skillDescription": {
-                        "path": "$.skillDescription",
-                        "target": "skill_description",
-                        "type": "string"
-                    }
-                }
-            }),
+            payload_strategy_id: "RAG_TEXT_CONTRACT_PAYLOAD_V1".into(),
+            supported_source_types: vec!["SKILL".into()],
             source_resolver_strategy_id: None,
             document_parser_strategy_id: None,
             source_resolver_max_bytes: 1024,
             record_resolver_info: false,
             record_parser_info: false,
             markdown_heading_depth: 6,
+            document_format: "MARKDOWN".into(),
             degrade_policy: "SKIP_VECTOR_WITH_WARNING".into(),
             embedding_model_code: None,
             embedding_version: "v1".into(),

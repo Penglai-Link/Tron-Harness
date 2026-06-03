@@ -15,13 +15,14 @@ pub struct CompiledRagIngestProfile {
     pub corpus_id: String,
     pub stage_order: Vec<String>,
     pub payload_strategy_id: String,
-    pub payload_mapping: Value,
+    pub supported_source_types: Vec<String>,
     pub source_resolver_strategy_id: Option<String>,
     pub document_parser_strategy_id: Option<String>,
     pub source_resolver_max_bytes: usize,
     pub record_resolver_info: bool,
     pub record_parser_info: bool,
     pub markdown_heading_depth: usize,
+    pub document_format: String,
     pub degrade_policy: String,
     pub embedding_model_code: Option<String>,
     pub embedding_version: String,
@@ -79,7 +80,7 @@ where
             return Err(RagError::IngestProfileInvalid);
         }
     }
-    let payload_strategy_id = payload_strategy_id(&profile.config)?;
+    let payload_strategy_id = payload_strategy_id(&profile.config, stages)?;
     if registry
         .resolve_payload_strategy(&payload_strategy_id)
         .status
@@ -87,26 +88,9 @@ where
     {
         return Err(RagError::IngestProfileInvalid);
     }
-    let payload_mapping = profile
-        .config
-        .get("payloadMapping")
-        .cloned()
-        .unwrap_or(Value::Null);
-    if payload_strategy_id == "RAG_JSON_TEXT_PAYLOAD_V1" {
-        validate_json_text_payload_mapping(&payload_mapping, corpus)?;
-    }
+    let supported_source_types = supported_source_types(&profile.config)?;
     let source_resolver_strategy_id = optional_stage_strategy_id(stages, "resolveSource")?;
     let document_parser_strategy_id = optional_stage_strategy_id(stages, "parseDocument")?;
-    if payload_strategy_id == "PROJECT_DOC_MARKDOWN_REF_PAYLOAD_V1" {
-        validate_project_doc_ref_stages(
-            &node_set,
-            source_resolver_strategy_id.as_deref(),
-            document_parser_strategy_id.as_deref(),
-        )?;
-        if payload_mapping.is_object() {
-            validate_project_doc_payload_mapping(&payload_mapping, corpus)?;
-        }
-    }
 
     let edges = dag
         .get("edges")
@@ -117,11 +101,6 @@ where
         .collect::<Result<Vec<_>, _>>()?;
     for (from, to) in &edges {
         if !node_set.contains(from) || !node_set.contains(to) {
-            return Err(RagError::IngestProfileInvalid);
-        }
-        let from_output = stage_artifact(stages, from, "outputArtifact")?;
-        let to_input = stage_artifact(stages, to, "inputArtifact")?;
-        if from_output != to_input {
             return Err(RagError::IngestProfileInvalid);
         }
     }
@@ -140,150 +119,70 @@ where
         .and_then(Value::as_str)
         .unwrap_or("v1")
         .to_string();
-    let source_resolver_max_bytes = source_resolver_max_bytes(&profile.config)?;
+    let source_resolver_max_bytes = source_resolver_max_bytes(&profile.config, stages)?;
     let (record_resolver_info, record_parser_info) = metadata_policy_flags(&profile.config);
-    let markdown_heading_depth = if payload_strategy_id == "PROJECT_DOC_MARKDOWN_REF_PAYLOAD_V1" {
-        markdown_heading_depth(&profile.config)?
+    let markdown_heading_depth = if matches!(
+        payload_strategy_id.as_str(),
+        "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1"
+    ) {
+        markdown_heading_depth(&profile.config, stages)?
     } else {
         DEFAULT_MARKDOWN_HEADING_DEPTH
     };
+    let document_format = document_format(&profile.config, stages);
 
     Ok(CompiledRagIngestProfile {
         profile_id: profile.profile_id.clone(),
         corpus_id: corpus.corpus_id.clone(),
         stage_order: ordered,
         payload_strategy_id,
-        payload_mapping,
+        supported_source_types,
         source_resolver_strategy_id,
         document_parser_strategy_id,
         source_resolver_max_bytes,
         record_resolver_info,
         record_parser_info,
         markdown_heading_depth,
+        document_format,
         degrade_policy: profile.degrade_policy.clone(),
         embedding_model_code,
         embedding_version,
     })
 }
 
-fn payload_strategy_id(config: &Value) -> Result<String, RagError> {
-    config
-        .get("payloadStrategyId")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .ok_or(RagError::IngestProfileInvalid)
-}
-
-fn validate_json_text_payload_mapping(
-    payload_mapping: &Value,
-    corpus: &RagCorpusRecord,
-) -> Result<(), RagError> {
-    let mapping = payload_mapping
-        .as_object()
-        .ok_or(RagError::IngestProfileInvalid)?;
-    validate_payload_supported_source_types(mapping)?;
-    if mapping.get("textTemplate").is_none() && mapping.get("text").is_none() {
-        return Err(RagError::IngestProfileInvalid);
+fn payload_strategy_id(
+    _config: &Value,
+    stages: &serde_json::Map<String, Value>,
+) -> Result<String, RagError> {
+    if let Some(strategy_id) = optional_stage_strategy_id(stages, "preparePayload")? {
+        return Ok(strategy_id);
     }
-    validate_payload_mapping_fields(mapping, corpus)
+    Err(RagError::IngestProfileInvalid)
 }
 
-fn validate_project_doc_payload_mapping(
-    payload_mapping: &Value,
-    corpus: &RagCorpusRecord,
-) -> Result<(), RagError> {
-    let mapping = payload_mapping
-        .as_object()
-        .ok_or(RagError::IngestProfileInvalid)?;
-    validate_payload_supported_source_types(mapping)?;
-    validate_payload_mapping_fields(mapping, corpus)?;
-    let Some(computed_fields) = mapping.get("computedFields").and_then(Value::as_object) else {
-        return Ok(());
-    };
-    for (logical_name, field) in computed_fields {
-        let field = field.as_object().ok_or(RagError::IngestProfileInvalid)?;
-        let source = non_empty_str(field, "source")?;
-        let compute = non_empty_str(field, "compute")?;
-        if source != "parsedDocument.contentText" || compute != "stableHash" {
-            return Err(RagError::IngestProfileInvalid);
-        }
-        validate_payload_field_target(logical_name, field, corpus)?;
-    }
-    Ok(())
-}
-
-fn validate_payload_supported_source_types(
-    mapping: &serde_json::Map<String, Value>,
-) -> Result<(), RagError> {
-    let supported = mapping
-        .get("supportedSourceTypes")
+fn supported_source_types(config: &Value) -> Result<Vec<String>, RagError> {
+    let Some(values) = config
+        .get("sourceInputPolicy")
+        .and_then(Value::as_object)
+        .and_then(|policy| policy.get("supportedSourceTypes"))
         .and_then(Value::as_array)
-        .ok_or(RagError::IngestProfileInvalid)?;
-    if supported.is_empty()
-        || supported
-            .iter()
-            .any(|value| value.as_str().map(str::is_empty).unwrap_or(true))
-    {
-        return Err(RagError::IngestProfileInvalid);
-    }
-    Ok(())
-}
-
-fn validate_payload_mapping_fields(
-    mapping: &serde_json::Map<String, Value>,
-    corpus: &RagCorpusRecord,
-) -> Result<(), RagError> {
-    let Some(fields) = mapping.get("fields").and_then(Value::as_object) else {
-        return Ok(());
+    else {
+        return Ok(Vec::new());
     };
-    for (logical_name, field) in fields {
-        let field = field.as_object().ok_or(RagError::IngestProfileInvalid)?;
-        non_empty_str(field, "path")?;
-        validate_payload_field_target(logical_name, field, corpus)?;
-    }
-    Ok(())
-}
-
-fn validate_payload_field_target(
-    logical_name: &str,
-    field: &serde_json::Map<String, Value>,
-    corpus: &RagCorpusRecord,
-) -> Result<(), RagError> {
-    let target = non_empty_str(field, "target")?;
-    if corpus.field_mapping.get(logical_name).map(String::as_str) != Some(target) {
+    if values.is_empty() {
         return Err(RagError::IngestProfileInvalid);
     }
-    Ok(())
-}
-
-fn non_empty_str<'a>(
-    object: &'a serde_json::Map<String, Value>,
-    key: &str,
-) -> Result<&'a str, RagError> {
-    object
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or(RagError::IngestProfileInvalid)
-}
-
-fn validate_project_doc_ref_stages(
-    node_set: &BTreeSet<String>,
-    source_resolver_strategy_id: Option<&str>,
-    document_parser_strategy_id: Option<&str>,
-) -> Result<(), RagError> {
-    if !node_set.contains("resolveSource") || !node_set.contains("parseDocument") {
-        return Err(RagError::IngestProfileInvalid);
-    }
-    if source_resolver_strategy_id != Some("PROJECT_DOC_MARKDOWN_RESOLVE_SOURCE_V1")
-        || document_parser_strategy_id != Some("PROJECT_DOC_MARKDOWN_PARSE_DOCUMENT_V1")
-    {
-        return Err(RagError::IngestProfileInvalid);
-    }
-    Ok(())
+    values
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+                .ok_or(RagError::IngestProfileInvalid)
+        })
+        .collect()
 }
 
 fn optional_stage_strategy_id(
@@ -303,19 +202,79 @@ fn optional_stage_strategy_id(
         .ok_or(RagError::IngestProfileInvalid)
 }
 
-fn source_resolver_max_bytes(config: &Value) -> Result<usize, RagError> {
-    let Some(max_bytes) = config
-        .get("resolverPolicy")
-        .and_then(Value::as_object)
-        .and_then(|policy| policy.get("maxBytes"))
+fn source_resolver_max_bytes(
+    config: &Value,
+    stages: &serde_json::Map<String, Value>,
+) -> Result<usize, RagError> {
+    let max_bytes = stage_config(stages, "resolveSource")
+        .and_then(|config| config.get("maxBytes"))
         .and_then(Value::as_u64)
-    else {
+        .or_else(|| {
+            config
+                .get("resolverPolicy")
+                .and_then(Value::as_object)
+                .and_then(|policy| policy.get("maxBytes"))
+                .and_then(Value::as_u64)
+        });
+    let Some(max_bytes) = max_bytes else {
         return Ok(DEFAULT_PROJECT_DOC_RESOLVER_MAX_BYTES);
     };
     if max_bytes == 0 {
         return Err(RagError::IngestProfileInvalid);
     }
     usize::try_from(max_bytes).map_err(|_| RagError::IngestProfileInvalid)
+}
+
+fn markdown_heading_depth(
+    config: &Value,
+    stages: &serde_json::Map<String, Value>,
+) -> Result<usize, RagError> {
+    let depth = stage_config(stages, "splitText")
+        .and_then(|config| config.get("splitter"))
+        .and_then(Value::as_object)
+        .and_then(|splitter| splitter.get("headingDepth"))
+        .and_then(Value::as_u64)
+        .or_else(|| {
+            config
+                .get("splitter")
+                .and_then(Value::as_object)
+                .and_then(|splitter| splitter.get("headingDepth"))
+                .and_then(Value::as_u64)
+        });
+    let Some(depth) = depth else {
+        return Ok(DEFAULT_MARKDOWN_HEADING_DEPTH);
+    };
+    if !(1..=6).contains(&depth) {
+        return Err(RagError::IngestProfileInvalid);
+    }
+    usize::try_from(depth).map_err(|_| RagError::IngestProfileInvalid)
+}
+
+fn document_format(config: &Value, stages: &serde_json::Map<String, Value>) -> String {
+    stage_config(stages, "parseDocument")
+        .and_then(|config| config.get("format"))
+        .and_then(Value::as_str)
+        .or_else(|| {
+            config
+                .get("parserPolicy")
+                .and_then(Value::as_object)
+                .and_then(|policy| policy.get("supportedFormats"))
+                .and_then(Value::as_array)
+                .and_then(|formats| formats.first())
+                .and_then(Value::as_str)
+        })
+        .unwrap_or("MARKDOWN")
+        .to_string()
+}
+
+fn stage_config<'a>(
+    stages: &'a serde_json::Map<String, Value>,
+    stage_id: &str,
+) -> Option<&'a Value> {
+    stages
+        .get(stage_id)
+        .and_then(Value::as_object)
+        .and_then(|stage| stage.get("config"))
 }
 
 fn metadata_policy_flags(config: &Value) -> (bool, bool) {
@@ -334,21 +293,6 @@ fn metadata_policy_flags(config: &Value) -> (bool, bool) {
     )
 }
 
-fn markdown_heading_depth(config: &Value) -> Result<usize, RagError> {
-    let Some(depth) = config
-        .get("splitter")
-        .and_then(Value::as_object)
-        .and_then(|splitter| splitter.get("headingDepth"))
-        .and_then(Value::as_u64)
-    else {
-        return Ok(DEFAULT_MARKDOWN_HEADING_DEPTH);
-    };
-    if !(1..=6).contains(&depth) {
-        return Err(RagError::IngestProfileInvalid);
-    }
-    usize::try_from(depth).map_err(|_| RagError::IngestProfileInvalid)
-}
-
 fn parse_edge(value: &Value) -> Result<(String, String), RagError> {
     let object = value.as_object().ok_or(RagError::IngestProfileInvalid)?;
     let from = object
@@ -360,20 +304,6 @@ fn parse_edge(value: &Value) -> Result<(String, String), RagError> {
         .and_then(Value::as_str)
         .ok_or(RagError::IngestProfileInvalid)?;
     Ok((from.to_string(), to.to_string()))
-}
-
-fn stage_artifact(
-    stages: &serde_json::Map<String, Value>,
-    stage_id: &str,
-    field: &str,
-) -> Result<String, RagError> {
-    stages
-        .get(stage_id)
-        .and_then(Value::as_object)
-        .and_then(|stage| stage.get(field))
-        .and_then(Value::as_str)
-        .map(ToOwned::to_owned)
-        .ok_or(RagError::IngestProfileInvalid)
 }
 
 fn topological_order(

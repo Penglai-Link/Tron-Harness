@@ -35,9 +35,6 @@ pub async fn ingest(
     if request.access_context.user_code != auth.user().user_code {
         return rag_error_response(crate::domain::rag::RagError::IngestScopeInvalid);
     }
-    if request.workspace_code != request.access_context.workspace_code {
-        return rag_error_response(crate::domain::rag::RagError::IngestScopeInvalid);
-    }
     if !user_has_workspace_access(&workspaces, &request.workspace_code, &auth.user().user_code) {
         return rag_error_response(crate::domain::rag::RagError::IngestScopeInvalid);
     }
@@ -59,7 +56,6 @@ pub async fn search(
         return rag_error_response(crate::domain::rag::RagError::SearchRequestInvalid);
     }
     if request.access_context.user_code != auth.user().user_code
-        || request.workspace_code != request.access_context.workspace_code
         || !user_has_workspace_access(&workspaces, &request.workspace_code, &auth.user().user_code)
     {
         return rag_error_response(crate::domain::rag::RagError::SearchScopeInvalid);
@@ -176,9 +172,9 @@ fn has_required_request_fields(request: &crate::application::rag::RagIngestReque
         request.access_context.workspace_code.as_str(),
         request.target_scope.scope_type.as_str(),
         request.target_scope.scope_code.as_str(),
-        request.source_code.as_str(),
-        request.source_version.as_str(),
-        request.source_type.as_str(),
+        request.source.code.as_str(),
+        request.source.version.as_str(),
+        request.source.source_type.as_str(),
     ]
     .into_iter()
     .all(|value| !value.trim().is_empty())

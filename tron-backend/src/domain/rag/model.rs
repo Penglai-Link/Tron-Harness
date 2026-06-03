@@ -110,6 +110,8 @@ pub struct RagCorpusRecord {
     pub capabilities: Value,
     pub filter_schema: Value,
     pub field_mapping: BTreeMap<String, String>,
+    pub source_field_mapping: BTreeMap<String, String>,
+    pub text_unit_field_mapping: BTreeMap<String, String>,
     pub storage_binding: RagStorageBinding,
 }
 

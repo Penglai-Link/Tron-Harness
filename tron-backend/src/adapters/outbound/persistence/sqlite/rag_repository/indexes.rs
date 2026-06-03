@@ -257,32 +257,6 @@ pub(super) fn table_exists(connection: &Connection, table_name: &str) -> Result<
         .map_err(storage_error)
 }
 
-pub(super) fn column_exists(
-    connection: &Connection,
-    table_name: &str,
-    column_name: &str,
-) -> Result<bool, RagError> {
-    let pragma = format!("PRAGMA table_info({})", quote_identifier(table_name)?);
-    let mut statement = connection.prepare(&pragma).map_err(storage_error)?;
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .map_err(storage_error)?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(storage_error)?;
-    Ok(columns.iter().any(|column| column == column_name))
-}
-
-pub(super) fn legacy_vector_columns_exist(
-    connection: &Connection,
-    table_name: &str,
-) -> Result<bool, RagError> {
-    Ok(
-        column_exists(connection, table_name, "embedding_dimension")?
-            && column_exists(connection, table_name, "embedding")?
-            && column_exists(connection, table_name, "embedding_status")?,
-    )
-}
-
 pub(super) fn decode_embedding(raw: &[u8]) -> Option<Vec<f32>> {
     if !raw.len().is_multiple_of(4) {
         return None;

@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -13,21 +13,37 @@ use super::{
     storage_error,
 };
 
-pub(crate) fn push_source_domain_values(
-    values: &mut Vec<(String, SqlValue)>,
-    columns: &BTreeSet<String>,
+pub(crate) fn validate_domain_field_targets(
     plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
+    for logical_name in command.domain_fields.keys() {
+        if !plan.source_field_mapping.contains_key(logical_name)
+            && !plan.text_unit_field_mapping.contains_key(logical_name)
+            && !plan.field_mapping.contains_key(logical_name)
+        {
+            return Err(RagError::StorageBindingInvalid);
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn push_domain_values(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &BTreeSet<String>,
+    mapping: &BTreeMap<String, String>,
+    command: &RagPersistIngestCommand,
+) -> Result<(), RagError> {
     for (logical_name, value) in &command.domain_fields {
-        let column = plan
-            .field_mapping
-            .get(logical_name)
-            .ok_or(RagError::StorageBindingInvalid)?;
+        let Some(column) = mapping.get(logical_name) else {
+            continue;
+        };
         if !columns.contains(column) {
             return Err(RagError::StorageBindingInvalid);
         }
-        values.push((column.clone(), json_to_sql_value(value)?));
+        if !values.iter().any(|(existing, _)| existing == column) {
+            values.push((column.clone(), json_to_sql_value(value)?));
+        }
     }
     Ok(())
 }
@@ -78,7 +94,12 @@ pub(crate) fn push_embedded_source_values(
     if let Some(column) = plan.source_updated_at_column.as_deref() {
         push_integer(values, &plan.text_unit_columns, column, now);
     }
-    push_source_domain_values(values, &plan.text_unit_columns, plan, command)?;
+    let mapping = if plan.source_field_mapping.is_empty() {
+        &plan.field_mapping
+    } else {
+        &plan.source_field_mapping
+    };
+    push_domain_values(values, &plan.text_unit_columns, mapping, command)?;
     Ok(())
 }
 

@@ -18,13 +18,13 @@ use tron_backend::{
         DefaultRagStrategyRegistry, RagConfigRepository, RagDocumentSourceCall,
         RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime,
         RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService,
-        RagResolvedDocument, compile_ingest_profile,
+        RagIngestSource, RagResolvedDocument, compile_ingest_profile,
     },
     domain::rag::{RagError, RagProfileRecord, RagProfileType, RagStatus},
 };
 
 #[tokio::test]
-async fn memory_json_text_ingest_writes_business_text_unit_and_sidecar_indexes() {
+async fn memory_text_contract_ingest_writes_business_text_unit_and_sidecar_indexes() {
     let database_path = temp_database_path("rag-ingest-memory-success");
     let database_url = database_path.to_string_lossy().to_string();
     let repository = SqliteRagRepository::connect(&database_url).unwrap();
@@ -81,7 +81,7 @@ async fn memory_ingest_maps_business_version_from_payload() {
         FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)),
     );
     let mut request = memory_request("storage-v1");
-    request.payload["version"] = json!("business-v9");
+    request.payload["domainFields"]["version"] = json!("business-v9");
 
     service.ingest(request).await.unwrap();
 
@@ -177,13 +177,13 @@ async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_
     assert_eq!(
         metadata,
         json!({
-            "resolver": {
-                "strategyId": "PROJECT_DOC_MARKDOWN_RESOLVE_SOURCE_V1",
+            "_resolver": {
+                "strategyId": "PROJECT_DOC_RESOLVE_SOURCE",
                 "documentUri": "project-doc://TRON_CORE/docs/rag-mvp.md",
                 "contentLength": project_doc_markdown().len()
             },
-            "parser": {
-                "strategyId": "PROJECT_DOC_MARKDOWN_PARSE_DOCUMENT_V1",
+            "_parser": {
+                "strategyId": "RAG_PARSE_MARKDOWN_DOCUMENT",
                 "format": "MARKDOWN"
             }
         })
@@ -191,6 +191,10 @@ async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_
 
     let headings = query_text_unit_headings(&connection);
     assert_eq!(headings, vec!["RAG MVP", "RAG MVP > Write Path"]);
+    assert_eq!(
+        query_text_unit_document_codes(&connection),
+        vec!["DOC_RAG_MVP", "DOC_RAG_MVP"],
+    );
     assert_index_payload_columns_absent(&connection, "rag_project_doc_text_units");
     assert!(table_exists(&connection, "rag_project_doc_text_units_fts"));
     assert!(table_exists(
@@ -260,10 +264,25 @@ async fn project_doc_ingest_rejects_direct_markdown_payload() {
     );
     let mut request = project_doc_request("v1");
     request.payload = json!({
+        "source": {
+            "code": "doc-rag-mvp",
+            "version": "v1",
+            "type": "PROJECT_DOC_REF"
+        },
         "title": "RAG MVP",
-        "documentUri": "project-doc://TRON_CORE/docs/rag-mvp.md",
-        "format": "MARKDOWN",
+        "document": {
+            "uri": "project-doc://TRON_CORE/docs/rag-mvp.md",
+            "format": "MARKDOWN"
+        },
         "text": project_doc_markdown(),
+        "domainFields": {
+            "documentCode": "DOC_RAG_MVP",
+            "documentType": "DESIGN",
+            "path": "docs/rag-mvp.md",
+            "repoCode": "REPO_TRON",
+            "moduleCode": "MOD_RAG",
+            "moduleName": "RAG"
+        }
     });
 
     assert_eq!(
@@ -399,11 +418,6 @@ fn ingest_profile_compiler_rejects_invalid_dag_contracts() {
         (
             "unregistered-strategy",
             unregistered_strategy_dag(),
-            RagError::IngestProfileInvalid,
-        ),
-        (
-            "artifact-incompatible",
-            artifact_incompatible_dag(),
             RagError::IngestProfileInvalid,
         ),
         (
@@ -556,20 +570,29 @@ fn memory_request(source_version: &str) -> RagIngestRequest {
             scope_type: "USER".into(),
             scope_code: "USR-LARGE-ID".into(),
         },
-        source_code: "memory-rag-rule".into(),
-        source_version: source_version.into(),
-        source_type: "PLAIN_TEXT".into(),
+        source: RagIngestSource {
+            code: "memory-rag-rule".into(),
+            version: source_version.into(),
+            source_type: "MEMORY_CARD".into(),
+        },
         payload: json!({
+            "source": {
+                "code": "memory-rag-rule",
+                "version": source_version,
+                "type": "MEMORY_CARD"
+            },
             "title": "RAG citation rule",
             "text": "Always cite source titles in RAG answers.",
-            "version": source_version,
-            "memoryType": "RULE",
-            "memoryStatus": "ACTIVE",
-            "reviewStatus": "APPROVED",
-            "importanceScore": 90,
             "metadata": {
                 "seed": "contract-test",
                 "source": "rag-ingest"
+            },
+            "domainFields": {
+                "version": source_version,
+                "memoryType": "RULE",
+                "memoryStatus": "ACTIVE",
+                "reviewStatus": "APPROVED",
+                "importanceScore": 90
             }
         }),
     }
@@ -589,14 +612,25 @@ fn skill_request(source_version: &str) -> RagIngestRequest {
             scope_type: "SPACE".into(),
             scope_code: "TRON_CORE".into(),
         },
-        source_code: "skill:TRON_CORE:rag-reviewer".into(),
-        source_version: source_version.into(),
-        source_type: "SKILL".into(),
+        source: RagIngestSource {
+            code: "skill:TRON_CORE:rag-reviewer".into(),
+            version: source_version.into(),
+            source_type: "SKILL".into(),
+        },
         payload: json!({
-            "skillName": "rag-reviewer",
-            "skillDescription": "Reviews RAG retrieval changes before release.",
+            "source": {
+                "code": "skill:TRON_CORE:rag-reviewer",
+                "version": source_version,
+                "type": "SKILL"
+            },
+            "title": "rag-reviewer",
+            "text": "Skill: rag-reviewer\nDescription: Reviews RAG retrieval changes before release.",
             "metadata": {
                 "source": "skill-registry"
+            },
+            "domainFields": {
+                "skillName": "rag-reviewer",
+                "skillDescription": "Reviews RAG retrieval changes before release."
             }
         }),
     }
@@ -616,19 +650,30 @@ fn project_doc_request(source_version: &str) -> RagIngestRequest {
             scope_type: "SPACE".into(),
             scope_code: "TRON_CORE".into(),
         },
-        source_code: "doc-rag-mvp".into(),
-        source_version: source_version.into(),
-        source_type: "PROJECT_DOC_REF".into(),
+        source: RagIngestSource {
+            code: "doc-rag-mvp".into(),
+            version: source_version.into(),
+            source_type: "PROJECT_DOC_REF".into(),
+        },
         payload: json!({
+            "source": {
+                "code": "doc-rag-mvp",
+                "version": source_version,
+                "type": "PROJECT_DOC_REF"
+            },
             "title": "RAG MVP",
-            "documentUri": "project-doc://TRON_CORE/docs/rag-mvp.md",
-            "format": "MARKDOWN",
-            "documentCode": "DOC_RAG_MVP",
-            "documentType": "DESIGN",
-            "path": "docs/rag-mvp.md",
-            "repoCode": "REPO_TRON",
-            "moduleCode": "MOD_RAG",
-            "moduleName": "RAG"
+            "document": {
+                "uri": "project-doc://TRON_CORE/docs/rag-mvp.md",
+                "format": "MARKDOWN"
+            },
+            "domainFields": {
+                "documentCode": "DOC_RAG_MVP",
+                "documentType": "DESIGN",
+                "path": "docs/rag-mvp.md",
+                "repoCode": "REPO_TRON",
+                "moduleCode": "MOD_RAG",
+                "moduleName": "RAG"
+            }
         }),
     }
 }
@@ -648,7 +693,7 @@ fn set_project_doc_heading_depth(database_url: &str, heading_depth: u64) {
         "SELECT config_json FROM rag_profiles WHERE profile_id = 'project-doc-ingest-v1'",
     );
     let mut config = serde_json::from_str::<Value>(&config_json).unwrap();
-    config["splitter"]["headingDepth"] = json!(heading_depth);
+    config["stages"]["splitText"]["config"]["splitter"]["headingDepth"] = json!(heading_depth);
     connection
         .execute(
             "UPDATE rag_profiles SET config_json = ?1 WHERE profile_id = 'project-doc-ingest-v1'",
@@ -673,36 +718,26 @@ fn ingest_profile(profile_id: &str, config: Value) -> RagProfileRecord {
 
 fn valid_dag() -> Value {
     json!({
+        "sourceInputPolicy": {
+            "supportedSourceTypes": ["MEMORY_CARD"]
+        },
         "dag": {
-            "nodes": ["validateSource", "splitText", "fulltextIndex", "vectorIndex", "persistSource"],
+            "nodes": ["validateSource", "preparePayload", "splitText", "fulltextIndex", "vectorIndex", "persistSource"],
             "edges": [
-                { "from": "validateSource", "to": "splitText" },
+                { "from": "validateSource", "to": "preparePayload" },
+                { "from": "preparePayload", "to": "splitText" },
                 { "from": "splitText", "to": "fulltextIndex" },
                 { "from": "fulltextIndex", "to": "vectorIndex" },
                 { "from": "vectorIndex", "to": "persistSource" }
             ]
         },
         "stages": {
-            "validateSource": { "strategyId": "RAG_VALIDATE_SOURCE", "inputArtifact": "request", "outputArtifact": "source" },
-            "splitText": { "strategyId": "RAG_SPLIT_TEXT", "inputArtifact": "source", "outputArtifact": "textUnits" },
-            "fulltextIndex": { "strategyId": "RAG_FULLTEXT_INDEX", "inputArtifact": "textUnits", "outputArtifact": "fulltextUnits" },
-            "vectorIndex": { "strategyId": "RAG_VECTOR_INDEX", "inputArtifact": "fulltextUnits", "outputArtifact": "vectorUnits" },
-            "persistSource": { "strategyId": "RAG_PERSIST_SOURCE", "inputArtifact": "vectorUnits", "outputArtifact": "persisted" }
-        },
-        "payloadStrategyId": "RAG_JSON_TEXT_PAYLOAD_V1",
-        "payloadMapping": {
-            "supportedSourceTypes": ["PLAIN_TEXT"],
-            "required": ["text", "version"],
-            "title": "$.title",
-            "text": "$.text",
-            "metadataFrom": "$.metadata",
-            "fields": {
-                "version": {
-                    "path": "$.version",
-                    "target": "version",
-                    "type": "string"
-                }
-            }
+            "validateSource": { "strategyId": "RAG_VALIDATE_SOURCE" },
+            "preparePayload": { "strategyId": "RAG_TEXT_CONTRACT_PAYLOAD_V1" },
+            "splitText": { "strategyId": "RAG_SPLIT_TEXT" },
+            "fulltextIndex": { "strategyId": "RAG_FULLTEXT_INDEX" },
+            "vectorIndex": { "strategyId": "RAG_VECTOR_INDEX" },
+            "persistSource": { "strategyId": "RAG_PERSIST_SOURCE" }
         }
     })
 }
@@ -710,8 +745,8 @@ fn valid_dag() -> Value {
 fn cycle_dag() -> Value {
     let mut value = valid_dag();
     value["dag"]["edges"] = json!([
-        { "from": "validateSource", "to": "splitText" },
-        { "from": "splitText", "to": "validateSource" }
+        { "from": "validateSource", "to": "preparePayload" },
+        { "from": "preparePayload", "to": "validateSource" }
     ]);
     value
 }
@@ -726,12 +761,6 @@ fn missing_stage_dag() -> Value {
 fn unregistered_strategy_dag() -> Value {
     let mut value = valid_dag();
     value["stages"]["vectorIndex"]["strategyId"] = json!("RAG_UNKNOWN_VECTOR");
-    value
-}
-
-fn artifact_incompatible_dag() -> Value {
-    let mut value = valid_dag();
-    value["stages"]["vectorIndex"]["inputArtifact"] = json!("unrelatedArtifact");
     value
 }
 
@@ -857,6 +886,17 @@ fn query_project_doc_source(connection: &Connection) -> Value {
 fn query_text_unit_headings(connection: &Connection) -> Vec<String> {
     let mut statement = connection
         .prepare("SELECT heading_path FROM rag_project_doc_text_units ORDER BY ordinal")
+        .unwrap();
+    statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+}
+
+fn query_text_unit_document_codes(connection: &Connection) -> Vec<String> {
+    let mut statement = connection
+        .prepare("SELECT document_code FROM rag_project_doc_text_units ORDER BY ordinal")
         .unwrap();
     statement
         .query_map([], |row| row.get::<_, String>(0))

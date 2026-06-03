@@ -170,7 +170,7 @@ fn project_doc_corpus_seed_maps_repo_module_logical_fields_to_physical_columns()
 }
 
 #[test]
-fn ingest_profiles_declare_payload_mappings_for_memory_and_project_doc() {
+fn ingest_profiles_declare_contract_payload_strategies_for_memory_and_project_doc() {
     let service = RagConfigService::new(
         SqliteRagRepository::connect(":memory:").expect("RAG repository should connect"),
         DefaultRagStrategyRegistry::default(),
@@ -180,28 +180,24 @@ fn ingest_profiles_declare_payload_mappings_for_memory_and_project_doc() {
         .get_profile("memory-card-ingest-v1")
         .expect("memory ingest profile should be readable");
     assert_eq!(
-        memory.config["payloadStrategyId"],
-        json!("RAG_JSON_TEXT_PAYLOAD_V1")
+        memory.config["stages"]["preparePayload"]["strategyId"],
+        json!("RAG_TEXT_CONTRACT_PAYLOAD_V1")
     );
     assert_eq!(
-        memory.config["payloadMapping"]["fields"]["version"]["path"],
-        json!("$.version")
-    );
-    assert_eq!(
-        memory.config["payloadMapping"]["fields"]["version"]["target"],
-        json!("version")
+        memory.config["sourceInputPolicy"]["supportedSourceTypes"],
+        json!(["MEMORY_CARD"])
     );
 
     let project_doc = service
         .get_profile("project-doc-ingest-v1")
         .expect("project-doc ingest profile should be readable");
     assert_eq!(
-        project_doc.config["payloadMapping"]["fields"]["repoCode"]["target"],
-        json!("repo_code")
+        project_doc.config["stages"]["preparePayload"]["strategyId"],
+        json!("RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1")
     );
     assert_eq!(
-        project_doc.config["payloadMapping"]["computedFields"]["bodyHash"]["compute"],
-        json!("stableHash")
+        project_doc.config["stages"]["parseDocument"]["config"]["format"],
+        json!("MARKDOWN")
     );
 }
 
@@ -230,6 +226,28 @@ fn rag_service_lists_and_reads_profile_configuration_without_sqlite_details() {
     assert_eq!(profile.primary_corpus_id.as_deref(), Some("memory-card"));
     assert_eq!(profile.corpus_ids, vec!["memory-card".to_string()]);
     assert_eq!(profile.degrade_policy, "SKIP_VECTOR_ON_UNAVAILABLE");
+    assert_eq!(
+        profile.config["routes"][0]["retriever"],
+        json!("FULLTEXT_SQLITE_FTS5_SIMPLE_V1")
+    );
+    assert_eq!(
+        profile.config["routes"][1]["retriever"],
+        json!("VECTOR_SQLITE_VEC0_COSINE_V1")
+    );
+}
+
+#[test]
+fn skill_retrieval_profile_uses_same_extension_retrievers_as_memory() {
+    let service = RagConfigService::new(
+        SqliteRagRepository::connect(":memory:").expect("RAG repository should connect"),
+        DefaultRagStrategyRegistry::default(),
+    );
+
+    let profile = service
+        .get_profile("skill-related-v1")
+        .expect("skill retrieval profile should be readable");
+
+    assert_eq!(profile.primary_corpus_id.as_deref(), Some("skill"));
     assert_eq!(
         profile.config["routes"][0]["retriever"],
         json!("FULLTEXT_SQLITE_FTS5_SIMPLE_V1")
@@ -719,6 +737,11 @@ fn memory_corpus_record() -> RagCorpusRecord {
             ("sourceCode".to_string(), "source_code".to_string()),
             ("scopeType".to_string(), "scope_type".to_string()),
         ]),
+        source_field_mapping: BTreeMap::from([
+            ("sourceCode".to_string(), "source_code".to_string()),
+            ("scopeType".to_string(), "scope_type".to_string()),
+        ]),
+        text_unit_field_mapping: BTreeMap::new(),
         storage_binding: RagStorageBinding {
             layout: RagStorageLayout::EmbeddedSource,
             table: Some("rag_memory_text_units".to_string()),

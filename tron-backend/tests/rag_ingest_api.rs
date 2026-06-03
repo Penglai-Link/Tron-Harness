@@ -15,8 +15,7 @@ async fn ingest_api_validates_required_request_and_direct_target_scope() {
         "/api/v1/rag/ingest",
         Some(json!({
             "corpusId": "memory-card",
-            "ingestProfileId": "memory-card-ingest-v1",
-            "workspaceCode": "TRON_CORE"
+            "ingestProfileId": "memory-card-ingest-v1"
         })),
     )
     .await;
@@ -36,7 +35,6 @@ async fn ingest_api_validates_required_request_and_direct_target_scope() {
         Some(json!({
             "corpusId": "memory-card",
             "ingestProfileId": "memory-card-ingest-v1",
-            "workspaceCode": "TRON_CORE",
             "accessContext": {
                 "userCode": "USR-LARGE-ID",
                 "workspaceCode": "TRON_CORE"
@@ -45,10 +43,12 @@ async fn ingest_api_validates_required_request_and_direct_target_scope() {
                 "scopeType": "SPACE",
                 "scopeCode": "TRON_CORE"
             },
-            "sourceCode": "memory-rag-rule",
-            "sourceVersion": "v1",
-            "sourceType": "PLAIN_TEXT",
             "payload": {
+                "source": {
+                    "code": "memory-rag-rule",
+                    "version": "v1",
+                    "type": "MEMORY_CARD"
+                },
                 "title": "RAG citation rule",
                 "text": "Always cite source titles."
             }
@@ -62,6 +62,40 @@ async fn ingest_api_validates_required_request_and_direct_target_scope() {
         json!("RAG_INGEST_REQUEST_INVALID")
     );
 
+    let missing_access_workspace = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/ingest",
+        Some(json!({
+            "corpusId": "memory-card",
+            "ingestProfileId": "memory-card-ingest-v1",
+            "accessContext": {
+                "userCode": "USR-LARGE-ID",
+                "agentCode": "AGENT_CODEX"
+            },
+            "targetScope": {
+                "scopeType": "SPACE",
+                "scopeCode": "TRON_CORE"
+            },
+            "payload": {
+                "source": {
+                    "code": "memory-rag-rule",
+                    "version": "v1",
+                    "type": "MEMORY_CARD"
+                },
+                "title": "RAG citation rule",
+                "text": "Always cite source titles."
+            }
+        })),
+    )
+    .await;
+    assert_eq!(missing_access_workspace.status(), StatusCode::BAD_REQUEST);
+    let missing_access_workspace_json = response_json(missing_access_workspace).await;
+    assert_eq!(
+        missing_access_workspace_json["code"],
+        json!("RAG_INGEST_REQUEST_INVALID")
+    );
+
     let cross_user_scope = authenticated_request(
         &router,
         Method::POST,
@@ -69,7 +103,6 @@ async fn ingest_api_validates_required_request_and_direct_target_scope() {
         Some(json!({
             "corpusId": "memory-card",
             "ingestProfileId": "memory-card-ingest-v1",
-            "workspaceCode": "TRON_CORE",
             "accessContext": {
                 "userCode": "USR-LARGE-ID",
                 "agentCode": "AGENT_CODEX",
@@ -79,10 +112,12 @@ async fn ingest_api_validates_required_request_and_direct_target_scope() {
                 "scopeType": "USER",
                 "scopeCode": "OTHER-USER"
             },
-            "sourceCode": "memory-rag-rule",
-            "sourceVersion": "v1",
-            "sourceType": "PLAIN_TEXT",
             "payload": {
+                "source": {
+                    "code": "memory-rag-rule",
+                    "version": "v1",
+                    "type": "MEMORY_CARD"
+                },
                 "title": "RAG citation rule",
                 "text": "Always cite source titles."
             }
@@ -106,7 +141,6 @@ async fn ingest_api_requires_authenticated_workspace_access() {
         Some(json!({
             "corpusId": "project-doc",
             "ingestProfileId": "project-doc-ingest-v1",
-            "workspaceCode": "UNKNOWN_WORKSPACE",
             "accessContext": {
                 "userCode": "USR-LARGE-ID",
                 "agentCode": "AGENT_CODEX",
@@ -116,13 +150,17 @@ async fn ingest_api_requires_authenticated_workspace_access() {
                 "scopeType": "SPACE",
                 "scopeCode": "UNKNOWN_WORKSPACE"
             },
-            "sourceCode": "doc-rag-mvp",
-            "sourceVersion": "v1",
-            "sourceType": "PROJECT_DOC_REF",
             "payload": {
+                "source": {
+                    "code": "doc-rag-mvp",
+                    "version": "v1",
+                    "type": "PROJECT_DOC_REF"
+                },
                 "title": "RAG MVP",
-                "documentUri": "project-doc://UNKNOWN_WORKSPACE/docs/rag-mvp.md",
-                "format": "MARKDOWN"
+                "document": {
+                    "uri": "project-doc://UNKNOWN_WORKSPACE/docs/rag-mvp.md",
+                    "format": "MARKDOWN"
+                }
             }
         })),
     )

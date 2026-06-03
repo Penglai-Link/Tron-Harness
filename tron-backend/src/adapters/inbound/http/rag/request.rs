@@ -3,7 +3,8 @@ use serde_json::Value;
 
 use crate::application::rag::{
     RagDebugSourceRequest, RagIngestAccessContext, RagIngestRequest, RagIngestScope,
-    RagRetryIndexRequest, RagSearchContextRequest, RagSearchRequest, RagSearchTraceRequest,
+    RagIngestSource, RagRetryIndexRequest, RagSearchContextRequest, RagSearchRequest,
+    RagSearchTraceRequest,
 };
 
 #[derive(Debug, Deserialize)]
@@ -14,17 +15,9 @@ pub struct RagIngestHttpRequest {
     #[serde(default)]
     pub ingest_profile_id: Option<String>,
     #[serde(default)]
-    pub workspace_code: Option<String>,
-    #[serde(default)]
     pub access_context: Option<RagIngestAccessContextRequest>,
     #[serde(default)]
     pub target_scope: Option<RagIngestScopeRequest>,
-    #[serde(default)]
-    pub source_code: Option<String>,
-    #[serde(default)]
-    pub source_version: Option<String>,
-    #[serde(default)]
-    pub source_type: Option<String>,
     #[serde(default)]
     pub payload: Value,
 }
@@ -53,25 +46,43 @@ impl RagIngestHttpRequest {
     pub fn into_application(self) -> RagIngestRequest {
         let access_context = self.access_context.unwrap_or_default();
         let target_scope = self.target_scope.unwrap_or_default();
+        let source = ingest_source_from_payload(&self.payload);
+        let workspace_code = access_context.workspace_code.unwrap_or_default();
         RagIngestRequest {
             corpus_id: self.corpus_id.unwrap_or_default(),
             ingest_profile_id: self.ingest_profile_id.unwrap_or_default(),
-            workspace_code: self.workspace_code.unwrap_or_default(),
+            workspace_code: workspace_code.clone(),
             access_context: RagIngestAccessContext {
                 user_code: access_context.user_code.unwrap_or_default(),
                 agent_code: access_context.agent_code.unwrap_or_default(),
-                workspace_code: access_context.workspace_code.unwrap_or_default(),
+                workspace_code,
             },
             target_scope: RagIngestScope {
                 scope_type: target_scope.scope_type.unwrap_or_default(),
                 scope_code: target_scope.scope_code.unwrap_or_default(),
             },
-            source_code: self.source_code.unwrap_or_default(),
-            source_version: self.source_version.unwrap_or_default(),
-            source_type: self.source_type.unwrap_or_default(),
+            source,
             payload: self.payload,
         }
     }
+}
+
+fn ingest_source_from_payload(payload: &Value) -> RagIngestSource {
+    let source = payload.get("source");
+    RagIngestSource {
+        code: payload_source_string(source, "code"),
+        version: payload_source_string(source, "version"),
+        source_type: payload_source_string(source, "type"),
+    }
+}
+
+fn payload_source_string(source: Option<&Value>, field: &str) -> String {
+    source
+        .and_then(|source| source.get(field))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_string()
 }
 
 impl Default for RagIngestAccessContextRequest {
@@ -98,8 +109,6 @@ impl Default for RagIngestScopeRequest {
 pub struct RagSearchHttpRequest {
     #[serde(default)]
     pub profile_id: Option<String>,
-    #[serde(default)]
-    pub workspace_code: Option<String>,
     #[serde(default)]
     pub query: Option<String>,
     #[serde(default)]
@@ -135,14 +144,15 @@ impl RagSearchHttpRequest {
         let access_context = self.access_context.unwrap_or_default();
         let context = self.context.unwrap_or_default();
         let trace = self.trace.unwrap_or_default();
+        let workspace_code = access_context.workspace_code.unwrap_or_default();
         RagSearchRequest {
             profile_id: self.profile_id.unwrap_or_default(),
-            workspace_code: self.workspace_code.unwrap_or_default(),
+            workspace_code: workspace_code.clone(),
             query: self.query.unwrap_or_default(),
             access_context: RagIngestAccessContext {
                 user_code: access_context.user_code.unwrap_or_default(),
                 agent_code: access_context.agent_code.unwrap_or_default(),
-                workspace_code: access_context.workspace_code.unwrap_or_default(),
+                workspace_code,
             },
             filters: self.filters,
             limit: self.limit.unwrap_or(10),

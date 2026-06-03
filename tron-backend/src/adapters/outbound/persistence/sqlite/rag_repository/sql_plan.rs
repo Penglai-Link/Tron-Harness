@@ -16,6 +16,8 @@ pub(crate) struct SqliteRagCorpusPlan {
     pub source_columns: BTreeSet<String>,
     pub text_unit_columns: BTreeSet<String>,
     pub field_mapping: BTreeMap<String, String>,
+    pub source_field_mapping: BTreeMap<String, String>,
+    pub text_unit_field_mapping: BTreeMap<String, String>,
     pub filter_columns: BTreeMap<String, SqliteRagFilterColumn>,
     pub source_metadata_columns: Vec<SqliteRagMetadataColumn>,
     pub source_status_column: String,
@@ -175,6 +177,8 @@ pub(crate) fn compile_sql_corpus_plan(
         ),
         text_unit_unique_key,
         field_mapping: corpus.field_mapping.clone(),
+        source_field_mapping: corpus.source_field_mapping.clone(),
+        text_unit_field_mapping: corpus.text_unit_field_mapping.clone(),
         source_columns,
         text_unit_columns,
         filter_columns,
@@ -233,7 +237,12 @@ fn compile_source_metadata_columns(
     filter_columns: &BTreeMap<String, SqliteRagFilterColumn>,
 ) -> Vec<SqliteRagMetadataColumn> {
     let mut metadata_columns = BTreeMap::<String, SqliteRagMetadataColumn>::new();
-    for (logical_name, column) in &corpus.field_mapping {
+    let source_mapping = if corpus.source_field_mapping.is_empty() {
+        &corpus.field_mapping
+    } else {
+        &corpus.source_field_mapping
+    };
+    for (logical_name, column) in source_mapping {
         if source_columns.contains(column) && !is_common_identity_field(logical_name) {
             let value_type = filter_columns
                 .get(logical_name)

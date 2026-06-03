@@ -1,4 +1,5 @@
 mod diagnostics;
+mod field_mapping;
 mod index_schema;
 mod indexes;
 mod ingest;
@@ -25,6 +26,7 @@ use crate::{
     shared::sqlite_extensions::default_sqlite_extension_context,
 };
 
+use self::field_mapping::parse_field_mapping;
 use super::migrations::{
     RAG_DOMAIN_FIELDS_MIGRATION, RAG_FOUNDATION_MIGRATION, RAG_INGEST_PROFILES_MIGRATION,
     RAG_MEMORY_EMBEDDED_SOURCE_MIGRATION, RAG_OPTIONAL_MODEL_CODES_MIGRATION,
@@ -78,76 +80,6 @@ impl SqliteRagRepository {
     }
 
     pub fn apply_rag_domain_fields_migration(&self) -> Result<(), RagError> {
-        self.ensure_columns(
-            "rag_memory_sources",
-            &[
-                ("memory_type", "memory_type TEXT"),
-                ("memory_status", "memory_status TEXT"),
-                ("review_status", "review_status TEXT"),
-                ("version", "version TEXT"),
-                ("superseded_by", "superseded_by TEXT"),
-                ("conflict_group", "conflict_group TEXT"),
-                ("duplicate_group", "duplicate_group TEXT"),
-                ("injectable", "injectable INTEGER NOT NULL DEFAULT 1"),
-                ("importance_score", "importance_score INTEGER"),
-                ("confidence_score", "confidence_score INTEGER"),
-                ("quality_score", "quality_score INTEGER"),
-                ("pin_level", "pin_level INTEGER NOT NULL DEFAULT 0"),
-                ("expires_at", "expires_at INTEGER"),
-                ("derived_source_type", "derived_source_type TEXT"),
-                ("derived_source_code", "derived_source_code TEXT"),
-            ],
-        )?;
-        self.ensure_columns(
-            "rag_memory_text_units",
-            &[
-                (
-                    "source_type",
-                    "source_type TEXT NOT NULL DEFAULT 'PLAIN_TEXT'",
-                ),
-                (
-                    "source_status",
-                    "source_status TEXT NOT NULL DEFAULT 'PENDING'",
-                ),
-                ("title", "title TEXT"),
-                ("source_content_hash", "source_content_hash TEXT"),
-                (
-                    "source_metadata",
-                    "source_metadata TEXT NOT NULL DEFAULT '{}'",
-                ),
-                (
-                    "source_created_at",
-                    "source_created_at INTEGER NOT NULL DEFAULT 0",
-                ),
-                (
-                    "source_updated_at",
-                    "source_updated_at INTEGER NOT NULL DEFAULT 0",
-                ),
-                ("memory_type", "memory_type TEXT"),
-                ("memory_status", "memory_status TEXT"),
-                ("review_status", "review_status TEXT"),
-                ("version", "version TEXT"),
-                ("superseded_by", "superseded_by TEXT"),
-                ("conflict_group", "conflict_group TEXT"),
-                ("duplicate_group", "duplicate_group TEXT"),
-                ("injectable", "injectable INTEGER NOT NULL DEFAULT 1"),
-                ("importance_score", "importance_score INTEGER"),
-                ("confidence_score", "confidence_score INTEGER"),
-                ("quality_score", "quality_score INTEGER"),
-                ("pin_level", "pin_level INTEGER NOT NULL DEFAULT 0"),
-                ("expires_at", "expires_at INTEGER"),
-                ("derived_source_type", "derived_source_type TEXT"),
-                ("derived_source_code", "derived_source_code TEXT"),
-            ],
-        )?;
-        self.ensure_columns(
-            "rag_project_doc_sources",
-            &[
-                ("repo_code", "repo_code TEXT"),
-                ("module_code", "module_code TEXT"),
-                ("module_name", "module_name TEXT"),
-            ],
-        )?;
         self.connection
             .execute_batch(RAG_DOMAIN_FIELDS_MIGRATION)
             .map_err(storage_error)
@@ -223,23 +155,6 @@ impl SqliteRagRepository {
             .map_err(storage_error)?
             .collect::<Result<BTreeSet<_>, _>>()
             .map_err(storage_error)
-    }
-
-    fn ensure_columns(&self, table_name: &str, columns: &[(&str, &str)]) -> Result<(), RagError> {
-        for (column_name, column_definition) in columns {
-            if !self.column_exists(table_name, column_name)? {
-                self.connection
-                    .execute_batch(&format!(
-                        "ALTER TABLE {table_name} ADD COLUMN {column_definition};"
-                    ))
-                    .map_err(storage_error)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn column_exists(&self, table_name: &str, column_name: &str) -> Result<bool, RagError> {
-        Ok(self.table_columns(table_name)?.contains(column_name))
     }
 
     pub fn seeded_corpus_statuses(&self) -> Result<BTreeMap<String, String>, RagError> {
@@ -399,6 +314,8 @@ fn map_corpus_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RagCorpusRecord> 
     let field_mapping_json = row.get::<_, String>(6)?;
     let storage_binding_json = row.get::<_, String>(7)?;
 
+    let (field_mapping, source_field_mapping, text_unit_field_mapping) =
+        parse_field_mapping(&field_mapping_json)?;
     Ok(RagCorpusRecord {
         corpus_id: row.get(0)?,
         display_name: row.get(1)?,
@@ -406,7 +323,9 @@ fn map_corpus_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<RagCorpusRecord> 
         description: row.get(3)?,
         capabilities: parse_json_value(&capabilities_json)?,
         filter_schema: parse_json_value(&filter_schema_json)?,
-        field_mapping: parse_json_value::<BTreeMap<String, String>>(&field_mapping_json)?,
+        field_mapping,
+        source_field_mapping,
+        text_unit_field_mapping,
         storage_binding: parse_storage_binding(&storage_binding_json)?,
     })
 }
@@ -557,18 +476,17 @@ mod tests {
         assert_eq!(
             ingest_profile
                 .config
-                .get("payloadStrategyId")
+                .get("stages")
+                .and_then(|stages| stages.get("preparePayload"))
+                .and_then(|stage| stage.get("strategyId"))
                 .and_then(serde_json::Value::as_str),
-            Some("RAG_JSON_TEXT_PAYLOAD_V1")
+            Some("RAG_TEXT_CONTRACT_PAYLOAD_V1")
         );
         assert_eq!(
-            ingest_profile
-                .config
-                .get("payloadMapping")
-                .and_then(|mapping| mapping.get("fields"))
-                .and_then(|fields| fields.get("skillName"))
-                .and_then(|field| field.get("target"))
-                .and_then(serde_json::Value::as_str),
+            corpus
+                .source_field_mapping
+                .get("skillName")
+                .map(String::as_str),
             Some("skill_name")
         );
         assert!(

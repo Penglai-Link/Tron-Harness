@@ -10,14 +10,14 @@ impl RagStrategyRegistry for DefaultRagStrategyRegistry {
             &[
                 "INGEST_CHUNK",
                 "RAG_VALIDATE_SOURCE",
+                "RAG_TEXT_CONTRACT_PAYLOAD_V1",
+                "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1",
                 "RAG_SPLIT_TEXT",
                 "RAG_FULLTEXT_INDEX",
                 "RAG_VECTOR_INDEX",
                 "RAG_PERSIST_SOURCE",
-                "PROJECT_DOC_VALIDATE_SOURCE_V1",
-                "PROJECT_DOC_MARKDOWN_RESOLVE_SOURCE_V1",
-                "PROJECT_DOC_MARKDOWN_PARSE_DOCUMENT_V1",
-                "PROJECT_DOC_MARKDOWN_SPLIT_TEXT_V1",
+                "PROJECT_DOC_RESOLVE_SOURCE",
+                "RAG_PARSE_MARKDOWN_DOCUMENT",
             ],
         )
     }
@@ -26,8 +26,8 @@ impl RagStrategyRegistry for DefaultRagStrategyRegistry {
         default_registration(
             strategy_id,
             &[
-                "RAG_JSON_TEXT_PAYLOAD_V1",
-                "PROJECT_DOC_MARKDOWN_REF_PAYLOAD_V1",
+                "RAG_TEXT_CONTRACT_PAYLOAD_V1",
+                "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1",
             ],
         )
     }

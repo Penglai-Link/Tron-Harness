@@ -14,8 +14,9 @@ use tron_backend::{
         DefaultRagStrategyRegistry, RagDebugSourceRequest, RagDiagnosticsService,
         RagDocumentSourceCall, RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult,
         RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRequest, RagIngestScope,
-        RagIngestService, RagResolvedDocument, RagRetryIndexRequest, RagRetryIndexService,
-        RagSearchContextRequest, RagSearchRequest, RagSearchService, RagSearchTraceRequest,
+        RagIngestService, RagIngestSource, RagResolvedDocument, RagRetryIndexRequest,
+        RagRetryIndexService, RagSearchContextRequest, RagSearchRequest, RagSearchService,
+        RagSearchTraceRequest,
     },
     shared::{
         event_bus::{BusRouteClass, EventBusConfig, EventBusRuntimeBuilder, RecordingEventSink},
@@ -226,7 +227,7 @@ async fn rag_ingest_events_use_safe_payload_and_publish_failure_is_non_blocking(
 
     service.ingest(ingest_request()).await.unwrap();
 
-    assert!(sink.wait_for_len(7, Duration::from_secs(2)));
+    assert!(sink.wait_for_len(8, Duration::from_secs(2)));
     let events = sink.events();
     let names = events
         .iter()
@@ -317,17 +318,26 @@ fn ingest_request() -> RagIngestRequest {
             scope_type: "USER".into(),
             scope_code: "USR-AUTH-0001".into(),
         },
-        source_code: "memory-ingest-events".into(),
-        source_version: "v1".into(),
-        source_type: "PLAIN_TEXT".into(),
+        source: RagIngestSource {
+            code: "memory-ingest-events".into(),
+            version: "v1".into(),
+            source_type: "MEMORY_CARD".into(),
+        },
         payload: json!({
+            "source": {
+                "code": "memory-ingest-events",
+                "version": "v1",
+                "type": "MEMORY_CARD"
+            },
             "title": "RAG citation rule",
             "text": "Always cite sources.",
-            "version": "v1",
-            "memoryType": "RULE",
-            "memoryStatus": "ACTIVE",
-            "reviewStatus": "APPROVED",
-            "importanceScore": 80
+            "domainFields": {
+                "version": "v1",
+                "memoryType": "RULE",
+                "memoryStatus": "ACTIVE",
+                "reviewStatus": "APPROVED",
+                "importanceScore": 80
+            }
         }),
     }
 }

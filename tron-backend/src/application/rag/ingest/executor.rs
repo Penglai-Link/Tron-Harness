@@ -34,11 +34,12 @@ where
         for stage_id in &compiled.stage_order {
             match stage_id.as_str() {
                 "validateSource" => self.execute_validate_source_stage(request, bundle)?,
+                "preparePayload" => self.execute_prepare_payload_stage(request, bundle)?,
                 "resolveSource" => {
                     self.execute_resolve_source_stage(request, compiled, bundle)
                         .await?
                 }
-                "parseDocument" => self.execute_parse_document_stage(request, bundle)?,
+                "parseDocument" => self.execute_parse_document_stage(request, compiled, bundle)?,
                 "splitText" => self.execute_split_text_stage(request, compiled, bundle)?,
                 "fulltextIndex" => self.execute_fulltext_index_stage(request, bundle)?,
                 "vectorIndex" => {
@@ -54,20 +55,36 @@ where
         Ok(bundle.persist_result()?.clone())
     }
 
+    fn execute_prepare_payload_stage(
+        &self,
+        request: &RagIngestRequest,
+        bundle: &mut ArtifactBundle,
+    ) -> Result<(), RagError> {
+        bundle.validated_source_payload()?;
+        publish_ingest_stage_event(
+            &self.event_bus,
+            "preparePayload",
+            BusOutcome::Completed,
+            1,
+            request,
+        );
+        Ok(())
+    }
+
     fn execute_validate_source_stage(
         &self,
         request: &RagIngestRequest,
         bundle: &mut ArtifactBundle,
     ) -> Result<(), RagError> {
         let payload = bundle.raw_source_payload()?.clone();
-        if request.source_type == "PROJECT_DOC_REF" {
+        if request.source.source_type == "PROJECT_DOC_REF" {
             validate_project_doc_ref_request(request)?;
         }
         bundle.append(
             request,
             ARTIFACT_VALIDATED_SOURCE,
             RagArtifactPayload::ValidatedSource(payload),
-            json!({ "sourceType": request.source_type }),
+            json!({ "sourceType": request.source.source_type }),
         );
         publish_ingest_stage_event(
             &self.event_bus,
@@ -87,7 +104,7 @@ where
     ) -> Result<(), RagError> {
         bundle.validated_source_payload()?;
         validate_project_doc_ref_request(request)?;
-        let document_uri = required_payload_string(&request.payload, "documentUri")?;
+        let document_uri = document_uri(request, compiled)?;
         let resolved = self
             .embedding_runtime
             .resolve_project_doc_markdown(RagDocumentSourceCall {
@@ -120,8 +137,13 @@ where
     fn execute_parse_document_stage(
         &self,
         request: &RagIngestRequest,
+        compiled: &CompiledRagIngestProfile,
         bundle: &mut ArtifactBundle,
     ) -> Result<(), RagError> {
+        let format = document_format(request, compiled)?;
+        if format != compiled.document_format {
+            return Err(RagError::DocumentFormatUnsupported);
+        }
         let resolved = bundle.resolved_document()?.clone();
         if resolved.content_text.trim().is_empty() {
             return Err(RagError::DocumentParseFailed);
@@ -130,7 +152,7 @@ where
             request,
             ARTIFACT_PARSED_DOCUMENT,
             RagArtifactPayload::ParsedDocument(resolved),
-            json!({ "format": "MARKDOWN" }),
+            json!({ "format": format }),
         );
         publish_ingest_stage_event(
             &self.event_bus,
@@ -284,13 +306,14 @@ where
         self.repository.persist_ingest(RagPersistIngestCommand {
             corpus_id: request.corpus_id.clone(),
             profile_id: compiled.profile_id.clone(),
-            source_code: request.source_code.clone(),
-            source_version: request.source_version.clone(),
-            source_type: request.source_type.clone(),
+            source_code: request.source.code.clone(),
+            source_version: request.source.version.clone(),
+            source_type: request.source.source_type.clone(),
             scope: request.target_scope.clone(),
             source_status: source_status.into(),
             title: prepared.title,
             content_hash: prepared.content_hash,
+            body_hash: prepared.body_hash,
             metadata: prepared.metadata,
             domain_fields: prepared.domain_fields,
             text_units: vector_result.text_units,
@@ -329,7 +352,7 @@ where
 }
 
 fn validate_project_doc_ref_request(request: &RagIngestRequest) -> Result<(), RagError> {
-    if request.source_type != "PROJECT_DOC_REF" {
+    if request.source.source_type != "PROJECT_DOC_REF" {
         return Err(RagError::IngestRequestInvalid);
     }
     if request
@@ -341,26 +364,58 @@ fn validate_project_doc_ref_request(request: &RagIngestRequest) -> Result<(), Ra
     {
         return Err(RagError::IngestRequestInvalid);
     }
-    let format = request
-        .payload
-        .get("format")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .ok_or(RagError::DocumentFormatUnsupported)?;
-    if format != "MARKDOWN" {
+    if document_payload_string(&request.payload, "format")
+        .or_else(|| payload_string(&request.payload, "format"))
+        .is_none()
+    {
         return Err(RagError::DocumentFormatUnsupported);
     }
-    required_payload_string(&request.payload, "documentUri")?;
+    if document_payload_string(&request.payload, "uri")
+        .or_else(|| payload_string(&request.payload, "documentUri"))
+        .is_none()
+    {
+        return Err(RagError::IngestRequestInvalid);
+    }
     Ok(())
 }
 
-fn required_payload_string<'a>(payload: &'a Value, field: &str) -> Result<&'a str, RagError> {
+fn document_uri<'a>(
+    request: &'a RagIngestRequest,
+    compiled: &CompiledRagIngestProfile,
+) -> Result<&'a str, RagError> {
+    if compiled.payload_strategy_id == "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1" {
+        return document_payload_string(&request.payload, "uri")
+            .ok_or(RagError::IngestRequestInvalid);
+    }
+    payload_string(&request.payload, "documentUri").ok_or(RagError::IngestRequestInvalid)
+}
+
+fn document_format<'a>(
+    request: &'a RagIngestRequest,
+    compiled: &CompiledRagIngestProfile,
+) -> Result<&'a str, RagError> {
+    if compiled.payload_strategy_id == "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1" {
+        return document_payload_string(&request.payload, "format")
+            .ok_or(RagError::DocumentFormatUnsupported);
+    }
+    payload_string(&request.payload, "format").ok_or(RagError::DocumentFormatUnsupported)
+}
+
+fn payload_string<'a>(payload: &'a Value, field: &str) -> Option<&'a str> {
     payload
         .get(field)
         .and_then(Value::as_str)
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or(RagError::IngestRequestInvalid)
+}
+
+fn document_payload_string<'a>(payload: &'a Value, field: &str) -> Option<&'a str> {
+    payload
+        .get("document")
+        .and_then(|document| document.get(field))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
 }
 
 fn allows_vector_degrade(degrade_policy: &str) -> bool {

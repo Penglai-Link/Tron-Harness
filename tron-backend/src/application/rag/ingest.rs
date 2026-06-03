@@ -46,6 +46,7 @@ pub struct RagPersistIngestCommand {
     pub source_status: String,
     pub title: Option<String>,
     pub content_hash: String,
+    pub body_hash: Option<String>,
     pub metadata: Value,
     pub domain_fields: BTreeMap<String, Value>,
     pub text_units: Vec<RagTextUnitWrite>,
@@ -58,7 +59,6 @@ pub struct RagPersistIngestCommand {
 #[derive(Debug, Clone, PartialEq)]
 pub struct RagTextUnitWrite {
     pub text_unit_code: String,
-    pub document_code: Option<String>,
     pub unit_type: String,
     pub text: String,
     pub search_text: String,
@@ -125,10 +125,15 @@ pub struct RagIngestRequest {
     pub workspace_code: String,
     pub access_context: RagIngestAccessContext,
     pub target_scope: RagIngestScope,
-    pub source_code: String,
-    pub source_version: String,
-    pub source_type: String,
+    pub source: RagIngestSource,
     pub payload: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RagIngestSource {
+    pub code: String,
+    pub version: String,
+    pub source_type: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -243,8 +248,8 @@ where
         Ok(RagIngestResult {
             corpus_id: request.corpus_id,
             profile_id: compiled.profile_id,
-            source_code: request.source_code,
-            source_version: request.source_version,
+            source_code: request.source.code,
+            source_version: request.source.version,
             status: persisted.source_status,
             text_unit_count: persisted.text_unit_count,
             fulltext_status: persisted.fulltext_status,
@@ -279,8 +284,8 @@ fn publish_ingest_event(
             ("workspace_code", request.workspace_code.clone()),
             ("corpus_id", request.corpus_id.clone()),
             ("profile_id", request.ingest_profile_id.clone()),
-            ("source_code", request.source_code.clone()),
-            ("source_version", request.source_version.clone()),
+            ("source_code", request.source.code.clone()),
+            ("source_version", request.source.version.clone()),
             ("scope_type", request.target_scope.scope_type.clone()),
             ("scope_code", request.target_scope.scope_code.clone()),
             ("status", status.to_string()),
@@ -302,8 +307,8 @@ fn publish_ingest_stage_event(
         &[
             ("workspace_code", request.workspace_code.clone()),
             ("corpus_id", request.corpus_id.clone()),
-            ("source_code", request.source_code.clone()),
-            ("source_version", request.source_version.clone()),
+            ("source_code", request.source.code.clone()),
+            ("source_version", request.source.version.clone()),
             ("stage_id", stage_id.to_string()),
             ("count", count.to_string()),
         ],
@@ -320,9 +325,9 @@ fn validate_ingest_request(request: &RagIngestRequest) -> Result<(), RagError> {
         request.access_context.workspace_code.as_str(),
         request.target_scope.scope_type.as_str(),
         request.target_scope.scope_code.as_str(),
-        request.source_code.as_str(),
-        request.source_version.as_str(),
-        request.source_type.as_str(),
+        request.source.code.as_str(),
+        request.source.version.as_str(),
+        request.source.source_type.as_str(),
     ] {
         if value.trim().is_empty() {
             return Err(RagError::IngestRequestInvalid);
@@ -331,7 +336,38 @@ fn validate_ingest_request(request: &RagIngestRequest) -> Result<(), RagError> {
     if request.payload.as_object().is_none() {
         return Err(RagError::IngestRequestInvalid);
     }
+    validate_payload_source(request)?;
     Ok(())
+}
+
+fn validate_payload_source(request: &RagIngestRequest) -> Result<(), RagError> {
+    let source = request
+        .payload
+        .get("source")
+        .and_then(Value::as_object)
+        .ok_or(RagError::IngestRequestInvalid)?;
+    let source_code = source_string(source, "code")?;
+    let source_version = source_string(source, "version")?;
+    let source_type = source_string(source, "type")?;
+    if source_code != request.source.code
+        || source_version != request.source.version
+        || source_type != request.source.source_type
+    {
+        return Err(RagError::IngestRequestInvalid);
+    }
+    Ok(())
+}
+
+fn source_string<'a>(
+    source: &'a serde_json::Map<String, Value>,
+    field: &str,
+) -> Result<&'a str, RagError> {
+    source
+        .get(field)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or(RagError::IngestRequestInvalid)
 }
 
 pub fn validate_direct_scope(

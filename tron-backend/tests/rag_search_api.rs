@@ -26,8 +26,7 @@ async fn search_api_validates_request_auth_workspace_and_scope() {
         Method::POST,
         "/api/v1/rag/search",
         Some(json!({
-            "profileId": "memory-related-v1",
-            "workspaceCode": "TRON_CORE"
+            "profileId": "memory-related-v1"
         })),
     )
     .await;
@@ -51,13 +50,29 @@ async fn search_api_validates_request_auth_workspace_and_scope() {
     let cross_user_json = response_json(cross_user_scope).await;
     assert_eq!(cross_user_json["code"], json!("RAG_SEARCH_SCOPE_INVALID"));
 
+    let missing_access_workspace = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/search",
+        Some(search_payload(json!({
+            "userCode": "USR-AUTH-0001",
+            "agentCode": "AGENT_CODEX"
+        }))),
+    )
+    .await;
+    assert_eq!(missing_access_workspace.status(), StatusCode::BAD_REQUEST);
+    let missing_access_workspace_json = response_json(missing_access_workspace).await;
+    assert_eq!(
+        missing_access_workspace_json["code"],
+        json!("RAG_SEARCH_REQUEST_INVALID")
+    );
+
     let unknown_workspace = authenticated_request(
         &router,
         Method::POST,
         "/api/v1/rag/search",
         Some(json!({
             "profileId": "memory-related-v1",
-            "workspaceCode": "UNKNOWN_WORKSPACE",
             "query": "cite sources",
             "accessContext": {
                 "userCode": "USR-AUTH-0001",
@@ -125,7 +140,6 @@ async fn search_api_uses_retrieval_specific_missing_profile_error() {
         "/api/v1/rag/search",
         Some(json!({
             "profileId": "missing-retrieval-profile",
-            "workspaceCode": "TRON_CORE",
             "query": "cite sources",
             "accessContext": {
                 "userCode": "USR-AUTH-0001",
@@ -156,7 +170,6 @@ fn app_with_database(database_url: &str) -> axum::Router {
 fn search_payload(access_context: serde_json::Value) -> serde_json::Value {
     json!({
         "profileId": "memory-related-v1",
-        "workspaceCode": "TRON_CORE",
         "query": "cite sources",
         "accessContext": access_context,
         "filters": { "memoryType": "RULE" },
@@ -178,7 +191,7 @@ fn seed_search_fixture(database_url: &str) {
                 unit_type, text, heading_path, ordinal, token_count,
                 content_hash, status, metadata, created_at, updated_at
             )
-            VALUES (?1, ?2, 'v1', 'PLAIN_TEXT', 'SPACE', 'TRON_CORE',
+            VALUES (?1, ?2, 'v1', 'MEMORY_CARD', 'SPACE', 'TRON_CORE',
                 'ACTIVE', 'API memory rule', 'hash', '{}', 1, 1, 'RULE', 'ACTIVE', 'APPROVED', 'v1', 1,
                 'LEAF',
                 'Always cite sources in API answers.',
