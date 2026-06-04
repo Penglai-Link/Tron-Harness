@@ -5,6 +5,7 @@
 - feature: @ref:spec/feature-spec.md
 - acceptance: @ref:spec/acceptance.md
 - test_plan: @ref:spec/test-plan.md
+- feature_evolution: @ref:orchestration/feature-evolution-log.md
 - frontend_task: @ref:tasks/frontend-task.md
 - backend_task: @ref:tasks/backend-task.md
 - worktree_plan: @ref:orchestration/worktree-plan.md
@@ -23,4 +24,4 @@
 ## Current Status
 
 - status: implementation_verified
-- last_updated: 2026-05-28
+- last_updated: 2026-06-04

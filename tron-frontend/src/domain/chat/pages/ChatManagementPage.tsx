@@ -528,6 +528,32 @@ function truncateLabel(value: string, maxLength = 64) {
   return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
 }
 
+function reasoningPreviewLabel(value: string, maxLength = 168) {
+  return truncateLabel(value.replace(/[#>*_`~-]+/g, " "), maxLength);
+}
+
+function reasoningFirstClause(value: string) {
+  const normalized = value
+    .replace(/[#>*_`~-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) return "";
+  const stripped = normalized
+    .replace(/^the user (?:wants|asked|is asking)[^.?!]*[.?!]\s*/i, "")
+    .replace(/^i should\s+/i, "")
+    .replace(/^i need to\s+/i, "")
+    .replace(/^let me\s+/i, "");
+  const firstClause = stripped.split(/(?<=[.?!])(?:\s+|(?=[A-Z]))/)[0]?.trim() ?? "";
+  return firstClause || normalized;
+}
+
+function appendReasoningDelta(content: string, delta: string) {
+  if (!content) return delta;
+  if (!delta) return content;
+  if (/\s$/.test(content) || /^[\s.,;:!?)]/.test(delta)) return `${content}${delta}`;
+  return `${content} ${delta}`;
+}
+
 const toolTargetKeys = ["command", "cmd", "file", "fileName", "filePath", "path", "target", "query", "pattern", "url", "uri"];
 
 function valueAtKnownKey(value: unknown, depth = 0): string {
@@ -565,8 +591,25 @@ function toolActionLabel(toolName: string, args: unknown) {
 }
 
 function toolSummaryLabel(toolName: string, args: unknown) {
-  const target = valueAtKnownKey(args) || toolName;
-  return `${toolActionLabel(toolName, args)} ${truncateLabel(target, 72)}`;
+  const target = valueAtKnownKey(args);
+  const title = `${toolActionLabel(toolName, args)} ${toolName}`;
+  if (!target || target === toolName) return title;
+  return `${title} [${truncateLabel(target, 48)}]`;
+}
+
+function deriveReasoningPreview(detail: string, toolCards: ToolWorkCard[]) {
+  const clause = reasoningFirstClause(detail);
+  const toolCount = toolCards.filter((toolCard) => toolCard.started).length;
+  if (!toolCount) return reasoningPreviewLabel(clause || detail, 120);
+  const summary = clause
+    ? `${clause} Used ${toolCount} ${toolCount === 1 ? "tool" : "tools"}.`
+    : `Used ${toolCount} ${toolCount === 1 ? "tool" : "tools"} before replying.`;
+  return truncateLabel(summary, 120);
+}
+
+function isStructuredWorkEvent(event: ChatAguiStreamEvent) {
+  const type = (event.type ?? "").toUpperCase();
+  return type.startsWith("REASONING") || type.startsWith("TOOL_CALL") || type === "ACTIVITY_DELTA";
 }
 
 function activityLines(event: TranscriptAguiEvent) {
@@ -593,6 +636,7 @@ interface ReasoningWorkCard {
   firstMillis: number;
   id: string;
   runCode: string;
+  toolCards: ToolWorkCard[];
 }
 
 interface ToolWorkCard {
@@ -601,6 +645,7 @@ interface ToolWorkCard {
   firstMillis: number;
   id: string;
   logs: string[];
+  parentReasoningId: string | null;
   result: string;
   runCode: string;
   started: boolean;
@@ -613,39 +658,96 @@ type AguiUserWorkCard =
   | { kind: "tool"; value: ToolWorkCard };
 
 function reasoningCardKey(event: TranscriptAguiEvent) {
-  const runCode = aguiEventRunCode(event);
-  return `${runCode}:reasoning`;
+  return `${aguiEventRunCode(event)}:reasoning`;
 }
 
-function ensureReasoningCard(cards: Map<string, ReasoningWorkCard>, event: TranscriptAguiEvent) {
-  const key = reasoningCardKey(event);
-  const existing = cards.get(key);
-  if (existing) return existing;
+function createReasoningCard(
+  cards: Map<string, ReasoningWorkCard>,
+  activeCardIdsByRun: Map<string, string>,
+  latestCardIdsByRun: Map<string, string>,
+  sequenceByRun: Map<string, number>,
+  event: TranscriptAguiEvent,
+) {
+  const runCode = aguiEventRunCode(event);
+  const sequence = (sequenceByRun.get(runCode) ?? 0) + 1;
+  sequenceByRun.set(runCode, sequence);
+  const key = `${reasoningCardKey(event)}:${sequence}`;
   const card = {
     content: "",
     ended: false,
     endMillis: null,
     firstMillis: aguiEventMillis(event) ?? Date.now(),
     id: key,
-    runCode: aguiEventRunCode(event),
+    runCode,
+    toolCards: [],
   };
   cards.set(key, card);
+  activeCardIdsByRun.set(runCode, key);
+  latestCardIdsByRun.set(runCode, key);
   return card;
 }
 
-function ensureToolCard(cards: Map<string, ToolWorkCard>, event: TranscriptAguiEvent) {
+function activeReasoningCard(
+  cards: Map<string, ReasoningWorkCard>,
+  activeCardIdsByRun: Map<string, string>,
+  event: TranscriptAguiEvent,
+) {
+  const activeCardId = activeCardIdsByRun.get(aguiEventRunCode(event));
+  if (!activeCardId) return null;
+  return cards.get(activeCardId) ?? null;
+}
+
+function ensureReasoningCard(
+  cards: Map<string, ReasoningWorkCard>,
+  activeCardIdsByRun: Map<string, string>,
+  latestCardIdsByRun: Map<string, string>,
+  sequenceByRun: Map<string, number>,
+  event: TranscriptAguiEvent,
+  options?: { forceNew?: boolean },
+) {
+  if (!options?.forceNew) {
+    const existing = activeReasoningCard(cards, activeCardIdsByRun, event);
+    if (existing) return existing;
+  }
+  return createReasoningCard(cards, activeCardIdsByRun, latestCardIdsByRun, sequenceByRun, event);
+}
+
+function endReasoningCard(
+  cards: Map<string, ReasoningWorkCard>,
+  activeCardIdsByRun: Map<string, string>,
+  latestCardIdsByRun: Map<string, string>,
+  sequenceByRun: Map<string, number>,
+  event: TranscriptAguiEvent,
+) {
+  const card = ensureReasoningCard(cards, activeCardIdsByRun, latestCardIdsByRun, sequenceByRun, event);
+  card.ended = true;
+  card.endMillis = aguiEventMillis(event) ?? card.endMillis;
+  if (aguiEventType(event).toUpperCase() === "REASONING_END") {
+    activeCardIdsByRun.delete(aguiEventRunCode(event));
+  }
+  return card;
+}
+
+function ensureToolCard(
+  cards: Map<string, ToolWorkCard>,
+  reasoningCards: Map<string, ReasoningWorkCard>,
+  latestReasoningCardIdsByRun: Map<string, string>,
+  event: TranscriptAguiEvent,
+) {
   const toolCallId = aguiEventToolCallId(event);
   if (!toolCallId) return null;
   const key = `${aguiEventRunCode(event)}:${toolCallId}`;
   const existing = cards.get(key);
   if (existing) return existing;
   const toolName = aguiEventToolName(event);
+  const parentReasoningId = latestReasoningCardIdsByRun.get(aguiEventRunCode(event)) ?? null;
   const card = {
     args: aguiEventToolArgs(event),
     ended: false,
     firstMillis: aguiEventMillis(event) ?? Date.now(),
     id: key,
     logs: [],
+    parentReasoningId,
     result: "",
     runCode: aguiEventRunCode(event),
     started: false,
@@ -653,35 +755,44 @@ function ensureToolCard(cards: Map<string, ToolWorkCard>, event: TranscriptAguiE
     toolName,
   };
   cards.set(key, card);
+  if (parentReasoningId) {
+    const reasoningCard = reasoningCards.get(parentReasoningId);
+    if (reasoningCard) reasoningCard.toolCards.push(card);
+  }
   return card;
 }
 
 function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard[] {
   const reasoningCards = new Map<string, ReasoningWorkCard>();
+  const activeReasoningCardIdsByRun = new Map<string, string>();
+  const latestReasoningCardIdsByRun = new Map<string, string>();
+  const reasoningSequenceByRun = new Map<string, number>();
   const toolCards = new Map<string, ToolWorkCard>();
 
   events.forEach((event) => {
     const type = aguiEventType(event).toUpperCase();
 
-    if (type === "REASONING_START" || type === "REASONING_MESSAGE_START") {
-      ensureReasoningCard(reasoningCards, event);
+    if (type === "REASONING_START") {
+      ensureReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event, { forceNew: true });
+      return;
+    }
+    if (type === "REASONING_MESSAGE_START") {
+      ensureReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event);
       return;
     }
     if (type === "REASONING_MESSAGE_CONTENT" || type === "REASONING_TEXT_CONTENT") {
-      const card = ensureReasoningCard(reasoningCards, event);
+      const card = ensureReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event);
       const delta = "delta" in event && typeof event.delta === "string" ? event.delta : "";
-      card.content += delta;
+      card.content = appendReasoningDelta(card.content, delta);
       return;
     }
     if (type === "REASONING_END" || type === "REASONING_MESSAGE_END") {
-      const card = ensureReasoningCard(reasoningCards, event);
-      card.ended = true;
-      card.endMillis = aguiEventMillis(event) ?? card.endMillis;
+      endReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event);
       return;
     }
 
     if (type === "TOOL_CALL_START" || type === "TOOL_CALL_ARGS") {
-      const card = ensureToolCard(toolCards, event);
+      const card = ensureToolCard(toolCards, reasoningCards, latestReasoningCardIdsByRun, event);
       if (!card) return;
       card.started = card.started || type === "TOOL_CALL_START";
       card.toolName = aguiEventToolName(event);
@@ -690,13 +801,13 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
       return;
     }
     if (type === "ACTIVITY_DELTA") {
-      const card = ensureToolCard(toolCards, event);
+      const card = ensureToolCard(toolCards, reasoningCards, latestReasoningCardIdsByRun, event);
       if (!card) return;
       card.logs.push(...activityLines(event));
       return;
     }
     if (type === "TOOL_CALL_RESULT") {
-      const card = ensureToolCard(toolCards, event);
+      const card = ensureToolCard(toolCards, reasoningCards, latestReasoningCardIdsByRun, event);
       if (!card) return;
       card.toolName = aguiEventToolName(event);
       const result = "content" in event && typeof event.content === "string" ? event.content : "";
@@ -704,7 +815,7 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
       return;
     }
     if (type === "TOOL_CALL_END") {
-      const card = ensureToolCard(toolCards, event);
+      const card = ensureToolCard(toolCards, reasoningCards, latestReasoningCardIdsByRun, event);
       if (card) card.ended = true;
     }
   });
@@ -722,6 +833,7 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
         firstMillis: aguiEventMillis(runStartEvent) ?? Date.now(),
         id: fallbackKey,
         runCode,
+        toolCards: [],
       });
     }
   }
@@ -730,7 +842,7 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
     ...Array.from(reasoningCards.values())
       .map((value) => ({ kind: "reasoning" as const, value })),
     ...Array.from(toolCards.values())
-      .filter((value) => value.started)
+      .filter((value) => value.started && !value.parentReasoningId)
       .map((value) => ({ kind: "tool" as const, value })),
   ].sort((left, right) => left.value.firstMillis - right.value.firstMillis);
 }
@@ -1628,50 +1740,6 @@ function ChatBubble({
   );
 }
 
-function AguiUserCardShell({
-  children,
-  icon,
-  meta,
-  summary,
-  title,
-}: {
-  children: React.ReactNode;
-  icon: React.ReactNode;
-  meta?: React.ReactNode;
-  summary?: React.ReactNode;
-  title: React.ReactNode;
-}) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <article className="rounded-md bg-white px-3 py-2 text-sm shadow-[0_8px_22px_rgba(15,23,42,0.06)]">
-      <button
-        className="flex w-full items-start justify-between gap-3 text-left"
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((current) => !current)}
-      >
-        <div className="flex min-w-0 items-start gap-2">
-          <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-container-low)] text-[var(--color-on-surface-variant)]">
-            {icon}
-          </span>
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-semibold">{title}</span>
-              {meta}
-            </div>
-            {summary ? <div className="mt-1 min-w-0 text-[var(--color-on-surface-variant)]">{summary}</div> : null}
-          </div>
-        </div>
-        <span className="mt-1 shrink-0 text-[var(--color-on-surface-variant)]">
-          {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
-        </span>
-      </button>
-      {expanded ? <div className="mt-3 border-t border-[var(--color-outline-variant)] pt-3">{children}</div> : null}
-    </article>
-  );
-}
-
 function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
   const hasContent = card.content.trim().length > 0;
   const detail = hasContent ? card.content : "";
@@ -1681,6 +1749,12 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
   const [expanded, setExpanded] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const duration = card.endMillis ? formatAguiDuration(Math.max(0, card.endMillis - card.firstMillis)) : "";
+  const nestedToolCards = card.toolCards.filter((toolCard) => toolCard.started);
+  const toolCount = nestedToolCards.length;
+  const title = card.ended && duration
+    ? `${toolCount ? `Thought for ${duration}, used ${toolCount} ${toolCount === 1 ? "tool" : "tools"}` : `Thought for ${duration}`}`
+    : `${toolCount ? `Thinking, using ${toolCount} ${toolCount === 1 ? "tool" : "tools"}` : "Thinking"}`;
+  const collapsedPreview = card.ended && hasContent ? deriveReasoningPreview(detail, nestedToolCards) : "";
 
   useEffect(() => {
     if (!expanded || !detail) return;
@@ -1693,7 +1767,10 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
   }, [detail, expanded]);
 
   return (
-    <article aria-label="Thinking" className="rounded-md bg-white px-3 py-2 text-sm shadow-[0_8px_22px_rgba(15,23,42,0.06)]">
+    <article
+      aria-label="Thinking"
+      className="rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-3 py-2 text-sm"
+    >
       <button
         className="flex w-full items-start justify-between gap-3 text-left"
         type="button"
@@ -1706,13 +1783,15 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex min-w-0 items-center gap-2">
-              <span className={cn("truncate font-semibold", card.ended ? undefined : "animate-pulse")}>
-                {card.ended && duration ? `Thought for ${duration}` : "Thinking"}
-              </span>
+              <span className={cn("truncate font-semibold", card.ended ? undefined : "animate-pulse")}>{title}</span>
             </div>
             {initializingHint ? (
               <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
                 {initializingHint}
+              </p>
+            ) : !expanded && collapsedPreview ? (
+              <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--color-on-surface-variant)]">
+                {collapsedPreview}
               </p>
             ) : null}
           </div>
@@ -1721,13 +1800,37 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
           {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         </span>
       </button>
-      {expanded && detail ? (
-        <div ref={contentRef} className="mt-3 h-40 min-h-0 overflow-y-scroll overscroll-contain rounded-md bg-[var(--color-surface-container-lowest)] p-3">
-          <MarkdownContent
-            ariaLabel="Streaming reasoning markdown"
-            className="min-h-0 py-0 leading-6"
-            content={detail}
-          />
+      {expanded ? (
+        <div className="mt-2 space-y-2 border-t border-[var(--color-outline-variant)] pt-2">
+          {detail ? (
+            <div
+              ref={contentRef}
+              className="max-h-36 overflow-y-auto overscroll-contain rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-2.5"
+            >
+              <MarkdownContent
+                ariaLabel="Streaming reasoning markdown"
+                className="min-h-0 py-0 leading-6"
+                content={detail}
+              />
+            </div>
+          ) : null}
+          {nestedToolCards.length ? (
+            <section className="space-y-2" aria-label="Thought tool steps">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-on-surface-variant)]">Used tools</p>
+                <span className="rounded-full bg-[var(--color-surface-container-high)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-on-surface-variant)]">
+                  {toolCount}
+                </span>
+              </div>
+              <ol className="space-y-1.5">
+                {nestedToolCards.map((toolCard, index) => (
+                  <li className="border-l border-[var(--color-outline-variant)] pl-3" key={toolCard.id}>
+                    <ToolUserCard card={toolCard} nested stepNumber={index + 1} />
+                  </li>
+                ))}
+              </ol>
+            </section>
+          ) : null}
         </div>
       ) : null}
     </article>
@@ -1745,55 +1848,103 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
-function ToolUserCard({ card }: { card: ToolWorkCard }) {
+function CompactToolRow({
+  card,
+  nested = false,
+  stepNumber,
+}: {
+  card: ToolWorkCard;
+  nested?: boolean;
+  stepNumber?: number;
+}) {
   const complete = card.ended || Boolean(card.result);
   const result = card.result || (complete ? "No result payload." : "");
+  const [expanded, setExpanded] = useState(false);
 
   return (
-    <AguiUserCardShell
-      icon={complete ? <CheckCircle2 size={16} /> : <Hammer className="animate-pulse" size={16} />}
-      meta={<Badge tone={complete ? "neutral" : "success"}>{complete ? "done" : "running"}</Badge>}
-      title={toolSummaryLabel(card.toolName, card.args)}
-      summary={(
-        <p className="line-clamp-1 font-mono text-xs">
-          {card.toolName} · {card.toolCallId}
-        </p>
-      )}
-    >
-      <div className="space-y-3">
-        <section className="space-y-1.5">
-          <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Parameters</h3>
-          <JsonBlock value={card.args ?? { tool: card.toolName }} />
-        </section>
-        {complete ? (
-          <section className="space-y-1.5">
-            <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Result</h3>
-            {result ? <JsonBlock value={result} /> : (
-              <div className="rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm leading-6 text-[var(--color-on-surface-variant)]">
-                No result payload.
-              </div>
-            )}
-          </section>
-        ) : (
-          <section className="space-y-1.5">
-            <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Log</h3>
-            <div className="space-y-1 rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)]">
-              {card.logs.length ? card.logs.map((line, index) => (
-                <p className="whitespace-pre-wrap" key={`${card.id}-log-${index}`}>{line}</p>
-              )) : <p className="text-[var(--color-on-surface-variant)]">Waiting for tool activity...</p>}
-            </div>
-          </section>
+    <div className={cn(
+      "rounded-md",
+      nested ? "bg-transparent" : "border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-2 py-1.5",
+    )}>
+      <button
+        className={cn(
+          "flex w-full items-start justify-between gap-3 rounded-md text-left",
+          nested ? "px-2 py-2 transition hover:bg-white/60" : "px-1 py-1.5 transition hover:bg-[var(--color-hover-surface)]",
         )}
-      </div>
-    </AguiUserCardShell>
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <div className="flex min-w-0 items-start gap-2">
+          <span className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-container-low)] text-[11px] font-semibold text-[var(--color-on-surface-variant)]">
+            {typeof stepNumber === "number"
+              ? stepNumber
+              : complete
+                ? <CheckCircle2 size={14} />
+                : <Hammer className="animate-pulse" size={14} />}
+          </span>
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-semibold">{toolSummaryLabel(card.toolName, card.args)}</span>
+              <Badge tone={complete ? "neutral" : "success"}>{complete ? "done" : "running"}</Badge>
+            </div>
+          </div>
+        </div>
+        <span className="mt-1 shrink-0 text-[var(--color-on-surface-variant)]">
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </span>
+      </button>
+      {expanded ? (
+        <div className={cn(
+          "space-y-2 border-t border-[var(--color-outline-variant)]",
+          nested ? "ml-8 px-2 py-2" : "px-1 py-2",
+        )}>
+          <section className="space-y-1">
+            <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Parameters</h3>
+            <JsonBlock value={card.args ?? { tool: card.toolName }} />
+          </section>
+          {complete ? (
+            <section className="space-y-1">
+              <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Result</h3>
+              {result ? <JsonBlock value={result} /> : (
+                <div className="rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm leading-6 text-[var(--color-on-surface-variant)]">
+                  No result payload.
+                </div>
+              )}
+            </section>
+          ) : (
+            <section className="space-y-1">
+              <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Log</h3>
+              <div className="space-y-1 rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)]">
+                {card.logs.length ? card.logs.map((line, index) => (
+                  <p className="whitespace-pre-wrap" key={`${card.id}-log-${index}`}>{line}</p>
+                )) : <p className="text-[var(--color-on-surface-variant)]">Waiting for tool activity...</p>}
+              </div>
+            </section>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
+}
+
+function ToolUserCard({
+  card,
+  nested = false,
+  stepNumber,
+}: {
+  card: ToolWorkCard;
+  nested?: boolean;
+  stepNumber?: number;
+}) {
+  return <CompactToolRow card={card} nested={nested} stepNumber={stepNumber} />;
 }
 
 function AguiUserWorkRail({ cards }: { cards: AguiUserWorkCard[] }) {
   if (!cards.length) return null;
 
   return (
-    <section className="space-y-2" aria-label="AG-UI user work cards">
+    <section className="space-y-2 border-l border-[var(--color-outline-variant)] pl-4" aria-label="Agent work rail">
       {cards.map((card) => (
         card.kind === "reasoning"
           ? <ReasoningUserCard card={card.value} key={`reasoning-${card.value.id}`} />
@@ -1872,6 +2023,7 @@ function AguiRunWorkRail({
         firstMillis: pendingStartedAt ?? Date.now(),
         id: "pending-reasoning",
         runCode: "pending",
+        toolCards: [],
       },
     }];
   const debugEvents = events.filter((event) => shouldShowAguiEventType(aguiEventType(event), preferences));
@@ -1956,6 +2108,8 @@ export function ChatManagementPage() {
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
   const visibleSessionCodeRef = useRef("");
+  const liveAssistantDraftRef = useRef("");
+  const liveAguiObservedRef = useRef(false);
   const effectiveAgentCode = selectedAgentCode || mainChatAgentOption.agentCode;
   const selectedAgent = chatAgents.find((agent) => agent.agentCode === effectiveAgentCode) ?? null;
   const agentScopedModels = useMemo(
@@ -2362,10 +2516,18 @@ export function ChatManagementPage() {
         {
           onAguiEvent: (event) => {
             if (event.threadId && event.threadId !== sendingSessionCode) return;
+            if (isStructuredWorkEvent(event)) {
+              liveAguiObservedRef.current = true;
+              if (activeSessionCodeRef.current === sendingSessionCode) {
+                setVisibleMessages((current) => current.filter((message) => message.messageCode !== optimisticAssistantCode));
+              }
+            }
             setLiveAguiPendingStartedAt(null);
             setLiveAguiEvents((current) => [...current, event]);
           },
           onDelta: (delta) => {
+            liveAssistantDraftRef.current = `${liveAssistantDraftRef.current}${delta}`;
+            if (liveAguiObservedRef.current) return;
             if (activeSessionCodeRef.current !== sendingSessionCode) return;
             setVisibleMessages((current) => {
               const assistantExists = current.some((message) => message.messageCode === optimisticAssistantCode);
@@ -2426,6 +2588,8 @@ export function ChatManagementPage() {
       setSending(false);
       setRunningSessionCode("");
       setLiveAguiPendingStartedAt(null);
+      liveAssistantDraftRef.current = "";
+      liveAguiObservedRef.current = false;
       if (streamAbortControllerRef.current === abortController) {
         streamAbortControllerRef.current = null;
       }
