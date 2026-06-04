@@ -259,6 +259,7 @@ mod tests {
                 api_key: "sk-test".into(),
                 model_name: "qwen-test".into(),
                 thinking_enabled: false,
+                responses_stateful_enabled: true,
                 temperature: Some(0.2),
                 max_tokens: Some(128),
                 context_window_tokens: Some(8_192),

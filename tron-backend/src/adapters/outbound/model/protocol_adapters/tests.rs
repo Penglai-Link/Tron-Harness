@@ -317,6 +317,7 @@ fn responses_request_uses_stateful_response_items_and_previous_response_id() {
         api_key: "sk-test".into(),
         model_name: "qwen-test".into(),
         thinking_enabled: false,
+        responses_stateful_enabled: false,
         temperature: None,
         max_tokens: None,
         context_window_tokens: Some(128_000),
