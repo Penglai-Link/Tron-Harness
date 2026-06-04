@@ -1007,7 +1007,7 @@ async fn tool_catalog_read_apis_are_available() {
     assert_eq!(tool_body["data"]["toolCode"], json!("bash.exec"));
     assert_eq!(
         tool_body["data"]["inputSchema"]["description"],
-        json!("Run one system command directly with structured arguments.")
+        json!("Run one shell command directly when structured tools are not enough.")
     );
     assert!(
         tool_body["data"]["inputSchema"]["examples"]
@@ -1060,15 +1060,15 @@ async fn tool_catalog_read_apis_follow_accept_language() {
     assert_eq!(tool_body["data"]["name"], json!("执行命令"));
     assert_eq!(
         tool_body["data"]["description"],
-        json!("使用结构化参数直接执行一条系统命令。")
+        json!("在结构化工具不够用时直接执行一条 shell 命令。")
     );
     assert_eq!(
         tool_body["data"]["inputSchema"]["description"],
-        json!("使用结构化参数直接执行一条系统命令。")
+        json!("在结构化工具不够用时直接执行一条 shell 命令。")
     );
     assert_eq!(
         tool_body["data"]["inputSchema"]["properties"]["command"]["description"],
-        json!("要执行的程序名或绝对路径。")
+        json!("要执行的程序名或绝对路径；需要 shell 解析时请使用 bash 并传入 -c。")
     );
     assert!(
         tool_body["data"]["inputSchema"]["examples"]

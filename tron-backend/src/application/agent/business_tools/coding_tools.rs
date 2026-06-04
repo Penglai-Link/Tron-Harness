@@ -134,7 +134,7 @@ pub(super) fn resolve_path(
     if trimmed.is_empty() {
         return Err(ToolError::ExecutionFailed("path is required".into()));
     }
-    let path = PathBuf::from(trimmed);
+    let path = expand_tilde(trimmed);
     if path.is_absolute() {
         Ok(path)
     } else {
@@ -175,12 +175,33 @@ pub(super) fn default_cwd_for_context(context: &AgentRunContext) -> PathBuf {
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .map(PathBuf::from)
+        .map(expand_tilde)
         .unwrap_or_else(default_cwd)
 }
 
 pub(super) fn default_cwd() -> PathBuf {
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
+}
+
+fn expand_tilde(raw_path: &str) -> PathBuf {
+    if let Some(rest) = raw_path.strip_prefix('~') {
+        if rest.is_empty() {
+            if let Some(home) = home_dir() {
+                return home;
+            }
+        } else if rest.starts_with('/') || rest.starts_with('\\') {
+            if let Some(home) = home_dir() {
+                return home.join(rest.trim_start_matches(|ch| ch == '/' || ch == '\\'));
+            }
+        }
+    }
+    PathBuf::from(raw_path)
+}
+
+fn home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
 }
 
 pub(super) fn apply_replace(
@@ -235,3 +256,101 @@ pub(super) fn ensure_parent_dirs(path: &PathBuf) -> Result<(), ToolError> {
 }
 
 pub(super) type EnvVars = BTreeMap<String, String>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::agent::{
+        AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig, AgentModelProtocol,
+        AgentRunContext, AgentRunLimits, EffectiveSkill, EffectiveTool, EffectiveVariable,
+    };
+    use serde_json::json;
+
+    fn test_context(local_directory: Option<&str>) -> AgentRunContext {
+        AgentRunContext {
+            conversation_code: Some("CONV-1".into()),
+            run_code: "RUN-1".into(),
+            workspace_code: "WS-1".into(),
+            user_code: Some("USR-1".into()),
+            locale: "en-US".into(),
+            request_id: Some("REQ-1".into()),
+            stream_key: Some("STREAM-1".into()),
+            agent_kind: AgentKind::React,
+            system_agent_session_id: None,
+            model: AgentModelConfig {
+                model_code: "MODEL-1".into(),
+                protocol: AgentModelProtocol::ChatCompletions,
+                base_url: "http://localhost".into(),
+                api_path: None,
+                api_key: "sk-test".into(),
+                model_name: "gpt-test".into(),
+                thinking_enabled: false,
+                responses_stateful_enabled: false,
+                temperature: None,
+                max_tokens: None,
+                context_window_tokens: None,
+                top_p: None,
+                max_retries: None,
+            },
+            variables: vec![EffectiveVariable {
+                key: "REGION".into(),
+                value: "us".into(),
+                source: "LOCAL".into(),
+            }],
+            skills: vec![EffectiveSkill {
+                skill_name: "planner".into(),
+                description: "Plan work".into(),
+                instruction: None,
+                tool_names: vec!["fs.list".into()],
+            }],
+            tools: vec![EffectiveTool {
+                tool_name: "fs.list".into(),
+                domain_code: Some("fs".into()),
+                description: "List files".into(),
+                input_schema: json!({"type": "object"}),
+                skill_name: Some("planner".into()),
+                required_variable_keys: vec![],
+            }],
+            tool_exposure: Default::default(),
+            execution_scope: AgentExecutionScope {
+                app_code: Some("APP-1".into()),
+                repository_url: Some("https://example.test/repo.git".into()),
+                local_directory: local_directory.map(str::to_string),
+                branch_name: Some("main".into()),
+                task_code: Some("TASK-1".into()),
+            },
+            limits: AgentRunLimits {
+                max_steps: 4,
+                max_tool_calls: 4,
+                max_parallel_tool_calls: 2,
+            },
+            messages: vec![AgentMessage::user("hello")],
+            observations: Vec::new(),
+            started_at: "2026-06-04T00:00:00Z".into(),
+        }
+    }
+
+    #[test]
+    fn resolve_path_expands_home_directory_prefix() {
+        let context = test_context(Some("/workspace/repo"));
+        let home = home_dir().expect("HOME or USERPROFILE must be set");
+        let resolved = resolve_path(&context, "~/.tron").expect("tilde path should resolve");
+        assert_eq!(resolved, home.join(".tron"));
+    }
+
+    #[test]
+    fn resolve_optional_directory_expands_home_directory_prefix() {
+        let context = test_context(Some("/workspace/repo"));
+        let home = home_dir().expect("HOME or USERPROFILE must be set");
+        let resolved =
+            resolve_optional_directory(&context, Some("~")).expect("tilde directory should resolve");
+        assert_eq!(resolved, Some(home));
+    }
+
+    #[test]
+    fn resolve_path_keeps_relative_paths_under_workspace_root() {
+        let context = test_context(Some("/workspace/repo"));
+        let resolved = resolve_path(&context, "tron-backend/src").expect("relative path should resolve");
+        assert_eq!(resolved, PathBuf::from("/workspace/repo").join("tron-backend/src"));
+    }
+}
