@@ -82,20 +82,7 @@ impl GraphBackedRagRepository {
             "sourceMetadataJson",
             &json_string(&command.metadata)?,
         );
-        if let Some(name) = command
-            .domain_fields
-            .get("skillName")
-            .and_then(Value::as_str)
-        {
-            push_text_prop(&mut properties, "skillName", name);
-        }
-        if let Some(description) = command
-            .domain_fields
-            .get("skillDescription")
-            .and_then(Value::as_str)
-        {
-            push_text_prop(&mut properties, "skillDescription", description);
-        }
+        push_domain_field_properties(corpus, &command, &mut properties)?;
         properties.insert(
             "tokenCount".into(),
             GraphPropertyValue::Integer(
@@ -148,7 +135,12 @@ impl GraphBackedRagRepository {
                 .create_node(&scope, write)
                 .map_err(map_graph_error)?;
         }
-        self.persist_related_graph(&scope, &node_code, command.related_graph.as_ref())?;
+        self.persist_related_graph(
+            &scope,
+            &node_code,
+            command.related_graph.as_ref(),
+            &command.graph_write_policy,
+        )?;
         Ok(())
     }
 
@@ -157,11 +149,12 @@ impl GraphBackedRagRepository {
         scope: &crate::domain::graph::ResolvedGraphScope,
         skill_node_code: &str,
         related_graph: Option<&Value>,
+        graph_write_policy: &Value,
     ) -> Result<(), RagError> {
         let Some(related_graph) = related_graph else {
             return Ok(());
         };
-        let policy = corpus_policy_defaults();
+        let policy = related_policy(graph_write_policy)?;
         let nodes = related_graph
             .get("nodes")
             .and_then(Value::as_array)
@@ -179,7 +172,12 @@ impl GraphBackedRagRepository {
             let reference = required_str(node, "ref")?;
             let kind = required_str(node, "kind")?;
             let label = required_str(node, "label")?;
-            if !policy.allowed_kinds.contains(kind) {
+            if !valid_business_code(kind)
+                || policy
+                    .allowed_kinds
+                    .as_ref()
+                    .is_some_and(|allowed| !allowed.contains(kind))
+            {
                 return Err(RagError::IngestRequestInvalid);
             }
             let code = normalize_related_code(required_str(node, "code")?)?;
@@ -234,16 +232,22 @@ impl GraphBackedRagRepository {
                 .ok_or(RagError::IngestRequestInvalid)?
                 .clone();
             let relationship = required_str(edge, "relationship")?;
-            if !policy.allowed_relationships.contains(relationship) {
+            if !valid_business_code(relationship)
+                || policy
+                    .allowed_relationships
+                    .as_ref()
+                    .is_some_and(|allowed| !allowed.contains(relationship))
+            {
                 return Err(RagError::IngestRequestInvalid);
             }
             let edge_code = stable_graph_code("RAG_SKILL_EDGE", &[&from, relationship, &to]);
+            let properties = custom_edge_properties(edge)?;
             let write = GraphEdgeWrite {
                 edge_code: edge_code.clone(),
                 source_node_code: from,
                 target_node_code: to,
                 relationship: relationship.to_string(),
-                properties: BTreeMap::new(),
+                properties,
                 full_text: None,
                 embedding_text: None,
                 embedding_model_code: None,
@@ -271,25 +275,98 @@ impl GraphBackedRagRepository {
 }
 
 struct RelatedPolicy {
-    allowed_kinds: BTreeSet<&'static str>,
-    allowed_relationships: BTreeSet<&'static str>,
+    allowed_kinds: Option<BTreeSet<String>>,
+    allowed_relationships: Option<BTreeSet<String>>,
     max_nodes: usize,
     max_edges: usize,
 }
 
-fn corpus_policy_defaults() -> RelatedPolicy {
-    RelatedPolicy {
-        allowed_kinds: BTreeSet::from(["TOOL", "CONFIG", "VARIABLE", "AGENT", "TAG"]),
-        allowed_relationships: BTreeSet::from([
-            "REQUIRES_TOOL",
-            "HAS_CONFIG",
-            "USES_VARIABLE",
-            "USED_BY_AGENT",
-            "HAS_TAG",
-        ]),
-        max_nodes: 50,
-        max_edges: 100,
+fn related_policy(policy: &Value) -> Result<RelatedPolicy, RagError> {
+    Ok(RelatedPolicy {
+        allowed_kinds: optional_code_set(policy, "allowedNodeKinds")?,
+        allowed_relationships: optional_code_set(policy, "allowedRelationships")?,
+        max_nodes: optional_positive_usize(policy, "maxRelatedNodes").unwrap_or(50),
+        max_edges: optional_positive_usize(policy, "maxRelatedEdges").unwrap_or(100),
+    })
+}
+
+fn optional_code_set(policy: &Value, field: &str) -> Result<Option<BTreeSet<String>>, RagError> {
+    let Some(values) = policy.get(field) else {
+        return Ok(None);
+    };
+    let values = values.as_array().ok_or(RagError::StorageBindingInvalid)?;
+    let mut codes = BTreeSet::new();
+    for value in values {
+        let code = value
+            .as_str()
+            .map(str::trim)
+            .filter(|value| valid_business_code(value))
+            .ok_or(RagError::StorageBindingInvalid)?;
+        codes.insert(code.to_string());
     }
+    Ok((!codes.is_empty()).then_some(codes))
+}
+
+fn optional_positive_usize(policy: &Value, field: &str) -> Option<usize> {
+    policy
+        .get(field)
+        .and_then(Value::as_u64)
+        .map(|value| value as usize)
+        .filter(|value| *value > 0)
+}
+
+fn valid_business_code(value: &str) -> bool {
+    let value = value.trim();
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_' || ch == '-')
+}
+
+fn push_domain_field_properties(
+    corpus: &RagCorpusRecord,
+    command: &RagPersistIngestCommand,
+    properties: &mut BTreeMap<String, GraphPropertyValue>,
+) -> Result<(), RagError> {
+    for (logical_name, value) in &command.domain_fields {
+        let property_name = corpus
+            .field_mapping
+            .get(logical_name)
+            .ok_or(RagError::StorageBindingInvalid)?;
+        if is_reserved_main_node_property(property_name) {
+            return Err(RagError::StorageBindingInvalid);
+        }
+        properties.insert(property_name.clone(), json_graph_property_value(value)?);
+    }
+    Ok(())
+}
+
+fn is_reserved_main_node_property(name: &str) -> bool {
+    matches!(
+        name,
+        "corpusId"
+            | "sourceCode"
+            | "sourceVersion"
+            | "sourceType"
+            | "sourceStatus"
+            | "scopeType"
+            | "scopeCode"
+            | "ragWorkspaceCode"
+            | "targetCode"
+            | "textUnitCode"
+            | "title"
+            | "text"
+            | "searchText"
+            | "headingPath"
+            | "textUnitStatus"
+            | "fulltextStatus"
+            | "embeddingStatus"
+            | "embeddingModelCode"
+            | "metadataJson"
+            | "sourceMetadataJson"
+            | "tokenCount"
+            | "embeddingJson"
+    )
 }
 
 fn custom_related_properties(
@@ -312,8 +389,33 @@ fn custom_related_properties(
     Ok(properties)
 }
 
+fn custom_edge_properties(edge: &Value) -> Result<BTreeMap<String, GraphPropertyValue>, RagError> {
+    let mut properties = BTreeMap::new();
+    let Some(raw_properties) = edge.get("properties") else {
+        return Ok(properties);
+    };
+    let property_map = raw_properties
+        .as_object()
+        .ok_or(RagError::IngestRequestInvalid)?;
+    for (name, value) in property_map {
+        let name = name.trim();
+        if name.is_empty() || is_reserved_edge_property(name) {
+            return Err(RagError::IngestRequestInvalid);
+        }
+        properties.insert(name.to_string(), json_graph_property_value(value)?);
+    }
+    Ok(properties)
+}
+
 fn is_reserved_related_property(name: &str) -> bool {
     matches!(name, "relatedKind" | "relatedRef" | "title" | "text")
+}
+
+fn is_reserved_edge_property(name: &str) -> bool {
+    matches!(
+        name,
+        "edgeCode" | "sourceNodeCode" | "targetNodeCode" | "relationship"
+    )
 }
 
 fn json_graph_property_value(value: &Value) -> Result<GraphPropertyValue, RagError> {

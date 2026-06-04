@@ -449,6 +449,7 @@ mod tests {
             degrade_policy: "SKIP_VECTOR_WITH_WARNING".into(),
             embedding_model_code: None,
             embedding_version: "v1".into(),
+            graph_write_policy: serde_json::Value::Null,
         }
     }
 }

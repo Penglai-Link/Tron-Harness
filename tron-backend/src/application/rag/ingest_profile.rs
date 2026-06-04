@@ -26,6 +26,7 @@ pub struct CompiledRagIngestProfile {
     pub degrade_policy: String,
     pub embedding_model_code: Option<String>,
     pub embedding_version: String,
+    pub graph_write_policy: Value,
 }
 
 pub fn compile_ingest_profile<S>(
@@ -147,6 +148,11 @@ where
         degrade_policy: profile.degrade_policy.clone(),
         embedding_model_code,
         embedding_version,
+        graph_write_policy: profile
+            .config
+            .get("graphWritePolicy")
+            .cloned()
+            .unwrap_or(Value::Null),
     })
 }
 

@@ -17,8 +17,8 @@ use crate::{
 use super::{
     GraphBackedRagRepository,
     model::{
-        append_graph_filters, graph_filter, graph_hit_to_row, graph_node_json, map_graph_error,
-        node_label,
+        append_graph_filters, graph_filter, graph_hit_to_row, graph_node_json,
+        graph_properties_json, map_graph_error, node_label,
     },
 };
 
@@ -44,7 +44,7 @@ impl GraphBackedRagRepository {
                 graph_filter("sourceStatus", "ACTIVE"),
                 graph_filter("textUnitStatus", "ACTIVE"),
             ];
-            append_graph_filters(&mut filters, &query.filters);
+            append_graph_filters(&mut filters, corpus, &query.filters);
             let full_text = if query.retriever == "FULLTEXT_GRAPH_SINGLE_NODE_V1" {
                 Some(query.query.clone())
             } else {
@@ -148,7 +148,8 @@ impl GraphBackedRagRepository {
                         "edgeCode": edge.edge_code,
                         "sourceNodeCode": edge.source_node_code,
                         "targetNodeCode": edge.target_node_code,
-                        "relationship": edge.relationship
+                        "relationship": edge.relationship,
+                        "properties": graph_properties_json(&edge.properties)
                     })
                 });
             }

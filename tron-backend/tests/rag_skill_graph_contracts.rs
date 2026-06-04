@@ -10,7 +10,7 @@ use std::{
 };
 
 use rusqlite::{Connection, params};
-use serde_json::json;
+use serde_json::{Value, json};
 use tron_backend::{
     adapters::outbound::persistence::{
         GrafeoAdapterConfig, GrafeoGraphStore, GrafeoStoreCore, GraphBackedRagRepository,
@@ -92,6 +92,13 @@ fn skill_graph_seed_is_additive_and_keeps_existing_skill_sqlite_binding() {
             .unwrap()
             .is_some()
     );
+    let skill_graph_ingest = repository
+        .get_profile("skill-graph-ingest-v1")
+        .unwrap()
+        .unwrap();
+    let graph_write_policy = &skill_graph_ingest.config["graphWritePolicy"];
+    assert!(graph_write_policy.get("allowedNodeKinds").is_none());
+    assert!(graph_write_policy.get("allowedRelationships").is_none());
 }
 
 #[test]
@@ -328,6 +335,19 @@ async fn skill_graph_ingest_search_expand_debug_and_retry_use_graph_storage_with
         result.hits[0].metadata["relatedGraph"]["nodes"][0]["properties"]["priority"],
         json!(10)
     );
+    let expanded_edges = result.hits[0].metadata["relatedGraph"]["edges"]
+        .as_array()
+        .expect("related graph edges should be returned");
+    let requires_tool_edge = expanded_edges
+        .iter()
+        .find(|edge| edge["relationship"] == json!("REQUIRES_TOOL"))
+        .expect("requires tool edge should be present");
+    assert_eq!(
+        requires_tool_edge["properties"]["usage"],
+        json!("source-control")
+    );
+    assert_eq!(requires_tool_edge["properties"]["required"], json!(true));
+    assert_eq!(requires_tool_edge["properties"]["weight"], json!(0.9));
     let mut tool_only_request = search_request("skill-graph-related-v1", "rag-reviewer");
     tool_only_request.context.graph_expansion.relationships = vec!["REQUIRES_TOOL".into()];
     let tool_only_result = search_service.search(tool_only_request).await.unwrap();
@@ -364,7 +384,69 @@ async fn skill_graph_ingest_search_expand_debug_and_retry_use_graph_storage_with
 }
 
 #[tokio::test]
-async fn skill_graph_related_payload_rejects_disallowed_relationships() {
+async fn skill_graph_default_write_policy_allows_custom_kind_relationship_and_edge_properties() {
+    let database_url = temp_database_path("rag-skill-graph-custom")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-custom-store")
+        .to_string_lossy()
+        .to_string();
+    let runtime = FakeRuntime::new(embedding_4(1.0, 0.0));
+    let (repository, _) = build_repository(&database_url, &graph_path);
+    let service = RagIngestService::new(
+        repository.clone(),
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+    let mut request = skill_graph_request(
+        "rag-prompter",
+        "Builds prompt templates for RAG graph searches.",
+    );
+    request.payload["relatedGraph"]["nodes"][0]["ref"] = json!("prompt.rag");
+    request.payload["relatedGraph"]["nodes"][0]["kind"] = json!("PROMPT_TEMPLATE");
+    request.payload["relatedGraph"]["nodes"][0]["label"] = json!("RagPromptTemplate");
+    request.payload["relatedGraph"]["nodes"][0]["code"] = json!("RAG_PROMPT_TEMPLATE");
+    request.payload["relatedGraph"]["nodes"][0]["title"] = json!("RAG Prompt Template");
+    request.payload["relatedGraph"]["edges"][0]["to"] = json!("prompt.rag");
+    request.payload["relatedGraph"]["edges"][0]["relationship"] = json!("USES_PROMPT_TEMPLATE");
+    request.payload["relatedGraph"]["edges"][0]["properties"] = json!({
+        "required": true,
+        "weight": 0.7,
+        "usage": "agent-selected"
+    });
+
+    service.ingest(request).await.unwrap();
+
+    let search_service = RagSearchService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+    let mut request = search_request("skill-graph-related-v1", "rag-prompter");
+    request.filters = json!({ "skillName": "rag-prompter" });
+    let result = search_service.search(request).await.unwrap();
+    assert_eq!(result.hits.len(), 1);
+    let nodes = result.hits[0].metadata["relatedGraph"]["nodes"]
+        .as_array()
+        .expect("related graph nodes should be returned");
+    assert!(nodes.iter().any(|node| {
+        node["relatedKind"] == json!("PROMPT_TEMPLATE")
+            && node["labels"][0] == json!("RagPromptTemplate")
+    }));
+    let edges = result.hits[0].metadata["relatedGraph"]["edges"]
+        .as_array()
+        .expect("related graph edges should be returned");
+    let prompt_edge = edges
+        .iter()
+        .find(|edge| edge["relationship"] == json!("USES_PROMPT_TEMPLATE"))
+        .expect("custom relationship edge should be returned");
+    assert_eq!(prompt_edge["properties"]["required"], json!(true));
+    assert_eq!(prompt_edge["properties"]["weight"], json!(0.7));
+    assert_eq!(prompt_edge["properties"]["usage"], json!("agent-selected"));
+}
+
+#[tokio::test]
+async fn skill_graph_write_policy_rejects_values_only_when_whitelists_are_configured() {
     let database_url = temp_database_path("rag-skill-graph-reject")
         .to_string_lossy()
         .to_string();
@@ -372,6 +454,15 @@ async fn skill_graph_related_payload_rejects_disallowed_relationships() {
         .to_string_lossy()
         .to_string();
     let (repository, _) = build_repository(&database_url, &graph_path);
+    set_skill_graph_write_policy(
+        &database_url,
+        json!({
+            "allowedNodeKinds": ["TOOL", "TAG"],
+            "allowedRelationships": ["REQUIRES_TOOL", "HAS_TAG"],
+            "maxRelatedNodes": 50,
+            "maxRelatedEdges": 100
+        }),
+    );
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
@@ -425,6 +516,43 @@ async fn blank_query_structured_filter_does_not_execute_against_graph_single_nod
     );
     assert_eq!(runtime.embedding_calls(), embedding_calls_after_ingest);
     assert_eq!(runtime.rerank_calls(), 0);
+}
+
+#[tokio::test]
+async fn skill_graph_main_node_business_fields_follow_corpus_field_mapping() {
+    let database_url = temp_database_path("rag-skill-graph-field-mapping")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-field-mapping-store")
+        .to_string_lossy()
+        .to_string();
+    let runtime = FakeRuntime::new(embedding_4(1.0, 0.0));
+    let (repository, _) = build_repository(&database_url, &graph_path);
+    add_skill_alias_field_mapping(&database_url);
+    let service = RagIngestService::new(
+        repository.clone(),
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+    let mut request = skill_graph_request(
+        "rag-mapper",
+        "Verifies graph fields are driven by corpus mapping.",
+    );
+    request.payload["domainFields"]["skillAlias"] = json!("mapped-skill-alias");
+    service.ingest(request).await.unwrap();
+
+    let search_service =
+        RagSearchService::new(repository, DefaultRagStrategyRegistry::default(), runtime);
+    let mut request = search_request("skill-graph-related-v1", "rag-mapper");
+    request.filters = json!({ "skillName": "rag-mapper" });
+    request.context.return_fields = vec!["skillName".into(), "skillAlias".into()];
+    let result = search_service.search(request).await.unwrap();
+    assert_eq!(result.hits.len(), 1);
+    assert_eq!(result.hits[0].fields["skillName"], json!("rag-mapper"));
+    assert_eq!(
+        result.hits[0].fields["skillAlias"],
+        json!("mapped-skill-alias")
+    );
 }
 
 fn build_repository(
@@ -546,7 +674,12 @@ fn skill_graph_request(skill_name: &str, description: &str) -> RagIngestRequest 
                     {
                         "from": "$skill",
                         "to": "tool.git",
-                        "relationship": "REQUIRES_TOOL"
+                        "relationship": "REQUIRES_TOOL",
+                        "properties": {
+                            "required": true,
+                            "usage": "source-control",
+                            "weight": 0.9
+                        }
                     },
                     {
                         "from": "$skill",
@@ -557,6 +690,45 @@ fn skill_graph_request(skill_name: &str, description: &str) -> RagIngestRequest 
             }
         }),
     }
+}
+
+fn set_skill_graph_write_policy(database_url: &str, policy: Value) {
+    let connection = Connection::open(database_url).unwrap();
+    let config_json: String = connection
+        .query_row(
+            "SELECT config_json FROM rag_profiles WHERE profile_id = 'skill-graph-ingest-v1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let mut config: Value = serde_json::from_str(&config_json).unwrap();
+    config["graphWritePolicy"] = policy;
+    connection
+        .execute(
+            "UPDATE rag_profiles SET config_json = ?1 WHERE profile_id = 'skill-graph-ingest-v1'",
+            params![serde_json::to_string(&config).unwrap()],
+        )
+        .unwrap();
+}
+
+fn add_skill_alias_field_mapping(database_url: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let field_mapping_json: String = connection
+        .query_row(
+            "SELECT field_mapping_json FROM rag_corpora WHERE corpus_id = 'skill-graph'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let mut field_mapping: Value = serde_json::from_str(&field_mapping_json).unwrap();
+    field_mapping["source"]["skillAlias"] = json!("skillAlias");
+    field_mapping["textUnit"]["skillAlias"] = json!("skillAlias");
+    connection
+        .execute(
+            "UPDATE rag_corpora SET field_mapping_json = ?1 WHERE corpus_id = 'skill-graph'",
+            params![serde_json::to_string(&field_mapping).unwrap()],
+        )
+        .unwrap();
 }
 
 fn search_request(profile_id: &str, query: &str) -> RagSearchRequest {

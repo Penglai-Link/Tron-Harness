@@ -128,20 +128,15 @@ pub(super) fn graph_hit_to_row(
         storage_score: score,
         source_metadata: metadata,
         text_metadata: json!({}),
-        field_values: Map::from_iter([
-            (
-                "skillName".into(),
-                json!(prop_text(props, "skillName").unwrap_or_default()),
-            ),
-            (
-                "skillDescription".into(),
-                json!(prop_text(props, "skillDescription").unwrap_or_default()),
-            ),
-        ]),
+        field_values: graph_field_values(corpus, props),
     }
 }
 
-pub(super) fn append_graph_filters(filters: &mut Vec<GraphPropertyFilter>, raw: &Value) {
+pub(super) fn append_graph_filters(
+    filters: &mut Vec<GraphPropertyFilter>,
+    corpus: &RagCorpusRecord,
+    raw: &Value,
+) {
     let Some(object) = raw.as_object() else {
         return;
     };
@@ -153,7 +148,12 @@ pub(super) fn append_graph_filters(filters: &mut Vec<GraphPropertyFilter>, raw: 
         let Some(text) = value.as_str() else {
             continue;
         };
-        filters.push(graph_filter(field, text));
+        let property_name = corpus
+            .field_mapping
+            .get(field)
+            .map(String::as_str)
+            .unwrap_or(field);
+        filters.push(graph_filter(property_name, text));
     }
 }
 
@@ -291,7 +291,23 @@ pub(super) fn graph_node_json(node: &GraphNode) -> Value {
     })
 }
 
-fn graph_properties_json(properties: &BTreeMap<String, GraphPropertyValue>) -> Value {
+fn graph_field_values(
+    corpus: &RagCorpusRecord,
+    properties: &BTreeMap<String, GraphPropertyValue>,
+) -> Map<String, Value> {
+    Map::from_iter(
+        corpus
+            .field_mapping
+            .iter()
+            .filter_map(|(logical_name, property_name)| {
+                properties
+                    .get(property_name)
+                    .map(|value| (logical_name.clone(), graph_property_json(value)))
+            }),
+    )
+}
+
+pub(super) fn graph_properties_json(properties: &BTreeMap<String, GraphPropertyValue>) -> Value {
     Value::Object(Map::from_iter(
         properties
             .iter()

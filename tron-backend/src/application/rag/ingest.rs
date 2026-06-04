@@ -50,6 +50,7 @@ pub struct RagPersistIngestCommand {
     pub metadata: Value,
     pub domain_fields: BTreeMap<String, Value>,
     pub related_graph: Option<Value>,
+    pub graph_write_policy: Value,
     pub text_units: Vec<RagTextUnitWrite>,
     pub warnings: Vec<RagIngestWarning>,
     pub workspace_code: String,
