@@ -32,12 +32,9 @@ const DEFAULT_APPLICATION_CONFIG_PATH: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/application.yaml");
 
 const DEFAULT_HTTP_CONNECT_TIMEOUT_MS: u64 = 1_500;
-const DEFAULT_HTTP_REQUEST_TIMEOUT_MS: u64 = 30_000;
 const DEFAULT_HTTP_POOL_IDLE_TIMEOUT_MS: u64 = 90_000;
 const DEFAULT_HTTP_POOL_MAX_IDLE_PER_HOST: usize = 32;
 const DEFAULT_HTTP_TCP_KEEPALIVE_MS: u64 = 30_000;
-const DEFAULT_HTTP_MODEL_INFERENCE_REQUEST_TIMEOUT_MS: u64 = 180_000;
-const DEFAULT_HTTP_RUNTIME_CONTROL_REQUEST_TIMEOUT_MS: u64 = 20_000;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppConfig {
@@ -62,7 +59,6 @@ pub struct HttpClientProfilesConfig {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HttpClientProfileConfig {
     pub connect_timeout_ms: u64,
-    pub request_timeout_ms: Option<u64>,
     pub pool_idle_timeout_ms: Option<u64>,
     pub pool_max_idle_per_host: usize,
     pub tcp_keepalive_ms: Option<u64>,
@@ -72,19 +68,14 @@ impl HttpClientProfilesConfig {
     pub fn default_profiles() -> Self {
         let default = HttpClientProfileConfig {
             connect_timeout_ms: DEFAULT_HTTP_CONNECT_TIMEOUT_MS,
-            request_timeout_ms: Some(DEFAULT_HTTP_REQUEST_TIMEOUT_MS),
             pool_idle_timeout_ms: Some(DEFAULT_HTTP_POOL_IDLE_TIMEOUT_MS),
             pool_max_idle_per_host: DEFAULT_HTTP_POOL_MAX_IDLE_PER_HOST,
             tcp_keepalive_ms: Some(DEFAULT_HTTP_TCP_KEEPALIVE_MS),
         };
-        let mut model_inference = default.clone();
-        model_inference.request_timeout_ms = Some(DEFAULT_HTTP_MODEL_INFERENCE_REQUEST_TIMEOUT_MS);
-        let mut runtime_control = default.clone();
-        runtime_control.request_timeout_ms = Some(DEFAULT_HTTP_RUNTIME_CONTROL_REQUEST_TIMEOUT_MS);
         Self {
-            default,
-            model_inference,
-            runtime_control,
+            default: default.clone(),
+            model_inference: default.clone(),
+            runtime_control: default,
         }
     }
 }
@@ -217,9 +208,6 @@ impl HttpClientProfileConfig {
         if let Some(value) = overrides.connect_timeout_ms {
             self.connect_timeout_ms = value;
         }
-        if let Some(value) = overrides.request_timeout_ms {
-            self.request_timeout_ms = Some(value);
-        }
         if let Some(value) = overrides.pool_idle_timeout_ms {
             self.pool_idle_timeout_ms = Some(value);
         }
@@ -281,7 +269,6 @@ struct HttpClientProfilesFileConfig {
 #[serde(rename_all = "camelCase")]
 struct HttpClientProfileFileConfig {
     connect_timeout_ms: Option<u64>,
-    request_timeout_ms: Option<u64>,
     pool_idle_timeout_ms: Option<u64>,
     pool_max_idle_per_host: Option<usize>,
     tcp_keepalive_ms: Option<u64>,

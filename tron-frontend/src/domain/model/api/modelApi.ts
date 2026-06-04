@@ -55,7 +55,6 @@ export interface ModelMutationPayload {
   maxTokens?: number | null;
   contextWindowTokens?: number | null;
   topP?: number | null;
-  timeoutMs?: number | null;
   maxRetries?: number | null;
   allowInheritance?: boolean;
 }

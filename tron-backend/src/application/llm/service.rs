@@ -318,7 +318,6 @@ mod tests {
             api_path: None,
             api_key: "sk-test".into(),
             model_name: "embed-test".into(),
-            timeout_ms: Some(1000),
             max_retries: Some(0),
         }
     }
@@ -332,7 +331,6 @@ mod tests {
             api_path: None,
             api_key: "sk-test".into(),
             model_name: "rerank-test".into(),
-            timeout_ms: Some(1000),
             max_retries: Some(0),
         }
     }

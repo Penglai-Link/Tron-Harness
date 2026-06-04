@@ -60,7 +60,6 @@ fn base_context() -> AgentRunContext {
             max_tokens: Some(128),
             context_window_tokens: Some(8_192),
             top_p: Some(1.0),
-            timeout_ms: Some(1000),
             max_retries: Some(0),
         },
         variables: vec![EffectiveVariable {

@@ -70,6 +70,7 @@ export interface WorkspaceInternalAgentRecord {
   expandedDomainPersistenceMode: ExpandedDomainPersistenceMode;
   maxSteps: number;
   maxToolCalls: number;
+  maxParallelToolCalls: number;
   selectedToolCodes: string[];
   source: WorkspaceInternalAgentPolicySource;
 }
@@ -80,6 +81,7 @@ export interface WorkspaceInternalAgentPolicyPayload {
   expandedDomainPersistenceMode?: ExpandedDomainPersistenceMode;
   maxSteps?: number;
   maxToolCalls?: number;
+  maxParallelToolCalls?: number;
 }
 
 export interface ListToolsQuery {

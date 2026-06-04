@@ -15,6 +15,8 @@ pub struct ModelRequest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolCall {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub call_id: Option<String>,
     pub tool_name: String,
     pub input: Value,
 }
@@ -35,8 +37,8 @@ pub enum ModelResponse {
         token_usage: Option<ModelTokenUsage>,
         system_agent_session_id: Option<String>,
     },
-    ToolCall {
-        call: ToolCall,
+    ToolCalls {
+        calls: Vec<ToolCall>,
         token_usage: Option<ModelTokenUsage>,
     },
 }
@@ -107,23 +109,53 @@ impl ModelResponse {
         Self::tool_call_with_usage(tool_name, input, None)
     }
 
+    pub fn tool_call_with_id(
+        call_id: impl Into<String>,
+        tool_name: impl Into<String>,
+        input: Value,
+    ) -> Self {
+        Self::tool_calls_with_usage(
+            vec![ToolCall {
+                call_id: Some(call_id.into()),
+                tool_name: tool_name.into(),
+                input,
+            }],
+            None,
+        )
+    }
+
+    pub fn tool_calls(calls: Vec<ToolCall>) -> Self {
+        Self::tool_calls_with_usage(calls, None)
+    }
+
+    pub fn tool_calls_with_usage(
+        calls: Vec<ToolCall>,
+        token_usage: Option<ModelTokenUsage>,
+    ) -> Self {
+        Self::ToolCalls {
+            calls,
+            token_usage,
+        }
+    }
+
     pub fn tool_call_with_usage(
         tool_name: impl Into<String>,
         input: Value,
         token_usage: Option<ModelTokenUsage>,
     ) -> Self {
-        Self::ToolCall {
-            call: ToolCall {
+        Self::tool_calls_with_usage(
+            vec![ToolCall {
+                call_id: None,
                 tool_name: tool_name.into(),
                 input,
-            },
+            }],
             token_usage,
-        }
+        )
     }
 
     pub fn token_usage(&self) -> Option<ModelTokenUsage> {
         match self {
-            Self::FinalOutput { token_usage, .. } | Self::ToolCall { token_usage, .. } => {
+            Self::FinalOutput { token_usage, .. } | Self::ToolCalls { token_usage, .. } => {
                 *token_usage
             }
         }

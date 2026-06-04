@@ -1,4 +1,4 @@
-use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::{future::Future, pin::Pin, sync::Arc};
 
 use serde_json::Value;
 
@@ -87,11 +87,18 @@ impl HttpModelClient {
         let output_for_sink = output.clone();
         let token_usage = Arc::new(std::sync::Mutex::new(None));
         let token_usage_for_sink = token_usage.clone();
+        let terminal_response = Arc::new(std::sync::Mutex::new(None));
+        let terminal_response_for_sink = terminal_response.clone();
         let event_sink = Arc::new(move |event: Value| {
             if let Some(usage) = adapter.parse_usage(&event) {
                 *token_usage_for_sink
                     .lock()
                     .expect("model stream usage mutex poisoned") = Some(usage);
+            }
+            if let Some(response) = adapter.parse_stream_terminal_response(&event)? {
+                *terminal_response_for_sink
+                    .lock()
+                    .expect("model stream terminal response mutex poisoned") = Some(response);
             }
             if let Some(delta) = adapter.parse_stream_event(&event)? {
                 if delta.kind == ModelStreamEventKind::Text {
@@ -114,6 +121,13 @@ impl HttpModelClient {
         let token_usage = *token_usage
             .lock()
             .expect("model stream usage mutex poisoned");
+        if let Some(response) = terminal_response
+            .lock()
+            .expect("model stream terminal response mutex poisoned")
+            .clone()
+        {
+            return Ok(response);
+        }
         if output.is_empty() {
             return self.generate_with_adapter(config, request).await;
         }
@@ -192,17 +206,10 @@ impl HttpModelProviderClient {
         url: &str,
         body: &Value,
     ) -> reqwest::RequestBuilder {
-        let mut request = self
-            .client
+        self.client
             .post(url)
             .bearer_auth(&config.api_key)
-            .json(body);
-        if let Some(timeout_ms) = config.timeout_ms
-            && timeout_ms > 0
-        {
-            request = request.timeout(Duration::from_millis(timeout_ms));
-        }
-        request
+            .json(body)
     }
 }
 
@@ -231,7 +238,7 @@ fn drain_sse_events(
 
 fn provider_error(error: reqwest::Error) -> String {
     if error.is_timeout() {
-        "model provider request timed out".into()
+        "model provider connection timed out".into()
     } else {
         error.to_string()
     }
@@ -256,4 +263,139 @@ fn endpoint_url(config: &AgentModelConfig, default_path: &str) -> Result<String,
         return Err("model baseUrl and apiPath are required".into());
     }
     Ok(format!("{base}/{path}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    use crate::domain::agent::{
+        AgentMessage, AgentModelProtocol, ModelRequest, ModelResponse, ModelStreamEvent,
+        ToolCall,
+    };
+
+    #[derive(Clone)]
+    struct StubProvider {
+        stream_events: Vec<Value>,
+    }
+
+    impl ModelProviderClient for StubProvider {
+        fn post_json<'a>(
+            &'a self,
+            _config: &'a AgentModelConfig,
+            _url: &'a str,
+            _body: &'a Value,
+        ) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send + 'a>> {
+            Box::pin(async { Err("post_json should not be used in this test".into()) })
+        }
+
+        fn post_event_stream<'a>(
+            &'a self,
+            _config: &'a AgentModelConfig,
+            _url: &'a str,
+            _body: &'a Value,
+            sink: Arc<dyn Fn(Value) -> Result<(), String> + Send + Sync + 'a>,
+        ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>> {
+            let events = self.stream_events.clone();
+            Box::pin(async move {
+                for event in events {
+                    sink(event)?;
+                }
+                Ok(())
+            })
+        }
+    }
+
+    #[tokio::test]
+    async fn responses_stream_terminal_tool_calls_override_text_accumulator() {
+        let client = HttpModelClient::new(Arc::new(StubProvider {
+            stream_events: vec![
+                json!({
+                    "type": "response.output_text.delta",
+                    "delta": "好的，我来同时调用"
+                }),
+                json!({
+                    "type": "response.completed",
+                    "response": {
+                        "output": [
+                            {
+                                "type": "function_call",
+                                "call_id": "call_123",
+                                "name": "lookup",
+                                "arguments": "{\"query\":\"status\"}"
+                            },
+                            {
+                                "type": "function_call",
+                                "call_id": "call_456",
+                                "name": "lookup",
+                                "arguments": "{\"query\":\"health\"}"
+                            }
+                        ]
+                    }
+                }),
+            ],
+        }));
+        let seen = Arc::new(std::sync::Mutex::new(Vec::<ModelStreamEvent>::new()));
+        let seen_for_sink = seen.clone();
+        let sink: ModelStreamSink = Arc::new(move |event| {
+            seen_for_sink
+                .lock()
+                .expect("stream event collection mutex poisoned")
+                .push(event);
+        });
+
+        let response = client
+            .generate_stream(&responses_model_config(), &minimal_request(), sink)
+            .await
+            .expect("responses stream should parse terminal tool calls");
+
+        assert_eq!(
+            response,
+            ModelResponse::ToolCalls {
+                calls: vec![
+                    ToolCall {
+                        call_id: Some("call_123".into()),
+                        tool_name: "lookup".into(),
+                        input: json!({ "query": "status" }),
+                    },
+                    ToolCall {
+                        call_id: Some("call_456".into()),
+                        tool_name: "lookup".into(),
+                        input: json!({ "query": "health" }),
+                    },
+                ],
+                token_usage: None,
+            }
+        );
+        assert_eq!(
+            seen.lock().expect("stream event collection mutex poisoned").as_slice(),
+            &[ModelStreamEvent::text_delta("好的，我来同时调用")]
+        );
+    }
+
+    fn responses_model_config() -> AgentModelConfig {
+        AgentModelConfig {
+            model_code: "MODEL-TEST".into(),
+            protocol: AgentModelProtocol::Responses,
+            base_url: "https://example.com/v1".into(),
+            api_path: Some("/responses".into()),
+            api_key: "test-key".into(),
+            model_name: "qwen3.7-max".into(),
+            thinking_enabled: true,
+            temperature: Some(0.2),
+            max_tokens: Some(4096),
+            context_window_tokens: None,
+            top_p: None,
+            max_retries: None,
+        }
+    }
+
+    fn minimal_request() -> ModelRequest {
+        ModelRequest {
+            messages: vec![AgentMessage::user("测试多个工具并行调用")],
+            tools: Vec::new(),
+            system_agent_session_id: None,
+        }
+    }
 }

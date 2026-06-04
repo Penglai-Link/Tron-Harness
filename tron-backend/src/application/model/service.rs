@@ -1,7 +1,6 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
-    time::Duration,
 };
 
 use reqwest::Client;
@@ -38,7 +37,6 @@ mod workspace_use_cases;
 
 use self::{catalog_resolution::*, model_factory::*, verification::*, workspace_mapping::*};
 
-const DEFAULT_TIMEOUT_MS: u64 = 5_000;
 const MASKED_API_KEY_VALUE: &str = "*****";
 
 #[derive(Debug, Clone)]
@@ -60,7 +58,6 @@ pub struct ModelCommand {
     pub max_tokens: Option<u32>,
     pub context_window_tokens: Option<u32>,
     pub top_p: Option<f64>,
-    pub timeout_ms: Option<u64>,
     pub max_retries: Option<u32>,
     pub allow_inheritance: Option<bool>,
 }
@@ -74,7 +71,6 @@ pub struct RuntimeModelConfig {
     pub api_path: Option<String>,
     pub api_key: String,
     pub model_name: String,
-    pub timeout_ms: Option<u64>,
     pub max_retries: Option<u32>,
 }
 
@@ -144,7 +140,6 @@ struct NormalizedModelSpec {
     max_tokens: Option<u32>,
     context_window_tokens: Option<u32>,
     top_p: Option<f64>,
-    timeout_ms: Option<u64>,
     max_retries: Option<u32>,
     allow_inheritance: Option<bool>,
 }

@@ -175,6 +175,7 @@ type WorkspaceInternalAgentSeed = {
   expandedDomainPersistenceMode: ExpandedDomainPersistenceMode;
   maxSteps: number;
   maxToolCalls: number;
+  maxParallelToolCalls: number;
   name: string;
   selectedToolCodes: string[];
   toolAssignmentMode: ToolAssignmentMode;
@@ -187,7 +188,8 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     description: "Primary platform internal agent used for workspace chat runtime policy.",
     expandedDomainPersistenceMode: "sticky_expanded",
     maxSteps: 8,
-    maxToolCalls: 4,
+    maxToolCalls: 100,
+    maxParallelToolCalls: 4,
     name: "Main Agent",
     selectedToolCodes: [],
     toolAssignmentMode: "all_platform_tools",
@@ -351,6 +353,7 @@ function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: str
     expandedDomainPersistenceMode: effective.expandedDomainPersistenceMode,
     maxSteps: effective.maxSteps,
     maxToolCalls: effective.maxToolCalls,
+    maxParallelToolCalls: effective.maxParallelToolCalls,
     name: effective.name,
     selectedToolCodes,
     source,
@@ -372,6 +375,7 @@ function validateInternalAgentPatch(payload: WorkspaceInternalAgentPolicyPayload
       "expandedDomainPersistenceMode",
       "maxSteps",
       "maxToolCalls",
+      "maxParallelToolCalls",
     ].includes(key)) {
       return false;
     }

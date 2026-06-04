@@ -81,7 +81,6 @@ impl ModelService {
             max_tokens: source.max_tokens,
             context_window_tokens: source.context_window_tokens,
             top_p: source.top_p,
-            timeout_ms: source.timeout_ms,
             max_retries: source.max_retries,
             last_verified_at: None,
             last_verify_status: None,

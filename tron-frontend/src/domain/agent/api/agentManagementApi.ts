@@ -75,6 +75,7 @@ interface WorkspaceInternalAgentRecordApi {
   expandedDomainPersistenceMode: ExpandedDomainPersistenceModeApi;
   maxSteps: number;
   maxToolCalls: number;
+  maxParallelToolCalls?: number;
   selectedToolCodes: string[];
 }
 
@@ -198,7 +199,11 @@ function normalizeWorkspaceInternalAgentRecord(record: WorkspaceInternalAgentRec
     expandedDomainPersistenceMode: normalizeExpandedDomainPersistenceMode(record.expandedDomainPersistenceMode),
     name: record.name,
     maxSteps: typeof record.maxSteps === "number" && Number.isFinite(record.maxSteps) ? record.maxSteps : 8,
-    maxToolCalls: typeof record.maxToolCalls === "number" && Number.isFinite(record.maxToolCalls) ? record.maxToolCalls : 4,
+    maxToolCalls: typeof record.maxToolCalls === "number" && Number.isFinite(record.maxToolCalls) ? record.maxToolCalls : 100,
+    maxParallelToolCalls:
+      typeof record.maxParallelToolCalls === "number" && Number.isFinite(record.maxParallelToolCalls)
+        ? record.maxParallelToolCalls
+        : 4,
     source: normalizeWorkspaceInternalAgentSource(record.source),
     selectedToolCodes: Array.isArray(record.selectedToolCodes) ? [...new Set(record.selectedToolCodes)] : [],
     toolAssignmentMode: normalizeToolAssignmentMode(record.toolAssignmentMode),

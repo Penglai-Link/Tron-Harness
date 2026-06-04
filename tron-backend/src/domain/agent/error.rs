@@ -13,6 +13,7 @@ pub enum AgentError {
     UnauthorizedTool(String),
     ToolFailure(String),
     MaxStepsExceeded,
+    MaxToolCallsExceeded,
     EventPublishFailed(String),
 }
 
@@ -25,6 +26,7 @@ impl Display for AgentError {
             Self::UnauthorizedTool(tool) => write!(f, "unauthorized tool: {tool}"),
             Self::ToolFailure(message) => write!(f, "tool failure: {message}"),
             Self::MaxStepsExceeded => f.write_str("agent run exceeded max steps"),
+            Self::MaxToolCallsExceeded => f.write_str("agent run exceeded max tool calls"),
             Self::EventPublishFailed(message) => write!(f, "event publish failed: {message}"),
         }
     }

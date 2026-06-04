@@ -84,7 +84,6 @@ type BaseModel = {
   structuredOutputEnabled: boolean;
   temperature: number | null;
   thinkingEnabled: boolean;
-  timeoutMs: number | null;
   topP: number | null;
   updatedAt: string;
   vendor: string;
@@ -138,7 +137,6 @@ type ModelRecord = {
   structuredOutputEnabled: boolean;
   temperature: number | null;
   thinkingEnabled: boolean;
-  timeoutMs: number | null;
   topP: number | null;
   updatedAt: string;
   vendor: string;
@@ -443,7 +441,6 @@ function createSeedBaseModel(
     structuredOutputEnabled: protocol === "RESPONSES",
     temperature: modelType === "TEXT" ? 0.2 : null,
     thinkingEnabled: modelType === "TEXT",
-    timeoutMs: 5000,
     topP: modelType === "TEXT" ? 1 : null,
     updatedAt: now,
     vendor,
@@ -495,7 +492,6 @@ function buildPlatformView(model: PlatformModel, platformDefaults: Partial<Recor
     temperature: model.temperature,
     maxTokens: model.maxTokens,
     topP: model.topP,
-    timeoutMs: model.timeoutMs,
     maxRetries: model.maxRetries,
     lastVerifiedAt: model.lastVerifiedAt,
     lastVerifyStatus: model.lastVerifyStatus,
@@ -543,7 +539,6 @@ function buildWorkspaceView(
     temperature: configModel.temperature,
     maxTokens: configModel.maxTokens,
     topP: configModel.topP,
-    timeoutMs: configModel.timeoutMs,
     maxRetries: configModel.maxRetries,
     lastVerifiedAt: configModel.lastVerifiedAt,
     lastVerifyStatus: configModel.lastVerifyStatus,
@@ -927,7 +922,6 @@ function createMockState() {
         ? null
         : model.maxTokens;
     model.topP = typeof payload.topP === "number" ? payload.topP : model.topP;
-    model.timeoutMs = typeof payload.timeoutMs === "number" ? payload.timeoutMs : model.timeoutMs;
     model.maxRetries = typeof payload.maxRetries === "number" ? payload.maxRetries : model.maxRetries;
     model.updatedAt = now;
     if ("allowInheritance" in model) {
@@ -1205,7 +1199,6 @@ function createMockState() {
         structuredOutputEnabled: preview.structuredOutputEnabled,
         temperature: preview.temperature,
         thinkingEnabled: preview.thinkingEnabled,
-        timeoutMs: preview.timeoutMs,
         topP: preview.topP,
         updatedAt: preview.updatedAt,
         vendor: preview.vendor,

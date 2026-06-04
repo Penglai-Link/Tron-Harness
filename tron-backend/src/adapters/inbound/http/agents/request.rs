@@ -33,6 +33,7 @@ pub struct UpdateInternalAgentPolicyRequest {
     pub expanded_domain_persistence_mode: Option<String>,
     pub max_steps: Option<u32>,
     pub max_tool_calls: Option<u32>,
+    pub max_parallel_tool_calls: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]

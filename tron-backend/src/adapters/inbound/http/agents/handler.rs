@@ -369,6 +369,7 @@ fn to_internal_agent_policy_command(
         expanded_domain_persistence_mode,
         max_steps: request.max_steps,
         max_tool_calls: request.max_tool_calls,
+        max_parallel_tool_calls: request.max_parallel_tool_calls,
     })
 }
 

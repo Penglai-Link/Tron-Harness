@@ -25,7 +25,6 @@ const MASKED_API_KEY_VALUE = "*****";
 const DEFAULT_TEMPERATURE = "0.2";
 const DEFAULT_MAX_TOKENS = "4096";
 const DEFAULT_TOP_P = "1";
-const DEFAULT_TIMEOUT_MS = "5000";
 const DEFAULT_MAX_RETRIES = "1";
 
 export interface ModelFormState {
@@ -44,7 +43,6 @@ export interface ModelFormState {
   structuredOutputEnabled: boolean;
   temperature: string;
   thinkingEnabled: boolean;
-  timeoutMs: string;
   topP: string;
   vendor: string;
 }
@@ -68,7 +66,6 @@ export function emptyModelFormState(): ModelFormState {
     structuredOutputEnabled: true,
     temperature: DEFAULT_TEMPERATURE,
     thinkingEnabled: true,
-    timeoutMs: DEFAULT_TIMEOUT_MS,
     topP: DEFAULT_TOP_P,
     vendor: "",
   };
@@ -97,7 +94,6 @@ export function modelFormFromRecord(record: ModelRecord): ModelFormState {
     structuredOutputEnabled: record.structuredOutputEnabled,
     temperature: record.temperature === null ? DEFAULT_TEMPERATURE : String(record.temperature),
     thinkingEnabled: record.thinkingEnabled,
-    timeoutMs: record.timeoutMs === null ? DEFAULT_TIMEOUT_MS : String(record.timeoutMs),
     topP: record.topP === null ? DEFAULT_TOP_P : String(record.topP),
     vendor: record.vendor,
   };
@@ -146,7 +142,6 @@ export function modelFormToPayload(
     maxTokens: parseOptionalInteger(state.maxTokens),
     contextWindowTokens: parseOptionalInteger(state.contextWindowTokens),
     topP: parseOptionalNumber(state.topP),
-    timeoutMs: parseOptionalInteger(state.timeoutMs),
     maxRetries: parseOptionalInteger(state.maxRetries),
     allowInheritance: options.allowInheritance,
   };
@@ -238,7 +233,6 @@ export function ModelFormFields({
                 protocol: nextProtocol,
                 modelType: nextModelType,
                 temperature: state.temperature.trim() ? state.temperature : DEFAULT_TEMPERATURE,
-                timeoutMs: state.timeoutMs.trim() ? state.timeoutMs : DEFAULT_TIMEOUT_MS,
                 topP: state.topP.trim() ? state.topP : DEFAULT_TOP_P,
               });
             }}
@@ -274,7 +268,6 @@ export function ModelFormFields({
                 modelCapabilities: normalizeModelCapabilities(nextModelCapabilities, nextModelType),
                 modelType: nextModelType,
                 temperature: state.temperature.trim() ? state.temperature : DEFAULT_TEMPERATURE,
-                timeoutMs: state.timeoutMs.trim() ? state.timeoutMs : DEFAULT_TIMEOUT_MS,
                 topP: state.topP.trim() ? state.topP : DEFAULT_TOP_P,
               });
             }}
@@ -368,15 +361,6 @@ export function ModelFormFields({
             step="0.1"
             value={state.topP}
             onChange={(event) => patch("topP", event.target.value)}
-            disabled={readOnly}
-          />
-        </Field>
-        <Field label="Timeout (ms)">
-          <TextInput
-            type="number"
-            step="1"
-            value={state.timeoutMs}
-            onChange={(event) => patch("timeoutMs", event.target.value)}
             disabled={readOnly}
           />
         </Field>

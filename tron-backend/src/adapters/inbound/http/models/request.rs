@@ -25,7 +25,6 @@ pub struct ModelRequest {
     pub max_tokens: Option<u32>,
     pub context_window_tokens: Option<u32>,
     pub top_p: Option<f64>,
-    pub timeout_ms: Option<u64>,
     pub max_retries: Option<u32>,
     pub allow_inheritance: Option<bool>,
 }
@@ -50,7 +49,6 @@ impl From<ModelRequest> for ModelCommand {
             max_tokens: request.max_tokens,
             context_window_tokens: request.context_window_tokens,
             top_p: request.top_p,
-            timeout_ms: request.timeout_ms,
             max_retries: request.max_retries,
             allow_inheritance: request.allow_inheritance,
         }

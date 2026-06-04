@@ -209,6 +209,7 @@ impl AgentInvocationService {
                 .map(|policy| AgentRunLimits {
                     max_steps: policy.max_steps,
                     max_tool_calls: policy.max_tool_calls,
+                    max_parallel_tool_calls: policy.max_parallel_tool_calls,
                 })
                 .unwrap_or_default()
         });
@@ -558,7 +559,6 @@ pub(crate) fn build_system_runtime_model_config(
         max_tokens: None,
         context_window_tokens,
         top_p: None,
-        timeout_ms: Some(180_000),
         max_retries: Some(0),
     }
 }

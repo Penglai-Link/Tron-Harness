@@ -9,7 +9,6 @@ impl ModelService {
             .unwrap_or_else(|| default_verify_path(model.protocol, model.model_type).into());
         let url = join_verify_url(&model.base_url, &endpoint_path)?;
         let payload = verify_request_payload(model.protocol, model.model_type, &model.model_name);
-        let timeout = Duration::from_millis(model.timeout_ms.unwrap_or(DEFAULT_TIMEOUT_MS));
         let attempts = model.max_retries.unwrap_or(0).saturating_add(1);
         let api_key = self.resolve_api_key_value(model)?;
         let method_label = format!("POST {}", url.path());
@@ -19,7 +18,6 @@ impl ModelService {
             let response = self
                 .http_client
                 .post(url.clone())
-                .timeout(timeout)
                 .bearer_auth(api_key.clone())
                 .json(&payload)
                 .send()

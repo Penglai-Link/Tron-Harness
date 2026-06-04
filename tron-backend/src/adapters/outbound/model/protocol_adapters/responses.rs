@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 
 use crate::domain::agent::{
     AgentModelConfig, AgentModelProtocol, ModelRequest, ModelResponse, ModelStreamEvent,
-    ModelTokenUsage,
+    ModelTokenUsage, ToolCall,
 };
 
 use super::{content::*, registry::ModelProtocolAdapter, usage::parse_responses_usage};
@@ -35,16 +35,25 @@ impl ModelProtocolAdapter for ResponsesAdapter {
         Ok(parse_responses_stream_event(body))
     }
 
+    fn parse_stream_terminal_response(&self, body: &Value) -> Result<Option<ModelResponse>, String> {
+        Ok(parse_responses_stream_terminal_response(body))
+    }
+
     fn parse_usage(&self, body: &Value) -> Option<ModelTokenUsage> {
         parse_responses_usage(body)
     }
 }
 
 pub fn responses_request(config: &AgentModelConfig, request: &ModelRequest) -> Value {
+    let instructions = responses_instructions_text(&request.messages);
+    let input = responses_input_value(&request.messages);
     let mut payload = json!({
         "model": config.model_name,
-        "input": request.messages.iter().map(response_message_json).collect::<Vec<_>>(),
+        "input": input,
     });
+    if let Some(instructions) = instructions {
+        payload["instructions"] = json!(instructions);
+    }
     if let Some(temperature) = config.temperature {
         payload["temperature"] = json!(temperature);
     }
@@ -52,7 +61,6 @@ pub fn responses_request(config: &AgentModelConfig, request: &ModelRequest) -> V
         payload["max_output_tokens"] = json!(max_tokens);
     }
     if config.thinking_enabled {
-        payload["enable_thinking"] = json!(true);
         payload["reasoning"] = json!({ "effort": "medium" });
     }
     if !request.tools.is_empty() {
@@ -68,8 +76,25 @@ pub fn responses_request(config: &AgentModelConfig, request: &ModelRequest) -> V
                 }))
                 .collect::<Vec<_>>()
         );
+        payload["parallel_tool_calls"] = json!(true);
     }
     payload
+}
+
+fn responses_input_value(messages: &[crate::domain::agent::AgentMessage]) -> Value {
+    let input_messages = messages
+        .iter()
+        .filter(|message| !matches!(message.role.as_str(), "system" | "developer"))
+        .collect::<Vec<_>>();
+    if input_messages.len() == 1 && input_messages[0].role == "user" {
+        return json!(input_messages[0].content.as_str());
+    }
+    Value::Array(
+        input_messages
+            .into_iter()
+            .map(responses_input_item_json)
+            .collect::<Vec<_>>(),
+    )
 }
 
 fn parse_responses_stream_event(body: &Value) -> Option<ModelStreamEvent> {
@@ -96,29 +121,71 @@ fn parse_responses_stream_event(body: &Value) -> Option<ModelStreamEvent> {
     }
 }
 
+fn parse_responses_stream_terminal_response(body: &Value) -> Option<ModelResponse> {
+    match body.get("type").and_then(Value::as_str) {
+        Some("response.completed") => body.get("response").and_then(parse_responses_response),
+        _ => None,
+    }
+}
+
 fn parse_responses_response(body: &Value) -> Option<ModelResponse> {
     let token_usage = parse_responses_usage(body);
-    if let Some(text) = body.get("output_text").and_then(Value::as_str) {
-        return Some(ModelResponse::final_output_with_usage(text, token_usage));
-    }
-    let output = body.get("output")?.as_array()?;
-    for item in output {
-        if item.get("type").and_then(Value::as_str) == Some("function_call") {
-            let name = item.get("name")?.as_str()?;
-            let arguments = item
-                .get("arguments")
-                .and_then(Value::as_str)
-                .and_then(|raw| serde_json::from_str(raw).ok())
-                .unwrap_or_else(|| json!({}));
-            return Some(ModelResponse::tool_call_with_usage(
-                name,
-                arguments,
+    if let Some(output) = body.get("output").and_then(Value::as_array) {
+        let tool_calls = output
+            .iter()
+            .filter_map(parse_responses_tool_call)
+            .collect::<Vec<_>>();
+        if !tool_calls.is_empty() {
+            return Some(ModelResponse::tool_calls_with_usage(tool_calls, token_usage));
+        }
+        let mut final_output = String::new();
+        for item in output {
+            if item.get("type").and_then(Value::as_str) == Some("message")
+                && let Some(text) = item.get("content").and_then(text_from_content)
+            {
+                final_output.push_str(&text);
+            }
+        }
+        if !final_output.is_empty() {
+            return Some(ModelResponse::final_output_with_usage(
+                final_output,
                 token_usage,
             ));
         }
+        if let Some(text) = output
+            .iter()
+            .find_map(|item| item.get("content").and_then(text_from_content))
+        {
+            return Some(ModelResponse::final_output_with_usage(text, token_usage));
+        }
     }
-    output
-        .iter()
-        .find_map(|item| item.get("content").and_then(text_from_content))
-        .map(|text| ModelResponse::final_output_with_usage(text, token_usage))
+    if let Some(text) = body.get("output_text").and_then(Value::as_str) {
+        return Some(ModelResponse::final_output_with_usage(text, token_usage));
+    }
+    None
+}
+
+fn parse_responses_tool_call(item: &Value) -> Option<ToolCall> {
+    match item.get("type").and_then(Value::as_str) {
+        Some("function_call") | Some("custom_tool_call") => {
+            let name = item.get("name")?.as_str()?.to_owned();
+            let call_id = item
+                .get("call_id")
+                .or_else(|| item.get("id"))
+                .and_then(Value::as_str)
+                .map(|value| value.to_owned());
+            let raw_arguments = item
+                .get("arguments")
+                .or_else(|| item.get("input"))
+                .and_then(Value::as_str)
+                .unwrap_or("{}");
+            let input = serde_json::from_str(raw_arguments).unwrap_or_else(|_| json!({}));
+            Some(ToolCall {
+                call_id,
+                tool_name: name,
+                input,
+            })
+        }
+        _ => None,
+    }
 }

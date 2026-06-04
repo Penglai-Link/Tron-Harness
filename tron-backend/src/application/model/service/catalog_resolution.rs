@@ -45,7 +45,6 @@ pub(super) fn build_platform_view(
         max_tokens: model.max_tokens,
         context_window_tokens: model.context_window_tokens,
         top_p: model.top_p,
-        timeout_ms: model.timeout_ms,
         max_retries: model.max_retries,
         last_verified_at: model.last_verified_at,
         last_verify_status: model.last_verify_status,
@@ -93,7 +92,6 @@ pub(super) fn agent_model_config_from_view(
         max_tokens: view.max_tokens,
         context_window_tokens: view.context_window_tokens,
         top_p: view.top_p,
-        timeout_ms: view.timeout_ms,
         max_retries: view.max_retries,
     })
 }
@@ -115,7 +113,6 @@ pub(super) fn runtime_model_config_from_view(
             api_path: view.api_path.clone(),
             api_key: api_key.to_string(),
             model_name: view.model_name.clone(),
-            timeout_ms: view.timeout_ms,
             max_retries: view.max_retries,
         }),
         _ => None,
@@ -176,7 +173,6 @@ pub(super) fn build_workspace_effective_view(
         max_tokens: config_model.max_tokens,
         context_window_tokens: config_model.context_window_tokens,
         top_p: config_model.top_p,
-        timeout_ms: config_model.timeout_ms,
         max_retries: config_model.max_retries,
         last_verified_at: config_model.last_verified_at.clone(),
         last_verify_status: config_model.last_verify_status,
@@ -221,7 +217,6 @@ pub(super) fn build_workspace_preview_view(
     view.max_tokens = preview_model.max_tokens;
     view.context_window_tokens = preview_model.context_window_tokens;
     view.top_p = preview_model.top_p;
-    view.timeout_ms = preview_model.timeout_ms;
     view.max_retries = preview_model.max_retries;
     view.last_verified_at = preview_model.last_verified_at.clone();
     view.last_verify_status = preview_model.last_verify_status;
