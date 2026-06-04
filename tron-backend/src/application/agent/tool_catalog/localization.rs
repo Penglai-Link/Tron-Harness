@@ -1,3 +1,5 @@
+mod coding;
+
 use serde_json::Value;
 
 use crate::{
@@ -237,7 +239,7 @@ fn translate_en_us(key: &str) -> &'static str {
             "Expand one visible tool domain into concrete callable tools."
         }
         "agent.toolCatalog.discovery.expand.params.domainCode" => "Visible domain code to expand.",
-        _ => key_leak_fallback(),
+        _ => coding::translate_en_us(key).unwrap_or_else(key_leak_fallback),
     }
 }
 
@@ -332,7 +334,7 @@ fn translate_zh_cn(key: &str) -> &'static str {
             "展开一个可见工具领域，加载其中可直接调用的具体工具。"
         }
         "agent.toolCatalog.discovery.expand.params.domainCode" => "需要展开的可见领域编码。",
-        _ => key_leak_fallback(),
+        _ => coding::translate_zh_cn(key).unwrap_or_else(key_leak_fallback),
     }
 }
 

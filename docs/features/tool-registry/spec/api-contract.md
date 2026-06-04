@@ -19,6 +19,7 @@ All endpoints use the uniform envelope:
 - `GET /api/v1/tools/{toolCode}`
 
 The catalog is read-only in v1 and derives from backend code definitions.
+Tool catalog schemas in this evolution must include top-level `description` and `examples`.
 
 ## Workspace Internal-Agent Endpoints
 
@@ -37,6 +38,7 @@ The catalog is read-only in v1 and derives from backend code definitions.
 
 - Existing system-agent registry and workspace system-agent endpoints remain unchanged.
 - Internal-agent APIs are parallel rather than overloading system-agent rows.
+- `main-agent` policy resolution now covers both business tools and coding-domain tools in the same catalog.
 
 ## Runtime Discovery Contract
 
@@ -45,6 +47,7 @@ The catalog is read-only in v1 and derives from backend code definitions.
 - `discovery.expand_tool_domain(domainCode)`
 
 The discovery response must include domain metadata plus concrete assigned tools and their full JSON Schemas.
+Coding-domain tool schemas follow the same contract and must retain top-level `description` and `examples` after localization/materialization.
 
 ## Error Contract
 
@@ -56,6 +59,8 @@ Expected feature errors include:
 - tool not found in catalog
 - selected tool not visible to the internal agent
 - stale selected tool definition
+- coding tool input is invalid
+- coding tool command failed
 
 ## Frontend Backend Boundary
 
@@ -68,6 +73,7 @@ Expected feature errors include:
 - Tool catalog reads are code-backed and do not persist catalog definitions.
 - Workspace internal-agent policy writes persist overrides and explicit selected-tool assignments only.
 - Runtime discovery expansion is run-scoped behavior, not a persisted HTTP transaction.
+- Coding-domain tool execution is host-backed and run-scoped; it does not introduce new persisted tool-definition tables.
 
 ## Mock Or Adapter Expectations
 

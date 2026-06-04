@@ -26,7 +26,11 @@ pub fn discovery_expand_tool_definition(locale: &str) -> EffectiveTool {
             locale,
             &json!({
                 "type": "object",
+                "x-i18n-description-key": "agent.toolCatalog.discovery.expand.description",
                 "required": ["domainCode"],
+                "examples": [{
+                    "domainCode": "workspace"
+                }],
                 "properties": {
                     "domainCode": {
                         "type": "string",

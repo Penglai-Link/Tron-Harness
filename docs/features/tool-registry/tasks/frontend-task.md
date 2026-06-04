@@ -3,8 +3,8 @@
 ## Execution Contract
 
 - feature_slug: tool-registry
-- status: in_progress
-- execution_mode: parallel
+- status: not_applicable
+- execution_mode: solo
 
 ## TDD Contract
 
@@ -12,12 +12,12 @@ Frontend rows use bounded AC slices with green plus focused VERIFY while backend
 
 ## Task Rows
 
-- AC-TOOL-04 | phase: tdd | owner: frontend-worker | scope: `/settings/tools` page, models, API bindings, mocks, and shared UI wiring | command_ref: CMD-FE-CHECK | status: in_progress.
-- AC-TOOL-05 | phase: tdd | owner: frontend-worker | scope: workspace `/agents` internal-agent section, policy controls, selected-tool UI, and system-agent regression preservation | command_ref: CMD-FE-CHECK | status: in_progress.
+- AC-TOOL-04 | phase: support | owner: lead | scope: `/settings/tools` stayed unchanged because this evolution only reopened backend coding-domain catalog/runtime behavior | command_ref: CMD-DOCS-FINAL | status: not_applicable.
+- AC-TOOL-05 | phase: support | owner: lead | scope: workspace `/agents` stayed unchanged because this evolution only reopened backend coding-domain catalog/runtime behavior | command_ref: CMD-DOCS-FINAL | status: not_applicable.
 
 ## Worktree Notes
 
-- Frontend worker runtime id: `019e85d1-513b-77e1-ba1c-18d854b6e3d4`.
+- No frontend worker was dispatched for this backend-only slice.
 
 ## Integration Notes
 

@@ -1,3 +1,4 @@
+mod coding_tools;
 mod discovery;
 mod platform_tools;
 
@@ -37,6 +38,7 @@ pub fn register_default_agent_tools(
 ) -> Result<(), ToolError> {
     let mut tools: Vec<std::sync::Arc<dyn Tool>> =
         platform_tools::platform_business_tools(workspaces, apps, tasks, models, skills, variables);
+    tools.extend(coding_tools::coding_domain_tools());
     tools.push(discovery::discovery_tool());
 
     for tool in tools {

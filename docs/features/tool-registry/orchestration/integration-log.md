@@ -2,21 +2,24 @@
 
 ## Summary
 
-- status: in_progress
+- status: complete
 
 ## Integration Events
 
-- 2026-06-02: lead created feature workspace docs and renamed base branch to `feature/clouds3n/tool-registry/base` before delegated coding.
-- 2026-06-02: backend and frontend coder-spark workers were spawned for disjoint implementation slices.
+| event_id | date | summary | status |
+| --- | --- | --- | --- |
+| INT-001 | 2026-06-04 | lead reopened `tool-registry` as a bounded coding-domain evolution, aligned docs to a solo backend slice, and preserved existing system-agent contracts | done |
+| INT-002 | 2026-06-04 | backend integrated `bash`/`fs`/`search` catalog definitions, runtime executors, localized schema descriptions/examples, and agent-management coverage for policy-derived coding tools | done |
 
 ## Conflict Log
 
-- None yet.
+- None.
 
 ## Validation After Integration
 
-- pending
+- `rtk make be-check` passed.
+- `rtk make be-test` passed after cleaning accumulated test temp files from `TMPDIR`.
 
 ## Blockers
 
-- None yet.
+- None.

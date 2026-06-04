@@ -159,6 +159,12 @@ fn temp_command_path(command_name: &str) -> PathBuf {
     std::env::temp_dir().join(format!("tron-agent-mgmt-{command_name}-{nanos}"))
 }
 
+fn temp_workspace_dir(name: &str) -> PathBuf {
+    let path = temp_command_path(name);
+    std::fs::create_dir_all(&path).expect("temp workspace directory should be created");
+    path
+}
+
 fn write_fake_command(path: &PathBuf) {
     write_executable_script(path, "#!/bin/sh\nexit 0\n");
 }
@@ -963,11 +969,14 @@ async fn tool_catalog_read_apis_are_available() {
             .any(|row| row["domainCode"] == json!("workspace"))
     );
     assert!(domains.iter().any(|row| row["domainCode"] == json!("task")));
+    assert!(domains.iter().any(|row| row["domainCode"] == json!("bash")));
+    assert!(domains.iter().any(|row| row["domainCode"] == json!("fs")));
+    assert!(domains.iter().any(|row| row["domainCode"] == json!("search")));
 
     let tools_response = request_with_headers(
         &app,
         Method::GET,
-        "/api/v1/tools?domainCode=task&search=create",
+        "/api/v1/tools?domainCode=fs&search=read",
         None,
         None,
         Some(&authorization),
@@ -981,13 +990,13 @@ async fn tool_catalog_read_apis_are_available() {
     assert!(
         tools
             .iter()
-            .any(|row| row["toolCode"] == json!("task.create"))
+            .any(|row| row["toolCode"] == json!("fs.read_text"))
     );
 
     let tool_response = request_with_headers(
         &app,
         Method::GET,
-        "/api/v1/tools/task.create",
+        "/api/v1/tools/bash.exec",
         None,
         None,
         Some(&authorization),
@@ -995,7 +1004,16 @@ async fn tool_catalog_read_apis_are_available() {
     .await;
     assert_eq!(tool_response.status(), StatusCode::OK);
     let tool_body = response_json(tool_response).await;
-    assert_eq!(tool_body["data"]["toolCode"], json!("task.create"));
+    assert_eq!(tool_body["data"]["toolCode"], json!("bash.exec"));
+    assert_eq!(
+        tool_body["data"]["inputSchema"]["description"],
+        json!("Run one system command directly with structured arguments.")
+    );
+    assert!(
+        tool_body["data"]["inputSchema"]["examples"]
+            .as_array()
+            .is_some_and(|examples| !examples.is_empty())
+    );
 }
 
 #[tokio::test]
@@ -1031,7 +1049,7 @@ async fn tool_catalog_read_apis_follow_accept_language() {
     let tool_response = request_with_locale(
         &app,
         Method::GET,
-        "/api/v1/tools/task.create",
+        "/api/v1/tools/bash.exec",
         None,
         &authorization,
         "zh-CN",
@@ -1039,18 +1057,23 @@ async fn tool_catalog_read_apis_follow_accept_language() {
     .await;
     assert_eq!(tool_response.status(), StatusCode::OK);
     let tool_body = response_json(tool_response).await;
-    assert_eq!(tool_body["data"]["name"], json!("创建任务"));
+    assert_eq!(tool_body["data"]["name"], json!("执行命令"));
     assert_eq!(
         tool_body["data"]["description"],
-        json!("在当前或指定工作区中创建任务。")
+        json!("使用结构化参数直接执行一条系统命令。")
     );
     assert_eq!(
-        tool_body["data"]["inputSchema"]["properties"]["title"]["description"],
-        json!("任务标题。")
+        tool_body["data"]["inputSchema"]["description"],
+        json!("使用结构化参数直接执行一条系统命令。")
     );
     assert_eq!(
-        tool_body["data"]["inputSchema"]["properties"]["sourceType"]["description"],
-        json!("来源类型，可选值：internal、github、gitlab。")
+        tool_body["data"]["inputSchema"]["properties"]["command"]["description"],
+        json!("要执行的程序名或绝对路径。")
+    );
+    assert!(
+        tool_body["data"]["inputSchema"]["examples"]
+            .as_array()
+            .is_some_and(|examples| !examples.is_empty())
     );
 }
 
@@ -1090,6 +1113,12 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
             .as_array()
             .is_some_and(|rows| !rows.is_empty())
     );
+    assert!(main_row["selectedToolCodes"]
+        .as_array()
+        .is_some_and(|rows| rows.iter().any(|code| code == "bash.exec")));
+    assert!(main_row["selectedToolCodes"]
+        .as_array()
+        .is_some_and(|rows| rows.iter().any(|code| code == "fs.read_text")));
 
     let get_response = request_with_headers(
         &app,
@@ -1256,4 +1285,145 @@ async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
         .expect("recorded scripted model request mutex poisoned")
         .clone();
     assert_eq!(recorded_requests.len(), 1);
+}
+
+#[tokio::test]
+async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
+    let codex_command = temp_command_path("codex-coding-tools");
+    let opencode_command = temp_command_path("opencode-coding-tools");
+    write_fake_command(&codex_command);
+    write_fake_command(&opencode_command);
+
+    let workspace_dir = temp_workspace_dir("coding-tools-runtime");
+    let source_dir = workspace_dir.join("src");
+    std::fs::create_dir_all(&source_dir).expect("source directory should be created");
+    let cargo_toml = workspace_dir.join("Cargo.toml");
+    let lib_rs = source_dir.join("lib.rs");
+    std::fs::write(&cargo_toml, "[package]\nname = \"coding-tools\"\n")
+        .expect("Cargo.toml should be written");
+    std::fs::write(&lib_rs, "pub struct ToolRegistry;\n")
+        .expect("lib.rs should be written");
+
+    let model_server = scripted_model_server(vec![
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "bash.exec",
+                                "arguments": serde_json::to_string(&json!({
+                                    "command": "sed",
+                                    "args": ["-n", "1,1p", cargo_toml.display().to_string()]
+                                })).expect("bash.exec arguments should serialize")
+                            }
+                        },
+                        {
+                            "function": {
+                                "name": "fs.read_text",
+                                "arguments": serde_json::to_string(&json!({
+                                    "path": lib_rs.display().to_string(),
+                                    "startLine": 1,
+                                    "endLine": 1
+                                })).expect("fs.read_text arguments should serialize")
+                            }
+                        },
+                        {
+                            "function": {
+                                "name": "search.glob",
+                                "arguments": serde_json::to_string(&json!({
+                                    "patterns": ["*.rs"],
+                                    "root": workspace_dir.display().to_string()
+                                })).expect("search.glob arguments should serialize")
+                            }
+                        }
+                    ]
+                }
+            }]
+        }),
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "coding tools executed"
+                }
+            }]
+        }),
+    ])
+    .await;
+    let app = app_with_config(test_config(&codex_command, &opencode_command));
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let run_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/agents/runs",
+        Some(json!({
+            "prompt": "Read and inspect the coding workspace.",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "TEST_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": model_server.base_url,
+                "apiKey": "sk-test-api",
+                "modelName": "gpt-test"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(run_response.status(), StatusCode::OK);
+    let run_body = response_json(run_response).await;
+    assert_eq!(run_body["data"]["finalOutput"], json!("coding tools executed"));
+
+    let recorded_requests = model_server
+        .requests
+        .lock()
+        .expect("recorded scripted model request mutex poisoned")
+        .clone();
+    assert_eq!(recorded_requests.len(), 2);
+
+    let first_tools = recorded_requests[0]["tools"]
+        .as_array()
+        .expect("first request tools should be an array");
+    assert!(
+        first_tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == json!("bash.exec"))
+    );
+    assert!(
+        first_tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == json!("fs.read_text"))
+    );
+    assert!(
+        first_tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == json!("search.glob"))
+    );
+
+    let second_messages = recorded_requests[1]["messages"]
+        .as_array()
+        .expect("second request messages should be an array");
+    assert!(second_messages.iter().any(|message| {
+        message["role"] == json!("user")
+            && message["content"]
+                .as_str()
+                .is_some_and(|content| content.contains("bash.exec") && content.contains("[package]"))
+    }));
+    assert!(second_messages.iter().any(|message| {
+        message["role"] == json!("user")
+            && message["content"]
+                .as_str()
+                .is_some_and(|content| content.contains("fs.read_text") && content.contains("ToolRegistry"))
+    }));
+    assert!(second_messages.iter().any(|message| {
+        message["role"] == json!("user")
+            && message["content"]
+                .as_str()
+                .is_some_and(|content| content.contains("search.glob") && content.contains("src/lib.rs"))
+    }));
 }
