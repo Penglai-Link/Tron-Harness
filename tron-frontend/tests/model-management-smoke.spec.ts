@@ -1317,6 +1317,16 @@ async function openModelsPage(page: Page) {
   await expect(page.getByRole("heading", { name: "Models" })).toBeVisible();
 }
 
+test("responses state options are localized on the model create page", async ({ page }) => {
+  await routeApi(page);
+  await seedTronCoreShellSelection(page);
+  await page.goto(`${frontendBaseUrl}/settings/models/new`);
+
+  const responsesStateSelect = page.getByLabel("Responses State");
+  await expect(responsesStateSelect).toBeVisible();
+  await expect(responsesStateSelect.locator("option")).toHaveText(["Stateless", "Stateful"]);
+});
+
 test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;

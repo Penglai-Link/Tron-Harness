@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Navigate,
   useNavigate,
@@ -89,14 +90,11 @@ function maskApiKeyValue(value: string) {
   return value.trim() ? "*****" : "";
 }
 
-function formatResponsesState(value: boolean) {
-  return value ? "有状态" : "无状态";
-}
-
 export function PlatformModelDetailsPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const { t } = useTranslation(["common"]);
   const dataSource = getServiceDataSource("model");
   const modelCode = searchParams.get("modelCode") ?? "";
   const [selectedRecord, setSelectedRecord] = useState<ModelRecord | null>(null);
@@ -442,8 +440,12 @@ export function PlatformModelDetailsPage() {
                 <ReadValue>{selectedRecord.structuredOutputEnabled ? "Enabled" : "Disabled"}</ReadValue>
               </Field>
               {selectedRecord.protocol === "RESPONSES" ? (
-                <Field label="Responses State">
-                  <ReadValue>{formatResponsesState(selectedRecord.responsesStatefulEnabled)}</ReadValue>
+                <Field label={t("common:responsesState.label", "Responses State")}>
+                  <ReadValue>
+                    {selectedRecord.responsesStatefulEnabled
+                      ? t("common:responsesState.stateful", "Stateful")
+                      : t("common:responsesState.stateless", "Stateless")}
+                  </ReadValue>
                 </Field>
               ) : null}
             </div>

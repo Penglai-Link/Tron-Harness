@@ -12,6 +12,11 @@ export const common = {
   content: {
     none: "None",
   },
+  responsesState: {
+    label: "Responses State",
+    stateless: "Stateless",
+    stateful: "Stateful",
+  },
   locale: {
     english: "English",
     simplifiedChinese: "Simplified Chinese",

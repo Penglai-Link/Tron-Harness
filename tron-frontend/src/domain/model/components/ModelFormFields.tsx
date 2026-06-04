@@ -1,4 +1,5 @@
 import type { RefObject } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   Field,
@@ -183,6 +184,7 @@ export function ModelFormFields({
       : (state.maxTokens.trim() ? state.maxTokens : DEFAULT_MAX_TOKENS);
   }
 
+  const { t } = useTranslation(["common"]);
   const protocolOptions = getModelProtocolOptions(state.modelType);
   const modelCapabilityGroups = getModelCapabilityGroups(state.protocol);
   const maxTokensDisabled = Boolean(readOnly || state.structuredOutputEnabled);
@@ -381,14 +383,14 @@ export function ModelFormFields({
       </div>
 
       {state.protocol === "RESPONSES" ? (
-        <Field label="Responses State">
+        <Field label={t("common:responsesState.label", "Responses State")}>
           <SelectInput
             value={state.responsesStatefulEnabled ? "true" : "false"}
             onChange={(event) => patch("responsesStatefulEnabled", event.target.value === "true")}
             disabled={readOnly}
           >
-            <option value="false">无状态</option>
-            <option value="true">有状态</option>
+            <option value="false">{t("common:responsesState.stateless", "Stateless")}</option>
+            <option value="true">{t("common:responsesState.stateful", "Stateful")}</option>
           </SelectInput>
         </Field>
       ) : null}

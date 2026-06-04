@@ -12,6 +12,11 @@ export const common = {
   content: {
     none: "无",
   },
+  responsesState: {
+    label: "Responses 状态",
+    stateless: "无状态",
+    stateful: "有状态",
+  },
   locale: {
     english: "English",
     simplifiedChinese: "简体中文",
