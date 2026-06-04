@@ -19,7 +19,7 @@ VALUES
         'memory-card',
         '["memory-card"]',
         'v1',
-        '{"routes":[{"routeId":"memory-fulltext","retriever":"FULLTEXT_SQLITE_FTS5_SIMPLE_V1"},{"routeId":"memory-vector","retriever":"VECTOR_SQLITE_VEC0_COSINE_V1"}],"fusionPolicy":{"type":"SUM_SCORE"},"dedupPolicy":{"type":"TEXT_UNIT"},"rerankPolicy":{"enabled":true},"hydratePolicy":{"type":"TEXT_UNIT"},"contextPolicy":{"supportedStrategies":["RESULT_LIST","TOKEN_BUDGET_PACK","MEMORY_CONTEXT_PACK","DOC_QA_CONTEXT_PACK"]}}',
+        '{"routes":[{"routeId":"memory-structured","retriever":"STRUCTURED_FILTER_SQLITE_V1"},{"routeId":"memory-fulltext","retriever":"FULLTEXT_SQLITE_FTS5_SIMPLE_V1"},{"routeId":"memory-vector","retriever":"VECTOR_SQLITE_VEC0_COSINE_V1"}],"fusionPolicy":{"type":"SUM_SCORE"},"dedupPolicy":{"type":"TEXT_UNIT"},"rerankPolicy":{"enabled":true},"hydratePolicy":{"type":"TEXT_UNIT"},"contextPolicy":{"supportedStrategies":["RESULT_LIST","TOKEN_BUDGET_PACK","MEMORY_CONTEXT_PACK","DOC_QA_CONTEXT_PACK"]}}',
         '{}',
         'SKIP_VECTOR_ON_UNAVAILABLE',
         1772380800000,

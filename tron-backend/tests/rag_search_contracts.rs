@@ -596,7 +596,7 @@ async fn blank_query_rejects_profiles_without_structured_filter_route() {
     let database_url = temp_database_path("rag-structured-filter-blank-reject")
         .to_string_lossy()
         .to_string();
-    seed_memory_fixture(&database_url).await;
+    seed_project_doc_fixture(&database_url).await;
     let repository = CapturingSearchRepository::connect(&database_url);
     let route_calls = repository.route_calls.clone();
     let runtime = FakeSearchRuntime::new();
@@ -608,10 +608,10 @@ async fn blank_query_rejects_profiles_without_structured_filter_route() {
 
     let error = service
         .search(search_request(
-            "memory-related-v1",
+            "project-doc-related-v1",
             "",
             "RESULT_LIST",
-            json!({ "memoryType": "RULE" }),
+            json!({ "documentType": "DESIGN" }),
         ))
         .await
         .unwrap_err();
@@ -619,6 +619,85 @@ async fn blank_query_rejects_profiles_without_structured_filter_route() {
     assert_eq!(error, RagError::SearchRequestInvalid);
     assert_eq!(runtime.embedding_call_count(), 0);
     assert!(route_calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn seeded_memory_related_profile_uses_structured_fulltext_and_vector_routes() {
+    let database_url = temp_database_path("rag-seeded-memory-related-three-routes")
+        .to_string_lossy()
+        .to_string();
+    seed_memory_fixture(&database_url).await;
+    let repository = CapturingSearchRepository::connect(&database_url);
+    let route_calls = repository.route_calls.clone();
+    let runtime = FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0));
+    let service = RagSearchService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+
+    let result = service
+        .search(search_request(
+            "memory-related-v1",
+            "cite source titles",
+            "RESULT_LIST",
+            json!({ "memoryType": "RULE" }),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(result.hits.len(), 1);
+    assert_eq!(result.hits[0].source_code, "memory-rag-rule");
+    assert_eq!(runtime.embedding_call_count(), 1);
+    let route_calls = route_calls.lock().unwrap();
+    assert_eq!(
+        route_calls
+            .iter()
+            .map(|call| call.retriever.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "STRUCTURED_FILTER_SQLITE_V1",
+            "FULLTEXT_SQLITE_FTS5_SIMPLE_V1",
+            "VECTOR_SQLITE_VEC0_COSINE_V1"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn seeded_memory_related_profile_allows_blank_query_structured_filter_only() {
+    let database_url = temp_database_path("rag-seeded-memory-related-blank-structured")
+        .to_string_lossy()
+        .to_string();
+    seed_memory_fixture(&database_url).await;
+    let repository = CapturingSearchRepository::connect(&database_url);
+    let route_calls = repository.route_calls.clone();
+    let runtime = FakeSearchRuntime::new();
+    let service = RagSearchService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+
+    let result = service
+        .search(search_request_with_return_fields(
+            "memory-related-v1",
+            "",
+            "RESULT_LIST",
+            json!({ "memoryType": "RULE" }),
+            &["memoryType"],
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(result.hits.len(), 1);
+    assert_eq!(result.hits[0].source_code, "memory-rag-rule");
+    assert_eq!(result.hits[0].fields["memoryType"], json!("RULE"));
+    assert_eq!(runtime.embedding_call_count(), 0);
+    assert_eq!(runtime.rerank_call_count(), 0);
+    let route_calls = route_calls.lock().unwrap();
+    assert_eq!(route_calls.len(), 1);
+    assert_eq!(route_calls[0].retriever, "STRUCTURED_FILTER_SQLITE_V1");
+    assert!(route_calls[0].query.is_empty());
 }
 
 #[tokio::test]
