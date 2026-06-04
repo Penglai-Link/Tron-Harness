@@ -151,6 +151,29 @@ pub struct AgentRunResult {
 }
 ```
 
+## Turn State Strategy
+
+The runtime loop stays single and protocol-agnostic. Only the continuation state changes per model protocol.
+
+### ChatTranscriptState
+
+- Keeps the full message transcript as the source of truth.
+- Builds Chat Completions requests from the transcript and current tool observations.
+- Appends tool observations back into the transcript so the next turn sees the same shared history.
+
+### ResponsesItemState
+
+- Keeps the current transcript slice plus a `previous_response_id` cursor.
+- Builds Responses requests from the current delta items instead of replaying the full transcript on every turn.
+- Carries tool observations forward as function-call output items and advances the cursor after each model response.
+
+### Shared Loop Contract
+
+- Step counting stays in the shared loop.
+- Tool batching and parallel execution stay in the shared loop.
+- Failure handling and event publication stay in the shared loop.
+- Only request construction, response continuation, and tool-observation propagation are protocol-specific.
+
 ## Adapter Decomposition
 
 ## MainReactRuntime
@@ -352,9 +375,9 @@ Rules:
 
 ## Immediate Implementation Checklist
 
-1. Create `application/agent/runtime_adapter.rs` with trait and capability structs.
-2. Create `application/agent/runtime_registry.rs` with adapter selection.
-3. Move invocation runtime selection from `selected_model_client` to runtime registry.
-4. Keep `SystemAgentCliModelClient` as adapter dependency, not orchestration entrypoint.
-5. Add minimal runtime adapter key and capability fields to run results.
-
+1. Create `application/agent/turn_state.rs` with chat transcript and Responses item continuation strategies.
+2. Create `application/agent/runtime_adapter.rs` with trait and capability structs.
+3. Create `application/agent/runtime_registry.rs` with adapter selection.
+4. Move invocation runtime selection from `selected_model_client` to runtime registry.
+5. Keep `SystemAgentCliModelClient` as adapter dependency, not orchestration entrypoint.
+6. Add minimal runtime adapter key and capability fields to run results.

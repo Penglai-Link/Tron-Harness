@@ -3,11 +3,26 @@
 ## Summary
 
 - feature_slug: react-agent-runtime
-- total_changes: 3
+- total_changes: 4
 - first_evolution: 2026-05-27
-- last_evolution: 2026-05-30
+- last_evolution: 2026-06-04
 
 ## Change History
+
+### #4
+
+- change_id: 4
+- timestamp: 2026-06-04
+- trigger: user_request
+- change_type: requirement_expansion
+- gate_reopened: Phase 4A
+- diff_summary: |
+    What changed vs before:
+    - Runtime loop continuation was still transcript-centric and Responses requests only mirrored transcript replay.
+    + Added a shared turn-state strategy with `ChatTranscriptState` and `ResponsesItemState`, kept one runtime loop, and let Responses build delta input items with `previous_response_id` instead of copying the loop into protocol-specific branches.
+- downstream_impact: feature-spec,acceptance,test-plan,tasks,worktree-plan,integration-log,reports,tron-backend/src/application/agent/runtime.rs,tron-backend/src/application/agent/runtime_tool_calls.rs,tron-backend/src/application/agent/turn_state.rs,tron-backend/src/domain/agent/model_exchange.rs,tron-backend/src/adapters/outbound/model/protocol_adapters/responses.rs
+- old_evidence_status: superseded
+- user_approval: approved_with_defaults
 
 ### #3
 
@@ -60,4 +75,4 @@
 
 ## Residual Risks
 
-- System CLI runtime execution is stateless per request in this iteration; external session continuation mapping is still pending.
+- System CLI runtime execution remains adapter-bound per request; protocol-native Responses continuation now uses `previous_response_id`, but external CLI session continuation mapping is still adapter-specific.

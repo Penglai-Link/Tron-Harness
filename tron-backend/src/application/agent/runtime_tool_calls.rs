@@ -1,32 +1,32 @@
 use std::sync::Arc;
 
 use crate::domain::agent::{
-    AgentError, AgentMessage, AgentRunContext, ToolCall, ToolError, ToolExecutionResult,
-    ToolRequest,
+    AgentError, AgentRunContext, ToolCall, ToolError, ToolExecutionResult, ToolRequest,
 };
 use crate::shared::event_bus::BusOutcome;
 
-use super::{
-    ReactAgent, apply_tool_context_delta, collapse_ephemeral_expanded_domains,
-    format_tool_observation_message,
-};
+use super::{ReactAgent, apply_tool_context_delta, collapse_ephemeral_expanded_domains};
+use super::super::TurnStateAdapter;
 
 impl ReactAgent {
     pub(super) async fn execute_tool_calls(
         &self,
         context: &mut AgentRunContext,
         tool_calls: &mut u32,
+        turn_state: &mut TurnStateAdapter,
         calls: Vec<ToolCall>,
     ) -> Result<(), AgentError> {
         if calls.len() > 1 {
-            self.execute_tool_call_batches(context, tool_calls, calls).await
+            self.execute_tool_call_batches(context, tool_calls, turn_state, calls)
+                .await
         } else {
             for call in calls {
                 if *tool_calls >= context.limits.max_tool_calls {
                     self.fail_max_tool_calls(context)?;
                     return Err(AgentError::MaxToolCallsExceeded);
                 }
-                self.execute_tool_call(context, tool_calls, call).await?;
+                self.execute_tool_call(context, tool_calls, turn_state, call)
+                    .await?;
             }
 
             Ok(())
@@ -37,6 +37,7 @@ impl ReactAgent {
         &self,
         context: &mut AgentRunContext,
         tool_calls: &mut u32,
+        turn_state: &mut TurnStateAdapter,
         call: ToolCall,
     ) -> Result<(), AgentError> {
         *tool_calls += 1;
@@ -84,14 +85,8 @@ impl ReactAgent {
                     None,
                     Some(observation.output.as_str()),
                 )?;
-                context.messages.push(match model_call_id {
-                    Some(call_id) => AgentMessage::tool_with_call_id(
-                        format_tool_observation_message(&observation),
-                        call_id,
-                        observation.output.clone(),
-                    ),
-                    None => AgentMessage::tool(format_tool_observation_message(&observation)),
-                });
+                let message = turn_state.record_tool_observation(&observation, model_call_id);
+                context.messages.push(message);
                 let completed_tool_name = observation.tool_name.clone();
                 context.observations.push(observation);
                 collapse_ephemeral_expanded_domains(context, completed_tool_name.as_str());
@@ -135,6 +130,7 @@ impl ReactAgent {
         &self,
         context: &mut AgentRunContext,
         tool_calls: &mut u32,
+        turn_state: &mut TurnStateAdapter,
         calls: Vec<ToolCall>,
     ) -> Result<(), AgentError> {
         let mut remaining_calls = calls;
@@ -150,7 +146,7 @@ impl ReactAgent {
                 .min(context.limits.max_parallel_tool_calls as usize)
                 .min(remaining_budget as usize);
             let batch_calls = remaining_calls.drain(..batch_size).collect::<Vec<_>>();
-            self.execute_tool_calls_parallel_batch(context, tool_calls, batch_calls)
+            self.execute_tool_calls_parallel_batch(context, tool_calls, turn_state, batch_calls)
                 .await?;
         }
 
@@ -161,6 +157,7 @@ impl ReactAgent {
         &self,
         context: &mut AgentRunContext,
         tool_calls: &mut u32,
+        turn_state: &mut TurnStateAdapter,
         calls: Vec<ToolCall>,
     ) -> Result<(), AgentError> {
         let context_snapshot = Arc::new(context.clone());
@@ -234,6 +231,7 @@ impl ReactAgent {
                         &tool_call_id,
                         &tool_name,
                         model_call_id,
+                        turn_state,
                         execution,
                     )?;
                 }
@@ -284,6 +282,7 @@ impl ReactAgent {
         tool_call_id: &str,
         tool_name: &str,
         model_call_id: Option<String>,
+        turn_state: &mut TurnStateAdapter,
         execution: ToolExecutionResult,
     ) -> Result<(), AgentError> {
         let observation = execution.observation;
@@ -298,14 +297,8 @@ impl ReactAgent {
             None,
             Some(observation.output.as_str()),
         )?;
-        context.messages.push(match model_call_id {
-            Some(call_id) => AgentMessage::tool_with_call_id(
-                format_tool_observation_message(&observation),
-                call_id,
-                observation.output.clone(),
-            ),
-            None => AgentMessage::tool(format_tool_observation_message(&observation)),
-        });
+        let message = turn_state.record_tool_observation(&observation, model_call_id);
+        context.messages.push(message);
         let completed_tool_name = observation.tool_name.clone();
         context.observations.push(observation);
         collapse_ephemeral_expanded_domains(context, completed_tool_name.as_str());

@@ -15,6 +15,7 @@ mod runtime_capability;
 mod system_agent_model_probe;
 mod system_cli_output_parser;
 mod tool_catalog;
+mod turn_state;
 
 pub use agui_stream::{AgentAguiReplayStore, AgentAguiStreamError, AgentAguiStreamService};
 pub use business_tools::{
@@ -38,4 +39,5 @@ pub use runtime_adapter::{
     AgentRuntime, AgentRuntimeRegistry, RuntimeAdapterDescriptor, RuntimeAdapterKey,
     RuntimeAdapterSelection, RuntimeAdapterStage, RuntimeCapabilities, runtime_adapter_descriptors,
 };
+pub(crate) use turn_state::{TurnStateAdapter, TurnStateKind};
 pub use tool_catalog::BusinessToolCatalog;

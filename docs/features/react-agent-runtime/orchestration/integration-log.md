@@ -10,6 +10,7 @@ Runtime feature workspace prepared on the selected Lite Spec base branch, then e
 | --- | --- | --- | --- |
 | RAR-INT-01 | AC-RAR-01, AC-RAR-02, AC-RAR-03, AC-RAR-04, AC-RAR-05, AC-RAR-06 | Spec, task, and worktree plans prepared before implementation. | done |
 | RAR-INT-02 | AC-RAR-07 | Invocation runtime routing and system CLI adapter implementation integrated; chat orchestration integration tests verify codex/opencode command execution path. | done |
+| RAR-INT-03 | AC-RAR-08 | Shared turn-state strategy integrated into the runtime loop; ChatTranscriptState and ResponsesItemState keep one loop while Responses requests now carry `previous_response_id` plus delta input items. | done |
 
 ## Conflict Log
 

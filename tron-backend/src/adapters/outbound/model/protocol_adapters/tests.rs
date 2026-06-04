@@ -308,6 +308,47 @@ fn responses_request_uses_string_input_for_single_user_prompt() {
 }
 
 #[test]
+fn responses_request_uses_stateful_response_items_and_previous_response_id() {
+    let config = AgentModelConfig {
+        model_code: "MODEL-1".into(),
+        protocol: AgentModelProtocol::Responses,
+        base_url: "https://provider.test/v1".into(),
+        api_path: None,
+        api_key: "sk-test".into(),
+        model_name: "qwen-test".into(),
+        thinking_enabled: false,
+        temperature: None,
+        max_tokens: None,
+        context_window_tokens: Some(128_000),
+        top_p: None,
+        max_retries: None,
+    };
+    let body = responses_request(
+        &config,
+        &ModelRequest {
+            messages: vec![AgentMessage::tool_with_call_id(
+                "tool:lookup\nresult:\nfound",
+                "call-123",
+                "found",
+            )],
+            tools: vec![],
+            system_agent_session_id: None,
+            response_input_items: Some(vec![json!({
+                "type": "function_call_output",
+                "call_id": "call-123",
+                "output": "found"
+            })]),
+            previous_response_id: Some("resp-1".into()),
+        },
+    );
+
+    assert_eq!(body["previous_response_id"], json!("resp-1"));
+    assert_eq!(body["input"][0]["type"], json!("function_call_output"));
+    assert_eq!(body["input"][0]["call_id"], json!("call-123"));
+    assert_eq!(body["input"][0]["output"], json!("found"));
+}
+
+#[test]
 fn chat_stream_maps_reasoning_content_to_summary_delta() {
     let event = ChatCompletionsAdapter
         .parse_stream_event(&json!({

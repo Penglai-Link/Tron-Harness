@@ -9,12 +9,14 @@ use crate::{
         AgentError, AgentKind, AgentModelConfig, AgentRunContext, AgentRunResult,
         ExpandedDomainPersistenceMode, ModelRequest, ModelResponse, ModelStreamEvent,
         ModelStreamEventKind, ModelTokenUsage, ToolContextDelta, ToolExposureMode, ToolRegistry,
-        responses_input_items_from_messages,
     },
     shared::event_bus::{BusEventDraft, BusOutcome, BusRequestRef, EventBusHandle, PublishOutcome},
 };
 
-use super::{DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, discovery_expand_tool_definition};
+use super::{
+    DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, TurnStateAdapter, TurnStateKind,
+    discovery_expand_tool_definition,
+};
 
 #[path = "runtime_tool_calls.rs"]
 mod runtime_tool_calls;
@@ -81,35 +83,6 @@ pub struct ReactAgent {
     event_bus: EventBusHandle,
 }
 
-#[derive(Debug, Default, Clone)]
-struct ResponsesContinuationState {
-    previous_response_id: Option<String>,
-    consumed_message_count: usize,
-}
-
-impl ResponsesContinuationState {
-    fn build_request(&self, context: &AgentRunContext) -> ModelRequest {
-        let current_messages = self.current_messages(context);
-        ModelRequest {
-            messages: current_messages.to_vec(),
-            tools: context.tools.clone(),
-            system_agent_session_id: context.system_agent_session_id.clone(),
-            response_input_items: Some(responses_input_items_from_messages(current_messages)),
-            previous_response_id: self.previous_response_id.clone(),
-        }
-    }
-
-    fn apply_response(&mut self, response: &ModelResponse, message_count: usize) {
-        self.previous_response_id = response.response_id().map(str::to_owned);
-        self.consumed_message_count = message_count;
-    }
-
-    fn current_messages<'a>(&self, context: &'a AgentRunContext) -> &'a [crate::domain::agent::AgentMessage] {
-        let start = self.consumed_message_count.min(context.messages.len());
-        &context.messages[start..]
-    }
-}
-
 impl ReactAgent {
     pub async fn run(&self, mut context: AgentRunContext) -> Result<AgentRunResult, AgentError> {
         self.run_with_model(&mut context, None).await
@@ -129,13 +102,12 @@ impl ReactAgent {
         sink: Option<ModelStreamSink>,
     ) -> Result<AgentRunResult, AgentError> {
         validate_context(&context)?;
-        let mut responses_state = if context.model.protocol == crate::domain::agent::AgentModelProtocol::Responses
-            && context.model.responses_stateful_enabled
-        {
-            Some(ResponsesContinuationState::default())
-        } else {
-            None
-        };
+        let mut turn_state = TurnStateAdapter::new(
+            context.model.protocol,
+            context.messages.clone(),
+            context.model.responses_stateful_enabled,
+        );
+        let turn_state_kind = turn_state.kind();
         self.publish(
             &context,
             "agent.run.requested",
@@ -158,10 +130,7 @@ impl ReactAgent {
                 return Err(AgentError::MaxStepsExceeded);
             }
             step_count += 1;
-            let request = match responses_state.as_ref() {
-                Some(state) => state.build_request(context),
-                None => model_request_from_context(&context),
-            };
+            let request = turn_state.build_request(context);
             self.publish(
                 &context,
                 "agent.model.requested",
@@ -169,7 +138,7 @@ impl ReactAgent {
                 Some("model_requested"),
             )?;
             let response_result = if let Some(sink) = sink.clone() {
-                let stream_sink = self.model_stream_event_sink(context, sink);
+                let stream_sink = self.model_stream_event_sink(context, sink, turn_state_kind);
                 self.model_client
                     .generate_stream(&context.model, &request, stream_sink)
                     .await
@@ -200,9 +169,7 @@ impl ReactAgent {
                     None => usage,
                 });
             }
-            if let Some(state) = responses_state.as_mut() {
-                state.apply_response(&response, context.messages.len());
-            }
+            turn_state.apply_model_response(&response);
 
             match response {
                 ModelResponse::FinalOutput {
@@ -237,7 +204,7 @@ impl ReactAgent {
                     calls,
                     ..
                 } => {
-                    self.execute_tool_calls(context, &mut tool_calls, calls)
+                    self.execute_tool_calls(context, &mut tool_calls, &mut turn_state, calls)
                         .await?;
                 }
             }
@@ -334,6 +301,7 @@ impl ReactAgent {
         &self,
         context: &AgentRunContext,
         sink: ModelStreamSink,
+        turn_state_kind: TurnStateKind,
     ) -> ModelStreamSink {
         let event_bus = self.event_bus.clone();
         let run_code = context.run_code.clone();
@@ -349,11 +317,7 @@ impl ReactAgent {
             .map(|value| value.to_string());
         let output_started = Arc::new(Mutex::new(false));
         Arc::new(move |event: ModelStreamEvent| {
-            let event_name = match event.kind {
-                ModelStreamEventKind::Text => "agent.output.delta",
-                ModelStreamEventKind::Reasoning => "agent.reasoning.raw_delta",
-                ModelStreamEventKind::ReasoningSummary => "agent.reasoning.delta",
-            };
+            let event_name = turn_state_kind.stream_event_name(event.kind);
             if event.kind == ModelStreamEventKind::Text {
                 let mut started = output_started
                     .lock()
@@ -486,24 +450,6 @@ fn validate_context(context: &AgentRunContext) -> Result<(), AgentError> {
     }
     Ok(())
 }
-
-fn model_request_from_context(context: &AgentRunContext) -> ModelRequest {
-    ModelRequest {
-        messages: context.messages.clone(),
-        tools: context.tools.clone(),
-        system_agent_session_id: context.system_agent_session_id.clone(),
-        response_input_items: None,
-        previous_response_id: None,
-    }
-}
-
-fn format_tool_observation_message(observation: &crate::domain::agent::ToolObservation) -> String {
-    format!(
-        "tool:{}\nresult:\n{}",
-        observation.tool_name, observation.output
-    )
-}
-
 fn apply_tool_context_delta(context: &mut AgentRunContext, delta: ToolContextDelta) {
     if !delta.add_tools.is_empty() {
         for tool in delta.add_tools {

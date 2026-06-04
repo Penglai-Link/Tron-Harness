@@ -2,7 +2,7 @@
 
 ## Summary
 
-Runtime kernel implementation is complete in `tron-backend/src/domain/agent.rs` and wired through `tron-backend/src/domain.rs`.
+Runtime kernel implementation is complete in `tron-backend/src/domain/agent.rs` and the turn-state continuation refactor is wired through the shared runtime loop in `tron-backend/src/application/agent`.
 
 ## Evidence Rows
 
@@ -13,7 +13,7 @@ Runtime kernel implementation is complete in `tron-backend/src/domain/agent.rs` 
 - AC-RAR-05 | red: bounded failure behavior did not exist before the runtime kernel. | green: `rtk make be-test` passed max-step exhaustion and failure-event assertions without successful output events. | command_ref: CMD-BE-TEST | browser:not applicable | status: done.
 - AC-RAR-06 | red: first GREEN attempt exposed event-bus attr overflow while carrying too much metadata. | green: event attrs were reduced below the shared bus limit, and `rtk make be-test` passed metadata-only event assertions excluding prompts, completions, raw tool outputs, tokens, request bodies, and response bodies. | command_ref: CMD-BE-TEST | browser:not applicable | status: done.
 - AC-RAR-07 | red: runtime invocation could not dispatch to system CLI agents before adapter evolution and had no backend model-catalog contract for system agents. | green: backend integration tests passed for workspace-resolved `codex`/`opencode` dispatch, command execution, output/token mapping, and startup/rescan CLI model catalog refresh exposure through registry records. | command_ref: CMD-BE-TEST | browser:not applicable | status: done.
-- AC-RAR-08 | red: no explicit orchestrator contract existed for runtime `start`/`resume`/`cancel`, capability routing, timeout envelope, or retry policy. | green: orchestrator and runtime adapter registry tests passed, invocation now routes through `AgentOrchestrator` plus runtime descriptors instead of chat-scoped branching, and service-mode adapters (`CODEX_APP_SERVER`, `OPENCODE_SERVE`, `OPENCODE_ACP`) execute real start/resume/cancel HTTP calls. | command_ref: CMD-BE-TEST | browser:not applicable | status: done.
+- AC-RAR-08 | red: no explicit orchestrator contract existed for runtime `start`/`resume`/`cancel`, capability routing, timeout envelope, retry policy, or protocol-specific continuation state. | green: orchestrator and runtime adapter registry tests passed, invocation now routes through `AgentOrchestrator` plus runtime descriptors instead of chat-scoped branching, `ChatTranscriptState` and `ResponsesItemState` keep a single runtime loop, Responses requests carry `previous_response_id` plus delta input items, and service-mode adapters (`CODEX_APP_SERVER`, `OPENCODE_SERVE`, `OPENCODE_ACP`) execute real start/resume/cancel HTTP calls. | command_ref: CMD-BE-TEST | browser:not applicable | status: done.
 - AC-RAR-09 | red: runtime and AGUI events lacked a formal canonical lifecycle envelope before translation. | green: canonical-event mapping tests passed and AGUI stream translation is now anchored on canonical runtime codes with deterministic protocol event output. | command_ref: CMD-BE-TEST | browser:not applicable | status: done.
 - AC-RAR-10 | red: AGUI replay data previously depended on in-memory sink state and could not survive process restart. | green: persistent replay sink now writes canonical/AGUI translated events into SQLite and `agent_agui_stream_api` restart test verifies replay still returns historical events after app restart. | command_ref: CMD-BE-TEST | browser:not applicable | status: done.
 
@@ -29,12 +29,19 @@ Runtime kernel implementation is complete in `tron-backend/src/domain/agent.rs` 
 - `tron-backend/src/application/agent/runtime_adapter.rs`
 - `tron-backend/src/application/agent/runtime_adapter/service_mode_runtime.rs`
 - `tron-backend/src/application/agent/runtime_capability.rs`
+- `tron-backend/src/application/agent/runtime.rs`
+- `tron-backend/src/application/agent/runtime_tool_calls.rs`
+- `tron-backend/src/application/agent/turn_state.rs`
+- `tron-backend/src/adapters/outbound/model/http_model_client.rs`
+- `tron-backend/src/adapters/outbound/model/protocol_adapters/tests.rs`
 - `tron-backend/src/application/agent/canonical_event.rs`
 - `tron-backend/src/application/agent/agui_stream.rs`
 - `tron-backend/src/application/agent/agui_translate.rs`
 - `tron-backend/src/application/agent/management.rs`
 - `tron-backend/src/domain/agent/kind.rs`
 - `tron-backend/src/application/agent.rs`
+- `tron-backend/src/domain/agent/model_exchange.rs`
+- `tron-backend/src/adapters/outbound/model/protocol_adapters/responses.rs`
 - `tron-backend/src/domain/agent/agui.rs`
 - `tron-backend/src/adapters/outbound/persistence/sqlite/agent_event_replay_store.rs`
 - `tron-backend/src/adapters/outbound/persistence/sqlite.rs`
