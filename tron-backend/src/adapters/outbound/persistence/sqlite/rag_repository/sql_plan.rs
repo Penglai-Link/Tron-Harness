@@ -98,6 +98,7 @@ pub(crate) fn compile_sql_corpus_plan(
                 .ok_or(RagError::StorageBindingInvalid)?
                 .to_string(),
         ),
+        RagStorageLayout::GraphSingleNode => return Err(RagError::StorageBindingInvalid),
     };
     validate_identifier(&text_unit_table)?;
     if let Some(table) = &source_table {
@@ -131,6 +132,7 @@ pub(crate) fn compile_sql_corpus_plan(
         RagStorageLayout::EmbeddedSource => {
             first_existing(&text_unit_columns, &["source_status", "status"])
         }
+        RagStorageLayout::GraphSingleNode => None,
     };
 
     let text_unit_unique_key = text_unit_unique_key(repository, &text_unit_table)?;

@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     future::Future,
     pin::Pin,
     sync::{Arc, Mutex},
@@ -22,11 +22,20 @@ use super::{
         stable_hit_order,
     },
     search_strategy::retriever_strategy,
+    search_validation::{
+        filters_and_version, search_scopes, validate_request, validate_return_fields,
+    },
 };
 
 pub trait RagSearchRepository: RagConfigRepository {
     fn search_route(&self, query: RagRouteSearchQuery) -> Result<Vec<RagSearchRow>, RagError>;
     fn persist_search_trace(&self, trace: RagSearchTraceWrite) -> Result<(), RagError>;
+    fn expand_related_graph(
+        &self,
+        _query: RagGraphExpansionQuery,
+    ) -> Result<Option<Value>, RagError> {
+        Ok(None)
+    }
 }
 
 impl<T> RagSearchRepository for Arc<Mutex<T>>
@@ -44,6 +53,15 @@ where
             .expect("RAG repository mutex poisoned")
             .persist_search_trace(trace)
     }
+
+    fn expand_related_graph(
+        &self,
+        query: RagGraphExpansionQuery,
+    ) -> Result<Option<Value>, RagError> {
+        self.lock()
+            .expect("RAG repository mutex poisoned")
+            .expand_related_graph(query)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -51,6 +69,7 @@ pub struct RagRouteSearchQuery {
     pub corpus_id: String,
     pub route_id: String,
     pub retriever: String,
+    pub workspace_code: String,
     pub query: String,
     pub query_embedding: Option<Vec<f32>>,
     pub source_version: String,
@@ -58,6 +77,18 @@ pub struct RagRouteSearchQuery {
     pub filters: Value,
     pub return_fields: Vec<String>,
     pub limit: usize,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RagGraphExpansionQuery {
+    pub corpus_id: String,
+    pub source_code: String,
+    pub source_version: String,
+    pub target_code: String,
+    pub scope_type: String,
+    pub scope_code: String,
+    pub workspace_code: String,
+    pub policy: Value,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -196,6 +227,8 @@ pub struct CandidateHit {
 pub(super) struct RankedCandidate {
     pub result: CandidateHit,
     pub target_code: String,
+    pub scope_type: String,
+    pub scope_code: String,
     pub route_ids: Vec<String>,
     pub route_ranks: Vec<CandidateRouteRank>,
     pub token_count: i64,
@@ -284,6 +317,7 @@ where
             .execute_routes(&compiled, &route_corpora, &profile.filters, &request)
             .await?;
         ranked_hits.truncate(request.limit);
+        self.expand_final_graph_hits(&mut ranked_hits, &compiled, &request, &route_corpora)?;
         let context_pack = assemble_context_pack(
             &request.context.strategy,
             &ranked_hits,
@@ -399,6 +433,7 @@ where
                 route_id: route.route_id.clone(),
                 retriever: strategy.storage_retriever.to_string(),
                 query: request.query.clone(),
+                workspace_code: request.workspace_code.clone(),
                 query_embedding: (strategy.needs_query_embedding())
                     .then(|| query_embedding.clone())
                     .flatten(),
@@ -436,136 +471,51 @@ where
         }
         Ok((hits, warnings))
     }
-}
 
-fn validate_request(request: &RagSearchRequest) -> Result<(), RagError> {
-    for value in [
-        request.profile_id.as_str(),
-        request.workspace_code.as_str(),
-        request.query.as_str(),
-        request.access_context.user_code.as_str(),
-        request.access_context.agent_code.as_str(),
-        request.access_context.workspace_code.as_str(),
-        request.context.strategy.as_str(),
-    ] {
-        if value.trim().is_empty() {
-            return Err(RagError::SearchRequestInvalid);
+    fn expand_final_graph_hits(
+        &self,
+        hits: &mut [RankedCandidate],
+        compiled: &CompiledRetrievalProfile,
+        request: &RagSearchRequest,
+        route_corpora: &BTreeMap<String, crate::domain::rag::RagCorpusRecord>,
+    ) -> Result<(), RagError> {
+        let Some(policy) = compiled.graph_expansion_policy.as_ref() else {
+            return Ok(());
+        };
+        if !policy
+            .get("enabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(false)
+        {
+            return Ok(());
         }
-    }
-    if request.workspace_code != request.access_context.workspace_code || request.limit == 0 {
-        return Err(RagError::SearchRequestInvalid);
-    }
-    if request
-        .context
-        .return_fields
-        .iter()
-        .any(|field| field.trim().is_empty())
-    {
-        return Err(RagError::SearchRequestInvalid);
-    }
-    Ok(())
-}
-
-fn validate_return_fields(
-    fields: &[String],
-    corpora: &BTreeMap<String, crate::domain::rag::RagCorpusRecord>,
-) -> Result<(), RagError> {
-    if fields.is_empty() {
-        return Ok(());
-    }
-    let available = corpora
-        .values()
-        .flat_map(corpus_return_field_names)
-        .collect::<BTreeSet<_>>();
-    for field in fields {
-        if is_reserved_return_field(field) || !available.contains(field) {
-            return Err(RagError::SearchRequestInvalid);
+        for hit in hits {
+            let Some(corpus) = route_corpora.get(&hit.result.corpus_id) else {
+                continue;
+            };
+            if corpus.storage_binding.layout
+                != crate::domain::rag::RagStorageLayout::GraphSingleNode
+            {
+                continue;
+            }
+            let expanded = self
+                .repository
+                .expand_related_graph(RagGraphExpansionQuery {
+                    corpus_id: hit.result.corpus_id.clone(),
+                    source_code: hit.result.source_code.clone(),
+                    source_version: hit.result.source_version.clone(),
+                    target_code: hit.target_code.clone(),
+                    scope_type: hit.scope_type.clone(),
+                    scope_code: hit.scope_code.clone(),
+                    workspace_code: request.workspace_code.clone(),
+                    policy: policy.clone(),
+                })?;
+            if let Some(expanded) = expanded {
+                let mut metadata = hit.result.metadata.as_object().cloned().unwrap_or_default();
+                metadata.insert("relatedGraph".into(), expanded);
+                hit.result.metadata = Value::Object(metadata);
+            }
         }
+        Ok(())
     }
-    Ok(())
-}
-
-fn corpus_return_field_names(corpus: &crate::domain::rag::RagCorpusRecord) -> BTreeSet<String> {
-    let mut names = BTreeSet::new();
-    names.extend(corpus.field_mapping.keys().cloned());
-    names.extend(corpus.source_field_mapping.keys().cloned());
-    names.extend(corpus.text_unit_field_mapping.keys().cloned());
-    names.extend(
-        corpus
-            .filter_schema
-            .get("fields")
-            .and_then(Value::as_object)
-            .into_iter()
-            .flat_map(|fields| fields.keys().cloned()),
-    );
-    names
-        .into_iter()
-        .filter(|field| !is_reserved_return_field(field))
-        .collect()
-}
-
-fn is_reserved_return_field(field: &str) -> bool {
-    matches!(
-        field,
-        "corpusId"
-            | "sourceCode"
-            | "sourceVersion"
-            | "title"
-            | "score"
-            | "text"
-            | "metadata"
-            | "targetType"
-            | "targetCode"
-            | "routeIds"
-            | "scopeType"
-            | "scopeCode"
-            | "preview"
-    )
-}
-
-fn filters_and_version(
-    corpus: &crate::domain::rag::RagCorpusRecord,
-    profile_filters: &Value,
-    request: &RagSearchRequest,
-    compiled: &CompiledRetrievalProfile,
-) -> Result<(Value, String), RagError> {
-    let merged = merge_search_filters(corpus, profile_filters, &request.filters)?;
-    let source_version = merged
-        .get("sourceVersion")
-        .map(source_version_filter_value)
-        .transpose()?
-        .unwrap_or_else(|| compiled.required_source_version.clone());
-    Ok((merged, source_version))
-}
-
-fn source_version_filter_value(value: &Value) -> Result<String, RagError> {
-    let raw = value.get("value").ok_or(RagError::SearchFilterInvalid)?;
-    if let Some(version) = raw.as_str() {
-        return Ok(version.to_string());
-    }
-    let versions = raw.as_array().ok_or(RagError::SearchFilterInvalid)?;
-    match versions.as_slice() {
-        [version] => version
-            .as_str()
-            .map(ToOwned::to_owned)
-            .ok_or(RagError::SearchFilterInvalid),
-        _ => Err(RagError::SearchFilterInvalid),
-    }
-}
-
-fn search_scopes(access_context: &RagIngestAccessContext) -> Vec<RagSearchScope> {
-    vec![
-        RagSearchScope {
-            scope_type: "USER".into(),
-            scope_code: access_context.user_code.clone(),
-        },
-        RagSearchScope {
-            scope_type: "AGENT".into(),
-            scope_code: access_context.agent_code.clone(),
-        },
-        RagSearchScope {
-            scope_type: "SPACE".into(),
-            scope_code: access_context.workspace_code.clone(),
-        },
-    ]
 }

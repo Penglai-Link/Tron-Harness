@@ -21,6 +21,7 @@ use crate::{
                 SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
                 SqliteWorkspaceRepository, bootstrap_platform_admin,
                 sqlite::SqliteRagRepository,
+                GraphBackedRagRepository, SqliteAgentEventReplayStore,
             },
         },
     },
@@ -69,7 +70,7 @@ static GLOBAL_OPEN_APP_SERVICE: OnceLock<OpenAppService> = OnceLock::new();
 static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService)> = OnceLock::new();
 
 pub type AppRagService =
-    RagService<Arc<Mutex<SqliteRagRepository>>, DefaultRagStrategyRegistry, DefaultRagRuntime>;
+    RagService<Arc<Mutex<GraphBackedRagRepository>>, DefaultRagStrategyRegistry, DefaultRagRuntime>;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -258,6 +259,8 @@ impl AppState {
         );
         let rag = build_rag_service(
             &config.database_url,
+            &config.graph_storage_path,
+            workspaces.clone(),
             llm_runtime.clone(),
             &config.project_doc_root,
             event_bus.clone(),
@@ -558,12 +561,23 @@ fn build_open_app_service(
 
 fn build_rag_service(
     database_url: &str,
+    graph_storage_path: &str,
+    workspaces: WorkspaceService,
     llm_runtime: LlmRuntimeService,
     project_doc_root: &str,
     event_bus: EventBusHandle,
 ) -> AppRagService {
-    let repository = SqliteRagRepository::connect(database_url)
+    let sqlite = SqliteRagRepository::connect(database_url)
         .expect("RAG SQLite repository should initialize");
+    let graph_core = GrafeoStoreCore::connect(GrafeoAdapterConfig {
+        storage_path: graph_storage_path.to_owned(),
+    })
+    .expect("RAG graph storage adapter should initialize");
+    let repository = GraphBackedRagRepository::new(
+        sqlite,
+        Arc::new(GrafeoGraphStore::new(graph_core)),
+        Arc::new(ScopeResolver::new(workspaces)),
+    );
     RagService::new(
         Arc::new(Mutex::new(repository)),
         DefaultRagStrategyRegistry::default(),

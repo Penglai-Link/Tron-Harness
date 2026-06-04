@@ -19,6 +19,7 @@ pub struct CompiledRetrievalProfile {
     pub fusion_policy: FusionPolicy,
     pub dedup_policy: DedupPolicy,
     pub topic_policy: TopicPolicy,
+    pub graph_expansion_policy: Option<Value>,
     pub degrade_policy: String,
 }
 
@@ -154,6 +155,7 @@ where
         fusion_policy: parse_fusion_policy(&profile.config)?,
         dedup_policy: parse_dedup_policy(&profile.config)?,
         topic_policy: parse_topic_policy(&profile.config)?,
+        graph_expansion_policy: profile.config.get("graphExpansionPolicy").cloned(),
         degrade_policy: profile.degrade_policy.clone(),
     })
 }

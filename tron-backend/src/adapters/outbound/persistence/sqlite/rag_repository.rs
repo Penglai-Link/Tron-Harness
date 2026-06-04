@@ -30,7 +30,7 @@ use self::field_mapping::parse_field_mapping;
 use super::migrations::{
     RAG_DOMAIN_FIELDS_MIGRATION, RAG_FOUNDATION_MIGRATION, RAG_INGEST_PROFILES_MIGRATION,
     RAG_MEMORY_EMBEDDED_SOURCE_MIGRATION, RAG_OPTIONAL_MODEL_CODES_MIGRATION,
-    RAG_SEARCH_PROFILES_MIGRATION, RAG_SKILL_CORPUS_MIGRATION,
+    RAG_SEARCH_PROFILES_MIGRATION, RAG_SKILL_CORPUS_MIGRATION, RAG_SKILL_GRAPH_CORPUS_MIGRATION,
     RAG_STORAGE_BINDING_LAYOUT_MIGRATION,
 };
 
@@ -70,6 +70,7 @@ impl SqliteRagRepository {
         self.apply_rag_storage_binding_layout_migration()?;
         self.apply_rag_memory_embedded_source_migration()?;
         self.apply_rag_skill_corpus_migration()?;
+        self.apply_rag_skill_graph_corpus_migration()?;
         self.apply_rag_sqlite_extension_index_migration()
     }
 
@@ -118,6 +119,12 @@ impl SqliteRagRepository {
     pub fn apply_rag_skill_corpus_migration(&self) -> Result<(), RagError> {
         self.connection
             .execute_batch(RAG_SKILL_CORPUS_MIGRATION)
+            .map_err(storage_error)
+    }
+
+    pub fn apply_rag_skill_graph_corpus_migration(&self) -> Result<(), RagError> {
+        self.connection
+            .execute_batch(RAG_SKILL_GRAPH_CORPUS_MIGRATION)
             .map_err(storage_error)
     }
 
@@ -381,6 +388,18 @@ fn parse_storage_binding(raw: &str) -> rusqlite::Result<RagStorageBinding> {
             .map(ToOwned::to_owned),
         diagnostics_table: value
             .get("diagnosticsTable")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
+        namespace: value
+            .get("namespace")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
+        node_label: value
+            .get("nodeLabel")
+            .and_then(Value::as_str)
+            .map(ToOwned::to_owned),
+        code_strategy: value
+            .get("codeStrategy")
             .and_then(Value::as_str)
             .map(ToOwned::to_owned),
     })

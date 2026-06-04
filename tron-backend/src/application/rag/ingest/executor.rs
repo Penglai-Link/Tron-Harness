@@ -316,6 +316,7 @@ where
             body_hash: prepared.body_hash,
             metadata: prepared.metadata,
             domain_fields: prepared.domain_fields,
+            related_graph: request.payload.get("relatedGraph").cloned(),
             text_units: vector_result.text_units,
             warnings: vector_result.warnings.clone(),
             workspace_code: request.workspace_code.clone(),

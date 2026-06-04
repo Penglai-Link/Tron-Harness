@@ -14,6 +14,7 @@ mod search_observability;
 mod search_profile;
 mod search_ranking;
 mod search_strategy;
+mod search_validation;
 mod service;
 mod strategy_registry;
 
@@ -38,9 +39,10 @@ pub use retry::{
 };
 pub use runtime::DefaultRagRuntime;
 pub use search::{
-    CandidateHit, ContextPack, ContextPackItem, RagRerankCall, RagRouteSearchQuery,
-    RagSearchContextRequest, RagSearchRepository, RagSearchRequest, RagSearchResult, RagSearchRow,
-    RagSearchRuntime, RagSearchScope, RagSearchService, RagSearchTraceRequest,
+    CandidateHit, ContextPack, ContextPackItem, RagGraphExpansionQuery, RagRerankCall,
+    RagRouteSearchQuery, RagSearchContextRequest, RagSearchRepository, RagSearchRequest,
+    RagSearchResult, RagSearchRow, RagSearchRuntime, RagSearchScope, RagSearchService,
+    RagSearchTraceRequest,
 };
 pub use search_filter::merge_search_filters;
 pub use search_profile::{

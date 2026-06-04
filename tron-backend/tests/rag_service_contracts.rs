@@ -782,6 +782,9 @@ fn memory_corpus_record() -> RagCorpusRecord {
             source_table: None,
             text_unit_table: None,
             diagnostics_table: Some("rag_diagnostics".to_string()),
+            namespace: None,
+            node_label: None,
+            code_strategy: None,
         },
     }
 }

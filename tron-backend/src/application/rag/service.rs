@@ -379,11 +379,22 @@ fn validate_storage_binding(
                 binding.diagnostics_table.as_deref(),
             ]
         }
+        RagStorageLayout::GraphSingleNode => vec![
+            binding.namespace.as_deref(),
+            binding.node_label.as_deref(),
+            binding.diagnostics_table.as_deref(),
+        ],
     };
     for table_name in required_tables {
         let Some(table_name) = table_name else {
             return Err(RagError::StorageBindingInvalid);
         };
+        if binding.layout == RagStorageLayout::GraphSingleNode {
+            if !is_valid_graph_binding_name(table_name) {
+                return Err(RagError::StorageBindingInvalid);
+            }
+            continue;
+        }
         if !is_valid_table_name(table_name) {
             return Err(RagError::StorageBindingInvalid);
         }
@@ -395,6 +406,13 @@ fn is_valid_table_name(table_name: &str) -> bool {
     table_name.starts_with("rag_")
         && table_name.chars().all(|character| {
             character.is_ascii_lowercase() || character == '_' || character.is_ascii_digit()
+        })
+}
+
+fn is_valid_graph_binding_name(value: &str) -> bool {
+    !value.trim().is_empty()
+        && value.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '_' || character == '-'
         })
 }
 

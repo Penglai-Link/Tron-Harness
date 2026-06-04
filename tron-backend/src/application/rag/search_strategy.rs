@@ -54,6 +54,14 @@ pub(super) fn retriever_strategy(strategy_id: &str) -> Result<RetrieverStrategy,
             kind: RetrieverKind::Vector,
             storage_retriever: "VECTOR_SQLITE_VEC0_COSINE_V1",
         }),
+        "FULLTEXT_GRAPH_SINGLE_NODE_V1" => Ok(RetrieverStrategy {
+            kind: RetrieverKind::Fulltext,
+            storage_retriever: "FULLTEXT_GRAPH_SINGLE_NODE_V1",
+        }),
+        "VECTOR_GRAPH_SINGLE_NODE_V1" => Ok(RetrieverStrategy {
+            kind: RetrieverKind::Vector,
+            storage_retriever: "VECTOR_GRAPH_SINGLE_NODE_V1",
+        }),
         _ => Err(RagError::SearchRouteUnavailable),
     }
 }

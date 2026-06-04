@@ -90,6 +90,8 @@ pub(super) const RAG_MEMORY_EMBEDDED_SOURCE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260601_0028_embed_rag_memory_source.sql");
 pub(super) const RAG_SKILL_CORPUS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260602_0030_create_skill_rag_corpus.sql");
+pub(super) const RAG_SKILL_GRAPH_CORPUS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260604_0031_create_skill_graph_rag_corpus.sql");
 pub(super) const AGENT_MANAGEMENT_RUNTIME_TYPE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260601_0027_add_agent_management_runtime_type.sql");
 pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_MIGRATION: &str =

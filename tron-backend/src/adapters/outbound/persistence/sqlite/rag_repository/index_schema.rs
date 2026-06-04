@@ -48,6 +48,7 @@ fn configured_text_unit_tables(repository: &SqliteRagRepository) -> Result<Vec<S
         let table = match corpus.storage_binding.layout {
             RagStorageLayout::EmbeddedSource => corpus.storage_binding.table,
             RagStorageLayout::Split => corpus.storage_binding.text_unit_table,
+            RagStorageLayout::GraphSingleNode => None,
         };
         let Some(table) = table else {
             continue;

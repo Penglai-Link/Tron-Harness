@@ -30,6 +30,13 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
     ]);
 
     assert_eq!(repository.rag_table_names().unwrap(), expected_tables);
+    assert!(
+        !repository
+            .rag_table_names()
+            .unwrap()
+            .contains("rag_skill_graph_text_units"),
+        "skill-graph stores skill payloads in graph nodes, not SQLite text-unit tables",
+    );
     assert_eq!(
         repository.seeded_corpus_statuses().unwrap(),
         BTreeMap::from([
@@ -37,6 +44,7 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
             ("memory-card".to_string(), "enabled".to_string()),
             ("project-doc".to_string(), "enabled".to_string()),
             ("skill".to_string(), "enabled".to_string()),
+            ("skill-graph".to_string(), "enabled".to_string()),
         ]),
     );
 
@@ -51,6 +59,7 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
             ("memory-card".to_string(), "enabled".to_string()),
             ("project-doc".to_string(), "enabled".to_string()),
             ("skill".to_string(), "enabled".to_string()),
+            ("skill-graph".to_string(), "enabled".to_string()),
         ]),
     );
 }

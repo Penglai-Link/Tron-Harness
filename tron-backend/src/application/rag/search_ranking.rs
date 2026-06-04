@@ -389,11 +389,21 @@ fn candidate_similarity(left: &RankedCandidate, right: &RankedCandidate) -> f64 
 
 fn hit_from_row(row: &RagSearchRow) -> RankedCandidate {
     let identity_key = format!(
-        "{}:{}:{}:{}:{}",
-        row.corpus_id, row.source_version, row.scope_type, row.scope_code, row.target_code
+        "{}:{}:{}:{}:{}:{}",
+        row.corpus_id,
+        row.source_code,
+        row.source_version,
+        row.scope_type,
+        row.scope_code,
+        row.target_code
     );
     let canonical_dedup_key = normalized_text(&row.text)
-        .map(|text| format!("text:{text}"))
+        .map(|text| {
+            format!(
+                "text:{}:{}:{}:{}:{}",
+                row.corpus_id, row.source_version, row.scope_type, row.scope_code, text
+            )
+        })
         .unwrap_or_else(|| identity_key.clone());
     RankedCandidate {
         result: CandidateHit {
@@ -407,6 +417,8 @@ fn hit_from_row(row: &RagSearchRow) -> RankedCandidate {
             fields: row.field_values.clone(),
         },
         target_code: row.target_code.clone(),
+        scope_type: row.scope_type.clone(),
+        scope_code: row.scope_code.clone(),
         route_ids: Vec::new(),
         route_ranks: Vec::new(),
         token_count: row.token_count,

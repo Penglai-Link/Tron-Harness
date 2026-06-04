@@ -69,6 +69,7 @@ impl TryFrom<&str> for RagProfileType {
 pub enum RagStorageLayout {
     Split,
     EmbeddedSource,
+    GraphSingleNode,
 }
 
 impl RagStorageLayout {
@@ -76,6 +77,7 @@ impl RagStorageLayout {
         match self {
             Self::Split => "SPLIT",
             Self::EmbeddedSource => "EMBEDDED_SOURCE",
+            Self::GraphSingleNode => "GRAPH_SINGLE_NODE",
         }
     }
 }
@@ -87,6 +89,7 @@ impl TryFrom<&str> for RagStorageLayout {
         match value {
             "SPLIT" => Ok(Self::Split),
             "EMBEDDED_SOURCE" => Ok(Self::EmbeddedSource),
+            "GRAPH_SINGLE_NODE" => Ok(Self::GraphSingleNode),
             _ => Err(RagError::StorageBindingInvalid),
         }
     }
@@ -99,6 +102,9 @@ pub struct RagStorageBinding {
     pub source_table: Option<String>,
     pub text_unit_table: Option<String>,
     pub diagnostics_table: Option<String>,
+    pub namespace: Option<String>,
+    pub node_label: Option<String>,
+    pub code_strategy: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

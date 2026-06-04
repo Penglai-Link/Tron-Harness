@@ -42,6 +42,8 @@ impl RagStrategyRegistry for DefaultRagStrategyRegistry {
                 "FULLTEXT_SQLITE_FTS5_SIMPLE_V1",
                 "VECTOR_SQLITE_COSINE_V1",
                 "VECTOR_SQLITE_VEC0_COSINE_V1",
+                "FULLTEXT_GRAPH_SINGLE_NODE_V1",
+                "VECTOR_GRAPH_SINGLE_NODE_V1",
             ],
         )
     }
