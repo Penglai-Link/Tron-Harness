@@ -216,9 +216,17 @@ fn rag_service_lists_and_reads_profile_configuration_without_sqlite_details() {
         })
         .expect("profile list should load through the repository port");
 
-    assert_eq!(profiles.len(), 1);
-    assert_eq!(profiles[0].profile_id, "memory-related-v1");
-    assert_eq!(profiles[0].required_source_version.as_deref(), Some("v1"));
+    let profile_ids = profiles
+        .iter()
+        .map(|profile| profile.profile_id.as_str())
+        .collect::<Vec<_>>();
+    assert!(profile_ids.contains(&"memory-related-v1"));
+    assert!(profile_ids.contains(&"memory-project-doc-fusion-v1"));
+    assert!(
+        profiles
+            .iter()
+            .all(|profile| profile.required_source_version.as_deref() == Some("v1"))
+    );
 
     let profile = service
         .get_profile("memory-related-v1")
@@ -233,6 +241,32 @@ fn rag_service_lists_and_reads_profile_configuration_without_sqlite_details() {
     assert_eq!(
         profile.config["routes"][1]["retriever"],
         json!("VECTOR_SQLITE_VEC0_COSINE_V1")
+    );
+
+    let fusion_profile = service
+        .get_profile("memory-project-doc-fusion-v1")
+        .expect("multi-corpus retrieval profile should be readable");
+    assert_eq!(
+        fusion_profile.primary_corpus_id.as_deref(),
+        Some("memory-card")
+    );
+    assert_eq!(
+        fusion_profile.corpus_ids,
+        vec!["memory-card".to_string(), "project-doc".to_string()]
+    );
+    assert_eq!(fusion_profile.config["routes"].as_array().unwrap().len(), 4);
+    assert_eq!(fusion_profile.config["fusionPolicy"]["type"], json!("RRF"));
+    assert_eq!(
+        fusion_profile.config["dedupPolicy"]["type"],
+        json!("CANONICAL_TEXT_UNIT")
+    );
+    assert_eq!(
+        fusion_profile.config["topicPolicy"]["type"],
+        json!("EMBEDDING_MMR_V1")
+    );
+    assert_eq!(
+        fusion_profile.config["rerankPolicy"]["enabled"],
+        json!(false)
     );
 }
 

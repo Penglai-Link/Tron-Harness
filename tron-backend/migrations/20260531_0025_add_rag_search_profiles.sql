@@ -37,6 +37,19 @@ VALUES
         'SKIP_VECTOR_ON_UNAVAILABLE',
         1772380800000,
         1772380800000
+    ),
+    (
+        'memory-project-doc-fusion-v1',
+        'RETRIEVAL',
+        'enabled',
+        'memory-card',
+        '["memory-card","project-doc"]',
+        'v1',
+        '{"routes":[{"routeId":"memory-fulltext","corpusId":"memory-card","retriever":"FULLTEXT_SQLITE_FTS5_SIMPLE_V1","topK":8,"weight":1.0},{"routeId":"memory-vector","corpusId":"memory-card","retriever":"VECTOR_SQLITE_VEC0_COSINE_V1","topK":8,"weight":1.0},{"routeId":"project-doc-fulltext","corpusId":"project-doc","retriever":"FULLTEXT_SQLITE_FTS5_SIMPLE_V1","topK":8,"weight":0.8},{"routeId":"project-doc-vector","corpusId":"project-doc","retriever":"VECTOR_SQLITE_VEC0_COSINE_V1","topK":8,"weight":0.8}],"fusionPolicy":{"type":"RRF","rankConstant":60},"dedupPolicy":{"type":"CANONICAL_TEXT_UNIT"},"topicPolicy":{"enabled":true,"type":"EMBEDDING_MMR_V1","applyStage":"BEFORE_RERANK","candidateWindow":20,"lambda":0.72,"similarityThreshold":0.82,"maxPerTopic":0,"fallback":"KEEP_ORDER"},"rerankPolicy":{"enabled":false},"hydratePolicy":{"type":"TEXT_UNIT"},"contextPolicy":{"supportedStrategies":["RESULT_LIST","TOKEN_BUDGET_PACK","MEMORY_CONTEXT_PACK","DOC_QA_CONTEXT_PACK"]}}',
+        '{}',
+        'SKIP_VECTOR_ON_UNAVAILABLE',
+        1772380800000,
+        1772380800000
     )
 ON CONFLICT (profile_id) DO UPDATE SET
     profile_type = excluded.profile_type,

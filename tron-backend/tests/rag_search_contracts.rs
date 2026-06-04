@@ -302,6 +302,52 @@ async fn rrf_embedding_mmr_promotes_diverse_cross_corpus_candidate() {
 }
 
 #[tokio::test]
+async fn seeded_memory_project_doc_fusion_profile_searches_both_corpora() {
+    let database_url = temp_database_path("rag-search-seeded-fusion")
+        .to_string_lossy()
+        .to_string();
+    seed_two_memory_fixture(&database_url).await;
+    seed_project_doc_fixture(&database_url).await;
+    let runtime = FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0));
+    let service = RagSearchService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+
+    let result = service
+        .search(search_request(
+            "memory-project-doc-fusion-v1",
+            "retrieval ordering",
+            "RESULT_LIST",
+            json!({}),
+        ))
+        .await
+        .unwrap();
+
+    let corpus_ids = result
+        .hits
+        .iter()
+        .map(|hit| hit.corpus_id.as_str())
+        .collect::<Vec<_>>();
+    assert!(corpus_ids.contains(&"memory-card"));
+    assert!(corpus_ids.contains(&"project-doc"));
+    assert!(
+        result
+            .hits
+            .iter()
+            .any(|hit| hit.source_code == "memory-rag-rule")
+    );
+    assert!(
+        result
+            .hits
+            .iter()
+            .any(|hit| hit.source_code == "doc-rag-mvp")
+    );
+    assert_eq!(runtime.last_rerank_model_code(), None);
+}
+
+#[tokio::test]
 async fn embedding_mmr_missing_embeddings_falls_back_to_fused_order() {
     let database_url = temp_database_path("rag-search-mmr-missing-embedding")
         .to_string_lossy()
