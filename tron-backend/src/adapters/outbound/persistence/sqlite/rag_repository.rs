@@ -20,8 +20,8 @@ use serde_json::Value;
 use crate::{
     application::rag::{RagConfigRepository, RagProfileListQuery},
     domain::rag::{
-        RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus, RagStorageBinding,
-        RagStorageLayout,
+        RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus, RagStorageBackend,
+        RagStorageBinding, RagStorageLayout,
     },
     shared::sqlite_extensions::default_sqlite_extension_context,
 };
@@ -31,7 +31,7 @@ use super::migrations::{
     RAG_DOMAIN_FIELDS_MIGRATION, RAG_FOUNDATION_MIGRATION, RAG_INGEST_PROFILES_MIGRATION,
     RAG_MEMORY_EMBEDDED_SOURCE_MIGRATION, RAG_OPTIONAL_MODEL_CODES_MIGRATION,
     RAG_SEARCH_PROFILES_MIGRATION, RAG_SKILL_CORPUS_MIGRATION, RAG_SKILL_GRAPH_CORPUS_MIGRATION,
-    RAG_STORAGE_BINDING_LAYOUT_MIGRATION,
+    RAG_STORAGE_BACKEND_FUSION_MIGRATION, RAG_STORAGE_BINDING_LAYOUT_MIGRATION,
 };
 
 pub struct SqliteRagRepository {
@@ -71,6 +71,7 @@ impl SqliteRagRepository {
         self.apply_rag_memory_embedded_source_migration()?;
         self.apply_rag_skill_corpus_migration()?;
         self.apply_rag_skill_graph_corpus_migration()?;
+        self.apply_rag_storage_backend_fusion_migration()?;
         self.apply_rag_sqlite_extension_index_migration()
     }
 
@@ -125,6 +126,12 @@ impl SqliteRagRepository {
     pub fn apply_rag_skill_graph_corpus_migration(&self) -> Result<(), RagError> {
         self.connection
             .execute_batch(RAG_SKILL_GRAPH_CORPUS_MIGRATION)
+            .map_err(storage_error)
+    }
+
+    pub fn apply_rag_storage_backend_fusion_migration(&self) -> Result<(), RagError> {
+        self.connection
+            .execute_batch(RAG_STORAGE_BACKEND_FUSION_MIGRATION)
             .map_err(storage_error)
     }
 
@@ -372,7 +379,18 @@ fn parse_storage_binding(raw: &str) -> rusqlite::Result<RagStorageBinding> {
                 RagStorageLayout::Split
             }
         });
+    let backend = value
+        .get("backend")
+        .and_then(Value::as_str)
+        .map(RagStorageBackend::try_from)
+        .transpose()
+        .map_err(to_sql_error)?
+        .unwrap_or(match layout {
+            RagStorageLayout::GraphSingleNode => RagStorageBackend::Graph,
+            RagStorageLayout::Split | RagStorageLayout::EmbeddedSource => RagStorageBackend::Sqlite,
+        });
     Ok(RagStorageBinding {
+        backend,
         layout,
         table: value
             .get("table")

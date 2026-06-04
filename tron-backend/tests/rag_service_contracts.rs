@@ -10,8 +10,8 @@ use tron_backend::{
         StrategyRegistration, StrategyRegistrationStatus,
     },
     domain::rag::{
-        RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus, RagStorageBinding,
-        RagStorageLayout,
+        RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus, RagStorageBackend,
+        RagStorageBinding, RagStorageLayout,
     },
 };
 
@@ -28,6 +28,7 @@ fn rag_service_resolves_enabled_corpus_storage_binding_from_repository_port() {
 
     assert_eq!(corpus.corpus_id, "memory-card");
     assert_eq!(corpus.status, RagStatus::Enabled);
+    assert_eq!(corpus.storage_binding.backend, RagStorageBackend::Sqlite);
     assert_eq!(
         corpus.storage_binding.layout,
         RagStorageLayout::EmbeddedSource
@@ -273,6 +274,70 @@ fn rag_service_lists_and_reads_profile_configuration_without_sqlite_details() {
     assert_eq!(
         fusion_profile.config["rerankPolicy"]["enabled"],
         json!(false)
+    );
+
+    let three_way_fusion_profile = service
+        .get_profile("skill-memory-project-fusion-v1")
+        .expect("skill memory project fusion profile should be readable");
+    assert_eq!(
+        three_way_fusion_profile.primary_corpus_id.as_deref(),
+        Some("skill-graph")
+    );
+    assert_eq!(
+        three_way_fusion_profile.corpus_ids,
+        vec![
+            "skill-graph".to_string(),
+            "memory-card".to_string(),
+            "project-doc".to_string()
+        ]
+    );
+    let routes = three_way_fusion_profile.config["routes"]
+        .as_array()
+        .expect("three-way fusion profile should expose routes");
+    assert_eq!(routes.len(), 6);
+    assert!(routes.iter().any(|route| {
+        route["corpusId"] == json!("skill-graph")
+            && route["retriever"] == json!("FULLTEXT_GRAPH_SINGLE_NODE_V1")
+    }));
+    assert!(routes.iter().any(|route| {
+        route["corpusId"] == json!("skill-graph")
+            && route["retriever"] == json!("VECTOR_GRAPH_SINGLE_NODE_V1")
+    }));
+    assert!(routes.iter().any(|route| {
+        route["corpusId"] == json!("memory-card")
+            && route["retriever"] == json!("FULLTEXT_SQLITE_FTS5_SIMPLE_V1")
+    }));
+    assert!(routes.iter().any(|route| {
+        route["corpusId"] == json!("project-doc")
+            && route["retriever"] == json!("VECTOR_SQLITE_VEC0_COSINE_V1")
+    }));
+    assert_eq!(
+        three_way_fusion_profile.config["fusionPolicy"]["type"],
+        json!("RRF")
+    );
+    assert_eq!(
+        three_way_fusion_profile.config["graphExpansionPolicy"]["enabled"],
+        json!(true)
+    );
+}
+
+#[test]
+fn storage_backend_domain_accepts_only_sqlite_or_graph_codes() {
+    assert_eq!(
+        RagStorageBackend::try_from("SQLITE").unwrap(),
+        RagStorageBackend::Sqlite
+    );
+    assert_eq!(
+        RagStorageBackend::try_from("GRAPH").unwrap(),
+        RagStorageBackend::Graph
+    );
+    assert_eq!(
+        RagStorageBackend::try_from("graph").unwrap_err(),
+        RagError::StorageBindingInvalid
+    );
+    assert_eq!(
+        RagStorageBackend::try_from("ELASTIC").unwrap_err(),
+        RagError::StorageBindingInvalid
     );
 }
 
@@ -783,6 +848,7 @@ fn memory_corpus_record() -> RagCorpusRecord {
         ]),
         text_unit_field_mapping: BTreeMap::new(),
         storage_binding: RagStorageBinding {
+            backend: RagStorageBackend::Sqlite,
             layout: RagStorageLayout::EmbeddedSource,
             table: Some("rag_memory_text_units".to_string()),
             source_table: None,

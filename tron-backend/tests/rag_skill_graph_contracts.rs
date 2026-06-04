@@ -23,8 +23,9 @@ use tron_backend::{
             RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime,
             RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService,
             RagIngestSource, RagRerankCall, RagResolvedDocument, RagRetryIndexRequest,
-            RagRetryIndexService, RagSearchContextRequest, RagSearchGraphExpansionRequest,
-            RagSearchRequest, RagSearchRuntime, RagSearchService, RagSearchTraceRequest,
+            RagRetryIndexService, RagRouteSearchQuery, RagSearchContextRequest,
+            RagSearchGraphExpansionRequest, RagSearchRepository, RagSearchRequest,
+            RagSearchRuntime, RagSearchScope, RagSearchService, RagSearchTraceRequest,
         },
     },
     domain::{
@@ -32,7 +33,7 @@ use tron_backend::{
             GraphFilterOperator, GraphPropertyFilter, GraphPropertyValue, GraphQueryLimit,
             GraphScopeCommand, GraphSearchQuery,
         },
-        rag::{RagError, RagStatus, RagStorageLayout},
+        rag::{RagError, RagStatus, RagStorageBackend, RagStorageLayout},
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceLineageItem, WorkspaceStatus},
     },
 };
@@ -43,6 +44,7 @@ fn skill_graph_seed_is_additive_and_keeps_existing_skill_sqlite_binding() {
 
     let skill = repository.get_corpus("skill").unwrap().unwrap();
     assert_eq!(skill.status, RagStatus::Enabled);
+    assert_eq!(skill.storage_binding.backend, RagStorageBackend::Sqlite);
     assert_eq!(
         skill.storage_binding.layout,
         RagStorageLayout::EmbeddedSource
@@ -54,6 +56,10 @@ fn skill_graph_seed_is_additive_and_keeps_existing_skill_sqlite_binding() {
 
     let skill_graph = repository.get_corpus("skill-graph").unwrap().unwrap();
     assert_eq!(skill_graph.status, RagStatus::Enabled);
+    assert_eq!(
+        skill_graph.storage_binding.backend,
+        RagStorageBackend::Graph
+    );
     assert_eq!(
         skill_graph.storage_binding.layout,
         RagStorageLayout::GraphSingleNode
@@ -86,6 +92,93 @@ fn skill_graph_seed_is_additive_and_keeps_existing_skill_sqlite_binding() {
             .unwrap()
             .is_some()
     );
+}
+
+#[test]
+fn graph_backed_repository_dispatches_by_backend_before_layout() {
+    let database_url = temp_database_path("rag-storage-backend-dispatch")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-storage-backend-dispatch-graph")
+        .to_string_lossy()
+        .to_string();
+    let sqlite = SqliteRagRepository::connect(&database_url).unwrap();
+    let connection = Connection::open(&database_url).unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE rag_backend_dispatch_text_units (
+                id INTEGER PRIMARY KEY,
+                text_unit_code TEXT NOT NULL UNIQUE,
+                source_code TEXT NOT NULL,
+                source_version TEXT NOT NULL,
+                scope_type TEXT NOT NULL,
+                scope_code TEXT NOT NULL,
+                text TEXT NOT NULL,
+                heading_path TEXT NOT NULL,
+                ordinal INTEGER NOT NULL,
+                token_count INTEGER NOT NULL DEFAULT 1,
+                status TEXT NOT NULL,
+                metadata TEXT NOT NULL DEFAULT '{}'
+             );
+             INSERT INTO rag_backend_dispatch_text_units (
+                text_unit_code, source_code, source_version, scope_type, scope_code,
+                text, heading_path, ordinal, status
+             )
+             VALUES (
+                'graph-backend-unit-001', 'graph-backend-source', 'v1',
+                'SPACE', 'TRON_CORE', 'graph backend should not use sqlite',
+                '', 0, 'ACTIVE'
+             );
+             INSERT INTO rag_corpora (
+                corpus_id, display_name, status, description, capabilities_json,
+                filter_schema_json, field_mapping_json, storage_binding_json, created_at, updated_at
+             )
+             VALUES (
+                'graph-backend-custom', 'Graph Backend Custom', 'enabled',
+                'Dispatch fixture.',
+                '{\"fulltext\":true,\"vector\":false,\"graph\":true,\"reserved\":false}',
+                '{\"fields\":{\"scopeType\":{\"type\":\"string\",\"column\":\"scope_type\"}}}',
+                '{\"source\":{\"sourceCode\":\"source_code\",\"sourceVersion\":\"source_version\",\"scopeType\":\"scope_type\",\"scopeCode\":\"scope_code\"},\"textUnit\":{\"text\":\"text\"}}',
+                '{\"backend\":\"GRAPH\",\"layout\":\"EMBEDDED_SOURCE\",\"table\":\"rag_backend_dispatch_text_units\",\"diagnosticsTable\":\"rag_diagnostics\"}',
+                1780592400000, 1780592400000
+             );",
+        )
+        .unwrap();
+    drop(connection);
+    sqlite.apply_rag_sqlite_extension_index_migration().unwrap();
+    let core = GrafeoStoreCore::connect(GrafeoAdapterConfig {
+        storage_path: graph_path,
+    })
+    .unwrap();
+    let repository = GraphBackedRagRepository::new(
+        sqlite,
+        Arc::new(GrafeoGraphStore::new(core)),
+        Arc::new(ScopeResolver::with_workspace_provider(
+            FakeWorkspaceProvider,
+        )),
+    );
+
+    let error = repository
+        .search_route(RagRouteSearchQuery {
+            corpus_id: "graph-backend-custom".into(),
+            route_id: "graph-backend-custom-fulltext".into(),
+            retriever: "FULLTEXT_SQLITE_FTS5_SIMPLE_V1".into(),
+            workspace_code: "TRON_CORE".into(),
+            query: "graph backend".into(),
+            query_embedding: None,
+            query_embedding_model_code: None,
+            source_version: "v1".into(),
+            scopes: vec![RagSearchScope {
+                scope_type: "SPACE".into(),
+                scope_code: "TRON_CORE".into(),
+            }],
+            filters: json!({}),
+            return_fields: Vec::new(),
+            limit: 5,
+        })
+        .unwrap_err();
+
+    assert_eq!(error, RagError::StorageBindingInvalid);
 }
 
 #[tokio::test]

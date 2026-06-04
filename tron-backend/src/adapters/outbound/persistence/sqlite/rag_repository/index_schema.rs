@@ -45,6 +45,9 @@ fn configured_text_unit_tables(repository: &SqliteRagRepository) -> Result<Vec<S
         if corpus.status != RagStatus::Enabled {
             continue;
         }
+        if !corpus.storage_binding.is_sqlite_backend() {
+            continue;
+        }
         let table = match corpus.storage_binding.layout {
             RagStorageLayout::EmbeddedSource => corpus.storage_binding.table,
             RagStorageLayout::Split => corpus.storage_binding.text_unit_table,

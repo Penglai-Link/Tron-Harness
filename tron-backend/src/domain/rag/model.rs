@@ -66,6 +66,33 @@ impl TryFrom<&str> for RagProfileType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RagStorageBackend {
+    Sqlite,
+    Graph,
+}
+
+impl RagStorageBackend {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Sqlite => "SQLITE",
+            Self::Graph => "GRAPH",
+        }
+    }
+}
+
+impl TryFrom<&str> for RagStorageBackend {
+    type Error = RagError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "SQLITE" => Ok(Self::Sqlite),
+            "GRAPH" => Ok(Self::Graph),
+            _ => Err(RagError::StorageBindingInvalid),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RagStorageLayout {
     Split,
     EmbeddedSource,
@@ -97,6 +124,7 @@ impl TryFrom<&str> for RagStorageLayout {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RagStorageBinding {
+    pub backend: RagStorageBackend,
     pub layout: RagStorageLayout,
     pub table: Option<String>,
     pub source_table: Option<String>,
@@ -105,6 +133,16 @@ pub struct RagStorageBinding {
     pub namespace: Option<String>,
     pub node_label: Option<String>,
     pub code_strategy: Option<String>,
+}
+
+impl RagStorageBinding {
+    pub fn is_graph_backend(&self) -> bool {
+        self.backend == RagStorageBackend::Graph
+    }
+
+    pub fn is_sqlite_backend(&self) -> bool {
+        self.backend == RagStorageBackend::Sqlite
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

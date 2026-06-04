@@ -527,9 +527,7 @@ where
             let Some(corpus) = route_corpora.get(&hit.result.corpus_id) else {
                 continue;
             };
-            if corpus.storage_binding.layout
-                != crate::domain::rag::RagStorageLayout::GraphSingleNode
-            {
+            if !corpus.storage_binding.is_graph_backend() {
                 continue;
             }
             let expanded = self

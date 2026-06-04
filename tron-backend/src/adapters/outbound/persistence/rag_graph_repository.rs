@@ -67,9 +67,10 @@ impl RagIngestRepository for GraphBackedRagRepository {
             .sqlite
             .get_corpus(&command.corpus_id)?
             .ok_or(RagError::CorpusNotFound)?;
-        if corpus.storage_binding.layout != RagStorageLayout::GraphSingleNode {
+        if !corpus.storage_binding.is_graph_backend() {
             return self.sqlite.persist_ingest(command);
         }
+        ensure_graph_single_node(&corpus)?;
         self.persist_graph_single_node(&corpus, command)
     }
 }
@@ -80,9 +81,10 @@ impl RagSearchRepository for GraphBackedRagRepository {
             .sqlite
             .get_corpus(&query.corpus_id)?
             .ok_or(RagError::CorpusNotFound)?;
-        if corpus.storage_binding.layout != RagStorageLayout::GraphSingleNode {
+        if !corpus.storage_binding.is_graph_backend() {
             return self.sqlite.search_route(query);
         }
+        ensure_graph_single_node(&corpus)?;
         self.search_graph_route(&corpus, &query)
     }
 
@@ -98,9 +100,10 @@ impl RagSearchRepository for GraphBackedRagRepository {
             .sqlite
             .get_corpus(&query.corpus_id)?
             .ok_or(RagError::CorpusNotFound)?;
-        if corpus.storage_binding.layout != RagStorageLayout::GraphSingleNode {
+        if !corpus.storage_binding.is_graph_backend() {
             return Ok(None);
         }
+        ensure_graph_single_node(&corpus)?;
         self.expand_graph_hit(&corpus, &query)
     }
 }
@@ -114,9 +117,10 @@ impl RagDiagnosticsRepository for GraphBackedRagRepository {
             .sqlite
             .get_corpus(&request.corpus_id)?
             .ok_or(RagError::CorpusNotFound)?;
-        if corpus.storage_binding.layout != RagStorageLayout::GraphSingleNode {
+        if !corpus.storage_binding.is_graph_backend() {
             return self.sqlite.debug_source(request);
         }
+        ensure_graph_single_node(&corpus)?;
         self.debug_graph_source(&corpus, request)
     }
 
@@ -134,9 +138,10 @@ impl RagRetryIndexRepository for GraphBackedRagRepository {
             .sqlite
             .get_corpus(&request.corpus_id)?
             .ok_or(RagError::CorpusNotFound)?;
-        if corpus.storage_binding.layout != RagStorageLayout::GraphSingleNode {
+        if !corpus.storage_binding.is_graph_backend() {
             return self.sqlite.retry_text_units(request);
         }
+        ensure_graph_single_node(&corpus)?;
         if request.stages.iter().any(|stage| stage == "vectorIndex") {
             return Err(RagError::RetryStageUnsupported);
         }
@@ -154,9 +159,10 @@ impl RagRetryIndexRepository for GraphBackedRagRepository {
             .sqlite
             .get_corpus(&request.corpus_id)?
             .ok_or(RagError::CorpusNotFound)?;
-        if corpus.storage_binding.layout != RagStorageLayout::GraphSingleNode {
+        if !corpus.storage_binding.is_graph_backend() {
             return self.sqlite.rebuild_fulltext_index(request);
         }
+        ensure_graph_single_node(&corpus)?;
         Ok(usize::from(
             self.find_graph_skill_node(&corpus, request)?.is_some(),
         ))
@@ -179,5 +185,13 @@ impl RagRetryIndexRepository for GraphBackedRagRepository {
     ) -> Result<(), RagError> {
         self.sqlite
             .persist_retry_warning(request, stage_id, code, message)
+    }
+}
+
+fn ensure_graph_single_node(corpus: &RagCorpusRecord) -> Result<(), RagError> {
+    if corpus.storage_binding.layout == RagStorageLayout::GraphSingleNode {
+        Ok(())
+    } else {
+        Err(RagError::StorageBindingInvalid)
     }
 }
