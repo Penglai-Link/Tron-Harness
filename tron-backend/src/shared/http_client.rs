@@ -78,11 +78,6 @@ fn build_client(
         .connect_timeout(Duration::from_millis(config.connect_timeout_ms))
         .pool_max_idle_per_host(config.pool_max_idle_per_host);
 
-    if let Some(timeout_ms) = config.request_timeout_ms
-        && timeout_ms > 0
-    {
-        builder = builder.timeout(Duration::from_millis(timeout_ms));
-    }
     if let Some(timeout_ms) = config.pool_idle_timeout_ms
         && timeout_ms > 0
     {

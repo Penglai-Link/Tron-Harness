@@ -74,3 +74,6 @@ pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_MIGRATION: &str =
 pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_LIMITS_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260604_0001_add_internal_agent_limits_to_workspace_internal_agent_policies.sql"
 );
+pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_PARALLEL_LIMIT_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260604_0002_add_internal_agent_parallel_limits_to_workspace_internal_agent_policies.sql"
+);

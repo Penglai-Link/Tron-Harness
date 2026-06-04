@@ -9,6 +9,7 @@ pub enum AgentInvocationError {
     ModelFailed(String),
     ToolFailed(String),
     MaxStepsExceeded,
+    MaxToolCallsExceeded,
 }
 
 impl AgentInvocationError {
@@ -23,6 +24,7 @@ impl AgentInvocationError {
             Self::ModelFailed(_) => "AGENT_MODEL_FAILED",
             Self::ToolFailed(_) => "AGENT_TOOL_FAILED",
             Self::MaxStepsExceeded => "AGENT_MAX_STEPS_EXCEEDED",
+            Self::MaxToolCallsExceeded => "AGENT_MAX_TOOL_CALLS_EXCEEDED",
         }
     }
 
@@ -37,6 +39,7 @@ impl AgentInvocationError {
             | Self::ModelFailed(message)
             | Self::ToolFailed(message) => message.clone(),
             Self::MaxStepsExceeded => "agent run exceeded max steps".into(),
+            Self::MaxToolCallsExceeded => "agent run exceeded max tool calls".into(),
         }
     }
 }

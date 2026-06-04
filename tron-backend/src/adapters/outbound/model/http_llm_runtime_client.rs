@@ -1,4 +1,4 @@
-use std::{future::Future, pin::Pin, time::Duration};
+use std::{future::Future, pin::Pin};
 
 use serde_json::{Value, json};
 
@@ -143,17 +143,10 @@ impl HttpLlmRuntimeClient {
         url: &str,
         body: &Value,
     ) -> reqwest::RequestBuilder {
-        let mut builder = self
-            .client
+        self.client
             .post(url)
             .bearer_auth(&config.api_key)
-            .json(body);
-        if let Some(timeout_ms) = config.timeout_ms
-            && timeout_ms > 0
-        {
-            builder = builder.timeout(Duration::from_millis(timeout_ms));
-        }
-        builder
+            .json(body)
     }
 }
 
@@ -209,7 +202,7 @@ fn parse_rerank_response(body: &Value) -> Result<Vec<LlmRuntimeRerankHit>, Strin
 
 fn provider_error(error: reqwest::Error) -> String {
     if error.is_timeout() {
-        "llm runtime request timed out".into()
+        "llm runtime connection timed out".into()
     } else {
         error.to_string()
     }

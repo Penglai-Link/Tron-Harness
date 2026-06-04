@@ -27,7 +27,6 @@ pub struct Model {
     pub max_tokens: Option<u32>,
     pub context_window_tokens: Option<u32>,
     pub top_p: Option<f64>,
-    pub timeout_ms: Option<u64>,
     pub max_retries: Option<u32>,
     pub last_verified_at: Option<String>,
     pub last_verify_status: Option<ModelVerifyStatus>,

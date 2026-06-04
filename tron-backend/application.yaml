@@ -10,14 +10,9 @@ systemAgents:
 httpClients:
   default:
     connectTimeoutMs: 1500
-    requestTimeoutMs: 30000
     poolIdleTimeoutMs: 90000
     poolMaxIdlePerHost: 32
     tcpKeepaliveMs: 30000
-  modelInference:
-    requestTimeoutMs: 180000
-  runtimeControl:
-    requestTimeoutMs: 20000
 
 auth:
   jwtSecret: tron-dev-jwt-secret

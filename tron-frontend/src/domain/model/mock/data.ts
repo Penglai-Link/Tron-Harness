@@ -52,7 +52,6 @@ type BaseModel = {
   structuredOutputEnabled: boolean;
   temperature: number | null;
   thinkingEnabled: boolean;
-  timeoutMs: number | null;
   topP: number | null;
   updatedAt: string;
   vendor: string;
@@ -165,7 +164,6 @@ function createSeedBaseModel(
     structuredOutputEnabled: protocol === "RESPONSES",
     temperature: modelType === "TEXT" ? 0.2 : null,
     thinkingEnabled: modelType === "TEXT",
-    timeoutMs: 5000,
     topP: modelType === "TEXT" ? 1 : null,
     updatedAt: now,
     vendor,
@@ -272,7 +270,6 @@ function buildPlatformView(model: PlatformModel): ModelRecord {
     maxTokens: model.maxTokens,
     contextWindowTokens: model.contextWindowTokens,
     topP: model.topP,
-    timeoutMs: model.timeoutMs,
     maxRetries: model.maxRetries,
     lastVerifiedAt: model.lastVerifiedAt,
     lastVerifyStatus: model.lastVerifyStatus,
@@ -321,7 +318,6 @@ function buildWorkspaceView(
     maxTokens: configModel.maxTokens,
     contextWindowTokens: configModel.contextWindowTokens,
     topP: configModel.topP,
-    timeoutMs: configModel.timeoutMs,
     maxRetries: configModel.maxRetries,
     lastVerifiedAt: configModel.lastVerifiedAt,
     lastVerifyStatus: configModel.lastVerifyStatus,
@@ -719,7 +715,6 @@ function updateBaseModelFromPayload(
   model.maxTokens = payload.maxTokens ?? null;
   model.contextWindowTokens = payload.contextWindowTokens ?? null;
   model.topP = payload.topP ?? null;
-  model.timeoutMs = payload.timeoutMs ?? null;
   model.maxRetries = payload.maxRetries ?? null;
   model.updatedAt = now;
   if ("allowInheritance" in model) {
@@ -1183,7 +1178,6 @@ export function verifyWorkspaceModelDraftRecord(
     structuredOutputEnabled: preview.structuredOutputEnabled,
     temperature: preview.temperature,
     thinkingEnabled: preview.thinkingEnabled,
-    timeoutMs: preview.timeoutMs,
     topP: preview.topP,
     updatedAt: preview.updatedAt,
     vendor: preview.vendor,

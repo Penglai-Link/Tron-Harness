@@ -66,15 +66,22 @@ pub struct AgentExecutionScope {
 pub struct AgentRunLimits {
     pub max_steps: u32,
     pub max_tool_calls: u32,
+    #[serde(default = "default_max_parallel_tool_calls")]
+    pub max_parallel_tool_calls: u32,
 }
 
 impl Default for AgentRunLimits {
     fn default() -> Self {
         Self {
             max_steps: 8,
-            max_tool_calls: 4,
+            max_tool_calls: 100,
+            max_parallel_tool_calls: default_max_parallel_tool_calls(),
         }
     }
+}
+
+fn default_max_parallel_tool_calls() -> u32 {
+    4
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

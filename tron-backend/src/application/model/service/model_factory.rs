@@ -44,7 +44,6 @@ pub(super) fn normalize_model_spec(
         max_tokens: command.max_tokens,
         context_window_tokens: command.context_window_tokens,
         top_p: command.top_p,
-        timeout_ms: command.timeout_ms,
         max_retries: command.max_retries,
         allow_inheritance: workspace_local.then_some(command.allow_inheritance.unwrap_or(true)),
     })
@@ -74,7 +73,6 @@ pub(super) fn update_model_from_spec(
     model.max_tokens = spec.max_tokens;
     model.context_window_tokens = spec.context_window_tokens;
     model.top_p = spec.top_p;
-    model.timeout_ms = spec.timeout_ms;
     model.max_retries = spec.max_retries;
     model.allow_inheritance = allow_inheritance;
     model.updated_at = current_timestamp();
@@ -223,7 +221,6 @@ pub(super) fn duplicate_workspace_source_model(
         max_tokens: source.max_tokens,
         context_window_tokens: source.context_window_tokens,
         top_p: source.top_p,
-        timeout_ms: source.timeout_ms,
         max_retries: source.max_retries,
         last_verified_at: None,
         last_verify_status: None,
@@ -269,7 +266,6 @@ pub(super) fn workspace_status_patch_model(
         max_tokens: source.max_tokens,
         context_window_tokens: source.context_window_tokens,
         top_p: source.top_p,
-        timeout_ms: source.timeout_ms,
         max_retries: source.max_retries,
         last_verified_at: None,
         last_verify_status: None,
@@ -305,7 +301,6 @@ pub(super) fn update_workspace_status_patch_model(
     patch.max_tokens = source.max_tokens;
     patch.context_window_tokens = source.context_window_tokens;
     patch.top_p = source.top_p;
-    patch.timeout_ms = source.timeout_ms;
     patch.max_retries = source.max_retries;
     patch.last_verified_at = None;
     patch.last_verify_status = None;
@@ -350,7 +345,6 @@ pub(super) fn workspace_override_model(
         max_tokens: spec.max_tokens,
         context_window_tokens: spec.context_window_tokens,
         top_p: spec.top_p,
-        timeout_ms: spec.timeout_ms,
         max_retries: spec.max_retries,
         last_verified_at: None,
         last_verify_status: None,
@@ -391,7 +385,6 @@ pub(super) fn update_workspace_override_model(
     existing.max_tokens = spec.max_tokens;
     existing.context_window_tokens = spec.context_window_tokens;
     existing.top_p = spec.top_p;
-    existing.timeout_ms = spec.timeout_ms;
     existing.max_retries = spec.max_retries;
     existing.last_verified_at = None;
     existing.last_verify_status = None;
@@ -452,7 +445,6 @@ pub(super) fn build_platform_model_from_spec(
         max_tokens: spec.max_tokens,
         context_window_tokens: spec.context_window_tokens,
         top_p: spec.top_p,
-        timeout_ms: spec.timeout_ms,
         max_retries: spec.max_retries,
         last_verified_at: None,
         last_verify_status: None,
@@ -493,7 +485,6 @@ pub(super) fn build_workspace_local_model_from_spec(
         max_tokens: spec.max_tokens,
         context_window_tokens: spec.context_window_tokens,
         top_p: spec.top_p,
-        timeout_ms: spec.timeout_ms,
         max_retries: spec.max_retries,
         last_verified_at: None,
         last_verify_status: None,

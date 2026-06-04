@@ -6,15 +6,17 @@ use std::{
 
 use crate::{
     domain::agent::{
-        AgentError, AgentKind, AgentMessage, AgentModelConfig, AgentRunContext, AgentRunResult,
+        AgentError, AgentKind, AgentModelConfig, AgentRunContext, AgentRunResult,
         ExpandedDomainPersistenceMode, ModelRequest, ModelResponse, ModelStreamEvent,
         ModelStreamEventKind, ModelTokenUsage, ToolContextDelta, ToolExposureMode, ToolRegistry,
-        ToolRequest,
     },
     shared::event_bus::{BusEventDraft, BusOutcome, BusRequestRef, EventBusHandle, PublishOutcome},
 };
 
 use super::{DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, discovery_expand_tool_definition};
+
+#[path = "runtime_tool_calls.rs"]
+mod runtime_tool_calls;
 
 pub type ModelStreamSink = Arc<dyn Fn(ModelStreamEvent) + Send + Sync>;
 
@@ -188,101 +190,12 @@ impl ReactAgent {
                         observations: context.observations.clone(),
                     });
                 }
-                ModelResponse::ToolCall { call, .. } => {
-                    if tool_calls >= context.limits.max_tool_calls {
-                        self.publish(
-                            &context,
-                            "agent.run.failed",
-                            BusOutcome::Failure,
-                            Some("max_tool_calls_exceeded"),
-                        )?;
-                        return Err(AgentError::MaxStepsExceeded);
-                    }
-                    tool_calls += 1;
-                    let tool_call_id = format!("{}-tool-{tool_calls}", context.run_code);
-                    let tool_name = call.tool_name.clone();
-                    let tool_input = call.input.clone();
-                    self.publish_tool(
-                        &context,
-                        "agent.tool.selected",
-                        BusOutcome::Progress,
-                        Some(tool_name.as_str()),
-                        &tool_call_id,
-                        &tool_name,
-                        Some(&tool_input),
-                        None,
-                    )?;
-                    self.publish_tool(
-                        &context,
-                        "agent.tool.started",
-                        BusOutcome::Started,
-                        Some(tool_name.as_str()),
-                        &tool_call_id,
-                        &tool_name,
-                        Some(&tool_input),
-                        None,
-                    )?;
-                    match self.tool_registry.execute_allowed(
-                        ToolRequest {
-                            tool_name: call.tool_name,
-                            input: call.input,
-                        },
-                        &context,
-                    ) {
-                        Ok(execution) => {
-                            let observation = execution.observation;
-                            apply_tool_context_delta(context, execution.context_delta);
-                            self.publish_tool(
-                                &context,
-                                "agent.tool.completed",
-                                BusOutcome::Completed,
-                                Some(observation.tool_name.as_str()),
-                                &tool_call_id,
-                                &observation.tool_name,
-                                None,
-                                Some(observation.output.as_str()),
-                            )?;
-                            context.messages.push(AgentMessage::tool(
-                                format_tool_observation_message(&observation),
-                            ));
-                            let completed_tool_name = observation.tool_name.clone();
-                            context.observations.push(observation);
-                            collapse_ephemeral_expanded_domains(
-                                context,
-                                completed_tool_name.as_str(),
-                            );
-                            self.publish_tool(
-                                &context,
-                                "agent.observation.created",
-                                BusOutcome::Progress,
-                                Some("observation_created"),
-                                &tool_call_id,
-                                &tool_name,
-                                None,
-                                context.observations.last().map(|item| item.output.as_str()),
-                            )?;
-                        }
-                        Err(error) => {
-                            let error_message = error.to_string();
-                            self.publish_tool(
-                                &context,
-                                "agent.tool.failed",
-                                BusOutcome::Failure,
-                                Some("tool_failed"),
-                                &tool_call_id,
-                                &tool_name,
-                                None,
-                                Some(error_message.as_str()),
-                            )?;
-                            self.publish(
-                                &context,
-                                "agent.run.failed",
-                                BusOutcome::Failure,
-                                Some("tool_failure"),
-                            )?;
-                            return Err(error.into());
-                        }
-                    }
+                ModelResponse::ToolCalls {
+                    calls,
+                    ..
+                } => {
+                    self.execute_tool_calls(context, &mut tool_calls, calls)
+                        .await?;
                 }
             }
         }
@@ -521,6 +434,11 @@ fn validate_context(context: &AgentRunContext) -> Result<(), AgentError> {
     if context.limits.max_tool_calls == 0 {
         return Err(AgentError::InvalidConfiguration(
             "maxToolCalls must be greater than zero".into(),
+        ));
+    }
+    if context.limits.max_parallel_tool_calls == 0 {
+        return Err(AgentError::InvalidConfiguration(
+            "maxParallelToolCalls must be greater than zero".into(),
         ));
     }
     Ok(())

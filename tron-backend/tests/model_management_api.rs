@@ -249,7 +249,6 @@ async fn model_capabilities_round_trip_as_multi_value_field() {
             "enabled": true,
             "thinkingEnabled": true,
             "structuredOutputEnabled": true,
-            "timeoutMs": 1000,
             "maxRetries": 0
         })),
     )
@@ -281,7 +280,6 @@ async fn model_capabilities_round_trip_as_multi_value_field() {
             "enabled": true,
             "thinkingEnabled": true,
             "structuredOutputEnabled": true,
-            "timeoutMs": 1000,
             "maxRetries": 0
         })),
     )
@@ -1076,14 +1074,14 @@ async fn cleanup_migration_deletes_legacy_enabled_workspace_platform_shadow_rows
                 id, scope_kind, workspace_code, model_code, display_name, vendor, protocol,
                 model_type, model_capabilities, base_url, api_path, api_key_ref, model_name, enabled,
                 description, thinking_enabled, structured_output_enabled, temperature,
-                max_tokens, top_p, timeout_ms, max_retries, last_verified_at,
+                max_tokens, top_p, max_retries, last_verified_at,
                 last_verify_status, last_verify_message, source_kind, source_model_code,
                 allow_inheritance, created_at, updated_at
             ) VALUES (
                 ?1, 'workspace', 'TRON_CORE', ?2, 'GPT-4o Main', 'OpenAI', 'responses',
                 'text', ?3, 'https://api.openai.com/v1', '/responses', 'sk-legacy-shadow', 'gpt-4o', 1,
                 'legacy explicit restore row', 1, 1, 0.2,
-                4096, 1.0, 5000, 1, NULL,
+                4096, 1.0, 1, NULL,
                 NULL, NULL, 'platform', ?4,
                 NULL, 1779235200000, 1779235200000
             )",
@@ -1496,7 +1494,6 @@ async fn verify_platform_draft_uses_unsaved_payload_without_persisting() {
             "temperature": 0.2,
             "maxTokens": 1024,
             "topP": 1.0,
-            "timeoutMs": 1000,
             "maxRetries": 0
         })),
     )
@@ -1579,7 +1576,6 @@ async fn verify_platform_create_draft_uses_unsaved_payload_without_persisting() 
             "temperature": 0.2,
             "maxTokens": 1024,
             "topP": 1.0,
-            "timeoutMs": 1000,
             "maxRetries": 0
         })),
     )
@@ -1675,7 +1671,6 @@ async fn verify_workspace_draft_uses_unsaved_payload_without_persisting() {
             "temperature": 0.2,
             "maxTokens": 1024,
             "topP": 1.0,
-            "timeoutMs": 1000,
             "maxRetries": 0
         })),
     )
@@ -1770,7 +1765,6 @@ async fn verify_workspace_create_draft_uses_unsaved_payload_without_persisting()
             "temperature": 0.2,
             "maxTokens": 1024,
             "topP": 1.0,
-            "timeoutMs": 1000,
             "maxRetries": 0,
             "allowInheritance": true
         })),
@@ -1885,7 +1879,6 @@ async fn platform_list_masks_api_key_and_blank_update_preserves_saved_secret() {
             "temperature": 0.2,
             "maxTokens": 1024,
             "topP": 1.0,
-            "timeoutMs": 1000,
             "maxRetries": 0
         })),
     )
@@ -1975,7 +1968,6 @@ async fn workspace_catalog_masks_api_key_and_blank_update_preserves_saved_secret
             "temperature": 0.2,
             "maxTokens": 1024,
             "topP": 1.0,
-            "timeoutMs": 1000,
             "maxRetries": 0,
             "allowInheritance": true
         })),
@@ -2292,7 +2284,6 @@ async fn create_model_for_verify(
             "enabled": true,
             "thinkingEnabled": model_type == "TEXT",
             "structuredOutputEnabled": protocol == "RESPONSES",
-            "timeoutMs": 1500,
             "maxRetries": 0
         })),
     )
@@ -2380,7 +2371,6 @@ fn model_payload(display_name: &str, model_name: &str, protocol: &str, model_typ
         "maxTokens": max_tokens,
         "contextWindowTokens": context_window_tokens,
         "topP": top_p,
-        "timeoutMs": 1000,
         "maxRetries": 0
     })
 }

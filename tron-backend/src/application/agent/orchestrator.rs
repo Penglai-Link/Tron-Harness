@@ -1,6 +1,4 @@
-use std::{sync::Arc, time::Duration};
-
-use tokio::time::timeout;
+use std::sync::Arc;
 
 use crate::domain::agent::{AgentRunContext, AgentRunResult};
 
@@ -9,9 +7,7 @@ use super::{
     RuntimeAdapterSelection,
 };
 
-const DEFAULT_RUNTIME_TIMEOUT_MS: u64 = 180_000;
 const MAX_ORCHESTRATOR_RETRIES: u32 = 3;
-const ORCHESTRATOR_TIMEOUT_MULTIPLIER: u64 = 2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RunLifecycleState {
@@ -68,7 +64,6 @@ impl AgentOrchestrator {
     ) -> Result<OrchestratedRunResult, AgentInvocationError> {
         let runtime_adapter_key = runtime.key().code().to_string();
         let retry_budget = max_retry_budget(&context);
-        let timeout_ms = runtime_timeout_ms(&context);
         let resumed = requested_session_id.is_some() && runtime.capabilities().supports_resume;
         let mut attempts = 0;
         let mut lifecycle_trace = vec![RunLifecycleState::Created];
@@ -83,9 +78,8 @@ impl AgentOrchestrator {
                 _ => runtime.start(context.clone(), sink.clone()),
             };
 
-            let timed_result = timeout(Duration::from_millis(timeout_ms), run_future).await;
-            match timed_result {
-                Ok(Ok(run)) => {
+            match run_future.await {
+                Ok(run) => {
                     lifecycle_trace.push(RunLifecycleState::Completed);
                     return Ok(OrchestratedRunResult {
                         run,
@@ -96,42 +90,16 @@ impl AgentOrchestrator {
                         resumed,
                     });
                 }
-                Ok(Err(error)) => {
+                Err(error) => {
                     if attempts <= retry_budget && is_retryable_error(&error) {
                         continue;
                     }
                     lifecycle_trace.push(RunLifecycleState::Failed);
                     return Err(error);
                 }
-                Err(_) => {
-                    let timeout_error = AgentInvocationError::RuntimeFailed(format!(
-                        "runtime adapter `{}` timed out after {}ms",
-                        runtime_adapter_key, timeout_ms
-                    ));
-                    if runtime.capabilities().supports_cancel {
-                        lifecycle_trace.push(RunLifecycleState::Cancelling);
-                        let _ = runtime.cancel(context.run_code.as_str()).await;
-                        lifecycle_trace.push(RunLifecycleState::Cancelled);
-                    } else {
-                        lifecycle_trace.push(RunLifecycleState::Failed);
-                    }
-                    if attempts <= retry_budget && is_retryable_error(&timeout_error) {
-                        continue;
-                    }
-                    return Err(timeout_error);
-                }
             }
         }
     }
-}
-
-fn runtime_timeout_ms(context: &AgentRunContext) -> u64 {
-    let base = context
-        .model
-        .timeout_ms
-        .filter(|value| *value > 0)
-        .unwrap_or(DEFAULT_RUNTIME_TIMEOUT_MS);
-    base.saturating_mul(ORCHESTRATOR_TIMEOUT_MULTIPLIER)
 }
 
 fn max_retry_budget(context: &AgentRunContext) -> u32 {
@@ -308,7 +276,7 @@ mod tests {
         }
     }
 
-    fn context(timeout_ms: u64, max_retries: u32) -> AgentRunContext {
+    fn context(max_retries: u32) -> AgentRunContext {
         AgentRunContext {
             conversation_code: Some("CONV-1".into()),
             run_code: "RUN-1".into(),
@@ -331,7 +299,6 @@ mod tests {
                 max_tokens: Some(128),
                 context_window_tokens: Some(8_192),
                 top_p: Some(1.0),
-                timeout_ms: Some(timeout_ms),
                 max_retries: Some(max_retries),
             },
             variables: vec![EffectiveVariable {
@@ -390,12 +357,7 @@ mod tests {
 
         let result = assert_success(
             orchestrator
-                .execute_with_runtime(
-                    runtime.clone(),
-                    context(1_000, 0),
-                    Some("thr-1".into()),
-                    None,
-                )
+                .execute_with_runtime(runtime.clone(), context(0), Some("thr-1".into()), None)
                 .await,
         );
 
@@ -426,12 +388,7 @@ mod tests {
 
         let result = assert_success(
             orchestrator
-                .execute_with_runtime(
-                    runtime.clone(),
-                    context(1_000, 0),
-                    Some("thr-1".into()),
-                    None,
-                )
+                .execute_with_runtime(runtime.clone(), context(0), Some("thr-1".into()), None)
                 .await,
         );
 
@@ -464,7 +421,7 @@ mod tests {
 
         let result = assert_success(
             orchestrator
-                .execute_with_runtime(runtime.clone(), context(1_000, 1), None, None)
+                .execute_with_runtime(runtime.clone(), context(1), None, None)
                 .await,
         );
 
@@ -484,7 +441,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn timeout_attempt_triggers_cancel_when_supported() {
+    async fn slow_runtime_completes_without_cancel_when_supported() {
         let orchestrator = orchestrator();
         let runtime = std::sync::Arc::new(FakeRuntime::new(
             RuntimeAdapterKey::OpenCodeServe,
@@ -493,12 +450,12 @@ mod tests {
             30,
         ));
 
-        let error = orchestrator
-            .execute_with_runtime(runtime.clone(), context(5, 0), None, None)
-            .await
-            .expect_err("timeout should fail");
-        assert_eq!(error.code(), "AGENT_RUNTIME_FAILED");
-        assert!(error.message().contains("timed out"));
-        assert_eq!(runtime.calls(), vec!["start", "cancel:RUN-1"]);
+        let result = assert_success(
+            orchestrator
+                .execute_with_runtime(runtime.clone(), context(0), None, None)
+                .await,
+        );
+        assert_eq!(result.lifecycle_state, RunLifecycleState::Completed);
+        assert_eq!(runtime.calls(), vec!["start"]);
     }
 }

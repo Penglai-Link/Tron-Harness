@@ -64,6 +64,7 @@ interface InternalAgentDraft {
   expandedDomainPersistenceMode: WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"];
   maxSteps: number;
   maxToolCalls: number;
+  maxParallelToolCalls: number;
   selectedToolCodes: string[];
   toolAssignmentMode: WorkspaceInternalAgentRecord["toolAssignmentMode"];
   toolExposureMode: WorkspaceInternalAgentRecord["toolExposureMode"];
@@ -94,6 +95,7 @@ function draftFromRecord(record: WorkspaceInternalAgentRecord): InternalAgentDra
     expandedDomainPersistenceMode: record.expandedDomainPersistenceMode,
     maxSteps: record.maxSteps,
     maxToolCalls: record.maxToolCalls,
+    maxParallelToolCalls: record.maxParallelToolCalls,
     selectedToolCodes: normalizeToolCodes(record.selectedToolCodes),
     toolAssignmentMode: record.toolAssignmentMode,
     toolExposureMode: record.toolExposureMode,
@@ -107,6 +109,7 @@ function hasDraftChanges(record: WorkspaceInternalAgentRecord, draft: InternalAg
     || record.expandedDomainPersistenceMode !== draft.expandedDomainPersistenceMode
     || record.maxSteps !== draft.maxSteps
     || record.maxToolCalls !== draft.maxToolCalls
+    || record.maxParallelToolCalls !== draft.maxParallelToolCalls
     || !hasSameToolCodes(normalizeToolCodes(record.selectedToolCodes), normalizeToolCodes(draft.selectedToolCodes))
   );
 }
@@ -164,7 +167,13 @@ export function WorkspaceAgentsPage() {
   );
 
   function fieldLabel(
-    key: "expandedDomainPersistenceMode" | "maxSteps" | "maxToolCalls" | "toolAssignmentMode" | "toolExposureMode",
+    key:
+      | "expandedDomainPersistenceMode"
+      | "maxSteps"
+      | "maxToolCalls"
+      | "maxParallelToolCalls"
+      | "toolAssignmentMode"
+      | "toolExposureMode",
     defaultValue: string,
     align: "end" | "start" = "start",
   ) {
@@ -360,7 +369,7 @@ export function WorkspaceAgentsPage() {
 
   function updateLimitDraft(
     agentCode: string,
-    key: "maxSteps" | "maxToolCalls",
+    key: "maxSteps" | "maxToolCalls" | "maxParallelToolCalls",
     valueAsNumber: number,
   ) {
     const draft = internalDrafts[agentCode];
@@ -490,6 +499,9 @@ export function WorkspaceAgentsPage() {
     }
     if (row.maxToolCalls !== draft.maxToolCalls) {
       payload.maxToolCalls = draft.maxToolCalls;
+    }
+    if (row.maxParallelToolCalls !== draft.maxParallelToolCalls) {
+      payload.maxParallelToolCalls = draft.maxParallelToolCalls;
     }
 
     const shouldSaveTools = draft.toolAssignmentMode === "selected_tools"
@@ -699,9 +711,9 @@ export function WorkspaceAgentsPage() {
                     }}
                   />
                 </Field>
-                <Field label={fieldLabel("maxToolCalls", "Max tool calls", "end")}>
+                <Field label={fieldLabel("maxToolCalls", "Max tool calls")}>
                   <TextInput
-                    aria-label={internalPageT("labels.maxToolCalls", "Max tool calls")}
+                    aria-label={internalPageT("labels.maxToolCalls", "Max total tool calls")}
                     disabled={internalBusy}
                     min={1}
                     step={1}
@@ -709,6 +721,19 @@ export function WorkspaceAgentsPage() {
                     value={draft.maxToolCalls}
                     onChange={(event) => {
                       updateLimitDraft(agent.agentCode, "maxToolCalls", event.currentTarget.valueAsNumber);
+                    }}
+                  />
+                </Field>
+                <Field label={fieldLabel("maxParallelToolCalls", "Max parallel tool calls", "end")}>
+                  <TextInput
+                    aria-label={internalPageT("labels.maxParallelToolCalls", "Max parallel tool calls")}
+                    disabled={internalBusy}
+                    min={1}
+                    step={1}
+                    type="number"
+                    value={draft.maxParallelToolCalls}
+                    onChange={(event) => {
+                      updateLimitDraft(agent.agentCode, "maxParallelToolCalls", event.currentTarget.valueAsNumber);
                     }}
                   />
                 </Field>

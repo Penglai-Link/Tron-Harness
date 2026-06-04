@@ -1,9 +1,8 @@
-use std::{future::Future, path::Path, pin::Pin, process::Stdio, time::Duration};
+use std::{future::Future, path::Path, pin::Pin, process::Stdio};
 
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::Command,
-    time::timeout,
 };
 
 use crate::domain::agent::{
@@ -17,7 +16,6 @@ use super::{
     AgentInvocationError, AgentRuntime, ModelStreamSink, RuntimeAdapterKey, RuntimeCapabilities,
 };
 
-const DEFAULT_SYSTEM_AGENT_TIMEOUT_MS: u64 = 180_000;
 const STREAM_DELTA_CHUNK_CHARS: usize = 72;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,22 +63,13 @@ impl SystemCliRuntime {
                 .await;
         }
 
-        let (mut command, timeout_ms) = self.build_command(&context)?;
-        let output = timeout(Duration::from_millis(timeout_ms), command.output())
-            .await
-            .map_err(|_| {
-                AgentInvocationError::RuntimeFailed(format!(
-                    "{} command timed out after {}ms",
-                    system_agent_name(self.kind),
-                    timeout_ms
-                ))
-            })?
-            .map_err(|error| {
-                AgentInvocationError::RuntimeFailed(format!(
-                    "{} command failed to start: {error}",
-                    system_agent_name(self.kind)
-                ))
-            })?;
+        let mut command = self.build_command(&context)?;
+        let output = command.output().await.map_err(|error| {
+            AgentInvocationError::RuntimeFailed(format!(
+                "{} command failed to start: {error}",
+                system_agent_name(self.kind)
+            ))
+        })?;
 
         let stdout = String::from_utf8_lossy(&output.stdout).to_string();
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
@@ -98,18 +87,11 @@ impl SystemCliRuntime {
         self.run_result_from_parsed(context, parsed, stdout)
     }
 
-    fn build_command(
-        &self,
-        context: &AgentRunContext,
-    ) -> Result<(Command, u64), AgentInvocationError> {
+    fn build_command(&self, context: &AgentRunContext) -> Result<Command, AgentInvocationError> {
         let prompt = prompt_from_context(context);
         if prompt.is_empty() {
             return Err(AgentInvocationError::PromptRequired);
         }
-        let timeout_ms = context
-            .model
-            .timeout_ms
-            .unwrap_or(DEFAULT_SYSTEM_AGENT_TIMEOUT_MS);
         let resume_session_id = context
             .system_agent_session_id
             .as_deref()
@@ -166,7 +148,7 @@ impl SystemCliRuntime {
             }
         }
 
-        Ok((command, timeout_ms))
+        Ok(command)
     }
 
     async fn invoke_stream(
@@ -174,7 +156,7 @@ impl SystemCliRuntime {
         context: AgentRunContext,
         sink: ModelStreamSink,
     ) -> Result<AgentRunResult, AgentInvocationError> {
-        let (mut command, timeout_ms) = self.build_command(&context)?;
+        let mut command = self.build_command(&context)?;
         command.kill_on_drop(true);
         command.stdout(Stdio::piped());
         command.stderr(Stdio::piped());
@@ -236,22 +218,12 @@ impl SystemCliRuntime {
             Ok::<String, String>(stderr_buffer)
         });
 
-        let status = match timeout(Duration::from_millis(timeout_ms), child.wait()).await {
-            Ok(result) => result.map_err(|error| {
-                AgentInvocationError::RuntimeFailed(format!(
-                    "{} command failed while waiting: {error}",
-                    system_agent_name(self.kind)
-                ))
-            })?,
-            Err(_) => {
-                let _ = child.kill().await;
-                return Err(AgentInvocationError::RuntimeFailed(format!(
-                    "{} command timed out after {}ms",
-                    system_agent_name(self.kind),
-                    timeout_ms
-                )));
-            }
-        };
+        let status = child.wait().await.map_err(|error| {
+            AgentInvocationError::RuntimeFailed(format!(
+                "{} command failed while waiting: {error}",
+                system_agent_name(self.kind)
+            ))
+        })?;
 
         let stream_output = stdout_task
             .await

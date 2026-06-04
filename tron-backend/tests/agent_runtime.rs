@@ -1,4 +1,11 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{
+        Arc, Barrier,
+        atomic::{AtomicUsize, Ordering},
+    },
+    thread,
+    time::Duration,
+};
 
 use serde_json::json;
 use tron_backend::{
@@ -7,8 +14,8 @@ use tron_backend::{
     domain::agent::{
         AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig, AgentModelProtocol,
         AgentRunContext, AgentRunLimits, EffectiveSkill, EffectiveTool, EffectiveVariable,
-        InProcessTool, ModelRequest, ModelResponse, ToolError, ToolObservation, ToolRegistry,
-        ToolRequest,
+        InProcessTool, ModelRequest, ModelResponse, ToolCall, ToolError, ToolObservation,
+        ToolRegistry, ToolRequest,
     },
     shared::{
         event_bus::{BusRouteClass, EventBusConfig, EventBusRuntimeBuilder, RecordingEventSink},
@@ -73,7 +80,6 @@ fn base_context(run_code: &str) -> AgentRunContext {
             max_tokens: Some(128),
             context_window_tokens: Some(8_192),
             top_p: Some(1.0),
-            timeout_ms: Some(1000),
             max_retries: Some(0),
         },
         variables: vec![EffectiveVariable {
@@ -106,6 +112,7 @@ fn base_context(run_code: &str) -> AgentRunContext {
         limits: AgentRunLimits {
             max_steps: 4,
             max_tool_calls: 2,
+            max_parallel_tool_calls: 2,
         },
         messages: vec![AgentMessage::user("hello")],
         observations: Vec::new(),
@@ -208,6 +215,324 @@ async fn react_agent_executes_allowed_tool_and_keeps_runs_isolated() {
     assert_eq!(first.observations.len(), 1);
     assert_eq!(second.final_output, "second-run");
     assert!(second.observations.is_empty());
+}
+
+#[tokio::test]
+async fn react_agent_executes_multiple_tool_calls_in_one_model_turn() {
+    let registry = ToolRegistry::default();
+    registry
+        .register(Arc::new(InProcessTool::new(
+            "echo",
+            |request: ToolRequest| {
+                Ok(ToolObservation {
+                    tool_name: request.tool_name,
+                    output: format!("observed:{}", request.input["value"]),
+                })
+            },
+        )))
+        .expect("tool should register");
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![
+            ModelResponse::tool_calls(vec![
+                ToolCall {
+                    call_id: Some("call-1".into()),
+                    tool_name: "echo".into(),
+                    input: json!({"value": "a"}),
+                },
+                ToolCall {
+                    call_id: Some("call-2".into()),
+                    tool_name: "echo".into(),
+                    input: json!({"value": "b"}),
+                },
+            ]),
+            ModelResponse::final_output("after-tool"),
+        ])),
+        Arc::new(registry),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    let result = agent
+        .run(base_context("RUN-MULTI-TOOL"))
+        .await
+        .expect("multi tool run should pass");
+
+    assert_eq!(result.final_output, "after-tool");
+    assert_eq!(result.observations.len(), 2);
+    assert_eq!(result.observations[0].output, "observed:\"a\"");
+    assert_eq!(result.observations[1].output, "observed:\"b\"");
+}
+
+#[tokio::test]
+async fn react_agent_executes_multiple_tool_calls_concurrently_by_default() {
+    let registry = ToolRegistry::default();
+    let barrier = Arc::new(Barrier::new(2));
+    let running = Arc::new(AtomicUsize::new(0));
+    let max_running = Arc::new(AtomicUsize::new(0));
+    registry
+        .register(Arc::new(InProcessTool::new("echo", {
+            let barrier = Arc::clone(&barrier);
+            let running = Arc::clone(&running);
+            let max_running = Arc::clone(&max_running);
+            move |request: ToolRequest| {
+                let current = running.fetch_add(1, Ordering::SeqCst) + 1;
+                let mut observed = max_running.load(Ordering::SeqCst);
+                while current > observed {
+                    match max_running.compare_exchange(
+                        observed,
+                        current,
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) {
+                        Ok(_) => break,
+                        Err(actual) => observed = actual,
+                    }
+                }
+                barrier.wait();
+                thread::sleep(Duration::from_millis(50));
+                running.fetch_sub(1, Ordering::SeqCst);
+                Ok(ToolObservation {
+                    tool_name: request.tool_name,
+                    output: format!("observed:{}", request.input["value"]),
+                })
+            }
+        })))
+        .expect("tool should register");
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![
+            ModelResponse::tool_calls(vec![
+                ToolCall {
+                    call_id: Some("call-1".into()),
+                    tool_name: "echo".into(),
+                    input: json!({"value": "a"}),
+                },
+                ToolCall {
+                    call_id: Some("call-2".into()),
+                    tool_name: "echo".into(),
+                    input: json!({"value": "b"}),
+                },
+            ]),
+            ModelResponse::final_output("after-tool"),
+        ])),
+        Arc::new(registry),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    let result = tokio::time::timeout(
+        Duration::from_secs(2),
+        agent.run(base_context("RUN-PARALLEL")),
+    )
+    .await
+    .expect("parallel tool calls should complete within timeout")
+    .expect("parallel tool run should pass");
+
+    assert_eq!(result.final_output, "after-tool");
+    assert_eq!(result.observations.len(), 2);
+    assert_eq!(result.observations[0].output, "observed:\"a\"");
+    assert_eq!(result.observations[1].output, "observed:\"b\"");
+    assert_eq!(max_running.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn react_agent_executes_single_tool_call_without_parallel_batching() {
+    let registry = ToolRegistry::default();
+    let running = Arc::new(AtomicUsize::new(0));
+    let max_running = Arc::new(AtomicUsize::new(0));
+    registry
+        .register(Arc::new(InProcessTool::new("echo", {
+            let running = Arc::clone(&running);
+            let max_running = Arc::clone(&max_running);
+            move |request: ToolRequest| {
+                let current = running.fetch_add(1, Ordering::SeqCst) + 1;
+                let mut observed = max_running.load(Ordering::SeqCst);
+                while current > observed {
+                    match max_running.compare_exchange(
+                        observed,
+                        current,
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) {
+                        Ok(_) => break,
+                        Err(actual) => observed = actual,
+                    }
+                }
+                thread::sleep(Duration::from_millis(50));
+                running.fetch_sub(1, Ordering::SeqCst);
+                Ok(ToolObservation {
+                    tool_name: request.tool_name,
+                    output: format!("observed:{}", request.input["value"]),
+                })
+            }
+        })))
+        .expect("tool should register");
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![
+            ModelResponse::tool_calls(vec![
+                ToolCall {
+                    call_id: Some("call-1".into()),
+                    tool_name: "echo".into(),
+                    input: json!({"value": "a"}),
+                },
+            ]),
+            ModelResponse::final_output("after-tool"),
+        ])),
+        Arc::new(registry),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    let result = agent
+        .run(base_context("RUN-SINGLE-TOOL"))
+        .await
+        .expect("single tool run should pass");
+
+    assert_eq!(result.final_output, "after-tool");
+    assert_eq!(result.observations.len(), 1);
+    assert_eq!(result.observations[0].output, "observed:\"a\"");
+    assert_eq!(max_running.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn react_agent_batches_parallel_tool_calls_by_parallel_limit() {
+    let registry = ToolRegistry::default();
+    let barrier = Arc::new(Barrier::new(2));
+    let running = Arc::new(AtomicUsize::new(0));
+    let max_running = Arc::new(AtomicUsize::new(0));
+    registry
+        .register(Arc::new(InProcessTool::new("echo", {
+            let barrier = Arc::clone(&barrier);
+            let running = Arc::clone(&running);
+            let max_running = Arc::clone(&max_running);
+            move |request: ToolRequest| {
+                let current = running.fetch_add(1, Ordering::SeqCst) + 1;
+                let mut observed = max_running.load(Ordering::SeqCst);
+                while current > observed {
+                    match max_running.compare_exchange(
+                        observed,
+                        current,
+                        Ordering::SeqCst,
+                        Ordering::SeqCst,
+                    ) {
+                        Ok(_) => break,
+                        Err(actual) => observed = actual,
+                    }
+                }
+                barrier.wait();
+                thread::sleep(Duration::from_millis(20));
+                running.fetch_sub(1, Ordering::SeqCst);
+                Ok(ToolObservation {
+                    tool_name: request.tool_name,
+                    output: format!("observed:{}", request.input["value"]),
+                })
+            }
+        })))
+        .expect("tool should register");
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![
+            ModelResponse::tool_calls(vec![
+                ToolCall {
+                    call_id: Some("call-1".into()),
+                    tool_name: "echo".into(),
+                    input: json!({"value": "a"}),
+                },
+                ToolCall {
+                    call_id: Some("call-2".into()),
+                    tool_name: "echo".into(),
+                    input: json!({"value": "b"}),
+                },
+                ToolCall {
+                    call_id: Some("call-3".into()),
+                    tool_name: "echo".into(),
+                    input: json!({"value": "c"}),
+                },
+                ToolCall {
+                    call_id: Some("call-4".into()),
+                    tool_name: "echo".into(),
+                    input: json!({"value": "d"}),
+                },
+            ]),
+            ModelResponse::final_output("after-tool"),
+        ])),
+        Arc::new(registry),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    let mut context = base_context("RUN-BATCHED-PARALLEL");
+    context.limits.max_tool_calls = 6;
+    context.limits.max_parallel_tool_calls = 2;
+    let result = tokio::time::timeout(Duration::from_secs(2), agent.run(context))
+        .await
+        .expect("batched parallel tool calls should complete within timeout")
+        .expect("batched parallel tool run should pass");
+
+    assert_eq!(result.final_output, "after-tool");
+    assert_eq!(result.observations.len(), 4);
+    assert_eq!(max_running.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn react_agent_executes_remaining_parallel_budget_before_failing() {
+    let registry = ToolRegistry::default();
+    let executed = Arc::new(AtomicUsize::new(0));
+    registry
+        .register(Arc::new(InProcessTool::new("echo", {
+            let executed = Arc::clone(&executed);
+            move |request: ToolRequest| {
+                executed.fetch_add(1, Ordering::SeqCst);
+                Ok(ToolObservation {
+                    tool_name: request.tool_name,
+                    output: format!("observed:{}", request.input["value"]),
+                })
+            }
+        })))
+        .expect("tool should register");
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![ModelResponse::tool_calls(
+            vec![
+                ToolCall {
+                    call_id: Some("call-1".into()),
+                    tool_name: "echo".into(),
+                    input: json!({"value": "a"}),
+                },
+                ToolCall {
+                    call_id: Some("call-2".into()),
+                    tool_name: "echo".into(),
+                    input: json!({"value": "b"}),
+                },
+                ToolCall {
+                    call_id: Some("call-3".into()),
+                    tool_name: "echo".into(),
+                    input: json!({"value": "c"}),
+                },
+                ToolCall {
+                    call_id: Some("call-4".into()),
+                    tool_name: "echo".into(),
+                    input: json!({"value": "d"}),
+                },
+            ],
+        )])),
+        Arc::new(registry),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    let mut context = base_context("RUN-PARALLEL-BUDGET");
+    context.limits.max_tool_calls = 3;
+    context.limits.max_parallel_tool_calls = 2;
+    let error = agent
+        .run(context)
+        .await
+        .expect_err("run should fail after exhausting total tool-call budget");
+
+    assert_eq!(error.to_string(), "agent run exceeded max tool calls");
+    assert_eq!(executed.load(Ordering::SeqCst), 3);
 }
 
 #[tokio::test]
@@ -359,7 +684,7 @@ async fn model_request_builders_use_frozen_model_config() {
 
     let responses = responses_request(&config, &request);
     assert_eq!(responses["model"], json!("gpt-test"));
-    assert_eq!(responses["input"][0]["content"], json!("hi"));
+    assert_eq!(responses["input"], json!("hi"));
 
     let embeddings = embeddings_request(&config, "embed me");
     assert_eq!(embeddings["model"], json!("gpt-test"));
@@ -372,6 +697,7 @@ async fn max_step_exhaustion_fails_without_output_success() {
         limits: AgentRunLimits {
             max_steps: 1,
             max_tool_calls: 1,
+            max_parallel_tool_calls: 1,
         },
         ..base_context("RUN-LIMIT")
     };
@@ -409,6 +735,7 @@ async fn zero_tool_call_limit_is_rejected_before_model_execution() {
         limits: AgentRunLimits {
             max_steps: 1,
             max_tool_calls: 0,
+            max_parallel_tool_calls: 1,
         },
         ..base_context("RUN-ZERO-TOOL")
     };
@@ -426,4 +753,30 @@ async fn zero_tool_call_limit_is_rejected_before_model_execution() {
         .expect_err("zero tool-call limit should be rejected");
 
     assert_eq!(error.to_string(), "maxToolCalls must be greater than zero");
+}
+
+#[tokio::test]
+async fn zero_parallel_tool_call_limit_is_rejected_before_model_execution() {
+    let context = AgentRunContext {
+        limits: AgentRunLimits {
+            max_steps: 1,
+            max_tool_calls: 1,
+            max_parallel_tool_calls: 0,
+        },
+        ..base_context("RUN-ZERO-PARALLEL")
+    };
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![])),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    let error = agent
+        .run(context)
+        .await
+        .expect_err("zero parallel tool-call limit should be rejected");
+
+    assert_eq!(error.to_string(), "maxParallelToolCalls must be greater than zero");
 }

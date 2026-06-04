@@ -428,9 +428,6 @@ export function PlatformModelDetailsPage() {
               <Field label="Top P">
                 <ReadValue>{formatOptionalNumber(selectedRecord.topP)}</ReadValue>
               </Field>
-              <Field label="Timeout (ms)">
-                <ReadValue>{selectedRecord.timeoutMs === null ? "" : String(selectedRecord.timeoutMs)}</ReadValue>
-              </Field>
               <Field label="Max Retries">
                 <ReadValue>{selectedRecord.maxRetries === null ? "" : String(selectedRecord.maxRetries)}</ReadValue>
               </Field>

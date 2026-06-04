@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 
 use crate::domain::agent::{
     AgentModelConfig, AgentModelProtocol, ModelRequest, ModelResponse, ModelStreamEvent,
-    ModelTokenUsage,
+    ModelTokenUsage, ToolCall,
 };
 
 use super::{content::*, registry::ModelProtocolAdapter, usage::parse_openai_compatible_usage};
@@ -83,6 +83,7 @@ pub fn chat_completions_request(config: &AgentModelConfig, request: &ModelReques
                 }))
                 .collect::<Vec<_>>()
         );
+        payload["parallel_tool_calls"] = json!(true);
     }
     payload
 }
@@ -90,36 +91,16 @@ pub fn chat_completions_request(config: &AgentModelConfig, request: &ModelReques
 fn parse_chat_response(body: &Value) -> Option<ModelResponse> {
     let token_usage = parse_openai_compatible_usage(body);
     let message = body.get("choices")?.as_array()?.first()?.get("message")?;
-    if let Some(tool_call) = message
+    if let Some(tool_calls) = message
         .get("tool_calls")
         .and_then(Value::as_array)
-        .and_then(|calls| calls.first())
+        .map(|calls| parse_chat_tool_calls(calls.as_slice()))
+        .filter(|calls| !calls.is_empty())
     {
-        let function = tool_call.get("function")?;
-        let name = function.get("name")?.as_str()?;
-        let arguments = function
-            .get("arguments")
-            .and_then(Value::as_str)
-            .and_then(|raw| serde_json::from_str(raw).ok())
-            .unwrap_or_else(|| json!({}));
-        return Some(ModelResponse::tool_call_with_usage(
-            name,
-            arguments,
-            token_usage,
-        ));
+        return Some(ModelResponse::tool_calls_with_usage(tool_calls, token_usage));
     }
     if let Some(function_call) = message.get("function_call") {
-        let name = function_call.get("name")?.as_str()?;
-        let arguments = function_call
-            .get("arguments")
-            .and_then(Value::as_str)
-            .and_then(|raw| serde_json::from_str(raw).ok())
-            .unwrap_or_else(|| json!({}));
-        return Some(ModelResponse::tool_call_with_usage(
-            name,
-            arguments,
-            token_usage,
-        ));
+        return parse_chat_legacy_function_call(function_call, token_usage);
     }
     message
         .get("content")
@@ -131,6 +112,53 @@ fn parse_chat_response(body: &Value) -> Option<ModelResponse> {
                 .map(str::to_owned)
         })
         .map(|output| ModelResponse::final_output_with_usage(output, token_usage))
+}
+
+fn parse_chat_tool_calls(calls: &[Value]) -> Vec<ToolCall> {
+    calls
+        .iter()
+        .filter_map(parse_chat_tool_call)
+        .collect::<Vec<_>>()
+}
+
+fn parse_chat_tool_call(call: &Value) -> Option<ToolCall> {
+    let function = call.get("function")?;
+    let name = function.get("name")?.as_str()?.to_owned();
+    let call_id = call
+        .get("call_id")
+        .or_else(|| call.get("id"))
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let arguments = function
+        .get("arguments")
+        .and_then(Value::as_str)
+        .and_then(|raw| serde_json::from_str(raw).ok())
+        .unwrap_or_else(|| json!({}));
+    Some(ToolCall {
+        call_id,
+        tool_name: name,
+        input: arguments,
+    })
+}
+
+fn parse_chat_legacy_function_call(
+    function_call: &Value,
+    token_usage: Option<ModelTokenUsage>,
+) -> Option<ModelResponse> {
+    let name = function_call.get("name")?.as_str()?;
+    let arguments = function_call
+        .get("arguments")
+        .and_then(Value::as_str)
+        .and_then(|raw| serde_json::from_str(raw).ok())
+        .unwrap_or_else(|| json!({}));
+    Some(ModelResponse::tool_calls_with_usage(
+        vec![ToolCall {
+            call_id: None,
+            tool_name: name.to_owned(),
+            input: arguments,
+        }],
+        token_usage,
+    ))
 }
 
 fn parse_chat_stream_event(body: &Value) -> Option<ModelStreamEvent> {

@@ -47,7 +47,6 @@ export interface ModelRecord {
   maxTokens: number | null;
   contextWindowTokens: number | null;
   topP: number | null;
-  timeoutMs: number | null;
   maxRetries: number | null;
   lastVerifiedAt: string | null;
   lastVerifyStatus: ModelVerifyStatus | null;

@@ -9,11 +9,56 @@ pub(super) fn chat_message_json(message: &AgentMessage) -> Value {
     })
 }
 
-pub(super) fn response_message_json(message: &AgentMessage) -> Value {
-    json!({
-        "role": provider_role(message),
-        "content": message.content,
-    })
+pub(super) fn responses_instructions_text(messages: &[AgentMessage]) -> Option<String> {
+    let instructions = messages
+        .iter()
+        .filter(|message| matches!(message.role.as_str(), "system" | "developer"))
+        .map(|message| message.content.trim())
+        .filter(|content| !content.is_empty())
+        .collect::<Vec<_>>();
+    if instructions.is_empty() {
+        None
+    } else {
+        Some(instructions.join("\n\n"))
+    }
+}
+
+pub(super) fn responses_input_item_json(message: &AgentMessage) -> Value {
+    match message.role.as_str() {
+        "system" | "developer" => json!({
+            "type": "message",
+            "role": message.role.as_str(),
+            "content": message.content.as_str(),
+        }),
+        "user" | "assistant" => json!({
+            "type": "message",
+            "role": message.role.as_str(),
+            "content": message.content.as_str(),
+        }),
+        "tool" => {
+            if let Some(call_id) = &message.tool_call_id {
+                json!({
+                    "type": "function_call_output",
+                    "call_id": call_id,
+                    "output": message
+                        .tool_output
+                        .as_deref()
+                        .unwrap_or(message.content.as_str()),
+                })
+            } else {
+                json!({
+                    "type": "message",
+                    "role": "user",
+                    "content": message.content.as_str(),
+                })
+            }
+        }
+        _ => json!({
+            "type": "message",
+            "role": "user",
+            "content": message.content.as_str(),
+        }),
+    }
 }
 
 fn provider_role(message: &AgentMessage) -> &str {

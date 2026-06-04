@@ -2,7 +2,7 @@ use serde_json::json;
 
 use crate::domain::agent::{
     AgentMessage, AgentModelConfig, AgentModelProtocol, ModelRequest, ModelResponse,
-    ModelStreamEvent, ModelTokenUsage,
+    ModelStreamEvent, ModelTokenUsage, ToolCall,
 };
 
 use super::*;
@@ -45,6 +45,56 @@ fn chat_response_accepts_legacy_function_call() {
     assert_eq!(
         response,
         ModelResponse::tool_call("lookup", json!({ "query": "status" }))
+    );
+}
+
+#[test]
+fn chat_response_parses_multiple_tool_calls_without_parallel_flag_dependency() {
+    let response = ChatCompletionsAdapter
+        .parse_response(&json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "id": "call_123",
+                            "type": "function",
+                            "function": {
+                                "name": "lookup",
+                                "arguments": "{\"query\":\"status\"}"
+                            }
+                        },
+                        {
+                            "id": "call_456",
+                            "type": "function",
+                            "function": {
+                                "name": "lookup",
+                                "arguments": "{\"query\":\"health\"}"
+                            }
+                        }
+                    ]
+                }
+            }]
+        }))
+        .expect("parallel tool call chat response should parse");
+
+    assert_eq!(
+        response,
+        ModelResponse::ToolCalls {
+            calls: vec![
+                ToolCall {
+                    call_id: Some("call_123".into()),
+                    tool_name: "lookup".into(),
+                    input: json!({ "query": "status" }),
+                },
+                ToolCall {
+                    call_id: Some("call_456".into()),
+                    tool_name: "lookup".into(),
+                    input: json!({ "query": "health" }),
+                },
+            ],
+            token_usage: None,
+        }
     );
 }
 
@@ -111,7 +161,6 @@ fn chat_stream_request_asks_for_usage_chunk() {
         max_tokens: None,
         context_window_tokens: Some(128_000),
         top_p: None,
-        timeout_ms: None,
         max_retries: None,
     };
     let body = ChatCompletionsAdapter
@@ -131,7 +180,7 @@ fn chat_stream_request_asks_for_usage_chunk() {
 }
 
 #[test]
-fn request_builders_downgrade_tool_observations_to_user_messages() {
+fn request_builders_default_parallel_tool_calls_to_true_when_tools_are_present() {
     let config = AgentModelConfig {
         model_code: "MODEL-1".into(),
         protocol: AgentModelProtocol::ChatCompletions,
@@ -144,11 +193,57 @@ fn request_builders_downgrade_tool_observations_to_user_messages() {
         max_tokens: None,
         context_window_tokens: None,
         top_p: None,
-        timeout_ms: None,
         max_retries: None,
     };
     let request = ModelRequest {
-        messages: vec![AgentMessage::tool("tool:workspace.list\nresult:\n[]")],
+        messages: vec![AgentMessage::user("hello")],
+        tools: vec![crate::domain::agent::EffectiveTool {
+            tool_name: "lookup".into(),
+            domain_code: None,
+            description: "Lookup something".into(),
+            input_schema: json!({"type": "object"}),
+            skill_name: None,
+            required_variable_keys: vec![],
+        }],
+        system_agent_session_id: None,
+    };
+
+    let chat = chat_completions_request(&config, &request);
+    assert_eq!(chat["parallel_tool_calls"], json!(true));
+
+    let responses = responses_request(
+        &AgentModelConfig {
+            protocol: AgentModelProtocol::Responses,
+            model_name: "qwen-test".into(),
+            ..config
+        },
+        &request,
+    );
+    assert_eq!(responses["parallel_tool_calls"], json!(true));
+}
+
+#[test]
+fn request_builders_handle_tool_observations_per_protocol() {
+    let config = AgentModelConfig {
+        model_code: "MODEL-1".into(),
+        protocol: AgentModelProtocol::ChatCompletions,
+        base_url: "https://provider.test/v1".into(),
+        api_path: None,
+        api_key: "sk-test".into(),
+        model_name: "gpt-test".into(),
+        thinking_enabled: false,
+        temperature: None,
+        max_tokens: None,
+        context_window_tokens: None,
+        top_p: None,
+        max_retries: None,
+    };
+    let request = ModelRequest {
+        messages: vec![AgentMessage::tool_with_call_id(
+            "tool:workspace.list\nresult:\n[]",
+            "call-123",
+            "[]",
+        )],
         tools: vec![],
         system_agent_session_id: None,
     };
@@ -161,11 +256,41 @@ fn request_builders_downgrade_tool_observations_to_user_messages() {
     );
 
     let responses = responses_request(&config, &request);
-    assert_eq!(responses["input"][0]["role"], json!("user"));
-    assert_eq!(
-        responses["input"][0]["content"],
-        json!("tool:workspace.list\nresult:\n[]")
+    assert_eq!(responses["input"][0]["type"], json!("function_call_output"));
+    assert_eq!(responses["input"][0]["call_id"], json!("call-123"));
+    assert_eq!(responses["input"][0]["output"], json!("[]"));
+}
+
+#[test]
+fn responses_request_uses_string_input_for_single_user_prompt() {
+    let config = AgentModelConfig {
+        model_code: "MODEL-1".into(),
+        protocol: AgentModelProtocol::Responses,
+        base_url: "https://provider.test/v1".into(),
+        api_path: None,
+        api_key: "sk-test".into(),
+        model_name: "qwen-test".into(),
+        thinking_enabled: false,
+        temperature: None,
+        max_tokens: None,
+        context_window_tokens: Some(128_000),
+        top_p: None,
+        max_retries: None,
+    };
+    let body = responses_request(
+        &config,
+        &ModelRequest {
+            messages: vec![
+                AgentMessage::system("You are helpful."),
+                AgentMessage::user("hello"),
+            ],
+            tools: vec![],
+            system_agent_session_id: None,
+        },
     );
+
+    assert_eq!(body["instructions"], json!("You are helpful."));
+    assert_eq!(body["input"], json!("hello"));
 }
 
 #[test]
@@ -202,7 +327,6 @@ fn responses_request_enables_reasoning_for_thinking_models() {
         max_tokens: None,
         context_window_tokens: Some(128_000),
         top_p: None,
-        timeout_ms: None,
         max_retries: None,
     };
     let body = ResponsesAdapter
@@ -217,8 +341,8 @@ fn responses_request_enables_reasoning_for_thinking_models() {
         .expect("responses stream request should build");
 
     assert_eq!(body["stream"], json!(true));
-    assert_eq!(body["enable_thinking"], json!(true));
     assert_eq!(body["reasoning"]["effort"], json!("medium"));
+    assert!(body.get("enable_thinking").is_none());
 }
 
 #[test]
@@ -246,6 +370,75 @@ fn responses_response_skips_reasoning_and_reads_message_output_text() {
         .expect("message output after reasoning should parse");
 
     assert_eq!(response, ModelResponse::final_output("TRON"));
+}
+
+#[test]
+fn responses_response_parses_function_call_with_call_id() {
+    let response = ResponsesAdapter
+        .parse_response(&json!({
+            "object": "response",
+            "status": "requires_action",
+            "output": [
+                {
+                    "id": "fc_123",
+                    "call_id": "call_123",
+                    "type": "function_call",
+                    "name": "lookup",
+                    "arguments": "{\"query\":\"status\"}"
+                }
+            ]
+        }))
+        .expect("function call output should parse");
+
+    assert_eq!(
+        response,
+        ModelResponse::tool_call_with_id("call_123", "lookup", json!({ "query": "status" }))
+    );
+}
+
+#[test]
+fn responses_response_parses_multiple_function_calls() {
+    let response = ResponsesAdapter
+        .parse_response(&json!({
+            "object": "response",
+            "status": "requires_action",
+            "output": [
+                {
+                    "id": "fc_123",
+                    "call_id": "call_123",
+                    "type": "function_call",
+                    "name": "lookup",
+                    "arguments": "{\"query\":\"status\"}"
+                },
+                {
+                    "id": "fc_456",
+                    "call_id": "call_456",
+                    "type": "function_call",
+                    "name": "lookup",
+                    "arguments": "{\"query\":\"health\"}"
+                }
+            ]
+        }))
+        .expect("multiple function call output should parse");
+
+    assert_eq!(
+        response,
+        ModelResponse::ToolCalls {
+            calls: vec![
+                ToolCall {
+                    call_id: Some("call_123".into()),
+                    tool_name: "lookup".into(),
+                    input: json!({ "query": "status" }),
+                },
+                ToolCall {
+                    call_id: Some("call_456".into()),
+                    tool_name: "lookup".into(),
+                    input: json!({ "query": "health" }),
+                },
+            ],
+            token_usage: None,
+        }
+    );
 }
 
 #[test]

@@ -1324,7 +1324,6 @@ async fn create_platform_text_model(app: &Router, authorization: &str, base_url:
             "temperature": 0.2,
             "maxTokens": 1024,
             "topP": 1.0,
-            "timeoutMs": 1000,
             "maxRetries": 0
         })),
         None,

@@ -24,8 +24,8 @@ export function InfoTooltip({
       </button>
       <span
         className={cn(
-          "pointer-events-none invisible absolute top-full z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface-strong)] px-3 py-2 text-left text-[12px] font-normal normal-case leading-5 text-[var(--color-on-surface)] opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100",
-          align === "end" ? "right-0" : "left-0",
+          "pointer-events-none invisible fixed inset-x-4 bottom-4 z-30 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface-strong)] px-3 py-2 text-left text-[12px] font-normal normal-case leading-5 text-[var(--color-on-surface)] opacity-0 shadow-lg transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100 sm:absolute sm:inset-x-auto sm:bottom-auto sm:top-full sm:mt-2 sm:w-80 sm:max-w-[calc(100vw-2rem)]",
+          align === "end" ? "sm:right-0" : "sm:left-0",
         )}
         role="tooltip"
       >

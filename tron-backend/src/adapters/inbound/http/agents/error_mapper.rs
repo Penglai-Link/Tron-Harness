@@ -51,6 +51,11 @@ pub fn agent_error_response(error: AgentInvocationError) -> Response {
             "AGENT_MAX_STEPS_EXCEEDED",
             "agent run exceeded max steps".to_string(),
         ),
+        AgentInvocationError::MaxToolCallsExceeded => (
+            StatusCode::BAD_REQUEST,
+            "AGENT_MAX_TOOL_CALLS_EXCEEDED",
+            "agent run exceeded max tool calls".to_string(),
+        ),
     };
     (status, Json(ApiResponse::error(code, message))).into_response()
 }
