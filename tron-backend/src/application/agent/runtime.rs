@@ -9,6 +9,7 @@ use crate::{
         AgentError, AgentKind, AgentModelConfig, AgentRunContext, AgentRunResult,
         ExpandedDomainPersistenceMode, ModelRequest, ModelResponse, ModelStreamEvent,
         ModelStreamEventKind, ModelTokenUsage, ToolContextDelta, ToolExposureMode, ToolRegistry,
+        responses_input_items_from_messages,
     },
     shared::event_bus::{BusEventDraft, BusOutcome, BusRequestRef, EventBusHandle, PublishOutcome},
 };
@@ -80,6 +81,35 @@ pub struct ReactAgent {
     event_bus: EventBusHandle,
 }
 
+#[derive(Debug, Default, Clone)]
+struct ResponsesContinuationState {
+    previous_response_id: Option<String>,
+    consumed_message_count: usize,
+}
+
+impl ResponsesContinuationState {
+    fn build_request(&self, context: &AgentRunContext) -> ModelRequest {
+        let current_messages = self.current_messages(context);
+        ModelRequest {
+            messages: current_messages.to_vec(),
+            tools: context.tools.clone(),
+            system_agent_session_id: context.system_agent_session_id.clone(),
+            response_input_items: Some(responses_input_items_from_messages(current_messages)),
+            previous_response_id: self.previous_response_id.clone(),
+        }
+    }
+
+    fn apply_response(&mut self, response: &ModelResponse, message_count: usize) {
+        self.previous_response_id = response.response_id().map(str::to_owned);
+        self.consumed_message_count = message_count;
+    }
+
+    fn current_messages<'a>(&self, context: &'a AgentRunContext) -> &'a [crate::domain::agent::AgentMessage] {
+        let start = self.consumed_message_count.min(context.messages.len());
+        &context.messages[start..]
+    }
+}
+
 impl ReactAgent {
     pub async fn run(&self, mut context: AgentRunContext) -> Result<AgentRunResult, AgentError> {
         self.run_with_model(&mut context, None).await
@@ -99,6 +129,13 @@ impl ReactAgent {
         sink: Option<ModelStreamSink>,
     ) -> Result<AgentRunResult, AgentError> {
         validate_context(&context)?;
+        let mut responses_state = if context.model.protocol == crate::domain::agent::AgentModelProtocol::Responses
+            && context.model.responses_stateful_enabled
+        {
+            Some(ResponsesContinuationState::default())
+        } else {
+            None
+        };
         self.publish(
             &context,
             "agent.run.requested",
@@ -121,7 +158,10 @@ impl ReactAgent {
                 return Err(AgentError::MaxStepsExceeded);
             }
             step_count += 1;
-            let request = model_request_from_context(&context);
+            let request = match responses_state.as_ref() {
+                Some(state) => state.build_request(context),
+                None => model_request_from_context(&context),
+            };
             self.publish(
                 &context,
                 "agent.model.requested",
@@ -159,6 +199,9 @@ impl ReactAgent {
                     Some(current) => current.add(usage),
                     None => usage,
                 });
+            }
+            if let Some(state) = responses_state.as_mut() {
+                state.apply_response(&response, context.messages.len());
             }
 
             match response {
@@ -449,6 +492,8 @@ fn model_request_from_context(context: &AgentRunContext) -> ModelRequest {
         messages: context.messages.clone(),
         tools: context.tools.clone(),
         system_agent_session_id: context.system_agent_session_id.clone(),
+        response_input_items: None,
+        previous_response_id: None,
     }
 }
 

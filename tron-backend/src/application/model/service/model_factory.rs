@@ -21,6 +21,7 @@ pub(super) fn normalize_model_spec(
         command.protocol,
         command.model_type,
         &model_capabilities,
+        command.responses_stateful_enabled,
     )?;
     if command.context_window_tokens == Some(0) {
         return Err(ModelError::InvalidContextWindowTokens);
@@ -40,6 +41,7 @@ pub(super) fn normalize_model_spec(
         description: trim_optional(command.description),
         thinking_enabled: command.thinking_enabled,
         structured_output_enabled: command.structured_output_enabled,
+        responses_stateful_enabled: command.responses_stateful_enabled,
         temperature: command.temperature,
         max_tokens: command.max_tokens,
         context_window_tokens: command.context_window_tokens,
@@ -69,6 +71,7 @@ pub(super) fn update_model_from_spec(
     model.description = spec.description;
     model.thinking_enabled = spec.thinking_enabled;
     model.structured_output_enabled = spec.structured_output_enabled;
+    model.responses_stateful_enabled = spec.responses_stateful_enabled;
     model.temperature = spec.temperature;
     model.max_tokens = spec.max_tokens;
     model.context_window_tokens = spec.context_window_tokens;
@@ -217,6 +220,7 @@ pub(super) fn duplicate_workspace_source_model(
         description: source.description.clone(),
         thinking_enabled: source.thinking_enabled,
         structured_output_enabled: source.structured_output_enabled,
+        responses_stateful_enabled: source.responses_stateful_enabled,
         temperature: source.temperature,
         max_tokens: source.max_tokens,
         context_window_tokens: source.context_window_tokens,
@@ -262,6 +266,7 @@ pub(super) fn workspace_status_patch_model(
         description: source.description.clone(),
         thinking_enabled: source.thinking_enabled,
         structured_output_enabled: source.structured_output_enabled,
+        responses_stateful_enabled: source.responses_stateful_enabled,
         temperature: source.temperature,
         max_tokens: source.max_tokens,
         context_window_tokens: source.context_window_tokens,
@@ -297,6 +302,7 @@ pub(super) fn update_workspace_status_patch_model(
     patch.description = source.description.clone();
     patch.thinking_enabled = source.thinking_enabled;
     patch.structured_output_enabled = source.structured_output_enabled;
+    patch.responses_stateful_enabled = source.responses_stateful_enabled;
     patch.temperature = source.temperature;
     patch.max_tokens = source.max_tokens;
     patch.context_window_tokens = source.context_window_tokens;
@@ -341,6 +347,7 @@ pub(super) fn workspace_override_model(
         description: spec.description,
         thinking_enabled: spec.thinking_enabled,
         structured_output_enabled: spec.structured_output_enabled,
+        responses_stateful_enabled: spec.responses_stateful_enabled,
         temperature: spec.temperature,
         max_tokens: spec.max_tokens,
         context_window_tokens: spec.context_window_tokens,
@@ -381,6 +388,7 @@ pub(super) fn update_workspace_override_model(
     existing.description = spec.description;
     existing.thinking_enabled = spec.thinking_enabled;
     existing.structured_output_enabled = spec.structured_output_enabled;
+    existing.responses_stateful_enabled = spec.responses_stateful_enabled;
     existing.temperature = spec.temperature;
     existing.max_tokens = spec.max_tokens;
     existing.context_window_tokens = spec.context_window_tokens;
@@ -441,6 +449,7 @@ pub(super) fn build_platform_model_from_spec(
         description: spec.description,
         thinking_enabled: spec.thinking_enabled,
         structured_output_enabled: spec.structured_output_enabled,
+        responses_stateful_enabled: spec.responses_stateful_enabled,
         temperature: spec.temperature,
         max_tokens: spec.max_tokens,
         context_window_tokens: spec.context_window_tokens,
@@ -481,6 +490,7 @@ pub(super) fn build_workspace_local_model_from_spec(
         description: spec.description,
         thinking_enabled: spec.thinking_enabled,
         structured_output_enabled: spec.structured_output_enabled,
+        responses_stateful_enabled: spec.responses_stateful_enabled,
         temperature: spec.temperature,
         max_tokens: spec.max_tokens,
         context_window_tokens: spec.context_window_tokens,

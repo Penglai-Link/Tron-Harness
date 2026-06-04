@@ -77,6 +77,7 @@ impl ModelService {
             description: source.description,
             thinking_enabled: source.thinking_enabled,
             structured_output_enabled: source.structured_output_enabled,
+            responses_stateful_enabled: source.responses_stateful_enabled,
             temperature: source.temperature,
             max_tokens: source.max_tokens,
             context_window_tokens: source.context_window_tokens,

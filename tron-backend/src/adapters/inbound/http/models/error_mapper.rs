@@ -73,6 +73,11 @@ pub fn model_error_response(error: ModelError) -> Response {
             "MODEL_PROTOCOL_MODEL_TYPE_INVALID",
             "protocol and modelType combination is invalid".to_string(),
         ),
+        ModelError::ResponsesStatefulModeUnsupported => (
+            StatusCode::BAD_REQUEST,
+            "MODEL_RESPONSES_STATEFUL_MODE_UNSUPPORTED",
+            "responsesStatefulEnabled is only supported for Responses protocol".to_string(),
+        ),
         ModelError::PlatformSourceRequired => (
             StatusCode::BAD_REQUEST,
             "MODEL_PLATFORM_SOURCE_REQUIRED",

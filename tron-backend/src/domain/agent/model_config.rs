@@ -13,6 +13,8 @@ pub struct AgentModelConfig {
     pub model_name: String,
     #[serde(default)]
     pub thinking_enabled: bool,
+    #[serde(default)]
+    pub responses_stateful_enabled: bool,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
     pub context_window_tokens: Option<u32>,

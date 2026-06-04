@@ -366,6 +366,7 @@ mod tests {
                     },
                 ],
                 token_usage: None,
+                response_id: None,
             }
         );
         assert_eq!(
@@ -383,6 +384,7 @@ mod tests {
             api_key: "test-key".into(),
             model_name: "qwen3.7-max".into(),
             thinking_enabled: true,
+            responses_stateful_enabled: false,
             temperature: Some(0.2),
             max_tokens: Some(4096),
             context_window_tokens: None,
@@ -396,6 +398,8 @@ mod tests {
             messages: vec![AgentMessage::user("测试多个工具并行调用")],
             tools: Vec::new(),
             system_agent_session_id: None,
+            response_input_items: None,
+            previous_response_id: None,
         }
     }
 }

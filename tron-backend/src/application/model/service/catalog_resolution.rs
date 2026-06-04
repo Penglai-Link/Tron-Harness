@@ -41,6 +41,7 @@ pub(super) fn build_platform_view(
         description: model.description,
         thinking_enabled: model.thinking_enabled,
         structured_output_enabled: model.structured_output_enabled,
+        responses_stateful_enabled: model.responses_stateful_enabled,
         temperature: model.temperature,
         max_tokens: model.max_tokens,
         context_window_tokens: model.context_window_tokens,
@@ -88,6 +89,7 @@ pub(super) fn agent_model_config_from_view(
         api_key: api_key.to_string(),
         model_name: view.model_name.clone(),
         thinking_enabled: view.thinking_enabled,
+        responses_stateful_enabled: view.responses_stateful_enabled,
         temperature: view.temperature,
         max_tokens: view.max_tokens,
         context_window_tokens: view.context_window_tokens,
@@ -169,6 +171,7 @@ pub(super) fn build_workspace_effective_view(
         description: config_model.description.clone(),
         thinking_enabled: config_model.thinking_enabled,
         structured_output_enabled: config_model.structured_output_enabled,
+        responses_stateful_enabled: config_model.responses_stateful_enabled,
         temperature: config_model.temperature,
         max_tokens: config_model.max_tokens,
         context_window_tokens: config_model.context_window_tokens,
@@ -213,6 +216,7 @@ pub(super) fn build_workspace_preview_view(
     view.description = preview_model.description.clone();
     view.thinking_enabled = preview_model.thinking_enabled;
     view.structured_output_enabled = preview_model.structured_output_enabled;
+    view.responses_stateful_enabled = preview_model.responses_stateful_enabled;
     view.temperature = preview_model.temperature;
     view.max_tokens = preview_model.max_tokens;
     view.context_window_tokens = preview_model.context_window_tokens;

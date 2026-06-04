@@ -76,6 +76,7 @@ fn base_context(run_code: &str) -> AgentRunContext {
             api_key: "sk-test".into(),
             model_name: "gpt-test".into(),
             thinking_enabled: false,
+            responses_stateful_enabled: false,
             temperature: Some(0.2),
             max_tokens: Some(128),
             context_window_tokens: Some(8_192),
@@ -676,6 +677,8 @@ async fn model_request_builders_use_frozen_model_config() {
             required_variable_keys: vec![],
         }],
         system_agent_session_id: None,
+        response_input_items: None,
+        previous_response_id: None,
     };
 
     let chat = chat_completions_request(&config, &request);

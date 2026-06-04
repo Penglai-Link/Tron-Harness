@@ -43,6 +43,7 @@ export interface ModelRecord {
   description: string | null;
   thinkingEnabled: boolean;
   structuredOutputEnabled: boolean;
+  responsesStatefulEnabled: boolean;
   temperature: number | null;
   maxTokens: number | null;
   contextWindowTokens: number | null;

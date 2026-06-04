@@ -8,10 +8,10 @@ impl ModelRepository for SqliteModelRepository {
             .prepare(
                 "SELECT id, scope_kind, workspace_code, model_code, display_name, vendor, protocol, model_type,
                         model_capabilities, base_url, api_path, api_key_ref, model_name, enabled, description,
-                        thinking_enabled, structured_output_enabled, temperature, max_tokens,
-                        context_window_tokens, top_p, max_retries, last_verified_at, last_verify_status,
-                        last_verify_message, source_kind, source_model_code, allow_inheritance, created_at,
-                        updated_at
+                        thinking_enabled, structured_output_enabled, responses_stateful_enabled, temperature,
+                        max_tokens, context_window_tokens, top_p, max_retries, last_verified_at,
+                        last_verify_status, last_verify_message, source_kind, source_model_code,
+                        allow_inheritance, created_at, updated_at
                  FROM models
                  ORDER BY scope_kind ASC, workspace_code ASC, display_name ASC, model_code ASC",
             )
@@ -44,24 +44,25 @@ impl ModelRepository for SqliteModelRepository {
                     description: row.get(14)?,
                     thinking_enabled: row.get::<_, i64>(15)? != 0,
                     structured_output_enabled: row.get::<_, i64>(16)? != 0,
-                    temperature: row.get(17)?,
-                    max_tokens: row.get::<_, Option<u32>>(18)?,
-                    context_window_tokens: row.get::<_, Option<u32>>(19)?,
-                    top_p: row.get(20)?,
-                    max_retries: row.get::<_, Option<u32>>(21)?,
-                    last_verified_at: option_timestamp_from_millis(row.get::<_, Option<i64>>(22)?),
+                    responses_stateful_enabled: row.get::<_, i64>(17)? != 0,
+                    temperature: row.get(18)?,
+                    max_tokens: row.get::<_, Option<u32>>(19)?,
+                    context_window_tokens: row.get::<_, Option<u32>>(20)?,
+                    top_p: row.get(21)?,
+                    max_retries: row.get::<_, Option<u32>>(22)?,
+                    last_verified_at: option_timestamp_from_millis(row.get::<_, Option<i64>>(23)?),
                     last_verify_status: row
-                        .get::<_, Option<String>>(23)?
+                        .get::<_, Option<String>>(24)?
                         .map(|value| verify_status_from_storage(value.as_str()))
                         .transpose()
                         .map_err(|_| rusqlite::Error::InvalidQuery)?,
-                    last_verify_message: row.get(24)?,
-                    source_kind: source_kind_from_storage(row.get::<_, String>(25)?.as_str())
+                    last_verify_message: row.get(25)?,
+                    source_kind: source_kind_from_storage(row.get::<_, String>(26)?.as_str())
                         .map_err(|_| rusqlite::Error::InvalidQuery)?,
-                    source_model_code: row.get(26)?,
-                    allow_inheritance: row.get::<_, Option<i64>>(27)?.map(|value| value != 0),
-                    created_at: timestamp_from_millis(row.get(28)?),
-                    updated_at: timestamp_from_millis(row.get(29)?),
+                    source_model_code: row.get(27)?,
+                    allow_inheritance: row.get::<_, Option<i64>>(28)?.map(|value| value != 0),
+                    created_at: timestamp_from_millis(row.get(29)?),
+                    updated_at: timestamp_from_millis(row.get(30)?),
                 })
             })
             .map_err(storage_error)?
@@ -86,13 +87,13 @@ impl ModelRepository for SqliteModelRepository {
                 "INSERT INTO models (
                     id, scope_kind, workspace_code, model_code, display_name, vendor, protocol,
                     model_type, model_capabilities, base_url, api_path, api_key_ref, model_name, enabled,
-                    description, thinking_enabled, structured_output_enabled, temperature,
-                    max_tokens, context_window_tokens, top_p, max_retries, last_verified_at,
-                    last_verify_status, last_verify_message, source_kind, source_model_code, allow_inheritance,
-                    created_at, updated_at
+                    description, thinking_enabled, structured_output_enabled, responses_stateful_enabled,
+                    temperature, max_tokens, context_window_tokens, top_p, max_retries, last_verified_at,
+                    last_verify_status, last_verify_message, source_kind, source_model_code,
+                    allow_inheritance, created_at, updated_at
                 ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
-                    ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30
+                    ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31
                 )",
                 params![
                     model.id.value(),
@@ -112,6 +113,7 @@ impl ModelRepository for SqliteModelRepository {
                     model.description,
                     bool_to_int(model.thinking_enabled),
                     bool_to_int(model.structured_output_enabled),
+                    bool_to_int(model.responses_stateful_enabled),
                     model.temperature,
                     model.max_tokens,
                     model.context_window_tokens,
@@ -142,8 +144,8 @@ impl ModelRepository for SqliteModelRepository {
                     vendor = ?5,
                     protocol = ?6,
                     model_type = ?7,
-                    model_capabilities = ?8,
-                    base_url = ?9,
+                     model_capabilities = ?8,
+                     base_url = ?9,
                     api_path = ?10,
                     api_key_ref = ?11,
                     model_name = ?12,
@@ -151,18 +153,19 @@ impl ModelRepository for SqliteModelRepository {
                      description = ?14,
                      thinking_enabled = ?15,
                      structured_output_enabled = ?16,
-                     temperature = ?17,
-                     max_tokens = ?18,
-                     context_window_tokens = ?19,
-                     top_p = ?20,
-                     max_retries = ?21,
-                     last_verified_at = ?22,
-                     last_verify_status = ?23,
-                     last_verify_message = ?24,
-                     source_kind = ?25,
-                     source_model_code = ?26,
-                     allow_inheritance = ?27,
-                     updated_at = ?28
+                     responses_stateful_enabled = ?17,
+                     temperature = ?18,
+                     max_tokens = ?19,
+                     context_window_tokens = ?20,
+                     top_p = ?21,
+                     max_retries = ?22,
+                     last_verified_at = ?23,
+                     last_verify_status = ?24,
+                     last_verify_message = ?25,
+                     source_kind = ?26,
+                     source_model_code = ?27,
+                     allow_inheritance = ?28,
+                     updated_at = ?29
                  WHERE model_code = ?1",
                 params![
                     model.model_code,
@@ -181,6 +184,7 @@ impl ModelRepository for SqliteModelRepository {
                     model.description,
                     bool_to_int(model.thinking_enabled),
                     bool_to_int(model.structured_output_enabled),
+                    bool_to_int(model.responses_stateful_enabled),
                     model.temperature,
                     model.max_tokens,
                     model.context_window_tokens,

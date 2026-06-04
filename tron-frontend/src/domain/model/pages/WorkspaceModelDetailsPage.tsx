@@ -85,6 +85,10 @@ function maskApiKeyValue(value: string) {
   return value.trim() ? "*****" : "";
 }
 
+function formatResponsesState(value: boolean) {
+  return value ? "有状态" : "无状态";
+}
+
 export function WorkspaceModelDetailsPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -483,6 +487,11 @@ export function WorkspaceModelDetailsPage() {
               <Field label="Structured Output Enabled">
                 <ReadValue>{selectedRecord.structuredOutputEnabled ? "Enabled" : "Disabled"}</ReadValue>
               </Field>
+              {selectedRecord.protocol === "RESPONSES" ? (
+                <Field label="Responses State">
+                  <ReadValue>{formatResponsesState(selectedRecord.responsesStatefulEnabled)}</ReadValue>
+                </Field>
+              ) : null}
               {selectedRecord.sourceKind === "LOCAL" ? (
                 <Field label="Allow Inheritance">
                   <ReadValue>{selectedRecord.allowInheritance ? "Enabled" : "Disabled"}</ReadValue>

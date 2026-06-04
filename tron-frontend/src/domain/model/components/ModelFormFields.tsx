@@ -41,6 +41,7 @@ export interface ModelFormState {
   modelType: ModelType;
   protocol: ModelMutationPayload["protocol"];
   structuredOutputEnabled: boolean;
+  responsesStatefulEnabled: boolean;
   temperature: string;
   thinkingEnabled: boolean;
   topP: string;
@@ -64,6 +65,7 @@ export function emptyModelFormState(): ModelFormState {
     modelType,
     protocol,
     structuredOutputEnabled: true,
+    responsesStatefulEnabled: false,
     temperature: DEFAULT_TEMPERATURE,
     thinkingEnabled: true,
     topP: DEFAULT_TOP_P,
@@ -92,6 +94,7 @@ export function modelFormFromRecord(record: ModelRecord): ModelFormState {
     modelType: record.modelType,
     protocol: record.protocol,
     structuredOutputEnabled: record.structuredOutputEnabled,
+    responsesStatefulEnabled: record.responsesStatefulEnabled,
     temperature: record.temperature === null ? DEFAULT_TEMPERATURE : String(record.temperature),
     thinkingEnabled: record.thinkingEnabled,
     topP: record.topP === null ? DEFAULT_TOP_P : String(record.topP),
@@ -138,6 +141,7 @@ export function modelFormToPayload(
     description: state.description.trim() ? state.description.trim() : null,
     thinkingEnabled: state.thinkingEnabled,
     structuredOutputEnabled: state.structuredOutputEnabled,
+    responsesStatefulEnabled: state.protocol === "RESPONSES" ? state.responsesStatefulEnabled : false,
     temperature: parseOptionalNumber(state.temperature),
     maxTokens: parseOptionalInteger(state.maxTokens),
     contextWindowTokens: parseOptionalInteger(state.contextWindowTokens),
@@ -232,6 +236,7 @@ export function ModelFormFields({
                 modelCapabilities: normalizeModelCapabilities(nextModelCapabilities, nextModelType),
                 protocol: nextProtocol,
                 modelType: nextModelType,
+                responsesStatefulEnabled: false,
                 temperature: state.temperature.trim() ? state.temperature : DEFAULT_TEMPERATURE,
                 topP: state.topP.trim() ? state.topP : DEFAULT_TOP_P,
               });
@@ -374,6 +379,19 @@ export function ModelFormFields({
           />
         </Field>
       </div>
+
+      {state.protocol === "RESPONSES" ? (
+        <Field label="Responses State">
+          <SelectInput
+            value={state.responsesStatefulEnabled ? "true" : "false"}
+            onChange={(event) => patch("responsesStatefulEnabled", event.target.value === "true")}
+            disabled={readOnly}
+          >
+            <option value="false">无状态</option>
+            <option value="true">有状态</option>
+          </SelectInput>
+        </Field>
+      ) : null}
 
       <div className="grid gap-3 md:grid-cols-2">
         <ToggleSwitch

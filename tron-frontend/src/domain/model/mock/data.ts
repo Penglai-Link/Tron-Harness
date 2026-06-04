@@ -50,6 +50,7 @@ type BaseModel = {
   modelType: ModelType;
   protocol: ModelProtocol;
   structuredOutputEnabled: boolean;
+  responsesStatefulEnabled: boolean;
   temperature: number | null;
   thinkingEnabled: boolean;
   topP: number | null;
@@ -162,6 +163,7 @@ function createSeedBaseModel(
     modelType,
     protocol,
     structuredOutputEnabled: protocol === "RESPONSES",
+    responsesStatefulEnabled: false,
     temperature: modelType === "TEXT" ? 0.2 : null,
     thinkingEnabled: modelType === "TEXT",
     topP: modelType === "TEXT" ? 1 : null,
@@ -266,6 +268,7 @@ function buildPlatformView(model: PlatformModel): ModelRecord {
     description: model.description,
     thinkingEnabled: model.thinkingEnabled,
     structuredOutputEnabled: model.structuredOutputEnabled,
+    responsesStatefulEnabled: model.responsesStatefulEnabled,
     temperature: model.temperature,
     maxTokens: model.maxTokens,
     contextWindowTokens: model.contextWindowTokens,
@@ -314,6 +317,7 @@ function buildWorkspaceView(
     description: configModel.description,
     thinkingEnabled: configModel.thinkingEnabled,
     structuredOutputEnabled: configModel.structuredOutputEnabled,
+    responsesStatefulEnabled: configModel.responsesStatefulEnabled,
     temperature: configModel.temperature,
     maxTokens: configModel.maxTokens,
     contextWindowTokens: configModel.contextWindowTokens,
@@ -711,6 +715,7 @@ function updateBaseModelFromPayload(
   model.description = payload.description?.trim() ? payload.description.trim() : null;
   model.thinkingEnabled = payload.thinkingEnabled;
   model.structuredOutputEnabled = payload.structuredOutputEnabled;
+  model.responsesStatefulEnabled = payload.protocol === "RESPONSES" ? payload.responsesStatefulEnabled : false;
   model.temperature = payload.temperature ?? null;
   model.maxTokens = payload.maxTokens ?? null;
   model.contextWindowTokens = payload.contextWindowTokens ?? null;
@@ -1176,6 +1181,7 @@ export function verifyWorkspaceModelDraftRecord(
     modelType: preview.modelType,
     protocol: preview.protocol,
     structuredOutputEnabled: preview.structuredOutputEnabled,
+    responsesStatefulEnabled: preview.responsesStatefulEnabled,
     temperature: preview.temperature,
     thinkingEnabled: preview.thinkingEnabled,
     topP: preview.topP,

@@ -82,6 +82,7 @@ type BaseModel = {
   modelType: ModelType;
   protocol: ModelProtocol;
   structuredOutputEnabled: boolean;
+  responsesStatefulEnabled: boolean;
   temperature: number | null;
   thinkingEnabled: boolean;
   topP: number | null;
@@ -135,6 +136,7 @@ type ModelRecord = {
   sourceWorkspaceName: string | null;
   sourceWorkspacePath: WorkspaceLineageEntry[];
   structuredOutputEnabled: boolean;
+  responsesStatefulEnabled: boolean;
   temperature: number | null;
   thinkingEnabled: boolean;
   topP: number | null;
@@ -439,6 +441,7 @@ function createSeedBaseModel(
     modelType,
     protocol,
     structuredOutputEnabled: protocol === "RESPONSES",
+    responsesStatefulEnabled: false,
     temperature: modelType === "TEXT" ? 0.2 : null,
     thinkingEnabled: modelType === "TEXT",
     topP: modelType === "TEXT" ? 1 : null,
@@ -489,6 +492,7 @@ function buildPlatformView(model: PlatformModel, platformDefaults: Partial<Recor
     description: model.description,
     thinkingEnabled: model.thinkingEnabled,
     structuredOutputEnabled: model.structuredOutputEnabled,
+    responsesStatefulEnabled: model.responsesStatefulEnabled,
     temperature: model.temperature,
     maxTokens: model.maxTokens,
     topP: model.topP,
@@ -536,6 +540,7 @@ function buildWorkspaceView(
     description: configModel.description,
     thinkingEnabled: configModel.thinkingEnabled,
     structuredOutputEnabled: configModel.structuredOutputEnabled,
+    responsesStatefulEnabled: configModel.responsesStatefulEnabled,
     temperature: configModel.temperature,
     maxTokens: configModel.maxTokens,
     topP: configModel.topP,
@@ -915,6 +920,9 @@ function createMockState() {
         : model.description;
     model.thinkingEnabled = Boolean(payload.thinkingEnabled ?? model.thinkingEnabled);
     model.structuredOutputEnabled = Boolean(payload.structuredOutputEnabled ?? model.structuredOutputEnabled);
+    model.responsesStatefulEnabled = model.protocol === "RESPONSES"
+      ? Boolean(payload.responsesStatefulEnabled ?? false)
+      : false;
     model.temperature = typeof payload.temperature === "number" ? payload.temperature : model.temperature;
     model.maxTokens = typeof payload.maxTokens === "number"
       ? payload.maxTokens
@@ -1197,6 +1205,7 @@ function createMockState() {
         modelType: preview.modelType,
         protocol: preview.protocol,
         structuredOutputEnabled: preview.structuredOutputEnabled,
+        responsesStatefulEnabled: preview.responsesStatefulEnabled,
         temperature: preview.temperature,
         thinkingEnabled: preview.thinkingEnabled,
         topP: preview.topP,

@@ -21,7 +21,7 @@ use crate::{
 use super::migrations::{
     MODEL_CAPABILITIES_MIGRATION, MODEL_CONTEXT_WINDOW_TOKENS_MIGRATION,
     MODEL_REMOVE_EXPLICIT_PLATFORM_RESTORE_MIGRATION, MODEL_REMOVE_SEEDED_DATA_MIGRATION,
-    MODELS_MIGRATION,
+    MODEL_RESPONSES_STATEFUL_ENABLED_MIGRATION, MODELS_MIGRATION,
 };
 
 mod repository_impl;
@@ -69,6 +69,11 @@ impl SqliteModelRepository {
         if !column_exists(&self.connection, "models", "context_window_tokens")? {
             self.connection
                 .execute_batch(MODEL_CONTEXT_WINDOW_TOKENS_MIGRATION)
+                .map_err(storage_error)?;
+        }
+        if !column_exists(&self.connection, "models", "responses_stateful_enabled")? {
+            self.connection
+                .execute_batch(MODEL_RESPONSES_STATEFUL_ENABLED_MIGRATION)
                 .map_err(storage_error)?;
         }
         self.connection

@@ -94,6 +94,7 @@ fn chat_response_parses_multiple_tool_calls_without_parallel_flag_dependency() {
                 },
             ],
             token_usage: None,
+            response_id: None,
         }
     );
 }
@@ -157,6 +158,7 @@ fn chat_stream_request_asks_for_usage_chunk() {
         api_key: "sk-test".into(),
         model_name: "gpt-test".into(),
         thinking_enabled: true,
+        responses_stateful_enabled: false,
         temperature: None,
         max_tokens: None,
         context_window_tokens: Some(128_000),
@@ -167,10 +169,12 @@ fn chat_stream_request_asks_for_usage_chunk() {
         .stream_request_body(
             &config,
             &ModelRequest {
-                messages: vec![AgentMessage::user("hello")],
-                tools: vec![],
-                system_agent_session_id: None,
-            },
+            messages: vec![AgentMessage::user("hello")],
+            tools: vec![],
+            system_agent_session_id: None,
+            response_input_items: None,
+            previous_response_id: None,
+        },
         )
         .expect("stream request should build");
 
@@ -189,6 +193,7 @@ fn request_builders_default_parallel_tool_calls_to_true_when_tools_are_present()
         api_key: "sk-test".into(),
         model_name: "gpt-test".into(),
         thinking_enabled: false,
+        responses_stateful_enabled: false,
         temperature: None,
         max_tokens: None,
         context_window_tokens: None,
@@ -206,6 +211,8 @@ fn request_builders_default_parallel_tool_calls_to_true_when_tools_are_present()
             required_variable_keys: vec![],
         }],
         system_agent_session_id: None,
+        response_input_items: None,
+        previous_response_id: None,
     };
 
     let chat = chat_completions_request(&config, &request);
@@ -215,6 +222,7 @@ fn request_builders_default_parallel_tool_calls_to_true_when_tools_are_present()
         &AgentModelConfig {
             protocol: AgentModelProtocol::Responses,
             model_name: "qwen-test".into(),
+            responses_stateful_enabled: false,
             ..config
         },
         &request,
@@ -232,6 +240,7 @@ fn request_builders_handle_tool_observations_per_protocol() {
         api_key: "sk-test".into(),
         model_name: "gpt-test".into(),
         thinking_enabled: false,
+        responses_stateful_enabled: false,
         temperature: None,
         max_tokens: None,
         context_window_tokens: None,
@@ -246,6 +255,8 @@ fn request_builders_handle_tool_observations_per_protocol() {
         )],
         tools: vec![],
         system_agent_session_id: None,
+        response_input_items: None,
+        previous_response_id: None,
     };
 
     let chat = chat_completions_request(&config, &request);
@@ -271,6 +282,7 @@ fn responses_request_uses_string_input_for_single_user_prompt() {
         api_key: "sk-test".into(),
         model_name: "qwen-test".into(),
         thinking_enabled: false,
+        responses_stateful_enabled: false,
         temperature: None,
         max_tokens: None,
         context_window_tokens: Some(128_000),
@@ -286,6 +298,8 @@ fn responses_request_uses_string_input_for_single_user_prompt() {
             ],
             tools: vec![],
             system_agent_session_id: None,
+            response_input_items: None,
+            previous_response_id: None,
         },
     );
 
@@ -323,6 +337,7 @@ fn responses_request_enables_reasoning_for_thinking_models() {
         api_key: "sk-test".into(),
         model_name: "qwen-test".into(),
         thinking_enabled: true,
+        responses_stateful_enabled: false,
         temperature: None,
         max_tokens: None,
         context_window_tokens: Some(128_000),
@@ -333,10 +348,12 @@ fn responses_request_enables_reasoning_for_thinking_models() {
         .stream_request_body(
             &config,
             &ModelRequest {
-                messages: vec![AgentMessage::user("hello")],
-                tools: vec![],
-                system_agent_session_id: None,
-            },
+            messages: vec![AgentMessage::user("hello")],
+            tools: vec![],
+            system_agent_session_id: None,
+            response_input_items: None,
+            previous_response_id: None,
+        },
         )
         .expect("responses stream request should build");
 
@@ -376,7 +393,8 @@ fn responses_response_skips_reasoning_and_reads_message_output_text() {
 fn responses_response_parses_function_call_with_call_id() {
     let response = ResponsesAdapter
         .parse_response(&json!({
-            "object": "response",
+        "object": "response",
+            "id": "resp_123",
             "status": "requires_action",
             "output": [
                 {
@@ -392,7 +410,15 @@ fn responses_response_parses_function_call_with_call_id() {
 
     assert_eq!(
         response,
-        ModelResponse::tool_call_with_id("call_123", "lookup", json!({ "query": "status" }))
+        ModelResponse::tool_calls_with_usage_and_response_id(
+            vec![ToolCall {
+                call_id: Some("call_123".into()),
+                tool_name: "lookup".into(),
+                input: json!({ "query": "status" }),
+            }],
+            None,
+            Some("resp_123".into()),
+        )
     );
 }
 
@@ -400,7 +426,8 @@ fn responses_response_parses_function_call_with_call_id() {
 fn responses_response_parses_multiple_function_calls() {
     let response = ResponsesAdapter
         .parse_response(&json!({
-            "object": "response",
+        "object": "response",
+            "id": "resp_456",
             "status": "requires_action",
             "output": [
                 {
@@ -437,6 +464,7 @@ fn responses_response_parses_multiple_function_calls() {
                 },
             ],
             token_usage: None,
+            response_id: Some("resp_456".into()),
         }
     );
 }

@@ -89,6 +89,10 @@ function maskApiKeyValue(value: string) {
   return value.trim() ? "*****" : "";
 }
 
+function formatResponsesState(value: boolean) {
+  return value ? "有状态" : "无状态";
+}
+
 export function PlatformModelDetailsPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -437,6 +441,11 @@ export function PlatformModelDetailsPage() {
               <Field label="Structured Output Enabled">
                 <ReadValue>{selectedRecord.structuredOutputEnabled ? "Enabled" : "Disabled"}</ReadValue>
               </Field>
+              {selectedRecord.protocol === "RESPONSES" ? (
+                <Field label="Responses State">
+                  <ReadValue>{formatResponsesState(selectedRecord.responsesStatefulEnabled)}</ReadValue>
+                </Field>
+              ) : null}
             </div>
           )}
         </SurfaceCard>

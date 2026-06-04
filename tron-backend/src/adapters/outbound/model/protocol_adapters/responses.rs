@@ -2,7 +2,7 @@ use serde_json::{Value, json};
 
 use crate::domain::agent::{
     AgentModelConfig, AgentModelProtocol, ModelRequest, ModelResponse, ModelStreamEvent,
-    ModelTokenUsage, ToolCall,
+    ModelTokenUsage, ToolCall, responses_input_item_json,
 };
 
 use super::{content::*, registry::ModelProtocolAdapter, usage::parse_responses_usage};
@@ -46,13 +46,20 @@ impl ModelProtocolAdapter for ResponsesAdapter {
 
 pub fn responses_request(config: &AgentModelConfig, request: &ModelRequest) -> Value {
     let instructions = responses_instructions_text(&request.messages);
-    let input = responses_input_value(&request.messages);
+    let input = request
+        .response_input_items
+        .as_ref()
+        .map(|items| json!(items))
+        .unwrap_or_else(|| responses_input_value(&request.messages));
     let mut payload = json!({
         "model": config.model_name,
         "input": input,
     });
     if let Some(instructions) = instructions {
         payload["instructions"] = json!(instructions);
+    }
+    if let Some(previous_response_id) = &request.previous_response_id {
+        payload["previous_response_id"] = json!(previous_response_id);
     }
     if let Some(temperature) = config.temperature {
         payload["temperature"] = json!(temperature);
@@ -129,6 +136,10 @@ fn parse_responses_stream_terminal_response(body: &Value) -> Option<ModelRespons
 }
 
 fn parse_responses_response(body: &Value) -> Option<ModelResponse> {
+    let response_id = body
+        .get("id")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
     let token_usage = parse_responses_usage(body);
     if let Some(output) = body.get("output").and_then(Value::as_array) {
         let tool_calls = output
@@ -136,7 +147,11 @@ fn parse_responses_response(body: &Value) -> Option<ModelResponse> {
             .filter_map(parse_responses_tool_call)
             .collect::<Vec<_>>();
         if !tool_calls.is_empty() {
-            return Some(ModelResponse::tool_calls_with_usage(tool_calls, token_usage));
+            return Some(ModelResponse::tool_calls_with_usage_and_response_id(
+                tool_calls,
+                token_usage,
+                response_id,
+            ));
         }
         let mut final_output = String::new();
         for item in output {
@@ -147,20 +162,29 @@ fn parse_responses_response(body: &Value) -> Option<ModelResponse> {
             }
         }
         if !final_output.is_empty() {
-            return Some(ModelResponse::final_output_with_usage(
+            return Some(ModelResponse::final_output_with_usage_and_response_id(
                 final_output,
                 token_usage,
+                response_id,
             ));
         }
         if let Some(text) = output
             .iter()
             .find_map(|item| item.get("content").and_then(text_from_content))
         {
-            return Some(ModelResponse::final_output_with_usage(text, token_usage));
+            return Some(ModelResponse::final_output_with_usage_and_response_id(
+                text,
+                token_usage,
+                response_id,
+            ));
         }
     }
     if let Some(text) = body.get("output_text").and_then(Value::as_str) {
-        return Some(ModelResponse::final_output_with_usage(text, token_usage));
+        return Some(ModelResponse::final_output_with_usage_and_response_id(
+            text,
+            token_usage,
+            response_id,
+        ));
     }
     None
 }

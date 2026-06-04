@@ -23,6 +23,7 @@ pub struct Model {
     pub description: Option<String>,
     pub thinking_enabled: bool,
     pub structured_output_enabled: bool,
+    pub responses_stateful_enabled: bool,
     pub temperature: Option<f64>,
     pub max_tokens: Option<u32>,
     pub context_window_tokens: Option<u32>,

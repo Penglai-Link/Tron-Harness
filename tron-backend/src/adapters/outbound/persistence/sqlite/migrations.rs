@@ -43,6 +43,9 @@ pub(super) const MODEL_REMOVE_SEEDED_DATA_MIGRATION: &str =
     include_str!("../../../../../migrations/20260522_0015_remove_seeded_model_data.sql");
 pub(super) const MODEL_CONTEXT_WINDOW_TOKENS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260528_0019_add_model_context_window_tokens.sql");
+pub(super) const MODEL_RESPONSES_STATEFUL_ENABLED_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260604_0020_add_model_responses_stateful_enabled.sql"
+);
 pub(super) const SKILL_REGISTRY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260519_0011_create_skill_registry.sql");
 pub(super) const BOOTSTRAP_PLATFORM_ADMIN_MIGRATION: &str =

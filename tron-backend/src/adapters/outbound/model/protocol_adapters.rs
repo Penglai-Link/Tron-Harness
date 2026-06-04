@@ -4,6 +4,8 @@ mod embeddings;
 mod registry;
 mod responses;
 #[cfg(test)]
+mod responses_stateful_tests;
+#[cfg(test)]
 mod tests;
 mod usage;
 

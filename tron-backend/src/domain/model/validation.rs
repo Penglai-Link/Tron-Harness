@@ -9,6 +9,7 @@ pub fn validate_model_configuration(
     protocol: ModelProtocol,
     model_type: ModelType,
     model_capabilities: &[ModelCapability],
+    responses_stateful_enabled: bool,
 ) -> Result<(), ModelError> {
     if display_name.trim().is_empty() {
         return Err(ModelError::DisplayNameRequired);
@@ -42,6 +43,9 @@ pub fn validate_model_configuration(
         .any(|value| !protocol_model_type_allowed(protocol, model_capability_model_type(*value)))
     {
         return Err(ModelError::InvalidProtocolModelType);
+    }
+    if responses_stateful_enabled && protocol != ModelProtocol::Responses {
+        return Err(ModelError::ResponsesStatefulModeUnsupported);
     }
     Ok(())
 }

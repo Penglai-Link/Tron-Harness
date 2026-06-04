@@ -23,44 +23,6 @@ pub(super) fn responses_instructions_text(messages: &[AgentMessage]) -> Option<S
     }
 }
 
-pub(super) fn responses_input_item_json(message: &AgentMessage) -> Value {
-    match message.role.as_str() {
-        "system" | "developer" => json!({
-            "type": "message",
-            "role": message.role.as_str(),
-            "content": message.content.as_str(),
-        }),
-        "user" | "assistant" => json!({
-            "type": "message",
-            "role": message.role.as_str(),
-            "content": message.content.as_str(),
-        }),
-        "tool" => {
-            if let Some(call_id) = &message.tool_call_id {
-                json!({
-                    "type": "function_call_output",
-                    "call_id": call_id,
-                    "output": message
-                        .tool_output
-                        .as_deref()
-                        .unwrap_or(message.content.as_str()),
-                })
-            } else {
-                json!({
-                    "type": "message",
-                    "role": "user",
-                    "content": message.content.as_str(),
-                })
-            }
-        }
-        _ => json!({
-            "type": "message",
-            "role": "user",
-            "content": message.content.as_str(),
-        }),
-    }
-}
-
 fn provider_role(message: &AgentMessage) -> &str {
     match message.role.as_str() {
         // Internal tool observations are serialized as plain user text because
