@@ -37,6 +37,26 @@ pub fn merge_search_filters(
     Ok(Value::Object(merged.into_iter().collect()))
 }
 
+pub fn merge_search_request_filters(
+    corpus: &RagCorpusRecord,
+    profile_filters: &Value,
+    request_filters: &Value,
+) -> Result<Value, RagError> {
+    let schema = parse_schema(&corpus.filter_schema);
+    let mut merged = normalize_filters(&schema, profile_filters)?;
+    let request = normalize_request_filters(&schema, request_filters)?;
+    for (field, request_value) in request {
+        if let Some(profile_value) = merged.get(&field) {
+            let intersection = merge_filter_values(profile_value, &request_value)
+                .ok_or(RagError::SearchFilterInvalid)?;
+            merged.insert(field, intersection);
+        } else {
+            merged.insert(field, request_value);
+        }
+    }
+    Ok(Value::Object(merged.into_iter().collect()))
+}
+
 fn normalize_filters(
     schema: &BTreeMap<String, FilterField>,
     filters: &Value,
@@ -45,6 +65,28 @@ fn normalize_filters(
     let mut normalized = BTreeMap::new();
     for (field, raw_value) in object {
         let schema_field = schema.get(field).ok_or(RagError::SearchFilterInvalid)?;
+        let (operator, value) = extract_operator(raw_value);
+        if !schema_field.operators.contains(operator)
+            || !value_matches(&schema_field.field_type, operator, value)
+        {
+            return Err(RagError::SearchFilterInvalid);
+        }
+        let normalized_value = json!({ "op": operator, "value": value.clone() });
+        normalized.insert(field.clone(), normalized_value);
+    }
+    Ok(normalized)
+}
+
+fn normalize_request_filters(
+    schema: &BTreeMap<String, FilterField>,
+    filters: &Value,
+) -> Result<BTreeMap<String, Value>, RagError> {
+    let object = filters.as_object().ok_or(RagError::SearchFilterInvalid)?;
+    let mut normalized = BTreeMap::new();
+    for (field, raw_value) in object {
+        let Some(schema_field) = schema.get(field) else {
+            continue;
+        };
         let (operator, value) = extract_operator(raw_value);
         if !schema_field.operators.contains(operator)
             || !value_matches(&schema_field.field_type, operator, value)

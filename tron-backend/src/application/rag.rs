@@ -44,7 +44,7 @@ pub use search::{
     RagSearchRepository, RagSearchRequest, RagSearchResult, RagSearchRow, RagSearchRuntime,
     RagSearchScope, RagSearchService, RagSearchTraceRequest,
 };
-pub use search_filter::merge_search_filters;
+pub use search_filter::{merge_search_filters, merge_search_request_filters};
 pub use search_profile::{
     CompiledRetrievalProfile, DedupPolicy, EmbeddingMmrPolicy, FusionPolicy, RetrievalRoute,
     TopicFallback, TopicPolicy, compile_retrieval_profile,

@@ -6,7 +6,7 @@ use crate::domain::rag::{RagCorpusRecord, RagError};
 
 use super::{
     CompiledRetrievalProfile, RagIngestAccessContext, RagSearchRequest, RagSearchScope,
-    merge_search_filters,
+    merge_search_request_filters,
 };
 
 pub(super) fn validate_request(request: &RagSearchRequest) -> Result<(), RagError> {
@@ -70,7 +70,7 @@ pub(super) fn filters_and_version(
     request: &RagSearchRequest,
     compiled: &CompiledRetrievalProfile,
 ) -> Result<(Value, String), RagError> {
-    let merged = merge_search_filters(corpus, profile_filters, &request.filters)?;
+    let merged = merge_search_request_filters(corpus, profile_filters, &request.filters)?;
     let source_version = merged
         .get("sourceVersion")
         .map(source_version_filter_value)

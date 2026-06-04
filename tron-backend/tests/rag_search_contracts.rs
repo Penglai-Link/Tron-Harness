@@ -350,6 +350,59 @@ async fn seeded_memory_project_doc_fusion_profile_searches_both_corpora() {
 }
 
 #[tokio::test]
+async fn request_filters_match_each_route_filter_schema() {
+    let database_url = temp_database_path("rag-search-route-filter-schema")
+        .to_string_lossy()
+        .to_string();
+    seed_memory_fixture(&database_url).await;
+    seed_project_doc_fixture(&database_url).await;
+    seed_skill_fixture(&database_url).await;
+    insert_mixed_filter_profile(&database_url, "mixed-filter-routing-v1");
+    let service = RagSearchService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
+    );
+
+    let result = service
+        .search(search_request(
+            "mixed-filter-routing-v1",
+            "rag retrieval",
+            "RESULT_LIST",
+            json!({
+                "memoryType": "RULE",
+                "documentType": "DESIGN",
+                "skillName": "rag-reviewer"
+            }),
+        ))
+        .await
+        .unwrap();
+    let source_codes = result
+        .hits
+        .iter()
+        .map(|hit| hit.source_code.as_str())
+        .collect::<Vec<_>>();
+    assert!(source_codes.contains(&"memory-rag-rule"));
+    assert!(source_codes.contains(&"doc-rag-mvp"));
+    assert!(source_codes.contains(&"skill:TRON_CORE:rag-reviewer"));
+
+    let invalid_known_field = service
+        .search(search_request(
+            "mixed-filter-routing-v1",
+            "rag retrieval",
+            "RESULT_LIST",
+            json!({
+                "memoryType": 7,
+                "documentType": "DESIGN",
+                "skillName": "rag-reviewer"
+            }),
+        ))
+        .await
+        .unwrap_err();
+    assert_eq!(invalid_known_field, RagError::SearchFilterInvalid);
+}
+
+#[tokio::test]
 async fn embedding_mmr_missing_embeddings_falls_back_to_fused_order() {
     let database_url = temp_database_path("rag-search-mmr-missing-embedding")
         .to_string_lossy()
@@ -1625,6 +1678,56 @@ fn insert_rrf_mmr_profile(database_url: &str, profile_id: &str, include_project_
                 serde_json::to_string(&corpus_ids).unwrap(),
                 serde_json::to_string(&config).unwrap()
             ],
+        )
+        .unwrap();
+}
+
+fn insert_mixed_filter_profile(database_url: &str, profile_id: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let config = json!({
+        "routes": [
+            {
+                "routeId": "memory-vector",
+                "corpusId": "memory-card",
+                "retriever": "VECTOR_SQLITE_VEC0_COSINE_V1",
+                "topK": 4,
+                "weight": 1.0
+            },
+            {
+                "routeId": "project-doc-vector",
+                "corpusId": "project-doc",
+                "retriever": "VECTOR_SQLITE_VEC0_COSINE_V1",
+                "topK": 4,
+                "weight": 1.0
+            },
+            {
+                "routeId": "skill-vector",
+                "corpusId": "skill",
+                "retriever": "VECTOR_SQLITE_VEC0_COSINE_V1",
+                "topK": 4,
+                "weight": 1.0
+            }
+        ],
+        "fusionPolicy": {"type": "SUM_SCORE"},
+        "dedupPolicy": {"type": "TEXT_UNIT"},
+        "rerankPolicy": {"enabled": false},
+        "hydratePolicy": {"type": "TEXT_UNIT"},
+        "contextPolicy": {"supportedStrategies": ["RESULT_LIST"]}
+    });
+    connection
+        .execute(
+            "INSERT INTO rag_profiles (
+                profile_id, profile_type, status, primary_corpus_id, corpus_ids_json,
+                required_source_version, config_json, filters_json, degrade_policy,
+                created_at, updated_at
+            )
+            VALUES (?1, 'RETRIEVAL', 'enabled', 'memory-card', '[\"memory-card\",\"project-doc\",\"skill\"]',
+                'v1', ?2, '{}', 'SKIP_VECTOR_ON_UNAVAILABLE', 1, 1)
+            ON CONFLICT (profile_id) DO UPDATE SET
+                config_json = excluded.config_json,
+                corpus_ids_json = excluded.corpus_ids_json,
+                updated_at = excluded.updated_at",
+            params![profile_id, serde_json::to_string(&config).unwrap()],
         )
         .unwrap();
 }
