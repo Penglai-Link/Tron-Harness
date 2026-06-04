@@ -57,6 +57,12 @@ pub enum ToolError {
     ExecutionFailed(String),
 }
 
+impl ToolError {
+    pub fn is_execution_failure(&self) -> bool {
+        matches!(self, Self::ExecutionFailed(_))
+    }
+}
+
 impl Display for ToolError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {

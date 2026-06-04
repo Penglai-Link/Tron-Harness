@@ -280,20 +280,32 @@ pub fn translate_protocol_events(
             let tool_name = event_tool_name(event);
             let tool_call_id = event_tool_call_id(event, &run_code, &tool_name);
             let result = event_tool_result(event).unwrap_or_else(|| "failed".into());
-            vec![protocol_event(
-                "TOOL_CALL_RESULT",
-                json!({
-                    "type": "TOOL_CALL_RESULT",
-                    "threadId": stream_key,
-                    "runId": run_code,
-                    "messageId": format!("{run_code}-tool-result"),
-                    "toolCallId": tool_call_id,
-                    "toolCallName": tool_name,
-                    "content": result,
-                    "role": "tool",
-                    "timestamp": timestamp,
-                }),
-            )]
+            vec![
+                protocol_event(
+                    "TOOL_CALL_RESULT",
+                    json!({
+                        "type": "TOOL_CALL_RESULT",
+                        "threadId": stream_key,
+                        "runId": run_code,
+                        "messageId": format!("{run_code}-tool-result"),
+                        "toolCallId": tool_call_id,
+                        "toolCallName": tool_name,
+                        "content": result,
+                        "role": "tool",
+                        "timestamp": timestamp,
+                    }),
+                ),
+                protocol_event(
+                    "TOOL_CALL_END",
+                    json!({
+                        "type": "TOOL_CALL_END",
+                        "threadId": stream_key,
+                        "runId": run_code,
+                        "toolCallId": tool_call_id,
+                        "timestamp": timestamp,
+                    }),
+                ),
+            ]
         }
         CanonicalRuntimeEvent::ObservationCreated => {
             let tool_name = event_tool_name(event);

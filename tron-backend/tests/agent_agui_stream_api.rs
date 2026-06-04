@@ -313,6 +313,64 @@ async fn agui_protocol_tool_events_keep_correlation_fields() {
 }
 
 #[tokio::test]
+async fn agui_protocol_tool_failure_events_emit_result_and_end() {
+    let config = EventBusConfig::default();
+    let sink = Arc::new(AguiEventSink::new(&config));
+    let event_bus =
+        EventBusRuntimeBuilder::new(config, Arc::new(FixedSnowflakeIdProvider::new(401)))
+            .register_sink(sink.clone())
+            .build();
+    let service = AgentAguiStreamService::new(sink);
+    let stream_key = "CONV-TOOL-AGUI-FAIL";
+    let run_code = "RUN-TOOL-AGUI-FAIL";
+    service
+        .activate(stream_key)
+        .expect("stream should activate");
+
+    let publish = |event_name: &'static str| {
+        event_bus.publish(
+            BusEventDraft::agui(event_name, "test")
+                .outcome(BusOutcome::Failure)
+                .subject("agent_run", run_code)
+                .request(BusRequestRef::with_stream_key(stream_key))
+                .summary("shell.exec")
+                .payload_field("tool_call_id", "RUN-TOOL-AGUI-FAIL-tool-1")
+                .payload_field("tool_name", "shell.exec")
+                .payload_field("tool_result_json", "command exited with status 1"),
+        )
+    };
+
+    assert!(matches!(
+        publish("agent.tool.failed"),
+        PublishOutcome::Accepted { .. }
+    ));
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let events = service
+        .protocol_events(stream_key)
+        .expect("protocol events should be available");
+    let event = |event_type: &str| {
+        events
+            .iter()
+            .find(|event| event.sse_event == event_type)
+            .expect("expected protocol event")
+    };
+    assert_eq!(
+        event("TOOL_CALL_RESULT").data["toolCallId"],
+        json!("RUN-TOOL-AGUI-FAIL-tool-1")
+    );
+    assert_eq!(
+        event("TOOL_CALL_RESULT").data["content"],
+        json!("command exited with status 1")
+    );
+    assert_eq!(
+        event("TOOL_CALL_END").data["toolCallId"],
+        json!("RUN-TOOL-AGUI-FAIL-tool-1")
+    );
+}
+
+#[tokio::test]
 async fn agui_stream_events_can_replay_from_persistent_store_after_restart() {
     let database_path = temp_database_path("agui-replay");
     let mut config = AppConfig::default();

@@ -219,6 +219,63 @@ async fn react_agent_executes_allowed_tool_and_keeps_runs_isolated() {
 }
 
 #[tokio::test]
+async fn react_agent_continues_after_tool_execution_failure() {
+    let sink = Arc::new(RecordingEventSink::with_route_class(
+        "agent-runtime-failure",
+        BusRouteClass::Agui,
+    ));
+    let event_bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(101)),
+    )
+    .register_sink(sink.clone())
+    .build();
+    let registry = ToolRegistry::default();
+    registry
+        .register(Arc::new(InProcessTool::new("flaky", |_request: ToolRequest| {
+            Err(ToolError::ExecutionFailed("boom".into()))
+        })))
+        .expect("tool should register");
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![
+            ModelResponse::tool_call("flaky", json!({"value": "x"})),
+            ModelResponse::final_output("after-failure"),
+        ])),
+        Arc::new(registry),
+        event_bus,
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    let result = agent
+        .run({
+            let mut context = base_context("RUN-TOOL-FAILURE");
+            context.tools.push(EffectiveTool {
+                tool_name: "flaky".into(),
+                domain_code: None,
+                description: "Flaky".into(),
+                input_schema: json!({"type": "object"}),
+                skill_name: Some("planner".into()),
+                required_variable_keys: vec![],
+            });
+            context
+        })
+        .await
+        .expect("tool execution failure should not abort the run");
+
+    assert_eq!(result.final_output, "after-failure");
+    assert_eq!(result.observations.len(), 1);
+    assert_eq!(result.observations[0].tool_name, "flaky");
+    assert_eq!(result.observations[0].output, "boom");
+    assert!(sink.wait_for_len(12, Duration::from_secs(2)));
+    let events = sink.events();
+    assert!(events.iter().any(|event| event.event_name == "agent.tool.failed"));
+    assert!(events.iter().any(|event| event.event_name == "agent.observation.created"));
+    assert!(events.iter().any(|event| event.event_name == "agent.run.completed"));
+    assert!(!events.iter().any(|event| event.event_name == "agent.run.failed"));
+}
+
+#[tokio::test]
 async fn react_agent_executes_multiple_tool_calls_in_one_model_turn() {
     let registry = ToolRegistry::default();
     registry

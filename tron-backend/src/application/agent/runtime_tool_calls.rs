@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use crate::domain::agent::{
-    AgentError, AgentRunContext, ToolCall, ToolError, ToolExecutionResult, ToolRequest,
+    AgentError, AgentRunContext, ToolCall, ToolError, ToolExecutionResult, ToolObservation,
+    ToolRequest,
 };
 use crate::shared::event_bus::BusOutcome;
 
@@ -113,13 +114,24 @@ impl ReactAgent {
                     None,
                     Some(error_message.as_str()),
                 )?;
-                self.publish(
-                    &context,
-                    "agent.run.failed",
-                    BusOutcome::Failure,
-                    Some("tool_failure"),
-                )?;
-                return Err(error.into());
+                if error.is_execution_failure() {
+                    self.record_tool_failure_observation(
+                        context,
+                        &tool_call_id,
+                        &tool_name,
+                        model_call_id,
+                        turn_state,
+                        error_message,
+                    )?;
+                } else {
+                    self.publish(
+                        &context,
+                        "agent.run.failed",
+                        BusOutcome::Failure,
+                        Some("tool_failure"),
+                    )?;
+                    return Err(error.into());
+                }
             }
         }
 
@@ -247,7 +259,16 @@ impl ReactAgent {
                         None,
                         Some(error_message.as_str()),
                     )?;
-                    if first_error.is_none() {
+                    if error.is_execution_failure() {
+                        self.record_tool_failure_observation(
+                            context,
+                            &tool_call_id,
+                            &tool_name,
+                            model_call_id,
+                            turn_state,
+                            error_message,
+                        )?;
+                    } else if first_error.is_none() {
                         first_error = Some(error.into());
                     }
                 }
@@ -302,6 +323,36 @@ impl ReactAgent {
         let completed_tool_name = observation.tool_name.clone();
         context.observations.push(observation);
         collapse_ephemeral_expanded_domains(context, completed_tool_name.as_str());
+        self.publish_tool(
+            &context,
+            "agent.observation.created",
+            BusOutcome::Progress,
+            Some("observation_created"),
+            tool_call_id,
+            tool_name,
+            None,
+            context.observations.last().map(|item| item.output.as_str()),
+        )?;
+
+        Ok(())
+    }
+
+    fn record_tool_failure_observation(
+        &self,
+        context: &mut AgentRunContext,
+        tool_call_id: &str,
+        tool_name: &str,
+        model_call_id: Option<String>,
+        turn_state: &mut TurnStateAdapter,
+        error_message: String,
+    ) -> Result<(), AgentError> {
+        let observation = ToolObservation {
+            tool_name: tool_name.to_string(),
+            output: error_message,
+        };
+        let message = turn_state.record_tool_observation(&observation, model_call_id);
+        context.messages.push(message);
+        context.observations.push(observation);
         self.publish_tool(
             &context,
             "agent.observation.created",
