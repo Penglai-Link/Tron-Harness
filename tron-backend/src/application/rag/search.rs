@@ -14,8 +14,9 @@ use crate::{
 };
 
 use super::{
-    CompiledRetrievalProfile, RagConfigRepository, RagEmbeddingCall, RagIngestAccessContext,
-    RagSearchTraceWrite, RagStrategyRegistry, compile_retrieval_profile, merge_search_filters,
+    CompiledRetrievalProfile, RagConfigRepository, RagEmbeddingCall, RagEmbeddingResult,
+    RagIngestAccessContext, RagSearchTraceWrite, RagStrategyRegistry, compile_retrieval_profile,
+    merge_search_filters,
     search_observability::{persist_trace_if_enabled, publish_route_events, publish_search_event},
     search_ranking::{
         apply_rerank, apply_topic_policy, assemble_context_pack, fuse_and_dedup, rank_route_rows,
@@ -72,6 +73,7 @@ pub struct RagRouteSearchQuery {
     pub workspace_code: String,
     pub query: String,
     pub query_embedding: Option<Vec<f32>>,
+    pub query_embedding_model_code: Option<String>,
     pub source_version: String,
     pub scopes: Vec<RagSearchScope>,
     pub filters: Value,
@@ -132,7 +134,7 @@ pub trait RagSearchRuntime: Clone + Send + Sync + 'static {
     fn embed<'a>(
         &'a self,
         call: RagEmbeddingCall,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>>;
 
     fn rerank<'a>(
         &'a self,
@@ -144,12 +146,8 @@ impl RagSearchRuntime for LlmRuntimeService {
     fn embed<'a>(
         &'a self,
         call: RagEmbeddingCall,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
-        Box::pin(async move {
-            <Self as super::RagEmbeddingRuntime>::embed(self, call)
-                .await
-                .map(|result| result.embedding)
-        })
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
+        Box::pin(async move { <Self as super::RagEmbeddingRuntime>::embed(self, call).await })
     }
 
     fn rerank<'a>(
@@ -458,7 +456,18 @@ where
                 query: request.query.clone(),
                 workspace_code: request.workspace_code.clone(),
                 query_embedding: (strategy.needs_query_embedding())
-                    .then(|| query_embedding.clone())
+                    .then(|| {
+                        query_embedding
+                            .as_ref()
+                            .map(|result| result.embedding.clone())
+                    })
+                    .flatten(),
+                query_embedding_model_code: (strategy.needs_query_embedding())
+                    .then(|| {
+                        query_embedding
+                            .as_ref()
+                            .map(|result| result.model_code.clone())
+                    })
                     .flatten(),
                 source_version,
                 scopes: search_scopes(&request.access_context),
@@ -483,7 +492,9 @@ where
                 route,
                 &strategy,
                 request,
-                query_embedding.as_deref(),
+                query_embedding
+                    .as_ref()
+                    .map(|result| result.embedding.as_slice()),
             ));
         }
         let mut hits = fuse_and_dedup(&compiled, route_hits);

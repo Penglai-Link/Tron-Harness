@@ -394,12 +394,8 @@ impl tron_backend::application::rag::RagSearchRuntime for FakeEmbeddingRuntime {
     fn embed<'a>(
         &'a self,
         call: RagEmbeddingCall,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
-        Box::pin(async move {
-            <Self as RagEmbeddingRuntime>::embed(self, call)
-                .await
-                .map(|result| result.embedding)
-        })
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
+        Box::pin(async move { <Self as RagEmbeddingRuntime>::embed(self, call).await })
     }
 
     fn rerank<'a>(

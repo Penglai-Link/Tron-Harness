@@ -51,18 +51,8 @@ impl RagSearchRuntime for DefaultRagRuntime {
     fn embed<'a>(
         &'a self,
         call: RagEmbeddingCall,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
-        Box::pin(async move {
-            self.llm
-                .embedding_call(LlmEmbeddingCallCommand {
-                    workspace_code: call.workspace_code,
-                    model_code: call.model_code,
-                    input: call.input,
-                })
-                .await
-                .map(|result| result.embedding)
-                .map_err(|error| error.to_string())
-        })
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
+        Box::pin(async move { <Self as RagEmbeddingRuntime>::embed(self, call).await })
     }
 
     fn rerank<'a>(

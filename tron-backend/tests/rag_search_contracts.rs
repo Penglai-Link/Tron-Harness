@@ -1127,7 +1127,7 @@ impl RagSearchRuntime for FakeSearchRuntime {
     fn embed<'a>(
         &'a self,
         _call: RagEmbeddingCall,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
         Box::pin(async move {
             *self.embedding_call_count.lock().unwrap() += 1;
             self.embeddings
@@ -1135,6 +1135,10 @@ impl RagSearchRuntime for FakeSearchRuntime {
                 .unwrap()
                 .pop_front()
                 .unwrap_or_else(|| Ok(embedding_4096(1.0, 0.0)))
+                .map(|embedding| RagEmbeddingResult {
+                    model_code: "workspace-default-embedding".into(),
+                    embedding,
+                })
         })
     }
 
@@ -1159,14 +1163,7 @@ impl RagEmbeddingRuntime for FakeSearchRuntime {
         &'a self,
         call: RagEmbeddingCall,
     ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
-        Box::pin(async move {
-            <Self as RagSearchRuntime>::embed(self, call)
-                .await
-                .map(|embedding| RagEmbeddingResult {
-                    model_code: "workspace-default-embedding".into(),
-                    embedding,
-                })
-        })
+        Box::pin(async move { <Self as RagSearchRuntime>::embed(self, call).await })
     }
 }
 

@@ -577,10 +577,13 @@ impl RagSearchRuntime for FakeRuntime {
     fn embed<'a>(
         &'a self,
         _call: RagEmbeddingCall,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
         Box::pin(async move {
             self.embedding_calls.fetch_add(1, Ordering::SeqCst);
-            Ok(self.embedding.clone())
+            Ok(RagEmbeddingResult {
+                model_code: "FAKE_EMBEDDING".into(),
+                embedding: self.embedding.clone(),
+            })
         })
     }
 
