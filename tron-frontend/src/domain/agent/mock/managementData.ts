@@ -187,7 +187,7 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     agentCode: "main-agent",
     description: "Primary platform internal agent used for workspace chat runtime policy.",
     expandedDomainPersistenceMode: "sticky_expanded",
-    maxSteps: 8,
+    maxSteps: 100,
     maxToolCalls: 100,
     maxParallelToolCalls: 4,
     name: "Main Agent",

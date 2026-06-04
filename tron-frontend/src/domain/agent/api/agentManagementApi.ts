@@ -198,7 +198,7 @@ function normalizeWorkspaceInternalAgentRecord(record: WorkspaceInternalAgentRec
     description: record.description,
     expandedDomainPersistenceMode: normalizeExpandedDomainPersistenceMode(record.expandedDomainPersistenceMode),
     name: record.name,
-    maxSteps: typeof record.maxSteps === "number" && Number.isFinite(record.maxSteps) ? record.maxSteps : 8,
+    maxSteps: typeof record.maxSteps === "number" && Number.isFinite(record.maxSteps) ? record.maxSteps : 100,
     maxToolCalls: typeof record.maxToolCalls === "number" && Number.isFinite(record.maxToolCalls) ? record.maxToolCalls : 100,
     maxParallelToolCalls:
       typeof record.maxParallelToolCalls === "number" && Number.isFinite(record.maxParallelToolCalls)

@@ -79,7 +79,7 @@ fn internal_agents() -> Vec<InternalAgentDefinition> {
         tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
         tool_exposure_mode: ToolExposureMode::DirectList,
         expanded_domain_persistence_mode: ExpandedDomainPersistenceMode::StickyExpanded,
-        max_steps: 8,
+        max_steps: 100,
         max_tool_calls: 100,
         max_parallel_tool_calls: 4,
     }]

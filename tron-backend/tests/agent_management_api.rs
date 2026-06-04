@@ -1108,7 +1108,7 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
         json!("ALL_PLATFORM_TOOLS")
     );
     assert_eq!(get_body["data"]["toolExposureMode"], json!("DIRECT_LIST"));
-    assert_eq!(get_body["data"]["maxSteps"], json!(8));
+    assert_eq!(get_body["data"]["maxSteps"], json!(100));
     assert_eq!(get_body["data"]["maxToolCalls"], json!(100));
     assert_eq!(get_body["data"]["maxParallelToolCalls"], json!(4));
 
@@ -1173,7 +1173,7 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
     assert_eq!(reset_response.status(), StatusCode::OK);
     let reset = response_json(reset_response).await;
     assert_eq!(reset["data"]["source"], json!("PLATFORM_DEFAULT"));
-    assert_eq!(reset["data"]["maxSteps"], json!(8));
+    assert_eq!(reset["data"]["maxSteps"], json!(100));
     assert_eq!(reset["data"]["maxToolCalls"], json!(100));
     assert_eq!(reset["data"]["maxParallelToolCalls"], json!(4));
 }

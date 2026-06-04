@@ -73,7 +73,7 @@ pub struct AgentRunLimits {
 impl Default for AgentRunLimits {
     fn default() -> Self {
         Self {
-            max_steps: 8,
+            max_steps: 100,
             max_tool_calls: 100,
             max_parallel_tool_calls: default_max_parallel_tool_calls(),
         }
