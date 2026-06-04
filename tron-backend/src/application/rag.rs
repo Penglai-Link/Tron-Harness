@@ -40,9 +40,9 @@ pub use retry::{
 pub use runtime::DefaultRagRuntime;
 pub use search::{
     CandidateHit, ContextPack, ContextPackItem, RagGraphExpansionQuery, RagRerankCall,
-    RagRouteSearchQuery, RagSearchContextRequest, RagSearchRepository, RagSearchRequest,
-    RagSearchResult, RagSearchRow, RagSearchRuntime, RagSearchScope, RagSearchService,
-    RagSearchTraceRequest,
+    RagRouteSearchQuery, RagSearchContextRequest, RagSearchGraphExpansionRequest,
+    RagSearchRepository, RagSearchRequest, RagSearchResult, RagSearchRow, RagSearchRuntime,
+    RagSearchScope, RagSearchService, RagSearchTraceRequest,
 };
 pub use search_filter::merge_search_filters;
 pub use search_profile::{

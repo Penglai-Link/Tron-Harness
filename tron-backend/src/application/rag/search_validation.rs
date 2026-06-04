@@ -34,6 +34,15 @@ pub(super) fn validate_request(request: &RagSearchRequest) -> Result<(), RagErro
     {
         return Err(RagError::SearchRequestInvalid);
     }
+    if request
+        .context
+        .graph_expansion
+        .relationships
+        .iter()
+        .any(|relationship| !valid_relationship_code(relationship))
+    {
+        return Err(RagError::SearchRequestInvalid);
+    }
     Ok(())
 }
 
@@ -139,4 +148,12 @@ fn source_version_filter_value(value: &Value) -> Result<String, RagError> {
             .ok_or(RagError::SearchFilterInvalid),
         _ => Err(RagError::SearchFilterInvalid),
     }
+}
+
+fn valid_relationship_code(value: &str) -> bool {
+    let value = value.trim();
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_' || ch == '-')
 }

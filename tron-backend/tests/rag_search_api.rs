@@ -68,6 +68,31 @@ async fn search_api_validates_request_auth_workspace_and_scope() {
         json!("RAG_SEARCH_REQUEST_INVALID")
     );
 
+    let mut invalid_graph_expansion = search_payload(json!({
+        "userCode": "USR-AUTH-0001",
+        "agentCode": "AGENT_CODEX",
+        "workspaceCode": "TRON_CORE"
+    }));
+    invalid_graph_expansion["context"]["graphExpansion"] = json!({
+        "relationships": ["requires_tool"]
+    });
+    let invalid_graph_expansion_response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/search",
+        Some(invalid_graph_expansion),
+    )
+    .await;
+    assert_eq!(
+        invalid_graph_expansion_response.status(),
+        StatusCode::BAD_REQUEST
+    );
+    let invalid_graph_expansion_json = response_json(invalid_graph_expansion_response).await;
+    assert_eq!(
+        invalid_graph_expansion_json["code"],
+        json!("RAG_SEARCH_REQUEST_INVALID")
+    );
+
     let unknown_workspace = authenticated_request(
         &router,
         Method::POST,

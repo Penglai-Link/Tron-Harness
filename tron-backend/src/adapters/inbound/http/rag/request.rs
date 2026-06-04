@@ -3,8 +3,8 @@ use serde_json::Value;
 
 use crate::application::rag::{
     RagDebugSourceRequest, RagIngestAccessContext, RagIngestRequest, RagIngestScope,
-    RagIngestSource, RagRetryIndexRequest, RagSearchContextRequest, RagSearchRequest,
-    RagSearchTraceRequest,
+    RagIngestSource, RagRetryIndexRequest, RagSearchContextRequest, RagSearchGraphExpansionRequest,
+    RagSearchRequest, RagSearchTraceRequest,
 };
 
 #[derive(Debug, Deserialize)]
@@ -132,6 +132,15 @@ pub struct RagSearchContextHttpRequest {
     pub strategy: Option<String>,
     #[serde(default)]
     pub return_fields: Vec<String>,
+    #[serde(default)]
+    pub graph_expansion: Option<RagSearchGraphExpansionHttpRequest>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct RagSearchGraphExpansionHttpRequest {
+    #[serde(default)]
+    pub relationships: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -167,6 +176,15 @@ impl RagSearchHttpRequest {
                     .map(|field| field.trim().to_string())
                     .filter(|field| !field.is_empty())
                     .collect(),
+                graph_expansion: RagSearchGraphExpansionRequest {
+                    relationships: context
+                        .graph_expansion
+                        .map(|graph_expansion| graph_expansion.relationships)
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|relationship| relationship.trim().to_string())
+                        .collect(),
+                },
             },
             trace: RagSearchTraceRequest {
                 enabled: trace.enabled.unwrap_or(false),
@@ -180,6 +198,7 @@ impl Default for RagSearchContextHttpRequest {
         Self {
             strategy: None,
             return_fields: Vec::new(),
+            graph_expansion: None,
         }
     }
 }

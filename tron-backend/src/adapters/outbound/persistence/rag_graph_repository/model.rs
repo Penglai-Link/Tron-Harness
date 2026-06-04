@@ -286,8 +286,26 @@ pub(super) fn graph_node_json(node: &GraphNode) -> Value {
         "labels": node.labels,
         "title": prop_text(&node.properties, "title"),
         "relatedKind": prop_text(&node.properties, "relatedKind"),
-        "text": prop_text(&node.properties, "text")
+        "text": prop_text(&node.properties, "text"),
+        "properties": graph_properties_json(&node.properties)
     })
+}
+
+fn graph_properties_json(properties: &BTreeMap<String, GraphPropertyValue>) -> Value {
+    Value::Object(Map::from_iter(
+        properties
+            .iter()
+            .map(|(name, value)| (name.clone(), graph_property_json(value))),
+    ))
+}
+
+fn graph_property_json(value: &GraphPropertyValue) -> Value {
+    match value {
+        GraphPropertyValue::Text(value) => json!(value),
+        GraphPropertyValue::Integer(value) => json!(value),
+        GraphPropertyValue::Decimal(value) => json!(value),
+        GraphPropertyValue::Boolean(value) => json!(value),
+    }
 }
 
 pub(super) fn decode_embedding(bytes: &[u8]) -> Vec<f32> {

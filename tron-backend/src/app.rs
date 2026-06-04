@@ -14,6 +14,7 @@ use crate::{
             model::{HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient},
             persistence::{
                 GrafeoAdapterConfig, GrafeoGraphStore, GrafeoOntologyStore, GrafeoStoreCore,
+                GraphBackedRagRepository,
                 SqliteAgentEventReplayStore, SqliteAgentManagementRepository,
                 SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
                 SqliteChatRepository, SqliteMcpRepository, SqliteModelRepository,
@@ -21,7 +22,6 @@ use crate::{
                 SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
                 SqliteWorkspaceRepository, bootstrap_platform_admin,
                 sqlite::SqliteRagRepository,
-                GraphBackedRagRepository, SqliteAgentEventReplayStore,
             },
         },
     },
@@ -67,6 +67,7 @@ static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
 static GLOBAL_MODEL_SERVICE: OnceLock<ModelService> = OnceLock::new();
 static GLOBAL_CHAT_SERVICE: OnceLock<ChatService> = OnceLock::new();
 static GLOBAL_OPEN_APP_SERVICE: OnceLock<OpenAppService> = OnceLock::new();
+static GLOBAL_GRAPH_CORE: OnceLock<GrafeoStoreCore> = OnceLock::new();
 static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService)> = OnceLock::new();
 
 pub type AppRagService =
@@ -257,30 +258,30 @@ impl AppState {
             Arc::new(models.clone()),
             Arc::new(HttpLlmRuntimeClient::new(model_inference_client)),
         );
+        let graph_core = if config.graph_storage_path == ":memory:" {
+            GLOBAL_GRAPH_CORE
+                .get_or_init(|| build_graph_core(&config.graph_storage_path))
+                .clone()
+        } else {
+            build_graph_core(&config.graph_storage_path)
+        };
         let rag = build_rag_service(
             &config.database_url,
-            &config.graph_storage_path,
+            graph_core.clone(),
             workspaces.clone(),
             llm_runtime.clone(),
             &config.project_doc_root,
             event_bus.clone(),
         );
         let (graphs, ontologies) = if config.graph_storage_path == ":memory:" {
+            let graph_core = graph_core.clone();
             GLOBAL_GRAPH_SERVICES
                 .get_or_init(|| {
-                    build_graph_services(
-                        &config.graph_storage_path,
-                        workspaces.clone(),
-                        llm_runtime.clone(),
-                    )
+                    build_graph_services(graph_core, workspaces.clone(), llm_runtime.clone())
                 })
                 .clone()
         } else {
-            build_graph_services(
-                &config.graph_storage_path,
-                workspaces.clone(),
-                llm_runtime.clone(),
-            )
+            build_graph_services(graph_core, workspaces.clone(), llm_runtime.clone())
         };
         let agent_runs = build_agent_run_history_service(&config.database_url);
         let chats = if config.database_url == ":memory:" {
@@ -561,7 +562,7 @@ fn build_open_app_service(
 
 fn build_rag_service(
     database_url: &str,
-    graph_storage_path: &str,
+    graph_core: GrafeoStoreCore,
     workspaces: WorkspaceService,
     llm_runtime: LlmRuntimeService,
     project_doc_root: &str,
@@ -569,10 +570,6 @@ fn build_rag_service(
 ) -> AppRagService {
     let sqlite = SqliteRagRepository::connect(database_url)
         .expect("RAG SQLite repository should initialize");
-    let graph_core = GrafeoStoreCore::connect(GrafeoAdapterConfig {
-        storage_path: graph_storage_path.to_owned(),
-    })
-    .expect("RAG graph storage adapter should initialize");
     let repository = GraphBackedRagRepository::new(
         sqlite,
         Arc::new(GrafeoGraphStore::new(graph_core)),
@@ -586,15 +583,18 @@ fn build_rag_service(
     .with_event_bus(event_bus)
 }
 
+fn build_graph_core(graph_storage_path: &str) -> GrafeoStoreCore {
+    GrafeoStoreCore::connect(GrafeoAdapterConfig {
+        storage_path: graph_storage_path.to_owned(),
+    })
+    .expect("graph Grafeo adapter should initialize")
+}
+
 fn build_graph_services(
-    graph_storage_path: &str,
+    core: GrafeoStoreCore,
     workspaces: WorkspaceService,
     llm_runtime: LlmRuntimeService,
 ) -> (GraphService, OntologyService) {
-    let core = GrafeoStoreCore::connect(GrafeoAdapterConfig {
-        storage_path: graph_storage_path.to_owned(),
-    })
-    .expect("graph Grafeo adapter should initialize");
     let graphs = GraphService::with_embedding_runtime(
         GrafeoGraphStore::new(core.clone()),
         ScopeResolver::new(workspaces.clone()),

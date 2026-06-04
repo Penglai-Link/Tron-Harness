@@ -67,7 +67,7 @@ VALUES
         'skill-graph',
         '["skill-graph"]',
         'v1',
-        '{"routes":[{"routeId":"skill-graph-fulltext","retriever":"FULLTEXT_GRAPH_SINGLE_NODE_V1"},{"routeId":"skill-graph-vector","retriever":"VECTOR_GRAPH_SINGLE_NODE_V1"}],"fusionPolicy":{"type":"SUM_SCORE"},"dedupPolicy":{"type":"TEXT_UNIT"},"rerankPolicy":{"enabled":false},"hydratePolicy":{"type":"TEXT_UNIT"},"graphExpansionPolicy":{"enabled":true,"relationships":["REQUIRES_TOOL","HAS_CONFIG","USES_VARIABLE"],"direction":"OUTGOING","maxDepth":1,"maxRelatedNodes":20,"failurePolicy":"WARN_AND_RETURN_BASE_HITS"},"contextPolicy":{"supportedStrategies":["RESULT_LIST","TOKEN_BUDGET_PACK","MEMORY_CONTEXT_PACK","DOC_QA_CONTEXT_PACK"]}}',
+        '{"routes":[{"routeId":"skill-graph-fulltext","retriever":"FULLTEXT_GRAPH_SINGLE_NODE_V1"},{"routeId":"skill-graph-vector","retriever":"VECTOR_GRAPH_SINGLE_NODE_V1"}],"fusionPolicy":{"type":"SUM_SCORE"},"dedupPolicy":{"type":"TEXT_UNIT"},"rerankPolicy":{"enabled":false},"hydratePolicy":{"type":"TEXT_UNIT"},"graphExpansionPolicy":{"enabled":true,"direction":"OUTGOING","maxDepth":1,"maxRelatedNodes":20,"failurePolicy":"WARN_AND_RETURN_BASE_HITS"},"contextPolicy":{"supportedStrategies":["RESULT_LIST","TOKEN_BUDGET_PACK","MEMORY_CONTEXT_PACK","DOC_QA_CONTEXT_PACK"]}}',
         '{}',
         'SKIP_VECTOR_ON_UNAVAILABLE',
         1780502400000,

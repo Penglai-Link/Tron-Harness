@@ -1,4 +1,8 @@
-use std::collections::BTreeSet;
+use std::{
+    collections::BTreeSet,
+    path::PathBuf,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use axum::{
     body::{Body, to_bytes},
@@ -33,6 +37,29 @@ async fn health_response_uses_uniform_success_envelope() {
             .collect::<BTreeSet<_>>(),
         BTreeSet::from(["code", "data", "message"]),
     );
+}
+
+#[tokio::test]
+async fn file_backed_router_builds_without_duplicate_graph_file_lock() {
+    let storage_path = temp_backend_contract_path("router-graph-lock");
+    let config = AppConfig {
+        database_url: storage_path.with_extension("sqlite3").display().to_string(),
+        graph_storage_path: storage_path.with_extension("grafeo").display().to_string(),
+        ..AppConfig::default()
+    };
+    let router = build_router(config);
+    let response = router
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri("/api/v1/health")
+                .body(Body::empty())
+                .expect("health request should build"),
+        )
+        .await
+        .expect("health request should be handled by the router");
+
+    assert_eq!(response.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -116,4 +143,15 @@ fn assert_no_sensitive_keys(value: &Value) {
         }
         _ => {}
     }
+}
+
+fn temp_backend_contract_path(label: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock should be after Unix epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!(
+        "tron-backend-contract-{label}-{}-{nanos}",
+        std::process::id()
+    ))
 }

@@ -882,6 +882,7 @@ fn search_request(
         context: RagSearchContextRequest {
             strategy: strategy.into(),
             return_fields: Vec::new(),
+            graph_expansion: Default::default(),
         },
         trace: RagSearchTraceRequest { enabled: false },
     }

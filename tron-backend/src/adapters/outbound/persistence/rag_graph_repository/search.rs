@@ -96,21 +96,7 @@ impl GraphBackedRagRepository {
             &query.scope_type,
             &query.scope_code,
         )?;
-        let relationships = query
-            .policy
-            .get("relationships")
-            .and_then(Value::as_array)
-            .map(|items| {
-                items
-                    .iter()
-                    .filter_map(Value::as_str)
-                    .map(ToOwned::to_owned)
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_default();
-        if relationships.is_empty() {
-            return Ok(None);
-        }
+        let relationships = query.relationships.clone();
         let max_depth = policy_usize(&query.policy, "maxDepth", 1);
         let max_nodes = policy_usize(&query.policy, "maxRelatedNodes", 20);
         let direction = match query

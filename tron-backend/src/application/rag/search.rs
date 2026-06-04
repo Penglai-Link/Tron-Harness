@@ -88,6 +88,7 @@ pub struct RagGraphExpansionQuery {
     pub scope_type: String,
     pub scope_code: String,
     pub workspace_code: String,
+    pub relationships: Vec<String>,
     pub policy: Value,
 }
 
@@ -193,6 +194,12 @@ pub struct RagSearchRequest {
 pub struct RagSearchContextRequest {
     pub strategy: String,
     pub return_fields: Vec<String>,
+    pub graph_expansion: RagSearchGraphExpansionRequest,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RagSearchGraphExpansionRequest {
+    pub relationships: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -508,6 +515,7 @@ where
                     scope_type: hit.scope_type.clone(),
                     scope_code: hit.scope_code.clone(),
                     workspace_code: request.workspace_code.clone(),
+                    relationships: request.context.graph_expansion.relationships.clone(),
                     policy: policy.clone(),
                 })?;
             if let Some(expanded) = expanded {

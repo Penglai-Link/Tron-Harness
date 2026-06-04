@@ -178,11 +178,12 @@ impl GraphBackedRagRepository {
         for node in nodes {
             let reference = required_str(node, "ref")?;
             let kind = required_str(node, "kind")?;
+            let label = required_str(node, "label")?;
             if !policy.allowed_kinds.contains(kind) {
                 return Err(RagError::IngestRequestInvalid);
             }
             let code = normalize_related_code(required_str(node, "code")?)?;
-            let mut properties = BTreeMap::new();
+            let mut properties = custom_related_properties(node)?;
             push_text_prop(&mut properties, "relatedKind", kind);
             push_text_prop(&mut properties, "relatedRef", reference);
             push_text_prop(
@@ -197,7 +198,7 @@ impl GraphBackedRagRepository {
             );
             let write = GraphNodeWrite {
                 node_code: code.clone(),
-                labels: vec!["RagSkillRelatedNode".into()],
+                labels: vec![label.to_string()],
                 properties,
                 full_text: optional_str(node, "text").map(ToOwned::to_owned),
                 embedding_text: None,
@@ -288,5 +289,42 @@ fn corpus_policy_defaults() -> RelatedPolicy {
         ]),
         max_nodes: 50,
         max_edges: 100,
+    }
+}
+
+fn custom_related_properties(
+    node: &Value,
+) -> Result<BTreeMap<String, GraphPropertyValue>, RagError> {
+    let mut properties = BTreeMap::new();
+    let Some(raw_properties) = node.get("properties") else {
+        return Ok(properties);
+    };
+    let property_map = raw_properties
+        .as_object()
+        .ok_or(RagError::IngestRequestInvalid)?;
+    for (name, value) in property_map {
+        let name = name.trim();
+        if name.is_empty() || is_reserved_related_property(name) {
+            return Err(RagError::IngestRequestInvalid);
+        }
+        properties.insert(name.to_string(), json_graph_property_value(value)?);
+    }
+    Ok(properties)
+}
+
+fn is_reserved_related_property(name: &str) -> bool {
+    matches!(name, "relatedKind" | "relatedRef" | "title" | "text")
+}
+
+fn json_graph_property_value(value: &Value) -> Result<GraphPropertyValue, RagError> {
+    match value {
+        Value::String(value) => Ok(GraphPropertyValue::Text(value.clone())),
+        Value::Number(value) => value
+            .as_i64()
+            .map(GraphPropertyValue::Integer)
+            .or_else(|| value.as_f64().map(GraphPropertyValue::Decimal))
+            .ok_or(RagError::IngestRequestInvalid),
+        Value::Bool(value) => Ok(GraphPropertyValue::Boolean(*value)),
+        _ => Err(RagError::IngestRequestInvalid),
     }
 }

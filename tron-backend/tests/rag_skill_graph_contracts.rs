@@ -22,8 +22,8 @@ use tron_backend::{
             RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime,
             RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService,
             RagIngestSource, RagRerankCall, RagResolvedDocument, RagRetryIndexRequest,
-            RagRetryIndexService, RagSearchContextRequest, RagSearchRequest, RagSearchRuntime,
-            RagSearchService, RagSearchTraceRequest,
+            RagRetryIndexService, RagSearchContextRequest, RagSearchGraphExpansionRequest,
+            RagSearchRequest, RagSearchRuntime, RagSearchService, RagSearchTraceRequest,
         },
     },
     domain::{
@@ -142,6 +142,35 @@ async fn skill_graph_ingest_search_expand_debug_and_retry_use_graph_storage_with
         Some(&GraphPropertyValue::Text("skill-graph".into()))
     );
     assert!(nodes[0].node.properties.contains_key("embeddingJson"));
+    let related_nodes = graph_service
+        .search(
+            graph_scope(),
+            GraphSearchQuery {
+                filters: vec![GraphPropertyFilter {
+                    property_name: "provider".into(),
+                    operator: GraphFilterOperator::Equals,
+                    value: GraphPropertyValue::Text("git".into()),
+                }],
+                full_text: None,
+                vector_text: None,
+                embedding_model_code: None,
+                traversal: None,
+                labels: vec!["RagTool".into()],
+                limit: GraphQueryLimit::new(10).unwrap(),
+                min_score: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(related_nodes.len(), 1);
+    assert_eq!(
+        related_nodes[0].node.properties.get("priority"),
+        Some(&GraphPropertyValue::Integer(10))
+    );
+    assert_eq!(
+        related_nodes[0].node.properties.get("builtin"),
+        Some(&GraphPropertyValue::Boolean(true))
+    );
 
     ingest_service
         .ingest(skill_graph_request(
@@ -184,10 +213,35 @@ async fn skill_graph_ingest_search_expand_debug_and_retry_use_graph_storage_with
     assert_eq!(result.hits.len(), 1);
     assert_eq!(result.hits[0].corpus_id, "skill-graph");
     assert_eq!(result.hits[0].fields["skillName"], json!("rag-reviewer"));
+    let expanded_nodes = result.hits[0].metadata["relatedGraph"]["nodes"]
+        .as_array()
+        .expect("related graph nodes should be returned");
+    let mut expanded_kinds = expanded_nodes
+        .iter()
+        .filter_map(|node| node["relatedKind"].as_str())
+        .collect::<Vec<_>>();
+    expanded_kinds.sort_unstable();
+    assert_eq!(expanded_kinds, vec!["TAG", "TOOL"]);
     assert_eq!(
-        result.hits[0].metadata["relatedGraph"]["nodes"][0]["relatedKind"],
-        json!("TOOL")
+        result.hits[0].metadata["relatedGraph"]["nodes"][0]["labels"][0],
+        json!("RagTool")
     );
+    assert_eq!(
+        result.hits[0].metadata["relatedGraph"]["nodes"][0]["properties"]["provider"],
+        json!("git")
+    );
+    assert_eq!(
+        result.hits[0].metadata["relatedGraph"]["nodes"][0]["properties"]["priority"],
+        json!(10)
+    );
+    let mut tool_only_request = search_request("skill-graph-related-v1", "rag-reviewer");
+    tool_only_request.context.graph_expansion.relationships = vec!["REQUIRES_TOOL".into()];
+    let tool_only_result = search_service.search(tool_only_request).await.unwrap();
+    let tool_only_nodes = tool_only_result.hits[0].metadata["relatedGraph"]["nodes"]
+        .as_array()
+        .expect("filtered related graph nodes should be returned");
+    assert_eq!(tool_only_nodes.len(), 1);
+    assert_eq!(tool_only_nodes[0]["relatedKind"], json!("TOOL"));
     assert_eq!(runtime.rerank_calls(), 0);
 
     let debug = tron_backend::application::rag::RagDiagnosticsService::new(
@@ -295,18 +349,45 @@ fn skill_graph_request(skill_name: &str, description: &str) -> RagIngestRequest 
                 "skillDescription": description
             },
             "relatedGraph": {
-                "nodes": [{
-                    "ref": "tool.git",
-                    "kind": "TOOL",
-                    "code": "GIT",
-                    "title": "Git",
-                    "text": "Git operations"
-                }],
-                "edges": [{
-                    "from": "$skill",
-                    "to": "tool.git",
-                    "relationship": "REQUIRES_TOOL"
-                }]
+                "nodes": [
+                    {
+                        "ref": "tool.git",
+                        "kind": "TOOL",
+                        "label": "RagTool",
+                        "code": "GIT",
+                        "title": "Git",
+                        "text": "Git operations",
+                        "properties": {
+                            "provider": "git",
+                            "priority": 10,
+                            "confidence": 0.95,
+                            "builtin": true
+                        }
+                    },
+                    {
+                        "ref": "tag.review",
+                        "kind": "TAG",
+                        "label": "RagTag",
+                        "code": "RAG_REVIEW",
+                        "title": "RAG Review",
+                        "text": "RAG review workflow",
+                        "properties": {
+                            "category": "review"
+                        }
+                    }
+                ],
+                "edges": [
+                    {
+                        "from": "$skill",
+                        "to": "tool.git",
+                        "relationship": "REQUIRES_TOOL"
+                    },
+                    {
+                        "from": "$skill",
+                        "to": "tag.review",
+                        "relationship": "HAS_TAG"
+                    }
+                ]
             }
         }),
     }
@@ -324,6 +405,7 @@ fn search_request(profile_id: &str, query: &str) -> RagSearchRequest {
         context: RagSearchContextRequest {
             strategy: "RESULT_LIST".into(),
             return_fields: vec!["skillName".into(), "skillDescription".into()],
+            graph_expansion: RagSearchGraphExpansionRequest::default(),
         },
         trace: RagSearchTraceRequest { enabled: false },
     }
