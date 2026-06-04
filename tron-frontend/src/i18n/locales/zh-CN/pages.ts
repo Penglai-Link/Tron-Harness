@@ -256,9 +256,23 @@ export const pages = {
           optionOne: "直接列表：启动时直接把具体工具 schema 提供给模型。",
           optionTwo: "领域发现：先给模型领域目录，再按需展开具体领域并加载工具。",
         },
+        maxSteps: {
+          ariaLabel: "解释最大步数",
+          summary: "限制这个内部智能体在一次运行中最多能进行多少轮模型交互。",
+          optionOne: "较小的值可以更早结束冗长推理，让运行保持紧凑。",
+          optionTwo: "较大的值允许更多轮次的多步骤工作，但也会增加运行成本。",
+        },
+        maxToolCalls: {
+          ariaLabel: "解释最大工具调用数",
+          summary: "限制这个内部智能体在一次运行中最多能执行多少次工具调用。",
+          optionOne: "较小的值可以限制工具使用，让行为更可控。",
+          optionTwo: "较大的值允许更多工具驱动的迭代，但运行也会更长。",
+        },
       },
       labels: {
         expandedDomainPersistenceMode: "展开领域持久化模式",
+        maxSteps: "最大步数",
+        maxToolCalls: "最大工具调用数",
         toolAssignmentMode: "工具分配模式",
         toolExposureMode: "工具暴露模式",
       },

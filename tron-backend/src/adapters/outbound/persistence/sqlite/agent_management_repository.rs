@@ -23,7 +23,9 @@ use self::codecs::{
     tool_exposure_mode_to_storage,
 };
 
-use super::migrations::AGENT_MANAGEMENT_INTERNAL_AGENT_MIGRATION;
+use super::migrations::{
+    AGENT_MANAGEMENT_INTERNAL_AGENT_LIMITS_MIGRATION, AGENT_MANAGEMENT_INTERNAL_AGENT_MIGRATION,
+};
 use super::migrations::{AGENT_MANAGEMENT_MIGRATION, AGENT_MANAGEMENT_RUNTIME_TYPE_MIGRATION};
 
 const MAIN_AGENT_SINGLETON_KEY: &str = "platform";
@@ -66,6 +68,16 @@ impl SqliteAgentManagementRepository {
             .connection
             .execute_batch(AGENT_MANAGEMENT_INTERNAL_AGENT_MIGRATION)
             .map_err(storage_error)?;
+        if !column_exists(
+            &repository.connection,
+            "workspace_internal_agent_policies",
+            "max_steps",
+        )? {
+            repository
+                .connection
+                .execute_batch(AGENT_MANAGEMENT_INTERNAL_AGENT_LIMITS_MIGRATION)
+                .map_err(storage_error)?;
+        }
         Ok(repository)
     }
 }
@@ -297,13 +309,13 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
     ) -> Result<Vec<WorkspaceInternalAgentPolicy>, AgentManagementError> {
         let sql = match workspace_code {
             Some(_workspace_code) => {
-                "SELECT workspace_code, agent_code, tool_assignment_mode, tool_exposure_mode, expanded_domain_persistence_mode, created_at, updated_at
+                "SELECT workspace_code, agent_code, tool_assignment_mode, tool_exposure_mode, expanded_domain_persistence_mode, max_steps, max_tool_calls, created_at, updated_at
                  FROM workspace_internal_agent_policies
                  WHERE workspace_code = ?1
                  ORDER BY agent_code ASC"
             }
             None => {
-                "SELECT workspace_code, agent_code, tool_assignment_mode, tool_exposure_mode, expanded_domain_persistence_mode, created_at, updated_at
+                "SELECT workspace_code, agent_code, tool_assignment_mode, tool_exposure_mode, expanded_domain_persistence_mode, max_steps, max_tool_calls, created_at, updated_at
                  FROM workspace_internal_agent_policies
                  ORDER BY workspace_code ASC, agent_code ASC"
             }
@@ -318,8 +330,10 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
                 expanded_domain_persistence_mode: expanded_domain_persistence_mode_from_storage(
                     row.get::<_, String>(4)?,
                 ),
-                created_at: timestamp_from_millis(row.get(5)?),
-                updated_at: timestamp_from_millis(row.get(6)?),
+                max_steps: row.get(5)?,
+                max_tool_calls: row.get(6)?,
+                created_at: timestamp_from_millis(row.get(7)?),
+                updated_at: timestamp_from_millis(row.get(8)?),
             })
         };
         let rows = if let Some(workspace_code) = workspace_code {
@@ -344,13 +358,17 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
                     tool_assignment_mode,
                     tool_exposure_mode,
                     expanded_domain_persistence_mode,
+                    max_steps,
+                    max_tool_calls,
                     created_at,
                     updated_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
                  ON CONFLICT(workspace_code, agent_code) DO UPDATE SET
                     tool_assignment_mode = excluded.tool_assignment_mode,
                     tool_exposure_mode = excluded.tool_exposure_mode,
                     expanded_domain_persistence_mode = excluded.expanded_domain_persistence_mode,
+                    max_steps = excluded.max_steps,
+                    max_tool_calls = excluded.max_tool_calls,
                     updated_at = excluded.updated_at",
                 params![
                     policy.workspace_code,
@@ -360,6 +378,8 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
                     expanded_domain_persistence_mode_to_storage(
                         policy.expanded_domain_persistence_mode
                     ),
+                    policy.max_steps,
+                    policy.max_tool_calls,
                     timestamp_to_millis(&policy.created_at),
                     timestamp_to_millis(&policy.updated_at),
                 ],

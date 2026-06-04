@@ -1108,6 +1108,8 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
         json!("ALL_PLATFORM_TOOLS")
     );
     assert_eq!(get_body["data"]["toolExposureMode"], json!("DIRECT_LIST"));
+    assert_eq!(get_body["data"]["maxSteps"], json!(8));
+    assert_eq!(get_body["data"]["maxToolCalls"], json!(4));
 
     let patch_response = request_with_headers(
         &app,
@@ -1116,7 +1118,9 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
         Some(json!({
             "toolAssignmentMode": "selected_tools",
             "toolExposureMode": "direct_list",
-            "expandedDomainPersistenceMode": "ephemeral_expanded"
+            "expandedDomainPersistenceMode": "ephemeral_expanded",
+            "maxSteps": 12,
+            "maxToolCalls": 6
         })),
         None,
         Some(&authorization),
@@ -1132,6 +1136,8 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
         patched["data"]["expandedDomainPersistenceMode"],
         json!("EPHEMERAL_EXPANDED")
     );
+    assert_eq!(patched["data"]["maxSteps"], json!(12));
+    assert_eq!(patched["data"]["maxToolCalls"], json!(6));
 
     let assign_response = request_with_headers(
         &app,
@@ -1164,4 +1170,86 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
     assert_eq!(reset_response.status(), StatusCode::OK);
     let reset = response_json(reset_response).await;
     assert_eq!(reset["data"]["source"], json!("PLATFORM_DEFAULT"));
+    assert_eq!(reset["data"]["maxSteps"], json!(8));
+    assert_eq!(reset["data"]["maxToolCalls"], json!(4));
+}
+
+#[tokio::test]
+async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
+    let codex_command = temp_command_path("codex-internal-policy-limits");
+    let opencode_command = temp_command_path("opencode-internal-policy-limits");
+    write_fake_command(&codex_command);
+    write_fake_command(&opencode_command);
+
+    let model_server = scripted_model_server(vec![
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "function": {
+                            "name": "workspace.list",
+                            "arguments": "{}"
+                        }
+                    }]
+                }
+            }]
+        }),
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "should not be reached"
+                }
+            }]
+        }),
+    ])
+    .await;
+    let app = app_with_config(test_config(&codex_command, &opencode_command));
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let patch_policy = request_with_headers(
+        &app,
+        Method::PATCH,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
+        Some(json!({
+            "maxSteps": 1,
+            "maxToolCalls": 1
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(patch_policy.status(), StatusCode::OK);
+
+    let run_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/agents/runs",
+        Some(json!({
+            "prompt": "Inspect the workspace list.",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "TEST_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": model_server.base_url,
+                "apiKey": "sk-test-api",
+                "modelName": "gpt-test"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(run_response.status(), StatusCode::BAD_REQUEST);
+    let run_body = response_json(run_response).await;
+    assert_eq!(run_body["code"], json!("AGENT_MAX_STEPS_EXCEEDED"));
+
+    let recorded_requests = model_server
+        .requests
+        .lock()
+        .expect("recorded scripted model request mutex poisoned")
+        .clone();
+    assert_eq!(recorded_requests.len(), 1);
 }

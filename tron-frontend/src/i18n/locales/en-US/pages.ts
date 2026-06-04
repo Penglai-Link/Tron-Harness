@@ -254,9 +254,23 @@ export const pages = {
           optionOne: "Direct list: send the concrete tool schemas to the model at startup.",
           optionTwo: "Domain discovery: send the domain catalog first, then expand a domain before concrete tools are loaded.",
         },
+        maxSteps: {
+          ariaLabel: "Explain max steps",
+          summary: "Caps how many model turns this internal agent can take in a single run.",
+          optionOne: "Lower values stop long reasoning loops sooner and keep runs tight.",
+          optionTwo: "Higher values allow more multi-step work, but they also increase runtime cost.",
+        },
+        maxToolCalls: {
+          ariaLabel: "Explain max tool calls",
+          summary: "Caps how many tool executions this internal agent can perform in one run.",
+          optionOne: "Lower values keep tool use bounded and easier to reason about.",
+          optionTwo: "Higher values allow more tool-driven iteration before the run stops.",
+        },
       },
       labels: {
         expandedDomainPersistenceMode: "Expanded domain persistence mode",
+        maxSteps: "Max steps",
+        maxToolCalls: "Max tool calls",
         toolAssignmentMode: "Tool assignment mode",
         toolExposureMode: "Tool exposure mode",
       },

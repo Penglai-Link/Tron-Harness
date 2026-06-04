@@ -310,7 +310,10 @@ impl ReactAgent {
         tool_output: Option<&str>,
     ) -> Result<(), AgentError> {
         let mut payload_fields = vec![
-            ("tool_call_id".to_string(), compact_event_value(tool_call_id)),
+            (
+                "tool_call_id".to_string(),
+                compact_event_value(tool_call_id),
+            ),
             ("tool_name".to_string(), compact_event_value(tool_name)),
         ];
         if let Some(tool_input) = tool_input {
@@ -513,6 +516,11 @@ fn validate_context(context: &AgentRunContext) -> Result<(), AgentError> {
     if context.limits.max_steps == 0 {
         return Err(AgentError::InvalidConfiguration(
             "maxSteps must be greater than zero".into(),
+        ));
+    }
+    if context.limits.max_tool_calls == 0 {
+        return Err(AgentError::InvalidConfiguration(
+            "maxToolCalls must be greater than zero".into(),
         ));
     }
     Ok(())

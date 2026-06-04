@@ -402,3 +402,28 @@ async fn max_step_exhaustion_fails_without_output_success() {
 
     assert_eq!(error.to_string(), "agent run exceeded max steps");
 }
+
+#[tokio::test]
+async fn zero_tool_call_limit_is_rejected_before_model_execution() {
+    let context = AgentRunContext {
+        limits: AgentRunLimits {
+            max_steps: 1,
+            max_tool_calls: 0,
+        },
+        ..base_context("RUN-ZERO-TOOL")
+    };
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![])),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    let error = agent
+        .run(context)
+        .await
+        .expect_err("zero tool-call limit should be rejected");
+
+    assert_eq!(error.to_string(), "maxToolCalls must be greater than zero");
+}

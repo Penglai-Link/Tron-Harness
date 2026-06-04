@@ -367,6 +367,8 @@ fn to_internal_agent_policy_command(
         tool_assignment_mode,
         tool_exposure_mode,
         expanded_domain_persistence_mode,
+        max_steps: request.max_steps,
+        max_tool_calls: request.max_tool_calls,
     })
 }
 

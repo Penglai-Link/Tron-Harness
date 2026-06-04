@@ -53,6 +53,8 @@ pub struct WorkspaceInternalAgentPolicy {
     pub tool_assignment_mode: ToolAssignmentMode,
     pub tool_exposure_mode: ToolExposureMode,
     pub expanded_domain_persistence_mode: ExpandedDomainPersistenceMode,
+    pub max_steps: u32,
+    pub max_tool_calls: u32,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -78,6 +80,8 @@ pub struct InternalAgentToolPolicy {
     pub tool_assignment_mode: ToolAssignmentMode,
     pub tool_exposure_mode: ToolExposureMode,
     pub expanded_domain_persistence_mode: ExpandedDomainPersistenceMode,
+    pub max_steps: u32,
+    pub max_tool_calls: u32,
     pub selected_tool_codes: Vec<String>,
     pub assigned_tool_count: usize,
     pub effective_tool_count: usize,

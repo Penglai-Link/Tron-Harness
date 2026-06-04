@@ -54,6 +54,7 @@ import {
   SelectInput,
   SurfaceCard,
   TablePagination,
+  TextInput,
   useToast,
   useTablePagination,
   useWorkspaceSpaces,
@@ -61,6 +62,8 @@ import {
 
 interface InternalAgentDraft {
   expandedDomainPersistenceMode: WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"];
+  maxSteps: number;
+  maxToolCalls: number;
   selectedToolCodes: string[];
   toolAssignmentMode: WorkspaceInternalAgentRecord["toolAssignmentMode"];
   toolExposureMode: WorkspaceInternalAgentRecord["toolExposureMode"];
@@ -89,6 +92,8 @@ function hasSameToolCodes(left: string[], right: string[]) {
 function draftFromRecord(record: WorkspaceInternalAgentRecord): InternalAgentDraft {
   return {
     expandedDomainPersistenceMode: record.expandedDomainPersistenceMode,
+    maxSteps: record.maxSteps,
+    maxToolCalls: record.maxToolCalls,
     selectedToolCodes: normalizeToolCodes(record.selectedToolCodes),
     toolAssignmentMode: record.toolAssignmentMode,
     toolExposureMode: record.toolExposureMode,
@@ -100,6 +105,8 @@ function hasDraftChanges(record: WorkspaceInternalAgentRecord, draft: InternalAg
     record.toolAssignmentMode !== draft.toolAssignmentMode
     || record.toolExposureMode !== draft.toolExposureMode
     || record.expandedDomainPersistenceMode !== draft.expandedDomainPersistenceMode
+    || record.maxSteps !== draft.maxSteps
+    || record.maxToolCalls !== draft.maxToolCalls
     || !hasSameToolCodes(normalizeToolCodes(record.selectedToolCodes), normalizeToolCodes(draft.selectedToolCodes))
   );
 }
@@ -157,7 +164,7 @@ export function WorkspaceAgentsPage() {
   );
 
   function fieldLabel(
-    key: "expandedDomainPersistenceMode" | "toolAssignmentMode" | "toolExposureMode",
+    key: "expandedDomainPersistenceMode" | "maxSteps" | "maxToolCalls" | "toolAssignmentMode" | "toolExposureMode",
     defaultValue: string,
     align: "end" | "start" = "start",
   ) {
@@ -351,6 +358,24 @@ export function WorkspaceAgentsPage() {
     setInternalSaveState(agentCode, hasDraftChanges(baseRecord, nextDraft) ? "pending" : "idle");
   }
 
+  function updateLimitDraft(
+    agentCode: string,
+    key: "maxSteps" | "maxToolCalls",
+    valueAsNumber: number,
+  ) {
+    const draft = internalDrafts[agentCode];
+    if (!draft) {
+      return;
+    }
+
+    const nextValue = Number.isFinite(valueAsNumber)
+      ? Math.max(1, Math.trunc(valueAsNumber))
+      : draft[key];
+    setInternalDraft(agentCode, {
+      [key]: nextValue,
+    } as Partial<InternalAgentDraft>);
+  }
+
   function handleToolSelection(agentCode: string, toolCode: string, checked: boolean) {
     const draft = internalDrafts[agentCode];
     if (!draft) return;
@@ -459,6 +484,12 @@ export function WorkspaceAgentsPage() {
     }
     if (row.expandedDomainPersistenceMode !== draft.expandedDomainPersistenceMode) {
       payload.expandedDomainPersistenceMode = draft.expandedDomainPersistenceMode;
+    }
+    if (row.maxSteps !== draft.maxSteps) {
+      payload.maxSteps = draft.maxSteps;
+    }
+    if (row.maxToolCalls !== draft.maxToolCalls) {
+      payload.maxToolCalls = draft.maxToolCalls;
     }
 
     const shouldSaveTools = draft.toolAssignmentMode === "selected_tools"
@@ -654,6 +685,32 @@ export function WorkspaceAgentsPage() {
                       {internalPageT("modes.ephemeralExpanded", "Ephemeral expanded")}
                     </option>
                   </SelectInput>
+                </Field>
+                <Field label={fieldLabel("maxSteps", "Max steps")}>
+                  <TextInput
+                    aria-label={internalPageT("labels.maxSteps", "Max steps")}
+                    disabled={internalBusy}
+                    min={1}
+                    step={1}
+                    type="number"
+                    value={draft.maxSteps}
+                    onChange={(event) => {
+                      updateLimitDraft(agent.agentCode, "maxSteps", event.currentTarget.valueAsNumber);
+                    }}
+                  />
+                </Field>
+                <Field label={fieldLabel("maxToolCalls", "Max tool calls", "end")}>
+                  <TextInput
+                    aria-label={internalPageT("labels.maxToolCalls", "Max tool calls")}
+                    disabled={internalBusy}
+                    min={1}
+                    step={1}
+                    type="number"
+                    value={draft.maxToolCalls}
+                    onChange={(event) => {
+                      updateLimitDraft(agent.agentCode, "maxToolCalls", event.currentTarget.valueAsNumber);
+                    }}
+                  />
                 </Field>
               </div>
 

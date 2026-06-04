@@ -10,9 +10,9 @@ use crate::{
     domain::{
         agent::{
             AgentExecutionScope, AgentKind, AgentManagementError, AgentMessage, AgentModelConfig,
-            AgentModelProtocol, AgentRunContext, AgentRunHistoryRecord, AgentRunStatus,
-            AgentRuntimeType, AgentToolExposureState, EffectiveSkill, EffectiveVariable,
-            ToolAvailabilityState, ToolExposureMode, ToolRegistry,
+            AgentModelProtocol, AgentRunContext, AgentRunHistoryRecord, AgentRunLimits,
+            AgentRunStatus, AgentRuntimeType, AgentToolExposureState, EffectiveSkill,
+            EffectiveVariable, ToolAvailabilityState, ToolExposureMode, ToolRegistry,
         },
         skill::WorkspaceSkillListQuery,
         variable::VariableCatalogQuery,
@@ -150,14 +150,21 @@ impl AgentInvocationService {
         let locale = locale.unwrap_or_else(|| "en-US".to_string());
         let mut tools = requested_tools;
         let mut tool_exposure = AgentToolExposureState::default();
-        if tools.is_empty() && is_internal_agent(&resolved_agent.agent_code) {
-            let policy = self
-                .management
-                .workspace_internal_agent_policy(
-                    &workspace.workspace_code,
-                    &resolved_agent.agent_code,
-                )
-                .map_err(|error| map_agent_error(&resolved_agent.agent_code, error.clone()))?;
+        let internal_agent_policy = if is_internal_agent(&resolved_agent.agent_code) {
+            Some(
+                self.management
+                    .workspace_internal_agent_policy(
+                        &workspace.workspace_code,
+                        &resolved_agent.agent_code,
+                    )
+                    .map_err(|error| map_agent_error(&resolved_agent.agent_code, error))?,
+            )
+        } else {
+            None
+        };
+        if tools.is_empty()
+            && let Some(policy) = internal_agent_policy.as_ref()
+        {
             let effective_tool_records = self
                 .management
                 .resolve_internal_agent_effective_tool_definitions(
@@ -196,6 +203,15 @@ impl AgentInvocationService {
                 }
             }
         }
+        let limits = requested_limits.unwrap_or_else(|| {
+            internal_agent_policy
+                .as_ref()
+                .map(|policy| AgentRunLimits {
+                    max_steps: policy.max_steps,
+                    max_tool_calls: policy.max_tool_calls,
+                })
+                .unwrap_or_default()
+        });
         let variables = self
             .variables
             .list_variables(
@@ -289,7 +305,7 @@ impl AgentInvocationService {
                 branch_name,
                 task_code: task_code.clone(),
             },
-            limits: requested_limits.unwrap_or_default(),
+            limits,
             messages,
             observations: Vec::new(),
             started_at: chrono::Utc::now().to_rfc3339(),

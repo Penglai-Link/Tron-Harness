@@ -68,6 +68,8 @@ export interface WorkspaceInternalAgentRecord {
   toolAssignmentMode: ToolAssignmentMode;
   toolExposureMode: ToolExposureMode;
   expandedDomainPersistenceMode: ExpandedDomainPersistenceMode;
+  maxSteps: number;
+  maxToolCalls: number;
   selectedToolCodes: string[];
   source: WorkspaceInternalAgentPolicySource;
 }
@@ -76,6 +78,8 @@ export interface WorkspaceInternalAgentPolicyPayload {
   toolAssignmentMode?: ToolAssignmentMode;
   toolExposureMode?: ToolExposureMode;
   expandedDomainPersistenceMode?: ExpandedDomainPersistenceMode;
+  maxSteps?: number;
+  maxToolCalls?: number;
 }
 
 export interface ListToolsQuery {

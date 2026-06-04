@@ -155,11 +155,17 @@ fn request_builders_downgrade_tool_observations_to_user_messages() {
 
     let chat = chat_completions_request(&config, &request);
     assert_eq!(chat["messages"][0]["role"], json!("user"));
-    assert_eq!(chat["messages"][0]["content"], json!("tool:workspace.list\nresult:\n[]"));
+    assert_eq!(
+        chat["messages"][0]["content"],
+        json!("tool:workspace.list\nresult:\n[]")
+    );
 
     let responses = responses_request(&config, &request);
     assert_eq!(responses["input"][0]["role"], json!("user"));
-    assert_eq!(responses["input"][0]["content"], json!("tool:workspace.list\nresult:\n[]"));
+    assert_eq!(
+        responses["input"][0]["content"],
+        json!("tool:workspace.list\nresult:\n[]")
+    );
 }
 
 #[test]

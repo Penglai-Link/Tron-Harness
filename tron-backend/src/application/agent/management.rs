@@ -42,6 +42,8 @@ pub struct UpdateWorkspaceInternalAgentPolicyCommand {
     pub tool_assignment_mode: Option<ToolAssignmentMode>,
     pub tool_exposure_mode: Option<ToolExposureMode>,
     pub expanded_domain_persistence_mode: Option<ExpandedDomainPersistenceMode>,
+    pub max_steps: Option<u32>,
+    pub max_tool_calls: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,6 +64,8 @@ struct InternalAgentDefinition {
     tool_assignment_mode: ToolAssignmentMode,
     tool_exposure_mode: ToolExposureMode,
     expanded_domain_persistence_mode: ExpandedDomainPersistenceMode,
+    max_steps: u32,
+    max_tool_calls: u32,
 }
 
 fn internal_agents() -> Vec<InternalAgentDefinition> {
@@ -73,6 +77,8 @@ fn internal_agents() -> Vec<InternalAgentDefinition> {
         tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
         tool_exposure_mode: ToolExposureMode::DirectList,
         expanded_domain_persistence_mode: ExpandedDomainPersistenceMode::StickyExpanded,
+        max_steps: 8,
+        max_tool_calls: 4,
     }]
 }
 
@@ -298,6 +304,8 @@ impl AgentManagementService {
                 tool_assignment_mode: mode,
                 tool_exposure_mode: policy.tool_exposure_mode,
                 expanded_domain_persistence_mode: policy.expanded_domain_persistence_mode,
+                max_steps: policy.max_steps,
+                max_tool_calls: policy.max_tool_calls,
                 selected_tool_codes,
                 assigned_tool_count,
                 effective_tool_count,
@@ -342,6 +350,8 @@ impl AgentManagementService {
             expanded_domain_persistence_mode: command
                 .expanded_domain_persistence_mode
                 .unwrap_or(current.expanded_domain_persistence_mode),
+            max_steps: command.max_steps.unwrap_or(current.max_steps),
+            max_tool_calls: command.max_tool_calls.unwrap_or(current.max_tool_calls),
             created_at: current_timestamp(),
             updated_at: now,
         };
@@ -536,6 +546,8 @@ fn to_internal_policy_record(
         tool_assignment_mode: definition.tool_assignment_mode,
         tool_exposure_mode: definition.tool_exposure_mode,
         expanded_domain_persistence_mode: definition.expanded_domain_persistence_mode,
+        max_steps: definition.max_steps,
+        max_tool_calls: definition.max_tool_calls,
         created_at: current_timestamp(),
         updated_at: current_timestamp(),
     }
