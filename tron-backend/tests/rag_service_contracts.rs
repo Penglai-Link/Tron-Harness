@@ -390,28 +390,6 @@ fn skill_retrieval_profile_uses_same_extension_retrievers_as_memory() {
 }
 
 #[test]
-fn skill_retrieval_profile_uses_same_extension_retrievers_as_memory() {
-    let service = RagConfigService::new(
-        SqliteRagRepository::connect(":memory:").expect("RAG repository should connect"),
-        DefaultRagStrategyRegistry::default(),
-    );
-
-    let profile = service
-        .get_profile("skill-related-v1")
-        .expect("skill retrieval profile should be readable");
-
-    assert_eq!(profile.primary_corpus_id.as_deref(), Some("skill"));
-    assert_eq!(
-        profile.config["routes"][0]["retriever"],
-        json!("FULLTEXT_SQLITE_FTS5_SIMPLE_V1")
-    );
-    assert_eq!(
-        profile.config["routes"][1]["retriever"],
-        json!("VECTOR_SQLITE_VEC0_COSINE_V1")
-    );
-}
-
-#[test]
 fn retrieval_profile_validation_rejects_missing_or_latest_source_version() {
     let service = RagConfigService::new(
         FakeRagRepository::with_profiles(vec![
