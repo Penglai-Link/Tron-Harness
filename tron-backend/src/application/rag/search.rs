@@ -381,15 +381,32 @@ where
         profile_filters: &Value,
         request: &RagSearchRequest,
     ) -> Result<(Vec<RankedCandidate>, Vec<Value>), RagError> {
-        let embedding_routes = compiled
-            .routes
+        let blank_query = request.query.trim().is_empty();
+        let mut executable_routes = Vec::new();
+        for route in &compiled.routes {
+            let strategy = retriever_strategy(&route.retriever)?;
+            if blank_query && !strategy.can_run_without_query() {
+                continue;
+            }
+            if strategy.is_structured_filter() {
+                let corpus = route_corpora
+                    .get(&route.corpus_id)
+                    .ok_or(RagError::CorpusNotFound)?;
+                if corpus.storage_binding.layout
+                    == crate::domain::rag::RagStorageLayout::GraphSingleNode
+                {
+                    continue;
+                }
+            }
+            executable_routes.push((route, strategy));
+        }
+        if blank_query && executable_routes.is_empty() {
+            return Err(RagError::SearchRequestInvalid);
+        }
+
+        let embedding_routes = executable_routes
             .iter()
-            .filter_map(|route| {
-                retriever_strategy(&route.retriever)
-                    .ok()
-                    .filter(|strategy| strategy.needs_query_embedding())
-                    .map(|_| route)
-            })
+            .filter_map(|(route, strategy)| strategy.needs_query_embedding().then_some(*route))
             .collect::<Vec<_>>();
         let mut warnings = Vec::new();
         let query_embedding = if !embedding_routes.is_empty() {
@@ -423,8 +440,7 @@ where
             None
         };
         let mut route_hits = Vec::new();
-        for route in &compiled.routes {
-            let strategy = retriever_strategy(&route.retriever)?;
+        for (route, strategy) in executable_routes {
             if strategy.should_skip_without_embedding() && query_embedding.is_none() {
                 continue;
             }
@@ -473,7 +489,7 @@ where
         let mut hits = fuse_and_dedup(&compiled, route_hits);
         hits.sort_by(stable_hit_order);
         apply_topic_policy(&compiled, &mut hits);
-        if compiled.rerank_enabled && hits.len() > 1 {
+        if !blank_query && compiled.rerank_enabled && hits.len() > 1 {
             apply_rerank(&self.runtime, compiled, request, &mut hits).await?;
         }
         Ok((hits, warnings))

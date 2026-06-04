@@ -245,6 +245,7 @@ fn default_route_id(corpus_id: &str, retriever: &str, index: usize) -> String {
     match retriever_strategy(retriever).map(|strategy| strategy.kind) {
         Ok(RetrieverKind::Fulltext) => format!("{corpus_id}-fulltext"),
         Ok(RetrieverKind::Vector) => format!("{corpus_id}-vector"),
+        Ok(RetrieverKind::StructuredFilter) => format!("{corpus_id}-structured-filter"),
         _ => format!("{corpus_id}-route-{index}"),
     }
 }

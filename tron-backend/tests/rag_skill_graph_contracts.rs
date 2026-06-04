@@ -9,6 +9,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use rusqlite::{Connection, params};
 use serde_json::json;
 use tron_backend::{
     adapters::outbound::persistence::{
@@ -292,6 +293,47 @@ async fn skill_graph_related_payload_rejects_disallowed_relationships() {
     );
 }
 
+#[tokio::test]
+async fn blank_query_structured_filter_does_not_execute_against_graph_single_node_corpus() {
+    let database_url = temp_database_path("rag-skill-graph-structured-filter")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-structured-filter-store")
+        .to_string_lossy()
+        .to_string();
+    let runtime = FakeRuntime::new(embedding_4(1.0, 0.0));
+    let (repository, _) = build_repository(&database_url, &graph_path);
+    let ingest_service = RagIngestService::new(
+        repository.clone(),
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+    ingest_service
+        .ingest(skill_graph_request(
+            "rag-reviewer",
+            "Reviews RAG retrieval changes before release.",
+        ))
+        .await
+        .unwrap();
+    insert_graph_structured_filter_profile(&database_url);
+    let embedding_calls_after_ingest = runtime.embedding_calls();
+
+    let search_service = RagSearchService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+    let mut request = search_request("skill-graph-structured-filter-v1", "");
+    request.filters = json!({ "skillName": "rag-reviewer" });
+
+    assert_eq!(
+        search_service.search(request).await.unwrap_err(),
+        RagError::SearchRequestInvalid
+    );
+    assert_eq!(runtime.embedding_calls(), embedding_calls_after_ingest);
+    assert_eq!(runtime.rerank_calls(), 0);
+}
+
 fn build_repository(
     database_url: &str,
     graph_path: &str,
@@ -318,6 +360,37 @@ fn build_repository(
             ScopeResolver::with_workspace_provider(FakeWorkspaceProvider),
         ),
     )
+}
+
+fn insert_graph_structured_filter_profile(database_url: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let config = json!({
+        "routes": [{
+            "routeId": "skill-graph-structured",
+            "corpusId": "skill-graph",
+            "retriever": "STRUCTURED_FILTER_SQLITE_V1",
+            "filters": {"skillName": "rag-reviewer"}
+        }],
+        "fusionPolicy": {"type": "SUM_SCORE"},
+        "dedupPolicy": {"type": "TEXT_UNIT"},
+        "rerankPolicy": {"enabled": false},
+        "contextPolicy": {"supportedStrategies": ["RESULT_LIST"]}
+    });
+    connection
+        .execute(
+            "INSERT INTO rag_profiles (
+                profile_id, profile_type, status, primary_corpus_id, corpus_ids_json,
+                required_source_version, config_json, filters_json, degrade_policy,
+                created_at, updated_at
+            )
+            VALUES (?1, 'RETRIEVAL', 'enabled', 'skill-graph', '[\"skill-graph\"]',
+                'v1', ?2, '{}', 'SKIP_VECTOR_ON_UNAVAILABLE', 1, 1)",
+            params![
+                "skill-graph-structured-filter-v1",
+                serde_json::to_string(&config).unwrap()
+            ],
+        )
+        .unwrap();
 }
 
 fn skill_graph_request(skill_name: &str, description: &str) -> RagIngestRequest {

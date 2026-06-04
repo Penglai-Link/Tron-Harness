@@ -44,6 +44,7 @@ impl RagStrategyRegistry for DefaultRagStrategyRegistry {
                 "VECTOR_SQLITE_VEC0_COSINE_V1",
                 "FULLTEXT_GRAPH_SINGLE_NODE_V1",
                 "VECTOR_GRAPH_SINGLE_NODE_V1",
+                "STRUCTURED_FILTER_SQLITE_V1",
             ],
         )
     }

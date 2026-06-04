@@ -33,6 +33,7 @@ pub(super) fn rank_route_rows(
                         query_embedding.map(|query| cosine_similarity(query, embedding))
                     })
                     .unwrap_or(0.0),
+                RetrieverKind::StructuredFilter => 1.0,
                 _ => 0.0,
             });
             (score > 0.0).then(|| {

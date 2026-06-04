@@ -4,6 +4,7 @@ use crate::domain::rag::RagError;
 pub(super) enum RetrieverKind {
     Fulltext,
     Vector,
+    StructuredFilter,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -17,6 +18,14 @@ impl RetrieverStrategy {
         self.kind == RetrieverKind::Vector
     }
 
+    pub fn can_run_without_query(&self) -> bool {
+        self.kind == RetrieverKind::StructuredFilter
+    }
+
+    pub fn is_structured_filter(&self) -> bool {
+        self.kind == RetrieverKind::StructuredFilter
+    }
+
     pub fn should_skip_without_embedding(&self) -> bool {
         self.kind == RetrieverKind::Vector
     }
@@ -25,6 +34,7 @@ impl RetrieverStrategy {
         match self.kind {
             RetrieverKind::Fulltext => "RAG_FULLTEXT_ROUTE_UNAVAILABLE",
             RetrieverKind::Vector => "RAG_VECTOR_ROUTE_UNAVAILABLE",
+            RetrieverKind::StructuredFilter => "RAG_STRUCTURED_FILTER_ROUTE_UNAVAILABLE",
         }
     }
 
@@ -32,6 +42,7 @@ impl RetrieverStrategy {
         match self.kind {
             RetrieverKind::Fulltext => "Fulltext route unavailable",
             RetrieverKind::Vector => "Vector route skipped; fulltext route remains available",
+            RetrieverKind::StructuredFilter => "Structured filter route unavailable",
         }
     }
 }
@@ -61,6 +72,10 @@ pub(super) fn retriever_strategy(strategy_id: &str) -> Result<RetrieverStrategy,
         "VECTOR_GRAPH_SINGLE_NODE_V1" => Ok(RetrieverStrategy {
             kind: RetrieverKind::Vector,
             storage_retriever: "VECTOR_GRAPH_SINGLE_NODE_V1",
+        }),
+        "STRUCTURED_FILTER_SQLITE_V1" => Ok(RetrieverStrategy {
+            kind: RetrieverKind::StructuredFilter,
+            storage_retriever: "STRUCTURED_FILTER_SQLITE_V1",
         }),
         _ => Err(RagError::SearchRouteUnavailable),
     }

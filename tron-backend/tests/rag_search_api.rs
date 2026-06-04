@@ -193,6 +193,62 @@ async fn search_api_flattens_requested_logical_return_fields() {
 }
 
 #[tokio::test]
+async fn search_api_accepts_missing_query_for_structured_filter_profile() {
+    let database_url = temp_database_path("rag-search-api-structured-filter")
+        .to_string_lossy()
+        .to_string();
+    seed_search_fixture(&database_url);
+    insert_structured_filter_profile(&database_url, "memory-api-structured-filter-v1");
+    let router = app_with_database(&database_url);
+    let mut payload = search_payload(json!({
+        "userCode": "USR-AUTH-0001",
+        "agentCode": "AGENT_CODEX",
+        "workspaceCode": "TRON_CORE"
+    }));
+    payload["profileId"] = json!("memory-api-structured-filter-v1");
+    payload["context"]["returnFields"] = json!(["memoryType"]);
+    payload.as_object_mut().unwrap().remove("query");
+
+    let response =
+        authenticated_request(&router, Method::POST, "/api/v1/rag/search", Some(payload)).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["code"], json!("SUCCESS"));
+    assert_eq!(
+        body["data"]["hits"][0]["sourceCode"],
+        json!("api-memory-rule")
+    );
+    assert_eq!(body["data"]["hits"][0]["memoryType"], json!("RULE"));
+
+    let invalid_filter = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/search",
+        Some(json!({
+            "profileId": "memory-api-structured-filter-v1",
+            "accessContext": {
+                "userCode": "USR-AUTH-0001",
+                "agentCode": "AGENT_CODEX",
+                "workspaceCode": "TRON_CORE"
+            },
+            "filters": { "unknown": "x" },
+            "limit": 3,
+            "tokenBudget": 100,
+            "context": { "strategy": "RESULT_LIST" }
+        })),
+    )
+    .await;
+    assert_eq!(invalid_filter.status(), StatusCode::BAD_REQUEST);
+    let invalid_filter_body = response_json(invalid_filter).await;
+    assert_eq!(
+        invalid_filter_body["code"],
+        json!("RAG_SEARCH_FILTER_INVALID")
+    );
+    assert!(invalid_filter_body.get("data").is_some());
+}
+
+#[tokio::test]
 async fn search_api_rejects_physical_return_field_names() {
     let database_url = temp_database_path("rag-search-api-physical-return-field")
         .to_string_lossy()
@@ -284,6 +340,34 @@ fn seed_search_fixture(database_url: &str) {
                 'Always cite sources in API answers.',
                 '', 0, 6, 'hash', 'ACTIVE', '{}', 1, 1)",
             params!["api-memory-rule:v1:0", "api-memory-rule"],
+        )
+        .unwrap();
+}
+
+fn insert_structured_filter_profile(database_url: &str, profile_id: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let config = json!({
+        "routes": [{
+            "routeId": "memory-api-structured",
+            "retriever": "STRUCTURED_FILTER_SQLITE_V1",
+            "filters": {"memoryType": "RULE"}
+        }],
+        "fusionPolicy": {"type": "SUM_SCORE"},
+        "dedupPolicy": {"type": "TEXT_UNIT"},
+        "rerankPolicy": {"enabled": false},
+        "hydratePolicy": {"type": "TEXT_UNIT"},
+        "contextPolicy": {"supportedStrategies": ["RESULT_LIST"]}
+    });
+    connection
+        .execute(
+            "INSERT INTO rag_profiles (
+                profile_id, profile_type, status, primary_corpus_id, corpus_ids_json,
+                required_source_version, config_json, filters_json, degrade_policy,
+                created_at, updated_at
+            )
+            VALUES (?1, 'RETRIEVAL', 'enabled', 'memory-card', '[\"memory-card\"]',
+                'v1', ?2, '{}', 'SKIP_VECTOR_ON_UNAVAILABLE', 1, 1)",
+            params![profile_id, serde_json::to_string(&config).unwrap()],
         )
         .unwrap();
 }

@@ -15,11 +15,13 @@ use tron_backend::{
         DefaultRagStrategyRegistry, RagConfigRepository, RagDocumentSourceCall,
         RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime,
         RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService,
-        RagIngestSource, RagRerankCall, RagResolvedDocument, RagSearchContextRequest,
-        RagSearchRequest, RagSearchRuntime, RagSearchService, RagSearchTraceRequest, TopicFallback,
-        TopicPolicy, compile_retrieval_profile, merge_search_filters,
+        RagIngestSource, RagRerankCall, RagResolvedDocument, RagRouteSearchQuery,
+        RagSearchContextRequest, RagSearchRepository, RagSearchRequest, RagSearchRow,
+        RagSearchRuntime, RagSearchService, RagSearchTraceRequest, RagStrategyRegistry,
+        StrategyRegistrationStatus, TopicFallback, TopicPolicy, compile_retrieval_profile,
+        merge_search_filters,
     },
-    domain::rag::{RagError, RagProfileRecord, RagProfileType, RagStatus},
+    domain::rag::{RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus},
 };
 
 #[tokio::test]
@@ -436,6 +438,42 @@ fn retrieval_profile_compiler_rejects_invalid_routes_context_and_version() {
 }
 
 #[test]
+fn retrieval_profile_compiler_accepts_explicit_structured_filter_sqlite_route() {
+    let repository = SqliteRagRepository::connect(":memory:").unwrap();
+    let corpus = repository.get_corpus("memory-card").unwrap().unwrap();
+    let registry = DefaultRagStrategyRegistry::default();
+
+    assert_eq!(
+        registry
+            .resolve_retriever("STRUCTURED_FILTER_SQLITE_V1")
+            .status,
+        StrategyRegistrationStatus::Enabled
+    );
+
+    let compiled = compile_retrieval_profile(
+        &retrieval_profile(
+            "structured-filter",
+            Some("v1"),
+            json!({
+                "routes": [{
+                    "retriever": "STRUCTURED_FILTER_SQLITE_V1",
+                    "topK": 3,
+                    "filters": {"injectable": true}
+                }],
+                "contextPolicy": {"supportedStrategies": ["RESULT_LIST"]}
+            }),
+        ),
+        &corpus,
+        &registry,
+    )
+    .unwrap();
+
+    assert_eq!(compiled.routes.len(), 1);
+    assert_eq!(compiled.routes[0].route_id, "memory-card-structured-filter");
+    assert_eq!(compiled.routes[0].retriever, "STRUCTURED_FILTER_SQLITE_V1");
+}
+
+#[test]
 fn retrieval_profile_compiler_accepts_rrf_and_embedding_mmr_policy() {
     let repository = SqliteRagRepository::connect(":memory:").unwrap();
     let corpus = repository.get_corpus("memory-card").unwrap().unwrap();
@@ -502,6 +540,145 @@ fn search_filters_reject_unknown_types_and_prevent_profile_filter_broadening() {
         .unwrap_err(),
         RagError::SearchFilterInvalid
     );
+}
+
+#[tokio::test]
+async fn blank_query_executes_only_structured_filter_routes_without_embedding_or_rerank() {
+    let database_url = temp_database_path("rag-structured-filter-blank")
+        .to_string_lossy()
+        .to_string();
+    seed_structured_filter_fixture(&database_url).await;
+    insert_structured_filter_profile(
+        &database_url,
+        "memory-structured-filter-mixed-v1",
+        true,
+        true,
+        5,
+    );
+    let repository = CapturingSearchRepository::connect(&database_url);
+    let route_calls = repository.route_calls.clone();
+    let runtime = FakeSearchRuntime::new();
+    let service = RagSearchService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+    let mut request = search_request_with_return_fields(
+        "memory-structured-filter-mixed-v1",
+        "   ",
+        "RESULT_LIST",
+        json!({ "importanceScore": { "op": "gte", "value": 80 } }),
+        &["memoryType"],
+    );
+    request.limit = 5;
+
+    let result = service.search(request).await.unwrap();
+
+    assert_eq!(
+        result
+            .hits
+            .iter()
+            .map(|hit| hit.source_code.as_str())
+            .collect::<Vec<_>>(),
+        vec!["memory-rag-rule", "memory-rerank-second"]
+    );
+    assert!(result.warnings.is_empty());
+    assert_eq!(runtime.embedding_call_count(), 0);
+    assert_eq!(runtime.rerank_call_count(), 0);
+    let route_calls = route_calls.lock().unwrap();
+    assert_eq!(route_calls.len(), 1);
+    assert_eq!(route_calls[0].retriever, "STRUCTURED_FILTER_SQLITE_V1");
+    assert!(route_calls[0].query.trim().is_empty());
+}
+
+#[tokio::test]
+async fn blank_query_rejects_profiles_without_structured_filter_route() {
+    let database_url = temp_database_path("rag-structured-filter-blank-reject")
+        .to_string_lossy()
+        .to_string();
+    seed_memory_fixture(&database_url).await;
+    let repository = CapturingSearchRepository::connect(&database_url);
+    let route_calls = repository.route_calls.clone();
+    let runtime = FakeSearchRuntime::new();
+    let service = RagSearchService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+
+    let error = service
+        .search(search_request(
+            "memory-related-v1",
+            "",
+            "RESULT_LIST",
+            json!({ "memoryType": "RULE" }),
+        ))
+        .await
+        .unwrap_err();
+
+    assert_eq!(error, RagError::SearchRequestInvalid);
+    assert_eq!(runtime.embedding_call_count(), 0);
+    assert!(route_calls.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn sqlite_structured_filter_returns_active_scoped_versioned_limited_rows() {
+    let database_url = temp_database_path("rag-structured-filter-sqlite")
+        .to_string_lossy()
+        .to_string();
+    seed_structured_filter_fixture(&database_url).await;
+    insert_structured_filter_profile(
+        &database_url,
+        "memory-structured-filter-v1",
+        false,
+        false,
+        10,
+    );
+    let service = RagSearchService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new(),
+    );
+
+    let mut request = search_request_with_return_fields(
+        "memory-structured-filter-v1",
+        "",
+        "RESULT_LIST",
+        json!({ "importanceScore": { "op": "gte", "value": 80 } }),
+        &["memoryType", "importanceScore"],
+    );
+    request.limit = 10;
+    let result = service.search(request).await.unwrap();
+
+    assert_eq!(
+        result
+            .hits
+            .iter()
+            .map(|hit| hit.source_code.as_str())
+            .collect::<Vec<_>>(),
+        vec!["memory-rag-rule", "memory-rerank-second"]
+    );
+    assert!(result.hits.iter().all(|hit| hit.source_version == "v1"));
+    assert!(result.hits.iter().all(|hit| hit.score > 0.0));
+    assert_eq!(result.hits[0].fields["memoryType"], json!("RULE"));
+    assert_eq!(result.hits[0].fields["importanceScore"], json!(90));
+
+    let limited_service = RagSearchService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new(),
+    );
+    let mut limited_request = search_request_with_return_fields(
+        "memory-structured-filter-v1",
+        "",
+        "RESULT_LIST",
+        json!({ "importanceScore": { "op": "gte", "value": 80 } }),
+        &["memoryType"],
+    );
+    limited_request.limit = 1;
+    let limited = limited_service.search(limited_request).await.unwrap();
+    assert_eq!(limited.hits.len(), 1);
+    assert_eq!(limited.hits[0].source_code, "memory-rag-rule");
 }
 
 #[tokio::test]
@@ -751,12 +928,70 @@ fn sqlite_rag_repository_uses_template_plans_instead_of_corpus_sql_branches() {
     }
 }
 
+struct CapturingSearchRepository {
+    inner: SqliteRagRepository,
+    route_calls: Arc<Mutex<Vec<RagRouteSearchQuery>>>,
+}
+
+impl CapturingSearchRepository {
+    fn connect(database_url: &str) -> Self {
+        Self {
+            inner: SqliteRagRepository::connect(database_url).unwrap(),
+            route_calls: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+}
+
+impl RagConfigRepository for CapturingSearchRepository {
+    fn list_corpora(&self) -> Result<Vec<RagCorpusRecord>, RagError> {
+        self.inner.list_corpora()
+    }
+
+    fn get_corpus(&self, corpus_id: &str) -> Result<Option<RagCorpusRecord>, RagError> {
+        self.inner.get_corpus(corpus_id)
+    }
+
+    fn list_profiles(
+        &self,
+        query: tron_backend::application::rag::RagProfileListQuery,
+    ) -> Result<Vec<RagProfileRecord>, RagError> {
+        self.inner.list_profiles(query)
+    }
+
+    fn get_profile(&self, profile_id: &str) -> Result<Option<RagProfileRecord>, RagError> {
+        self.inner.get_profile(profile_id)
+    }
+}
+
+impl RagSearchRepository for CapturingSearchRepository {
+    fn search_route(&self, query: RagRouteSearchQuery) -> Result<Vec<RagSearchRow>, RagError> {
+        self.route_calls.lock().unwrap().push(query.clone());
+        self.inner.search_route(query)
+    }
+
+    fn persist_search_trace(
+        &self,
+        trace: tron_backend::application::rag::RagSearchTraceWrite,
+    ) -> Result<(), RagError> {
+        self.inner.persist_search_trace(trace)
+    }
+
+    fn expand_related_graph(
+        &self,
+        query: tron_backend::application::rag::RagGraphExpansionQuery,
+    ) -> Result<Option<Value>, RagError> {
+        self.inner.expand_related_graph(query)
+    }
+}
+
 #[derive(Clone, Default)]
 struct FakeSearchRuntime {
     embeddings: Arc<Mutex<VecDeque<Result<Vec<f32>, String>>>>,
     reranks: Arc<Mutex<VecDeque<Result<Vec<RagRerankItem>, String>>>>,
     documents: Arc<Mutex<VecDeque<Result<RagResolvedDocument, RagError>>>>,
     last_rerank_model_code: Arc<Mutex<Option<String>>>,
+    embedding_call_count: Arc<Mutex<usize>>,
+    rerank_call_count: Arc<Mutex<usize>>,
 }
 
 type RagRerankItem = (usize, f64);
@@ -799,6 +1034,14 @@ impl FakeSearchRuntime {
     fn last_rerank_model_code(&self) -> Option<String> {
         self.last_rerank_model_code.lock().unwrap().clone()
     }
+
+    fn embedding_call_count(&self) -> usize {
+        *self.embedding_call_count.lock().unwrap()
+    }
+
+    fn rerank_call_count(&self) -> usize {
+        *self.rerank_call_count.lock().unwrap()
+    }
 }
 
 impl RagSearchRuntime for FakeSearchRuntime {
@@ -807,6 +1050,7 @@ impl RagSearchRuntime for FakeSearchRuntime {
         _call: RagEmbeddingCall,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
         Box::pin(async move {
+            *self.embedding_call_count.lock().unwrap() += 1;
             self.embeddings
                 .lock()
                 .unwrap()
@@ -820,6 +1064,7 @@ impl RagSearchRuntime for FakeSearchRuntime {
         call: RagRerankCall,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<RagRerankItem>, String>> + Send + 'a>> {
         Box::pin(async move {
+            *self.rerank_call_count.lock().unwrap() += 1;
             *self.last_rerank_model_code.lock().unwrap() = call.model_code;
             self.reranks
                 .lock()
@@ -965,6 +1210,51 @@ async fn seed_skill_fixture(database_url: &str) {
     service.ingest(skill_request()).await.unwrap();
 }
 
+async fn seed_structured_filter_fixture(database_url: &str) {
+    seed_two_memory_fixture(database_url).await;
+    let service = RagIngestService::new(
+        SqliteRagRepository::connect(database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new(),
+    );
+    service
+        .ingest(memory_request(
+            "memory-inactive-filter-match",
+            "v1",
+            "SPACE",
+            "TRON_CORE",
+        ))
+        .await
+        .unwrap();
+    service
+        .ingest(memory_request(
+            "memory-wrong-scope-filter-match",
+            "v1",
+            "SPACE",
+            "TRON_CORE",
+        ))
+        .await
+        .unwrap();
+    let connection = Connection::open(database_url).unwrap();
+    connection
+        .execute(
+            "UPDATE rag_memory_text_units
+             SET status = 'DISABLED'
+             WHERE source_code = ?1",
+            params!["memory-inactive-filter-match"],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "UPDATE rag_memory_text_units
+             SET scope_type = 'USER',
+                 scope_code = 'OTHER-USER'
+             WHERE source_code = ?1",
+            params!["memory-wrong-scope-filter-match"],
+        )
+        .unwrap();
+}
+
 fn memory_request(
     source_code: &str,
     source_version: &str,
@@ -1096,6 +1386,58 @@ fn skill_request() -> RagIngestRequest {
 
 fn project_doc_markdown() -> &'static str {
     "# RAG MVP\nIntro.\n\n## Write Path\nThe write path uses a synchronous DAG to persist source and text units."
+}
+
+fn insert_structured_filter_profile(
+    database_url: &str,
+    profile_id: &str,
+    include_query_routes: bool,
+    rerank_enabled: bool,
+    route_top_k: usize,
+) {
+    let connection = Connection::open(database_url).unwrap();
+    let mut routes = vec![json!({
+        "routeId": "memory-structured",
+        "retriever": "STRUCTURED_FILTER_SQLITE_V1",
+        "topK": route_top_k,
+        "filters": {"injectable": true}
+    })];
+    if include_query_routes {
+        routes.extend([
+            json!({
+                "routeId": "memory-fulltext",
+                "retriever": "FULLTEXT_SQLITE_FTS5_SIMPLE_V1"
+            }),
+            json!({
+                "routeId": "memory-vector",
+                "retriever": "VECTOR_SQLITE_VEC0_COSINE_V1"
+            }),
+        ]);
+    }
+    let config = json!({
+        "routes": routes,
+        "fusionPolicy": {"type": "SUM_SCORE"},
+        "dedupPolicy": {"type": "TEXT_UNIT"},
+        "rerankPolicy": {"enabled": rerank_enabled},
+        "hydratePolicy": {"type": "TEXT_UNIT"},
+        "contextPolicy": {"supportedStrategies": ["RESULT_LIST", "MEMORY_CONTEXT_PACK"]}
+    });
+    connection
+        .execute(
+            "INSERT INTO rag_profiles (
+                profile_id, profile_type, status, primary_corpus_id, corpus_ids_json,
+                required_source_version, config_json, filters_json, degrade_policy,
+                created_at, updated_at
+            )
+            VALUES (?1, 'RETRIEVAL', 'enabled', 'memory-card', '[\"memory-card\"]',
+                'v1', ?2, '{\"memoryType\":\"RULE\"}', 'SKIP_VECTOR_ON_UNAVAILABLE', 1, 1)
+            ON CONFLICT (profile_id) DO UPDATE SET
+                config_json = excluded.config_json,
+                filters_json = excluded.filters_json,
+                updated_at = excluded.updated_at",
+            params![profile_id, serde_json::to_string(&config).unwrap()],
+        )
+        .unwrap();
 }
 
 fn insert_extension_memory_profile(database_url: &str, profile_id: &str) {

@@ -13,7 +13,6 @@ pub(super) fn validate_request(request: &RagSearchRequest) -> Result<(), RagErro
     for value in [
         request.profile_id.as_str(),
         request.workspace_code.as_str(),
-        request.query.as_str(),
         request.access_context.user_code.as_str(),
         request.access_context.agent_code.as_str(),
         request.access_context.workspace_code.as_str(),

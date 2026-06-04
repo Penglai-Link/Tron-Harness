@@ -78,11 +78,7 @@ fn search_route(
     let select = select_projection(plan, query, retriever)?;
     let from_sql = from_sql(plan, query, retriever)?;
     let (where_sql, where_params) = where_sql(plan, query, retriever)?;
-    let limit_sql = if retriever.limits_in_application {
-        String::new()
-    } else {
-        " LIMIT ?".to_string()
-    };
+    let limit_sql = " LIMIT ?";
     let order_sql = order_sql(plan, query, retriever)?;
     let sql = format!(
         "SELECT {} {from_sql} {where_sql} {order_sql}{limit_sql}",
@@ -91,9 +87,7 @@ fn search_route(
     let mut params = select.params.clone();
     params.extend(where_params);
     params.extend(order_params(query, retriever)?);
-    if !retriever.limits_in_application {
-        params.push(SqlValue::Integer(query.limit.max(1) as i64));
-    }
+    params.push(SqlValue::Integer(query.limit.max(1) as i64));
     let mut statement = repository.connection.prepare(&sql).map_err(storage_error)?;
     let rows = statement
         .query_map(params_from_iter(params), |row| map_row(row, plan, &select))
@@ -174,6 +168,7 @@ fn from_sql(
                  JOIN {text_table} tu ON tu.id = vec.rowid"
             )
         }
+        SqliteRetrieverKind::StructuredFilter => format!("FROM {text_table} tu"),
     };
     if let Some(source_table) = plan.source_table.as_deref() {
         let source_table = quote_identifier(source_table)?;
@@ -204,6 +199,7 @@ fn storage_score_expr(
             "1.0 - vec_distance_cosine(vec.embedding, ?)".into(),
             vec![SqlValue::Text(query_embedding_json(query)?)],
         )),
+        SqliteRetrieverKind::StructuredFilter => Ok(("1.0".into(), Vec::new())),
         _ => Ok(("NULL".into(), Vec::new())),
     }
 }
@@ -227,6 +223,7 @@ fn order_sql(
                     .into(),
             )
         }
+        SqliteRetrieverKind::StructuredFilter => Ok("ORDER BY tu.source_code, tu.ordinal".into()),
         _ => Ok("ORDER BY tu.source_code, tu.ordinal".into()),
     }
 }
@@ -278,6 +275,7 @@ fn validate_retriever_available(
                 Err(RagError::SearchRouteUnavailable)
             }
         }
+        SqliteRetrieverKind::StructuredFilter => Ok(()),
     }
 }
 
@@ -337,6 +335,7 @@ fn where_sql(
         SqliteRetrieverKind::VectorCosine | SqliteRetrieverKind::VectorVec0 => {
             query_embedding_dimension(query)?;
         }
+        SqliteRetrieverKind::StructuredFilter => {}
     }
 
     if !query.scopes.is_empty() {
@@ -365,31 +364,30 @@ enum SqliteRetrieverKind {
     FulltextFts5,
     VectorCosine,
     VectorVec0,
+    StructuredFilter,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct SqliteRetrieverStrategy {
     kind: SqliteRetrieverKind,
-    limits_in_application: bool,
 }
 
 fn sqlite_retriever_strategy(strategy_id: &str) -> Result<SqliteRetrieverStrategy, RagError> {
     match strategy_id {
         "FULLTEXT" | "FULLTEXT_SQLITE_LIKE_V1" => Ok(SqliteRetrieverStrategy {
             kind: SqliteRetrieverKind::FulltextLike,
-            limits_in_application: false,
         }),
         "FULLTEXT_SQLITE_FTS5_SIMPLE_V1" => Ok(SqliteRetrieverStrategy {
             kind: SqliteRetrieverKind::FulltextFts5,
-            limits_in_application: false,
         }),
         "VECTOR" | "VECTOR_SQLITE_COSINE_V1" => Ok(SqliteRetrieverStrategy {
             kind: SqliteRetrieverKind::VectorCosine,
-            limits_in_application: false,
         }),
         "VECTOR_SQLITE_VEC0_COSINE_V1" => Ok(SqliteRetrieverStrategy {
             kind: SqliteRetrieverKind::VectorVec0,
-            limits_in_application: false,
+        }),
+        "STRUCTURED_FILTER_SQLITE_V1" => Ok(SqliteRetrieverStrategy {
+            kind: SqliteRetrieverKind::StructuredFilter,
         }),
         _ => Err(RagError::SearchRouteUnavailable),
     }
@@ -447,6 +445,7 @@ fn search_text_expr(
             Ok(format!("{fts_table}.search_text"))
         }
         SqliteRetrieverKind::VectorCosine | SqliteRetrieverKind::VectorVec0 => text_expr("text"),
+        SqliteRetrieverKind::StructuredFilter => text_expr("text"),
     }
 }
 
