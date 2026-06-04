@@ -64,6 +64,7 @@ import {
   useAguiDebugPreferences,
   type AguiDebugPreferences,
 } from "@/domain/settings/model/aguiDebugPreferences";
+import { deriveReasoningPreview, truncateLabel } from "./chatReasoningPreview";
 import type {
   ChatAguiEvent,
   ChatAguiStreamEvent,
@@ -522,31 +523,6 @@ function formatJsonBlockValue(value: unknown) {
   return stringifyPreview(value);
 }
 
-function truncateLabel(value: string, maxLength = 64) {
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
-}
-
-function reasoningPreviewLabel(value: string, maxLength = 168) {
-  return truncateLabel(value.replace(/[#>*_`~-]+/g, " "), maxLength);
-}
-
-function reasoningFirstClause(value: string) {
-  const normalized = value
-    .replace(/[#>*_`~-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!normalized) return "";
-  const stripped = normalized
-    .replace(/^the user (?:wants|asked|is asking)[^.?!]*[.?!]\s*/i, "")
-    .replace(/^i should\s+/i, "")
-    .replace(/^i need to\s+/i, "")
-    .replace(/^let me\s+/i, "");
-  const firstClause = stripped.split(/(?<=[.?!])(?:\s+|(?=[A-Z]))/)[0]?.trim() ?? "";
-  return firstClause || normalized;
-}
-
 function appendReasoningDelta(content: string, delta: string) {
   if (!content) return delta;
   if (!delta) return content;
@@ -595,16 +571,6 @@ function toolSummaryLabel(toolName: string, args: unknown) {
   const title = `${toolActionLabel(toolName, args)} ${toolName}`;
   if (!target || target === toolName) return title;
   return `${title} [${truncateLabel(target, 48)}]`;
-}
-
-function deriveReasoningPreview(detail: string, toolCards: ToolWorkCard[]) {
-  const clause = reasoningFirstClause(detail);
-  const toolCount = toolCards.filter((toolCard) => toolCard.started).length;
-  if (!toolCount) return reasoningPreviewLabel(clause || detail, 120);
-  const summary = clause
-    ? `${clause} Used ${toolCount} ${toolCount === 1 ? "tool" : "tools"}.`
-    : `Used ${toolCount} ${toolCount === 1 ? "tool" : "tools"} before replying.`;
-  return truncateLabel(summary, 120);
 }
 
 function isStructuredWorkEvent(event: ChatAguiStreamEvent) {
