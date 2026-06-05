@@ -37,6 +37,8 @@ import {
   statusLabel,
 } from "@/domain/task/model";
 import { updateTaskStatus } from "@/domain/task/api";
+import { updateMockTaskStatus } from "@/domain/task/mock/data";
+import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { cn } from "@/shared/lib/utils";
 
 type BoardScalePreset = "fit" | "100" | "90" | "80" | "70" | "60" | "50";
@@ -162,6 +164,7 @@ export function TasksKanbanPage() {
   const toast = useToast();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const boardViewportRef = useRef<HTMLDivElement | null>(null);
+  const dataSource = getServiceDataSource("task");
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const workspaceCode = activeWorkspace?.workspaceCode ?? "";
 
@@ -276,7 +279,11 @@ export function TasksKanbanPage() {
 
     setPendingTaskCode(task.taskCode);
     try {
-      await updateTaskStatus(task.taskCode, { status });
+      if (dataSource === "api") {
+        await updateTaskStatus(task.taskCode, { status });
+      } else {
+        updateMockTaskStatus(task.taskCode, { status });
+      }
       refresh();
       toast.success(`Task ${task.taskCode} moved to ${statusLabel(status)}`);
     } catch (error) {
@@ -285,7 +292,7 @@ export function TasksKanbanPage() {
     } finally {
       setPendingTaskCode(null);
     }
-  }, [canMoveTaskToStatus, parseDraggedTask, pendingTaskCode, refresh, toast]);
+  }, [canMoveTaskToStatus, dataSource, parseDraggedTask, pendingTaskCode, refresh, toast]);
 
   return (
     <div className="flex min-h-[calc(100vh-6.5rem)] flex-col">

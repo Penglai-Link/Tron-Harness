@@ -34,7 +34,7 @@ Protected task APIs live under `/api/v1/tasks`, require the existing authenticat
 - parameter_passing: query parameters
 - request: `workspaceCode`, optional `search`, `status`, `priority`, `taskType`, `sourceType`, `assigneeUserCode`, `includeArchived`
 - response: array of kanban columns with task cards
-- client_impact: `/tasks` board consumes this endpoint in API mode
+- client_impact: `/tasks` board consumes this endpoint in API mode and re-renders columns after successful drag/drop status updates
 - compatibility: board columns now represent the new status enum set
 
 ### GET /api/v1/tasks - Task list
@@ -88,11 +88,11 @@ Protected task APIs live under `/api/v1/tasks`, require the existing authenticat
 - client_impact: detail edit controls
 - compatibility: `taskType` values are now `Feature` and `Bug`
 
-### PATCH /api/v1/tasks/{taskCode}/status - Update task status
+### POST /api/v1/tasks/{taskCode}/status - Update task status
 
 - purpose: update lifecycle status and progress
 - auth: authenticated
-- acceptance_ids: AC-TASK-05
+- acceptance_ids: AC-TASK-05, AC-TASK-09
 - parameter_passing: path variables and request body
 - request: `status`, optional `progress`
 - response: task detail
@@ -100,8 +100,8 @@ Protected task APIs live under `/api/v1/tasks`, require the existing authenticat
   - direct status update to `Archived` is invalid; archive still uses the lifecycle route
   - requested status must belong to the current task role, otherwise return `TASK_STATUS_ROLE_INVALID`
   - `Completed` forces progress to `100`
-- client_impact: detail status dropdown persists role-aware lifecycle changes
-- compatibility: replaces the old global status update contract
+- client_impact: detail status dropdown and kanban drag/drop persist role-aware lifecycle changes; kanban drag/drop sends only `status` so non-Completed progress is preserved by the backend
+- compatibility: replaces the old global status update contract; backend also accepts PATCH for existing detail compatibility
 
 ### POST /api/v1/tasks/{taskCode}/archive - Archive task
 
@@ -144,7 +144,7 @@ All task endpoints require an authenticated user through the existing backend au
 
 ## Frontend Backend Boundary
 
-The backend owns enum values, task role inference, allowed status sets, default statuses, validation, persistence, taskCode generation, same-workspace parent checks, active-subtask archive guards, effective-user assignment checks, status/progress rules, archive/restore rules, and agent/app string-link persistence. The frontend owns interaction layout, workspace/user selector UX, read-only/edit detail mode, API-mode hooks, mock/demo parity, debounced search input, and shared Toast feedback.
+The backend owns enum values, task role inference, allowed status sets, default statuses, validation, persistence, taskCode generation, same-workspace parent checks, active-subtask archive guards, effective-user assignment checks, status/progress rules, archive/restore rules, and agent/app string-link persistence. The frontend owns interaction layout, workspace/user selector UX, read-only/edit detail mode, API-mode hooks, mock/demo parity, debounced search input, drag/drop affordances, local prevalidation against `statusRules`, optimistic board feedback, rollback on status-update failure, and shared Toast feedback.
 
 ## Database And Transaction Boundary
 

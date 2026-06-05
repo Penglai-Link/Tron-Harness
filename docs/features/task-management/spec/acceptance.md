@@ -10,6 +10,7 @@
 - AC-TASK-06 [must] [business] Archive stores previous status, blocks parent archive while active subtasks exist, and restore returns to the stored active status or fallback `Open`; proof: `rtk make be-test`.
 - AC-TASK-07 [must] [interaction] Frontend create, detail, and subtask flows use role-aware task types and statuses without surfacing old enum values; proof: Playwright task workflow.
 - AC-TASK-08 [must] [business] Legacy backend task schema/data is reset once and backend task seeds are removed while frontend mock/demo parity remains available; proof: `rtk make be-test`.
+- AC-TASK-09 [must] [interaction] Task kanban cards support role-valid drag/drop status updates with rollback-safe feedback; proof: Playwright task workflow.
 
 ## Open Decisions
 

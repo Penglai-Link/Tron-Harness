@@ -16,7 +16,8 @@ Task Management evolves from the original persisted v1 loop into a superpower-al
 - status: approved_with_defaults
 - owner: clouds3n
 - source_request: implement the approved Task Management Superpower status evolution and development-stage data reset plan
-- main_agent: lead agent on feature/clouds3n/task-management
+- latest_evolution_request: task kanban cards can be dragged across valid status columns and persist through the existing status endpoint
+- main_agent: lead agent on feature/xinlangtao/task-card-drag-status/base
 - dependency_features: workspace-management, user-management-model, shared-ui-feedback
 - dependency_contracts: AGENTS.md uniform response envelope; existing Rust backend auth middleware; existing workspace and user services; existing frontend task routes and shared Toast
 
@@ -30,7 +31,7 @@ Task Management evolves from the original persisted v1 loop into a superpower-al
 
 - selected_feature: `Feature: Task Management`
 - selected_page: `Page: /tasks`, `Page: /tasks/new`, `Page: /tasks/detail`
-- selected_interactions: `Interaction: Search Task Board`; `Interaction: Create Task`; `Interaction: Edit Task Detail`; `Interaction: Add Subtask`
+- selected_interactions: `Interaction: Search Task Board`; `Interaction: Drag Task Card Status`; `Interaction: Create Task`; `Interaction: Edit Task Detail`; `Interaction: Add Subtask`
 - selected_rules: `Rule: Task Role Status Matrix`; `Rule: Workspace Scoped Task Ownership`; `Rule: Parent Child Same Workspace`
 - selected_exceptions: `Exception: Archive Active Subtasks First`; `Exception: Invalid Workspace Or Assignee`
 - selected_acceptance_source: `Acceptance: Task Management`
@@ -38,7 +39,7 @@ Task Management evolves from the original persisted v1 loop into a superpower-al
 - feature_inventory_summary: task management keeps one lightweight task surface while replacing the old global lifecycle with role-aware status behavior
 - shared_requirement_summary: backend status rules and defaults stay authoritative; frontend reflects them through the existing routes and shared Toast feedback
 - dependency_map_summary: workspace-management supplies workspace context and user-management-model supplies effective-user semantics; shared-ui-feedback supplies user-visible toast feedback
-- implementation_order_summary: backend contract and persistence reset land first, then frontend task pages and browser smoke align to the new role-aware flow
+- implementation_order_summary: backend contract and persistence reset landed first; this evolution adds the frontend drag/drop status interaction on top of the existing backend status endpoint
 
 ## Scope Boundary
 
@@ -74,17 +75,19 @@ Task Management evolves from the original persisted v1 loop into a superpower-al
   - bug: `Open`
 - Task options expansion through `GET /api/v1/tasks/options` with `statusRules` and `defaultStatuses`.
 - Task list/search, kanban projection, create, detail, PATCH update, status changes, archive/restore, and child creation through `parentTaskCode`.
+- Task kanban card drag/drop status updates through `POST /api/v1/tasks/{taskCode}/status`, with frontend role-rule prevalidation and backend validation as final authority.
 - Development-stage backend task reset by rebuilding legacy task schema/data and removing backend seed tasks.
-- Frontend minimal adaptation only:
+- Frontend minimal adaptation:
   - create page type options become `Feature` and `Bug`
   - detail page status dropdown filters by task role
   - subtask creation defaults to the parent task type
   - board/mock/demo data adopt the new type and status contract
+  - kanban cards support desktop drag/drop across valid status columns while preserving click-to-detail behavior
 
 ### Out Of Scope
 
 - Real task execution or backend execute endpoint.
-- Strict adjacent transition graph enforcement inside each role flow.
+- Strict adjacent transition graph enforcement inside each role flow; cross-status updates remain valid when the target state is allowed for the task role.
 - Import, export, delete, audit timeline, notification workflow.
 - Agent/app referential validation or dedicated agent/app management UI.
 - Global Shell workspace picker refactor.
@@ -106,8 +109,8 @@ Task remains a workspace-owned aggregate with optional parent, many user assignm
 
 - Backend: `domain::task`, `application::task`, SQLite task repository, legacy-schema reset path, and HTTP routes under `/api/v1/tasks`.
 - Frontend: `/tasks`, `/tasks/new`, and `/tasks/detail?taskCode=...`.
-- Routing: board card click still navigates by backend-generated `taskCode`.
-- Tests: backend API integration tests plus focused Playwright coverage for workspace selection, debounced board search, create, detail, role-filtered statuses, subtask inheritance, archive/restore, and backend reset expectations.
+- Routing: board card click still navigates by backend-generated `taskCode`; drag/drop on the board updates status without navigating.
+- Tests: backend API integration tests plus focused Playwright coverage for workspace selection, debounced board search, create, detail, role-filtered statuses, subtask inheritance, archive/restore, drag/drop status updates, and backend reset expectations.
 
 ## Repository Findings
 
@@ -115,6 +118,7 @@ Task remains a workspace-owned aggregate with optional parent, many user assignm
 - Backend task persistence currently seeds old example tasks and still stores old status/type enums inside SQLite constraints.
 - The repository does not have migration tracking; task schema reset must therefore be conditional and idempotent rather than an unconditional destructive SQL batch on every startup.
 - The current feature branch is `feature/clouds3n/task-management` in the active checkout at `/Users/clouds3n/Coding/open-source/ai/Tron`.
+- This evolution runs in the Lite Spec worktree `/Users/langtaoxin/.codex/worktrees/tron/feature/xinlangtao/task-card-drag-status/base` with frontend implementation delegated to the sibling worker worktree.
 
 ## Open Decisions
 

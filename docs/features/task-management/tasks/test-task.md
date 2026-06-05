@@ -4,7 +4,7 @@
 
 - feature_slug: task-management
 - status: done
-- execution_mode: solo
+- execution_mode: hybrid
 
 ## TDD Contract
 
@@ -20,10 +20,11 @@ Tests must provide RED evidence before implementation and GREEN/VERIFY evidence 
 - AC-TASK-06 | phase: tdd | owner: lead | scope: archive/restore fallback and active-subtask guard coverage in `task_management_api.rs` | command_ref: CMD-BE-TEST | status: done.
 - AC-TASK-07 | phase: tdd | owner: lead | scope: `tron-frontend/tests/task-management-smoke.spec.ts` role-aware UI and network assertions | command_ref: CMD-TASK-BROWSER | status: done.
 - AC-TASK-08 | phase: tdd | owner: lead | scope: backend reset path and frontend mock/demo parity verification | command_ref: CMD-BE-TEST | status: done.
+- AC-TASK-09 | phase: tdd | owner: tdd-slice-worker | scope: `tron-frontend/tests/task-management-smoke.spec.ts` drag/drop status update, invalid drop, failure rollback, same-column no-op, and click navigation assertions | command_ref: CMD-TASK-BROWSER | status: done.
 
 ## Worktree Notes
 
-Lead checkout: `/Users/clouds3n/Coding/open-source/ai/Tron` on branch `feature/clouds3n/task-management`.
+Lead checkout: `/Users/langtaoxin/.codex/worktrees/tron/feature/xinlangtao/task-card-drag-status/base` on branch `feature/xinlangtao/task-card-drag-status/base`.
 
 ## Integration Notes
 
