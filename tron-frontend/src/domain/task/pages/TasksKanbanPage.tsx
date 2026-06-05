@@ -337,7 +337,7 @@ export function TasksKanbanPage() {
               aria-label={`${column.title} task column`}
               className={cn(
                 "flex shrink-0 flex-col rounded-lg bg-[var(--color-surface-container)] transition",
-                dragOverStatus === column.status ? "ring-2 ring-[var(--color-primary)]" : "",
+                dragOverStatus === column.status ? "ring-2 ring-inset ring-[var(--color-primary)]" : "",
               )}
               data-task-kanban-column={column.status}
               data-testid={`task-kanban-dropzone-${column.status}`}
