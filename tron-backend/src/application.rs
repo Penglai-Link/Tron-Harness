@@ -5,6 +5,7 @@ pub mod chat;
 pub mod graph;
 pub mod llm;
 pub mod mcp;
+pub mod memory;
 pub mod model;
 pub mod open_app;
 pub mod rag;

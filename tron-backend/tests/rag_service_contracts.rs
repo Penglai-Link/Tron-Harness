@@ -255,6 +255,31 @@ fn rag_service_lists_and_reads_profile_configuration_without_sqlite_details() {
         json!(["RESULT_LIST"])
     );
 
+    let memory_query = service
+        .get_profile("memory-query-v1")
+        .expect("memory query profile should be readable");
+    let route_retrievers = memory_query.config["routes"]
+        .as_array()
+        .expect("memory query profile should declare routes")
+        .iter()
+        .map(|route| route["retriever"].as_str().unwrap_or_default())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        route_retrievers,
+        vec![
+            "FULLTEXT_SQLITE_FTS5_SIMPLE_V1",
+            "VECTOR_SQLITE_VEC0_COSINE_V1"
+        ]
+    );
+    assert!(
+        !route_retrievers.contains(&"STRUCTURED_FILTER_SQLITE_V1"),
+        "memory-query-v1 must stay query-only and avoid broad structured filter retrieval"
+    );
+    assert_eq!(
+        memory_query.config["contextPolicy"]["supportedStrategies"],
+        json!(["RESULT_LIST"])
+    );
+
     let profile = service
         .get_profile("memory-related-v1")
         .expect("seeded retrieval profile should be readable");

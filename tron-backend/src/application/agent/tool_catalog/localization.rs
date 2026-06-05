@@ -114,6 +114,10 @@ fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.domains.app.description" => {
             "Browse workspace apps and execution targets."
         }
+        "agent.toolCatalog.domains.memory.name" => "Memory Tools",
+        "agent.toolCatalog.domains.memory.description" => {
+            "Search, save, and soft-delete scoped memories."
+        }
         "agent.toolCatalog.domains.model.name" => "Model Tools",
         "agent.toolCatalog.domains.model.description" => {
             "Inspect effective model catalog configuration."
@@ -156,6 +160,98 @@ fn translate_en_us(key: &str) -> &'static str {
             "Returns one workspace detail record."
         }
         "agent.toolCatalog.tools.workspace.get.params.workspaceCode" => "Workspace code to load.",
+        "agent.toolCatalog.tools.memory.search.name" => "Search memories",
+        "agent.toolCatalog.tools.memory.search.description" => {
+            "Search scoped memories or build a context pack for the current agent run."
+        }
+        "agent.toolCatalog.tools.memory.search.sampleResultSummary" => {
+            "Returns matching memory items and an optional context pack."
+        }
+        "agent.toolCatalog.tools.memory.search.params.query" => {
+            "Search text. Optional when memoryCode is set or when searching accessible scoped memories with an empty query."
+        }
+        "agent.toolCatalog.tools.memory.search.params.mode" => {
+            "SEARCH returns results; CONTEXT_PACK returns baseline injectable memories plus query-related memories."
+        }
+        "agent.toolCatalog.tools.memory.search.params.limit" => {
+            "Maximum number of memories to return. Defaults to 10."
+        }
+        "agent.toolCatalog.tools.memory.search.params.tokenBudget" => {
+            "Maximum context-pack token budget. Defaults to 1200."
+        }
+        "agent.toolCatalog.tools.memory.search.params.trace" => {
+            "Whether to persist a RAG search trace for diagnostics."
+        }
+        "agent.toolCatalog.tools.memory.save.name" => "Save memory",
+        "agent.toolCatalog.tools.memory.save.description" => {
+            "Create or update a scoped memory card."
+        }
+        "agent.toolCatalog.tools.memory.save.sampleResultSummary" => {
+            "Returns the saved memory code and write status."
+        }
+        "agent.toolCatalog.tools.memory.save.params.text" => {
+            "Memory text to store. Required for new memories."
+        }
+        "agent.toolCatalog.tools.memory.save.params.title" => "Optional memory title.",
+        "agent.toolCatalog.tools.memory.save.params.semanticKey" => {
+            "Stable semantic key used to derive the memory identity when memoryCode is omitted."
+        }
+        "agent.toolCatalog.tools.memory.save.params.injectable" => {
+            "Whether the memory may be included in context packs."
+        }
+        "agent.toolCatalog.tools.memory.save.params.importanceScore" => {
+            "Optional importance score."
+        }
+        "agent.toolCatalog.tools.memory.save.params.confidenceScore" => {
+            "Optional confidence score."
+        }
+        "agent.toolCatalog.tools.memory.save.params.qualityScore" => "Optional quality score.",
+        "agent.toolCatalog.tools.memory.save.params.expiresAt" => {
+            "Optional expiration timestamp in milliseconds."
+        }
+        "agent.toolCatalog.tools.memory.save.params.derivedSourceType" => {
+            "Optional upstream source type for derived memories."
+        }
+        "agent.toolCatalog.tools.memory.save.params.derivedSourceCode" => {
+            "Optional upstream source code for derived memories."
+        }
+        "agent.toolCatalog.tools.memory.save.params.sourceRefs" => {
+            "Optional array of source reference objects."
+        }
+        "agent.toolCatalog.tools.memory.delete.name" => "Delete memory",
+        "agent.toolCatalog.tools.memory.delete.description" => {
+            "Soft-delete a memory by archiving or disabling it."
+        }
+        "agent.toolCatalog.tools.memory.delete.sampleResultSummary" => {
+            "Returns the memory code and delete action."
+        }
+        "agent.toolCatalog.tools.memory.delete.params.reason" => {
+            "Human-readable reason for deleting the memory."
+        }
+        "agent.toolCatalog.tools.memory.delete.params.deleteMode" => {
+            "ARCHIVE marks the memory archived; DISABLE marks it disabled."
+        }
+        "agent.toolCatalog.tools.memory.common.params.memoryCode" => {
+            "Memory code in U/D/S:scopeCode:sourceCode:sourceVersion format."
+        }
+        "agent.toolCatalog.tools.memory.common.params.scope" => {
+            "Memory scope. USER uses the current user, WORK_DOMAIN uses the current work domain, SPACE uses the current workspace."
+        }
+        "agent.toolCatalog.tools.memory.common.params.scopeCode" => {
+            "Optional explicit scope code. It must belong to the current run context."
+        }
+        "agent.toolCatalog.tools.memory.common.params.memoryType" => {
+            "Optional memory type filter or value."
+        }
+        "agent.toolCatalog.tools.memory.common.params.memoryStatus" => {
+            "Memory status. Searches default to ACTIVE."
+        }
+        "agent.toolCatalog.tools.memory.common.params.reviewStatus" => {
+            "Review status. Searches default to APPROVED."
+        }
+        "agent.toolCatalog.tools.memory.common.params.metadata" => {
+            "Optional memory metadata object."
+        }
         "agent.toolCatalog.tools.app.list.name" => "List apps",
         "agent.toolCatalog.tools.app.list.description" => {
             "List apps in the current or specified workspace."
@@ -247,6 +343,10 @@ fn translate_zh_cn(key: &str) -> &'static str {
     match key {
         "agent.toolCatalog.domains.app.name" => "应用工具",
         "agent.toolCatalog.domains.app.description" => "查看工作区应用和执行目标。",
+        "agent.toolCatalog.domains.memory.name" => "记忆工具",
+        "agent.toolCatalog.domains.memory.description" => {
+            "检索、保存和软删除有作用域的 Agent 记忆。"
+        }
         "agent.toolCatalog.domains.model.name" => "模型工具",
         "agent.toolCatalog.domains.model.description" => "查看生效中的模型目录配置。",
         "agent.toolCatalog.domains.skill.name" => "技能工具",
@@ -271,6 +371,68 @@ fn translate_zh_cn(key: &str) -> &'static str {
         "agent.toolCatalog.tools.workspace.get.description" => "根据工作区编码读取工作区元数据。",
         "agent.toolCatalog.tools.workspace.get.sampleResultSummary" => "返回单个工作区详情记录。",
         "agent.toolCatalog.tools.workspace.get.params.workspaceCode" => "要读取的工作区编码。",
+        "agent.toolCatalog.tools.memory.search.name" => "检索记忆",
+        "agent.toolCatalog.tools.memory.search.description" => {
+            "检索当前运行上下文可访问的记忆，或生成可注入上下文包。"
+        }
+        "agent.toolCatalog.tools.memory.search.sampleResultSummary" => {
+            "返回匹配的记忆条目和可选上下文包。"
+        }
+        "agent.toolCatalog.tools.memory.search.params.query" => {
+            "检索文本；提供 memoryCode 或使用空查询检索可访问记忆时可省略。"
+        }
+        "agent.toolCatalog.tools.memory.search.params.mode" => {
+            "SEARCH 返回结果列表；CONTEXT_PACK 返回默认可注入记忆和当前 query 相关记忆。"
+        }
+        "agent.toolCatalog.tools.memory.search.params.limit" => "最多返回的记忆数量，默认 10。",
+        "agent.toolCatalog.tools.memory.search.params.tokenBudget" => {
+            "上下文包 token 预算上限，默认 1200。"
+        }
+        "agent.toolCatalog.tools.memory.search.params.trace" => "是否记录 RAG 检索诊断轨迹。",
+        "agent.toolCatalog.tools.memory.save.name" => "保存记忆",
+        "agent.toolCatalog.tools.memory.save.description" => "创建或更新有作用域的记忆卡片。",
+        "agent.toolCatalog.tools.memory.save.sampleResultSummary" => {
+            "返回保存后的 memoryCode 和写入状态。"
+        }
+        "agent.toolCatalog.tools.memory.save.params.text" => "要保存的记忆正文；新建记忆时必填。",
+        "agent.toolCatalog.tools.memory.save.params.title" => "可选的记忆标题。",
+        "agent.toolCatalog.tools.memory.save.params.semanticKey" => {
+            "稳定语义键；未传 memoryCode 时用于派生记忆身份。"
+        }
+        "agent.toolCatalog.tools.memory.save.params.injectable" => "该记忆是否可进入上下文包。",
+        "agent.toolCatalog.tools.memory.save.params.importanceScore" => "可选的重要性评分。",
+        "agent.toolCatalog.tools.memory.save.params.confidenceScore" => "可选的置信度评分。",
+        "agent.toolCatalog.tools.memory.save.params.qualityScore" => "可选的质量评分。",
+        "agent.toolCatalog.tools.memory.save.params.expiresAt" => "可选的过期时间戳，单位毫秒。",
+        "agent.toolCatalog.tools.memory.save.params.derivedSourceType" => "可选的派生来源类型。",
+        "agent.toolCatalog.tools.memory.save.params.derivedSourceCode" => "可选的派生来源编码。",
+        "agent.toolCatalog.tools.memory.save.params.sourceRefs" => "可选的来源引用对象数组。",
+        "agent.toolCatalog.tools.memory.delete.name" => "删除记忆",
+        "agent.toolCatalog.tools.memory.delete.description" => "通过归档或禁用来软删除记忆。",
+        "agent.toolCatalog.tools.memory.delete.sampleResultSummary" => {
+            "返回 memoryCode 和删除动作。"
+        }
+        "agent.toolCatalog.tools.memory.delete.params.reason" => "删除记忆的人类可读原因。",
+        "agent.toolCatalog.tools.memory.delete.params.deleteMode" => {
+            "ARCHIVE 表示归档；DISABLE 表示禁用。"
+        }
+        "agent.toolCatalog.tools.memory.common.params.memoryCode" => {
+            "记忆编码，格式为 U/D/S:scopeCode:sourceCode:sourceVersion。"
+        }
+        "agent.toolCatalog.tools.memory.common.params.scope" => {
+            "记忆作用域：USER 使用当前用户，WORK_DOMAIN 使用当前工作域，SPACE 使用当前工作区。"
+        }
+        "agent.toolCatalog.tools.memory.common.params.scopeCode" => {
+            "可选的显式作用域编码，必须属于当前运行上下文。"
+        }
+        "agent.toolCatalog.tools.memory.common.params.memoryType" => "可选的记忆类型筛选或取值。",
+        "agent.toolCatalog.tools.memory.common.params.memoryStatus" => {
+            "记忆状态；检索默认使用 ACTIVE。"
+        }
+        "agent.toolCatalog.tools.memory.common.params.reviewStatus" => {
+            "审核状态；检索默认使用 APPROVED。"
+        }
+        "agent.toolCatalog.tools.memory.common.params.metadata" => "可选的记忆元数据对象。",
         "agent.toolCatalog.tools.app.list.name" => "列出应用",
         "agent.toolCatalog.tools.app.list.description" => "列出当前或指定工作区中的应用。",
         "agent.toolCatalog.tools.app.list.sampleResultSummary" => "返回分页后的应用记录。",

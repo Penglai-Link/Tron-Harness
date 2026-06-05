@@ -1,5 +1,6 @@
 mod business;
 mod coding;
+mod memory;
 
 use serde_json::Value;
 
@@ -43,6 +44,11 @@ pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
             description_i18n_key: "agent.toolCatalog.domains.fs.description",
         },
         ToolDomainDefinition {
+            domain_code: "memory",
+            name_i18n_key: "agent.toolCatalog.domains.memory.name",
+            description_i18n_key: "agent.toolCatalog.domains.memory.description",
+        },
+        ToolDomainDefinition {
             domain_code: "model",
             name_i18n_key: "agent.toolCatalog.domains.model.name",
             description_i18n_key: "agent.toolCatalog.domains.model.description",
@@ -78,6 +84,7 @@ pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
 pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
     let mut definitions = business::tool_definitions();
     definitions.extend(coding::tool_definitions());
+    definitions.extend(memory::tool_definitions());
     definitions
 }
 
