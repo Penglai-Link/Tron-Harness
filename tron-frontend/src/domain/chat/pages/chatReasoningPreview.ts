@@ -12,17 +12,35 @@ export function reasoningPreviewLabel(value: string, maxLength = 168) {
   return truncateLabel(value.replace(/[#>*_`~-]+/g, " "), maxLength);
 }
 
-export function reasoningFirstClause(value: string) {
+function normalizeReasoningText(value: string) {
   const normalized = value
     .replace(/[#>*_`~-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   if (!normalized) return "";
-  const stripped = normalized
+  return normalized
     .replace(/^the user (?:wants|asked|is asking)[^.?!。！？]*[.?!。！？]\s*/i, "")
     .replace(/^i should\s+/i, "")
     .replace(/^i need to\s+/i, "")
     .replace(/^let me\s+/i, "");
+}
+
+function splitReasoningSentences(value: string) {
+  return value.match(/[^.?!。！？]+[.?!。！？]?/g)?.map((sentence) => sentence.trim()).filter(Boolean) ?? [];
+}
+
+export function reasoningLastSentence(value: string) {
+  const normalized = normalizeReasoningText(value);
+  if (!normalized) return "";
+  const sentences = splitReasoningSentences(normalized);
+  if (sentences.length === 0) return normalized;
+  return sentences[sentences.length - 1] || normalized;
+}
+
+export function reasoningFirstClause(value: string) {
+  const normalized = normalizeReasoningText(value);
+  if (!normalized) return "";
+  const stripped = normalized;
   const sentenceBoundary = stripped.search(/[.?!。！？]/);
   if (sentenceBoundary >= 0) {
     return stripped.slice(0, sentenceBoundary + 1).trim();
@@ -31,9 +49,9 @@ export function reasoningFirstClause(value: string) {
 }
 
 export function deriveReasoningPreview(detail: string, toolCards: ReasoningPreviewToolCard[]) {
-  const clause = reasoningFirstClause(detail);
+  const sentence = reasoningLastSentence(detail);
   const toolCount = toolCards.filter((toolCard) => toolCard.started).length;
-  const previewSource = clause.length >= 20 ? clause : detail;
+  const previewSource = sentence || detail;
   const preview = reasoningPreviewLabel(previewSource, 120);
   if (!toolCount) return preview;
   const summary = preview

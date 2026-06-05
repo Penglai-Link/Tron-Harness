@@ -2,13 +2,13 @@ import { expect, test } from "@playwright/test";
 
 import { deriveReasoningPreview } from "../src/domain/chat/pages/chatReasoningPreview";
 
-test("reasoning preview keeps a readable Chinese first sentence", () => {
+test("reasoning preview keeps a readable Chinese last sentence", () => {
   const preview = deriveReasoningPreview(
     "我需要先梳理用户上下文，再确认工具调用顺序。然后再进入执行阶段。",
     [],
   );
 
-  expect(preview).toBe("我需要先梳理用户上下文，再确认工具调用顺序。");
+  expect(preview).toBe("然后再进入执行阶段。");
 });
 
 test("reasoning preview falls back to the full detail when the clause is too short", () => {
@@ -28,6 +28,6 @@ test("reasoning preview appends tool counts without losing the main detail", () 
     [{ started: true }, { started: true }],
   );
 
-  expect(preview).toContain("Reviewing session context and available skills.");
+  expect(preview).toContain("Additional detail follows.");
   expect(preview).toContain("Used 2 tools.");
 });
