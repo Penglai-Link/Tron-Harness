@@ -823,7 +823,7 @@ export function WorkspaceManagementPage() {
                     {creatingWorkspace ? pt("Saving...") : pt("Save")}
                   </Button>
                 ) : null}
-                {detail ? (
+                {detail && inspectorTab !== "create" ? (
                   <Button variant="secondary" onClick={() => prepareCreate(detail.workspaceCode)}>
                     <Plus size={16} aria-hidden="true" />
                     {pt("Child")}

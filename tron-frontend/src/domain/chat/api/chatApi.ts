@@ -8,4 +8,5 @@ export const chatApiEndpoints = {
   sendChatMessage: "POST /api/v1/chats/sessions/{sessionCode}/messages",
   streamChatMessage: "POST /api/v1/chats/sessions/{sessionCode}/messages/stream",
   listAguiEvents: "GET /api/v1/agents/agui/streams/{streamKey}/events",
+  listAguiProtocolEvents: "GET /api/v1/agents/agui/streams/{streamKey}/protocol-events",
 } as const;

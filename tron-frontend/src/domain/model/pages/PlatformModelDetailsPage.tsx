@@ -97,6 +97,7 @@ export function PlatformModelDetailsPage() {
   const { t } = useTranslation(["common"]);
   const dataSource = getServiceDataSource("model");
   const modelCode = searchParams.get("modelCode") ?? "";
+  const startsInEditMode = searchParams.get("mode") === "edit";
   const [selectedRecord, setSelectedRecord] = useState<ModelRecord | null>(null);
   const [form, setForm] = useState<ModelFormState>(emptyModelFormState());
   const [loading, setLoading] = useState(false);
@@ -153,9 +154,9 @@ export function PlatformModelDetailsPage() {
   useEffect(() => {
     if (!selectedRecord) return;
     setForm(modelFormFromRecord(selectedRecord));
-    setEditing(false);
+    setEditing(startsInEditMode);
     setVerifyPreview(null);
-  }, [selectedRecord]);
+  }, [selectedRecord, startsInEditMode]);
 
   useEffect(() => {
     if (apiKeyInputRef.current) {
@@ -185,7 +186,7 @@ export function PlatformModelDetailsPage() {
         : updatePlatformModelRecord(selectedRecord.modelCode, platformPayload(form, apiKeyRef, selectedRecord.enabled));
       toast.success(`${saved.displayName} saved`);
       setVerifyPreview(null);
-      setEditing(false);
+      exitEditing();
       await refreshPlatformModel();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Platform model could not be saved");
@@ -231,7 +232,12 @@ export function PlatformModelDetailsPage() {
     if (!selectedRecord) return;
     setForm(modelFormFromRecord(selectedRecord));
     setVerifyPreview(null);
+    exitEditing();
+  }
+
+  function exitEditing() {
     setEditing(false);
+    navigate(`/settings/models/detail?modelCode=${encodeURIComponent(modelCode)}`, { replace: true });
   }
 
   async function toggleEnabled() {

@@ -234,14 +234,6 @@ impl ModelTokenUsage {
     }
 }
 
-pub(crate) fn responses_input_items_from_messages(messages: &[AgentMessage]) -> Vec<Value> {
-    messages
-        .iter()
-        .filter(|message| !matches!(message.role.as_str(), "system" | "developer"))
-        .map(responses_input_item_json)
-        .collect::<Vec<_>>()
-}
-
 pub(crate) fn responses_input_item_json(message: &AgentMessage) -> Value {
     match message.role.as_str() {
         "system" | "developer" => json!({

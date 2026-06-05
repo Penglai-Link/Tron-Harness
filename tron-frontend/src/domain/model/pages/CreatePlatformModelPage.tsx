@@ -159,6 +159,7 @@ export function CreatePlatformModelPage() {
             state={form}
             onChange={setForm}
             apiKeyInputRef={apiKeyInputRef}
+            syncModelNameFromDisplayName
             displayNameError={duplicateDisplayName ? "displayName already exists in platform models" : undefined}
           />
         </SurfaceCard>

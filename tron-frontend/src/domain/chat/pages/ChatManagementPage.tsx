@@ -49,6 +49,7 @@ import {
   streamChatMessage,
   updateChatSession,
   useChatAguiEvents,
+  useChatAguiProtocolEvents,
   useChatMessageListBySession,
   useChatSessionGroupList,
 } from "@/domain/chat/hooks";
@@ -787,26 +788,9 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
     }
   });
 
-  if (!reasoningCards.size) {
-    const runStartEvent = events.find((event) => aguiEventType(event).toUpperCase() === "RUN_STARTED") ?? events[0];
-    if (runStartEvent) {
-      const runCode = aguiEventRunCode(runStartEvent) || "stream";
-      const terminalEvent = terminalAguiEvent(events);
-      const fallbackKey = `${runCode}:reasoning-fallback`;
-      reasoningCards.set(fallbackKey, {
-        content: "",
-        ended: Boolean(terminalEvent),
-        endMillis: terminalEvent ? aguiEventMillis(terminalEvent) : null,
-        firstMillis: aguiEventMillis(runStartEvent) ?? Date.now(),
-        id: fallbackKey,
-        runCode,
-        toolCards: [],
-      });
-    }
-  }
-
   return [
     ...Array.from(reasoningCards.values())
+      .filter((value) => value.content.trim() || value.toolCards.length > 0 || !value.ended)
       .map((value) => ({ kind: "reasoning" as const, value })),
     ...Array.from(toolCards.values())
       .filter((value) => value.started && !value.parentReasoningId)
@@ -1181,6 +1165,7 @@ function ChatModelSelector({
 }) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [expandedModelCode, setExpandedModelCode] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -1202,6 +1187,7 @@ function ChatModelSelector({
   useEffect(() => {
     if (!open) {
       setSearchQuery("");
+      setExpandedModelCode(null);
       return;
     }
     const frame = window.requestAnimationFrame(() => {
@@ -1257,19 +1243,37 @@ function ChatModelSelector({
           {filteredModels.length ? filteredModels.map((model) => (
             <button
               className={cn(
-                "flex w-full items-center rounded-md px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]",
+                "flex w-full items-start rounded-md px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]",
                 model.optionCode === selectedModelCode && "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]",
               )}
               key={model.optionCode}
               type="button"
               role="option"
+              title={model.displayName}
               aria-selected={model.optionCode === selectedModelCode}
+              onMouseEnter={() => setExpandedModelCode(model.optionCode)}
+              onMouseLeave={() => setExpandedModelCode((current) => (
+                current === model.optionCode ? null : current
+              ))}
+              onFocus={() => setExpandedModelCode(model.optionCode)}
+              onBlur={() => setExpandedModelCode((current) => (
+                current === model.optionCode ? null : current
+              ))}
               onClick={() => {
                 onSelect(model.optionCode);
                 setOpen(false);
               }}
             >
-              <span className="block min-w-0 truncate font-medium">{model.displayName}</span>
+              <span
+                className={cn(
+                  "block min-w-0 font-medium",
+                  expandedModelCode === model.optionCode
+                    ? "whitespace-normal break-all overflow-visible"
+                    : "truncate",
+                )}
+              >
+                {model.displayName}
+              </span>
             </button>
           )) : (
             <p className="px-3 py-2 text-xs text-[var(--color-on-surface-variant)]">
@@ -2036,38 +2040,26 @@ function AguiEventRail({ events }: { events: TranscriptAguiEvent[] }) {
 
 function AguiRunWorkRail({
   events,
-  pending,
-  pendingStartedAt,
   preferences,
 }: {
   events: TranscriptAguiEvent[];
-  pending?: boolean;
-  pendingStartedAt?: number | null;
   preferences: AguiDebugPreferences;
 }) {
   const userCards = buildAguiUserWorkCards(events);
-  const displayUserCards: AguiUserWorkCard[] = userCards.length || !pending
-    ? userCards
-    : [{
-      kind: "reasoning",
-      value: {
-        content: "",
-        ended: false,
-        endMillis: null,
-        firstMillis: pendingStartedAt ?? Date.now(),
-        id: "pending-reasoning",
-        runCode: "pending",
-        toolCards: [],
-      },
-    }];
+  const displayUserCards = userCards;
   const debugEvents = events.filter((event) => shouldShowAguiEventType(aguiEventType(event), preferences));
   const terminalEvent = terminalAguiEvent(events);
   const terminalRunCode = terminalEvent ? aguiEventRunCode(terminalEvent) : "";
+  const hasWorkDetails = displayUserCards.some((card) => (
+    card.kind === "reasoning"
+      ? Boolean(card.value.content.trim()) || card.value.toolCards.length > 0
+      : card.value.logs.length > 0 || Boolean(card.value.result)
+  ));
   const [expanded, setExpanded] = useState(true);
 
   useEffect(() => {
-    setExpanded(!terminalRunCode);
-  }, [terminalRunCode]);
+    setExpanded(!terminalRunCode || hasWorkDetails);
+  }, [hasWorkDetails, terminalRunCode]);
 
   if (!terminalEvent && !displayUserCards.length && !debugEvents.length) return null;
 
@@ -2112,9 +2104,9 @@ export function ChatManagementPage() {
   const activeSession = findSession(sessionGroups, activeSessionCode) ?? firstSession(sessionGroups);
   const messages = useChatMessageListBySession(activeSession?.sessionCode ?? "");
   const aguiEvents = useChatAguiEvents(activeSession?.sessionCode ?? "");
+  const aguiProtocolEvents = useChatAguiProtocolEvents(activeSession?.sessionCode ?? "");
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
   const [liveAguiEvents, setLiveAguiEvents] = useState<ChatAguiStreamEvent[]>([]);
-  const [liveAguiPendingStartedAt, setLiveAguiPendingStartedAt] = useState<number | null>(null);
   const [liveAguiAnchorMessageCode, setLiveAguiAnchorMessageCode] = useState("");
   const [sending, setSending] = useState(false);
   const [creatingSession, setCreatingSession] = useState(false);
@@ -2385,18 +2377,22 @@ export function ChatManagementPage() {
     if (visibleSessionCodeRef.current !== sessionCode) {
       visibleSessionCodeRef.current = sessionCode;
       setLiveAguiEvents([]);
-      setLiveAguiPendingStartedAt(null);
       setLiveAguiAnchorMessageCode("");
     }
   }, [activeSession?.sessionCode, messages]);
 
-  const transcriptAguiEvents = useMemo<TranscriptAguiEvent[]>(() => eventsForLatestAguiRun(liveAguiEvents), [liveAguiEvents]);
   const liveAguiPending = Boolean(
     sending
     && activeSession
     && runningSessionCode === activeSession.sessionCode
     && !liveAguiEvents.length,
   );
+  const transcriptAguiEvents = useMemo<TranscriptAguiEvent[]>(() => {
+    if (liveAguiEvents.length) return eventsForLatestAguiRun(liveAguiEvents);
+    if (liveAguiPending) return [];
+    return eventsForLatestAguiRun(aguiProtocolEvents);
+  }, [aguiProtocolEvents, liveAguiEvents, liveAguiPending]);
+  const transcriptAguiRunCode = latestAguiRunCode(transcriptAguiEvents);
   const canAbortCurrentSession = Boolean(
     sending
     && activeSession
@@ -2405,15 +2401,35 @@ export function ChatManagementPage() {
   const liveAguiAnchorIndex = useMemo(() => {
     if (!transcriptAguiEvents.length && !liveAguiPending) return -1;
 
-    const anchoredIndex = visibleMessages.findIndex((message) => message.messageCode === liveAguiAnchorMessageCode);
-    if (anchoredIndex >= 0) return anchoredIndex;
+    if (liveAguiEvents.length || liveAguiPending) {
+      const anchoredIndex = visibleMessages.findIndex((message) => message.messageCode === liveAguiAnchorMessageCode);
+      if (anchoredIndex >= 0) return anchoredIndex;
+    }
+
+    if (transcriptAguiRunCode) {
+      const assistantIndex = visibleMessages.findIndex((message) => (
+        message.role === "ASSISTANT" && message.runCode === transcriptAguiRunCode
+      ));
+      if (assistantIndex > 0) {
+        for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+          if (visibleMessages[index].role === "USER") return index;
+        }
+      }
+    }
 
     for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
       if (visibleMessages[index].role === "USER") return index;
     }
 
     return -1;
-  }, [liveAguiAnchorMessageCode, liveAguiPending, transcriptAguiEvents.length, visibleMessages]);
+  }, [
+    liveAguiAnchorMessageCode,
+    liveAguiEvents.length,
+    liveAguiPending,
+    transcriptAguiEvents.length,
+    transcriptAguiRunCode,
+    visibleMessages,
+  ]);
 
   const rightPanel = useMemo(() => {
     if (!hasActiveSession) return undefined;
@@ -2437,7 +2453,6 @@ export function ChatManagementPage() {
 
   function handleSessionSelect(sessionCode: string) {
     setActiveSessionCode(sessionCode);
-    setLiveAguiPendingStartedAt(null);
     setUnseenSessionCodes((current) => {
       if (!current.has(sessionCode)) return current;
       const next = new Set(current);
@@ -2530,7 +2545,6 @@ export function ChatManagementPage() {
     };
     setSending(true);
     setRunningSessionCode(sendingSessionCode);
-    setLiveAguiPendingStartedAt(Date.now());
     setComposer("");
     setLiveAguiEvents([]);
     setLiveAguiAnchorMessageCode(optimisticUserCode);
@@ -2553,15 +2567,15 @@ export function ChatManagementPage() {
             if (isStructuredWorkEvent(event)) {
               liveAguiObservedRef.current = true;
               if (activeSessionCodeRef.current === sendingSessionCode) {
-                setVisibleMessages((current) => current.filter((message) => message.messageCode !== optimisticAssistantCode));
+                setVisibleMessages((current) => current.filter((message) => (
+                  message.messageCode !== optimisticAssistantCode || Boolean(message.content.trim())
+                )));
               }
             }
-            setLiveAguiPendingStartedAt(null);
             setLiveAguiEvents((current) => [...current, event]);
           },
           onDelta: (delta) => {
             liveAssistantDraftRef.current = `${liveAssistantDraftRef.current}${delta}`;
-            if (liveAguiObservedRef.current) return;
             if (activeSessionCodeRef.current !== sendingSessionCode) return;
             setVisibleMessages((current) => {
               const assistantExists = current.some((message) => message.messageCode === optimisticAssistantCode);
@@ -2621,7 +2635,6 @@ export function ChatManagementPage() {
     } finally {
       setSending(false);
       setRunningSessionCode("");
-      setLiveAguiPendingStartedAt(null);
       liveAssistantDraftRef.current = "";
       liveAguiObservedRef.current = false;
       if (streamAbortControllerRef.current === abortController) {
@@ -2871,8 +2884,6 @@ export function ChatManagementPage() {
                     {liveAguiAnchorIndex >= 0 && visibleMessages[liveAguiAnchorIndex]?.messageCode === message.messageCode ? (
                       <AguiRunWorkRail
                         events={transcriptAguiEvents}
-                        pending={liveAguiPending}
-                        pendingStartedAt={liveAguiPendingStartedAt}
                         preferences={aguiDebugPreferences}
                       />
                     ) : null}

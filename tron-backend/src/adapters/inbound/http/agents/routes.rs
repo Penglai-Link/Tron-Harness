@@ -10,6 +10,7 @@ use super::handler::{
     disable_workspace_system_agent, enable_platform_system_agent, enable_workspace_system_agent,
     get_agent_run, get_main_agent_config, get_runtime_capability, get_tool,
     get_workspace_internal_agent, list_agent_runs, list_agui_stream_events,
+    list_agui_stream_protocol_events,
     list_platform_system_agents, list_runtime_capabilities, list_tool_domains, list_tools,
     list_workspace_internal_agents, list_workspace_system_agents,
     replace_workspace_internal_agent_tool_assignments, rescan_platform_system_agents,
@@ -91,5 +92,9 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/api/v1/agents/agui/streams/{stream_key}/events",
             get(list_agui_stream_events),
+        )
+        .route(
+            "/api/v1/agents/agui/streams/{stream_key}/protocol-events",
+            get(list_agui_stream_protocol_events),
         )
 }

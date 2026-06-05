@@ -24,6 +24,11 @@ interface AguiEventSnapshot {
   events: ChatAguiEvent[];
 }
 
+interface AguiProtocolEvent {
+  sseEvent: string;
+  data: ChatAguiStreamEvent;
+}
+
 export function useChatMessageListBySession(sessionCode: string) {
   return useServiceQuery<ChatMessage[]>({
     apiInitialData: () => [],
@@ -49,6 +54,29 @@ export function useChatAguiEvents(sessionCode: string) {
       const snapshot = payload as AguiEventSnapshot | { data?: AguiEventSnapshot };
       if ("data" in snapshot && snapshot.data) return snapshot.data.events ?? [];
       return "events" in snapshot ? snapshot.events ?? [] : [];
+    },
+  });
+}
+
+export function useChatAguiProtocolEvents(sessionCode: string) {
+  return useServiceQuery<ChatAguiStreamEvent[]>({
+    apiInitialData: () => [],
+    domain: "chat",
+    enabled: Boolean(sessionCode),
+    endpoint: chatApiEndpoints.listAguiProtocolEvents,
+    mockData: () => [],
+    deps: [sessionCode],
+    params: { streamKey: sessionCode },
+    select: (payload) => {
+      const records = Array.isArray(payload)
+        ? payload
+        : ("data" in (payload as { data?: unknown }) && Array.isArray((payload as { data?: unknown }).data)
+            ? (payload as { data: unknown[] }).data
+            : []);
+      return (records as AguiProtocolEvent[]).map((event) => ({
+        ...event.data,
+        type: (event.data?.type ?? event.sseEvent).toUpperCase(),
+      }));
     },
   });
 }

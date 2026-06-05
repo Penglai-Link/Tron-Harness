@@ -35,7 +35,7 @@ fn provider_role(message: &AgentMessage) -> &str {
 
 pub(super) fn text_from_content(content: &Value) -> Option<String> {
     if let Some(text) = content.as_str() {
-        return Some(text.to_owned());
+        return (!text.is_empty()).then(|| text.to_owned());
     }
 
     let text = content

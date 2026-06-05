@@ -96,6 +96,7 @@ export function WorkspaceModelDetailsPage() {
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const activeWorkspaceCode = activeWorkspace?.workspaceCode ?? "";
   const modelCode = searchParams.get("modelCode") ?? "";
+  const startsInEditMode = searchParams.get("mode") === "edit";
   const [records, setRecords] = useState<ModelRecord[]>([]);
   const [form, setForm] = useState<ModelFormState>(emptyModelFormState());
   const [allowInheritance, setAllowInheritance] = useState(true);
@@ -178,9 +179,9 @@ export function WorkspaceModelDetailsPage() {
     if (!selectedRecord) return;
     setForm(modelFormFromRecord(selectedRecord));
     setAllowInheritance(selectedRecord.allowInheritance ?? true);
-    setEditing(false);
+    setEditing(startsInEditMode && editableDefinition);
     setVerifyPreview(null);
-  }, [selectedRecord]);
+  }, [editableDefinition, selectedRecord, startsInEditMode]);
 
   useEffect(() => {
     if (apiKeyInputRef.current) {
@@ -218,7 +219,7 @@ export function WorkspaceModelDetailsPage() {
         : updateWorkspaceModelRecord(activeWorkspaceCode, selectedRecord.modelCode, payload);
       toast.success(`${saved.displayName} saved`);
       setVerifyPreview(null);
-      setEditing(false);
+      exitEditing();
       await refreshWorkspaceModels();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Workspace model could not be saved");
@@ -268,7 +269,12 @@ export function WorkspaceModelDetailsPage() {
     setForm(modelFormFromRecord(selectedRecord));
     setAllowInheritance(selectedRecord.allowInheritance ?? true);
     setVerifyPreview(null);
+    exitEditing();
+  }
+
+  function exitEditing() {
     setEditing(false);
+    navigate(`/models/detail?modelCode=${encodeURIComponent(modelCode)}`, { replace: true });
   }
 
   async function toggleEnabled() {

@@ -585,7 +585,7 @@ export function ModelRegistryPage() {
               className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]"
               onClick={() => {
                 setOpenRowMenu(null);
-                navigate(`/models/detail?modelCode=${encodeURIComponent(openMenuRow.modelCode)}`);
+                navigate(`/models/detail?modelCode=${encodeURIComponent(openMenuRow.modelCode)}&mode=edit`);
               }}
             >
               Edit

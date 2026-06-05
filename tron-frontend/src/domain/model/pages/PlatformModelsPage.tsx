@@ -406,7 +406,7 @@ export function PlatformModelsPage() {
               className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]"
               onClick={() => {
                 setOpenRowMenu(null);
-                navigate(`/settings/models/detail?modelCode=${encodeURIComponent(openMenuRow.modelCode)}`);
+                navigate(`/settings/models/detail?modelCode=${encodeURIComponent(openMenuRow.modelCode)}&mode=edit`);
               }}
             >
               {pageT("actions.edit", "Edit")}

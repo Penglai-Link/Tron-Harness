@@ -1,19 +1,18 @@
-use std::{
-    env,
-    error::Error,
-    fmt, fs,
-    net::SocketAddr,
-    path::{Path, PathBuf},
-};
+mod paths;
+
+use std::{error::Error, fmt, fs, net::SocketAddr, path::Path};
 
 use serde::Deserialize;
 
 use crate::shared::event_bus::EventBusConfig;
 
+use self::paths::{
+    default_database_url_from_home, default_graph_storage_path_from_home,
+    default_skills_registry_root_from_home, env_database_url_override, normalize_storage_path,
+};
+
 const DEFAULT_BIND_ADDRESS: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 8080;
-const DEFAULT_DATABASE_URL: &str = "tron-backend/target/tron.sqlite3";
-const DEFAULT_GRAPH_STORAGE_PATH: &str = "tron-backend/target/tron.graph.grafeo";
 const TEST_DATABASE_URL: &str = ":memory:";
 const DEFAULT_AUTH_JWT_SECRET: &str = "tron-dev-jwt-secret";
 const DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS: i64 = 900;
@@ -25,7 +24,6 @@ const DEFAULT_AUTH_GITHUB_TOKEN_URL: &str = "https://github.com/login/oauth/acce
 const DEFAULT_AUTH_GITHUB_USER_API_URL: &str = "https://api.github.com/user";
 const DEFAULT_AUTH_GITHUB_EMAILS_API_URL: &str = "https://api.github.com/user/emails";
 const DEFAULT_AUTH_GITHUB_SCOPE: &str = "read:user user:email";
-const DEFAULT_SKILLS_REGISTRY_ROOT_SUFFIX: &str = ".tron/skills-registry";
 const DEFAULT_SYSTEM_AGENT_CODEX_COMMAND: &str = "codex";
 const DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND: &str = "opencode";
 const DEFAULT_APPLICATION_CONFIG_PATH: &str =
@@ -119,6 +117,7 @@ impl AppConfig {
         let file_config = AppConfigFile::from_file(path)?;
         let mut config = Self::runtime_defaults();
         config.apply_file_overrides(file_config)?;
+        config.apply_env_overrides();
         Ok(config)
     }
 
@@ -126,8 +125,8 @@ impl AppConfig {
         Self {
             bind_address: DEFAULT_BIND_ADDRESS.into(),
             port: DEFAULT_PORT,
-            database_url: DEFAULT_DATABASE_URL.into(),
-            graph_storage_path: DEFAULT_GRAPH_STORAGE_PATH.into(),
+            database_url: default_database_url_from_home(),
+            graph_storage_path: default_graph_storage_path_from_home(),
             skills_registry_root: default_skills_registry_root_from_home(),
             system_agents: SystemAgentConfig {
                 codex_command: DEFAULT_SYSTEM_AGENT_CODEX_COMMAND.into(),
@@ -155,10 +154,10 @@ impl AppConfig {
             self.port = value;
         }
         if let Some(value) = overrides.database_url {
-            self.database_url = value;
+            self.database_url = normalize_storage_path(value);
         }
         if let Some(value) = overrides.graph_storage_path {
-            self.graph_storage_path = value;
+            self.graph_storage_path = normalize_storage_path(value);
         }
         if let Some(value) = overrides.skills_registry_root {
             self.skills_registry_root = value;
@@ -176,6 +175,12 @@ impl AppConfig {
             self.event_bus.apply_overrides(value);
         }
         Ok(())
+    }
+
+    fn apply_env_overrides(&mut self) {
+        if let Some(value) = env_database_url_override() {
+            self.database_url = value;
+        }
     }
 
     pub fn socket_addr(&self) -> Result<SocketAddr, ConfigError> {
@@ -500,14 +505,6 @@ impl Default for AppConfig {
             event_bus: EventBusConfig::default(),
         }
     }
-}
-
-fn default_skills_registry_root_from_home() -> String {
-    env::var("HOME")
-        .map(|home| PathBuf::from(home).join(DEFAULT_SKILLS_REGISTRY_ROOT_SUFFIX))
-        .unwrap_or_else(|_| PathBuf::from(DEFAULT_SKILLS_REGISTRY_ROOT_SUFFIX))
-        .display()
-        .to_string()
 }
 
 #[derive(Debug)]

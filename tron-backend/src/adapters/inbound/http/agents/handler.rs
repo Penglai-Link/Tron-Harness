@@ -445,3 +445,18 @@ pub async fn list_agui_stream_events(
         Err(error) => agent_agui_error_response(error),
     }
 }
+
+pub async fn list_agui_stream_protocol_events(
+    State(state): State<AppState>,
+    _auth: RequestAuthContext,
+    Path(stream_key): Path<String>,
+) -> Response {
+    let service = AgentAguiStreamService::with_replay_store(
+        state.agui_events.clone(),
+        state.agui_replay_store.clone(),
+    );
+    match service.protocol_events(&stream_key) {
+        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Err(error) => agent_agui_error_response(error),
+    }
+}

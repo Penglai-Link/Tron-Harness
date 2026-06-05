@@ -164,6 +164,32 @@ async fn agui_stream_adapter_converts_replayed_agent_events_safely() {
     assert!(!event_json.contains("sk-agui-secret"));
     assert!(!event_json.contains("request_body"));
 
+    let protocol_response = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/agents/agui/streams/{stream_key}/protocol-events"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(protocol_response.status(), StatusCode::OK);
+    let protocol_events = response_json(protocol_response).await;
+    assert_eq!(protocol_events["code"], json!("SUCCESS"));
+    let protocol_records = protocol_events["data"]
+        .as_array()
+        .expect("protocol events should be an array");
+    assert!(
+        protocol_records
+            .iter()
+            .any(|event| event["sseEvent"] == "RUN_STARTED")
+    );
+    assert!(
+        protocol_records
+            .iter()
+            .any(|event| event["sseEvent"] == "TEXT_MESSAGE_END")
+    );
+
     let deactivate = request_with_headers(
         &app,
         Method::DELETE,

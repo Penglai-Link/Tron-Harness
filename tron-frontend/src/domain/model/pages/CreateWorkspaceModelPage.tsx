@@ -177,6 +177,7 @@ export function CreateWorkspaceModelPage() {
               state={form}
               onChange={setForm}
               apiKeyInputRef={apiKeyInputRef}
+              syncModelNameFromDisplayName
               displayNameError={duplicateDisplayName ? `displayName already exists in workspace ${activeWorkspaceCode}` : undefined}
             />
 

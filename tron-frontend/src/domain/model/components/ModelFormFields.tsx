@@ -1,4 +1,7 @@
-import type { RefObject } from "react";
+import {
+  useRef,
+  type RefObject,
+} from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -159,6 +162,7 @@ export function ModelFormFields({
   displayNameError,
   onApiKeyDirtyChange,
   readOnly,
+  syncModelNameFromDisplayName,
   state,
   onChange,
 }: {
@@ -168,14 +172,34 @@ export function ModelFormFields({
   displayNameError?: string;
   onApiKeyDirtyChange?: (dirty: boolean) => void;
   readOnly?: boolean;
+  syncModelNameFromDisplayName?: boolean;
   state: ModelFormState;
   onChange: (nextState: ModelFormState) => void;
 }) {
+  const modelNameDirtyRef = useRef(false);
+
   function patch<K extends keyof ModelFormState>(key: K, value: ModelFormState[K]) {
     onChange({
       ...state,
       [key]: value,
     });
+  }
+
+  function patchDisplayName(value: string) {
+    onChange({
+      ...state,
+      displayName: value,
+      modelName: syncModelNameFromDisplayName && !modelNameDirtyRef.current
+        ? value
+        : state.modelName,
+    });
+  }
+
+  function patchModelName(value: string) {
+    if (syncModelNameFromDisplayName) {
+      modelNameDirtyRef.current = true;
+    }
+    patch("modelName", value);
   }
 
   function defaultMaxTokensValue() {
@@ -195,14 +219,14 @@ export function ModelFormFields({
         <Field label="Display Name" error={displayNameError}>
           <TextInput
             value={state.displayName}
-            onChange={(event) => patch("displayName", event.target.value)}
+            onChange={(event) => patchDisplayName(event.target.value)}
             disabled={readOnly}
           />
         </Field>
         <Field label="Vendor Model ID">
           <TextInput
             value={state.modelName}
-            onChange={(event) => patch("modelName", event.target.value)}
+            onChange={(event) => patchModelName(event.target.value)}
             disabled={readOnly}
           />
         </Field>

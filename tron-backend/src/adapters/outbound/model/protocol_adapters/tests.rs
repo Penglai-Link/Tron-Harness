@@ -149,41 +149,6 @@ fn chat_stream_usage_chunk_maps_openai_compatible_token_usage() {
 }
 
 #[test]
-fn chat_stream_request_asks_for_usage_chunk() {
-    let config = AgentModelConfig {
-        model_code: "MODEL-1".into(),
-        protocol: AgentModelProtocol::ChatCompletions,
-        base_url: "https://provider.test/v1".into(),
-        api_path: None,
-        api_key: "sk-test".into(),
-        model_name: "gpt-test".into(),
-        thinking_enabled: true,
-        responses_stateful_enabled: false,
-        temperature: None,
-        max_tokens: None,
-        context_window_tokens: Some(128_000),
-        top_p: None,
-        max_retries: None,
-    };
-    let body = ChatCompletionsAdapter
-        .stream_request_body(
-            &config,
-            &ModelRequest {
-            messages: vec![AgentMessage::user("hello")],
-            tools: vec![],
-            system_agent_session_id: None,
-            response_input_items: None,
-            previous_response_id: None,
-        },
-        )
-        .expect("stream request should build");
-
-    assert_eq!(body["stream"], json!(true));
-    assert_eq!(body["stream_options"]["include_usage"], json!(true));
-    assert_eq!(body["enable_thinking"], json!(true));
-}
-
-#[test]
 fn request_builders_default_parallel_tool_calls_to_true_when_tools_are_present() {
     let config = AgentModelConfig {
         model_code: "MODEL-1".into(),

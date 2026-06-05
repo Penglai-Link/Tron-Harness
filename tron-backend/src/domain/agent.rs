@@ -33,11 +33,9 @@ pub use management::{
 };
 pub use message::AgentMessage;
 pub use model_config::AgentModelConfig;
+pub(crate) use model_exchange::responses_input_item_json;
 pub use model_exchange::{
     ModelRequest, ModelResponse, ModelStreamEvent, ModelStreamEventKind, ModelTokenUsage, ToolCall,
-};
-pub(crate) use model_exchange::{
-    responses_input_item_json, responses_input_items_from_messages,
 };
 pub use run::{AgentRunResult, AgentRunStatus};
 pub use tool::{

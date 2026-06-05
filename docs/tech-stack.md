@@ -33,7 +33,7 @@ The project is designed to produce a single backend-driven runtime artifact.
 
 - Frontend can run independently using Vite dev server
 - Backend can run independently using Cargo
-- Backend storage is selected by backend configuration. `TRON_BACKEND_DATABASE_URL` points the current SQLite implementation at a file path or SQLite URI.
+- Backend storage is selected by backend configuration. `TRON_BACKEND_DATABASE_URL` points the current SQLite implementation at a file path or SQLite URI, and the default SQLite file lives under `$HOME/.tron/tron.sqlite3`.
 - Frontend components use mock data by default
 - API integration is isolated behind hooks
 - Frontend data source selection is environment-driven:

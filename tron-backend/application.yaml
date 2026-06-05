@@ -1,7 +1,5 @@
 bindAddress: 127.0.0.1
 port: 8080
-databaseUrl: tron-backend/target/tron.sqlite3
-graphStoragePath: tron-backend/target/tron.graph.grafeo
 
 systemAgents:
   codexCommand: codex
