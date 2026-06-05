@@ -20,8 +20,10 @@
 - chat_model: `tron-frontend/src/domain/chat/model/ChatModel.ts`
 - backend_runtime: `tron-backend/src/application/agent/runtime.rs`
 - backend_protocol: `tron-backend/src/application/agent/agui_stream.rs`
+- backend_replay_store: `tron-backend/src/adapters/outbound/persistence/sqlite/agent_event_replay_store.rs`
+- chat_stream_handler: `tron-backend/src/adapters/inbound/http/chats/handler.rs`
 
 ## Current Status
 
 - status: implementation_verified
-- last_updated: 2026-06-04
+- last_updated: 2026-06-05

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 use crate::{
     domain::agent::{
@@ -15,7 +15,14 @@ pub enum AgentAguiStreamError {
 }
 
 pub trait AgentAguiReplayStore: Send + Sync {
+    fn append_protocol_event(
+        &self,
+        stream_key: &str,
+        event: AgentAguiProtocolEvent,
+    ) -> Result<(), String>;
+
     fn replay_agui_events(&self, stream_key: &str) -> Result<Vec<AgentAguiEvent>, String>;
+
     fn replay_protocol_events(
         &self,
         stream_key: &str,
@@ -70,14 +77,12 @@ impl AgentAguiStreamService {
             .into_iter()
             .filter_map(|event| translate_agui_event(&stream_key, &event))
             .collect::<Vec<_>>();
-        let events = if memory_events.is_empty() {
-            self.replay_store
-                .as_ref()
-                .and_then(|store| store.replay_agui_events(&stream_key).ok())
-                .unwrap_or_default()
-        } else {
-            memory_events
-        };
+        let stored_events = self
+            .replay_store
+            .as_ref()
+            .and_then(|store| store.replay_agui_events(&stream_key).ok())
+            .unwrap_or_default();
+        let events = merge_agui_events(stored_events, memory_events);
         Ok(AgentAguiEventSnapshot {
             stream_key,
             active_streams: snapshot.active_streams,
@@ -97,14 +102,24 @@ impl AgentAguiStreamService {
             .into_iter()
             .flat_map(|event| translate_protocol_events(&stream_key, &event))
             .collect::<Vec<_>>();
-        if memory_events.is_empty() {
-            return Ok(self
-                .replay_store
-                .as_ref()
-                .and_then(|store| store.replay_protocol_events(&stream_key).ok())
-                .unwrap_or_default());
+        let stored_events = self
+            .replay_store
+            .as_ref()
+            .and_then(|store| store.replay_protocol_events(&stream_key).ok())
+            .unwrap_or_default();
+        Ok(merge_protocol_events(stored_events, memory_events))
+    }
+
+    pub fn record_protocol_event(
+        &self,
+        stream_key: &str,
+        event: AgentAguiProtocolEvent,
+    ) -> Result<(), AgentAguiStreamError> {
+        let stream_key = normalized_stream_key(stream_key)?;
+        if let Some(store) = self.replay_store.as_ref() {
+            let _ = store.append_protocol_event(&stream_key, event);
         }
-        Ok(memory_events)
+        Ok(())
     }
 
     fn state(&self, stream_key: String) -> AgentAguiStreamState {
@@ -125,4 +140,33 @@ fn normalized_stream_key(stream_key: &str) -> Result<String, AgentAguiStreamErro
         return Err(AgentAguiStreamError::StreamKeyRequired);
     }
     Ok(stream_key.to_string())
+}
+
+fn merge_agui_events(
+    stored_events: Vec<AgentAguiEvent>,
+    memory_events: Vec<AgentAguiEvent>,
+) -> Vec<AgentAguiEvent> {
+    let mut seen = BTreeSet::new();
+    let mut merged = Vec::new();
+    for event in stored_events.into_iter().chain(memory_events) {
+        if seen.insert(event.id.clone()) {
+            merged.push(event);
+        }
+    }
+    merged
+}
+
+fn merge_protocol_events(
+    stored_events: Vec<AgentAguiProtocolEvent>,
+    memory_events: Vec<AgentAguiProtocolEvent>,
+) -> Vec<AgentAguiProtocolEvent> {
+    let mut seen = BTreeSet::new();
+    let mut merged = Vec::new();
+    for event in stored_events.into_iter().chain(memory_events) {
+        let key = serde_json::to_string(&event).unwrap_or_else(|_| format!("{event:?}"));
+        if seen.insert(key) {
+            merged.push(event);
+        }
+    }
+    merged
 }

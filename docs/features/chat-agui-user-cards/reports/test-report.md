@@ -10,12 +10,14 @@
 | AC-AGUI-04 | CMD-BE-TEST, CMD-BE-CHECK | passed | `rtk make be-check` and `rtk make be-test` passed. Focused backend tests prove runtime publishes `tool_call_id`, `tool_name`, args, result payloads, and protocol conversion emits matching `TOOL_CALL_START`, `TOOL_CALL_ARGS`, `ACTIVITY_DELTA`, `TOOL_CALL_RESULT`, and `TOOL_CALL_END` fields. |
 | AC-AGUI-05 | CMD-FE-AGUI-BROWSER, CMD-BE-CHAT-STREAM | passed | Frontend regression injects stale prior-run events and verifies the visible `Worked for` duration and `Thinking` card only use the latest run. Backend regression `chat_stream_only_emits_events_for_current_run` verifies a second stream response does not replay the first run delta. |
 | AC-AGUI-06 | CMD-BE-AGENT-RUNTIME, CMD-BE-CHAT-STREAM | passed | Runtime now publishes `agent.reasoning.delta` immediately after `agent.model.requested`, protocol conversion exposes it as `REASONING_MESSAGE_CONTENT`, and chat stream tests verify both internal reasoning progress and model reasoning deltas stream without entering final assistant output. |
+| AC-AGUI-07 | CMD-FE-SESSION-AGUI-BROWSER, CMD-FE-CHECK, CMD-BE-CHECK | passed | Real Chromium against live `localhost:5173`/`localhost:8080` verified `SESSION-735200000000000012` replayed two completed user turns with two `Worked for` rails and two `Thought for` cards on initial load, after page refresh, and after creating `SESSION-735200000000000013` then switching back. Backend replay now persists HTTP-layer system-agent live protocol events and merges SQLite replay with in-memory AG-UI sink data so refresh and chat switching retain recent completed work rails. |
 
 ## Final Validation
 
 - `rtk make fe-check` passed.
 - `rtk make be-check` passed.
 - `rtk make be-test` passed.
+- Real Chromium session replay check passed for `SESSION-735200000000000012`: initial, refresh, and switch-back states each showed `workedCount: 2`, `thoughtCount: 2`, and `assistantCount: 2`.
 - `rtk npm --prefix tron-frontend exec playwright -- test chat-agui-user-cards.spec.ts --reporter=line` passed.
 - `rtk cargo test --manifest-path tron-backend/Cargo.toml --test agent_runtime -- --nocapture` passed.
 - `rtk cargo test --manifest-path tron-backend/Cargo.toml --test chat_management_api chat_stream -- --nocapture` passed.

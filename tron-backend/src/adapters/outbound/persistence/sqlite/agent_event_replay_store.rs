@@ -1,4 +1,10 @@
-use std::{fs, path::Path, sync::Mutex};
+use std::{
+    collections::hash_map::DefaultHasher,
+    fs,
+    hash::{Hash, Hasher},
+    path::Path,
+    sync::Mutex,
+};
 
 use rusqlite::{Connection, params};
 
@@ -151,9 +157,73 @@ impl SqliteAgentEventReplayStore {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|error| format!("agent event replay query collect failed: {error}"))
     }
+
+    fn persist_protocol_event(
+        &self,
+        stream_key: &str,
+        event: AgentAguiProtocolEvent,
+    ) -> Result<(), String> {
+        let stream_key = stream_key.trim();
+        if stream_key.is_empty() {
+            return Ok(());
+        }
+        let payload_json = serde_json::to_string(&event)
+            .map_err(|error| format!("agent event replay serialize protocol failed: {error}"))?;
+        let run_code = event
+            .data
+            .get("runId")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string);
+        let occurred_at = event
+            .data
+            .get("timestamp")
+            .and_then(serde_json::Value::as_i64)
+            .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
+        let bus_event_id = synthetic_protocol_event_id(stream_key, &payload_json);
+        let created_at = chrono::Utc::now().timestamp_millis();
+        let connection = self
+            .connection
+            .lock()
+            .expect("agent event replay connection mutex poisoned");
+        connection
+            .execute(
+                "INSERT OR IGNORE INTO agent_runtime_event_replay (
+                    bus_event_id,
+                    stream_key,
+                    run_code,
+                    occurred_at,
+                    canonical_event_code,
+                    category,
+                    ordinal,
+                    sse_event,
+                    payload_json,
+                    created_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, 'PROTOCOL', 0, ?6, ?7, ?8)",
+                params![
+                    bus_event_id,
+                    stream_key,
+                    run_code,
+                    occurred_at,
+                    event.sse_event,
+                    event.sse_event,
+                    payload_json,
+                    created_at,
+                ],
+            )
+            .map_err(|error| format!("agent event replay insert protocol failed: {error}"))?;
+        Ok(())
+    }
 }
 
 impl AgentAguiReplayStore for SqliteAgentEventReplayStore {
+    fn append_protocol_event(
+        &self,
+        stream_key: &str,
+        event: AgentAguiProtocolEvent,
+    ) -> Result<(), String> {
+        self.persist_protocol_event(stream_key, event)
+    }
+
     fn replay_agui_events(&self, stream_key: &str) -> Result<Vec<AgentAguiEvent>, String> {
         self.replay_by_category(stream_key, "AGUI")?
             .into_iter()
@@ -207,4 +277,11 @@ fn ensure_database_parent(database_url: &str) -> Result<(), String> {
             .map_err(|error| format!("agent event replay database directory failed: {error}"))?;
     }
     Ok(())
+}
+
+fn synthetic_protocol_event_id(stream_key: &str, payload_json: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    stream_key.hash(&mut hasher);
+    payload_json.hash(&mut hasher);
+    format!("synthetic-protocol:{:016x}", hasher.finish())
 }

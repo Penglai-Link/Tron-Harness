@@ -66,6 +66,7 @@ import {
   useAguiDebugPreferences,
   type AguiDebugPreferences,
 } from "@/domain/settings/model/aguiDebugPreferences";
+import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
 import { deriveReasoningPreview, truncateLabel } from "./chatReasoningPreview";
 import type {
   ChatAguiEvent,
@@ -468,23 +469,77 @@ function aguiWorkDuration(events: TranscriptAguiEvent[]) {
   return formatAguiDuration(Math.max(...times) - Math.min(...times));
 }
 
-function latestAguiRunCode(events: TranscriptAguiEvent[]) {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    if (aguiEventType(events[index]).toUpperCase() === "RUN_STARTED") {
-      return aguiEventRunCode(events[index]);
+interface AguiWorkRun {
+  events: TranscriptAguiEvent[];
+  firstMillis: number;
+  runCode: string;
+}
+
+function aguiRunsWithWorkDetails(events: TranscriptAguiEvent[], limit: number) {
+  const runs = new Map<string, AguiWorkRun>();
+  events.forEach((event) => {
+    const runCode = aguiEventRunCode(event);
+    if (!runCode) return;
+    const firstMillis = aguiEventMillis(event) ?? Date.now();
+    const existing = runs.get(runCode);
+    if (existing) {
+      existing.events.push(event);
+      existing.firstMillis = Math.min(existing.firstMillis, firstMillis);
+      return;
     }
-  }
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const runCode = aguiEventRunCode(events[index]);
-    if (runCode && runCode !== "stream") return runCode;
+    runs.set(runCode, {
+      events: [event],
+      firstMillis,
+      runCode,
+    });
+  });
+
+  return Array.from(runs.values())
+    .filter((run) => buildAguiUserWorkCards(run.events).length > 0)
+    .sort((left, right) => left.firstMillis - right.firstMillis)
+    .slice(-limit);
+}
+
+function userMessageCodeBeforeIndex(messages: ChatMessage[], startIndex: number) {
+  for (let index = startIndex; index >= 0; index -= 1) {
+    if (messages[index].role === "USER") return messages[index].messageCode;
   }
   return "";
 }
 
-function eventsForLatestAguiRun(events: TranscriptAguiEvent[]) {
-  const runCode = latestAguiRunCode(events);
-  if (!runCode) return events;
-  return events.filter((event) => aguiEventRunCode(event) === runCode);
+function anchorMessageCodeForAguiRun(
+  messages: ChatMessage[],
+  runCode: string,
+  liveAnchorMessageCodes: Record<string, string>,
+) {
+  const assistantIndex = messages.findIndex((message) => (
+    message.role === "ASSISTANT" && message.runCode === runCode
+  ));
+  if (assistantIndex > 0) {
+    return userMessageCodeBeforeIndex(messages, assistantIndex - 1);
+  }
+  const liveAnchorMessageCode = liveAnchorMessageCodes[runCode] ?? "";
+  if (liveAnchorMessageCode && messages.some((message) => message.messageCode === liveAnchorMessageCode)) {
+    return liveAnchorMessageCode;
+  }
+  return userMessageCodeBeforeIndex(messages, messages.length - 1);
+}
+
+function aguiWorkRailsByMessageCode(
+  messages: ChatMessage[],
+  events: TranscriptAguiEvent[],
+  liveAnchorMessageCodes: Record<string, string>,
+  recentWorkRunLimit: number,
+) {
+  const rails = new Map<string, AguiWorkRun[]>();
+  aguiRunsWithWorkDetails(events, recentWorkRunLimit).forEach((run) => {
+    const messageCode = anchorMessageCodeForAguiRun(messages, run.runCode, liveAnchorMessageCodes);
+    if (!messageCode) return;
+    const current = rails.get(messageCode) ?? [];
+    current.push(run);
+    rails.set(messageCode, current);
+  });
+  return rails;
 }
 
 function aguiEventMessageId(event: TranscriptAguiEvent) {
@@ -502,6 +557,31 @@ function aguiEventToolName(event: TranscriptAguiEvent) {
 
 function aguiEventToolArgs(event: TranscriptAguiEvent) {
   return "toolCallArgs" in event ? event.toolCallArgs : undefined;
+}
+
+function aguiEventStableKey(event: TranscriptAguiEvent) {
+  const messageId = "messageId" in event && typeof event.messageId === "string" ? event.messageId : "";
+  const toolCallId = "toolCallId" in event && typeof event.toolCallId === "string" ? event.toolCallId : "";
+  return [
+    aguiEventRunCode(event),
+    aguiEventType(event),
+    aguiEventTime(event),
+    messageId,
+    toolCallId,
+    aguiEventSummary(event),
+  ].join("\u0000");
+}
+
+function mergeTranscriptAguiEvents<T extends TranscriptAguiEvent>(...sources: T[][]) {
+  const seen = new Set<string>();
+  const merged: T[] = [];
+  sources.flat().forEach((event) => {
+    const key = aguiEventStableKey(event);
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(event);
+  });
+  return merged.sort((left, right) => (aguiEventMillis(left) ?? 0) - (aguiEventMillis(right) ?? 0));
 }
 
 function stringifyPreview(value: unknown) {
@@ -2050,16 +2130,11 @@ function AguiRunWorkRail({
   const debugEvents = events.filter((event) => shouldShowAguiEventType(aguiEventType(event), preferences));
   const terminalEvent = terminalAguiEvent(events);
   const terminalRunCode = terminalEvent ? aguiEventRunCode(terminalEvent) : "";
-  const hasWorkDetails = displayUserCards.some((card) => (
-    card.kind === "reasoning"
-      ? Boolean(card.value.content.trim()) || card.value.toolCards.length > 0
-      : card.value.logs.length > 0 || Boolean(card.value.result)
-  ));
   const [expanded, setExpanded] = useState(true);
 
   useEffect(() => {
-    setExpanded(!terminalRunCode || hasWorkDetails);
-  }, [hasWorkDetails, terminalRunCode]);
+    setExpanded(!terminalRunCode);
+  }, [terminalRunCode]);
 
   if (!terminalEvent && !displayUserCards.length && !debugEvents.length) return null;
 
@@ -2094,6 +2169,7 @@ export function ChatManagementPage() {
   const toast = useToast();
   const { session: authSession } = useAuthSession();
   const { preferences: aguiDebugPreferences } = useAguiDebugPreferences();
+  const { preferences: aguiWorkReplayPreferences } = useAguiWorkReplayPreferences();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
   const groups = useChatSessionGroupList(activeWorkspaceCode);
@@ -2106,8 +2182,8 @@ export function ChatManagementPage() {
   const aguiEvents = useChatAguiEvents(activeSession?.sessionCode ?? "");
   const aguiProtocolEvents = useChatAguiProtocolEvents(activeSession?.sessionCode ?? "");
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
-  const [liveAguiEvents, setLiveAguiEvents] = useState<ChatAguiStreamEvent[]>([]);
-  const [liveAguiAnchorMessageCode, setLiveAguiAnchorMessageCode] = useState("");
+  const [liveAguiEventsBySessionCode, setLiveAguiEventsBySessionCode] = useState<Record<string, ChatAguiStreamEvent[]>>({});
+  const [liveAguiAnchorMessageCodesBySessionCode, setLiveAguiAnchorMessageCodesBySessionCode] = useState<Record<string, Record<string, string>>>({});
   const [sending, setSending] = useState(false);
   const [creatingSession, setCreatingSession] = useState(false);
   const [chatModels, setChatModels] = useState<ModelRecord[]>([]);
@@ -2136,6 +2212,7 @@ export function ChatManagementPage() {
   const visibleSessionCodeRef = useRef("");
   const liveAssistantDraftRef = useRef("");
   const liveAguiObservedRef = useRef(false);
+  const currentLiveAguiRunCodesRef = useRef<Set<string>>(new Set());
   const effectiveAgentCode = selectedAgentCode || mainChatAgentOption.agentCode;
   const selectedAgent = chatAgents.find((agent) => agent.agentCode === effectiveAgentCode) ?? null;
   const agentScopedModels = useMemo(
@@ -2376,11 +2453,15 @@ export function ChatManagementPage() {
     setVisibleMessages(sessionCode ? messages.filter((message) => message.sessionCode === sessionCode) : []);
     if (visibleSessionCodeRef.current !== sessionCode) {
       visibleSessionCodeRef.current = sessionCode;
-      setLiveAguiEvents([]);
-      setLiveAguiAnchorMessageCode("");
     }
   }, [activeSession?.sessionCode, messages]);
 
+  const liveAguiEvents = activeSession?.sessionCode
+    ? liveAguiEventsBySessionCode[activeSession.sessionCode] ?? []
+    : [];
+  const liveAguiAnchorMessageCodes = activeSession?.sessionCode
+    ? liveAguiAnchorMessageCodesBySessionCode[activeSession.sessionCode] ?? {}
+    : {};
   const liveAguiPending = Boolean(
     sending
     && activeSession
@@ -2388,48 +2469,22 @@ export function ChatManagementPage() {
     && !liveAguiEvents.length,
   );
   const transcriptAguiEvents = useMemo<TranscriptAguiEvent[]>(() => {
-    if (liveAguiEvents.length) return eventsForLatestAguiRun(liveAguiEvents);
-    if (liveAguiPending) return [];
-    return eventsForLatestAguiRun(aguiProtocolEvents);
+    if (liveAguiPending && !aguiProtocolEvents.length) return [];
+    return mergeTranscriptAguiEvents(aguiProtocolEvents, liveAguiEvents);
   }, [aguiProtocolEvents, liveAguiEvents, liveAguiPending]);
-  const transcriptAguiRunCode = latestAguiRunCode(transcriptAguiEvents);
+  const workRailsByMessageCode = useMemo(() => (
+    aguiWorkRailsByMessageCode(
+      visibleMessages,
+      transcriptAguiEvents,
+      liveAguiAnchorMessageCodes,
+      aguiWorkReplayPreferences.recentTurnLimit,
+    )
+  ), [aguiWorkReplayPreferences.recentTurnLimit, liveAguiAnchorMessageCodes, transcriptAguiEvents, visibleMessages]);
   const canAbortCurrentSession = Boolean(
     sending
     && activeSession
     && runningSessionCode === activeSession.sessionCode,
   );
-  const liveAguiAnchorIndex = useMemo(() => {
-    if (!transcriptAguiEvents.length && !liveAguiPending) return -1;
-
-    if (liveAguiEvents.length || liveAguiPending) {
-      const anchoredIndex = visibleMessages.findIndex((message) => message.messageCode === liveAguiAnchorMessageCode);
-      if (anchoredIndex >= 0) return anchoredIndex;
-    }
-
-    if (transcriptAguiRunCode) {
-      const assistantIndex = visibleMessages.findIndex((message) => (
-        message.role === "ASSISTANT" && message.runCode === transcriptAguiRunCode
-      ));
-      if (assistantIndex > 0) {
-        for (let index = assistantIndex - 1; index >= 0; index -= 1) {
-          if (visibleMessages[index].role === "USER") return index;
-        }
-      }
-    }
-
-    for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
-      if (visibleMessages[index].role === "USER") return index;
-    }
-
-    return -1;
-  }, [
-    liveAguiAnchorMessageCode,
-    liveAguiEvents.length,
-    liveAguiPending,
-    transcriptAguiEvents.length,
-    transcriptAguiRunCode,
-    visibleMessages,
-  ]);
 
   const rightPanel = useMemo(() => {
     if (!hasActiveSession) return undefined;
@@ -2518,6 +2573,7 @@ export function ChatManagementPage() {
     const abortController = new AbortController();
     streamAbortRequestedRef.current = false;
     streamAbortControllerRef.current = abortController;
+    currentLiveAguiRunCodesRef.current.clear();
     const optimisticUserCode = `LOCAL-${Date.now()}-USER`;
     const optimisticAssistantCode = `LOCAL-${Date.now()}-ASSISTANT`;
     const optimisticCreatedAt = new Date().toISOString();
@@ -2546,8 +2602,6 @@ export function ChatManagementPage() {
     setSending(true);
     setRunningSessionCode(sendingSessionCode);
     setComposer("");
-    setLiveAguiEvents([]);
-    setLiveAguiAnchorMessageCode(optimisticUserCode);
     if (activeSessionCodeRef.current === sendingSessionCode) {
       setVisibleMessages((current) => [
         ...current,
@@ -2564,6 +2618,19 @@ export function ChatManagementPage() {
         {
           onAguiEvent: (event) => {
             if (event.threadId && event.threadId !== sendingSessionCode) return;
+            const runCode = aguiEventRunCode(event);
+            currentLiveAguiRunCodesRef.current.add(runCode);
+            setLiveAguiAnchorMessageCodesBySessionCode((current) => {
+              const sessionAnchors = current[sendingSessionCode] ?? {};
+              if (sessionAnchors[runCode]) return current;
+              return {
+                ...current,
+                [sendingSessionCode]: {
+                  ...sessionAnchors,
+                  [runCode]: optimisticUserCode,
+                },
+              };
+            });
             if (isStructuredWorkEvent(event)) {
               liveAguiObservedRef.current = true;
               if (activeSessionCodeRef.current === sendingSessionCode) {
@@ -2572,7 +2639,10 @@ export function ChatManagementPage() {
                 )));
               }
             }
-            setLiveAguiEvents((current) => [...current, event]);
+            setLiveAguiEventsBySessionCode((current) => ({
+              ...current,
+              [sendingSessionCode]: mergeTranscriptAguiEvents(current[sendingSessionCode] ?? [], [event]),
+            }));
           },
           onDelta: (delta) => {
             liveAssistantDraftRef.current = `${liveAssistantDraftRef.current}${delta}`;
@@ -2596,9 +2666,23 @@ export function ChatManagementPage() {
         abortController.signal,
       );
       setSessionGroups((current) => replaceSession(current, result.session));
+      const resultUserMessage = result.messages.find((message) => message.role === "USER") ?? null;
+      const persistedUserCode = resultUserMessage?.messageCode ?? optimisticUserCode;
+      const runCodes = Array.from(currentLiveAguiRunCodesRef.current);
+      if (runCodes.length) {
+        setLiveAguiAnchorMessageCodesBySessionCode((current) => {
+          const sessionAnchors = current[result.session.sessionCode] ?? {};
+          const nextSessionAnchors = { ...sessionAnchors };
+          runCodes.forEach((runCode) => {
+            nextSessionAnchors[runCode] = persistedUserCode;
+          });
+          return {
+            ...current,
+            [result.session.sessionCode]: nextSessionAnchors,
+          };
+        });
+      }
       if (activeSessionCodeRef.current === result.session.sessionCode) {
-        const resultUserMessage = result.messages.find((message) => message.role === "USER") ?? null;
-        setLiveAguiAnchorMessageCode(resultUserMessage?.messageCode ?? optimisticUserCode);
         setVisibleMessages((current) => [
           ...current.filter((message) => (
             message.messageCode !== optimisticUserCode
@@ -2881,12 +2965,13 @@ export function ChatManagementPage() {
                         });
                       }}
                     />
-                    {liveAguiAnchorIndex >= 0 && visibleMessages[liveAguiAnchorIndex]?.messageCode === message.messageCode ? (
+                    {(workRailsByMessageCode.get(message.messageCode) ?? []).map((run) => (
                       <AguiRunWorkRail
-                        events={transcriptAguiEvents}
+                        key={run.runCode}
+                        events={run.events}
                         preferences={aguiDebugPreferences}
                       />
-                    ) : null}
+                    ))}
                   </Fragment>
                 )) : activeWorkspaceCode ? (
                   <div className="flex min-h-[360px] items-center justify-center rounded-md bg-[var(--color-surface-container-lowest)] text-sm text-[var(--color-on-surface-variant)] shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">

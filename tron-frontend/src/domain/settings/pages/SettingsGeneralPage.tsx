@@ -5,6 +5,7 @@ import {
   PageHeader,
   SelectInput,
   SurfaceCard,
+  TextInput,
   useTheme,
 } from "@/shared";
 import { useLocale } from "@/i18n";
@@ -15,6 +16,11 @@ import {
   useAguiDebugPreferences,
   type AguiDebugMode,
 } from "@/domain/settings/model/aguiDebugPreferences";
+import {
+  maximumAguiWorkReplayTurnLimit,
+  minimumAguiWorkReplayTurnLimit,
+  useAguiWorkReplayPreferences,
+} from "@/domain/settings/model/aguiWorkReplayPreferences";
 
 export function SettingsGeneralPage() {
   const { t } = useTranslation(["common", "shell"]);
@@ -25,6 +31,10 @@ export function SettingsGeneralPage() {
     setMode: setAguiDebugMode,
     toggleCustomEventType,
   } = useAguiDebugPreferences();
+  const {
+    preferences: aguiWorkReplayPreferences,
+    setRecentTurnLimit,
+  } = useAguiWorkReplayPreferences();
   const readOnlyAguiCardList = aguiDebugPreferences.mode !== "custom";
   const selectedEventTypes = new Set(resolveAguiDebugEventTypes(aguiDebugPreferences));
   const selectedMode = aguiDebugModeOptions.find((option) => option.value === aguiDebugPreferences.mode) ?? aguiDebugModeOptions[0];
@@ -109,6 +119,30 @@ export function SettingsGeneralPage() {
               </label>
             ))}
           </div>
+        </SurfaceCard>
+
+        <SurfaceCard className="space-y-4 xl:col-span-2">
+          <div>
+            <h2 className="text-sm font-semibold text-[var(--color-on-surface)]">AG-UI Work Replay</h2>
+            <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
+              Controls how many recent completed conversation turns keep user-facing work rails after chat switching or page refresh.
+            </p>
+          </div>
+
+          <Field
+            label="Recent Work Turns"
+            hint={`Show between ${minimumAguiWorkReplayTurnLimit} and ${maximumAguiWorkReplayTurnLimit} recent turns per session.`}
+          >
+            <TextInput
+              aria-label="AG-UI recent work turn limit"
+              inputMode="numeric"
+              max={maximumAguiWorkReplayTurnLimit}
+              min={minimumAguiWorkReplayTurnLimit}
+              type="number"
+              value={aguiWorkReplayPreferences.recentTurnLimit}
+              onChange={(event) => setRecentTurnLimit(Number(event.target.value))}
+            />
+          </Field>
         </SurfaceCard>
       </div>
     </>

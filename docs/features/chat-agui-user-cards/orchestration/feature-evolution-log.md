@@ -20,8 +20,17 @@
 - affected_validation_gates: spec, tasks, reports, browser verify, frontend build/typecheck
 - evidence_migration: replace prior AC-AGUI-03 evidence that asserted nested tool cards with evidence that asserts compact nested tool steps and work-rail-first ordering.
 
+### 2026-06-05 session replay refinement
+
+- change_request: Keep recent completed AG-UI work rails visible per chat session after page refresh and chat switching.
+- classification: behavior refinement with backend replay persistence fix
+- downstream_impact: frontend transcript aggregation now renders recent per-turn work rails instead of only the latest run; backend replay records HTTP-layer system-agent live protocol events and merges SQLite replay with in-memory sink events.
+- stale_artifacts: `spec/acceptance.md`, `spec/test-plan.md`, `orchestration/worktree-plan.md`, `orchestration/context-index.md`, and `reports/test-report.md` needed refresh for AC-AGUI-07 and real Chromium evidence.
+- affected_validation_gates: backend check, frontend check, real browser refresh/switch verification
+- evidence_migration: add session-level replay evidence for a real two-turn chat session showing two work rails before refresh, after refresh, and after switching away and back.
+
 ## Scope Decision
 
-- backend_change_required: no
-- affected_ac_refs: AC-AGUI-02, AC-AGUI-03
+- backend_change_required: yes
+- affected_ac_refs: AC-AGUI-02, AC-AGUI-03, AC-AGUI-07
 - unchanged_ac_refs: AC-AGUI-01, AC-AGUI-04, AC-AGUI-05, AC-AGUI-06

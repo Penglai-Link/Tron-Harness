@@ -33,6 +33,7 @@ use crate::{
 };
 
 use super::error_mapper::{chat_error_response, chat_send_error_response};
+use super::protocol_replay::record_protocol_event;
 use super::stream_live::SystemAgentLiveEventBuilder;
 
 const CHAT_STREAM_POLL_INTERVAL_MS: u64 = 25;
@@ -276,6 +277,7 @@ pub async fn stream_message(
                     let key = format!("{}:{}", payload.sse_event, payload.data);
                     if seen.insert(key) {
                         emitted = true;
+                        record_protocol_event(&stream_service, &stream_key, &payload.sse_event, &payload.data);
                         yield Ok::<Event, Infallible>(
                             ChatSsePayload::agui(payload.sse_event, payload.data).event()
                         );
@@ -320,6 +322,7 @@ pub async fn stream_message(
                     let key = format!("{}:{}", payload.sse_event, payload.data);
                     if seen.insert(key) {
                         emitted = true;
+                        record_protocol_event(&stream_service, &stream_key, &payload.sse_event, &payload.data);
                         yield Ok::<Event, Infallible>(
                             ChatSsePayload::agui(payload.sse_event, payload.data).event()
                         );
@@ -333,7 +336,14 @@ pub async fn stream_message(
                 if drain_ticks < CHAT_STREAM_DRAIN_AFTER_COMPLETION_TICKS {
                     continue;
                 }
-                yield Ok::<Event, Infallible>(done.payload(&stream_key, &stream_run_code).event());
+                let done_payload = done.payload(&stream_key, &stream_run_code);
+                record_protocol_event(
+                    &stream_service,
+                    &stream_key,
+                    &done_payload.event_name,
+                    &done_payload.data,
+                );
+                yield Ok::<Event, Infallible>(done_payload.event());
                 break;
             }
         }

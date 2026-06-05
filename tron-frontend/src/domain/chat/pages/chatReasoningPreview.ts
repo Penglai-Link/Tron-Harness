@@ -48,14 +48,8 @@ export function reasoningFirstClause(value: string) {
   return stripped || normalized;
 }
 
-export function deriveReasoningPreview(detail: string, toolCards: ReasoningPreviewToolCard[]) {
+export function deriveReasoningPreview(detail: string, _toolCards: ReasoningPreviewToolCard[]) {
   const sentence = reasoningLastSentence(detail);
-  const toolCount = toolCards.filter((toolCard) => toolCard.started).length;
   const previewSource = sentence || detail;
-  const preview = reasoningPreviewLabel(previewSource, 120);
-  if (!toolCount) return preview;
-  const summary = preview
-    ? `${preview} Used ${toolCount} ${toolCount === 1 ? "tool" : "tools"}.`
-    : `Used ${toolCount} ${toolCount === 1 ? "tool" : "tools"} before replying.`;
-  return truncateLabel(summary, 120);
+  return reasoningPreviewLabel(previewSource, 120);
 }

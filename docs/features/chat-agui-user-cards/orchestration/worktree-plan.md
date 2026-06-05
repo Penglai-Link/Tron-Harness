@@ -16,8 +16,8 @@
 
 - default_branch: master
 - base_ref: master
-- current_branch: feature/clouds3n/chat-agui-reasoning-segments
-- note: workspace reopened for feature evolution because the original AC-AGUI-02 proof encoded one Thinking card per run and current runtime behavior needs one card per reasoning segment; the latest frontend refinement also aligns `/chats` user-facing work display to a Codex-style compact work rail.
+- current_branch: feature/clouds3n/agui-session-work-replay
+- note: workspace reopened for feature evolution because session-level AG-UI replay currently renders as a latest-run-only work rail; the current slice extends Chat Management to show recent per-turn work rails after refresh and chat switching.
 
 ## Dispatch Decisions
 
@@ -25,12 +25,13 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | AC-AGUI-02, AC-AGUI-03 | solo | lead-agent | current-thread | bounded frontend-only refinement with shared transcript aggregation and presentation logic; separate worker setup would add ceremony without reducing risk | current branch | done |
 | context scan | spawn | explorer | explorer | read-only repository scan requested by superpower workflow before feature evolution implementation | 019e6f23-2822-7773-8da9-ac5e7161b20f | done |
+| AC-AGUI-07 | solo | lead-agent | current-thread | bounded chat transcript replay change across the shared Chat Management surface and AG-UI replay store; subagent spawning is not authorized in this session unless the user explicitly asks for sub-agents | feature/clouds3n/agui-session-work-replay | done |
 
 ## Branch And Path Rules
 
 - Branch naming follows `eliteforge-git-feature-oriented-lite-spec`.
-- Main branch is `feature/clouds3n/chat-agui-reasoning-segments`.
-- No implementation worker branch is used because this refinement is a small bounded Chat Management frontend slice and the user accepted direct progress in the current thread.
+- Main branch is `feature/clouds3n/agui-session-work-replay`.
+- No implementation worker branch is used because this refinement is a bounded Chat Management frontend slice and this session has no explicit user authorization to spawn sub-agents.
 
 ## Open Decisions
 
