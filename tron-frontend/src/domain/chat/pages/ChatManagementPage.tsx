@@ -605,6 +605,14 @@ function formatJsonBlockValue(value: unknown) {
   return stringifyPreview(value);
 }
 
+function hasToolParameterPayload(value: unknown) {
+  if (value == null) return false;
+  if (typeof value === "string") return Boolean(value.trim());
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") return Object.keys(value).length > 0;
+  return true;
+}
+
 function appendReasoningDelta(content: string, delta: string) {
   if (!content) return delta;
   if (!delta) return content;
@@ -1960,7 +1968,8 @@ function CompactToolRow({
   const hasResultPayload = Boolean(card.result);
   const result = card.result || (complete ? "No result payload." : "");
   const [expanded, setExpanded] = useState(() => !card.ended);
-  const parametersText = formatJsonBlockValue(card.args ?? { tool: card.toolName });
+  const hasParameters = hasToolParameterPayload(card.args);
+  const parametersText = hasParameters ? formatJsonBlockValue(card.args) : "";
   const resultText = hasResultPayload ? formatJsonBlockValue(card.result) : "";
 
   useEffect(() => {
@@ -2005,23 +2014,25 @@ function CompactToolRow({
           "border-t border-[var(--color-outline-variant)]",
           nested ? "ml-8 px-2 py-2" : "px-1 py-2",
         )}>
-          <div className="flex h-64 min-h-0 flex-col gap-2 overflow-hidden">
-            <section className="flex min-h-0 flex-1 flex-col gap-1">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Parameters</h3>
-                <CopyValueButton ariaLabel="Copy parameters" title="Copy parameters" value={parametersText} />
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <JsonBlock value={card.args ?? { tool: card.toolName }} />
-              </div>
-            </section>
+          <div className="space-y-2">
+            {hasParameters ? (
+              <section className="flex min-h-0 flex-col gap-1">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Parameters</h3>
+                  <CopyValueButton ariaLabel="Copy parameters" title="Copy parameters" value={parametersText} />
+                </div>
+                <div className="max-h-40 overflow-y-auto">
+                  <JsonBlock value={card.args} />
+                </div>
+              </section>
+            ) : null}
             {complete ? (
-              <section className="flex min-h-0 flex-1 flex-col gap-1">
+              <section className="flex min-h-0 flex-col gap-1">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Result</h3>
                   <CopyValueButton ariaLabel="Copy result" title="Copy result" value={resultText} />
                 </div>
-                <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="max-h-64 overflow-y-auto">
                   {result ? <JsonBlock value={result} /> : (
                     <div className="rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm leading-6 text-[var(--color-on-surface-variant)]">
                       No result payload.
@@ -2030,9 +2041,9 @@ function CompactToolRow({
                 </div>
               </section>
             ) : (
-              <section className="flex min-h-0 flex-1 flex-col gap-1">
+              <section className="flex min-h-0 flex-col gap-1">
                 <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Log</h3>
-                <div className="min-h-0 flex-1 space-y-1 overflow-y-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)]">
+                <div className="max-h-64 space-y-1 overflow-y-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)]">
                   {card.logs.length ? card.logs.map((line, index) => (
                     <p className="whitespace-pre-wrap" key={`${card.id}-log-${index}`}>{line}</p>
                   )) : <p className="text-[var(--color-on-surface-variant)]">Waiting for tool activity...</p>}
