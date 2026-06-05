@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -28,8 +29,14 @@ import {
 import type {
   TaskListItem,
   TaskSourceType,
+  TaskStatus,
   TaskType,
 } from "@/domain/task/model";
+import {
+  inferTaskRole,
+  statusLabel,
+} from "@/domain/task/model";
+import { updateTaskStatus } from "@/domain/task/api";
 import { cn } from "@/shared/lib/utils";
 
 type BoardScalePreset = "fit" | "100" | "90" | "80" | "70" | "60" | "50";
@@ -80,15 +87,42 @@ function sourceTypeTone(sourceType: TaskSourceType) {
   return "success";
 }
 
-function KanbanCard({ task, selected, compact, dense, onSelect }: { task: TaskListItem; selected: boolean; compact: boolean; dense: boolean; onSelect: () => void }) {
+function KanbanCard({
+  compact,
+  dense,
+  dragging,
+  onDragEnd,
+  onDragStart,
+  onSelect,
+  pending,
+  selected,
+  task,
+}: {
+  task: TaskListItem;
+  selected: boolean;
+  compact: boolean;
+  dense: boolean;
+  dragging: boolean;
+  pending: boolean;
+  onDragEnd: () => void;
+  onDragStart: (event: React.DragEvent<HTMLButtonElement>) => void;
+  onSelect: () => void;
+}) {
   return (
     <button
+      aria-busy={pending}
       className={cn(
-        "w-full rounded-lg border bg-white text-left shadow-sm hover:border-[var(--color-outline)]",
+        "w-full rounded-lg border bg-white text-left shadow-sm transition hover:border-[var(--color-outline)]",
         dense ? "p-2" : compact ? "p-2.5" : "p-3",
         selected ? "border-[var(--color-primary)]" : "border-[var(--color-outline-variant)]",
+        dragging ? "opacity-60 ring-2 ring-[var(--color-primary)]" : "",
+        pending ? "cursor-wait opacity-70" : "cursor-grab active:cursor-grabbing",
       )}
+      data-testid={`task-kanban-card-${task.taskCode}`}
+      draggable={!pending}
       type="button"
+      onDragEnd={onDragEnd}
+      onDragStart={onDragStart}
       onClick={onSelect}
     >
       <div className={cn("flex items-center justify-between gap-2", dense ? "mb-1" : compact ? "mb-1.5" : "mb-2")}>
@@ -116,6 +150,9 @@ export function TasksKanbanPage() {
   const [taskType, setTaskType] = useState<TaskType>("Feature");
   const [priority, setPriority] = useState("");
   const [selectedTaskCode, setSelectedTaskCode] = useState<string | null>(null);
+  const [draggedTask, setDraggedTask] = useState<TaskListItem | null>(null);
+  const [dragOverStatus, setDragOverStatus] = useState<TaskStatus | null>(null);
+  const [pendingTaskCode, setPendingTaskCode] = useState<string | null>(null);
   const [boardScalePreset, setBoardScalePreset] = useState<BoardScalePreset>(() => {
     if (typeof window === "undefined") return "fit";
     return resolveStoredBoardScale(window.localStorage.getItem(BOARD_SCALE_STORAGE_KEY));
@@ -188,6 +225,68 @@ export function TasksKanbanPage() {
     columnWidth: Math.max(160, Math.round(BOARD_BASE_COLUMN_WIDTH * boardScale)),
   }), [boardScale]);
 
+  const parseDraggedTask = useCallback((event: React.DragEvent<HTMLElement>) => {
+    if (draggedTask) return draggedTask;
+    const serialized = event.dataTransfer.getData("application/json");
+    if (!serialized) return null;
+    try {
+      return JSON.parse(serialized) as TaskListItem;
+    } catch {
+      return null;
+    }
+  }, [draggedTask]);
+
+  const canMoveTaskToStatus = useCallback((task: TaskListItem, status: TaskStatus) => {
+    const taskRole = inferTaskRole(task.taskType, task.parentTaskCode);
+    return options.statusRules[taskRole].includes(status);
+  }, [options.statusRules]);
+
+  const handleCardDragStart = useCallback((task: TaskListItem, event: React.DragEvent<HTMLButtonElement>) => {
+    if (pendingTaskCode) {
+      event.preventDefault();
+      return;
+    }
+    setDraggedTask(task);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", task.taskCode);
+    event.dataTransfer.setData("application/json", JSON.stringify(task));
+  }, [pendingTaskCode]);
+
+  const handleColumnDragOver = useCallback((status: TaskStatus, event: React.DragEvent<HTMLElement>) => {
+    const task = parseDraggedTask(event);
+    if (!task || pendingTaskCode) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    setDragOverStatus(status);
+  }, [parseDraggedTask, pendingTaskCode]);
+
+  const handleColumnDrop = useCallback(async (status: TaskStatus, event: React.DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    setDragOverStatus(null);
+
+    const task = parseDraggedTask(event);
+    setDraggedTask(null);
+    if (!task || pendingTaskCode) return;
+    if (task.status === status) return;
+
+    if (!canMoveTaskToStatus(task, status)) {
+      toast.warning(`Task ${task.taskCode} cannot move to ${statusLabel(status)}`);
+      return;
+    }
+
+    setPendingTaskCode(task.taskCode);
+    try {
+      await updateTaskStatus(task.taskCode, { status });
+      refresh();
+      toast.success(`Task ${task.taskCode} moved to ${statusLabel(status)}`);
+    } catch (error) {
+      refresh();
+      toast.error(error instanceof Error ? error.message : "Task status could not be updated");
+    } finally {
+      setPendingTaskCode(null);
+    }
+  }, [canMoveTaskToStatus, parseDraggedTask, pendingTaskCode, refresh, toast]);
+
   return (
     <div className="flex min-h-[calc(100vh-6.5rem)] flex-col">
         <PageHeader
@@ -228,9 +327,22 @@ export function TasksKanbanPage() {
         <div className="flex min-h-0 flex-1 overflow-x-auto pb-4" ref={boardViewportRef} style={{ gap: `${boardLayout.columnGap}px` }}>
           {columns.map((column) => (
             <section
-              className="flex shrink-0 flex-col rounded-lg bg-[var(--color-surface-container)]"
+              aria-label={`${column.title} task column`}
+              className={cn(
+                "flex shrink-0 flex-col rounded-lg bg-[var(--color-surface-container)] transition",
+                dragOverStatus === column.status ? "ring-2 ring-[var(--color-primary)]" : "",
+              )}
               data-task-kanban-column={column.status}
+              data-testid={`task-kanban-dropzone-${column.status}`}
               key={column.status}
+              onDragEnter={() => setDragOverStatus(column.status)}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setDragOverStatus(null);
+                }
+              }}
+              onDragOver={(event) => handleColumnDragOver(column.status, event)}
+              onDrop={(event) => handleColumnDrop(column.status, event)}
               style={{
                 gap: `${boardLayout.columnGap}px`,
                 padding: `${boardLayout.columnPadding}px`,
@@ -248,7 +360,14 @@ export function TasksKanbanPage() {
                     task={task}
                     compact={boardLayout.compact}
                     dense={boardLayout.dense}
+                    dragging={draggedTask?.taskCode === task.taskCode}
+                    pending={pendingTaskCode === task.taskCode}
                     selected={selectedTaskCode === task.taskCode}
+                    onDragEnd={() => {
+                      setDraggedTask(null);
+                      setDragOverStatus(null);
+                    }}
+                    onDragStart={(event) => handleCardDragStart(task, event)}
                     onSelect={() => {
                       setSelectedTaskCode(task.taskCode);
                       navigate(`/tasks/detail?taskCode=${encodeURIComponent(task.taskCode)}`);
