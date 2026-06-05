@@ -132,8 +132,14 @@ test("opens protected routes, logs out, and signs back in without auth API reque
   await expect(page).toHaveURL(/\/login/);
   await expect(page.getByRole("button", { name: /oauth2/i })).toBeVisible();
 
-  await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
-  await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
+  const loginInput = page.getByLabel(/operator id|username|email/i);
+  const passwordInput = page.getByLabel(/passkey|password/i);
+  await expect(loginInput).toHaveValue("auth.operator");
+  await expect(passwordInput).toHaveValue("TronAuthPass123!");
+  await expect(loginInput).toHaveAttribute("placeholder", "Enter username or email");
+
+  await loginInput.fill("auth.operator");
+  await passwordInput.fill("TronAuthPass123!");
   await submitLogin(page);
 
   await expect(page).toHaveURL(/\/admin\/users$/);

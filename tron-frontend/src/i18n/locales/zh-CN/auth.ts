@@ -44,5 +44,5 @@ export const auth = {
     loggingOut: "退出登录中...",
     signedIn: "已登录",
   },
-  usernamePlaceholder: "auth.operator 或 auth.operator@tron.ai",
+  usernamePlaceholder: "输入用户名或邮箱",
 } as const;

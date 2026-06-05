@@ -409,8 +409,14 @@ test("redirects anonymous users to login, signs in, reaches user management, and
   await page.goto(`${frontendBaseUrl}/dashboard`);
   await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/);
 
-  await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
-  await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
+  const loginInput = page.getByLabel(/operator id|username|email/i);
+  const passwordInput = page.getByLabel(/passkey|password/i);
+  await expect(loginInput).toHaveValue("");
+  await expect(loginInput).toHaveAttribute("placeholder", "Enter username or email");
+  await expect(passwordInput).toHaveValue("");
+
+  await loginInput.fill("auth.operator");
+  await passwordInput.fill("TronAuthPass123!");
   await submitLogin(page);
 
   await expect(page).toHaveURL(/\/dashboard$/);

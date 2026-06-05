@@ -44,5 +44,5 @@ export const auth = {
     loggingOut: "Logging out...",
     signedIn: "Signed in",
   },
-  usernamePlaceholder: "auth.operator or auth.operator@tron.ai",
+  usernamePlaceholder: "Enter username or email",
 } as const;

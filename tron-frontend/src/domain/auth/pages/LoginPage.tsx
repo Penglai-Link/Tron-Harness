@@ -20,6 +20,7 @@ import {
 import {
   buildOAuth2AuthorizeUrl,
   fetchAuthProviders,
+  getAuthDataSource,
 } from "@/domain/auth/api";
 import { DEFAULT_AUTH_REDIRECT } from "@/domain/auth/constants";
 import { resolveAuthRedirect } from "@/domain/auth/model";
@@ -45,8 +46,8 @@ export function LoginPage() {
     () => resolveAuthRedirect(location.search, DEFAULT_AUTH_REDIRECT),
     [location.search],
   );
-  const [login, setLogin] = useState("auth.operator");
-  const [password, setPassword] = useState("TronAuthPass123!");
+  const [login, setLogin] = useState(() => getAuthDataSource() === "mock" ? "auth.operator" : "");
+  const [password, setPassword] = useState(() => getAuthDataSource() === "mock" ? "TronAuthPass123!" : "");
   const [submitting, setSubmitting] = useState(false);
   const [providersLoading, setProvidersLoading] = useState(true);
   const [providerError, setProviderError] = useState<string | null>(null);
