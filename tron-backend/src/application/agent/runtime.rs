@@ -200,10 +200,7 @@ impl ReactAgent {
                         observations: context.observations.clone(),
                     });
                 }
-                ModelResponse::ToolCalls {
-                    calls,
-                    ..
-                } => {
+                ModelResponse::ToolCalls { calls, .. } => {
                     self.execute_tool_calls(context, &mut tool_calls, &mut turn_state, calls)
                         .await?;
                 }

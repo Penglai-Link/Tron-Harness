@@ -315,16 +315,34 @@ fn responses_request_uses_stateful_response_items_and_previous_response_id() {
 }
 
 #[test]
-fn chat_stream_maps_reasoning_content_to_summary_delta() {
+fn chat_stream_maps_reasoning_content_to_raw_reasoning_delta() {
     let event = ChatCompletionsAdapter
         .parse_stream_event(&json!({
             "choices": [{
                 "delta": {
-                    "reasoning_content": "thinking summary"
+                    "reasoning_content": "thinking detail"
                 }
             }]
         }))
         .expect("chat reasoning stream event should parse safely");
+
+    assert_eq!(
+        event,
+        Some(ModelStreamEvent::reasoning_delta("thinking detail"))
+    );
+}
+
+#[test]
+fn chat_stream_maps_reasoning_summary_content_to_summary_delta() {
+    let event = ChatCompletionsAdapter
+        .parse_stream_event(&json!({
+            "choices": [{
+                "delta": {
+                    "reasoning_summary": "thinking summary"
+                }
+            }]
+        }))
+        .expect("chat reasoning summary stream event should parse safely");
 
     assert_eq!(
         event,
@@ -355,17 +373,18 @@ fn responses_request_enables_reasoning_for_thinking_models() {
         .stream_request_body(
             &config,
             &ModelRequest {
-            messages: vec![AgentMessage::user("hello")],
-            tools: vec![],
-            system_agent_session_id: None,
-            response_input_items: None,
-            previous_response_id: None,
-        },
+                messages: vec![AgentMessage::user("hello")],
+                tools: vec![],
+                system_agent_session_id: None,
+                response_input_items: None,
+                previous_response_id: None,
+            },
         )
         .expect("responses stream request should build");
 
     assert_eq!(body["stream"], json!(true));
     assert_eq!(body["reasoning"]["effort"], json!("medium"));
+    assert_eq!(body["reasoning"]["summary"], json!("concise"));
     assert!(body.get("enable_thinking").is_none());
 }
 

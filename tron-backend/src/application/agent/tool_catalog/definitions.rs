@@ -81,11 +81,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
     definitions
 }
 
-pub(super) fn schema(
-    description_key: &'static str,
-    examples: Value,
-    mut schema: Value,
-) -> Value {
+pub(super) fn schema(description_key: &'static str, examples: Value, mut schema: Value) -> Value {
     if let Value::Object(map) = &mut schema {
         map.insert(
             "x-i18n-description-key".to_string(),

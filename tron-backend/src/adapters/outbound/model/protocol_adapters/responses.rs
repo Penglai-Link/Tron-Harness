@@ -35,7 +35,10 @@ impl ModelProtocolAdapter for ResponsesAdapter {
         Ok(parse_responses_stream_event(body))
     }
 
-    fn parse_stream_terminal_response(&self, body: &Value) -> Result<Option<ModelResponse>, String> {
+    fn parse_stream_terminal_response(
+        &self,
+        body: &Value,
+    ) -> Result<Option<ModelResponse>, String> {
         Ok(parse_responses_stream_terminal_response(body))
     }
 
@@ -68,7 +71,7 @@ pub fn responses_request(config: &AgentModelConfig, request: &ModelRequest) -> V
         payload["max_output_tokens"] = json!(max_tokens);
     }
     if config.thinking_enabled {
-        payload["reasoning"] = json!({ "effort": "medium" });
+        payload["reasoning"] = json!({ "effort": "medium", "summary": "concise" });
     }
     if !request.tools.is_empty() {
         payload["tools"] = json!(
@@ -136,10 +139,7 @@ fn parse_responses_stream_terminal_response(body: &Value) -> Option<ModelRespons
 }
 
 fn parse_responses_response(body: &Value) -> Option<ModelResponse> {
-    let response_id = body
-        .get("id")
-        .and_then(Value::as_str)
-        .map(str::to_owned);
+    let response_id = body.get("id").and_then(Value::as_str).map(str::to_owned);
     let token_usage = parse_responses_usage(body);
     if let Some(output) = body.get("output").and_then(Value::as_array) {
         let tool_calls = output

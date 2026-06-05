@@ -307,7 +307,7 @@ pub fn translate_protocol_events(
                 ),
             ]
         }
-        CanonicalRuntimeEvent::ObservationCreated => {
+        CanonicalRuntimeEvent::ToolActivity | CanonicalRuntimeEvent::ObservationCreated => {
             let tool_name = event_tool_name(event);
             let tool_call_id = event_tool_call_id(event, &run_code, &tool_name);
             let log_line = event_tool_result(event).unwrap_or_else(|| "observation created".into());

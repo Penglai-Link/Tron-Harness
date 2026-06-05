@@ -35,8 +35,15 @@ async fn agent_model_mock_server() -> AgentModelMockServer {
 }
 
 async fn agent_chat_completion(Json(payload): Json<Value>) -> Json<Value> {
-    let prompt = payload["messages"][0]["content"]
-        .as_str()
+    let prompt = payload["messages"]
+        .as_array()
+        .and_then(|messages| {
+            messages.iter().rev().find_map(|message| {
+                (message["role"].as_str() == Some("user"))
+                    .then(|| message["content"].as_str())
+                    .flatten()
+            })
+        })
         .unwrap_or_default();
     Json(json!({
         "choices": [{

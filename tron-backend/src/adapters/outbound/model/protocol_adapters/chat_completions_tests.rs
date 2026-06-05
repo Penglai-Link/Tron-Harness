@@ -43,7 +43,7 @@ fn chat_stream_request_asks_for_usage_chunk_and_thinking() {
 }
 
 #[test]
-fn chat_stream_maps_glm_thinking_content_to_summary_delta() {
+fn chat_stream_maps_glm_thinking_content_to_raw_reasoning_delta() {
     let event = ChatCompletionsAdapter
         .parse_stream_event(&json!({
             "choices": [{
@@ -56,7 +56,7 @@ fn chat_stream_maps_glm_thinking_content_to_summary_delta() {
 
     assert_eq!(
         event,
-        Some(ModelStreamEvent::reasoning_summary_delta("glm thinking"))
+        Some(ModelStreamEvent::reasoning_delta("glm thinking"))
     );
 }
 
@@ -75,8 +75,6 @@ fn chat_stream_uses_reasoning_when_provider_sends_empty_content_field() {
 
     assert_eq!(
         event,
-        Some(ModelStreamEvent::reasoning_summary_delta(
-            "glm reasoning"
-        ))
+        Some(ModelStreamEvent::reasoning_delta("glm reasoning"))
     );
 }

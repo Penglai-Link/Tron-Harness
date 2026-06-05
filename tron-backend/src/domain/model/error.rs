@@ -55,9 +55,8 @@ impl fmt::Display for ModelError {
             Self::InvalidProtocolModelType => {
                 formatter.write_str("protocol and modelType combination is invalid")
             }
-            Self::ResponsesStatefulModeUnsupported => formatter.write_str(
-                "responsesStatefulEnabled is only supported for Responses protocol",
-            ),
+            Self::ResponsesStatefulModeUnsupported => formatter
+                .write_str("responsesStatefulEnabled is only supported for Responses protocol"),
             Self::PlatformSourceRequired => formatter.write_str("sourceModelCode is required"),
             Self::PlatformSourceInvalid => {
                 formatter.write_str("sourceModelCode must reference a platform model")

@@ -6,8 +6,8 @@ use crate::domain::agent::{
 };
 use crate::shared::event_bus::BusOutcome;
 
-use super::{ReactAgent, apply_tool_context_delta, collapse_ephemeral_expanded_domains};
 use super::super::TurnStateAdapter;
+use super::{ReactAgent, apply_tool_context_delta, collapse_ephemeral_expanded_domains};
 
 impl ReactAgent {
     pub(super) async fn execute_tool_calls(
@@ -66,13 +66,42 @@ impl ReactAgent {
             Some(&tool_input),
             None,
         )?;
-        match self.tool_registry.execute_allowed(
-            ToolRequest {
-                tool_name: call.tool_name,
-                input: call.input,
-            },
-            &context,
-        ) {
+        let registry = Arc::clone(&self.tool_registry);
+        let context_snapshot = context.clone();
+        let activity_publisher = self.clone();
+        let activity_tool_call_id = tool_call_id.clone();
+        let activity_tool_name = tool_name.clone();
+        let call_tool_name = call.tool_name;
+        let call_tool_input = call.input;
+        let handle = tokio::task::spawn_blocking(move || {
+            let mut publish_activity = |line: String| {
+                if line.trim().is_empty() {
+                    return;
+                }
+                let _ = activity_publisher.publish_tool(
+                    &context_snapshot,
+                    "agent.tool.activity",
+                    BusOutcome::Progress,
+                    Some("tool_activity"),
+                    &activity_tool_call_id,
+                    &activity_tool_name,
+                    None,
+                    Some(line.as_str()),
+                );
+            };
+            registry.execute_allowed_with_progress(
+                ToolRequest {
+                    tool_name: call_tool_name,
+                    input: call_tool_input,
+                },
+                &context_snapshot,
+                &mut publish_activity,
+            )
+        });
+        let execution_result = handle.await.map_err(|error| {
+            AgentError::ToolFailure(format!("serial tool execution join failed: {error}"))
+        })?;
+        match execution_result {
             Ok(execution) => {
                 let observation = execution.observation;
                 apply_tool_context_delta(context, execution.context_delta);
@@ -205,15 +234,34 @@ impl ReactAgent {
 
             let registry = Arc::clone(&self.tool_registry);
             let context_snapshot = Arc::clone(&context_snapshot);
+            let activity_publisher = self.clone();
+            let activity_tool_call_id = tool_call_id.clone();
+            let activity_tool_name = tool_name.clone();
             let call_tool_name = call.tool_name;
             let call_tool_input = call.input;
             let handle = tokio::task::spawn_blocking(move || {
-                registry.execute_allowed(
+                let mut publish_activity = |line: String| {
+                    if line.trim().is_empty() {
+                        return;
+                    }
+                    let _ = activity_publisher.publish_tool(
+                        &context_snapshot,
+                        "agent.tool.activity",
+                        BusOutcome::Progress,
+                        Some("tool_activity"),
+                        &activity_tool_call_id,
+                        &activity_tool_name,
+                        None,
+                        Some(line.as_str()),
+                    );
+                };
+                registry.execute_allowed_with_progress(
                     ToolRequest {
                         tool_name: call_tool_name,
                         input: call_tool_input,
                     },
                     &context_snapshot,
+                    &mut publish_activity,
                 )
             });
 

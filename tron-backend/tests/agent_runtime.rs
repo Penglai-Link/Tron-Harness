@@ -14,8 +14,8 @@ use tron_backend::{
     domain::agent::{
         AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig, AgentModelProtocol,
         AgentRunContext, AgentRunLimits, EffectiveSkill, EffectiveTool, EffectiveVariable,
-        InProcessTool, ModelRequest, ModelResponse, ToolCall, ToolError, ToolObservation,
-        ToolRegistry, ToolRequest,
+        InProcessTool, ModelRequest, ModelResponse, Tool, ToolCall, ToolError, ToolExecutionResult,
+        ToolObservation, ToolRegistry, ToolRequest,
     },
     shared::{
         event_bus::{BusRouteClass, EventBusConfig, EventBusRuntimeBuilder, RecordingEventSink},
@@ -54,6 +54,37 @@ impl ModelClient for ScriptedModelClient {
             }
             Ok(guard.remove(0))
         })
+    }
+}
+
+struct ProgressTool;
+
+impl Tool for ProgressTool {
+    fn name(&self) -> &str {
+        "progress"
+    }
+
+    fn exec(
+        &self,
+        request: ToolRequest,
+        context: &AgentRunContext,
+    ) -> Result<ToolExecutionResult, ToolError> {
+        let mut progress = |_line: String| {};
+        self.exec_with_progress(request, context, &mut progress)
+    }
+
+    fn exec_with_progress(
+        &self,
+        request: ToolRequest,
+        _context: &AgentRunContext,
+        progress: &mut dyn FnMut(String),
+    ) -> Result<ToolExecutionResult, ToolError> {
+        progress("first progress line".into());
+        progress("second progress line".into());
+        Ok(ToolExecutionResult::observation(ToolObservation {
+            tool_name: request.tool_name,
+            output: "progress complete".into(),
+        }))
     }
 }
 
@@ -232,9 +263,10 @@ async fn react_agent_continues_after_tool_execution_failure() {
     .build();
     let registry = ToolRegistry::default();
     registry
-        .register(Arc::new(InProcessTool::new("flaky", |_request: ToolRequest| {
-            Err(ToolError::ExecutionFailed("boom".into()))
-        })))
+        .register(Arc::new(InProcessTool::new(
+            "flaky",
+            |_request: ToolRequest| Err(ToolError::ExecutionFailed("boom".into())),
+        )))
         .expect("tool should register");
     let agent = ReactAgentBuilder::new(
         Arc::new(ScriptedModelClient::new(vec![
@@ -269,10 +301,26 @@ async fn react_agent_continues_after_tool_execution_failure() {
     assert_eq!(result.observations[0].output, "boom");
     assert!(sink.wait_for_len(12, Duration::from_secs(2)));
     let events = sink.events();
-    assert!(events.iter().any(|event| event.event_name == "agent.tool.failed"));
-    assert!(events.iter().any(|event| event.event_name == "agent.observation.created"));
-    assert!(events.iter().any(|event| event.event_name == "agent.run.completed"));
-    assert!(!events.iter().any(|event| event.event_name == "agent.run.failed"));
+    assert!(
+        events
+            .iter()
+            .any(|event| event.event_name == "agent.tool.failed")
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event.event_name == "agent.observation.created")
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event.event_name == "agent.run.completed")
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| event.event_name == "agent.run.failed")
+    );
 }
 
 #[tokio::test]
@@ -428,13 +476,11 @@ async fn react_agent_executes_single_tool_call_without_parallel_batching() {
         .expect("tool should register");
     let agent = ReactAgentBuilder::new(
         Arc::new(ScriptedModelClient::new(vec![
-            ModelResponse::tool_calls(vec![
-                ToolCall {
-                    call_id: Some("call-1".into()),
-                    tool_name: "echo".into(),
-                    input: json!({"value": "a"}),
-                },
-            ]),
+            ModelResponse::tool_calls(vec![ToolCall {
+                call_id: Some("call-1".into()),
+                tool_name: "echo".into(),
+                input: json!({"value": "a"}),
+            }]),
             ModelResponse::final_output("after-tool"),
         ])),
         Arc::new(registry),
@@ -685,6 +731,169 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
 }
 
 #[tokio::test]
+async fn react_agent_publishes_tool_progress_activity_events() {
+    let registry = ToolRegistry::default();
+    registry
+        .register(Arc::new(ProgressTool))
+        .expect("progress tool should register");
+    let sink = Arc::new(RecordingEventSink::with_route_class(
+        "agent-runtime-tool-progress",
+        BusRouteClass::Agui,
+    ));
+    let event_bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(240)),
+    )
+    .register_sink(sink.clone())
+    .build();
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![
+            ModelResponse::tool_call("progress", json!({})),
+            ModelResponse::final_output("after-progress"),
+        ])),
+        Arc::new(registry),
+        event_bus,
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    let mut context = base_context("RUN-TOOL-PROGRESS");
+    context.tools = vec![EffectiveTool {
+        tool_name: "progress".into(),
+        domain_code: None,
+        description: "Progress".into(),
+        input_schema: json!({"type": "object"}),
+        skill_name: None,
+        required_variable_keys: vec![],
+    }];
+
+    let result = agent
+        .run(context)
+        .await
+        .expect("progress tool run should pass");
+
+    assert_eq!(result.final_output, "after-progress");
+    assert!(sink.wait_for_len(13, Duration::from_secs(2)));
+    let events = sink.events();
+    let activity_payloads = events
+        .iter()
+        .filter(|event| event.event_name == "agent.tool.activity")
+        .map(|event| {
+            event
+                .payload_fields
+                .iter()
+                .find(|attr| attr.key == "tool_result_json")
+                .map(|attr| attr.value.clone())
+                .unwrap_or_default()
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        activity_payloads,
+        vec!["first progress line", "second progress line"]
+    );
+}
+
+#[tokio::test]
+async fn react_agent_publishes_parallel_tool_progress_activity_events() {
+    let registry = ToolRegistry::default();
+    registry
+        .register(Arc::new(ProgressTool))
+        .expect("progress tool should register");
+    let sink = Arc::new(RecordingEventSink::with_route_class(
+        "agent-runtime-parallel-tool-progress",
+        BusRouteClass::Agui,
+    ));
+    let event_bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(245)),
+    )
+    .register_sink(sink.clone())
+    .build();
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![
+            ModelResponse::tool_calls(vec![
+                ToolCall {
+                    call_id: Some("call-1".into()),
+                    tool_name: "progress".into(),
+                    input: json!({"index": 1}),
+                },
+                ToolCall {
+                    call_id: Some("call-2".into()),
+                    tool_name: "progress".into(),
+                    input: json!({"index": 2}),
+                },
+            ]),
+            ModelResponse::final_output("after-progress"),
+        ])),
+        Arc::new(registry),
+        event_bus,
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    let mut context = base_context("RUN-PARALLEL-TOOL-PROGRESS");
+    context.tools = vec![EffectiveTool {
+        tool_name: "progress".into(),
+        domain_code: None,
+        description: "Progress".into(),
+        input_schema: json!({"type": "object"}),
+        skill_name: None,
+        required_variable_keys: vec![],
+    }];
+
+    let result = agent
+        .run(context)
+        .await
+        .expect("parallel progress tool run should pass");
+
+    assert_eq!(result.final_output, "after-progress");
+    let events = {
+        let mut current = Vec::new();
+        for _ in 0..100 {
+            current = sink.events();
+            if current
+                .iter()
+                .filter(|event| event.event_name == "agent.tool.activity")
+                .count()
+                >= 4
+            {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        current
+    };
+    let payload =
+        |key: &str, event: &tron_backend::shared::event_bus::BusEvent| -> Option<String> {
+            event
+                .payload_fields
+                .iter()
+                .find(|attr| attr.key == key)
+                .map(|attr| attr.value.clone())
+        };
+    let activity_events = events
+        .iter()
+        .filter(|event| event.event_name == "agent.tool.activity")
+        .collect::<Vec<_>>();
+
+    assert_eq!(activity_events.len(), 4);
+    for tool_call_id in [
+        "RUN-PARALLEL-TOOL-PROGRESS-tool-1",
+        "RUN-PARALLEL-TOOL-PROGRESS-tool-2",
+    ] {
+        let lines = activity_events
+            .iter()
+            .filter(|event| payload("tool_call_id", event).as_deref() == Some(tool_call_id))
+            .map(|event| payload("tool_result_json", event).unwrap_or_default())
+            .collect::<Vec<_>>();
+        assert_eq!(lines.len(), 2);
+        assert!(lines.contains(&"first progress line".to_string()));
+        assert!(lines.contains(&"second progress line".to_string()));
+    }
+}
+
+#[tokio::test]
 async fn react_agent_truncates_oversize_tool_event_payloads_without_failing_run() {
     let oversized_output = "x".repeat(73_854);
     let registry = ToolRegistry::default();
@@ -898,5 +1107,8 @@ async fn zero_parallel_tool_call_limit_is_rejected_before_model_execution() {
         .await
         .expect_err("zero parallel tool-call limit should be rejected");
 
-    assert_eq!(error.to_string(), "maxParallelToolCalls must be greater than zero");
+    assert_eq!(
+        error.to_string(),
+        "maxParallelToolCalls must be greater than zero"
+    );
 }

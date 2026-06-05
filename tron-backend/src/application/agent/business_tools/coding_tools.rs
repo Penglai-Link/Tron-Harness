@@ -166,7 +166,10 @@ pub(super) fn resolve_optional_directory(
     context: &AgentRunContext,
     raw_directory: Option<&str>,
 ) -> Result<Option<PathBuf>, ToolError> {
-    match raw_directory.map(str::trim).filter(|value| !value.is_empty()) {
+    match raw_directory
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
         Some(value) => {
             let path = resolve_path(context, value)?;
             if !path.is_dir() {
@@ -232,7 +235,9 @@ pub(super) fn apply_replace(
 ) -> Result<usize, ToolError> {
     let occurrences = source.matches(target).count();
     if occurrences == 0 {
-        return Err(ToolError::ExecutionFailed("target text was not found".into()));
+        return Err(ToolError::ExecutionFailed(
+            "target text was not found".into(),
+        ));
     }
     *source = if replace_all {
         source.replace(target, replacement)
@@ -251,7 +256,9 @@ pub(super) fn apply_insert(
 ) -> Result<usize, ToolError> {
     let occurrences = source.matches(target).count();
     if occurrences == 0 {
-        return Err(ToolError::ExecutionFailed("target text was not found".into()));
+        return Err(ToolError::ExecutionFailed(
+            "target text was not found".into(),
+        ));
     }
     let replacement = if before {
         format!("{content}{target}")
@@ -362,15 +369,19 @@ mod tests {
     fn resolve_optional_directory_expands_home_directory_prefix() {
         let context = test_context(Some("/workspace/repo"));
         let home = home_dir().expect("HOME or USERPROFILE must be set");
-        let resolved =
-            resolve_optional_directory(&context, Some("~")).expect("tilde directory should resolve");
+        let resolved = resolve_optional_directory(&context, Some("~"))
+            .expect("tilde directory should resolve");
         assert_eq!(resolved, Some(home));
     }
 
     #[test]
     fn resolve_path_keeps_relative_paths_under_workspace_root() {
         let context = test_context(Some("/workspace/repo"));
-        let resolved = resolve_path(&context, "tron-backend/src").expect("relative path should resolve");
-        assert_eq!(resolved, PathBuf::from("/workspace/repo").join("tron-backend/src"));
+        let resolved =
+            resolve_path(&context, "tron-backend/src").expect("relative path should resolve");
+        assert_eq!(
+            resolved,
+            PathBuf::from("/workspace/repo").join("tron-backend/src")
+        );
     }
 }

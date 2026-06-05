@@ -10,7 +10,7 @@ import type { ChatSession, ChatSessionGroup, CreateChatSessionInput, UpdateChatS
 import { requestApi } from "@/shared/api/httpClient";
 import { getServiceDataSource, useServiceQuery } from "@/shared/api/serviceConfig";
 
-export function useChatSessionGroupList(workspaceCode: string) {
+export function useChatSessionGroupList(workspaceCode: string, refreshKey = 0) {
   return useServiceQuery<ChatSessionGroup[]>({
     apiInitialData: () => [],
     domain: "chat",
@@ -19,6 +19,7 @@ export function useChatSessionGroupList(workspaceCode: string) {
     mockData: () => getChatSessionGroups(),
     deps: [workspaceCode],
     params: { workspaceCode },
+    refreshKey,
   });
 }
 

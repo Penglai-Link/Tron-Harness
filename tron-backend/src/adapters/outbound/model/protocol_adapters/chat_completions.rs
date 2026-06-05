@@ -98,7 +98,10 @@ fn parse_chat_response(body: &Value) -> Option<ModelResponse> {
         .map(|calls| parse_chat_tool_calls(calls.as_slice()))
         .filter(|calls| !calls.is_empty())
     {
-        return Some(ModelResponse::tool_calls_with_usage(tool_calls, token_usage));
+        return Some(ModelResponse::tool_calls_with_usage(
+            tool_calls,
+            token_usage,
+        ));
     }
     if let Some(function_call) = message.get("function_call") {
         return parse_chat_legacy_function_call(function_call, token_usage);
@@ -166,8 +169,10 @@ fn parse_chat_stream_event(body: &Value) -> Option<ModelStreamEvent> {
     let delta = body.get("choices")?.as_array()?.first()?.get("delta")?;
     let event = if let Some(text) = delta.get("content").and_then(text_from_content) {
         ModelStreamEvent::text_delta(text)
-    } else if let Some(text) = chat_reasoning_delta(delta) {
+    } else if let Some(text) = chat_reasoning_summary_delta(delta) {
         ModelStreamEvent::reasoning_summary_delta(text)
+    } else if let Some(text) = chat_reasoning_delta(delta) {
+        ModelStreamEvent::reasoning_delta(text)
     } else {
         return None;
     };
@@ -176,6 +181,17 @@ fn parse_chat_stream_event(body: &Value) -> Option<ModelStreamEvent> {
     } else {
         Some(event)
     }
+}
+
+fn chat_reasoning_summary_delta(delta: &Value) -> Option<String> {
+    [
+        "reasoning_summary_content",
+        "reasoning_summary",
+        "thinking_summary_content",
+        "thinking_summary",
+    ]
+    .iter()
+    .find_map(|key| delta.get(key).and_then(text_from_content))
 }
 
 fn chat_reasoning_delta(delta: &Value) -> Option<String> {

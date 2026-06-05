@@ -382,6 +382,8 @@ type TranscriptAguiEvent = ChatAguiEvent | ChatAguiStreamEvent;
 const chatScrollBottomThreshold = 96;
 const chatScrollJumpButtonThreshold = 160;
 const liveAguiStartToleranceMs = 5_000;
+const activeChatReplayPollIntervalMs = 1_000;
+const activeChatReplayPendingTurnMaxAgeMs = 30 * 60_000;
 
 function aguiEventType(event: TranscriptAguiEvent) {
   if (typeof event.type === "string") return event.type;
@@ -589,9 +591,79 @@ function mergeTranscriptAguiEvents<T extends TranscriptAguiEvent>(...sources: T[
   return merged.sort((left, right) => (aguiEventMillis(left) ?? 0) - (aguiEventMillis(right) ?? 0));
 }
 
+function latestChatMessage(messages: ChatMessage[]) {
+  return messages.length ? messages[messages.length - 1] : null;
+}
+
+function messageCreatedMillis(message: ChatMessage) {
+  const parsed = Date.parse(message.createdAt);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function isRecentPendingUserTurn(messages: ChatMessage[], now = Date.now()) {
+  const latestMessage = latestChatMessage(messages);
+  if (!latestMessage || latestMessage.role !== "USER") return false;
+  const createdMillis = messageCreatedMillis(latestMessage);
+  if (createdMillis === null) return true;
+  return now - createdMillis <= activeChatReplayPendingTurnMaxAgeMs;
+}
+
+function replayRunCodesForPendingUserTurn(
+  events: TranscriptAguiEvent[],
+  sessionCode: string,
+  messages: ChatMessage[],
+) {
+  const runCodes = new Set<string>();
+  const latestMessage = latestChatMessage(messages);
+  if (!latestMessage || latestMessage.role !== "USER") return runCodes;
+  const latestUserMillis = messageCreatedMillis(latestMessage);
+  const firstEventMillisByRun = new Map<string, number>();
+
+  events.forEach((event) => {
+    const threadId = aguiEventThreadId(event);
+    if (threadId && threadId !== sessionCode) return;
+    const runCode = aguiEventRunCode(event);
+    if (!runCode || runCode === "stream") return;
+    const eventMillis = aguiEventMillis(event);
+    if (eventMillis === null) return;
+    const currentFirstMillis = firstEventMillisByRun.get(runCode);
+    if (currentFirstMillis === undefined || eventMillis < currentFirstMillis) {
+      firstEventMillisByRun.set(runCode, eventMillis);
+    }
+  });
+
+  firstEventMillisByRun.forEach((firstEventMillis, runCode) => {
+    if (latestUserMillis === null || firstEventMillis >= latestUserMillis - liveAguiStartToleranceMs) {
+      runCodes.add(runCode);
+    }
+  });
+  return runCodes;
+}
+
+function openAguiProtocolRunCodes(events: TranscriptAguiEvent[], sessionCode: string) {
+  const terminalByRun = new Map<string, boolean>();
+  events.forEach((event) => {
+    const threadId = aguiEventThreadId(event);
+    if (threadId && threadId !== sessionCode) return;
+    const runCode = aguiEventRunCode(event);
+    if (!runCode || runCode === "stream") return;
+    const type = aguiEventType(event).toUpperCase();
+    if (!terminalByRun.has(runCode)) terminalByRun.set(runCode, false);
+    if (type.includes("RUN_FINISHED") || type.includes("RUN_ERROR")) {
+      terminalByRun.set(runCode, true);
+    }
+  });
+  return new Set(
+    Array.from(terminalByRun.entries())
+      .filter(([, terminal]) => !terminal)
+      .map(([runCode]) => runCode),
+  );
+}
+
 function knownTranscriptRunCodes(
   messages: ChatMessage[],
   liveAnchorMessageCodes: Record<string, string>,
+  replayRunCodes: Set<string>,
 ) {
   const runCodes = new Set<string>();
   messages.forEach((message) => {
@@ -600,6 +672,7 @@ function knownTranscriptRunCodes(
   Object.keys(liveAnchorMessageCodes).forEach((runCode) => {
     if (runCode && runCode !== "stream") runCodes.add(runCode);
   });
+  replayRunCodes.forEach((runCode) => runCodes.add(runCode));
   return runCodes;
 }
 
@@ -609,7 +682,11 @@ function filterTranscriptAguiEventsForSession(
   messages: ChatMessage[],
   liveAnchorMessageCodes: Record<string, string>,
 ) {
-  const runCodes = knownTranscriptRunCodes(messages, liveAnchorMessageCodes);
+  const runCodes = knownTranscriptRunCodes(
+    messages,
+    liveAnchorMessageCodes,
+    replayRunCodesForPendingUserTurn(events, sessionCode, messages),
+  );
   if (!sessionCode || !runCodes.size) return [];
   return events.filter((event) => {
     const threadId = aguiEventThreadId(event);
@@ -743,8 +820,16 @@ interface ToolWorkCard {
   toolName: string;
 }
 
+interface ToolGroupWorkCard {
+  firstMillis: number;
+  id: string;
+  runCode: string;
+  toolCards: ToolWorkCard[];
+}
+
 type AguiUserWorkCard =
   | { kind: "reasoning"; value: ReasoningWorkCard }
+  | { kind: "toolGroup"; value: ToolGroupWorkCard }
   | { kind: "tool"; value: ToolWorkCard };
 
 function reasoningCardKey(event: TranscriptAguiEvent) {
@@ -870,7 +955,7 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
       ensureReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event);
       return;
     }
-    if (type === "REASONING_MESSAGE_CONTENT" || type === "REASONING_TEXT_CONTENT") {
+    if (type === "REASONING_MESSAGE_CONTENT") {
       const card = ensureReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event);
       const delta = "delta" in event && typeof event.delta === "string" ? event.delta : "";
       card.content = appendReasoningDelta(card.content, delta);
@@ -910,13 +995,38 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
     }
   });
 
+  const toolGroupCards = new Map<string, ToolGroupWorkCard>();
+  Array.from(toolCards.values())
+    .filter((value) => value.started)
+    .forEach((toolCard) => {
+      const groupKey = `${toolCard.runCode}:tool-group:${toolCard.parentReasoningId ?? "unassigned"}`;
+      const existing = toolGroupCards.get(groupKey);
+      if (existing) {
+        existing.toolCards.push(toolCard);
+        existing.firstMillis = Math.min(existing.firstMillis, toolCard.firstMillis);
+        return;
+      }
+      toolGroupCards.set(groupKey, {
+        firstMillis: toolCard.firstMillis,
+        id: groupKey,
+        runCode: toolCard.runCode,
+        toolCards: [toolCard],
+      });
+    });
+
   return [
     ...Array.from(reasoningCards.values())
       .filter((value) => value.content.trim() || value.toolCards.length > 0 || !value.ended)
       .map((value) => ({ kind: "reasoning" as const, value })),
-    ...Array.from(toolCards.values())
-      .filter((value) => value.started && !value.parentReasoningId)
-      .map((value) => ({ kind: "tool" as const, value })),
+    ...Array.from(toolGroupCards.values())
+      .map((value) => ({
+        kind: value.toolCards.length === 1 && value.toolCards[0].parentReasoningId === null
+          ? "tool"
+          : "toolGroup",
+        value: value.toolCards.length === 1 && value.toolCards[0].parentReasoningId === null
+          ? value.toolCards[0]
+          : value,
+      } as AguiUserWorkCard)),
   ].sort((left, right) => left.value.firstMillis - right.value.firstMillis);
 }
 
@@ -1843,17 +1953,19 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
     : "";
   const [expanded, setExpanded] = useState(() => !card.ended);
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const duration = card.endMillis ? formatAguiDuration(Math.max(0, card.endMillis - card.firstMillis)) : "";
   const nestedToolCards = card.toolCards.filter((toolCard) => toolCard.started);
-  const toolCount = nestedToolCards.length;
-  const title = card.ended && duration
-    ? `${toolCount ? `Thought for ${duration}, used ${toolCount} ${toolCount === 1 ? "tool" : "tools"}` : `Thought for ${duration}`}`
-    : `${toolCount ? `Thinking, using ${toolCount} ${toolCount === 1 ? "tool" : "tools"}` : "Thinking"}`;
-  const collapsedPreview = card.ended && hasContent ? deriveReasoningPreview(detail, nestedToolCards) : "";
+  const hasRunningTool = nestedToolCards.some((toolCard) => toolCard.started && !toolCard.ended && !toolCard.result);
+  const shouldStayExpanded = !card.ended || hasRunningTool;
+  const reasoningPreview = hasContent ? deriveReasoningPreview(detail, nestedToolCards) : "";
+  const headerSummary = initializingHint || reasoningPreview || (card.ended ? "Reasoning captured." : "Thinking...");
 
   useEffect(() => {
-    if (card.ended) setExpanded(false);
-  }, [card.ended]);
+    if (shouldStayExpanded) {
+      setExpanded(true);
+    } else {
+      setExpanded(false);
+    }
+  }, [shouldStayExpanded]);
 
   useEffect(() => {
     if (!expanded || !detail) return;
@@ -1868,67 +1980,39 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
   return (
     <article
       aria-label="Thinking"
-      className="rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-3 py-2 text-sm"
+      className="text-sm"
     >
       <button
-        className="flex w-full items-start justify-between gap-3 text-left"
+        className="group flex w-full items-start justify-between gap-3 rounded-md py-1 text-left text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)] focus:outline-none focus-visible:bg-[var(--color-surface-container-low)] focus-visible:text-[var(--color-on-surface)]"
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((current) => !current)}
       >
         <div className="flex min-w-0 items-start gap-2">
-          <span className="mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-container-low)] text-[var(--color-on-surface-variant)]">
+          <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded text-[var(--color-on-surface-variant)] transition group-hover:bg-[var(--color-surface-container-low)] group-hover:text-[var(--color-on-surface)]">
             <BrainCircuit className={card.ended ? undefined : "animate-pulse"} size={16} />
           </span>
-          <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className={cn("truncate font-semibold", card.ended ? undefined : "animate-pulse")}>{title}</span>
-            </div>
-            {initializingHint ? (
-              <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
-                {initializingHint}
-              </p>
-            ) : !expanded && collapsedPreview ? (
-              <p className="mt-1 line-clamp-2 text-xs leading-5 text-[var(--color-on-surface-variant)]">
-                {collapsedPreview}
-              </p>
-            ) : null}
-          </div>
+          <span className={cn("min-w-0 flex-1 line-clamp-2 text-sm leading-5", card.ended ? undefined : "animate-pulse")}>
+            {headerSummary}
+          </span>
         </div>
-        <span className="mt-1 shrink-0 text-[var(--color-on-surface-variant)]">
+        <span className="mt-0.5 shrink-0 text-[var(--color-on-surface-variant)]">
           {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
         </span>
       </button>
       {expanded ? (
-        <div className="mt-2 space-y-2 border-t border-[var(--color-outline-variant)] pt-2">
+        <div className="mt-1 space-y-3 pb-2 pl-7">
           {detail ? (
             <div
               ref={contentRef}
-              className="max-h-36 overflow-y-auto overscroll-contain rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-2.5"
+              className="max-h-36 overflow-y-auto overscroll-contain pr-2"
             >
               <MarkdownContent
                 ariaLabel="Streaming reasoning markdown"
-                className="min-h-0 py-0 leading-6"
+                className="min-h-0 py-0 text-sm leading-6 text-[var(--color-on-surface)]"
                 content={detail}
               />
             </div>
-          ) : null}
-          {nestedToolCards.length ? (
-            <section className="space-y-2" aria-label="Thought tool steps">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[var(--color-on-surface-variant)]">Used tools</p>
-                <span className="rounded-full bg-[var(--color-surface-container-high)] px-2 py-0.5 text-[11px] font-semibold text-[var(--color-on-surface-variant)]">
-                  {toolCount}
-                </span>
-              </div>
-              <ol className="space-y-1.5">
-                {nestedToolCards.map((toolCard, index) => (
-                  <li className="border-l border-[var(--color-outline-variant)] pl-3" key={toolCard.id}>
-                    <ToolUserCard card={toolCard} nested stepNumber={index + 1} />
-                  </li>
-                ))}
-              </ol>
-            </section>
           ) : null}
         </div>
       ) : null}
@@ -1941,7 +2025,7 @@ function JsonBlock({ value }: { value: unknown }) {
   if (!preview) return null;
 
   return (
-    <pre className="overflow-x-auto whitespace-pre-wrap rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)] [overflow-wrap:anywhere]">
+    <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)] [overflow-wrap:anywhere]">
       {preview}
     </pre>
   );
@@ -2001,31 +2085,52 @@ function CompactToolRow({
   const complete = card.ended || Boolean(card.result);
   const hasResultPayload = Boolean(card.result);
   const result = card.result || (complete ? "No result payload." : "");
-  const [expanded, setExpanded] = useState(() => !card.ended);
+  const [expanded, setExpanded] = useState(() => !complete);
+  const logRef = useRef<HTMLDivElement | null>(null);
+  const running = card.started && !complete;
   const hasParameters = hasToolParameterPayload(card.args);
   const parametersText = hasParameters ? formatJsonBlockValue(card.args) : "";
   const resultText = hasResultPayload ? formatJsonBlockValue(card.result) : "";
+  const toolLabel = toolSummaryLabel(card.toolName, card.args);
+  const nestedToolLabel = `${complete ? "Ran" : "Running"} ${toolLabel.replace(/^Run\s+/i, "")}`;
+  const [parametersExpanded, setParametersExpanded] = useState(false);
 
   useEffect(() => {
-    if (card.ended) setExpanded(false);
-  }, [card.ended]);
+    if (running) {
+      setExpanded(true);
+    } else if (complete) {
+      setExpanded(false);
+    }
+  }, [complete, running]);
+
+  useEffect(() => {
+    if (!expanded || complete || !card.logs.length) return;
+    const element = logRef.current;
+    if (!element) return;
+    const frame = window.requestAnimationFrame(() => {
+      element.scrollTop = element.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [card.logs.length, complete, expanded]);
 
   return (
     <div className={cn(
-      "rounded-md",
-      nested ? "bg-transparent" : "border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-2 py-1.5",
+      nested ? "text-sm" : "rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-2 py-1.5",
     )}>
       <button
         className={cn(
-          "flex w-full items-start justify-between gap-3 rounded-md text-left",
-          nested ? "px-2 py-2 transition hover:bg-white/60" : "px-1 py-1.5 transition hover:bg-[var(--color-hover-surface)]",
+          "flex w-full items-center justify-between gap-3 rounded-md text-left transition",
+          nested ? "py-1 text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)] focus:outline-none focus-visible:bg-[var(--color-surface-container-low)] focus-visible:text-[var(--color-on-surface)]" : "px-1 py-1.5 hover:bg-[var(--color-hover-surface)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]",
         )}
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((current) => !current)}
       >
-        <div className="flex min-w-0 items-start gap-2">
-          <span className="mt-0.5 inline-flex size-6 shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-container-low)] text-[11px] font-semibold text-[var(--color-on-surface-variant)]">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={cn(
+            "inline-flex shrink-0 items-center justify-center text-[11px] font-semibold text-[var(--color-on-surface-variant)]",
+            nested ? "size-4" : "size-6 rounded-md bg-[var(--color-surface-container-low)]",
+          )}>
             {typeof stepNumber === "number"
               ? stepNumber
               : complete
@@ -2034,8 +2139,10 @@ function CompactToolRow({
           </span>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-semibold">{toolSummaryLabel(card.toolName, card.args)}</span>
-              <Badge tone={complete ? "neutral" : "success"}>{complete ? "done" : "running"}</Badge>
+              <span className={cn("truncate", nested ? "font-normal" : "font-semibold")}>
+                {nested ? nestedToolLabel : toolLabel}
+              </span>
+              {nested ? null : <Badge tone={complete ? "neutral" : "success"}>{complete ? "done" : "running"}</Badge>}
             </div>
           </div>
         </div>
@@ -2045,19 +2152,29 @@ function CompactToolRow({
       </button>
       {expanded ? (
         <div className={cn(
-          "border-t border-[var(--color-outline-variant)]",
-          nested ? "ml-8 px-2 py-2" : "px-1 py-2",
+          "mt-1 border-t border-[var(--color-outline-variant)]",
+          nested ? "ml-6 py-2" : "px-1 py-2",
         )}>
           <div className="space-y-2">
             {hasParameters ? (
               <section className="flex min-h-0 flex-col gap-1">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Parameters</h3>
+                  <button
+                    aria-expanded={parametersExpanded}
+                    className="inline-flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)] focus:outline-none focus-visible:bg-[var(--color-surface-container-low)] focus-visible:text-[var(--color-on-surface)]"
+                    type="button"
+                    onClick={() => setParametersExpanded((current) => !current)}
+                  >
+                    {parametersExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                    <span>Parameters</span>
+                  </button>
                   <CopyValueButton ariaLabel="Copy parameters" title="Copy parameters" value={parametersText} />
                 </div>
-                <div className="max-h-40 overflow-y-auto">
-                  <JsonBlock value={card.args} />
-                </div>
+                {parametersExpanded ? (
+                  <div className="max-h-40 overflow-y-auto">
+                    <JsonBlock value={card.args} />
+                  </div>
+                ) : null}
               </section>
             ) : null}
             {complete ? (
@@ -2077,7 +2194,10 @@ function CompactToolRow({
             ) : (
               <section className="flex min-h-0 flex-col gap-1">
                 <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Log</h3>
-                <div className="max-h-64 space-y-1 overflow-y-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)]">
+                <div
+                  ref={logRef}
+                  className="max-h-64 space-y-1 overflow-y-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)]"
+                >
                   {card.logs.length ? card.logs.map((line, index) => (
                     <p className="whitespace-pre-wrap" key={`${card.id}-log-${index}`}>{line}</p>
                   )) : <p className="text-[var(--color-on-surface-variant)]">Waiting for tool activity...</p>}
@@ -2103,15 +2223,62 @@ function ToolUserCard({
   return <CompactToolRow card={card} nested={nested} stepNumber={stepNumber} />;
 }
 
+function ToolGroupUserCard({ card }: { card: ToolGroupWorkCard }) {
+  const toolCards = card.toolCards.filter((toolCard) => toolCard.started);
+  const hasRunningTool = toolCards.some((toolCard) => toolCard.started && !toolCard.ended && !toolCard.result);
+  const toolCount = toolCards.length;
+  const [expanded, setExpanded] = useState(() => hasRunningTool);
+
+  useEffect(() => {
+    setExpanded(hasRunningTool);
+  }, [hasRunningTool]);
+
+  if (!toolCount) return null;
+
+  return (
+    <section className="text-sm" aria-label="Tool run steps">
+      <button
+        aria-expanded={expanded}
+        className="group flex w-full items-center justify-between gap-3 rounded-md py-1 text-left text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)] focus:outline-none focus-visible:bg-[var(--color-surface-container-low)] focus-visible:text-[var(--color-on-surface)]"
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+      >
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="inline-flex size-5 shrink-0 items-center justify-center rounded text-[var(--color-on-surface-variant)] transition group-hover:bg-[var(--color-surface-container-low)] group-hover:text-[var(--color-on-surface)]">
+            <Terminal className={hasRunningTool ? "animate-pulse" : undefined} size={15} />
+          </span>
+          <span className="truncate font-medium">
+            {`Ran ${toolCount} ${toolCount === 1 ? "command" : "commands"}`}
+          </span>
+        </span>
+        <span className="shrink-0 text-[var(--color-on-surface-variant)]">
+          {expanded ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        </span>
+      </button>
+      {expanded ? (
+        <ol className="mt-1 space-y-1 pb-2 pl-7">
+          {toolCards.map((toolCard, index) => (
+            <li key={toolCard.id}>
+              <ToolUserCard card={toolCard} nested stepNumber={index + 1} />
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </section>
+  );
+}
+
 function AguiUserWorkRail({ cards }: { cards: AguiUserWorkCard[] }) {
   if (!cards.length) return null;
 
   return (
-    <section className="space-y-2 border-l border-[var(--color-outline-variant)] pl-4" aria-label="Agent work rail">
+    <section className="space-y-2 py-1" aria-label="Agent work rail">
       {cards.map((card) => (
         card.kind === "reasoning"
           ? <ReasoningUserCard card={card.value} key={`reasoning-${card.value.id}`} />
-          : <ToolUserCard card={card.value} key={`tool-${card.value.id}`} />
+          : card.kind === "toolGroup"
+            ? <ToolGroupUserCard card={card.value} key={`tool-group-${card.value.id}`} />
+            : <ToolUserCard card={card.value} key={`tool-${card.value.id}`} />
       ))}
     </section>
   );
@@ -2203,16 +2370,12 @@ function AguiRunWorkRail({
       {terminalEvent ? (
         <button
           aria-expanded={expanded}
-          className="flex w-full items-center gap-3 py-1 text-xs font-medium text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)]"
+          className="flex w-full items-center gap-1.5 border-b border-[var(--color-outline-variant)] py-1.5 text-sm font-medium text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)] focus:outline-none focus-visible:bg-[var(--color-surface-container-low)] focus-visible:text-[var(--color-on-surface)]"
           type="button"
           onClick={() => setExpanded((current) => !current)}
         >
-          <span className="h-px flex-1 bg-[var(--color-outline-variant)]" />
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            Worked for {aguiWorkDuration(events)}
-          </span>
-          <span className="h-px flex-1 bg-[var(--color-outline-variant)]" />
+          <span className="whitespace-nowrap">Worked for {aguiWorkDuration(events)}</span>
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
       ) : null}
       {!terminalEvent || expanded ? (
@@ -2232,15 +2395,17 @@ export function ChatManagementPage() {
   const { preferences: aguiWorkReplayPreferences } = useAguiWorkReplayPreferences();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
-  const groups = useChatSessionGroupList(activeWorkspaceCode);
+  const [activeChatDataRefreshKey, setActiveChatDataRefreshKey] = useState(0);
+  const [activeChatReplayRefreshKey, setActiveChatReplayRefreshKey] = useState(0);
+  const groups = useChatSessionGroupList(activeWorkspaceCode, activeChatDataRefreshKey);
   const [sessionGroups, setSessionGroups] = useState<ChatSessionGroup[]>([]);
   const [activeSessionCode, setActiveSessionCode] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [composer, setComposer] = useState("");
   const activeSession = findSession(sessionGroups, activeSessionCode) ?? firstSession(sessionGroups);
-  const messages = useChatMessageListBySession(activeSession?.sessionCode ?? "");
+  const messages = useChatMessageListBySession(activeSession?.sessionCode ?? "", activeChatDataRefreshKey);
   const aguiEvents = useChatAguiEvents(activeSession?.sessionCode ?? "");
-  const aguiProtocolEvents = useChatAguiProtocolEvents(activeSession?.sessionCode ?? "");
+  const aguiProtocolEvents = useChatAguiProtocolEvents(activeSession?.sessionCode ?? "", activeChatReplayRefreshKey);
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
   const [liveAguiEventsBySessionCode, setLiveAguiEventsBySessionCode] = useState<Record<string, ChatAguiStreamEvent[]>>({});
   const [liveAguiAnchorMessageCodesBySessionCode, setLiveAguiAnchorMessageCodesBySessionCode] = useState<Record<string, Record<string, string>>>({});
@@ -2567,6 +2732,22 @@ export function ChatManagementPage() {
     && activeSession
     && runningSessionCode === activeSession.sessionCode,
   );
+  const hasOpenReplayRun = useMemo(() => (
+    Boolean(activeSession?.sessionCode)
+    && openAguiProtocolRunCodes(aguiProtocolEvents, activeSession?.sessionCode ?? "").size > 0
+  ), [activeSession?.sessionCode, aguiProtocolEvents]);
+  const shouldPollActiveChatData = Boolean(
+    activeSession?.sessionCode
+    && !(sending && runningSessionCode === activeSession.sessionCode)
+    && (isRecentPendingUserTurn(visibleMessages) || hasOpenReplayRun)
+  );
+  const shouldPollActiveChatReplay = Boolean(
+    activeSession?.sessionCode
+    && (
+      (sending && runningSessionCode === activeSession.sessionCode)
+      || shouldPollActiveChatData
+    )
+  );
 
   const rightPanel = useMemo(() => {
     if (!hasActiveSession) return undefined;
@@ -2582,6 +2763,22 @@ export function ChatManagementPage() {
   }, [activeSession, aguiEvents, hasActiveSession, selectedMainAgentModel, selectedModel, visibleMessages]);
 
   useConsoleShellConfig({ rightPanel });
+
+  useEffect(() => {
+    if (!shouldPollActiveChatReplay) return;
+    const intervalId = window.setInterval(() => {
+      setActiveChatReplayRefreshKey((current) => current + 1);
+    }, activeChatReplayPollIntervalMs);
+    return () => window.clearInterval(intervalId);
+  }, [activeSession?.sessionCode, shouldPollActiveChatReplay]);
+
+  useEffect(() => {
+    if (!shouldPollActiveChatData) return;
+    const intervalId = window.setInterval(() => {
+      setActiveChatDataRefreshKey((current) => current + 1);
+    }, activeChatReplayPollIntervalMs);
+    return () => window.clearInterval(intervalId);
+  }, [activeSession?.sessionCode, shouldPollActiveChatData]);
 
   useEffect(() => {
     if (autoStickToBottomRef.current) scrollToLatestMessage("auto");

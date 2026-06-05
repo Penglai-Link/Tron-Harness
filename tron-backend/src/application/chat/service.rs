@@ -37,7 +37,10 @@ pub struct ChatService {
 
 impl ChatService {
     pub fn new(repository: impl ChatRepository + 'static) -> Self {
-        Self::with_id_provider(repository, Arc::new(SnowflakedSnowflakeIdProvider::default()))
+        Self::with_id_provider(
+            repository,
+            Arc::new(SnowflakedSnowflakeIdProvider::default()),
+        )
     }
 
     pub fn with_id_provider(

@@ -29,7 +29,7 @@ interface AguiProtocolEvent {
   data: ChatAguiStreamEvent;
 }
 
-export function useChatMessageListBySession(sessionCode: string) {
+export function useChatMessageListBySession(sessionCode: string, refreshKey = 0) {
   return useServiceQuery<ChatMessage[]>({
     apiInitialData: () => [],
     domain: "chat",
@@ -38,6 +38,7 @@ export function useChatMessageListBySession(sessionCode: string) {
     mockData: () => getChatMessages(sessionCode),
     deps: [sessionCode],
     params: { sessionCode },
+    refreshKey,
   });
 }
 
@@ -58,7 +59,7 @@ export function useChatAguiEvents(sessionCode: string) {
   });
 }
 
-export function useChatAguiProtocolEvents(sessionCode: string) {
+export function useChatAguiProtocolEvents(sessionCode: string, refreshKey = 0) {
   return useServiceQuery<ChatAguiStreamEvent[]>({
     apiInitialData: () => [],
     domain: "chat",
@@ -67,6 +68,7 @@ export function useChatAguiProtocolEvents(sessionCode: string) {
     mockData: () => [],
     deps: [sessionCode],
     params: { streamKey: sessionCode },
+    refreshKey,
     select: (payload) => {
       const records = Array.isArray(payload)
         ? payload
@@ -114,18 +116,23 @@ export async function streamChatMessage(
     const messageId = assistant?.messageCode ?? `${runId}-assistant`;
     const startedAt = Date.now();
     const staleRunId = `${runId}-stale`;
-    const firstReasoningContent = [
-      "Reviewing session context and available skills.",
-      ...Array.from({ length: 18 }, (_, index) => `Reasoning stream segment ${index + 1}: validating latest summary visibility while the card content overflows.`),
-    ];
-    const firstReasoningContentEvents: ChatAguiStreamEvent[] = firstReasoningContent.map((delta, index) => ({
-      type: index === 0 ? "REASONING_TEXT_CONTENT" : "REASONING_MESSAGE_CONTENT",
+    const firstRawReasoningContent = Array.from({ length: 18 }, (_, index) => `Raw reasoning stream segment ${index + 1}: validating raw provider reasoning stays out of the user card.`);
+    const firstReasoningContentEvents: ChatAguiStreamEvent[] = firstRawReasoningContent.map((delta, index) => ({
+      type: "REASONING_TEXT_CONTENT",
       threadId: session.sessionCode,
       runId,
       messageId: `${runId}-reasoning`,
       delta,
       timestamp: startedAt + 3 + index,
     }));
+    firstReasoningContentEvents.push({
+      type: "REASONING_MESSAGE_CONTENT",
+      threadId: session.sessionCode,
+      runId,
+      messageId: `${runId}-reasoning`,
+      delta: "Reviewing session context and available skills.",
+      timestamp: startedAt + 3 + firstReasoningContentEvents.length,
+    });
     const secondReasoningContent = "Summarizing tool results before replying.";
     const firstReasoningEndOffset = 3 + firstReasoningContentEvents.length;
     const toolCallDefinitions = [
@@ -175,7 +182,31 @@ export async function streamChatMessage(
         },
       ];
     });
-    const unmatchedActivityTimestamp = startedAt + firstReasoningEndOffset + 2 + toolCallDefinitions.length * 4;
+    const runningLogToolId = `${runId}-tool-log-scroll`;
+    const shouldEmitLogScrollFixture = input.content.includes("scrolling tool log");
+    const runningLogEvents: ChatAguiStreamEvent[] = shouldEmitLogScrollFixture
+      ? [
+          {
+            type: "TOOL_CALL_START",
+            threadId: session.sessionCode,
+            runId,
+            toolCallId: runningLogToolId,
+            toolCallName: "bash.exec",
+            toolCallArgs: { command: "bash", stdin: "for i in $(seq 1 40); do echo log-$i; done" },
+            timestamp: startedAt + firstReasoningEndOffset + 2 + toolCallDefinitions.length * 4,
+          },
+          ...Array.from({ length: 40 }, (_, index) => ({
+            type: "ACTIVITY_DELTA" as const,
+            threadId: session.sessionCode,
+            runId,
+            toolCallId: runningLogToolId,
+            toolCallName: "bash.exec",
+            delta: [{ op: "add", path: "/logs/-", value: `stream log line ${index + 1}` }],
+            timestamp: startedAt + firstReasoningEndOffset + 3 + toolCallDefinitions.length * 4 + index,
+          })),
+        ]
+      : [];
+    const unmatchedActivityTimestamp = startedAt + firstReasoningEndOffset + 2 + toolCallDefinitions.length * 4 + runningLogEvents.length;
     await new Promise((resolve) => { window.setTimeout(resolve, 120); });
     [
       { type: "RUN_STARTED", threadId: session.sessionCode, runId: staleRunId, timestamp: startedAt - 657_000 },
@@ -192,6 +223,7 @@ export async function streamChatMessage(
       { type: "REASONING_MESSAGE_END", threadId: session.sessionCode, runId, messageId: `${runId}-reasoning`, timestamp: startedAt + firstReasoningEndOffset },
       { type: "REASONING_END", threadId: session.sessionCode, runId, messageId: `${runId}-reasoning`, timestamp: startedAt + firstReasoningEndOffset + 1 },
       ...toolCallEvents,
+      ...runningLogEvents,
       { type: "ACTIVITY_DELTA", threadId: session.sessionCode, runId, toolCallId: `${runId}-unmatched-tool`, delta: [{ op: "add", path: "/logs/-", value: "This log belongs elsewhere" }], timestamp: unmatchedActivityTimestamp },
       { type: "REASONING_START", threadId: session.sessionCode, runId, messageId: `${runId}-reasoning`, timestamp: unmatchedActivityTimestamp + 1 },
       { type: "REASONING_MESSAGE_START", threadId: session.sessionCode, runId, messageId: `${runId}-reasoning`, timestamp: unmatchedActivityTimestamp + 2 },

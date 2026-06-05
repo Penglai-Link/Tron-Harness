@@ -93,7 +93,10 @@ impl Tool for FsReadTextTool {
         let path = resolve_path(context, &input.path)?;
         let content = fs::read_to_string(&path)
             .map_err(|error| ToolError::ExecutionFailed(format!("read failed: {error}")))?;
-        let all_lines = content.lines().map(|line| line.to_string()).collect::<Vec<_>>();
+        let all_lines = content
+            .lines()
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>();
         let start_line = input.start_line.unwrap_or(1);
         if start_line == 0 {
             return Err(ToolError::ExecutionFailed(

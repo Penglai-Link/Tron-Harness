@@ -30,6 +30,11 @@ use super::{
 };
 
 const MAIN_AGENT_CODE: &str = "main-agent";
+const MAIN_AGENT_FINAL_OUTPUT_GUIDANCE: &str = r#"Final assistant output contract:
+- The UI already renders Thinking and tool progress separately.
+- Do not repeat reasoning summaries, tool-progress narration, or step-by-step progress in the final answer.
+- Answer with only the final result, concise conclusion, and necessary user-facing evidence such as command results or artifact paths.
+- Do not expose chain-of-thought."#;
 
 #[derive(Clone)]
 pub struct AgentInvocationService {
@@ -252,6 +257,7 @@ impl AgentInvocationService {
             })? {
                 messages.push(AgentMessage::system(guidance));
             }
+            messages.push(AgentMessage::system(MAIN_AGENT_FINAL_OUTPUT_GUIDANCE));
         }
         if tool_exposure.tool_exposure_mode == Some(ToolExposureMode::DomainDiscovery)
             && !tool_exposure.visible_domains.is_empty()

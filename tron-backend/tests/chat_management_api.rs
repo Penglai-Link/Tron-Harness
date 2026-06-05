@@ -4,7 +4,7 @@ use std::{
     convert::Infallible,
     path::PathBuf,
     sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use axum::{
@@ -19,7 +19,7 @@ use axum::{
 };
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
-use tokio::{net::TcpListener, task::JoinHandle};
+use tokio::{net::TcpListener, task::JoinHandle, time::sleep};
 use tron_backend::{
     adapters::outbound::persistence::SqliteChatRepository,
     application::chat::{ChatService, CreateChatSessionCommand},
@@ -395,10 +395,10 @@ async fn chat_stream_persists_messages_and_emits_deltas() {
     let body = String::from_utf8(body.to_vec()).expect("stream body should be utf8");
     assert!(body.contains("event: RUN_STARTED"));
     assert!(body.contains("\"type\":\"RUN_STARTED\""));
-    assert!(body.contains("event: REASONING_MESSAGE_CONTENT"));
+    assert!(body.contains("event: REASONING_TEXT_CONTENT"));
     assert!(body.contains("thinking about stream this session"));
     assert!(body.contains("done thinking."));
-    assert!(body.matches("event: REASONING_MESSAGE_CONTENT").count() > 1);
+    assert!(!body.contains("event: REASONING_MESSAGE_CONTENT"));
     assert!(!body.contains("Analyzing request with gpt-chat."));
     assert!(body.contains("event: TEXT_MESSAGE_START"));
     assert!(body.contains("event: TEXT_MESSAGE_CONTENT"));
@@ -993,6 +993,92 @@ async fn chat_stream_uses_opencode_system_agent_cli_runtime_and_emits_live_event
     assert!(body.contains("event: TEXT_MESSAGE_END"));
     assert!(body.contains("event: RUN_FINISHED"));
     assert!(!body.contains("event: RUN_ERROR"));
+}
+
+#[tokio::test]
+async fn chat_stream_protocol_replay_survives_client_disconnect() {
+    let codex_command = temp_command_path("codex-disconnect-replay");
+    let opencode_command = temp_command_path("opencode-disconnect-replay");
+    write_executable_script(
+        &codex_command,
+        "#!/bin/sh\necho '{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\",\"text\":\"codex fallback\"}}'\necho '{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":2}}'\n",
+    );
+    write_executable_script(
+        &opencode_command,
+        "#!/bin/sh\necho '{\"type\":\"reasoning\",\"sessionID\":\"ses-disconnect\",\"part\":{\"text\":\"disconnect thinking\"}}'\nsleep 1\necho '{\"type\":\"text\",\"part\":{\"text\":\"disconnect \"}}'\necho '{\"type\":\"text\",\"part\":{\"text\":\"reply\"}}'\necho '{\"type\":\"step_finish\",\"part\":{\"tokens\":{\"input\":11,\"output\":7,\"total\":18}}}'\n",
+    );
+
+    let app = app_with_system_agent_commands(
+        "chat-system-disconnect-replay",
+        &codex_command,
+        &opencode_command,
+    );
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Disconnect replay session",
+            "agentCode": "opencode"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let stream_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages/stream"),
+        Some(json!({
+            "content": "stream then disconnect",
+            "workspaceCode": "TRON_CORE",
+            "systemModelId": "openai/gpt-4.1"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(stream_response.status(), StatusCode::OK);
+    drop(stream_response);
+
+    let mut replay_payload = json!(null);
+    for _ in 0..40 {
+        let response = request_with_headers(
+            &app,
+            Method::GET,
+            &format!("/api/v1/agents/agui/streams/{session_code}/protocol-events"),
+            None,
+            None,
+            Some(&authorization),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        replay_payload = response_json(response).await;
+        let serialized = replay_payload.to_string();
+        if serialized.contains("RUN_FINISHED") && serialized.contains("disconnect reply") {
+            break;
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+
+    let replay_json = replay_payload.to_string();
+    assert!(replay_json.contains("RUN_STARTED"));
+    assert!(replay_json.contains("REASONING_MESSAGE_CONTENT"));
+    assert!(replay_json.contains("disconnect thinking"));
+    assert!(replay_json.contains("TEXT_MESSAGE_CONTENT"));
+    assert!(replay_json.contains("disconnect reply"));
+    assert!(replay_json.contains("RUN_FINISHED"));
 }
 
 #[tokio::test]

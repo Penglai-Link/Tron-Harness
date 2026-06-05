@@ -271,8 +271,7 @@ mod tests {
     use serde_json::json;
 
     use crate::domain::agent::{
-        AgentMessage, AgentModelProtocol, ModelRequest, ModelResponse, ModelStreamEvent,
-        ToolCall,
+        AgentMessage, AgentModelProtocol, ModelRequest, ModelResponse, ModelStreamEvent, ToolCall,
     };
 
     #[derive(Clone)]
@@ -370,7 +369,9 @@ mod tests {
             }
         );
         assert_eq!(
-            seen.lock().expect("stream event collection mutex poisoned").as_slice(),
+            seen.lock()
+                .expect("stream event collection mutex poisoned")
+                .as_slice(),
             &[ModelStreamEvent::text_delta("好的，我来同时调用")]
         );
     }

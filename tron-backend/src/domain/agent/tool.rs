@@ -82,6 +82,15 @@ pub trait Tool: Send + Sync {
         request: ToolRequest,
         context: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError>;
+    fn exec_with_progress(
+        &self,
+        request: ToolRequest,
+        context: &AgentRunContext,
+        progress: &mut dyn FnMut(String),
+    ) -> Result<ToolExecutionResult, ToolError> {
+        let _ = progress;
+        self.exec(request, context)
+    }
 }
 
 pub struct InProcessTool<F>
@@ -144,6 +153,16 @@ impl ToolRegistry {
         request: ToolRequest,
         context: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
+        let mut progress = |_line: String| {};
+        self.execute_allowed_with_progress(request, context, &mut progress)
+    }
+
+    pub fn execute_allowed_with_progress(
+        &self,
+        request: ToolRequest,
+        context: &AgentRunContext,
+        progress: &mut dyn FnMut(String),
+    ) -> Result<ToolExecutionResult, ToolError> {
         if !context
             .tools
             .iter()
@@ -158,6 +177,6 @@ impl ToolRegistry {
             .get(&request.tool_name)
             .cloned()
             .ok_or_else(|| ToolError::MissingTool(request.tool_name.clone()))?;
-        tool.exec(request, context)
+        tool.exec_with_progress(request, context, progress)
     }
 }

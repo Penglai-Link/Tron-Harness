@@ -216,7 +216,9 @@ fn tool_observation_message(
 ) -> AgentMessage {
     let content = format_tool_observation_message(observation);
     match model_call_id {
-        Some(call_id) => AgentMessage::tool_with_call_id(content, call_id, observation.output.clone()),
+        Some(call_id) => {
+            AgentMessage::tool_with_call_id(content, call_id, observation.output.clone())
+        }
         None => AgentMessage::tool(content),
     }
 }
@@ -301,7 +303,10 @@ mod tests {
     fn responses_state_uses_delta_items_and_previous_response_id() {
         let context = responses_context();
         let mut state = ResponsesItemState::new(context.messages.clone());
-        assert_eq!(TurnStateAdapter::Responses(state.clone()).kind(), TurnStateKind::Responses);
+        assert_eq!(
+            TurnStateAdapter::Responses(state.clone()).kind(),
+            TurnStateKind::Responses
+        );
 
         let request = state.build_request(&context);
         assert_eq!(request.previous_response_id, None);

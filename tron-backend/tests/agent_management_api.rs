@@ -598,14 +598,21 @@ async fn main_agent_config_is_persisted_and_only_main_agent_runs_receive_guidanc
     let main_messages = recorded_requests[0]["messages"]
         .as_array()
         .expect("main-agent messages should be an array");
+    assert_eq!(main_messages.len(), 3);
     assert_eq!(main_messages[0]["role"], json!("system"));
     let main_guidance = main_messages[0]["content"]
         .as_str()
         .expect("main-agent guidance should be text");
     assert!(main_guidance.contains("Calm, terse, and surgical."));
     assert!(main_guidance.contains("Summarize the workspace problem before acting."));
-    assert_eq!(main_messages[1]["role"], json!("user"));
-    assert_eq!(main_messages[1]["content"], json!("Investigate latency."));
+    assert_eq!(main_messages[1]["role"], json!("system"));
+    let output_guidance = main_messages[1]["content"]
+        .as_str()
+        .expect("main-agent output guidance should be text");
+    assert!(output_guidance.contains("renders Thinking and tool progress separately"));
+    assert!(output_guidance.contains("Do not repeat reasoning summaries"));
+    assert_eq!(main_messages[2]["role"], json!("user"));
+    assert_eq!(main_messages[2]["content"], json!("Investigate latency."));
 
     let task_messages = recorded_requests[1]["messages"]
         .as_array()
@@ -971,7 +978,11 @@ async fn tool_catalog_read_apis_are_available() {
     assert!(domains.iter().any(|row| row["domainCode"] == json!("task")));
     assert!(domains.iter().any(|row| row["domainCode"] == json!("bash")));
     assert!(domains.iter().any(|row| row["domainCode"] == json!("fs")));
-    assert!(domains.iter().any(|row| row["domainCode"] == json!("search")));
+    assert!(
+        domains
+            .iter()
+            .any(|row| row["domainCode"] == json!("search"))
+    );
 
     let tools_response = request_with_headers(
         &app,
@@ -1113,12 +1124,16 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
             .as_array()
             .is_some_and(|rows| !rows.is_empty())
     );
-    assert!(main_row["selectedToolCodes"]
-        .as_array()
-        .is_some_and(|rows| rows.iter().any(|code| code == "bash.exec")));
-    assert!(main_row["selectedToolCodes"]
-        .as_array()
-        .is_some_and(|rows| rows.iter().any(|code| code == "fs.read_text")));
+    assert!(
+        main_row["selectedToolCodes"]
+            .as_array()
+            .is_some_and(|rows| rows.iter().any(|code| code == "bash.exec"))
+    );
+    assert!(
+        main_row["selectedToolCodes"]
+            .as_array()
+            .is_some_and(|rows| rows.iter().any(|code| code == "fs.read_text"))
+    );
 
     let get_response = request_with_headers(
         &app,
@@ -1301,8 +1316,7 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
     let lib_rs = source_dir.join("lib.rs");
     std::fs::write(&cargo_toml, "[package]\nname = \"coding-tools\"\n")
         .expect("Cargo.toml should be written");
-    std::fs::write(&lib_rs, "pub struct ToolRegistry;\n")
-        .expect("lib.rs should be written");
+    std::fs::write(&lib_rs, "pub struct ToolRegistry;\n").expect("lib.rs should be written");
 
     let model_server = scripted_model_server(vec![
         json!({
@@ -1387,7 +1401,10 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
     .await;
     assert_eq!(run_response.status(), StatusCode::OK);
     let run_body = response_json(run_response).await;
-    assert_eq!(run_body["data"]["finalOutput"], json!("coding tools executed"));
+    assert_eq!(
+        run_body["data"]["finalOutput"],
+        json!("coding tools executed")
+    );
 
     let recorded_requests = model_server
         .requests
@@ -1425,21 +1442,21 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
         .expect("second request messages should be an array");
     assert!(second_messages.iter().any(|message| {
         message["role"] == json!("user")
-            && message["content"]
-                .as_str()
-                .is_some_and(|content| content.contains("bash.exec") && content.contains("[package]"))
+            && message["content"].as_str().is_some_and(|content| {
+                content.contains("bash.exec") && content.contains("[package]")
+            })
     }));
     assert!(second_messages.iter().any(|message| {
         message["role"] == json!("user")
-            && message["content"]
-                .as_str()
-                .is_some_and(|content| content.contains("fs.read_text") && content.contains("ToolRegistry"))
+            && message["content"].as_str().is_some_and(|content| {
+                content.contains("fs.read_text") && content.contains("ToolRegistry")
+            })
     }));
     assert!(second_messages.iter().any(|message| {
         message["role"] == json!("user")
-            && message["content"]
-                .as_str()
-                .is_some_and(|content| content.contains("search.glob") && content.contains("src/lib.rs"))
+            && message["content"].as_str().is_some_and(|content| {
+                content.contains("search.glob") && content.contains("src/lib.rs")
+            })
     }));
     assert!(second_messages.iter().any(|message| {
         message["role"] == json!("user")

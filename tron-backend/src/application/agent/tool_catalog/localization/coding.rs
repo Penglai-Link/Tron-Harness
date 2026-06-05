@@ -19,15 +19,15 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.bash.exec.sampleResultSummary" => {
             Some("Returns command stdout, stderr, and exit status.")
         }
-        "agent.toolCatalog.tools.bash.exec.params.command" => {
-            Some("Executable name or absolute path to run. Use bash with -c when shell parsing is required.")
-        }
-        "agent.toolCatalog.tools.bash.exec.params.args" => {
-            Some("Structured command arguments passed as-is. Use bash -c or -lc when you need shell parsing, expansion, pipes, or redirects.")
-        }
-        "agent.toolCatalog.tools.bash.exec.params.cwd" => {
-            Some("Optional working directory. Absolute, relative, or ~ home-directory paths are allowed.")
-        }
+        "agent.toolCatalog.tools.bash.exec.params.command" => Some(
+            "Executable name or absolute path to run. Use bash with -c when shell parsing is required.",
+        ),
+        "agent.toolCatalog.tools.bash.exec.params.args" => Some(
+            "Structured command arguments passed as-is. Use bash -c or -lc when you need shell parsing, expansion, pipes, or redirects.",
+        ),
+        "agent.toolCatalog.tools.bash.exec.params.cwd" => Some(
+            "Optional working directory. Absolute, relative, or ~ home-directory paths are allowed.",
+        ),
         "agent.toolCatalog.tools.bash.exec.params.stdin" => {
             Some("Optional text piped to the process standard input.")
         }
@@ -41,9 +41,9 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.fs.read_text.sampleResultSummary" => {
             Some("Returns file content and the materialized line range.")
         }
-        "agent.toolCatalog.tools.fs.read_text.params.path" => {
-            Some("File path to read, absolute, relative to the workspace root, or a ~ home-directory path.")
-        }
+        "agent.toolCatalog.tools.fs.read_text.params.path" => Some(
+            "File path to read, absolute, relative to the workspace root, or a ~ home-directory path.",
+        ),
         "agent.toolCatalog.tools.fs.read_text.params.startLine" => {
             Some("Optional one-based start line.")
         }
@@ -60,12 +60,10 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.fs.write_text.sampleResultSummary" => {
             Some("Returns the written file path, mode, and byte count.")
         }
-        "agent.toolCatalog.tools.fs.write_text.params.path" => {
-            Some("Target file path, absolute, relative to the workspace root, or a ~ home-directory path.")
-        }
-        "agent.toolCatalog.tools.fs.write_text.params.content" => {
-            Some("Text content to write.")
-        }
+        "agent.toolCatalog.tools.fs.write_text.params.path" => Some(
+            "Target file path, absolute, relative to the workspace root, or a ~ home-directory path.",
+        ),
+        "agent.toolCatalog.tools.fs.write_text.params.content" => Some("Text content to write."),
         "agent.toolCatalog.tools.fs.write_text.params.mode" => {
             Some("Write mode. Allowed values: create, overwrite, append.")
         }
@@ -79,9 +77,9 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.fs.apply_patch.sampleResultSummary" => {
             Some("Returns the target file, action, and replacement count.")
         }
-        "agent.toolCatalog.tools.fs.apply_patch.params.path" => {
-            Some("Target file path, absolute, relative to the workspace root, or a ~ home-directory path.")
-        }
+        "agent.toolCatalog.tools.fs.apply_patch.params.path" => Some(
+            "Target file path, absolute, relative to the workspace root, or a ~ home-directory path.",
+        ),
         "agent.toolCatalog.tools.fs.apply_patch.params.action" => {
             Some("Patch action. Allowed values: replace, delete, insert_before, insert_after.")
         }
@@ -101,9 +99,9 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.fs.list.sampleResultSummary" => {
             Some("Returns directory entries with file type metadata.")
         }
-        "agent.toolCatalog.tools.fs.list.params.path" => {
-            Some("Directory path to inspect, absolute, relative to the workspace root, or a ~ home-directory path.")
-        }
+        "agent.toolCatalog.tools.fs.list.params.path" => Some(
+            "Directory path to inspect, absolute, relative to the workspace root, or a ~ home-directory path.",
+        ),
         "agent.toolCatalog.tools.fs.list.params.recursive" => {
             Some("Whether nested directories should be traversed.")
         }
@@ -126,9 +124,9 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.fs.stat.sampleResultSummary" => {
             Some("Returns existence, type, size, and readonly metadata.")
         }
-        "agent.toolCatalog.tools.fs.stat.params.path" => {
-            Some("Path to inspect, absolute, relative to the workspace root, or a ~ home-directory path.")
-        }
+        "agent.toolCatalog.tools.fs.stat.params.path" => Some(
+            "Path to inspect, absolute, relative to the workspace root, or a ~ home-directory path.",
+        ),
         "agent.toolCatalog.tools.fs.stat.params.followSymlink" => {
             Some("Whether symlink targets should be followed before reading metadata.")
         }
@@ -142,9 +140,9 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.search.grep.params.pattern" => {
             Some("Pattern text passed to ripgrep.")
         }
-        "agent.toolCatalog.tools.search.grep.params.root" => {
-            Some("Optional search root directory. Absolute, relative, or ~ home-directory paths are allowed. Uses the current workspace root when omitted.")
-        }
+        "agent.toolCatalog.tools.search.grep.params.root" => Some(
+            "Optional search root directory. Absolute, relative, or ~ home-directory paths are allowed. Uses the current workspace root when omitted.",
+        ),
         "agent.toolCatalog.tools.search.grep.params.glob" => {
             Some("Optional glob filters forwarded to ripgrep.")
         }
@@ -170,9 +168,9 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.search.glob.params.patterns" => {
             Some("One or more glob patterns used to filter file paths.")
         }
-        "agent.toolCatalog.tools.search.glob.params.root" => {
-            Some("Optional search root directory. Absolute, relative, or ~ home-directory paths are allowed. Uses the current workspace root when omitted.")
-        }
+        "agent.toolCatalog.tools.search.glob.params.root" => Some(
+            "Optional search root directory. Absolute, relative, or ~ home-directory paths are allowed. Uses the current workspace root when omitted.",
+        ),
         "agent.toolCatalog.tools.search.glob.params.includeHidden" => {
             Some("Whether hidden files should be included.")
         }
@@ -189,9 +187,9 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.search.path.params.patterns" => {
             Some("One or more wildcard patterns used to match path names or relative paths.")
         }
-        "agent.toolCatalog.tools.search.path.params.root" => {
-            Some("Optional search root directory. Absolute, relative, or ~ home-directory paths are allowed. Uses the current workspace root when omitted.")
-        }
+        "agent.toolCatalog.tools.search.path.params.root" => Some(
+            "Optional search root directory. Absolute, relative, or ~ home-directory paths are allowed. Uses the current workspace root when omitted.",
+        ),
         "agent.toolCatalog.tools.search.path.params.entryType" => {
             Some("Which path types to return. Allowed values: any, file, directory.")
         }
@@ -211,9 +209,7 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
 pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
     match key {
         "agent.toolCatalog.domains.bash.name" => Some("命令行工具"),
-        "agent.toolCatalog.domains.bash.description" => {
-            Some("以结构化参数执行 shell 兜底命令。")
-        }
+        "agent.toolCatalog.domains.bash.description" => Some("以结构化参数执行 shell 兜底命令。"),
         "agent.toolCatalog.domains.fs.name" => Some("文件工具"),
         "agent.toolCatalog.domains.fs.description" => {
             Some("读取、写入、检查并修补本地工作区文件。")
@@ -229,10 +225,12 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.bash.exec.sampleResultSummary" => {
             Some("返回命令的 stdout、stderr 和退出状态。")
         }
-        "agent.toolCatalog.tools.bash.exec.params.command" => Some("要执行的程序名或绝对路径；需要 shell 解析时请使用 bash 并传入 -c。"),
-        "agent.toolCatalog.tools.bash.exec.params.args" => {
-            Some("按参数数组传入的结构化命令参数，不经过 shell 解析；需要 shell 解析、展开、管道或重定向时请使用 bash -c 或 -lc。")
+        "agent.toolCatalog.tools.bash.exec.params.command" => {
+            Some("要执行的程序名或绝对路径；需要 shell 解析时请使用 bash 并传入 -c。")
         }
+        "agent.toolCatalog.tools.bash.exec.params.args" => Some(
+            "按参数数组传入的结构化命令参数，不经过 shell 解析；需要 shell 解析、展开、管道或重定向时请使用 bash -c 或 -lc。",
+        ),
         "agent.toolCatalog.tools.bash.exec.params.cwd" => {
             Some("可选工作目录；可填写绝对路径、相对路径或 `~` 家目录路径。")
         }
@@ -253,7 +251,9 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
             Some("要读取的文件路径，可为绝对路径、相对工作区根目录路径，或 `~` 家目录路径。")
         }
         "agent.toolCatalog.tools.fs.read_text.params.startLine" => Some("可选起始行，1 开始。"),
-        "agent.toolCatalog.tools.fs.read_text.params.endLine" => Some("可选结束行，按 1 开始且包含该行。"),
+        "agent.toolCatalog.tools.fs.read_text.params.endLine" => {
+            Some("可选结束行，按 1 开始且包含该行。")
+        }
         "agent.toolCatalog.tools.fs.read_text.params.maxBytes" => {
             Some("按行截取后最多返回的字节数。")
         }
@@ -297,9 +297,7 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
             Some("是否对所有命中的锚点都执行修补。")
         }
         "agent.toolCatalog.tools.fs.list.name" => Some("列出文件"),
-        "agent.toolCatalog.tools.fs.list.description" => {
-            Some("列出本地路径下的文件和目录。")
-        }
+        "agent.toolCatalog.tools.fs.list.description" => Some("列出本地路径下的文件和目录。"),
         "agent.toolCatalog.tools.fs.list.sampleResultSummary" => {
             Some("返回目录项以及文件类型元数据。")
         }
@@ -329,28 +327,36 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.search.grep.sampleResultSummary" => {
             Some("返回带文件和行号前缀的命中文本。")
         }
-        "agent.toolCatalog.tools.search.grep.params.pattern" => Some("传给 ripgrep 的搜索模式文本。"),
-        "agent.toolCatalog.tools.search.grep.params.root" => {
-            Some("可选搜索根目录；可填写绝对路径、相对路径或 `~` 家目录路径；缺省时使用当前工作区根目录。")
+        "agent.toolCatalog.tools.search.grep.params.pattern" => {
+            Some("传给 ripgrep 的搜索模式文本。")
         }
+        "agent.toolCatalog.tools.search.grep.params.root" => Some(
+            "可选搜索根目录；可填写绝对路径、相对路径或 `~` 家目录路径；缺省时使用当前工作区根目录。",
+        ),
         "agent.toolCatalog.tools.search.grep.params.glob" => {
             Some("可选 glob 过滤条件，会透传给 ripgrep。")
         }
         "agent.toolCatalog.tools.search.grep.params.caseSensitive" => Some("搜索是否区分大小写。"),
         "agent.toolCatalog.tools.search.grep.params.word" => Some("命中是否必须满足单词边界。"),
-        "agent.toolCatalog.tools.search.grep.params.contextLines" => Some("每个命中周围额外返回的上下文行数。"),
-        "agent.toolCatalog.tools.search.grep.params.maxResults" => Some("ripgrep 最多返回的命中数量。"),
+        "agent.toolCatalog.tools.search.grep.params.contextLines" => {
+            Some("每个命中周围额外返回的上下文行数。")
+        }
+        "agent.toolCatalog.tools.search.grep.params.maxResults" => {
+            Some("ripgrep 最多返回的命中数量。")
+        }
         "agent.toolCatalog.tools.search.glob.name" => Some("查找文件"),
         "agent.toolCatalog.tools.search.glob.description" => {
             Some("在本地根目录内使用 ripgrep 的 glob 过滤查找文件路径。")
         }
-        "agent.toolCatalog.tools.search.glob.sampleResultSummary" => Some("返回命中的相对文件路径列表。"),
+        "agent.toolCatalog.tools.search.glob.sampleResultSummary" => {
+            Some("返回命中的相对文件路径列表。")
+        }
         "agent.toolCatalog.tools.search.glob.params.patterns" => {
             Some("一个或多个用于过滤文件路径的 glob 模式。")
         }
-        "agent.toolCatalog.tools.search.glob.params.root" => {
-            Some("可选搜索根目录；可填写绝对路径、相对路径或 `~` 家目录路径；缺省时使用当前工作区根目录。")
-        }
+        "agent.toolCatalog.tools.search.glob.params.root" => Some(
+            "可选搜索根目录；可填写绝对路径、相对路径或 `~` 家目录路径；缺省时使用当前工作区根目录。",
+        ),
         "agent.toolCatalog.tools.search.glob.params.includeHidden" => Some("是否包含隐藏文件。"),
         "agent.toolCatalog.tools.search.glob.params.maxResults" => Some("最多返回的文件路径数量。"),
         "agent.toolCatalog.tools.search.path.name" => Some("查找路径"),
@@ -363,9 +369,9 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.search.path.params.patterns" => {
             Some("一个或多个用于匹配路径名或相对路径的通配模式。")
         }
-        "agent.toolCatalog.tools.search.path.params.root" => {
-            Some("可选搜索根目录；可填写绝对路径、相对路径或 `~` 家目录路径。省略时使用当前工作区根目录。")
-        }
+        "agent.toolCatalog.tools.search.path.params.root" => Some(
+            "可选搜索根目录；可填写绝对路径、相对路径或 `~` 家目录路径。省略时使用当前工作区根目录。",
+        ),
         "agent.toolCatalog.tools.search.path.params.entryType" => {
             Some("要返回的路径类型；可选值：any、file、directory。")
         }
@@ -375,9 +381,7 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.search.path.params.maxDepth" => {
             Some("从根目录开始递归遍历的最大深度。")
         }
-        "agent.toolCatalog.tools.search.path.params.maxResults" => {
-            Some("最多返回的命中路径数量。")
-        }
+        "agent.toolCatalog.tools.search.path.params.maxResults" => Some("最多返回的命中路径数量。"),
         _ => None,
     }
 }

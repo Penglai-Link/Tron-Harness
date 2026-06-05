@@ -34,7 +34,7 @@ use crate::{
 
 use super::error_mapper::{chat_error_response, chat_send_error_response};
 use super::protocol_replay::record_protocol_event;
-use super::stream_live::SystemAgentLiveEventBuilder;
+use super::stream_live::{SystemAgentLiveEventBuilder, SystemAgentLiveReplayRecorder};
 
 const CHAT_STREAM_POLL_INTERVAL_MS: u64 = 25;
 const CHAT_STREAM_DRAIN_AFTER_COMPLETION_TICKS: u16 = 80;
@@ -198,11 +198,18 @@ pub async fn stream_message(
     let _ = agui_stream.activate(&session_code);
 
     let (completion_sender, mut completion_receiver) =
-        tokio::sync::mpsc::channel::<ChatStreamCompletion>(1);
+        tokio::sync::mpsc::channel::<ChatSsePayload>(1);
     let (model_event_sender, mut model_event_receiver) =
         tokio::sync::mpsc::unbounded_channel::<ModelStreamEvent>();
+    let live_replay_recorder = SystemAgentLiveReplayRecorder::new(
+        agui_stream.clone(),
+        &session_code,
+        &run_code,
+        system_agent_live_stream,
+    );
     let chats = state.chats.clone();
     let session_code_for_task = session_code.clone();
+    let run_code_for_task = run_code.clone();
     let user_code = Some(auth.user().user_code.clone());
     let agent_service = AgentInvocationService::new(
         state.workspaces.clone(),
@@ -216,10 +223,14 @@ pub async fn stream_message(
         state.agent_tool_registry.clone(),
         state.runtime_http_client.clone(),
     );
+    let live_replay_recorder_for_sink = live_replay_recorder.clone();
     let sink = Arc::new(move |event: ModelStreamEvent| {
+        live_replay_recorder_for_sink.ingest(event.clone());
         let _ = model_event_sender.send(event);
     });
 
+    let replay_service_for_task = agui_stream.clone();
+    let live_replay_recorder_for_task = live_replay_recorder.clone();
     tokio::spawn(async move {
         let result = chats
             .send_message_stream(
@@ -232,20 +243,23 @@ pub async fn stream_message(
                 sink,
             )
             .await;
-        match result {
-            Ok(result) => {
-                let _ = completion_sender
-                    .send(ChatStreamCompletion::Success(result))
-                    .await;
-            }
+        let completion = match result {
+            Ok(result) => ChatStreamCompletion::Success(result),
             Err(error) => {
                 let code = chat_send_error_code(&error).to_string();
                 let message = chat_send_error_message(error);
-                let _ = completion_sender
-                    .send(ChatStreamCompletion::Error { code, message })
-                    .await;
+                ChatStreamCompletion::Error { code, message }
             }
-        }
+        };
+        live_replay_recorder_for_task.finalize();
+        let done_payload = completion.payload(&session_code_for_task, &run_code_for_task);
+        record_protocol_event(
+            &replay_service_for_task,
+            &session_code_for_task,
+            &done_payload.event_name,
+            &done_payload.data,
+        );
+        let _ = completion_sender.send(done_payload).await;
     });
 
     let stream_key = session_code.clone();
@@ -253,7 +267,7 @@ pub async fn stream_message(
     let stream_service = agui_stream.clone();
     let stream = async_stream::stream! {
         let mut seen = BTreeSet::<String>::new();
-        let mut completion: Option<ChatStreamCompletion> = None;
+        let mut completion: Option<ChatSsePayload> = None;
         let mut drain_ticks = 0u16;
         let mut interval = tokio::time::interval(Duration::from_millis(CHAT_STREAM_POLL_INTERVAL_MS));
         let mut live_event_builder = SystemAgentLiveEventBuilder::new(
@@ -277,7 +291,6 @@ pub async fn stream_message(
                     let key = format!("{}:{}", payload.sse_event, payload.data);
                     if seen.insert(key) {
                         emitted = true;
-                        record_protocol_event(&stream_service, &stream_key, &payload.sse_event, &payload.data);
                         yield Ok::<Event, Infallible>(
                             ChatSsePayload::agui(payload.sse_event, payload.data).event()
                         );
@@ -322,7 +335,6 @@ pub async fn stream_message(
                     let key = format!("{}:{}", payload.sse_event, payload.data);
                     if seen.insert(key) {
                         emitted = true;
-                        record_protocol_event(&stream_service, &stream_key, &payload.sse_event, &payload.data);
                         yield Ok::<Event, Infallible>(
                             ChatSsePayload::agui(payload.sse_event, payload.data).event()
                         );
@@ -336,14 +348,7 @@ pub async fn stream_message(
                 if drain_ticks < CHAT_STREAM_DRAIN_AFTER_COMPLETION_TICKS {
                     continue;
                 }
-                let done_payload = done.payload(&stream_key, &stream_run_code);
-                record_protocol_event(
-                    &stream_service,
-                    &stream_key,
-                    &done_payload.event_name,
-                    &done_payload.data,
-                );
-                yield Ok::<Event, Infallible>(done_payload.event());
+                yield Ok::<Event, Infallible>(done.event());
                 break;
             }
         }

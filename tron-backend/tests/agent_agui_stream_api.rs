@@ -52,8 +52,15 @@ async fn agent_model_mock_server() -> AgentModelMockServer {
 }
 
 async fn agent_chat_completion(Json(payload): Json<Value>) -> Json<Value> {
-    let prompt = payload["messages"][0]["content"]
-        .as_str()
+    let prompt = payload["messages"]
+        .as_array()
+        .and_then(|messages| {
+            messages.iter().rev().find_map(|message| {
+                (message["role"].as_str() == Some("user"))
+                    .then(|| message["content"].as_str())
+                    .flatten()
+            })
+        })
         .unwrap_or_default();
     Json(json!({
         "choices": [{
@@ -371,7 +378,7 @@ async fn agui_protocol_tool_events_keep_correlation_fields() {
         .activate(stream_key)
         .expect("stream should activate");
 
-    let publish = |event_name: &'static str, outcome: BusOutcome| {
+    let publish = |event_name: &'static str, outcome: BusOutcome, result: &'static str| {
         event_bus.publish(
             BusEventDraft::agui(event_name, "test")
                 .outcome(outcome)
@@ -381,24 +388,32 @@ async fn agui_protocol_tool_events_keep_correlation_fields() {
                 .payload_field("tool_call_id", "RUN-TOOL-AGUI-tool-1")
                 .payload_field("tool_name", "shell.exec")
                 .payload_field("tool_args_json", "{\"command\":\"cargo test\"}")
-                .payload_field("tool_result_json", "ok"),
+                .payload_field("tool_result_json", result),
         )
     };
 
     assert!(matches!(
-        publish("agent.tool.selected", BusOutcome::Progress),
+        publish("agent.tool.selected", BusOutcome::Progress, "selected"),
         PublishOutcome::Accepted { .. }
     ));
     assert!(matches!(
-        publish("agent.tool.started", BusOutcome::Started),
+        publish("agent.tool.started", BusOutcome::Started, "started"),
         PublishOutcome::Accepted { .. }
     ));
     assert!(matches!(
-        publish("agent.observation.created", BusOutcome::Progress),
+        publish("agent.tool.activity", BusOutcome::Progress, "live line"),
         PublishOutcome::Accepted { .. }
     ));
     assert!(matches!(
-        publish("agent.tool.completed", BusOutcome::Completed),
+        publish(
+            "agent.observation.created",
+            BusOutcome::Progress,
+            "observation"
+        ),
+        PublishOutcome::Accepted { .. }
+    ));
+    assert!(matches!(
+        publish("agent.tool.completed", BusOutcome::Completed, "ok"),
         PublishOutcome::Accepted { .. }
     ));
 
@@ -421,10 +436,15 @@ async fn agui_protocol_tool_events_keep_correlation_fields() {
         event("TOOL_CALL_START").data["toolCallArgs"]["command"],
         json!("cargo test")
     );
-    assert_eq!(
-        event("ACTIVITY_DELTA").data["toolCallId"],
-        json!("RUN-TOOL-AGUI-tool-1")
-    );
+    let activity_events = events
+        .iter()
+        .filter(|event| event.sse_event == "ACTIVITY_DELTA")
+        .collect::<Vec<_>>();
+    assert_eq!(activity_events.len(), 2);
+    assert!(activity_events.iter().any(|event| {
+        event.data["toolCallId"] == json!("RUN-TOOL-AGUI-tool-1")
+            && event.data["delta"][0]["value"] == json!("live line")
+    }));
     assert_eq!(event("TOOL_CALL_RESULT").data["content"], json!("ok"));
     assert_eq!(
         event("TOOL_CALL_END").data["toolCallId"],

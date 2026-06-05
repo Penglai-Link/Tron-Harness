@@ -41,6 +41,7 @@ interface ServiceQueryOptions<T> {
   mockData: () => T;
   params?: EndpointParams;
   deps?: DependencyList;
+  refreshKey?: unknown;
   select?: (payload: unknown) => T;
 }
 
@@ -110,7 +111,7 @@ function resolveEndpoint(endpoint: string, params?: EndpointParams) {
   };
 }
 
-export function useServiceQuery<T>({ apiInitialData, domain, enabled = true, endpoint, mockData, params, deps = [], select = selectApiData<T> }: ServiceQueryOptions<T>): T {
+export function useServiceQuery<T>({ apiInitialData, domain, enabled = true, endpoint, mockData, params, deps = [], refreshKey = 0, select = selectApiData<T> }: ServiceQueryOptions<T>): T {
   const toast = useToast();
   const dataSource = getServiceDataSource(domain);
   const shouldUseMockData = dataSource === "mock";
@@ -174,7 +175,7 @@ export function useServiceQuery<T>({ apiInitialData, domain, enabled = true, end
       });
 
     return () => controller.abort();
-  }, [dataSource, domain, enabled, request.method, request.url, toast]);
+  }, [dataSource, domain, enabled, refreshKey, request.method, request.url, toast]);
 
   return data;
 }

@@ -1,6 +1,11 @@
+use std::sync::{Arc, Mutex};
+
 use serde_json::{Value, json};
 
+use crate::application::agent::AgentAguiStreamService;
 use crate::domain::agent::{ModelStreamEvent, ModelStreamEventKind};
+
+use super::protocol_replay::record_protocol_event;
 
 pub(super) struct SystemAgentLiveProtocolEvent {
     pub(super) data: Value,
@@ -12,6 +17,67 @@ impl SystemAgentLiveProtocolEvent {
         Self {
             data,
             sse_event: sse_event.to_string(),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub(super) struct SystemAgentLiveReplayRecorder {
+    builder: Arc<Mutex<SystemAgentLiveEventBuilder>>,
+    enabled: bool,
+    service: AgentAguiStreamService,
+    stream_key: String,
+}
+
+impl SystemAgentLiveReplayRecorder {
+    pub(super) fn new(
+        service: AgentAguiStreamService,
+        stream_key: &str,
+        run_code: &str,
+        enabled: bool,
+    ) -> Self {
+        Self {
+            builder: Arc::new(Mutex::new(SystemAgentLiveEventBuilder::new(
+                stream_key, run_code, enabled,
+            ))),
+            enabled,
+            service,
+            stream_key: stream_key.to_string(),
+        }
+    }
+
+    pub(super) fn ingest(&self, event: ModelStreamEvent) {
+        if !self.enabled {
+            return;
+        }
+        let payloads = self
+            .builder
+            .lock()
+            .map(|mut builder| builder.ingest(event))
+            .unwrap_or_default();
+        self.record(payloads);
+    }
+
+    pub(super) fn finalize(&self) {
+        if !self.enabled {
+            return;
+        }
+        let payloads = self
+            .builder
+            .lock()
+            .map(|mut builder| builder.finalize())
+            .unwrap_or_default();
+        self.record(payloads);
+    }
+
+    fn record(&self, payloads: Vec<SystemAgentLiveProtocolEvent>) {
+        for payload in payloads {
+            record_protocol_event(
+                &self.service,
+                &self.stream_key,
+                &payload.sse_event,
+                &payload.data,
+            );
         }
     }
 }

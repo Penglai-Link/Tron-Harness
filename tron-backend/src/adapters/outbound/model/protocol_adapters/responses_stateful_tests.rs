@@ -1,8 +1,6 @@
 use serde_json::json;
 
-use crate::domain::agent::{
-    AgentMessage, AgentModelConfig, AgentModelProtocol, ModelRequest,
-};
+use crate::domain::agent::{AgentMessage, AgentModelConfig, AgentModelProtocol, ModelRequest};
 
 use super::responses_request;
 
