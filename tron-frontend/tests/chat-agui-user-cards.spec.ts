@@ -278,11 +278,22 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   await page.getByPlaceholder("Enter to send, Shift+Enter for newline").fill("show grouped agui cards");
   await page.getByPlaceholder("Enter to send, Shift+Enter for newline").press("Enter");
 
+  const transcript = page.getByLabel("Chat transcript");
+  const userMessageBubble = transcript.locator("article").first();
+  await expect(userMessageBubble).toBeVisible();
+  await expect(userMessageBubble).toContainText("show grouped agui cards");
+  await expect(userMessageBubble.getByRole("button", { name: "Copy raw markdown" })).toBeVisible();
+  await expect(userMessageBubble.getByRole("button", { name: "Edit message" })).toBeVisible();
+  await userMessageBubble.getByRole("button", { name: "Copy raw markdown" }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("show grouped agui cards");
+  await userMessageBubble.getByRole("button", { name: "Edit message" }).click();
+  await expect(page.getByPlaceholder("Enter to send, Shift+Enter for newline")).toHaveValue("show grouped agui cards");
+
   const runWork = page.getByLabel("AG-UI run work");
   const runSummary = runWork.getByRole("button", { name: /Worked for/ });
   await expect(runSummary).toBeVisible();
-  const copyMarkdownButton = page.getByLabel("Copy raw markdown").last();
-  const transcript = page.getByLabel("Chat transcript");
+  const assistantMessageBubble = transcript.locator("article").filter({ hasText: "Assistant" }).last();
+  const copyMarkdownButton = assistantMessageBubble.getByRole("button", { name: /Copy raw markdown/ });
   await expect(copyMarkdownButton).toBeVisible();
   await copyMarkdownButton.click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("**Recorded in");
@@ -305,12 +316,12 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   const secondThinkingCard = thinkingCards.nth(1);
   await expect(firstThinkingCard.getByRole("button", { name: /Thought for .*used 6 tools/ })).toHaveAttribute("aria-expanded", "false");
   await expect(secondThinkingCard.getByRole("button", { name: /Thought for/ })).toHaveAttribute("aria-expanded", "false");
-  await expect(firstThinkingCard.getByText("Reviewing session context and available skills. Used 6 tools.")).toBeVisible();
+  await expect(firstThinkingCard.getByText(/Reasoning stream segment 18/)).toBeVisible();
   await expect(secondThinkingCard.getByText("Summarizing tool results before replying.")).toBeVisible();
-  await expect(userCards.getByText("Reasoning stream segment 18")).toHaveCount(0);
   await firstThinkingCard.getByRole("button", { name: /Thought for .*used 6 tools/ }).click();
   await expect(firstThinkingCard.getByRole("button", { name: /Thought for .*used 6 tools/ })).toHaveAttribute("aria-expanded", "true");
   await expect(firstThinkingCard.getByText("Reviewing session context and available skills.")).toBeVisible();
+  await expect(firstThinkingCard.getByText(/Reasoning stream segment 18/)).toBeVisible();
   await expect(secondThinkingCard.getByText("Reviewing session context and available skills.")).toHaveCount(0);
   const reasoningScroller = userCards.locator(".max-h-36.overflow-y-auto").filter({ hasText: "Reasoning stream segment 18" });
   await expect(reasoningScroller).toBeVisible();
@@ -331,6 +342,15 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   await expect(toolCard).toBeVisible();
   await expect(firstThinkingCard.getByText(/workspace\.list · .*tool-/)).toHaveCount(0);
   await toolCard.click();
+  await expect(firstThinkingCard.locator(".h-64")).toBeVisible();
+  const parametersCopyButton = firstThinkingCard.getByRole("button", { name: "Copy parameters" });
+  const resultCopyButton = firstThinkingCard.getByRole("button", { name: "Copy result" });
+  await expect(parametersCopyButton).toBeVisible();
+  await expect(resultCopyButton).toBeVisible();
+  await parametersCopyButton.click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("{}");
+  await resultCopyButton.click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("Listed workspaces");
   await expect(firstThinkingCard.locator("pre").filter({ hasText: "{}" })).toBeVisible();
   await expect(firstThinkingCard.getByText("Listed workspaces")).toBeVisible();
   await expect(firstThinkingCard.getByText("This log belongs elsewhere")).toHaveCount(0);
@@ -350,7 +370,7 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   const secondRunThinkingCards = secondUserCards.getByLabel("Thinking");
   await expect(secondRunThinkingCards).toHaveCount(2);
   await expect(secondRunThinkingCards.nth(0).getByRole("button", { name: /Thought for .*used 6 tools/ })).toHaveAttribute("aria-expanded", "false");
-  await expect(secondRunThinkingCards.nth(0).getByText("Reviewing session context and available skills. Used 6 tools.")).toBeVisible();
+  await expect(secondRunThinkingCards.nth(0).getByText(/Reasoning stream segment 18/)).toBeVisible();
   await expect(secondRunThinkingCards.nth(1).getByText("Reviewing session context and available skills.")).toHaveCount(0);
   await secondRunThinkingCards.nth(0).getByRole("button", { name: /Thought for .*used 6 tools/ }).click();
   await expect(secondRunThinkingCards.nth(0).getByText("Reviewing session context and available skills.")).toBeVisible();

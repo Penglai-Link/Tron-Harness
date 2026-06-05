@@ -21,6 +21,7 @@ import {
   Hammer,
   LoaderCircle,
   MessageSquareText,
+  Pencil,
   Plus,
   Send,
   Square,
@@ -1644,29 +1645,17 @@ function SessionSidebar({
 function ChatBubble({
   currentUserDisplayName,
   message,
+  onEditMessage,
 }: {
   currentUserDisplayName: string;
   message: ChatMessage;
+  onEditMessage?: (content: string) => void;
 }) {
   const isUser = message.role === "USER";
   const actorName = isUser ? (currentUserDisplayName || message.actor) : message.actor;
-  const [copied, setCopied] = useState(false);
-  const copyResetRef = useRef<number | null>(null);
-
-  useEffect(() => () => {
-    if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current);
-  }, []);
-
-  async function handleCopyMessage() {
-    if (!message.content) return;
-    try {
-      await copyPlainText(message.content);
-      setCopied(true);
-      if (copyResetRef.current !== null) window.clearTimeout(copyResetRef.current);
-      copyResetRef.current = window.setTimeout(() => setCopied(false), 1400);
-    } catch {
-      setCopied(false);
-    }
+  async function handleEditMessage() {
+    if (!isUser || !message.content || !onEditMessage) return;
+    onEditMessage(message.content);
   }
 
   return (
@@ -1678,16 +1667,30 @@ function ChatBubble({
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           {!isUser ? (
-            <button
-              aria-label="Copy raw markdown"
-              className="inline-flex size-6 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
-              disabled={!message.content}
+            <CopyValueButton
+              ariaLabel="Copy raw markdown"
               title="Copy raw markdown"
-              type="button"
-              onClick={() => void handleCopyMessage()}
-            >
-              {copied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
-            </button>
+              value={message.content}
+            />
+          ) : null}
+          {isUser ? (
+            <>
+              <CopyValueButton
+                ariaLabel="Copy raw markdown"
+                title="Copy raw markdown"
+                value={message.content}
+              />
+              <button
+                aria-label="Edit message"
+                className="inline-flex size-6 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
+                disabled={!message.content || !onEditMessage}
+                title="Edit message"
+                type="button"
+                onClick={() => void handleEditMessage()}
+              >
+                <Pencil size={14} />
+              </button>
+            </>
           ) : null}
           <span className="text-xs text-[var(--color-on-surface-variant)]">{formatTime(message.createdAt)}</span>
         </div>
@@ -1712,7 +1715,7 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
   const initializingHint = !card.ended && !hasContent && card.runCode === "pending"
     ? "System agent 正在初始化..."
     : "";
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(() => !card.ended);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const duration = card.endMillis ? formatAguiDuration(Math.max(0, card.endMillis - card.firstMillis)) : "";
   const nestedToolCards = card.toolCards.filter((toolCard) => toolCard.started);
@@ -1721,6 +1724,10 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
     ? `${toolCount ? `Thought for ${duration}, used ${toolCount} ${toolCount === 1 ? "tool" : "tools"}` : `Thought for ${duration}`}`
     : `${toolCount ? `Thinking, using ${toolCount} ${toolCount === 1 ? "tool" : "tools"}` : "Thinking"}`;
   const collapsedPreview = card.ended && hasContent ? deriveReasoningPreview(detail, nestedToolCards) : "";
+
+  useEffect(() => {
+    if (card.ended) setExpanded(false);
+  }, [card.ended]);
 
   useEffect(() => {
     if (!expanded || !detail) return;
@@ -1814,6 +1821,48 @@ function JsonBlock({ value }: { value: unknown }) {
   );
 }
 
+function CopyValueButton({
+  ariaLabel,
+  title,
+  value,
+}: {
+  ariaLabel: string;
+  title: string;
+  value: string;
+}) {
+  const [copied, setCopied] = useState(false);
+  const resetTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+  }, []);
+
+  async function handleCopy() {
+    if (!value.trim()) return;
+    try {
+      await copyPlainText(value);
+      setCopied(true);
+      if (resetTimerRef.current !== null) window.clearTimeout(resetTimerRef.current);
+      resetTimerRef.current = window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <button
+      aria-label={ariaLabel}
+      className="inline-flex size-6 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
+      disabled={!value.trim()}
+      title={title}
+      type="button"
+      onClick={() => void handleCopy()}
+    >
+      {copied ? <CheckCircle2 size={14} /> : <Copy size={14} />}
+    </button>
+  );
+}
+
 function CompactToolRow({
   card,
   nested = false,
@@ -1824,8 +1873,15 @@ function CompactToolRow({
   stepNumber?: number;
 }) {
   const complete = card.ended || Boolean(card.result);
+  const hasResultPayload = Boolean(card.result);
   const result = card.result || (complete ? "No result payload." : "");
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(() => !card.ended);
+  const parametersText = formatJsonBlockValue(card.args ?? { tool: card.toolName });
+  const resultText = hasResultPayload ? formatJsonBlockValue(card.result) : "";
+
+  useEffect(() => {
+    if (card.ended) setExpanded(false);
+  }, [card.ended]);
 
   return (
     <div className={cn(
@@ -1862,32 +1918,44 @@ function CompactToolRow({
       </button>
       {expanded ? (
         <div className={cn(
-          "space-y-2 border-t border-[var(--color-outline-variant)]",
+          "border-t border-[var(--color-outline-variant)]",
           nested ? "ml-8 px-2 py-2" : "px-1 py-2",
         )}>
-          <section className="space-y-1">
-            <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Parameters</h3>
-            <JsonBlock value={card.args ?? { tool: card.toolName }} />
-          </section>
-          {complete ? (
-            <section className="space-y-1">
-              <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Result</h3>
-              {result ? <JsonBlock value={result} /> : (
-                <div className="rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm leading-6 text-[var(--color-on-surface-variant)]">
-                  No result payload.
-                </div>
-              )}
-            </section>
-          ) : (
-            <section className="space-y-1">
-              <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Log</h3>
-              <div className="space-y-1 rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)]">
-                {card.logs.length ? card.logs.map((line, index) => (
-                  <p className="whitespace-pre-wrap" key={`${card.id}-log-${index}`}>{line}</p>
-                )) : <p className="text-[var(--color-on-surface-variant)]">Waiting for tool activity...</p>}
+          <div className="flex h-64 min-h-0 flex-col gap-2 overflow-hidden">
+            <section className="flex min-h-0 flex-1 flex-col gap-1">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Parameters</h3>
+                <CopyValueButton ariaLabel="Copy parameters" title="Copy parameters" value={parametersText} />
+              </div>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <JsonBlock value={card.args ?? { tool: card.toolName }} />
               </div>
             </section>
-          )}
+            {complete ? (
+              <section className="flex min-h-0 flex-1 flex-col gap-1">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Result</h3>
+                  <CopyValueButton ariaLabel="Copy result" title="Copy result" value={resultText} />
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto">
+                  {result ? <JsonBlock value={result} /> : (
+                    <div className="rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm leading-6 text-[var(--color-on-surface-variant)]">
+                      No result payload.
+                    </div>
+                  )}
+                </div>
+              </section>
+            ) : (
+              <section className="flex min-h-0 flex-1 flex-col gap-1">
+                <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Log</h3>
+                <div className="min-h-0 flex-1 space-y-1 overflow-y-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)]">
+                  {card.logs.length ? card.logs.map((line, index) => (
+                    <p className="whitespace-pre-wrap" key={`${card.id}-log-${index}`}>{line}</p>
+                  )) : <p className="text-[var(--color-on-surface-variant)]">Waiting for tool activity...</p>}
+                </div>
+              </section>
+            )}
+          </div>
         </div>
       ) : null}
     </div>
@@ -2789,6 +2857,16 @@ export function ChatManagementPage() {
                     <ChatBubble
                       currentUserDisplayName={currentUserDisplayName}
                       message={message}
+                      onEditMessage={(content) => {
+                        setComposer(content);
+                        window.requestAnimationFrame(() => {
+                          const composerElement = composerRef.current;
+                          if (!composerElement) return;
+                          composerElement.focus();
+                          const cursor = content.length;
+                          composerElement.setSelectionRange(cursor, cursor);
+                        });
+                      }}
                     />
                     {liveAguiAnchorIndex >= 0 && visibleMessages[liveAguiAnchorIndex]?.messageCode === message.messageCode ? (
                       <AguiRunWorkRail
