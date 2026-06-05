@@ -6,7 +6,7 @@ The production runtime should serve the built React frontend and Rust API from t
 
 ## Scope
 
-- Add a Makefile workflow that builds the frontend directly into the backend frontend resource directory without changing existing frontend data-source choices.
+- Add a Makefile workflow that builds the frontend directly into the backend frontend resource directory and defaults integrated builds to API mode.
 - Let the Rust backend serve built frontend assets and return `index.html` for client-side routes.
 - Keep `/api` paths owned by backend API routing so unknown API routes return the uniform JSON response envelope instead of frontend HTML.
 - Preserve the existing split development workflow for Vite and Cargo.
@@ -21,10 +21,10 @@ The production runtime should serve the built React frontend and Rust API from t
 ## Build Model
 
 - `make fe-build` keeps the current standalone frontend output behavior.
-- `make app-build` builds frontend assets into `tron-backend/resources/frontend` with same-origin API configuration, while preserving whatever data-source settings the frontend already had. Mock modules remain mock unless an existing environment file or shell setting switches them to API.
+- `make app-build` builds frontend assets into `tron-backend/resources/frontend` with same-origin API configuration and integrated API-mode defaults. The target injects `VITE_TRON_DATA_SOURCE=api` plus explicit auth and admin API overrides so the integrated runtime does not silently fall back to mock mode.
 - `make app-run` builds those frontend resources and starts the backend.
 - `make app-clean` removes generated integrated frontend assets while preserving the resource directory.
 
 ## Compatibility
 
-Existing backend API handlers, frontend standalone development, and Vite dev proxy behavior remain available. The integrated mode adds a deployment-oriented workflow without requiring a separate frontend port. It does not promote frontend modules from mock to API as a side effect of deployment packaging.
+Existing backend API handlers, frontend standalone development, and Vite dev proxy behavior remain available. The integrated mode adds a deployment-oriented workflow without requiring a separate frontend port. Standalone frontend commands keep their existing mock-first defaults, while integrated targets now default to same-origin API mode.

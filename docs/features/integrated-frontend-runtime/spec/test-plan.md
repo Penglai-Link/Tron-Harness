@@ -16,6 +16,6 @@
 | AC id | case | red | green | command_ref |
 | --- | --- | --- | --- | --- |
 | AC-INTEGRATED-RUNTIME-01 | Makefile command visibility | Existing Makefile contract test fails because integrated commands are absent. | `make help` and Makefile contract test list integrated commands. | CMD-HELP, CMD-BE-TEST |
-| AC-INTEGRATED-RUNTIME-02 | Integrated output path and data-source preservation | `make app-build` target and Vite output override are absent. | `make app-build` sets same-origin API base and `TRON_FRONTEND_OUT_DIR` without forcing `VITE_TRON_*_DATA_SOURCE`; standalone `make fe-check` still succeeds. | CMD-FE-CHECK, CMD-APP-BUILD |
+| AC-INTEGRATED-RUNTIME-02 | Integrated output path and API-mode defaults | `make app-build` target and Vite output override are absent. | `make app-build` sets same-origin API base, `TRON_FRONTEND_OUT_DIR`, and integrated API-mode defaults while standalone `make fe-check` still succeeds. | CMD-FE-CHECK, CMD-APP-BUILD |
 | AC-INTEGRATED-RUNTIME-03 | SPA and assets served by backend | Router tests for `/`, client route, and asset path fail because backend has no frontend static handling. | Router tests pass using configured frontend resource fixtures. | CMD-BE-TEST |
 | AC-INTEGRATED-RUNTIME-04 | API boundary 404 | Unknown `/api` route would fall through to frontend fallback or default empty 404. | Unknown `/api` route returns `{ code, message, data }` JSON envelope. | CMD-BE-TEST |

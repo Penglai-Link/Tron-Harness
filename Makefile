@@ -6,6 +6,7 @@ BACKEND_ENV_FILE := $(BACKEND_DIR)/.env
 BACKEND_FRONTEND_DIR := $(BACKEND_DIR)/resources/frontend
 FRONTEND_INTEGRATED_OUT_DIR := ../$(BACKEND_FRONTEND_DIR)
 BE_RUN_ENV = $(if $(strip $(PORT)),TRON_BACKEND_PORT=$(PORT)) $(if $(strip $(GRAPH_STORAGE_PATH)),TRON_BACKEND_GRAPH_STORAGE_PATH=$(GRAPH_STORAGE_PATH))
+APP_FRONTEND_ENV = VITE_TRON_API_BASE_URL= VITE_TRON_DATA_SOURCE=api VITE_TRON_AUTH_DATA_SOURCE=api VITE_TRON_ADMIN_DATA_SOURCE=api TRON_FRONTEND_OUT_DIR=$(FRONTEND_INTEGRATED_OUT_DIR)
 
 .PHONY: help
 help:
@@ -30,8 +31,8 @@ help:
 	@echo "                    Example: make be-run PORT=8081 GRAPH_STORAGE_PATH=/tmp/tron-8081.graph.grafeo"
 	@echo ""
 	@echo "Integrated app commands:"
-	@echo "  make app-build    Build frontend into backend resources and compile backend"
-	@echo "  make app-run      Build integrated app and run backend server"
+	@echo "  make app-build    Build frontend into backend resources in integrated API mode and compile backend"
+	@echo "  make app-run      Build integrated app in integrated API mode and run backend server"
 	@echo "                    Example: make app-run PORT=8081"
 	@echo "  make app-clean    Remove standalone and integrated frontend build artifacts"
 
@@ -97,7 +98,7 @@ be-run:
 app-build:
 	rm -rf $(BACKEND_FRONTEND_DIR)
 	mkdir -p $(BACKEND_FRONTEND_DIR)
-	cd $(FRONTEND_DIR) && VITE_TRON_API_BASE_URL= TRON_FRONTEND_OUT_DIR=$(FRONTEND_INTEGRATED_OUT_DIR) npm run build
+	cd $(FRONTEND_DIR) && $(APP_FRONTEND_ENV) npm run build
 	cargo build --manifest-path $(BACKEND_MANIFEST)
 
 .PHONY: app-run

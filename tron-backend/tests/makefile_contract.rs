@@ -48,7 +48,7 @@ fn make_help_lists_integrated_backend_and_frontend_targets() {
 }
 
 #[test]
-fn integrated_frontend_build_preserves_data_source_configuration() {
+fn integrated_frontend_build_defaults_integrated_runtime_to_api_mode() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("tron-backend must live under the repository root");
@@ -63,29 +63,14 @@ fn integrated_frontend_build_preserves_data_source_configuration() {
         makefile.contains("VITE_TRON_API_BASE_URL="),
         "app-build must keep API calls same-origin for integrated runtime",
     );
-
-    for forbidden in [
+    for required in [
         "VITE_TRON_DATA_SOURCE=api",
         "VITE_TRON_AUTH_DATA_SOURCE=api",
         "VITE_TRON_ADMIN_DATA_SOURCE=api",
-        "VITE_TRON_AGENT_DATA_SOURCE=api",
-        "VITE_TRON_APP_DATA_SOURCE=api",
-        "VITE_TRON_AUTOMATION_DATA_SOURCE=api",
-        "VITE_TRON_CHAT_DATA_SOURCE=api",
-        "VITE_TRON_DASHBOARD_DATA_SOURCE=api",
-        "VITE_TRON_KNOWLEDGE_GRAPH_DATA_SOURCE=api",
-        "VITE_TRON_MEMORY_DATA_SOURCE=api",
-        "VITE_TRON_MODEL_DATA_SOURCE=api",
-        "VITE_TRON_OBSERVABILITY_DATA_SOURCE=api",
-        "VITE_TRON_PROMPT_DATA_SOURCE=api",
-        "VITE_TRON_RESOURCE_DATA_SOURCE=api",
-        "VITE_TRON_SKILL_DATA_SOURCE=api",
-        "VITE_TRON_TASK_DATA_SOURCE=api",
-        "VITE_TRON_VARIABLE_DATA_SOURCE=api",
     ] {
         assert!(
-            !makefile.contains(forbidden),
-            "integrated app build must not force existing data-source choice via `{forbidden}`",
+            makefile.contains(required),
+            "integrated app build must default integrated runtime to API mode via `{required}`",
         );
     }
 }
