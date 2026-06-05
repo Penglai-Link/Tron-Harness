@@ -1,6 +1,8 @@
 docs/tasks/frontend-onboarding/evidence/
 docs/brainstorm/*/runtime/
 tron-backend/resources/frontend/
+.intentforge-dreaming/
+**/.intentforge-dreaming/
 
 # AI Tools
 .codex/
@@ -65,3 +67,5 @@ $RECYCLE.BIN/
 .directory
 .Trash-*
 .nfs*
+
+*.pyc

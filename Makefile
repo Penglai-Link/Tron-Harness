@@ -35,6 +35,12 @@ help:
 	@echo "  make app-run      Build integrated app in integrated API mode and run backend server"
 	@echo "                    Example: make app-run PORT=8081"
 	@echo "  make app-clean    Remove standalone and integrated frontend build artifacts"
+	@echo ""
+	@echo "Skill commands:"
+	@echo "  make skill-memory-dreaming-test"
+	@echo "                    Validate the memory dreaming skill"
+	@echo "  make skill-memory-spec-test"
+	@echo "                    Validate the memory spec skill"
 
 .PHONY: fe-install
 fe-install:
@@ -109,3 +115,11 @@ app-run: app-build
 app-clean: fe-clean
 	rm -rf $(BACKEND_FRONTEND_DIR)
 	mkdir -p $(BACKEND_FRONTEND_DIR)
+
+.PHONY: skill-memory-dreaming-test
+skill-memory-dreaming-test:
+	python3 /home/baiyihuan/.codex/skills/.system/skill-creator/scripts/quick_validate.py tron-skills/eliteforge-memory-dreaming
+
+.PHONY: skill-memory-spec-test
+skill-memory-spec-test:
+	python3 /home/baiyihuan/.codex/skills/.system/skill-creator/scripts/quick_validate.py tron-skills/eliteforge-memory-spec
