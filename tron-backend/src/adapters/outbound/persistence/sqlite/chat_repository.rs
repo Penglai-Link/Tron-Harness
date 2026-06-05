@@ -72,14 +72,6 @@ impl SqliteChatRepository {
 }
 
 impl ChatRepository for SqliteChatRepository {
-    fn next_session_id(&mut self) -> Result<i64, ChatError> {
-        next_id(&self.connection, "chat_sessions")
-    }
-
-    fn next_message_id(&mut self) -> Result<i64, ChatError> {
-        next_id(&self.connection, "chat_messages")
-    }
-
     fn create_session(&mut self, session: &ChatSession) -> Result<(), ChatError> {
         self.connection
             .execute(

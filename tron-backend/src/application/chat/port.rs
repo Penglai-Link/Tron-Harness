@@ -1,8 +1,6 @@
 use crate::domain::chat::{ChatError, ChatMessage, ChatSession};
 
 pub trait ChatRepository: Send {
-    fn next_session_id(&mut self) -> Result<i64, ChatError>;
-    fn next_message_id(&mut self) -> Result<i64, ChatError>;
     fn create_session(&mut self, session: &ChatSession) -> Result<(), ChatError>;
     fn delete_session(&mut self, session_code: &str) -> Result<(), ChatError>;
     fn list_sessions(&mut self) -> Result<Vec<ChatSession>, ChatError>;

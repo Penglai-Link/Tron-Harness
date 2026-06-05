@@ -71,27 +71,7 @@ impl SystemAgentLiveEventBuilder {
 
         let mut payloads = Vec::new();
         if self.reasoning_started && !self.reasoning_ended {
-            let timestamp = current_stream_timestamp();
-            payloads.push(SystemAgentLiveProtocolEvent::new(
-                "REASONING_MESSAGE_END",
-                json!({
-                    "type": "REASONING_MESSAGE_END",
-                    "threadId": self.stream_key,
-                    "runId": self.run_code,
-                    "messageId": self.reasoning_message_id,
-                    "timestamp": timestamp,
-                }),
-            ));
-            payloads.push(SystemAgentLiveProtocolEvent::new(
-                "REASONING_END",
-                json!({
-                    "type": "REASONING_END",
-                    "threadId": self.stream_key,
-                    "runId": self.run_code,
-                    "timestamp": timestamp,
-                }),
-            ));
-            self.reasoning_ended = true;
+            payloads.extend(self.close_reasoning_payloads());
         }
         if self.text_started && !self.text_ended {
             payloads.push(SystemAgentLiveProtocolEvent::new(
@@ -187,6 +167,9 @@ impl SystemAgentLiveEventBuilder {
 
     fn text_event_payloads(&mut self, delta: String) -> Vec<SystemAgentLiveProtocolEvent> {
         let mut payloads = Vec::new();
+        if self.reasoning_started && !self.reasoning_ended {
+            payloads.extend(self.close_reasoning_payloads());
+        }
         if !self.text_started {
             self.text_started = true;
             payloads.push(SystemAgentLiveProtocolEvent::new(
@@ -225,6 +208,32 @@ impl SystemAgentLiveEventBuilder {
             }),
         ));
         payloads
+    }
+
+    fn close_reasoning_payloads(&mut self) -> Vec<SystemAgentLiveProtocolEvent> {
+        let timestamp = current_stream_timestamp();
+        self.reasoning_ended = true;
+        vec![
+            SystemAgentLiveProtocolEvent::new(
+                "REASONING_MESSAGE_END",
+                json!({
+                    "type": "REASONING_MESSAGE_END",
+                    "threadId": self.stream_key,
+                    "runId": self.run_code,
+                    "messageId": self.reasoning_message_id,
+                    "timestamp": timestamp,
+                }),
+            ),
+            SystemAgentLiveProtocolEvent::new(
+                "REASONING_END",
+                json!({
+                    "type": "REASONING_END",
+                    "threadId": self.stream_key,
+                    "runId": self.run_code,
+                    "timestamp": timestamp,
+                }),
+            ),
+        ]
     }
 }
 

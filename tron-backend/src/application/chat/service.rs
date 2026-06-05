@@ -18,7 +18,10 @@ use crate::{
         ChatError, ChatMessage, ChatMessageChannel, ChatMessageRole, ChatSession, ChatSessionGroup,
         ChatSessionStatus,
     },
-    shared::time::current_timestamp,
+    shared::{
+        id::{SnowflakeIdProvider, SnowflakedSnowflakeIdProvider},
+        time::current_timestamp,
+    },
 };
 
 const MAIN_AGENT_CODE: &str = "main-agent";
@@ -29,12 +32,21 @@ const OPENCODE_RUNTIME_ADAPTER_KEY: &str = "OPENCODE_RUN";
 #[derive(Clone)]
 pub struct ChatService {
     repository: Arc<Mutex<Box<dyn ChatRepository>>>,
+    id_provider: Arc<dyn SnowflakeIdProvider>,
 }
 
 impl ChatService {
     pub fn new(repository: impl ChatRepository + 'static) -> Self {
+        Self::with_id_provider(repository, Arc::new(SnowflakedSnowflakeIdProvider::default()))
+    }
+
+    pub fn with_id_provider(
+        repository: impl ChatRepository + 'static,
+        id_provider: Arc<dyn SnowflakeIdProvider>,
+    ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
+            id_provider,
         }
     }
 
@@ -45,8 +57,11 @@ impl ChatService {
     ) -> Result<ChatSession, ChatError> {
         let workspace_code =
             normalized_required(command.workspace_code).ok_or(ChatError::WorkspaceRequired)?;
-        let mut repository = self.repository();
-        let id = repository.next_session_id()?;
+        let id = self
+            .id_provider
+            .next_id()
+            .map_err(|_| ChatError::StorageFailure)?
+            .value();
         let now = current_timestamp();
         let session = ChatSession {
             id,
@@ -64,6 +79,7 @@ impl ChatService {
             created_at: now.clone(),
             updated_at: now,
         };
+        let mut repository = self.repository();
         repository.create_session(&session)?;
         Ok(session)
     }
@@ -297,8 +313,11 @@ impl ChatService {
         content: &str,
         token_usage: Option<ModelTokenUsage>,
     ) -> Result<ChatMessage, ChatSendError> {
-        let mut repository = self.repository();
-        let id = repository.next_message_id().map_err(ChatSendError::Chat)?;
+        let id = self
+            .id_provider
+            .next_id()
+            .map_err(|_| ChatSendError::Chat(ChatError::StorageFailure))?
+            .value();
         let message = ChatMessage {
             id,
             message_code: format!("MSG-{id}"),
@@ -313,6 +332,7 @@ impl ChatService {
             total_tokens: token_usage.map(|usage| usage.total_tokens),
             created_at: current_timestamp(),
         };
+        let mut repository = self.repository();
         repository
             .create_message(&message)
             .map_err(ChatSendError::Chat)?;

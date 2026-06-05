@@ -1,4 +1,7 @@
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::Arc,
+};
 
 use crate::{
     domain::agent::{
@@ -168,5 +171,127 @@ fn merge_protocol_events(
             merged.push(event);
         }
     }
-    merged
+    normalize_protocol_events(merged)
+}
+
+#[derive(Debug, Clone)]
+struct ReasoningProtocolState {
+    message_id: String,
+    open: bool,
+}
+
+fn normalize_protocol_events(events: Vec<AgentAguiProtocolEvent>) -> Vec<AgentAguiProtocolEvent> {
+    let mut reasoning_by_run = BTreeMap::<String, ReasoningProtocolState>::new();
+    let mut normalized = Vec::new();
+
+    for event in events {
+        match event.sse_event.as_str() {
+            "REASONING_START" | "REASONING_MESSAGE_START" => {
+                if let Some(run_id) = protocol_run_id(&event) {
+                    let message_id = protocol_message_id(&event)
+                        .unwrap_or_else(|| fallback_reasoning_message_id(&run_id));
+                    reasoning_by_run.insert(
+                        run_id,
+                        ReasoningProtocolState {
+                            message_id,
+                            open: true,
+                        },
+                    );
+                }
+                normalized.push(event);
+            }
+            "REASONING_MESSAGE_END" | "REASONING_END" => {
+                let Some(run_id) = protocol_run_id(&event) else {
+                    normalized.push(event);
+                    continue;
+                };
+                let Some(state) = reasoning_by_run.get_mut(&run_id) else {
+                    continue;
+                };
+                if !state.open {
+                    continue;
+                }
+                if event.sse_event == "REASONING_END" {
+                    state.open = false;
+                }
+                normalized.push(event);
+            }
+            "TEXT_MESSAGE_START" | "TEXT_MESSAGE_CONTENT" => {
+                if let Some(run_id) = protocol_run_id(&event) {
+                    if let Some(state) = reasoning_by_run.get_mut(&run_id)
+                        && state.open
+                    {
+                        normalized.extend(reasoning_close_events(
+                            &event,
+                            &run_id,
+                            state.message_id.as_str(),
+                        ));
+                        state.open = false;
+                    }
+                }
+                normalized.push(event);
+            }
+            _ => normalized.push(event),
+        }
+    }
+
+    normalized
+}
+
+fn reasoning_close_events(
+    boundary_event: &AgentAguiProtocolEvent,
+    run_id: &str,
+    reasoning_message_id: &str,
+) -> Vec<AgentAguiProtocolEvent> {
+    let thread_id = boundary_event
+        .data
+        .get("threadId")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let timestamp = boundary_event
+        .data
+        .get("timestamp")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    vec![
+        AgentAguiProtocolEvent {
+            sse_event: "REASONING_MESSAGE_END".into(),
+            data: serde_json::json!({
+                "type": "REASONING_MESSAGE_END",
+                "threadId": thread_id,
+                "runId": run_id,
+                "messageId": reasoning_message_id,
+                "timestamp": timestamp,
+            }),
+        },
+        AgentAguiProtocolEvent {
+            sse_event: "REASONING_END".into(),
+            data: serde_json::json!({
+                "type": "REASONING_END",
+                "threadId": thread_id,
+                "runId": run_id,
+                "timestamp": timestamp,
+            }),
+        },
+    ]
+}
+
+fn protocol_run_id(event: &AgentAguiProtocolEvent) -> Option<String> {
+    event
+        .data
+        .get("runId")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+}
+
+fn protocol_message_id(event: &AgentAguiProtocolEvent) -> Option<String> {
+    event
+        .data
+        .get("messageId")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+}
+
+fn fallback_reasoning_message_id(run_id: &str) -> String {
+    format!("{run_id}-reasoning")
 }

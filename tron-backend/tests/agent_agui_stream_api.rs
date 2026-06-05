@@ -263,6 +263,100 @@ async fn agui_protocol_separates_reasoning_summary_and_raw_text() {
 }
 
 #[tokio::test]
+async fn agui_protocol_closes_reasoning_before_text_output() {
+    let config = EventBusConfig::default();
+    let sink = Arc::new(AguiEventSink::new(&config));
+    let event_bus =
+        EventBusRuntimeBuilder::new(config, Arc::new(FixedSnowflakeIdProvider::new(475)))
+            .register_sink(sink.clone())
+            .build();
+    let service = AgentAguiStreamService::new(sink);
+    let stream_key = "CONV-REASONING-TEXT-ORDER";
+    let run_code = "RUN-REASONING-TEXT-ORDER";
+    service
+        .activate(stream_key)
+        .expect("stream should activate");
+
+    let publish = |event_name: &'static str, outcome: BusOutcome, delta: Option<&'static str>| {
+        let mut draft = BusEventDraft::agui(event_name, "test")
+            .outcome(outcome)
+            .subject("agent_run", run_code)
+            .request(BusRequestRef::with_stream_key(stream_key));
+        if let Some(delta) = delta {
+            draft = draft.payload_field(
+                "delta_json",
+                serde_json::to_string(delta).expect("delta should serialize"),
+            );
+        }
+        event_bus.publish(draft)
+    };
+
+    assert!(matches!(
+        publish("agent.model.requested", BusOutcome::Started, None),
+        PublishOutcome::Accepted { .. }
+    ));
+    assert!(matches!(
+        publish(
+            "agent.reasoning.delta",
+            BusOutcome::Progress,
+            Some("checking workspace")
+        ),
+        PublishOutcome::Accepted { .. }
+    ));
+    assert!(matches!(
+        publish("agent.output.started", BusOutcome::Started, None),
+        PublishOutcome::Accepted { .. }
+    ));
+    assert!(matches!(
+        publish(
+            "agent.output.delta",
+            BusOutcome::Progress,
+            Some("visible answer")
+        ),
+        PublishOutcome::Accepted { .. }
+    ));
+    assert!(matches!(
+        publish("agent.model.responded", BusOutcome::Completed, None),
+        PublishOutcome::Accepted { .. }
+    ));
+
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let events = service
+        .protocol_events(stream_key)
+        .expect("protocol events should be available");
+    let event_types = events
+        .iter()
+        .map(|event| event.sse_event.as_str())
+        .collect::<Vec<_>>();
+    let position = |event_type: &str| {
+        event_types
+            .iter()
+            .position(|current| *current == event_type)
+            .expect("expected protocol event")
+    };
+
+    assert!(position("REASONING_MESSAGE_CONTENT") < position("REASONING_MESSAGE_END"));
+    assert!(position("REASONING_MESSAGE_END") < position("REASONING_END"));
+    assert!(position("REASONING_END") < position("TEXT_MESSAGE_START"));
+    assert!(position("TEXT_MESSAGE_START") < position("TEXT_MESSAGE_CONTENT"));
+    assert_eq!(
+        event_types
+            .iter()
+            .filter(|event_type| **event_type == "REASONING_MESSAGE_END")
+            .count(),
+        1
+    );
+    assert_eq!(
+        event_types
+            .iter()
+            .filter(|event_type| **event_type == "REASONING_END")
+            .count(),
+        1
+    );
+}
+
+#[tokio::test]
 async fn agui_protocol_tool_events_keep_correlation_fields() {
     let config = EventBusConfig::default();
     let sink = Arc::new(AguiEventSink::new(&config));

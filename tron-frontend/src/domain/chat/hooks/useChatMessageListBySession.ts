@@ -176,6 +176,7 @@ export async function streamChatMessage(
       ];
     });
     const unmatchedActivityTimestamp = startedAt + firstReasoningEndOffset + 2 + toolCallDefinitions.length * 4;
+    await new Promise((resolve) => { window.setTimeout(resolve, 120); });
     [
       { type: "RUN_STARTED", threadId: session.sessionCode, runId: staleRunId, timestamp: startedAt - 657_000 },
       { type: "REASONING_START", threadId: session.sessionCode, runId: staleRunId, messageId: `${staleRunId}-reasoning`, timestamp: startedAt - 656_000 },

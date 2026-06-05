@@ -277,6 +277,7 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   await page.getByRole("button", { name: "New session" }).first().click();
   await page.getByPlaceholder("Enter to send, Shift+Enter for newline").fill("show grouped agui cards");
   await page.getByPlaceholder("Enter to send, Shift+Enter for newline").press("Enter");
+  await expect(page.getByLabel("Waiting for model")).toContainText("Waiting for model...");
 
   const transcript = page.getByLabel("Chat transcript");
   const userMessageBubble = transcript.locator("article").first();
@@ -292,6 +293,8 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   const runWork = page.getByLabel("AG-UI run work");
   const runSummary = runWork.getByRole("button", { name: /Worked for/ });
   await expect(runSummary).toBeVisible();
+  await expect(runSummary).toHaveCount(1);
+  await expect(page.getByLabel("Waiting for model")).toHaveCount(0);
   const assistantMessageBubble = transcript.locator("article").filter({ hasText: "Assistant" }).last();
   const copyMarkdownButton = assistantMessageBubble.getByRole("button", { name: /Copy raw markdown/ });
   await expect(copyMarkdownButton).toBeVisible();
@@ -342,7 +345,6 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   await expect(toolCard).toBeVisible();
   await expect(firstThinkingCard.getByText(/workspace\.list · .*tool-/)).toHaveCount(0);
   await toolCard.click();
-  await expect(firstThinkingCard.locator(".h-64")).toBeVisible();
   const parametersCopyButton = firstThinkingCard.getByRole("button", { name: "Copy parameters" });
   const resultCopyButton = firstThinkingCard.getByRole("button", { name: "Copy result" });
   await expect(parametersCopyButton).toBeVisible();

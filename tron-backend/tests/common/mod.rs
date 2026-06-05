@@ -696,7 +696,10 @@ fn temp_database_path(test_name: &str) -> std::path::PathBuf {
         .expect("system time should be after Unix epoch")
         .as_nanos();
     let sequence = TEST_DB_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-    std::env::temp_dir().join(format!("tron-tests-{test_name}-{nanos}-{sequence}.sqlite3"))
+    let process_id = std::process::id();
+    std::env::temp_dir().join(format!(
+        "tron-tests-{test_name}-{process_id}-{nanos}-{sequence}.sqlite3"
+    ))
 }
 
 pub async fn request(

@@ -3,6 +3,7 @@ mod common;
 use std::{
     convert::Infallible,
     path::PathBuf,
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -19,7 +20,12 @@ use axum::{
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
-use tron_backend::config::{AppConfig, SystemAgentConfig};
+use tron_backend::{
+    adapters::outbound::persistence::SqliteChatRepository,
+    application::chat::{ChatService, CreateChatSessionCommand},
+    config::{AppConfig, SystemAgentConfig},
+    shared::id::FixedSnowflakeIdProvider,
+};
 
 use common::{
     app, app_with_config, authenticated_bearer_token, request_with_headers, response_json,
@@ -185,6 +191,33 @@ async fn chat_session_groups_and_messages_are_persisted_history() {
     assert_eq!(messages["data"], json!([]));
 }
 
+#[test]
+fn chat_session_code_uses_shared_snowflake_id_provider() {
+    let database_url = temp_database_url("chat-session-snowflake-id");
+    let repository = SqliteChatRepository::connect(database_url.to_str().expect("path utf8"))
+        .expect("chat repository should initialize");
+    let service = ChatService::with_id_provider(
+        repository,
+        Arc::new(FixedSnowflakeIdProvider::new(734_200_000_000_000_123)),
+    );
+
+    let session = service
+        .create_session(
+            CreateChatSessionCommand {
+                agent_code: Some("main-agent".into()),
+                app_code: None,
+                task_code: None,
+                title: Some("Snowflake chat".into()),
+                workspace_code: Some("TRON_CORE".into()),
+            },
+            Some("auth.operator".into()),
+        )
+        .expect("session should be created");
+
+    assert_eq!(session.id, 734_200_000_000_000_123);
+    assert_eq!(session.session_code, "SESSION-734200000000000123");
+}
+
 #[tokio::test]
 async fn chat_message_history_requires_an_existing_session() {
     let app = app();
@@ -259,6 +292,7 @@ async fn chat_send_persists_messages_and_invokes_agent_run() {
         .as_str()
         .expect("session code should be returned")
         .to_string();
+    assert_decimal_code_has_snowflake_shape("SESSION-", &session_code);
 
     let send_response = request_with_headers(
         &app,
@@ -370,6 +404,13 @@ async fn chat_stream_persists_messages_and_emits_deltas() {
     assert!(body.contains("event: TEXT_MESSAGE_CONTENT"));
     assert!(body.contains("\"delta\":\"chat \""));
     assert!(body.contains("\"delta\":\"reply: stream this session\""));
+    assert!(
+        body.find("event: REASONING_MESSAGE_END")
+            .expect("reasoning should end")
+            < body
+                .find("event: TEXT_MESSAGE_START")
+                .expect("text should start")
+    );
     assert!(body.contains("event: TEXT_MESSAGE_END"));
     assert!(body.contains("event: RUN_FINISHED"));
     assert!(body.contains("\"type\":\"RUN_FINISHED\""));
@@ -389,6 +430,18 @@ async fn chat_stream_persists_messages_and_emits_deltas() {
     let messages = response_json(messages_response).await;
     assert_eq!(messages["data"][0]["role"], json!("USER"));
     assert_eq!(messages["data"][1]["role"], json!("ASSISTANT"));
+    assert_decimal_code_has_snowflake_shape(
+        "MSG-",
+        messages["data"][0]["messageCode"]
+            .as_str()
+            .expect("user message code should be returned"),
+    );
+    assert_decimal_code_has_snowflake_shape(
+        "MSG-",
+        messages["data"][1]["messageCode"]
+            .as_str()
+            .expect("assistant message code should be returned"),
+    );
     assert_eq!(
         messages["data"][1]["content"],
         json!("chat reply: stream this session")
@@ -930,6 +983,13 @@ async fn chat_stream_uses_opencode_system_agent_cli_runtime_and_emits_live_event
     assert!(body.contains("event: TEXT_MESSAGE_START"));
     assert!(body.contains("\"delta\":\"streamed \""));
     assert!(body.contains("\"delta\":\"opencode reply\""));
+    assert!(
+        body.find("event: REASONING_MESSAGE_END")
+            .expect("reasoning should end")
+            < body
+                .find("event: TEXT_MESSAGE_START")
+                .expect("text should start")
+    );
     assert!(body.contains("event: TEXT_MESSAGE_END"));
     assert!(body.contains("event: RUN_FINISHED"));
     assert!(!body.contains("event: RUN_ERROR"));
@@ -1380,4 +1440,21 @@ fn temp_database_url(test_name: &str) -> PathBuf {
         .expect("system time should be after epoch")
         .as_nanos();
     std::env::temp_dir().join(format!("tron-{test_name}-{nanos}.sqlite3"))
+}
+
+fn assert_decimal_code_has_snowflake_shape(prefix: &str, code: &str) {
+    let raw_id = code
+        .strip_prefix(prefix)
+        .unwrap_or_else(|| panic!("code `{code}` should start with `{prefix}`"));
+    assert!(
+        raw_id.chars().all(|item| item.is_ascii_digit()),
+        "code `{code}` should carry a decimal id"
+    );
+    let value = raw_id
+        .parse::<i64>()
+        .unwrap_or_else(|error| panic!("code `{code}` should parse as i64: {error}"));
+    assert!(
+        value > 1_000_000_000_000,
+        "code `{code}` should use a generated snowflake id, not a table-local sequence"
+    );
 }
