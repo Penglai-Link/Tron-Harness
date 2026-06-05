@@ -20,6 +20,7 @@ pub(super) fn coding_domain_tools() -> Vec<Arc<dyn Tool>> {
         Arc::new(filesystem::FsStatTool),
         Arc::new(search::SearchGrepTool),
         Arc::new(search::SearchGlobTool),
+        Arc::new(search::SearchPathTool),
     ]
 }
 
@@ -105,6 +106,25 @@ pub(super) struct SearchGlobOutput {
     pub root: String,
     pub patterns: Vec<String>,
     pub paths: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct SearchPathOutput {
+    pub root: String,
+    pub patterns: Vec<String>,
+    pub entry_type: &'static str,
+    pub entries: Vec<SearchPathEntry>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct SearchPathEntry {
+    pub path: String,
+    pub name: String,
+    pub is_file: bool,
+    pub is_directory: bool,
+    pub is_symlink: bool,
 }
 
 pub(super) fn parse_tool_input<T: for<'de> Deserialize<'de>>(

@@ -179,6 +179,31 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.search.glob.params.maxResults" => {
             Some("Maximum number of file paths to return.")
         }
+        "agent.toolCatalog.tools.search.path.name" => Some("Find paths"),
+        "agent.toolCatalog.tools.search.path.description" => {
+            Some("Find file and directory paths with wildcard patterns inside a local root.")
+        }
+        "agent.toolCatalog.tools.search.path.sampleResultSummary" => {
+            Some("Returns matching relative paths with file type metadata.")
+        }
+        "agent.toolCatalog.tools.search.path.params.patterns" => {
+            Some("One or more wildcard patterns used to match path names or relative paths.")
+        }
+        "agent.toolCatalog.tools.search.path.params.root" => {
+            Some("Optional search root directory. Absolute, relative, or ~ home-directory paths are allowed. Uses the current workspace root when omitted.")
+        }
+        "agent.toolCatalog.tools.search.path.params.entryType" => {
+            Some("Which path types to return. Allowed values: any, file, directory.")
+        }
+        "agent.toolCatalog.tools.search.path.params.includeHidden" => {
+            Some("Whether hidden files and directories should be included.")
+        }
+        "agent.toolCatalog.tools.search.path.params.maxDepth" => {
+            Some("Maximum recursive depth to traverse from the root directory.")
+        }
+        "agent.toolCatalog.tools.search.path.params.maxResults" => {
+            Some("Maximum number of matching paths to return.")
+        }
         _ => None,
     }
 }
@@ -328,6 +353,31 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         }
         "agent.toolCatalog.tools.search.glob.params.includeHidden" => Some("是否包含隐藏文件。"),
         "agent.toolCatalog.tools.search.glob.params.maxResults" => Some("最多返回的文件路径数量。"),
+        "agent.toolCatalog.tools.search.path.name" => Some("查找路径"),
+        "agent.toolCatalog.tools.search.path.description" => {
+            Some("在本地根目录内按通配模式查找文件和目录路径。")
+        }
+        "agent.toolCatalog.tools.search.path.sampleResultSummary" => {
+            Some("返回命中的相对路径以及文件类型元数据。")
+        }
+        "agent.toolCatalog.tools.search.path.params.patterns" => {
+            Some("一个或多个用于匹配路径名或相对路径的通配模式。")
+        }
+        "agent.toolCatalog.tools.search.path.params.root" => {
+            Some("可选搜索根目录；可填写绝对路径、相对路径或 `~` 家目录路径。省略时使用当前工作区根目录。")
+        }
+        "agent.toolCatalog.tools.search.path.params.entryType" => {
+            Some("要返回的路径类型；可选值：any、file、directory。")
+        }
+        "agent.toolCatalog.tools.search.path.params.includeHidden" => {
+            Some("是否包含隐藏文件和目录。")
+        }
+        "agent.toolCatalog.tools.search.path.params.maxDepth" => {
+            Some("从根目录开始递归遍历的最大深度。")
+        }
+        "agent.toolCatalog.tools.search.path.params.maxResults" => {
+            Some("最多返回的命中路径数量。")
+        }
         _ => None,
     }
 }

@@ -211,5 +211,32 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
             availability_state: ToolAvailabilityState::Available,
             sample_result_summary_i18n_key: "agent.toolCatalog.tools.search.glob.sampleResultSummary",
         },
+        ToolCatalogDefinition {
+            tool_code: "search.path",
+            domain_code: "search",
+            name_i18n_key: "agent.toolCatalog.tools.search.path.name",
+            description_i18n_key: "agent.toolCatalog.tools.search.path.description",
+            operation_kind: ToolOperationKind::Query,
+            input_schema: schema(
+                "agent.toolCatalog.tools.search.path.description",
+                json!([{ "patterns": ["*agent*"], "root": "tron-backend/src", "entryType": "directory", "includeHidden": false }]),
+                json!({
+                    "type": "object",
+                    "required": ["patterns"],
+                    "properties": {
+                        "patterns": { "type": "array", "minItems": 1, "items": { "type": "string" }, "x-i18n-description-key": "agent.toolCatalog.tools.search.path.params.patterns" },
+                        "root": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.search.path.params.root" },
+                        "entryType": { "type": "string", "enum": ["any", "file", "directory"], "default": "any", "x-i18n-description-key": "agent.toolCatalog.tools.search.path.params.entryType" },
+                        "includeHidden": { "type": "boolean", "default": false, "x-i18n-description-key": "agent.toolCatalog.tools.search.path.params.includeHidden" },
+                        "maxDepth": { "type": "integer", "minimum": 0, "default": 8, "x-i18n-description-key": "agent.toolCatalog.tools.search.path.params.maxDepth" },
+                        "maxResults": { "type": "integer", "minimum": 1, "default": 500, "x-i18n-description-key": "agent.toolCatalog.tools.search.path.params.maxResults" }
+                    },
+                    "additionalProperties": false
+                }),
+            ),
+            module_owner: "coding",
+            availability_state: ToolAvailabilityState::Available,
+            sample_result_summary_i18n_key: "agent.toolCatalog.tools.search.path.sampleResultSummary",
+        },
     ]
 }

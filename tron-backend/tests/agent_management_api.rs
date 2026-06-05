@@ -1337,6 +1337,16 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
                                     "root": workspace_dir.display().to_string()
                                 })).expect("search.glob arguments should serialize")
                             }
+                        },
+                        {
+                            "function": {
+                                "name": "search.path",
+                                "arguments": serde_json::to_string(&json!({
+                                    "patterns": ["src"],
+                                    "root": workspace_dir.display().to_string(),
+                                    "entryType": "directory"
+                                })).expect("search.path arguments should serialize")
+                            }
                         }
                     ]
                 }
@@ -1404,6 +1414,11 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
             .iter()
             .any(|tool| tool["function"]["name"] == json!("search.glob"))
     );
+    assert!(
+        first_tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == json!("search.path"))
+    );
 
     let second_messages = recorded_requests[1]["messages"]
         .as_array()
@@ -1425,5 +1440,11 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
             && message["content"]
                 .as_str()
                 .is_some_and(|content| content.contains("search.glob") && content.contains("src/lib.rs"))
+    }));
+    assert!(second_messages.iter().any(|message| {
+        message["role"] == json!("user")
+            && message["content"]
+                .as_str()
+                .is_some_and(|content| content.contains("search.path") && content.contains("src"))
     }));
 }
