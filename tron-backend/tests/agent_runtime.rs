@@ -685,6 +685,66 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
 }
 
 #[tokio::test]
+async fn react_agent_truncates_oversize_tool_event_payloads_without_failing_run() {
+    let oversized_output = "x".repeat(73_854);
+    let registry = ToolRegistry::default();
+    registry
+        .register(Arc::new(InProcessTool::new("echo", {
+            let oversized_output = oversized_output.clone();
+            move |request: ToolRequest| {
+                Ok(ToolObservation {
+                    tool_name: request.tool_name,
+                    output: oversized_output.clone(),
+                })
+            }
+        })))
+        .expect("tool should register");
+    let sink = Arc::new(RecordingEventSink::with_route_class(
+        "agent-runtime-oversize-tool",
+        BusRouteClass::Agui,
+    ));
+    let event_bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(250)),
+    )
+    .register_sink(sink.clone())
+    .build();
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![
+            ModelResponse::tool_call("echo", json!({"command": "large"})),
+            ModelResponse::final_output("after-tool"),
+        ])),
+        Arc::new(registry),
+        event_bus,
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    let result = agent
+        .run(base_context("RUN-TOOL-OVERSIZE"))
+        .await
+        .expect("oversize tool event payload should not fail the run");
+
+    assert_eq!(result.final_output, "after-tool");
+    assert_eq!(result.observations[0].output, oversized_output);
+    assert!(sink.wait_for_len(11, Duration::from_secs(2)));
+    let events = sink.events();
+    let tool_completed = events
+        .iter()
+        .find(|event| event.event_name == "agent.tool.completed")
+        .expect("tool completion event should be published");
+    let truncated_result = tool_completed
+        .payload_fields
+        .iter()
+        .find(|attr| attr.key == "tool_result_json")
+        .map(|attr| attr.value.clone())
+        .expect("tool result payload should be present");
+
+    assert!(truncated_result.len() <= 4096);
+    assert!(truncated_result.contains("[truncated: original_bytes=73854]"));
+}
+
+#[tokio::test]
 async fn tool_registry_rejects_missing_or_unauthorized_tools() {
     let registry = ToolRegistry::default();
     let context = base_context("RUN-DENIED");

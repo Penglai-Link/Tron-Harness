@@ -285,7 +285,7 @@ impl ReactAgent {
             draft = draft.attr("task_code", task_code.clone());
         }
         for (key, value) in payload_fields {
-            draft = draft.payload_field(key, value);
+            draft = draft.payload_field(key, compact_event_payload_value(&value));
         }
         if let Some(stream_key) = &context.stream_key {
             draft = draft.request(BusRequestRef::with_stream_key(stream_key.clone()));
@@ -415,6 +415,20 @@ fn compact_event_value(value: &str) -> String {
         end = end.saturating_sub(1);
     }
     format!("{}...", &value[..end])
+}
+
+fn compact_event_payload_value(value: &str) -> String {
+    const LIMIT: usize = 4096;
+    if value.len() <= LIMIT {
+        return value.to_string();
+    }
+
+    let marker = format!("\n...[truncated: original_bytes={}]", value.len());
+    let mut end = LIMIT.saturating_sub(marker.len());
+    while !value.is_char_boundary(end) {
+        end = end.saturating_sub(1);
+    }
+    format!("{}{}", &value[..end], marker)
 }
 
 fn validate_context(context: &AgentRunContext) -> Result<(), AgentError> {
