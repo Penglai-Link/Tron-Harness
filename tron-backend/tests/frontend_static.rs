@@ -40,6 +40,20 @@ async fn backend_serves_spa_entry_for_root_and_client_routes() {
 }
 
 #[tokio::test]
+async fn backend_serves_spa_entry_for_head_routes_without_body() {
+    let frontend_dir = write_frontend_fixture("spa-head");
+    let app = app_with_frontend_dir(&frontend_dir);
+
+    let response = request(&app, Method::HEAD, "/dashboard", None, None).await;
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_content_type(response.headers(), "text/html");
+    assert_eq!(response_text(response).await, "");
+
+    let _ = fs::remove_dir_all(frontend_dir);
+}
+
+#[tokio::test]
 async fn backend_serves_frontend_assets_from_resource_directory() {
     let frontend_dir = write_frontend_fixture("asset");
     let app = app_with_frontend_dir(&frontend_dir);
@@ -57,6 +71,32 @@ async fn backend_serves_frontend_assets_from_resource_directory() {
 }
 
 #[tokio::test]
+async fn non_get_frontend_routes_return_405_instead_of_spa_html() {
+    let frontend_dir = write_frontend_fixture("spa-method-guard");
+    let app = app_with_frontend_dir(&frontend_dir);
+
+    let response = request(&app, Method::POST, "/dashboard", None, None).await;
+
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+    assert_content_type(response.headers(), "text/plain");
+    assert_eq!(
+        response
+            .headers()
+            .get(header::ALLOW)
+            .and_then(|value| value.to_str().ok()),
+        Some("GET, HEAD"),
+    );
+    assert!(
+        !response_text(response)
+            .await
+            .contains("tron integrated fixture"),
+        "non-GET frontend requests must not return the SPA entry point",
+    );
+
+    let _ = fs::remove_dir_all(frontend_dir);
+}
+
+#[tokio::test]
 async fn unknown_api_routes_return_json_not_spa_html() {
     let frontend_dir = write_frontend_fixture("api-boundary");
     let app = app_with_frontend_dir(&frontend_dir);
@@ -68,6 +108,34 @@ async fn unknown_api_routes_return_json_not_spa_html() {
     let payload = response_json(response).await;
     assert_eq!(payload["code"], Value::String("NOT_FOUND".into()));
     assert_eq!(payload["data"], serde_json::json!({}));
+
+    let _ = fs::remove_dir_all(frontend_dir);
+}
+
+#[tokio::test]
+async fn unknown_api_post_routes_still_return_json_not_found() {
+    let frontend_dir = write_frontend_fixture("api-boundary-post");
+    let app = app_with_frontend_dir(&frontend_dir);
+
+    let response = request(&app, Method::POST, "/api/v1/not-exists", None, None).await;
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    assert_content_type(response.headers(), "application/json");
+    let payload = response_json(response).await;
+    assert_eq!(payload["code"], Value::String("NOT_FOUND".into()));
+    assert_eq!(payload["data"], serde_json::json!({}));
+
+    let _ = fs::remove_dir_all(frontend_dir);
+}
+
+#[tokio::test]
+async fn known_api_method_mismatch_still_returns_405() {
+    let frontend_dir = write_frontend_fixture("api-method-guard");
+    let app = app_with_frontend_dir(&frontend_dir);
+
+    let response = request(&app, Method::POST, "/api/v1/health", None, None).await;
+
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
 
     let _ = fs::remove_dir_all(frontend_dir);
 }

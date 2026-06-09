@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 use axum::{
     Json, Router,
     extract::State,
-    http::{StatusCode, Uri, header},
+    http::{Method, StatusCode, Uri, header},
     response::{IntoResponse, Response},
+    routing::any,
 };
 
 use crate::{
@@ -14,7 +15,9 @@ use crate::{
 };
 
 pub fn routes() -> Router<AppState> {
-    Router::new().fallback(frontend_resource)
+    Router::new()
+        .route("/", any(frontend_route))
+        .route("/{*path}", any(frontend_route))
 }
 
 fn api_not_found() -> Response {
@@ -28,24 +31,31 @@ fn api_not_found() -> Response {
         .into_response()
 }
 
-async fn frontend_resource(State(config): State<AppConfig>, uri: Uri) -> Response {
-    if is_api_path(uri.path()) {
+async fn frontend_route(State(config): State<AppConfig>, method: Method, uri: Uri) -> Response {
+    let uri_path = uri.path();
+    if is_api_path(uri_path) {
         return api_not_found();
     }
+    if !matches!(method, Method::GET | Method::HEAD) {
+        return frontend_method_not_allowed();
+    }
+    let include_body = method != Method::HEAD;
+    frontend_resource(config, uri_path, include_body).await
+}
 
+async fn frontend_resource(config: AppConfig, uri_path: &str, include_body: bool) -> Response {
     let root = PathBuf::from(&config.frontend_dist_dir);
-    let uri_path = uri.path();
 
     if let Some(candidate) = frontend_file_path(&root, uri_path) {
         if is_file(&candidate).await {
-            return file_response(candidate).await;
+            return file_response(candidate, include_body).await;
         }
         if looks_like_file_request(uri_path) {
             return frontend_not_found().into_response();
         }
     }
 
-    file_response(root.join("index.html")).await
+    file_response(root.join("index.html"), include_body).await
 }
 
 fn is_api_path(uri_path: &str) -> bool {
@@ -76,11 +86,26 @@ async fn is_file(path: &Path) -> bool {
     }
 }
 
-async fn file_response(path: PathBuf) -> Response {
+async fn file_response(path: PathBuf, include_body: bool) -> Response {
     match tokio::fs::read(&path).await {
-        Ok(bytes) => ([(header::CONTENT_TYPE, content_type(&path))], bytes).into_response(),
+        Ok(bytes) => {
+            let response_body = if include_body { bytes } else { Vec::new() };
+            ([(header::CONTENT_TYPE, content_type(&path))], response_body).into_response()
+        }
         Err(_) => frontend_not_found().into_response(),
     }
+}
+
+fn frontend_method_not_allowed() -> Response {
+    (
+        StatusCode::METHOD_NOT_ALLOWED,
+        [
+            (header::ALLOW, "GET, HEAD"),
+            (header::CONTENT_TYPE, "text/plain; charset=utf-8"),
+        ],
+        "frontend route only supports GET and HEAD",
+    )
+        .into_response()
 }
 
 fn frontend_not_found() -> impl IntoResponse {
