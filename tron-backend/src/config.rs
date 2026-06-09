@@ -4,8 +4,8 @@ mod paths;
 mod defaults;
 mod variable_crypto;
 
-use std::{fs, net::SocketAddr, path::Path};
 use serde::Deserialize;
+use std::{fs, net::SocketAddr, path::Path};
 
 use crate::shared::event_bus::EventBusConfig;
 

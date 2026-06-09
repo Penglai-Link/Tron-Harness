@@ -1,4 +1,4 @@
-use axum::{middleware, routing::get, Router};
+use axum::{Router, middleware, routing::get};
 
 use crate::{
     adapters::inbound::http::{
@@ -14,8 +14,7 @@ use crate::{
         chats::routes::routes as chat_routes,
         frontend::routes as frontend_routes,
         mcp::routes::{
-            management_routes as mcp_management_routes,
-            transport_routes as mcp_transport_routes,
+            management_routes as mcp_management_routes, transport_routes as mcp_transport_routes,
         },
         models::routes::routes as model_routes,
         rag::routes as rag_routes,

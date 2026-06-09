@@ -274,6 +274,7 @@ impl McpService {
                         });
                     }
                 }
+                }
             }
         }
 

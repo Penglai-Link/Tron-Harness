@@ -1,4 +1,9 @@
 use super::*;
+mod payload;
+use self::payload::{
+    PlatformVariableIdentity, WorkspaceVariableIdentity, build_stored_payload, reveal_stored_value,
+    updated_platform_payload, updated_workspace_payload,
+};
 
 impl VariableService {
     pub fn get_variable(
@@ -7,7 +12,7 @@ impl VariableService {
         variable_key: &str,
     ) -> Result<EffectiveVariable, VariableError> {
         let key = normalized_key(variable_key.to_owned())?;
-        self.effective_variable(workspace_code, &key)
+        self.effective_display_variable(workspace_code, &key)
     }
 
     pub fn list_variables(
@@ -192,6 +197,13 @@ impl VariableService {
     ) -> Result<EffectiveVariable, VariableError> {
         let workspace = self.active_workspace_detail(workspace_code)?;
         let key = normalized_key(command.key)?;
+        let CreateVariableCommand {
+            value,
+            description,
+            is_sensitive,
+            value_mode,
+            ..
+        } = command;
         let current = self
             .list_variables(
                 &workspace.workspace_code,
@@ -206,16 +218,20 @@ impl VariableService {
                     &workspace.workspace_code,
                     &key,
                     UpdateVariableCommand {
-                        value: command.value,
-                        description: command.description,
+                        value: Some(value),
+                        description,
+                        is_sensitive,
+                        value_mode,
                     },
                 ),
             _ => self.create_variable(
                 &workspace.workspace_code,
                 CreateVariableCommand {
                     key,
-                    value: command.value,
-                    description: command.description,
+                    value,
+                    description,
+                    is_sensitive,
+                    value_mode,
                 },
             ),
         }
@@ -435,195 +451,5 @@ impl VariableService {
         }
 
         Ok(resolved_by_key.into_values().collect())
-    }
-}
-
-struct StoredPayload {
-    value: String,
-    is_sensitive: bool,
-    value_nonce: Option<String>,
-    value_tag: Option<String>,
-    value_algorithm: Option<String>,
-    value_key_version: Option<String>,
-}
-
-struct PlatformVariableIdentity<'a> {
-    key: &'a str,
-}
-
-impl<'a> PlatformVariableIdentity<'a> {
-    fn new(key: &'a str) -> Self {
-        Self { key }
-    }
-
-    fn aad(&self) -> String {
-        format!("platform:{}", self.key)
-    }
-}
-
-struct WorkspaceVariableIdentity<'a> {
-    workspace_code: &'a str,
-    key: &'a str,
-}
-
-impl<'a> WorkspaceVariableIdentity<'a> {
-    fn new(workspace_code: &'a str, key: &'a str) -> Self {
-        Self {
-            workspace_code,
-            key,
-        }
-    }
-
-    fn aad(&self) -> String {
-        format!("workspace:{}:{}", self.workspace_code, self.key)
-    }
-}
-
-fn build_stored_payload(
-    cipher: &dyn VariableCipher,
-    aad: &[u8],
-    value: String,
-    is_sensitive: bool,
-) -> Result<StoredPayload, VariableError> {
-    if !is_sensitive {
-        return Ok(non_sensitive_payload(value));
-    }
-    sensitive_payload(cipher.encrypt(&value, aad)?)
-}
-
-fn updated_platform_payload(
-    cipher: &dyn VariableCipher,
-    existing: &PlatformVariable,
-    command: &UpdateVariableCommand,
-) -> Result<StoredPayload, VariableError> {
-    let target_sensitive = command.is_sensitive.unwrap_or(existing.is_sensitive);
-    let mode = command.value_mode.unwrap_or(VariableValueMode::Replace);
-    let aad = PlatformVariableIdentity::new(&existing.key).aad();
-    updated_payload(
-        cipher,
-        &platform_to_variable(existing.clone()),
-        aad.as_bytes(),
-        command.value.as_deref(),
-        mode,
-        target_sensitive,
-    )
-}
-
-fn updated_workspace_payload(
-    cipher: &dyn VariableCipher,
-    existing: &Variable,
-    workspace_code: &str,
-    command: &UpdateVariableCommand,
-) -> Result<StoredPayload, VariableError> {
-    let target_sensitive = command.is_sensitive.unwrap_or(existing.is_sensitive);
-    let mode = command.value_mode.unwrap_or(VariableValueMode::Replace);
-    let aad = WorkspaceVariableIdentity::new(workspace_code, &existing.key).aad();
-    updated_payload(
-        cipher,
-        existing,
-        aad.as_bytes(),
-        command.value.as_deref(),
-        mode,
-        target_sensitive,
-    )
-}
-
-fn updated_payload(
-    cipher: &dyn VariableCipher,
-    existing: &Variable,
-    aad: &[u8],
-    value: Option<&str>,
-    mode: VariableValueMode,
-    target_sensitive: bool,
-) -> Result<StoredPayload, VariableError> {
-    match mode {
-        VariableValueMode::Preserve if existing.is_sensitive && !target_sensitive => {
-            Err(VariableError::SensitiveDowngradeValueRequired)
-        }
-        VariableValueMode::Preserve if !existing.is_sensitive && target_sensitive => {
-            Err(VariableError::SensitiveUpgradeValueRequired)
-        }
-        VariableValueMode::Preserve => Ok(copy_payload(existing, target_sensitive)),
-        VariableValueMode::Replace => {
-            let value = value.ok_or_else(|| {
-                if !existing.is_sensitive && target_sensitive {
-                    VariableError::SensitiveUpgradeValueRequired
-                } else if existing.is_sensitive && !target_sensitive {
-                    VariableError::SensitiveDowngradeValueRequired
-                } else {
-                    VariableError::ValueRequired
-                }
-            })?;
-            build_stored_payload(cipher, aad, value.to_string(), target_sensitive)
-        }
-    }
-}
-
-fn reveal_stored_value(
-    cipher: &dyn VariableCipher,
-    variable: &Variable,
-    aad: &[u8],
-) -> Result<String, VariableError> {
-    if !variable.is_sensitive {
-        return Ok(variable.value.clone());
-    }
-    cipher.decrypt(&encrypted_value(variable)?, aad)
-}
-
-fn encrypted_value(variable: &Variable) -> Result<EncryptedVariableValue, VariableError> {
-    Ok(EncryptedVariableValue {
-        ciphertext: variable.value.clone(),
-        nonce: variable
-            .value_nonce
-            .clone()
-            .ok_or(VariableError::DecryptFailed)?,
-        tag: variable
-            .value_tag
-            .clone()
-            .ok_or(VariableError::DecryptFailed)?,
-        algorithm: variable
-            .value_algorithm
-            .clone()
-            .ok_or(VariableError::DecryptFailed)?,
-        key_version: variable
-            .value_key_version
-            .clone()
-            .ok_or(VariableError::DecryptFailed)?,
-    })
-}
-
-fn sensitive_payload(encrypted: EncryptedVariableValue) -> Result<StoredPayload, VariableError> {
-    Ok(StoredPayload {
-        value: encrypted.ciphertext,
-        is_sensitive: true,
-        value_nonce: Some(encrypted.nonce),
-        value_tag: Some(encrypted.tag),
-        value_algorithm: Some(encrypted.algorithm),
-        value_key_version: Some(encrypted.key_version),
-    })
-}
-
-fn non_sensitive_payload(value: String) -> StoredPayload {
-    StoredPayload {
-        value,
-        is_sensitive: false,
-        value_nonce: None,
-        value_tag: None,
-        value_algorithm: None,
-        value_key_version: None,
-    }
-}
-
-fn copy_payload(existing: &Variable, target_sensitive: bool) -> StoredPayload {
-    if !target_sensitive {
-        return non_sensitive_payload(existing.value.clone());
-    }
-    StoredPayload {
-        value: existing.value.clone(),
-        is_sensitive: true,
-        value_nonce: existing.value_nonce.clone(),
-        value_tag: existing.value_tag.clone(),
-        value_algorithm: existing.value_algorithm.clone(),
-        value_key_version: existing.value_key_version.clone(),
     }
 }

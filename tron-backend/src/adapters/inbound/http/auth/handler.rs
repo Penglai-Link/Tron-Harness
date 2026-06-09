@@ -114,7 +114,8 @@ pub async fn verify_step_up_password(
         Err(error) => return auth_error_response(error),
     };
     let target = request.target.into();
-    match users.verify_step_up_password(&session.user.user_code, &request.password, &target) {
+    match users.verify_step_up_password(&session.session.user.user_code, &request.password, &target)
+    {
         Ok(token) => Json(ApiResponse::success(StepUpTokenDto {
             step_up_token: token.token,
             expires_at: token.expires_at,

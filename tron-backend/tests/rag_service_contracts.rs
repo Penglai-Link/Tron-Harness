@@ -227,7 +227,7 @@ fn rag_service_lists_and_reads_profile_configuration_without_sqlite_details() {
     assert!(
         profiles
             .iter()
-        .all(|profile| profile.required_source_version.as_deref() == Some("v1"))
+            .all(|profile| profile.required_source_version.as_deref() == Some("v1"))
     );
 
     let memory_query = service

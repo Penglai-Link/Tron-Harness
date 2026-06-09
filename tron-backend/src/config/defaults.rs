@@ -1,11 +1,10 @@
 use crate::shared::event_bus::EventBusConfig;
 
 use super::{
-    AppConfig, AuthConfig, HttpClientProfilesConfig, SystemAgentConfig, VariableCryptoConfig,
-    DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS, DEFAULT_AUTH_DEV_OAUTH2_NAME,
+    AppConfig, AuthConfig, DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS, DEFAULT_AUTH_DEV_OAUTH2_NAME,
     DEFAULT_AUTH_JWT_SECRET, DEFAULT_AUTH_REFRESH_TOKEN_TTL_SECONDS, DEFAULT_BIND_ADDRESS,
     DEFAULT_PORT, DEFAULT_SYSTEM_AGENT_CODEX_COMMAND, DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND,
-    TEST_DATABASE_URL,
+    HttpClientProfilesConfig, SystemAgentConfig, TEST_DATABASE_URL, VariableCryptoConfig,
 };
 
 impl Default for AppConfig {
