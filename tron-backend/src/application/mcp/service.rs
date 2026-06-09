@@ -2,6 +2,8 @@ mod gateway;
 mod runtime;
 mod validation;
 
+pub(crate) use runtime::RuntimeMcpWarning;
+
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},

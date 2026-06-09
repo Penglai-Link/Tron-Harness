@@ -17,7 +17,7 @@ config/*.local.*
 
 # Runtime data
 data/
-runtime/
+/runtime/
 tmp/
 *.db
 *.db-*

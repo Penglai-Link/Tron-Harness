@@ -449,6 +449,115 @@ async fn chat_stream_persists_messages_and_emits_deltas() {
 }
 
 #[tokio::test]
+async fn chat_stream_downgrades_unreachable_mcp_server_to_agui_warning_and_finishes_run() {
+    let app = app();
+    let server = agent_model_mock_server().await;
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
+    let hanging_command = temp_command_path("hanging-mcp-runtime");
+    write_executable_script(&hanging_command, "#!/bin/sh\nsleep 10\n");
+
+    let create_server = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/mcp/servers",
+        Some(json!({
+            "serverCode": "hanging_stdio",
+            "name": "Hanging Stdio",
+            "description": "Blocks during stdio initialize",
+            "transportKind": "stdio",
+            "url": "",
+            "authKind": "none",
+            "headers": {},
+            "headersVariableRefs": {},
+            "command": hanging_command.display().to_string(),
+            "args": [],
+            "envVariableRefs": {},
+            "envPassthroughRefs": [],
+            "workingDirectory": hanging_command.parent().map(|path| path.display().to_string())
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(create_server.status(), StatusCode::CREATED);
+
+    let patch_mcp_policy = request_with_headers(
+        &app,
+        Method::PATCH,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/mcp-policy",
+        Some(json!({
+            "mcpAccessMode": "all_enabled_servers"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(patch_mcp_policy.status(), StatusCode::OK);
+
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Streaming chat with degraded MCP"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let stream_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages/stream"),
+        Some(json!({
+            "content": "stream with degraded mcp",
+            "workspaceCode": "TRON_CORE",
+            "modelCode": model_code
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(stream_response.status(), StatusCode::OK);
+    let body = to_bytes(stream_response.into_body(), usize::MAX)
+        .await
+        .expect("stream body should be readable");
+    let body = String::from_utf8(body.to_vec()).expect("stream body should be utf8");
+    assert!(body.contains("event: TOOL_CALL_START"));
+    assert!(body.contains("\"toolCallName\":\"MCP warning\""));
+    assert!(body.contains("continuing without its tools"));
+    assert!(body.contains("hanging_stdio"));
+    assert!(body.contains("event: RUN_STARTED"));
+    assert!(body.contains("event: RUN_FINISHED"));
+    assert!(body.contains("reply: stream with degraded mcp"));
+
+    let replay_response = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/agents/agui/streams/{session_code}/protocol-events"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(replay_response.status(), StatusCode::OK);
+    let replay_json = response_json(replay_response).await.to_string();
+    assert!(replay_json.contains("MCP warning"));
+    assert!(replay_json.contains("continuing without its tools"));
+    assert!(replay_json.contains("RUN_FINISHED"));
+}
+
+#[tokio::test]
 async fn chat_stream_only_emits_events_for_current_run() {
     let app = app();
     let server = agent_model_mock_server().await;

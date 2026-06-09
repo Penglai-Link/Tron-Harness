@@ -74,3 +74,17 @@ fn make_be_run_port_override_is_wired_into_backend_config() {
         "backend config path handling must consume TRON_BACKEND_GRAPH_STORAGE_PATH"
     );
 }
+
+#[test]
+fn make_be_clean_removes_backend_tmp_scratch_files() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("tron-backend must live under the repository root");
+
+    let makefile = fs::read_to_string(repo_root.join("Makefile"))
+        .expect("Makefile should be readable from the repository root");
+    assert!(
+        makefile.contains("rm -rf /tmp/tron*"),
+        "make be-clean must remove /tmp/tron* scratch files"
+    );
+}

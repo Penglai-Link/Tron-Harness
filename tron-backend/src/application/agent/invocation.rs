@@ -1,3 +1,4 @@
+mod agui_warning;
 mod helpers;
 
 use std::sync::Arc;
@@ -30,6 +31,7 @@ use super::{
     build_domain_discovery_guidance, discovery_expand_tool_definition,
     tool_record_to_effective_tool,
 };
+use agui_warning::{McpWarningPublishContext, publish_mcp_runtime_warnings};
 use helpers::{
     agent_kind_for_runtime, is_internal_agent, is_main_agent, normalize_optional,
     required_runtime_command_name, runtime_type_label, safe_preview,
@@ -160,6 +162,7 @@ impl AgentInvocationService {
         let model =
             resolve_invocation_model(&resolved_agent, requested_model, requested_system_model_id)?;
         let model_code = model.model_code.clone();
+        let agent_kind = agent_kind_for_runtime(resolved_agent.runtime_type);
         let locale = locale.unwrap_or_else(|| "en-US".to_string());
         let run_code = requested_run_code.unwrap_or_else(generate_agent_run_code);
         let mut tools = requested_tools;
@@ -263,7 +266,7 @@ impl AgentInvocationService {
             .collect::<Vec<_>>();
 
         if let Some(policy) = internal_agent_policy.as_ref() {
-            let mcp_tools = self
+            let materialization = self
                 .mcp
                 .materialize_runtime_tools(
                     &run_code,
@@ -275,7 +278,21 @@ impl AgentInvocationService {
                 )
                 .await
                 .map_err(map_mcp_error)?;
-            tools.extend(mcp_tools);
+            publish_mcp_runtime_warnings(
+                &self.event_bus,
+                &McpWarningPublishContext {
+                    run_code: &run_code,
+                    conversation_code: requested_conversation_code.as_deref(),
+                    workspace_code: &workspace.workspace_code,
+                    user_code: user_code.as_deref(),
+                    agent_kind,
+                    model: &model,
+                    app_code: requested_app_code.as_deref(),
+                    task_code: requested_task_code.as_deref(),
+                },
+                &materialization.warnings,
+            );
+            tools.extend(materialization.tools);
         }
 
         let mut messages = Vec::new();
@@ -326,7 +343,7 @@ impl AgentInvocationService {
             stream_key: requested_conversation_code
                 .clone()
                 .or_else(|| Some(run_code.clone())),
-            agent_kind: agent_kind_for_runtime(resolved_agent.runtime_type),
+            agent_kind,
             system_agent_session_id: None,
             model,
             variables,

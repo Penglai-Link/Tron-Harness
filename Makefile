@@ -20,7 +20,7 @@ help:
 	@echo "  make be-install   Fetch backend dependencies"
 	@echo "  make be-check     Compile backend"
 	@echo "  make be-test      Run backend tests"
-	@echo "  make be-clean     Remove backend build artifacts"
+	@echo "  make be-clean     Remove backend build artifacts and /tmp/tron* scratch files"
 	@echo "  make be-run       Run backend server"
 	@echo "                    Sources $(BACKEND_ENV_FILE) when present"
 	@echo "                    Example: make be-run PORT=8081"
@@ -74,6 +74,7 @@ be-test:
 .PHONY: be-clean
 be-clean:
 	rm -rf $(BACKEND_DIR)/target
+	rm -rf /tmp/tron*
 
 .PHONY: be-run
 be-run:
