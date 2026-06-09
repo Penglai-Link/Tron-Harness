@@ -37,6 +37,7 @@ impl Default for AppConfig {
                 dev_oauth2_enabled: true,
                 dev_oauth2_name: DEFAULT_AUTH_DEV_OAUTH2_NAME.into(),
                 github_oauth: None,
+                ldap: None,
             },
             event_bus: EventBusConfig::default(),
         }
