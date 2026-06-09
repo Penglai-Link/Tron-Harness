@@ -1,4 +1,6 @@
 use std::{
+    future::Future,
+    pin::Pin,
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -10,12 +12,12 @@ use url::Url;
 
 use crate::{
     application::user::{CreateUserCommand, PasswordHasher, UpdateUserCommand, UserRepository},
-    config::{AuthConfig, GitHubOAuthConfig},
+    config::{AuthConfig, GitHubOAuthConfig, LdapConfig},
     domain::{
         auth::{
-            AccessTokenIdentity, AuthError, AuthMethod, AuthProviderDescriptor, AuthProviderKind,
-            AuthenticatedAccess, AuthenticatedUser, CurrentSession, OAuth2IdentityLink,
-            OAuth2Profile, RefreshSession,
+            AccessTokenIdentity, AuthError, AuthIdentityProfile, AuthMethod,
+            AuthProviderDescriptor, AuthProviderKind, AuthenticatedAccess, AuthenticatedUser,
+            CurrentSession, OAuth2IdentityLink, RefreshSession,
         },
         user::{
             ListUsersQuery, PagedUsers, PasswordResetResult, User, UserError, UserSourceType,
@@ -32,6 +34,7 @@ use crate::{
     },
 };
 
+mod auth_ldap;
 mod auth_oauth;
 mod auth_session;
 mod auth_use_cases;
@@ -49,13 +52,26 @@ const DEV_OAUTH2_LOGIN: &str = "auth.operator";
 const DEV_OAUTH2_EMAIL: &str = "auth.operator@tron.ai";
 const DEV_OAUTH2_DISPLAY_NAME: &str = "Auth Operator";
 const GITHUB_PROVIDER_CODE: &str = "github";
+const LDAP_PROVIDER_CODE: &str = "ldap";
 const GITHUB_USER_AGENT: &str = "TronAuth/0.1";
-const GITHUB_AUTO_PROVISION_DEFAULT_ROLE_CODE: &str = "VIEWER";
-const GITHUB_AUTO_PROVISION_DEFAULT_SPACE_CODE: &str = "PLATFORM";
-const GITHUB_AUTO_PROVISION_DEFAULT_LOCALE: &str = "en-US";
-const GITHUB_AUTO_PROVISION_DEFAULT_TIMEZONE: &str = "UTC";
-const OAUTH2_AUTO_PROVISION_FALLBACK_NAME: &str = "User";
+const EXTERNAL_AUTH_AUTO_PROVISION_DEFAULT_ROLE_CODE: &str = "VIEWER";
+const EXTERNAL_AUTH_AUTO_PROVISION_DEFAULT_SPACE_CODE: &str = "PLATFORM";
+const EXTERNAL_AUTH_AUTO_PROVISION_DEFAULT_LOCALE: &str = "en-US";
+const EXTERNAL_AUTH_AUTO_PROVISION_DEFAULT_TIMEZONE: &str = "UTC";
+const EXTERNAL_AUTH_AUTO_PROVISION_FALLBACK_NAME: &str = "User";
 const OAUTH_STATE_TTL_SECONDS: i64 = 300;
+
+type LdapAuthFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<AuthIdentityProfile, AuthError>> + Send + 'a>>;
+
+pub(super) trait LdapAuthenticator: Send + Sync {
+    fn authenticate<'a>(
+        &'a self,
+        config: &'a LdapConfig,
+        login: &'a str,
+        password: &'a str,
+    ) -> LdapAuthFuture<'a>;
+}
 
 #[derive(Clone)]
 pub struct UserService {
@@ -63,6 +79,7 @@ pub struct UserService {
     password_hasher: Arc<dyn PasswordHasher>,
     auth_config: AuthConfig,
     oauth_client: Client,
+    ldap_authenticator: Arc<dyn LdapAuthenticator>,
     event_bus: EventBusHandle,
 }
 
@@ -166,11 +183,30 @@ impl UserService {
         auth_config: AuthConfig,
         event_bus: EventBusHandle,
     ) -> Self {
+        Self::with_dependencies(
+            repository,
+            password_hasher,
+            auth_config,
+            event_bus,
+            Client::new(),
+            Arc::new(auth_ldap::DefaultLdapAuthenticator),
+        )
+    }
+
+    fn with_dependencies(
+        repository: impl UserRepository + 'static,
+        password_hasher: impl PasswordHasher + 'static,
+        auth_config: AuthConfig,
+        event_bus: EventBusHandle,
+        oauth_client: Client,
+        ldap_authenticator: Arc<dyn LdapAuthenticator>,
+    ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             password_hasher: Arc::new(password_hasher),
             auth_config,
-            oauth_client: Client::new(),
+            oauth_client,
+            ldap_authenticator,
             event_bus,
         }
     }

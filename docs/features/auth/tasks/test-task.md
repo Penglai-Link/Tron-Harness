@@ -15,7 +15,7 @@ Only split into multiple workers when contracts are stable, write scopes are dis
 ## Task Rows
 
 - AC-AUTH-01 | phase: verify | owner: lead | scope: tron-backend/tests/auth_internal_login.rs; tron-frontend/tests/auth-smoke.spec.ts | command_ref: CMD-BE-TEST | status: done.
-- AC-AUTH-02 | phase: verify | owner: lead | scope: tron-backend/tests/auth_oauth2_login.rs; tron-frontend/tests/auth-smoke.spec.ts | command_ref: CMD-BE-TEST | status: done.
+- AC-AUTH-02 | phase: verify | owner: lead | scope: tron-backend/tests/auth_oauth2_login.rs; tron-backend/src/application/user/service/auth_ldap.rs; tron-frontend/tests/auth-smoke.spec.ts | command_ref: CMD-BE-TEST | status: done.
 - AC-AUTH-03 | phase: verify | owner: lead | scope: tron-frontend/tests/auth-smoke.spec.ts | command_ref: CMD-FE-AUTH-BROWSER | status: done.
 - AC-AUTH-04 | phase: verify | owner: lead | scope: tron-frontend/tests/auth-smoke.spec.ts | command_ref: CMD-FE-AUTH-BROWSER | status: done.
 - AC-AUTH-05 | phase: verify | owner: lead | scope: tron-backend/tests/auth_session_contract.rs | command_ref: CMD-BE-TEST | status: done.
@@ -27,11 +27,11 @@ Only split into multiple workers when contracts are stable, write scopes are dis
 
 ## Worktree Notes
 
-Lead keeps RED and VERIFY evidence in the main auth worktree because execution mode is solo.
+Lead keeps RED and VERIFY evidence in the main auth LDAP worktree because execution mode is solo.
 
 ## Integration Notes
 
-Frontend browser proof must cover anonymous blocking, successful access to existing user-management routes after authentication, idle silent renewal, and first-401 recovery without a route bounce.
+Frontend browser proof must cover anonymous blocking, successful access to existing user-management routes after internal, LDAP, or GitHub authentication, idle silent renewal, and first-401 recovery without a route bounce.
 
 ## Open Decisions
 

@@ -484,14 +484,12 @@ fn headers_from_storage(
 fn json_vec_from_storage(value: Option<String>) -> Result<Vec<String>, rusqlite::Error> {
     match value {
         None => Ok(Vec::new()),
-        Some(payload) => {
-            serde_json::from_str::<Vec<String>>(&payload).map_err(|error| {
-                rusqlite::Error::FromSqlConversionFailure(
-                    payload.len(),
-                    rusqlite::types::Type::Text,
-                    Box::new(error),
-                )
-            })
-        }
+        Some(payload) => serde_json::from_str::<Vec<String>>(&payload).map_err(|error| {
+            rusqlite::Error::FromSqlConversionFailure(
+                payload.len(),
+                rusqlite::types::Type::Text,
+                Box::new(error),
+            )
+        }),
     }
 }

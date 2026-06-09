@@ -49,7 +49,7 @@ export interface RoleRecord {
 }
 
 export type UserStatus = "Active" | "Archived";
-export type UserSourceType = "Internal" | "GitHub";
+export type UserSourceType = "Internal" | "GitHub" | "LDAP";
 
 export type UserRoleCode =
   | "ADMIN"

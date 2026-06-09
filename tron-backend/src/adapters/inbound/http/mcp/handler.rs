@@ -100,7 +100,10 @@ pub async fn verify_platform_server(
     Path(server_code): Path<String>,
     Json(request): Json<VerifyPlatformMcpServerRequest>,
 ) -> Response {
-    match mcp.verify_platform_server(&server_code, request.into()).await {
+    match mcp
+        .verify_platform_server(&server_code, request.into())
+        .await
+    {
         Ok(record) => Json(ApiResponse::success(record)).into_response(),
         Err(error) => mcp_error_response(error),
     }

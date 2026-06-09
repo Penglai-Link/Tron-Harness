@@ -164,6 +164,7 @@ pub fn github_oauth_config(server: &GitHubMockServer) -> AppConfig {
             user_api_url: server.user_api_url.clone(),
             emails_api_url: server.emails_api_url.clone(),
         }),
+        ldap: None,
         ..config.auth
     };
     config

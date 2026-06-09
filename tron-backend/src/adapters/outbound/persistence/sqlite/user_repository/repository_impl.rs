@@ -390,6 +390,7 @@ impl UserRepository for SqliteUserRepository {
                     session.user_code,
                     match session.auth_method {
                         AuthMethod::Internal => "internal",
+                        AuthMethod::Ldap => "ldap",
                         AuthMethod::Oauth2 => "oauth2",
                     },
                     session.provider_code,
@@ -422,6 +423,7 @@ impl UserRepository for SqliteUserRepository {
                         user_code: row.get(3)?,
                         auth_method: match row.get::<_, String>(4)?.as_str() {
                             "internal" => AuthMethod::Internal,
+                            "ldap" => AuthMethod::Ldap,
                             _ => AuthMethod::Oauth2,
                         },
                         provider_code: row.get(5)?,

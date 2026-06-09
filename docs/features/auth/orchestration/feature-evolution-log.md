@@ -17,6 +17,8 @@
 - 2026-05-22: reopened AC-AUTH-08 to stop idle access-token expiry from discarding in-progress frontend work; the shared auth client now schedules silent renewal before expiry, retries the first expired-request 401 after refresh, and skips redundant refresh calls when a newer bearer token is already in memory.
 - 2026-05-26: added AC-AUTH-09 so authenticated users with no assigned spaces are blocked on an authorization-request page before protected shell navigation or business pages render.
 - 2026-05-26: added AC-AUTH-10 so empty deployments initialize a usable `admin` platform administrator with fixed `ADMIN` role, root workspace access, password-reset requirement, and frontend no-space bypass for platform admins.
+- 2026-06-09: reopened AC-AUTH-02, AC-AUTH-04, AC-AUTH-06, and AC-AUTH-07 to add LDAP credential login below the GitHub button, YAML plus environment LDAP configuration, first-login local-user auto-provision, and durable provider-subject reuse through the shared external-identity path.
+- 2026-06-09: restored auth browser proof after discovering the shared frontend `Field` component renders a visual label without native input association; the login surface now supplies explicit input labels so the GitHub and LDAP smoke flows can be verified again.
 
 ## Downstream Artifact Migration
 
@@ -27,7 +29,11 @@
 - AC-AUTH-08 browser evidence now must additionally prove idle access renewal and first-401 recovery on protected admin routes without a redirect to `/login`.
 - AC-AUTH-09 browser evidence must prove `spaceCodes=[]` users see the authorization-request page on protected routes, cannot see shell navigation or workspace switching, and can still log out.
 - AC-AUTH-10 backend evidence must prove empty-database startup inserts only missing bootstrap admin, role, root workspace, assignment, and owner-grant rows, and backfills related grants for an existing `admin` user without duplicating it; browser evidence must prove `ADMIN` bypasses the no-space page.
+- AC-AUTH-02, AC-AUTH-04, AC-AUTH-06, and AC-AUTH-07 now also depend on `tron-backend/src/config.rs`, `tron-backend/application.yaml`, `tron-backend/.env.example`, `tron-backend/src/application/user/service/auth_ldap.rs`, and the login-page/provider-order proof in `tron-frontend/tests/auth-smoke.spec.ts`.
+- Current validation notes now include the follow-up fix that restored `src/application/mcp/service/runtime/http.rs` and `stdio.rs`, returning `rtk make be-check` to green while preserving the LDAP feature proof.
 
 ## Residual Risks
 
-- Residual risk is limited to future non-user-management domains adopting the same auth guard and request-context conventions, future non-GitHub providers needing their own verified profile mapping rules, and genuine refresh-session expiry still requiring re-authentication once the backend can no longer rotate the session.
+- Residual risk is limited to future non-user-management domains adopting the same auth guard and request-context conventions, future non-GitHub or non-LDAP providers needing their own verified profile mapping rules, and genuine refresh-session expiry still requiring re-authentication once the backend can no longer rotate the session.
+- LDAP profile extraction currently assumes directory attributes compatible with `mail` or `userPrincipalName` for email, `uid` or `sAMAccountName` or `cn` or `mail` for login, and `displayName` or `cn` or `name` for display name; deployments with different attribute contracts will need a future mapping extension.
+- Repo-level backend validation for this evolution is no longer blocked after the missing MCP runtime modules `src/application/mcp/service/runtime/http.rs` and `src/application/mcp/service/runtime/stdio.rs` were restored on 2026-06-09.

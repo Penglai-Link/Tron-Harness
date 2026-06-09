@@ -15,6 +15,8 @@ pub enum AuthError {
     OAuth2ProviderError,
     OAuth2ProfileInvalid,
     OAuth2UpstreamFailed,
+    LdapProfileInvalid,
+    LdapUpstreamFailed,
     TokenEncodingFailed,
     TokenDecodingFailed,
     PasswordVerifyFailed,
@@ -25,6 +27,7 @@ pub enum AuthError {
 #[serde(rename_all = "lowercase")]
 pub enum AuthMethod {
     Internal,
+    Ldap,
     Oauth2,
 }
 
@@ -32,6 +35,7 @@ pub enum AuthMethod {
 #[serde(rename_all = "lowercase")]
 pub enum AuthProviderKind {
     Internal,
+    Ldap,
     Oauth2,
 }
 
@@ -127,7 +131,7 @@ pub struct OAuth2IdentityLink {
 }
 
 #[derive(Debug, Clone)]
-pub struct OAuth2Profile {
+pub struct AuthIdentityProfile {
     pub provider_code: String,
     pub provider_name: String,
     pub subject: String,

@@ -142,7 +142,9 @@ impl McpService {
         let mut effective_tools = Vec::new();
 
         for server in servers {
-            let discovered_tools = self.discover_runtime_tools(&server, variable_values).await?;
+            let discovered_tools = self
+                .discover_runtime_tools(&server, variable_values)
+                .await?;
             let required_variable_keys = required_variable_keys(&server);
 
             for discovered_tool in discovered_tools {
@@ -172,11 +174,7 @@ impl McpService {
                         }
                     }
                 };
-                self.bind_runtime_tool(
-                    &tool_name,
-                    run_code,
-                    binding,
-                );
+                self.bind_runtime_tool(&tool_name, run_code, binding);
                 tool_registry
                     .register(Arc::new(McpRuntimeToolDispatch::new(
                         tool_name.clone(),
@@ -194,7 +192,9 @@ impl McpService {
                             discovered_tool.remote_tool_name, server.name
                         )
                     }),
-                    input_schema: http::normalize_runtime_input_schema(discovered_tool.input_schema),
+                    input_schema: http::normalize_runtime_input_schema(
+                        discovered_tool.input_schema,
+                    ),
                     skill_name: None,
                     required_variable_keys: required_variable_keys.clone(),
                 });
@@ -285,7 +285,8 @@ impl McpService {
                     "tools/list",
                     json!({}),
                 )
-                .await?;
+                .await
+                .map_err(McpError::RuntimeDiscoveryFailed)?;
                 http::parse_discovered_tools(&result)
             }
             McpServerTransportKind::Stdio => {
@@ -431,9 +432,7 @@ async fn invoke_runtime_tool_call(
         )
         .await
         .map_err(|error| {
-            format!(
-                "MCP tool `{remote_tool_name}` on server `{server_code}` failed: {error}"
-            )
+            format!("MCP tool `{remote_tool_name}` on server `{server_code}` failed: {error}")
         }),
     }
 }

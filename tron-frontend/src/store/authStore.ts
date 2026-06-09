@@ -7,6 +7,7 @@ import {
   buildLoginUrl,
 } from "@/domain/auth/model";
 import {
+  loginLdap,
   loginInternal,
   logoutAuthSession,
   refreshAuthSession,
@@ -30,6 +31,7 @@ interface AuthState {
   ensureSessionFresh: () => Promise<boolean>;
   initialize: () => Promise<void>;
   loginWithInternalAccount: (payload: InternalLoginPayload) => Promise<AuthSession>;
+  loginWithLdapAccount: (payload: InternalLoginPayload) => Promise<AuthSession>;
   markUnauthenticated: () => void;
   logout: () => Promise<void>;
   recoverFromUnauthorized: () => Promise<boolean>;
@@ -226,6 +228,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   loginWithInternalAccount: async (payload) => {
     const loginEpoch = ++authEpoch;
     const grant = await loginInternal(payload);
+    applyAuthenticatedSession(set, grant, loginEpoch);
+    return grant.session;
+  },
+  loginWithLdapAccount: async (payload) => {
+    const loginEpoch = ++authEpoch;
+    const grant = await loginLdap(payload);
     applyAuthenticatedSession(set, grant, loginEpoch);
     return grant.session;
   },

@@ -34,6 +34,7 @@ export const auth = {
   providerUnavailable: "External providers are temporarily unavailable.",
   providerLabels: {
     devOAuth2: "OAuth2",
+    ldap: "LDAP",
   },
   recoveryRequested: "Passkey recovery link requested",
   signInFailed: "Unable to sign in with the supplied credentials.",

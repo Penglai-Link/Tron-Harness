@@ -6,7 +6,7 @@ import {
 export interface AuthProvider {
   code: string;
   name: string;
-  type: "internal" | "oauth2";
+  type: "internal" | "ldap" | "oauth2";
 }
 
 export interface AuthProvidersPayload {
@@ -25,7 +25,7 @@ export interface AuthenticatedUser {
 }
 
 export interface AuthSession {
-  authMethod: "internal" | "oauth2";
+  authMethod: "internal" | "ldap" | "oauth2";
   authenticated: boolean;
   provider: AuthProvider | null;
   user: AuthenticatedUser;

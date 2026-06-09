@@ -19,8 +19,8 @@
   - `id`: Snowflake ID.
   - `session_code`: stable external session handle.
   - `user_id`, `user_code`: internal operator reference.
-  - `auth_method`: `internal` or `oauth2`.
-  - `provider_code`: nullable for internal login, stable provider code for OAuth2.
+  - `auth_method`: `internal`, `ldap`, or `oauth2`.
+  - `provider_code`: nullable for internal login, stable provider code for LDAP or OAuth2.
   - `refresh_token_hash`: hash of the refresh JWT value or signature material.
   - `expires_at`, `created_at`, `updated_at`, `revoked_at`, `last_used_at`.
 - Extend persistence with `user_oauth_identities`.
@@ -28,7 +28,7 @@
   - `user_id`, `user_code`: internal operator reference.
   - `provider_code`: stable provider identifier.
   - `provider_subject`: stable external subject identifier.
-  - `email`: last verified email returned by the provider.
+  - `email`: last verified or directory email returned by the provider.
   - `display_name`: last provider display name snapshot.
   - `linked_at`, `updated_at`.
 - No plaintext access token, refresh token, or provider secret is stored in SQLite.
@@ -41,8 +41,8 @@
 
 - One `users` row to many `auth_refresh_sessions`.
 - One `users` row to many `user_oauth_identities`.
-- One OAuth2 identity link belongs to exactly one internal user.
-- Internal login may create many refresh sessions without any OAuth2 identity link.
+- One external identity link belongs to exactly one internal user.
+- Internal login may create many refresh sessions without any external identity link.
 
 ## Migration Plan
 
@@ -64,14 +64,14 @@
 
 - Access tokens remain stateless JWTs and never persist server-side.
 - Refresh token persistence uses hashed token material only.
-- OAuth2 provider secrets stay in environment variables, not the database.
+- OAuth2 provider secrets and LDAP bind credentials stay in YAML or environment variables, not the database.
 - Archived users keep historical auth rows, but new sessions cannot be created for them.
 
 ## Test Data And Fixtures
 
 - Add one active internal auth fixture with a documented known password for internal-login proof.
 - Add one archived auth fixture to prove archived-login rejection.
-- Add one deterministic development OAuth2 profile for proof, and verify that first-login GitHub profiles can auto-provision an internal user when no matching email exists.
+- Add one deterministic development OAuth2 profile for proof, verify that first-login GitHub profiles can auto-provision an internal user when no matching email exists, and keep LDAP login logic covered through injected authenticator tests that prove first-login auto-provision and subject-link reuse.
 - Add startup proofs that an empty database creates a usable `admin`, and that an existing username `admin` receives missing `ADMIN`, root workspace, and owner grants without creating a duplicate user.
 
 ## Validation Commands

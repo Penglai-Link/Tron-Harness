@@ -494,9 +494,7 @@ fn variable_jsonrpc_error_code(error: &crate::domain::variable::VariableError) -
     }
 }
 
-fn variable_jsonrpc_error_message(
-    error: &crate::domain::variable::VariableError,
-) -> &'static str {
+fn variable_jsonrpc_error_message(error: &crate::domain::variable::VariableError) -> &'static str {
     match error {
         crate::domain::variable::VariableError::NotFound => "variable was not found",
         crate::domain::variable::VariableError::WorkspaceRequired => "workspaceCode is required",

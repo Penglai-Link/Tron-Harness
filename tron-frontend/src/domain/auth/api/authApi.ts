@@ -11,6 +11,7 @@ import {
   fetchMockAuthProviders,
   fetchMockCurrentAuthSession,
   loginMockInternal,
+  loginMockLdap,
   logoutMockAuthSession,
   refreshMockAuthSession,
 } from "@/domain/auth/mock/data";
@@ -24,6 +25,7 @@ export const authApiEndpoints = {
   currentSession: "GET /api/v1/auth/session",
   listProviders: "GET /api/v1/auth/providers",
   login: "POST /api/v1/auth/login",
+  loginLdap: "POST /api/v1/auth/login/ldap",
   logout: "POST /api/v1/auth/logout",
   oauth2Authorize: "GET /api/v1/auth/oauth2/authorize/{providerCode}",
   refresh: "POST /api/v1/auth/refresh",
@@ -54,6 +56,17 @@ export function loginInternal(payload: InternalLoginPayload) {
   }
 
   return requestApi<AuthGrant>(authApiEndpoints.login, {
+    body: payload,
+    retryOnUnauthorized: false,
+  });
+}
+
+export function loginLdap(payload: InternalLoginPayload) {
+  if (getAuthDataSource() === "mock") {
+    return loginMockLdap(payload);
+  }
+
+  return requestApi<AuthGrant>(authApiEndpoints.loginLdap, {
     body: payload,
     retryOnUnauthorized: false,
   });

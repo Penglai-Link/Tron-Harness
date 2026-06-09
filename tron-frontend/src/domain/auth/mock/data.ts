@@ -24,8 +24,15 @@ const devOAuth2Provider: AuthProvider = {
   type: "oauth2",
 };
 
+const ldapProvider: AuthProvider = {
+  code: "ldap",
+  name: "LDAP",
+  type: "ldap",
+};
+
 const mockProviders: AuthProvider[] = [
   internalProvider,
+  ldapProvider,
   devOAuth2Provider,
 ];
 
@@ -184,6 +191,23 @@ export function loginMockInternal(payload: InternalLoginPayload) {
   }
 
   return Promise.resolve(issueGrant(createDefaultMockSession()));
+}
+
+export function loginMockLdap(payload: InternalLoginPayload) {
+  const login = payload.login.trim().toLowerCase();
+  const acceptsDefaultOperator = login === "auth.operator" || login === "auth.operator@tron.ai";
+
+  if (!acceptsDefaultOperator || payload.password !== "TronAuthPass123!") {
+    return Promise.reject(new ApiError("invalid credentials", 401, {
+      code: "AUTH_INVALID_CREDENTIALS",
+      data: {},
+    }));
+  }
+
+  return Promise.resolve(issueGrant(createMockSession({
+    authMethod: "ldap",
+    provider: ldapProvider,
+  })));
 }
 
 export function refreshMockAuthSession() {

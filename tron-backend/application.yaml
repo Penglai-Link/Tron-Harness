@@ -30,6 +30,15 @@ auth:
     tokenUrl: https://github.com/login/oauth/access_token
     userApiUrl: https://api.github.com/user
     emailsApiUrl: https://api.github.com/user/emails
+  # Optional LDAP credential login.
+  # The following `.env` variable names can override this block at runtime:
+  # LDAP_URL, LDAP_BIND_DN, LDAP_BIND_PASSWORD, LDAP_SEARCH_BASE, LDAP_SEARCH_FILTER
+  # ldap:
+  #   url: ldap://127.0.0.1:389
+  #   bindDn: cn=service,dc=example,dc=com
+  #   bindPassword: change-me
+  #   searchBase: ou=people,dc=example,dc=com
+  #   searchFilter: (|(uid={login})(mail={login}))
 
 eventBus:
   enabled: true

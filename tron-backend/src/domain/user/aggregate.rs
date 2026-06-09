@@ -8,6 +8,8 @@ use super::{PhoneNumber, UserStatus};
 pub enum UserSourceType {
     Internal,
     GitHub,
+    #[serde(rename = "LDAP")]
+    Ldap,
 }
 
 #[derive(Debug, Clone, Serialize)]

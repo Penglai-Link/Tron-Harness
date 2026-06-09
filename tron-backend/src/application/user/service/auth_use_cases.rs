@@ -23,6 +23,9 @@ impl UserService {
         if let Some(provider) = self.github_provider_descriptor_if_enabled() {
             providers.push(provider);
         }
+        if let Some(provider) = self.ldap_provider_descriptor_if_enabled() {
+            providers.push(provider);
+        }
         if self.auth_config.dev_oauth2_enabled {
             providers.push(self.dev_provider_descriptor());
         }
@@ -59,6 +62,49 @@ impl UserService {
             "Created authenticated session",
             &session.session.user,
             Some(AuthMethod::Internal),
+            session
+                .session
+                .provider
+                .as_ref()
+                .map(|provider| provider.code.as_str()),
+            None,
+            BusPriority::Critical,
+        );
+        Ok(session)
+    }
+
+    pub async fn login_ldap(
+        &self,
+        login: &str,
+        password: &str,
+    ) -> Result<AuthorizedSession, AuthError> {
+        let login = login.trim();
+        if login.is_empty() || password.is_empty() {
+            return Err(AuthError::InvalidCredentials);
+        }
+
+        let ldap_config = self.ldap_config()?;
+        let profile = self
+            .ldap_authenticator
+            .authenticate(ldap_config, login, password)
+            .await?;
+        let mut repository = self
+            .repository
+            .lock()
+            .expect("user repository mutex poisoned");
+        let session = self.create_external_auth_session(
+            repository.as_mut(),
+            &profile,
+            AuthMethod::Ldap,
+            self.ldap_provider_descriptor(),
+            None,
+        )?;
+        drop(repository);
+        self.publish_auth_session_event(
+            "auth.session.created",
+            "Created LDAP session",
+            &session.session.user,
+            Some(session.session.auth_method),
             session
                 .session
                 .provider

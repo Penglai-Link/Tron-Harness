@@ -44,6 +44,25 @@ pub async fn login(
     }
 }
 
+pub async fn login_ldap(
+    State(users): State<UserService>,
+    Json(request): Json<InternalLoginRequest>,
+) -> Response {
+    match users.login_ldap(&request.login, &request.password).await {
+        Ok(session) => response_with_refresh_cookie(
+            StatusCode::OK,
+            Json(ApiResponse::success(auth_grant_response(
+                &users,
+                &session.access_token,
+                &session.session,
+            ))),
+            &users,
+            &session.refresh_token,
+        ),
+        Err(error) => auth_error_response(error),
+    }
+}
+
 pub async fn current_session(State(users): State<UserService>, headers: HeaderMap) -> Response {
     let access_token = read_access_token(&headers);
     match users.authenticate_access_token(access_token.as_deref()) {

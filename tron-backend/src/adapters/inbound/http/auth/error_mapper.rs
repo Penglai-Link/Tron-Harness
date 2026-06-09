@@ -63,6 +63,16 @@ pub fn auth_error_response(error: AuthError) -> Response {
             "AUTH_OAUTH2_UPSTREAM_FAILED",
             "oauth2 upstream request failed",
         ),
+        AuthError::LdapProfileInvalid => (
+            StatusCode::BAD_GATEWAY,
+            "AUTH_LDAP_PROFILE_INVALID",
+            "ldap profile payload is invalid",
+        ),
+        AuthError::LdapUpstreamFailed => (
+            StatusCode::BAD_GATEWAY,
+            "AUTH_LDAP_UPSTREAM_FAILED",
+            "ldap upstream request failed",
+        ),
         AuthError::TokenEncodingFailed
         | AuthError::TokenDecodingFailed
         | AuthError::PasswordVerifyFailed

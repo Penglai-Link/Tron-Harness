@@ -1,5 +1,8 @@
 use crate::{
-    domain::mcp::{McpError, McpTransportAvailability, PlatformMcpGatewayConfig, UpdatePlatformMcpGatewayCommand},
+    domain::mcp::{
+        McpError, McpTransportAvailability, PlatformMcpGatewayConfig,
+        UpdatePlatformMcpGatewayCommand,
+    },
     shared::time::current_timestamp,
 };
 

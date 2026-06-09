@@ -2,13 +2,12 @@ use std::collections::{BTreeMap, HashMap};
 
 use serde_json::Value;
 
-use crate::domain::workspace::WorkspaceError;
 use crate::domain::mcp::{
-    McpError, McpHealthStatus, McpServerAuthKind, McpServerTransportKind,
-    PlatformMcpServerRecord, PlatformMcpServerStatusFilter, WorkspaceEffectiveMcpServerRecord,
-    validate_mcp_server_url,
+    McpError, McpHealthStatus, McpServerAuthKind, McpServerTransportKind, PlatformMcpServerRecord,
+    PlatformMcpServerStatusFilter, WorkspaceEffectiveMcpServerRecord, validate_mcp_server_url,
 };
-use crate::domain::variable::{validate_variable_key, VariableError};
+use crate::domain::variable::{VariableError, validate_variable_key};
+use crate::domain::workspace::WorkspaceError;
 
 #[derive(Debug, Clone)]
 pub(super) struct ValidatedTransportDefinition {
@@ -44,7 +43,11 @@ pub(super) fn validate_transport_definition(
                 || !args.is_empty()
                 || !env_variable_refs.is_empty()
                 || !env_passthrough_refs.is_empty()
-                || working_directory.as_deref().map(str::trim).filter(|value| !value.is_empty()).is_some()
+                || working_directory
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .is_some()
             {
                 return Err(McpError::InvalidServerDefinition);
             }
@@ -288,7 +291,10 @@ fn normalize_trimmed_list(values: Vec<String>) -> Result<Vec<String>, McpError> 
         if normalized_value.is_empty() {
             return Err(McpError::InvalidServerDefinition);
         }
-        if !normalized.iter().any(|item: &String| item == &normalized_value) {
+        if !normalized
+            .iter()
+            .any(|item: &String| item == &normalized_value)
+        {
             normalized.push(normalized_value);
         }
     }

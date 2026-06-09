@@ -201,6 +201,7 @@ pub(super) fn token_validation() -> Validation {
 fn auth_method_from_claims(value: &str) -> Result<AuthMethod, AuthError> {
     match value {
         "internal" => Ok(AuthMethod::Internal),
+        "ldap" => Ok(AuthMethod::Ldap),
         "oauth2" => Ok(AuthMethod::Oauth2),
         _ => Err(AuthError::Unauthorized),
     }
@@ -209,6 +210,7 @@ fn auth_method_from_claims(value: &str) -> Result<AuthMethod, AuthError> {
 fn auth_method_as_str(value: AuthMethod) -> &'static str {
     match value {
         AuthMethod::Internal => "internal",
+        AuthMethod::Ldap => "ldap",
         AuthMethod::Oauth2 => "oauth2",
     }
 }

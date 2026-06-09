@@ -12,6 +12,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 cron = "0.12"
 grafeo = { version = "0.5.42", default-features = false, features = ["embedded", "storage"] }
 jsonwebtoken = "9"
+ldap3 = "0.12.1"
 rand = "0.9.4"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 rusqlite = { version = "0.32", features = ["bundled"] }

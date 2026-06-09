@@ -45,6 +45,15 @@ const oauthUser = {
   },
 };
 
+const ldapUser = {
+  ...authUser,
+  authMethod: "ldap",
+  provider: {
+    code: "ldap",
+    name: "LDAP",
+  },
+};
+
 const unassignedSpaceUser = {
   ...authUser,
   user: {
@@ -163,6 +172,7 @@ async function routeAuthApi(
   page: Page,
   options: {
     expireFirstAdminUsersRequest?: boolean;
+    ldapLoginSession?: typeof ldapUser;
     loginGrantExpiresIn?: number;
     loginSession?: typeof authUser;
     onOAuth2Authorize?: (url: string) => void;
@@ -170,14 +180,14 @@ async function routeAuthApi(
     refreshGrantExpiresIn?: number;
   } = {},
 ) {
-  let currentSession: typeof authUser | typeof oauthUser | null = null;
+  let currentSession: typeof authUser | typeof oauthUser | typeof ldapUser | null = null;
   let hasRefreshSession = false;
   let currentAccessToken = "";
   let nextAccessTokenId = 1;
   let refreshGrantCount = 0;
   let shouldExpireAdminUsersRequest = options.expireFirstAdminUsersRequest ?? false;
 
-  function issueGrant(session: typeof authUser | typeof oauthUser, expiresIn: number) {
+  function issueGrant(session: typeof authUser | typeof oauthUser | typeof ldapUser, expiresIn: number) {
     currentSession = session;
     hasRefreshSession = true;
     currentAccessToken = `test-access-token-${nextAccessTokenId++}`;
@@ -195,6 +205,7 @@ async function routeAuthApi(
       providers: [
         { code: "internal", name: "Internal Account", type: "internal" },
         { code: "github", name: "GitHub", type: "oauth2" },
+        { code: "ldap", name: "LDAP", type: "ldap" },
       ],
     }));
   });
@@ -215,6 +226,16 @@ async function routeAuthApi(
     const body = route.request().postDataJSON() as { login?: string; password?: string };
     if (body.login === "auth.operator" && body.password === "TronAuthPass123!") {
       await fulfillJson(route, issueGrant(options.loginSession ?? authUser, options.loginGrantExpiresIn ?? 900));
+      return;
+    }
+
+    await fulfillJson(route, unauthorizedEnvelope("AUTH_INVALID_CREDENTIALS", "invalid credentials"), 401);
+  });
+
+  await page.route("**/api/v1/auth/login/ldap", async (route) => {
+    const body = route.request().postDataJSON() as { login?: string; password?: string };
+    if (body.login === "auth.operator" && body.password === "TronAuthPass123!") {
+      await fulfillJson(route, issueGrant(options.ldapLoginSession ?? ldapUser, options.loginGrantExpiresIn ?? 900));
       return;
     }
 
@@ -537,6 +558,30 @@ test("supports oauth2 entry and lands on the intended protected route", async ({
     `http://127.0.0.1:${frontendPort}/api/v1/auth/oauth2/authorize/github?redirect=%2Fadmin%2Fusers`,
   );
   await expect(page).toHaveURL(`http://127.0.0.1:${frontendPort}/admin/users`);
+  await expect(page.getByRole("table")).toContainText("Auth Operator");
+});
+
+test("supports ldap entry below GitHub and lands on the intended protected route", async ({ page }) => {
+  await routeAuthApi(page);
+
+  await page.goto(`${frontendBaseUrl}/login?redirect=%2Fadmin%2Fusers`);
+  await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
+  await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
+
+  const buttonTexts = await page.locator("button").evaluateAll((buttons) => (
+    buttons
+      .map((button) => button.textContent?.replace(/\s+/g, " ").trim() ?? "")
+      .filter(Boolean)
+  ));
+  expect(buttonTexts.findIndex((text) => /^GitHub$/i.test(text))).toBeGreaterThanOrEqual(0);
+  expect(buttonTexts.findIndex((text) => /^LDAP$/i.test(text))).toBeGreaterThanOrEqual(0);
+  expect(buttonTexts.findIndex((text) => /^GitHub$/i.test(text))).toBeLessThan(
+    buttonTexts.findIndex((text) => /^LDAP$/i.test(text)),
+  );
+
+  await page.getByRole("button", { name: /^ldap$/i }).click();
+
+  await expect(page).toHaveURL(/\/admin\/users$/);
   await expect(page.getByRole("table")).toContainText("Auth Operator");
 });
 

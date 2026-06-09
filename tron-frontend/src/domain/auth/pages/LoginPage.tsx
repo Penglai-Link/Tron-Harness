@@ -42,6 +42,7 @@ export function LoginPage() {
   const { theme } = useTheme();
   const toast = useToast();
   const loginWithInternalAccount = useAuthStore((state) => state.loginWithInternalAccount);
+  const loginWithLdapAccount = useAuthStore((state) => state.loginWithLdapAccount);
   const redirectTarget = useMemo(
     () => resolveAuthRedirect(location.search, DEFAULT_AUTH_REDIRECT),
     [location.search],
@@ -52,7 +53,11 @@ export function LoginPage() {
   const [providersLoading, setProvidersLoading] = useState(true);
   const [providerError, setProviderError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
-  const [oauthProviders, setOauthProviders] = useState<Array<{ code: string; name: string }>>([]);
+  const [externalProviders, setExternalProviders] = useState<Array<{
+    code: string;
+    name: string;
+    type: "ldap" | "oauth2";
+  }>>([]);
   const [oauthSubmittingProviderCode, setOauthSubmittingProviderCode] = useState<string | null>(null);
   const authBusy = submitting || oauthSubmittingProviderCode !== null;
 
@@ -63,12 +68,19 @@ export function LoginPage() {
 
     fetchAuthProviders(controller.signal)
       .then((payload) => {
-        setOauthProviders(
+        setExternalProviders(
           payload.providers
-            .filter((provider) => provider.type === "oauth2")
+            .filter((provider): provider is typeof provider & { type: "ldap" | "oauth2" } => (
+              provider.type === "ldap" || provider.type === "oauth2"
+            ))
             .map((provider) => ({
               code: provider.code,
-              name: provider.code === "dev" ? t("auth:providerLabels.devOAuth2") : provider.name,
+              name: provider.code === "dev"
+                ? t("auth:providerLabels.devOAuth2")
+                : provider.code === "ldap"
+                  ? t("auth:providerLabels.ldap")
+                  : provider.name,
+              type: provider.type,
             })),
         );
       })
@@ -118,16 +130,48 @@ export function LoginPage() {
     }
   }
 
-  function handleOAuth2SignIn(providerCode: string) {
+  async function handleExternalSignIn(provider: {
+    code: string;
+    name: string;
+    type: "ldap" | "oauth2";
+  }) {
     if (authBusy) {
       return;
     }
 
     setFormError(null);
-    setOauthSubmittingProviderCode(providerCode);
+    setOauthSubmittingProviderCode(provider.code);
+
+    if (provider.type === "ldap") {
+      try {
+        const session = await loginWithLdapAccount({
+          login: login.trim(),
+          password,
+        });
+
+        if (session.user.passwordResetRequired) {
+          toast.warning(t("auth:passwordResetRequired"));
+        }
+
+        startTransition(() => {
+          navigate(redirectTarget, { replace: true });
+        });
+      } catch (error) {
+        const message = isApiError(error)
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : t("auth:signInFailed");
+        setFormError(message);
+        toast.error(message);
+      } finally {
+        setOauthSubmittingProviderCode(null);
+      }
+      return;
+    }
 
     try {
-      window.location.assign(buildOAuth2AuthorizeUrl(providerCode, redirectTarget));
+      window.location.assign(buildOAuth2AuthorizeUrl(provider.code, redirectTarget));
     } catch (error) {
       const message = error instanceof Error ? error.message : t("auth:providerUnavailable");
       setOauthSubmittingProviderCode(null);
@@ -203,6 +247,7 @@ export function LoginPage() {
           <form className="space-y-5" onSubmit={handleSubmit}>
             <Field label={t("auth:fields.usernameOrEmail")} error={formError ?? undefined}>
               <TextInput
+                aria-label={t("auth:fields.usernameOrEmail")}
                 autoComplete="username"
                 disabled={authBusy}
                 placeholder={t("auth:usernamePlaceholder")}
@@ -212,6 +257,7 @@ export function LoginPage() {
             </Field>
             <Field label={t("auth:fields.password")}>
               <TextInput
+                aria-label={t("auth:fields.password")}
                 autoComplete="current-password"
                 disabled={authBusy}
                 placeholder={t("auth:passkeyPlaceholder")}
@@ -244,12 +290,12 @@ export function LoginPage() {
                 {providerError}
               </div>
             ) : null}
-            {!providersLoading && !providerError && oauthProviders.length === 0 ? (
+            {!providersLoading && !providerError && externalProviders.length === 0 ? (
               <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3 text-sm text-[var(--color-on-surface-variant)]">
                 {t("auth:noExternalProviders")}
               </div>
             ) : null}
-            {oauthProviders.map((provider) => {
+            {externalProviders.map((provider) => {
               const providerSubmitting = oauthSubmittingProviderCode === provider.code;
 
               return (
@@ -260,7 +306,7 @@ export function LoginPage() {
                   key={provider.code}
                   type="button"
                   variant="secondary"
-                  onClick={() => handleOAuth2SignIn(provider.code)}
+                  onClick={() => void handleExternalSignIn(provider)}
                 >
                   <span className="flex items-center gap-2">
                     {providerSubmitting ? <LoaderCircle className="animate-spin" size={16} aria-hidden="true" /> : <Orbit size={16} aria-hidden="true" />}

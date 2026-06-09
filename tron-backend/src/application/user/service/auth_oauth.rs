@@ -57,7 +57,7 @@ impl UserService {
         }
         let claims = self.validate_oauth_state("dev", state_cookie, state_query)?;
 
-        let profile = OAuth2Profile {
+        let profile = AuthIdentityProfile {
             provider_code: "dev".into(),
             provider_name: self.auth_config.dev_oauth2_name.clone(),
             subject: DEV_OAUTH2_SUBJECT.into(),
@@ -70,36 +70,11 @@ impl UserService {
             .repository
             .lock()
             .expect("user repository mutex poisoned");
-        let user = match repository
-            .find_user_by_provider_subject(&profile.provider_code, &profile.subject)?
-        {
-            Some(user) => user,
-            None => match repository.find_active_user_by_email(&profile.email)? {
-                Some(user) => user,
-                None => self.auto_provision_oauth2_user(repository.as_mut(), &profile)?,
-            },
-        };
-        ensure_active_user(&user)?;
-
-        let now = now_seconds();
-        let identity = OAuth2IdentityLink {
-            id: repository.next_id().map_err(map_user_error_to_auth)?,
-            user_id: user.id.value(),
-            user_code: user.user_code.clone(),
-            provider_code: profile.provider_code.clone(),
-            provider_subject: profile.subject.clone(),
-            email: profile.email.to_ascii_lowercase(),
-            display_name: profile.display_name.clone(),
-            linked_at: now,
-            updated_at: now,
-        };
-        repository.upsert_oauth_identity(&identity)?;
-
-        let session = self.create_session(
+        let session = self.create_external_auth_session(
             repository.as_mut(),
-            &user,
+            &profile,
             AuthMethod::Oauth2,
-            Some(self.dev_provider_descriptor()),
+            self.dev_provider_descriptor(),
             Some(claims.redirect_path),
         )?;
         drop(repository);
@@ -138,36 +113,11 @@ impl UserService {
             .repository
             .lock()
             .expect("user repository mutex poisoned");
-        let user = match repository
-            .find_user_by_provider_subject(&profile.provider_code, &profile.subject)?
-        {
-            Some(user) => user,
-            None => match repository.find_active_user_by_email(&profile.email)? {
-                Some(user) => user,
-                None => self.auto_provision_oauth2_user(repository.as_mut(), &profile)?,
-            },
-        };
-        ensure_active_user(&user)?;
-
-        let now = now_seconds();
-        let identity = OAuth2IdentityLink {
-            id: repository.next_id().map_err(map_user_error_to_auth)?,
-            user_id: user.id.value(),
-            user_code: user.user_code.clone(),
-            provider_code: profile.provider_code.clone(),
-            provider_subject: profile.subject.clone(),
-            email: profile.email.to_ascii_lowercase(),
-            display_name: profile.display_name.clone(),
-            linked_at: now,
-            updated_at: now,
-        };
-        repository.upsert_oauth_identity(&identity)?;
-
-        let session = self.create_session(
+        let session = self.create_external_auth_session(
             repository.as_mut(),
-            &user,
+            &profile,
             AuthMethod::Oauth2,
-            Some(self.github_provider_descriptor()),
+            self.github_provider_descriptor(),
             Some(claims.redirect_path),
         )?;
         drop(repository);
@@ -206,6 +156,26 @@ impl UserService {
             })
     }
 
+    pub(super) fn ldap_provider_descriptor_if_enabled(&self) -> Option<AuthProviderDescriptor> {
+        self.auth_config
+            .ldap
+            .as_ref()
+            .map(|config| AuthProviderDescriptor {
+                code: LDAP_PROVIDER_CODE.into(),
+                name: config.name.clone(),
+                kind: AuthProviderKind::Ldap,
+            })
+    }
+
+    pub(super) fn ldap_provider_descriptor(&self) -> AuthProviderDescriptor {
+        self.ldap_provider_descriptor_if_enabled()
+            .unwrap_or(AuthProviderDescriptor {
+                code: LDAP_PROVIDER_CODE.into(),
+                name: "LDAP".into(),
+                kind: AuthProviderKind::Ldap,
+            })
+    }
+
     pub(super) fn github_provider_descriptor(&self) -> AuthProviderDescriptor {
         self.github_provider_descriptor_if_enabled()
             .unwrap_or(AuthProviderDescriptor {
@@ -221,6 +191,7 @@ impl UserService {
     ) -> Option<AuthProviderDescriptor> {
         match provider_code {
             GITHUB_PROVIDER_CODE => Some(self.github_provider_descriptor()),
+            LDAP_PROVIDER_CODE => Some(self.ldap_provider_descriptor()),
             "dev" => Some(self.dev_provider_descriptor()),
             _ => None,
         }
@@ -233,14 +204,63 @@ impl UserService {
             .ok_or(AuthError::ProviderNotFound)
     }
 
-    fn auto_provision_oauth2_user(
+    pub(super) fn ldap_config(&self) -> Result<&LdapConfig, AuthError> {
+        self.auth_config
+            .ldap
+            .as_ref()
+            .ok_or(AuthError::ProviderNotFound)
+    }
+
+    pub(super) fn create_external_auth_session(
         &self,
         repository: &mut dyn UserRepository,
-        profile: &OAuth2Profile,
+        profile: &AuthIdentityProfile,
+        auth_method: AuthMethod,
+        provider: AuthProviderDescriptor,
+        redirect_path: Option<String>,
+    ) -> Result<AuthorizedSession, AuthError> {
+        let user = match repository
+            .find_user_by_provider_subject(&profile.provider_code, &profile.subject)?
+        {
+            Some(user) => user,
+            None => match repository.find_active_user_by_email(&profile.email)? {
+                Some(user) => user,
+                None => self.auto_provision_external_user(repository, profile)?,
+            },
+        };
+        ensure_active_user(&user)?;
+
+        let now = now_seconds();
+        let identity = OAuth2IdentityLink {
+            id: repository.next_id().map_err(map_user_error_to_auth)?,
+            user_id: user.id.value(),
+            user_code: user.user_code.clone(),
+            provider_code: profile.provider_code.clone(),
+            provider_subject: profile.subject.clone(),
+            email: profile.email.to_ascii_lowercase(),
+            display_name: profile.display_name.clone(),
+            linked_at: now,
+            updated_at: now,
+        };
+        repository.upsert_oauth_identity(&identity)?;
+
+        self.create_session(
+            repository,
+            &user,
+            auth_method,
+            Some(provider),
+            redirect_path,
+        )
+    }
+
+    fn auto_provision_external_user(
+        &self,
+        repository: &mut dyn UserRepository,
+        profile: &AuthIdentityProfile,
     ) -> Result<User, AuthError> {
         let (first_name, last_name) = split_display_name(&profile.display_name);
         let username = self
-            .next_available_oauth_username(repository, &profile.login, &profile.email)
+            .next_available_external_username(repository, &profile.login, &profile.email)
             .map_err(map_user_error_to_auth)?;
         let command = CreateUserCommand {
             user_code: None,
@@ -251,18 +271,18 @@ impl UserService {
             email: Some(profile.email.clone()),
             phone: None,
             avatar_url: None,
-            locale: Some(GITHUB_AUTO_PROVISION_DEFAULT_LOCALE.into()),
-            timezone: Some(GITHUB_AUTO_PROVISION_DEFAULT_TIMEZONE.into()),
-            initial_password: Some(self.oauth2_auto_provision_password(profile)),
+            locale: Some(EXTERNAL_AUTH_AUTO_PROVISION_DEFAULT_LOCALE.into()),
+            timezone: Some(EXTERNAL_AUTH_AUTO_PROVISION_DEFAULT_TIMEZONE.into()),
+            initial_password: Some(self.external_auth_auto_provision_password(profile)),
             password_reset_required: Some(true),
-            role_codes: vec![GITHUB_AUTO_PROVISION_DEFAULT_ROLE_CODE.into()],
-            space_codes: vec![GITHUB_AUTO_PROVISION_DEFAULT_SPACE_CODE.into()],
+            role_codes: vec![EXTERNAL_AUTH_AUTO_PROVISION_DEFAULT_ROLE_CODE.into()],
+            space_codes: vec![EXTERNAL_AUTH_AUTO_PROVISION_DEFAULT_SPACE_CODE.into()],
         };
         self.create_user_in_repository(repository, command)
             .map_err(map_user_error_to_auth)
     }
 
-    fn next_available_oauth_username(
+    fn next_available_external_username(
         &self,
         repository: &mut dyn UserRepository,
         login_hint: &str,
@@ -298,7 +318,7 @@ impl UserService {
         }
     }
 
-    fn oauth2_auto_provision_password(&self, profile: &OAuth2Profile) -> String {
+    fn external_auth_auto_provision_password(&self, profile: &AuthIdentityProfile) -> String {
         // Keep the auto-provisioned password within the existing complexity policy
         // even when provider identifiers contain no digits, such as the local dev OAuth2 flow.
         format!(
@@ -353,7 +373,7 @@ impl UserService {
         Ok(claims)
     }
 
-    async fn github_profile_from_code(&self, code: &str) -> Result<OAuth2Profile, AuthError> {
+    async fn github_profile_from_code(&self, code: &str) -> Result<AuthIdentityProfile, AuthError> {
         let github = self.github_oauth_config()?;
         let token_response = self
             .oauth_client
@@ -421,7 +441,7 @@ impl UserService {
         let display_name =
             optional_trimmed(user_payload.name).unwrap_or_else(|| user_payload.login.clone());
 
-        Ok(OAuth2Profile {
+        Ok(AuthIdentityProfile {
             provider_code: GITHUB_PROVIDER_CODE.into(),
             provider_name: github.name.clone(),
             subject: user_payload.id.to_string(),
@@ -442,7 +462,9 @@ fn select_github_verified_email(emails: &[GitHubEmailResponse]) -> Option<String
 
 fn split_display_name(display_name: &str) -> (String, String) {
     let mut parts = display_name.split_whitespace();
-    let first_name = parts.next().unwrap_or(OAUTH2_AUTO_PROVISION_FALLBACK_NAME);
+    let first_name = parts
+        .next()
+        .unwrap_or(EXTERNAL_AUTH_AUTO_PROVISION_FALLBACK_NAME);
     let last_name = parts.collect::<Vec<_>>().join(" ");
     if last_name.is_empty() {
         (first_name.to_owned(), first_name.to_owned())
@@ -468,7 +490,7 @@ mod tests {
     use crate::{
         adapters::outbound::{crypto::BcryptPasswordHasher, persistence::SqliteUserRepository},
         config::AppConfig,
-        domain::{auth::OAuth2Profile, user::validate_initial_password},
+        domain::{auth::AuthIdentityProfile, user::validate_initial_password},
     };
 
     #[test]
@@ -479,7 +501,7 @@ mod tests {
             BcryptPasswordHasher,
             AppConfig::default().auth,
         );
-        let profile = OAuth2Profile {
+        let profile = AuthIdentityProfile {
             provider_code: "dev".into(),
             provider_name: "OAuth2".into(),
             subject: "dev-auth-operator".into(),
@@ -488,7 +510,7 @@ mod tests {
             display_name: "Auth Operator".into(),
         };
 
-        let password = service.oauth2_auto_provision_password(&profile);
+        let password = service.external_auth_auto_provision_password(&profile);
         assert!(
             validate_initial_password(&password).is_ok(),
             "generated OAuth2 bootstrap password should satisfy the initial password policy",

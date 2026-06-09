@@ -34,8 +34,7 @@ async fn mcp_probe_server() -> ProbeServer {
     let address = listener
         .local_addr()
         .expect("probe server should expose a local address");
-    let app = Router::new()
-        .route("/mcp", post(probe_mcp));
+    let app = Router::new().route("/mcp", post(probe_mcp));
     let task = tokio::spawn(async move {
         axum::serve(listener, app)
             .await
@@ -487,14 +486,16 @@ async fn platform_server_draft_verify_reports_health_without_persisting() {
     assert_eq!(verify_json["data"]["lastHealthStatus"], json!("HEALTHY"));
     assert!(verify_json["data"]["lastHealthCheckedAt"].is_string());
 
-    let list_response = authenticated_request(&router, Method::GET, "/api/v1/mcp/servers", None).await;
+    let list_response =
+        authenticated_request(&router, Method::GET, "/api/v1/mcp/servers", None).await;
     assert_eq!(list_response.status(), StatusCode::OK);
     let list_json = response_json(list_response).await;
     let rows = list_json["data"]
         .as_array()
         .expect("server list should be an array");
     assert!(
-        rows.iter().all(|row| row["serverCode"] != json!("draft_tools")),
+        rows.iter()
+            .all(|row| row["serverCode"] != json!("draft_tools")),
         "draft verify must not persist the server definition",
     );
 }

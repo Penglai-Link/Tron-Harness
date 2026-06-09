@@ -1,5 +1,5 @@
-mod runtime;
 mod gateway;
+mod runtime;
 mod validation;
 
 use std::{
@@ -10,8 +10,8 @@ use std::{
 use reqwest::Client;
 
 use crate::{
-    application::workspace::WorkspaceService,
     application::variable::VariableService,
+    application::workspace::WorkspaceService,
     domain::{
         mcp::{
             CreatePlatformMcpServerCommand, McpDeleteResult, McpError, McpHealthStatus,
@@ -22,8 +22,8 @@ use crate::{
             WorkspaceMcpServerPolicy, WorkspaceMcpServerSource, normalize_mcp_server_code,
             validate_mcp_server_name,
         },
-        workspace::{WorkspaceDetail, WorkspaceStatus},
         variable::VariableCatalogQuery,
+        workspace::{WorkspaceDetail, WorkspaceStatus},
     },
     shared::time::current_timestamp,
 };
@@ -120,7 +120,10 @@ impl McpService {
             .repository
             .lock()
             .expect("MCP repository mutex poisoned");
-        if repository.get_platform_server(&record.server_code)?.is_some() {
+        if repository
+            .get_platform_server(&record.server_code)?
+            .is_some()
+        {
             return Err(McpError::DuplicateServerCode);
         }
         repository.upsert_platform_server(&record)?;
@@ -410,20 +413,21 @@ impl McpService {
         let checked_at = current_timestamp();
         let outcome = match server.transport_kind {
             McpServerTransportKind::StreamableHttp => {
-                let headers = match validation::resolve_http_headers(server, resolved_variables.as_ref()) {
-                    Ok(headers) => headers,
-                    Err(McpError::VerificationFailed(message)) => {
-                        let updated = PlatformMcpServerRecord {
-                            last_health_status: McpHealthStatus::Unhealthy,
-                            last_health_message: Some(message),
-                            last_health_checked_at: Some(checked_at),
-                            updated_at: current_timestamp(),
-                            ..server.clone()
-                        };
-                        return Ok(updated);
-                    }
-                    Err(error) => return Err(error),
-                };
+                let headers =
+                    match validation::resolve_http_headers(server, resolved_variables.as_ref()) {
+                        Ok(headers) => headers,
+                        Err(McpError::VerificationFailed(message)) => {
+                            let updated = PlatformMcpServerRecord {
+                                last_health_status: McpHealthStatus::Unhealthy,
+                                last_health_message: Some(message),
+                                last_health_checked_at: Some(checked_at),
+                                updated_at: current_timestamp(),
+                                ..server.clone()
+                            };
+                            return Ok(updated);
+                        }
+                        Err(error) => return Err(error),
+                    };
                 runtime::verify_streamable_http_server(&self.http_client, server, &headers).await
             }
             McpServerTransportKind::Stdio => {

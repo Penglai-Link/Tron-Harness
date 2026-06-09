@@ -34,6 +34,7 @@ export const auth = {
   providerUnavailable: "外部登录方式暂时不可用。",
   providerLabels: {
     devOAuth2: "OAuth2",
+    ldap: "LDAP",
   },
   recoveryRequested: "已请求口令恢复链接",
   signInFailed: "提供的凭据无法完成登录。",

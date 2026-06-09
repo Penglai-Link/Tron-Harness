@@ -13,7 +13,7 @@
 - feature_name: Auth
 - status: approved_with_defaults
 - owner: clouds3n
-- source_request: use `eliteforge-codex-superpower` to create and implement the `auth` feature with frontend and backend, related to `user-management`, supporting internal user login and OAuth2 login
+- source_request: use `eliteforge-codex-superpower` to evolve the `auth` feature with frontend and backend, related to `user-management`, supporting internal user login, GitHub OAuth2 login, and LDAP credential login
 - main_agent: lead agent on `feature/clouds3n/auth/base`
 - dependency_features: `user-management-model`
 - dependency_contracts: `AGENTS.md` uniform response envelope; existing `tron-frontend` route registry and shell; existing `tron-backend` user repository, bcrypt password model, and SQLite persistence
@@ -26,17 +26,17 @@
 
 ## Requirement
 
-Create a real authentication feature for Tron so every non-auth page requires a valid JWT-backed session, internal operators can sign in with existing user-management accounts, protected backend APIs authenticate only through `Authorization: Bearer <access-jwt>`, refresh uses HttpOnly cookies only, the frontend silently renews access before idle expiry and retries the first expired-request 401 once after refresh, enterprise OAuth2 sign-in starts with GitHub OAuth and lands in the same session model without inventing a second user source, and first deployment has a bootstrap platform admin that can grant workspace access.
+Create a real authentication feature for Tron so every non-auth page requires a valid JWT-backed session, internal operators can sign in with existing user-management accounts, protected backend APIs authenticate only through `Authorization: Bearer <access-jwt>`, refresh uses HttpOnly cookies only, the frontend silently renews access before idle expiry and retries the first expired-request 401 once after refresh, external sign-in starts with GitHub OAuth or LDAP credentials and lands in the same session model without inventing a second user source, and first deployment has a bootstrap platform admin that can grant workspace access.
 
 ## Scope Boundary
 
-This slice owns backend auth/session APIs, protected-route behavior, login and callback pages, JWT session lifecycle with access-token response bodies plus refresh-cookie bootstrap, OAuth2 identity linking, and user-management integration at the authentication boundary only. It does not introduce authorization policy beyond authenticated access.
+This slice owns backend auth/session APIs, protected-route behavior, login and callback pages, JWT session lifecycle with access-token response bodies plus refresh-cookie bootstrap, external identity linking for GitHub OAuth2 or LDAP, and user-management integration at the authentication boundary only. It does not introduce authorization policy beyond authenticated access.
 
 ## Assumptions
 
 - Existing user-management users are the source of truth for internal operators.
 - Local development should stay usable on plain HTTP, so refresh-cookie security flags must remain configurable for the dev environment.
-- OAuth2 provider details can be driven by backend environment variables, with GitHub as the first live provider and any deterministic dev provider reserved for automated proof only.
+- OAuth2 provider details and LDAP directory coordinates can be driven by backend YAML or environment variables, with GitHub as the first live OAuth provider and any deterministic dev provider reserved for automated proof only.
 - Existing role and space assignments remain managed data, not API authorization gates, except the frontend no-space guard and platform-admin bypass in this slice.
 
 ## In Scope
@@ -49,7 +49,8 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 - Frontend session lifecycle that silently renews the in-memory access token before idle expiry, retries the first expired protected request after a successful refresh, and avoids redundant refresh churn when a newer bearer token is already available in memory.
 - Request-scoped authenticated-user context propagation so protected handlers can reuse operator identity during save or update operations.
 - OAuth2 authorize and callback endpoints, with GitHub as the first live provider and provider-subject reuse, verified-email matching, or first-login internal-user auto-provision.
-- Persistent refresh-session storage and persistent OAuth2 identity links.
+- LDAP credential login endpoint that binds through a configured directory service, reuses provider-subject links, and auto-provisions a first-login internal user from directory profile data.
+- Persistent refresh-session storage and persistent external identity links.
 - Frontend route guarding, login bootstrap, logout flow, callback completion page, and redirect preservation.
 - Dedicated authorization-request page for authenticated users whose session has no assigned workspace spaces, before any protected shell or business page renders.
 - Idempotent startup bootstrap for the `admin` platform administrator, fixed role catalog, root workspace access, and owner grant when the database lacks those rows.
@@ -77,21 +78,22 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
   - Anonymous operator.
   - Authenticated internal operator.
   - Authenticated OAuth2-linked operator.
+  - Authenticated LDAP-linked operator.
 - Core objects:
   - `AuthSession`: refresh-session record plus access-token grant lifecycle.
   - `AuthenticatedOperator`: stable user-management identity exposed to the frontend session model.
-  - `OAuth2IdentityLink`: provider subject mapped to one internal user.
+  - `ExternalIdentityLink`: provider subject mapped to one internal user through the existing identity-link storage.
 - Rules:
   - Only `Active` users can authenticate.
   - Archived users are rejected before a session is issued.
   - Frontend protected pages derive access from a freshly issued access token obtained via login, refresh, or OAuth callback bootstrap.
   - Protected backend routes accept only `Authorization: Bearer <access-jwt>`, and successful auth must expose the operator identity to downstream handlers.
-  - Internal and OAuth2 login must converge on the same session and user payload.
+  - Internal, LDAP, and OAuth2 login must converge on the same session and user payload.
   - Authenticated users with an empty `spaceCodes` assignment list are not authorized to operate the console and must be stopped before protected shell routes render.
   - Platform administrators with the fixed `ADMIN` role can bypass the no-space guard so an empty deployment still has an operator who can assign workspace access.
   - Backend startup must create the bootstrap `admin` account and required role or workspace grants only when those rows are absent, without overwriting existing operator-managed data.
   - Refresh cookies are used only by auth lifecycle endpoints and must not be required by general business APIs.
-  - First-time GitHub sign-in may auto-provision one internal user with minimal default assignments, and later sign-ins must reuse the durable provider subject link.
+  - First-time GitHub sign-in or LDAP credential login may auto-provision one internal user with minimal default assignments, and later sign-ins must reuse the durable provider subject link.
 - State transitions:
   - Anonymous -> internal login success -> authenticated.
   - Anonymous -> OAuth2 authorize -> callback success -> authenticated.
@@ -100,7 +102,7 @@ This slice owns backend auth/session APIs, protected-route behavior, login and c
 
 ## Page And Module Surface
 
-- `/login`: login surface for internal credentials, GitHub OAuth provider actions, busy-state feedback, and visible failure feedback.
+- `/login`: login surface for internal credentials, GitHub OAuth provider actions, an LDAP credential action below GitHub, busy-state feedback, and visible failure feedback.
 - `/auth/callback`: transient callback route that finalizes OAuth2 login and resumes the intended protected destination.
 - Protected shell routes: every existing route except `/login` and `/auth/callback` waits for session bootstrap and redirects anonymous users.
 - No-space authorization page: any protected route renders a standalone authorization request page when the authenticated user has no assigned spaces, without primary navigation, workspace switcher, settings shortcuts, or page content.

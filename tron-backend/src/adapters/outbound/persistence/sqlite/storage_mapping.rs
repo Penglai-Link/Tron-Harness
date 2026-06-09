@@ -78,6 +78,7 @@ pub(super) fn user_status_from_storage(value: &str) -> Result<UserStatus, UserEr
 pub(super) fn user_source_type_from_provider_code(value: Option<String>) -> UserSourceType {
     match value.as_deref() {
         Some("github") => UserSourceType::GitHub,
+        Some("ldap") => UserSourceType::Ldap,
         _ => UserSourceType::Internal,
     }
 }

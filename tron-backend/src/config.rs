@@ -1,6 +1,6 @@
 mod paths;
 
-use std::{error::Error, fmt, fs, net::SocketAddr, path::Path};
+use std::{env, error::Error, fmt, fs, net::SocketAddr, path::Path};
 
 use serde::Deserialize;
 
@@ -24,10 +24,16 @@ const DEFAULT_AUTH_GITHUB_TOKEN_URL: &str = "https://github.com/login/oauth/acce
 const DEFAULT_AUTH_GITHUB_USER_API_URL: &str = "https://api.github.com/user";
 const DEFAULT_AUTH_GITHUB_EMAILS_API_URL: &str = "https://api.github.com/user/emails";
 const DEFAULT_AUTH_GITHUB_SCOPE: &str = "read:user user:email";
+const DEFAULT_AUTH_LDAP_NAME: &str = "LDAP";
 const DEFAULT_SYSTEM_AGENT_CODEX_COMMAND: &str = "codex";
 const DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND: &str = "opencode";
 const DEFAULT_APPLICATION_CONFIG_PATH: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/application.yaml");
+const ENV_LDAP_URL: &str = "LDAP_URL";
+const ENV_LDAP_BIND_DN: &str = "LDAP_BIND_DN";
+const ENV_LDAP_BIND_PASSWORD: &str = "LDAP_BIND_PASSWORD";
+const ENV_LDAP_SEARCH_BASE: &str = "LDAP_SEARCH_BASE";
+const ENV_LDAP_SEARCH_FILTER: &str = "LDAP_SEARCH_FILTER";
 
 const DEFAULT_HTTP_CONNECT_TIMEOUT_MS: u64 = 1_500;
 const DEFAULT_HTTP_POOL_IDLE_TIMEOUT_MS: u64 = 90_000;
@@ -93,6 +99,7 @@ pub struct AuthConfig {
     pub dev_oauth2_enabled: bool,
     pub dev_oauth2_name: String,
     pub github_oauth: Option<GitHubOAuthConfig>,
+    pub ldap: Option<LdapConfig>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -108,6 +115,16 @@ pub struct GitHubOAuthConfig {
     pub emails_api_url: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LdapConfig {
+    pub name: String,
+    pub url: String,
+    pub bind_dn: String,
+    pub bind_password: String,
+    pub search_base: String,
+    pub search_filter: String,
+}
+
 impl AppConfig {
     pub fn from_application_yaml() -> Result<Self, ConfigError> {
         Self::from_yaml_file(DEFAULT_APPLICATION_CONFIG_PATH)
@@ -117,7 +134,7 @@ impl AppConfig {
         let file_config = AppConfigFile::from_file(path)?;
         let mut config = Self::runtime_defaults();
         config.apply_file_overrides(file_config)?;
-        config.apply_env_overrides();
+        config.apply_env_overrides()?;
         Ok(config)
     }
 
@@ -141,6 +158,7 @@ impl AppConfig {
                 dev_oauth2_enabled: false,
                 dev_oauth2_name: DEFAULT_AUTH_DEV_OAUTH2_NAME.into(),
                 github_oauth: None,
+                ldap: None,
             },
             event_bus: EventBusConfig::default(),
         }
@@ -177,10 +195,14 @@ impl AppConfig {
         Ok(())
     }
 
-    fn apply_env_overrides(&mut self) {
+    fn apply_env_overrides(&mut self) -> Result<(), ConfigError> {
         if let Some(value) = env_database_url_override() {
             self.database_url = value;
         }
+        if let Some(value) = ldap_env_override().transpose()? {
+            self.auth.ldap = Some(value);
+        }
+        Ok(())
     }
 
     pub fn socket_addr(&self) -> Result<SocketAddr, ConfigError> {
@@ -289,6 +311,7 @@ struct AuthFileConfig {
     dev_oauth2_enabled: Option<bool>,
     dev_oauth2_name: Option<String>,
     github_oauth: Option<GitHubOAuthFileConfig>,
+    ldap: Option<LdapFileConfig>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -304,6 +327,16 @@ struct GitHubOAuthFileConfig {
     token_url: Option<String>,
     user_api_url: Option<String>,
     emails_api_url: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct LdapFileConfig {
+    url: Option<String>,
+    bind_dn: Option<String>,
+    bind_password: Option<String>,
+    search_base: Option<String>,
+    search_filter: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -366,6 +399,9 @@ impl AuthConfig {
         if let Some(value) = overrides.github_oauth {
             self.github_oauth = value.into_runtime_config()?;
         }
+        if let Some(value) = overrides.ldap {
+            self.ldap = Some(value.into_runtime_config()?);
+        }
         Ok(())
     }
 }
@@ -406,6 +442,19 @@ impl GitHubOAuthFileConfig {
                 .emails_api_url
                 .unwrap_or_else(|| DEFAULT_AUTH_GITHUB_EMAILS_API_URL.to_string()),
         }))
+    }
+}
+
+impl LdapFileConfig {
+    fn into_runtime_config(self) -> Result<LdapConfig, ConfigError> {
+        Ok(LdapConfig {
+            name: DEFAULT_AUTH_LDAP_NAME.into(),
+            url: required_config_string(self.url, "auth.ldap.url")?,
+            bind_dn: required_config_string(self.bind_dn, "auth.ldap.bindDn")?,
+            bind_password: required_config_string(self.bind_password, "auth.ldap.bindPassword")?,
+            search_base: required_config_string(self.search_base, "auth.ldap.searchBase")?,
+            search_filter: required_config_string(self.search_filter, "auth.ldap.searchFilter")?,
+        })
     }
 }
 
@@ -501,6 +550,7 @@ impl Default for AppConfig {
                 dev_oauth2_enabled: true,
                 dev_oauth2_name: DEFAULT_AUTH_DEV_OAUTH2_NAME.into(),
                 github_oauth: None,
+                ldap: None,
             },
             event_bus: EventBusConfig::default(),
         }
@@ -567,4 +617,42 @@ fn required_config_string(value: Option<String>, key: &str) -> Result<String, Co
             key: key.to_string(),
         }),
     }
+}
+
+fn ldap_env_override() -> Option<Result<LdapConfig, ConfigError>> {
+    let url = env::var(ENV_LDAP_URL)
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    let bind_dn = env::var(ENV_LDAP_BIND_DN)
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    let bind_password = env::var(ENV_LDAP_BIND_PASSWORD)
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    let search_base = env::var(ENV_LDAP_SEARCH_BASE)
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+    let search_filter = env::var(ENV_LDAP_SEARCH_FILTER)
+        .ok()
+        .filter(|value| !value.trim().is_empty());
+
+    if url.is_none()
+        && bind_dn.is_none()
+        && bind_password.is_none()
+        && search_base.is_none()
+        && search_filter.is_none()
+    {
+        return None;
+    }
+
+    Some((|| -> Result<LdapConfig, ConfigError> {
+        Ok(LdapConfig {
+            name: DEFAULT_AUTH_LDAP_NAME.into(),
+            url: required_config_string(url, ENV_LDAP_URL)?,
+            bind_dn: required_config_string(bind_dn, ENV_LDAP_BIND_DN)?,
+            bind_password: required_config_string(bind_password, ENV_LDAP_BIND_PASSWORD)?,
+            search_base: required_config_string(search_base, ENV_LDAP_SEARCH_BASE)?,
+            search_filter: required_config_string(search_filter, ENV_LDAP_SEARCH_FILTER)?,
+        })
+    })())
 }
