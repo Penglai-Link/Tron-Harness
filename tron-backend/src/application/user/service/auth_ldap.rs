@@ -111,7 +111,7 @@ fn entry_attr(entry: &SearchEntry, keys: &[&str]) -> Option<String> {
 mod tests {
     use std::{
         fs,
-        path::PathBuf,
+        path::{Path, PathBuf},
         sync::Arc,
         sync::atomic::{AtomicU64, Ordering},
         time::{SystemTime, UNIX_EPOCH},
@@ -270,13 +270,17 @@ mod tests {
         assert!(providers.iter().any(|provider| provider.code == "ldap"));
     }
 
-    fn test_service(database_url: &str, authenticator: StaticLdapAuthenticator) -> UserService {
+    fn test_service(
+        database_url: impl AsRef<Path>,
+        authenticator: StaticLdapAuthenticator,
+    ) -> UserService {
+        let database_url = database_url.as_ref().to_string_lossy();
         let mut auth_config = AppConfig::default().auth;
         auth_config.dev_oauth2_enabled = false;
         auth_config.ldap = Some(test_ldap_config());
 
         UserService::with_dependencies(
-            SqliteUserRepository::connect(database_url)
+            SqliteUserRepository::connect(database_url.as_ref())
                 .expect("sqlite user repository should initialize"),
             BcryptPasswordHasher,
             auth_config,

@@ -285,8 +285,7 @@ impl McpService {
                     "tools/list",
                     json!({}),
                 )
-                .await
-                .map_err(McpError::RuntimeDiscoveryFailed)?;
+                .await?;
                 http::parse_discovered_tools(&result)
             }
             McpServerTransportKind::Stdio => {

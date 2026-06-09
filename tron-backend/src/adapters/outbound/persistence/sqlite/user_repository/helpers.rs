@@ -14,9 +14,32 @@ impl SqliteUserRepository {
         self.connection
             .execute_batch(AUTH_REFRESH_SESSIONS_MIGRATION)
             .map_err(storage_error)?;
+        if !self.refresh_session_schema_supports_ldap()? {
+            self.connection
+                .execute_batch(AUTH_REFRESH_SESSIONS_LDAP_MIGRATION)
+                .map_err(storage_error)?;
+        }
         self.connection
             .execute_batch(AUTH_OAUTH_IDENTITIES_MIGRATION)
             .map_err(storage_error)
+    }
+
+    fn refresh_session_schema_supports_ldap(&self) -> Result<bool, UserError> {
+        let create_sql = self
+            .connection
+            .query_row(
+                "SELECT sql
+                 FROM sqlite_master
+                 WHERE type = 'table' AND name = 'auth_refresh_sessions'
+                 LIMIT 1",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(storage_error)?;
+        Ok(create_sql
+            .as_deref()
+            .is_some_and(|sql| sql.contains("'ldap'")))
     }
 
     pub(super) fn all_users(&mut self) -> Result<Vec<User>, UserError> {

@@ -6,6 +6,9 @@ pub(super) const PASSWORD_RESET_MIGRATION: &str =
     include_str!("../../../../../migrations/20260511_0003_create_user_password_reset_events.sql");
 pub(super) const AUTH_REFRESH_SESSIONS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260515_0004_create_auth_refresh_sessions.sql");
+pub(super) const AUTH_REFRESH_SESSIONS_LDAP_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260609_0001_add_ldap_auth_method_to_auth_refresh_sessions.sql"
+);
 pub(super) const AUTH_OAUTH_IDENTITIES_MIGRATION: &str =
     include_str!("../../../../../migrations/20260515_0005_create_user_oauth_identities.sql");
 pub(super) const ROLES_MIGRATION: &str =

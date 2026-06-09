@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS auth_refresh_sessions (
         AND user_code NOT GLOB '*[^A-Z0-9_-]*'
     ),
     CONSTRAINT ck_auth_refresh_sessions_auth_method CHECK (
-        auth_method IN ('internal', 'oauth2')
+        auth_method IN ('internal', 'ldap', 'oauth2')
     ),
     CONSTRAINT ck_auth_refresh_sessions_provider_code CHECK (
         provider_code IS NULL
