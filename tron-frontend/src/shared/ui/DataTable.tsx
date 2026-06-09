@@ -22,6 +22,7 @@ interface DataTableProps<T> {
   rowKey: (row: T, index: number) => string;
   rowClassName?: (row: T) => string | undefined;
   rows: T[];
+  tableClassName?: string;
   title?: string;
   toolbar?: ReactNode;
   variant?: "default" | "embedded";
@@ -36,6 +37,7 @@ export function DataTable<T>({
   rowKey,
   rowClassName,
   rows,
+  tableClassName,
   title,
   toolbar,
   variant = "default",
@@ -74,7 +76,7 @@ export function DataTable<T>({
         </div>
       )}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[720px] border-collapse text-left text-sm">
+        <table className={cn("w-full min-w-[720px] border-collapse text-left text-sm", tableClassName)}>
           {columns.some((column) => column.width) ? (
             <colgroup>
               {columns.map((column) => (
@@ -103,7 +105,7 @@ export function DataTable<T>({
               rows.map((row, index) => (
                 <tr
                   className={cn(
-                    "border-b border-[var(--color-outline-variant)] last:border-0 hover:bg-[var(--color-hover-surface)]",
+                    "group border-b border-[var(--color-outline-variant)] last:border-0 hover:bg-[var(--color-hover-surface)]",
                     onRowClick ? "cursor-pointer" : null,
                     rowClassName?.(row),
                   )}

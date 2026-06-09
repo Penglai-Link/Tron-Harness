@@ -16,6 +16,7 @@ let frontendBaseUrl = "";
 type CapturedRequest = { body: unknown; method: string; pathname: string; searchParams: Record<string, string> };
 type VariableSourceKind = "Inherited" | "Local" | "Override";
 type LocalVariable = {
+  createdAt: string;
   description: string | null;
   key: string;
   updatedAt: string;
@@ -167,6 +168,7 @@ function effectiveVariables(variables: LocalVariable[], workspaceCode: keyof typ
   if (!currentWorkspace) return [];
 
   const resolved = new Map<string, {
+    createdAt: string;
     description: string | null;
     key: string;
     shadowedLabel: string | null;
@@ -200,6 +202,7 @@ function effectiveVariables(variables: LocalVariable[], workspaceCode: keyof typ
         shadowedWorkspaceCode: sourceKind === "Override" ? previous?.sourceWorkspaceCode ?? null : null,
         shadowedWorkspaceName: sourceKind === "Override" ? previous?.sourceWorkspaceName ?? null : null,
         shadowedLabel: sourceKind === "Override" ? previous?.sourceLabel ?? null : null,
+        createdAt: variable.createdAt,
         updatedAt: variable.updatedAt,
       });
     }
@@ -250,6 +253,7 @@ async function routeApi(page: Page, requests: CapturedRequest[], variables: Loca
         key,
         value: body.value ?? "",
         description: typeof body.description === "string" ? body.description : null,
+        createdAt: now,
         updatedAt: now,
       });
       const record = effectiveVariables(variables, workspaceCode).find((variable) => variable.key === key);
@@ -301,14 +305,6 @@ async function routeApi(page: Page, requests: CapturedRequest[], variables: Loca
 
 function toast(page: Page, message: string | RegExp) {
   return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
-}
-
-async function openDesktopRightSidebar(page: Page) {
-  const reopen = page.getByTestId("tron-right-sidebar-reopen");
-  if (await reopen.count()) {
-    await reopen.click();
-  }
-  await expect(page.getByTestId("tron-right-sidebar")).toBeVisible();
 }
 
 function appendFrontendLog(chunk: Buffer) {
@@ -374,6 +370,7 @@ test("variable management supports inheritance override revert local CRUD and wo
       key: "DEFAULT_REGION",
       value: "us-east-1",
       description: "Shared default deployment region.",
+      createdAt: now,
       updatedAt: now,
     },
     {
@@ -381,6 +378,7 @@ test("variable management supports inheritance override revert local CRUD and wo
       key: "ROUTER_TIMEOUT_MS",
       value: "800",
       description: "Root timeout for interactive routing.",
+      createdAt: now,
       updatedAt: now,
     },
     {
@@ -388,6 +386,7 @@ test("variable management supports inheritance override revert local CRUD and wo
       key: "OPENAI_API_BASE_URL",
       value: "https://api.openai.com/v1",
       description: "Shared OpenAI gateway base URL.",
+      createdAt: now,
       updatedAt: now,
     },
     {
@@ -395,6 +394,7 @@ test("variable management supports inheritance override revert local CRUD and wo
       key: "ROUTER_TIMEOUT_MS",
       value: "600",
       description: "Platform override for interactive latency.",
+      createdAt: now,
       updatedAt: now,
     },
     {
@@ -402,6 +402,7 @@ test("variable management supports inheritance override revert local CRUD and wo
       key: "OPENAI_API_KEY",
       value: "sk-tron-core-demo",
       description: "Workspace secret used by the demo workspace.",
+      createdAt: now,
       updatedAt: now,
     },
     {
@@ -409,6 +410,7 @@ test("variable management supports inheritance override revert local CRUD and wo
       key: "ROUTER_TIMEOUT_MS",
       value: "400",
       description: "Tron Core override for agent console flows.",
+      createdAt: now,
       updatedAt: now,
     },
     {
@@ -416,6 +418,7 @@ test("variable management supports inheritance override revert local CRUD and wo
       key: "AUDIT_RETENTION_DAYS",
       value: "365",
       description: "Retention period for compliance exports.",
+      createdAt: now,
       updatedAt: now,
     },
   ];
@@ -424,22 +427,21 @@ test("variable management supports inheritance override revert local CRUD and wo
 
   await page.goto(`${frontendBaseUrl}/variables`);
 
-  await expect(page.getByRole("heading", { name: "Variable Management" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Variables" })).toBeVisible();
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/variables/workspaces/TRON_CORE" && request.method === "GET")).toBe(true);
-  await expect(page.getByRole("button", { name: "DEFAULT_REGION", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "OPENAI_API_KEY", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "ROUTER_TIMEOUT_MS", exact: true })).toBeVisible();
+  await expect(page.locator("tbody tr", { hasText: "DEFAULT_REGION" })).toBeVisible();
+  await expect(page.locator("tbody tr", { hasText: "OPENAI_API_KEY" })).toBeVisible();
+  await expect(page.locator("tbody tr", { hasText: "ROUTER_TIMEOUT_MS" })).toBeVisible();
 
-  await page.getByRole("button", { name: "DEFAULT_REGION", exact: true }).click();
-  await openDesktopRightSidebar(page);
-  const variableInspector = page.getByTestId("tron-right-sidebar");
-  await expect(variableInspector.getByText("Inherited From", { exact: true })).toBeVisible();
-  await expect(variableInspector.getByRole("button", { name: "Override", exact: true })).toBeVisible();
+  await page.locator("tbody tr", { hasText: "DEFAULT_REGION" }).click();
+  await expect(page.getByRole("heading", { name: "DEFAULT_REGION" })).toBeVisible();
+  await expect(page.getByText("Inherited From", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Override", exact: true })).toBeVisible();
 
-  await variableInspector.getByRole("button", { name: "Override", exact: true }).click();
+  await page.getByRole("button", { name: "Override", exact: true }).click();
   await page.getByLabel("Variable value").fill("ap-southeast-1");
   await page.getByLabel("Variable description").fill("Regional override for APAC");
-  await variableInspector.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(toast(page, "DEFAULT_REGION overridden in TRON_CORE")).toBeVisible();
   await expect.poll(() => requests.some((request) => (
     request.method === "POST"
@@ -447,7 +449,7 @@ test("variable management supports inheritance override revert local CRUD and wo
     && (request.body as { key?: string; value?: string } | null)?.key === "DEFAULT_REGION"
     && (request.body as { value?: string } | null)?.value === "ap-southeast-1"
   ))).toBe(true);
-  await expect(page.getByText("Shadowed Ancestor", { exact: true })).toBeVisible();
+  await expect(page.getByText("Overrides", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Revert", exact: true }).click();
   await expect(toast(page, "DEFAULT_REGION reverted to inherited value")).toBeVisible();
@@ -455,13 +457,14 @@ test("variable management supports inheritance override revert local CRUD and wo
     request.method === "DELETE"
     && request.pathname === "/api/v1/variables/workspaces/TRON_CORE/DEFAULT_REGION"
   ))).toBe(true);
-  await expect(variableInspector.getByText("Inherited From", { exact: true })).toBeVisible();
+  await expect(page.getByText("Inherited From", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "New", exact: true }).first().click();
+  await page.goto(`${frontendBaseUrl}/variables`);
+  await page.getByRole("button", { name: "New", exact: true }).click();
   await page.getByLabel("Variable key").fill("MAX_CONTEXT_WINDOW");
   await page.getByLabel("Variable value").fill("128000");
   await page.getByLabel("Variable description").fill("Local window size");
-  await variableInspector.getByRole("button", { name: "Save", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(toast(page, "MAX_CONTEXT_WINDOW created")).toBeVisible();
   await expect.poll(() => requests.some((request) => (
     request.method === "POST"
@@ -469,7 +472,8 @@ test("variable management supports inheritance override revert local CRUD and wo
     && (request.body as { key?: string } | null)?.key === "MAX_CONTEXT_WINDOW"
   ))).toBe(true);
 
-  await page.getByRole("button", { name: "MAX_CONTEXT_WINDOW", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "MAX_CONTEXT_WINDOW" })).toBeVisible();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.getByLabel("Variable value").fill("256000");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(toast(page, "MAX_CONTEXT_WINDOW saved")).toBeVisible();

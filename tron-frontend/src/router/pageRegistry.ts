@@ -68,4 +68,5 @@ export const routePages: Record<string, RoutePageComponent> = {
   "tasks.new": lazy(() => import("@/domain/task/pages/CreateTaskPage").then((module) => ({ default: module.CreateTaskPage }))),
   "variables.details": lazy(() => import("@/domain/variable/pages/VariableDetailsPage").then((module) => ({ default: module.VariableDetailsPage }))),
   "variables.index": lazy(() => import("@/domain/variable/pages/VariablesPage").then((module) => ({ default: module.VariablesPage }))),
+  "variables.new": lazy(() => import("@/domain/variable/pages/CreateVariablePage").then((module) => ({ default: module.CreateVariablePage }))),
 };

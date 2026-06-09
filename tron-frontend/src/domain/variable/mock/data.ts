@@ -9,6 +9,7 @@ import { workspaceOptionMocks } from "@/shared/constants/workspaceSpaces";
 const sensitiveMask = "********";
 
 interface VariableSeed {
+  createdAt: string;
   description: string | null;
   isSensitive?: boolean;
   key: string;
@@ -25,6 +26,7 @@ const mockVariables: VariableSeed[] = [
     key: "DEFAULT_REGION",
     value: "us-east-1",
     description: "Shared default deployment region.",
+    createdAt: now,
     updatedAt: now,
   },
   {
@@ -32,6 +34,7 @@ const mockVariables: VariableSeed[] = [
     key: "ROUTER_TIMEOUT_MS",
     value: "800",
     description: "Root timeout for interactive routing.",
+    createdAt: now,
     updatedAt: now,
   },
   {
@@ -39,6 +42,7 @@ const mockVariables: VariableSeed[] = [
     key: "OPENAI_API_BASE_URL",
     value: "https://api.openai.com/v1",
     description: "Shared OpenAI gateway base URL.",
+    createdAt: now,
     updatedAt: now,
   },
   {
@@ -46,6 +50,7 @@ const mockVariables: VariableSeed[] = [
     key: "ROUTER_TIMEOUT_MS",
     value: "600",
     description: "Platform override for interactive latency.",
+    createdAt: now,
     updatedAt: now,
   },
   {
@@ -54,6 +59,7 @@ const mockVariables: VariableSeed[] = [
     value: sensitiveMask,
     description: "Workspace secret used by the demo workspace.",
     isSensitive: true,
+    createdAt: now,
     updatedAt: now,
   },
   {
@@ -61,6 +67,7 @@ const mockVariables: VariableSeed[] = [
     key: "ROUTER_TIMEOUT_MS",
     value: "400",
     description: "Tron Core override for agent console flows.",
+    createdAt: now,
     updatedAt: now,
   },
   {
@@ -68,6 +75,7 @@ const mockVariables: VariableSeed[] = [
     key: "AUDIT_RETENTION_DAYS",
     value: "365",
     description: "Retention period for compliance exports.",
+    createdAt: now,
     updatedAt: now,
   },
 ];
@@ -149,6 +157,7 @@ export function listVariableCatalog(workspaceCode: string): VariableRecord[] {
       shadowedWorkspaceCode: null,
       shadowedWorkspaceName: null,
       shadowedLabel: null,
+      createdAt: variable.createdAt,
       updatedAt: variable.updatedAt,
     });
   }
@@ -175,6 +184,7 @@ export function listVariableCatalog(workspaceCode: string): VariableRecord[] {
         shadowedWorkspaceCode: sourceKind === "Override" ? previous?.sourceWorkspaceCode ?? null : null,
         shadowedWorkspaceName: sourceKind === "Override" ? previous?.sourceWorkspaceName ?? null : null,
         shadowedLabel: sourceKind === "Override" ? previous?.sourceLabel ?? null : null,
+        createdAt: variable.createdAt,
         updatedAt: variable.updatedAt,
       });
     }
@@ -245,6 +255,7 @@ export function createVariableRecord(workspaceCode: string, payload: VariableWri
     value: payload.isSensitive ? sensitiveMask : payload.value ?? "",
     description: normalizeDescription(payload.description),
     isSensitive: Boolean(payload.isSensitive),
+    createdAt: now,
     updatedAt: now,
   });
   return listVariableCatalog(workspaceCode).find((variable) => variable.key === key)!;

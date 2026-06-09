@@ -147,6 +147,99 @@ async fn platform_variables_are_inherited_by_workspace_catalogs() {
 }
 
 #[tokio::test]
+async fn plain_platform_variable_create_and_list_return_full_display_contract() {
+    let database_url = temp_database_url("variable-platform-display-contract");
+    let config = AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let router = app_with_config(config);
+
+    let create_response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/admin/platform/variables",
+        Some(json!({
+            "key": "GLOBAL_VISIBLE_ENDPOINT",
+            "value": "https://api.example.test",
+            "description": "Visible platform endpoint",
+            "isSensitive": false,
+            "valueMode": "REPLACE"
+        })),
+    )
+    .await;
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+    let create_json = response_json(create_response).await;
+    assert_eq!(create_json["code"], json!("SUCCESS"));
+
+    let created = &create_json["data"];
+    assert_eq!(created["key"], json!("GLOBAL_VISIBLE_ENDPOINT"));
+    assert_eq!(created["value"], json!("https://api.example.test"));
+    assert_eq!(created["description"], json!("Visible platform endpoint"));
+    assert_eq!(created["isSensitive"], json!(false));
+    assert_eq!(created["valueMasked"], json!(false));
+    assert_eq!(created["hasValue"], json!(true));
+    let created_id = created["id"]
+        .as_str()
+        .expect("platform variable id should serialize as a string");
+    assert!(
+        created_id.parse::<i64>().is_ok(),
+        "platform variable id should use the SnowflakeId decimal string contract"
+    );
+    let created_at = created["createdAt"]
+        .as_str()
+        .expect("platform variable create response should include createdAt");
+    assert!(
+        !created_at.is_empty(),
+        "platform variable createdAt should not be empty"
+    );
+    assert!(
+        created["updatedAt"].is_string(),
+        "platform variable create response should include updatedAt"
+    );
+
+    let list_response = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/admin/platform/variables",
+        None,
+    )
+    .await;
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_json = response_json(list_response).await;
+    assert_eq!(list_json["code"], json!("SUCCESS"));
+    let records = list_json["data"]
+        .as_array()
+        .expect("platform variable list should return records");
+    let listed = records
+        .iter()
+        .find(|item| item["key"] == "GLOBAL_VISIBLE_ENDPOINT")
+        .expect("created platform variable should be listed");
+    for expected_field in [
+        "id",
+        "key",
+        "value",
+        "description",
+        "isSensitive",
+        "valueMasked",
+        "hasValue",
+        "createdAt",
+        "updatedAt",
+    ] {
+        assert!(
+            listed.get(expected_field).is_some(),
+            "platform variable list record should include {expected_field}"
+        );
+    }
+    assert_eq!(listed["id"], json!(created_id));
+    assert_eq!(listed["createdAt"], json!(created_at));
+    assert_eq!(listed["value"], json!("https://api.example.test"));
+    assert_eq!(listed["isSensitive"], json!(false));
+    assert_eq!(listed["valueMasked"], json!(false));
+    assert_eq!(listed["hasValue"], json!(true));
+}
+
+#[tokio::test]
 async fn create_override_and_delete_falls_back_to_inherited_value() {
     let database_url = temp_database_url("variable-override-fallback");
     let config = AppConfig {

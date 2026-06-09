@@ -293,6 +293,7 @@ impl VariableService {
                 is_sensitive: record.variable.is_sensitive,
                 value_masked: record.variable.is_sensitive,
                 has_value: !record.variable.value.is_empty(),
+                created_at: record.variable.created_at,
                 updated_at: record.variable.updated_at,
             })
             .collect())
@@ -327,6 +328,7 @@ fn display_value(variable: &Variable) -> String {
 fn display_platform_variable(variable: PlatformVariable) -> PlatformVariableDisplay {
     let has_value = !variable.value.is_empty();
     PlatformVariableDisplay {
+        id: variable.id,
         key: variable.key,
         value: if variable.is_sensitive {
             VARIABLE_MASK.into()
@@ -337,6 +339,7 @@ fn display_platform_variable(variable: PlatformVariable) -> PlatformVariableDisp
         is_sensitive: variable.is_sensitive,
         value_masked: variable.is_sensitive,
         has_value,
+        created_at: variable.created_at,
         updated_at: variable.updated_at,
     }
 }

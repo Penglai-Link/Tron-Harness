@@ -61,18 +61,21 @@ pub struct EffectiveVariable {
     pub is_sensitive: bool,
     pub value_masked: bool,
     pub has_value: bool,
+    pub created_at: String,
     pub updated_at: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlatformVariableDisplay {
+    pub id: SnowflakeId,
     pub key: String,
     pub value: String,
     pub description: Option<String>,
     pub is_sensitive: bool,
     pub value_masked: bool,
     pub has_value: bool,
+    pub created_at: String,
     pub updated_at: String,
 }
 

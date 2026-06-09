@@ -18,6 +18,7 @@ export interface VariableRecord extends SensitiveVariableDisplay {
   shadowedWorkspaceCode: string | null;
   shadowedWorkspaceName: string | null;
   shadowedLabel: string | null;
+  createdAt: string;
   updatedAt: string;
 }
 

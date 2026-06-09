@@ -58,18 +58,20 @@ export function CreatePlatformVariablePage() {
       <PageHeader
         breadcrumbs={[{ label: "Variables", href: "/settings/variables" }, { label: "New" }]}
         title="Create Platform Variable"
-      />
-
-      <div className="max-w-5xl">
-        <SurfaceCard className="space-y-6">
-          <PlatformVariableFormFields form={form} keyEditable onChange={setForm} />
-          <div className="flex justify-end gap-2 border-t border-[var(--color-outline-variant)] pt-5">
+        actions={(
+          <>
             <Button variant="secondary" onClick={() => navigate("/settings/variables")}>Cancel</Button>
             <Button disabled={submitting || !form.key.trim()} aria-busy={submitting} onClick={() => void saveVariable()}>
               <Save size={16} aria-hidden="true" />
               {submitting ? "Saving..." : "Save"}
             </Button>
-          </div>
+          </>
+        )}
+      />
+
+      <div className="max-w-5xl">
+        <SurfaceCard className="space-y-6">
+          <PlatformVariableFormFields form={form} keyEditable onChange={setForm} />
         </SurfaceCard>
       </div>
     </>

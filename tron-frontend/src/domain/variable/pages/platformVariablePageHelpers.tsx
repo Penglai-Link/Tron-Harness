@@ -1,6 +1,7 @@
 import {
   useEffect,
   useState,
+  type MouseEvent,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
@@ -15,7 +16,9 @@ import {
   TextArea,
   TextInput,
 } from "@/shared";
+import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
+import { cn } from "@/shared/lib/utils";
 
 import type {
   PlatformVariableRecord,
@@ -128,31 +131,25 @@ export function SensitiveValueCode({
   );
 }
 
-export function SensitiveRevealAction({
-  isSensitive,
-  onHide,
-  onReveal,
+export function SensitiveRevealIconButton({
+  onClick,
   revealed,
   variableKey,
 }: {
-  isSensitive: boolean;
-  onHide: () => void;
-  onReveal: () => void;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   revealed: boolean;
   variableKey: string;
 }) {
-  if (!isSensitive) return null;
-
   return (
     <Button
       type="button"
-      size="sm"
-      variant="secondary"
+      size="icon"
+      variant="ghost"
       aria-label={`${revealed ? "Hide" : "Reveal"} ${variableKey}`}
-      onClick={revealed ? onHide : onReveal}
+      title={revealed ? "Hide" : "Reveal"}
+      onClick={onClick}
     >
-      {revealed ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}
-      {revealed ? "Hide" : "Reveal"}
+      {revealed ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
     </Button>
   );
 }
@@ -250,49 +247,50 @@ export function StepUpRevealDialog({
   );
 }
 
-function SensitiveToggleButton({
+export function SensitiveDataCheckbox({
   checked,
   disabled,
+  label = "Sensitive Data",
   onChange,
 }: {
   checked: boolean;
   disabled?: boolean;
+  label?: string;
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <Button
-      type="button"
-      variant={checked ? "primary" : "secondary"}
-      aria-label="Sensitive value"
-      aria-pressed={checked}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
+    <label
+      className={cn(
+        "inline-flex min-h-8 w-fit items-center gap-2 text-sm text-[var(--color-on-surface)]",
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+      )}
     >
-      <ShieldCheck size={16} aria-hidden="true" />
-      Sensitive value
-    </Button>
+      <input
+        type="checkbox"
+        aria-label={label}
+        checked={checked}
+        className="size-4 accent-[var(--color-primary)]"
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span>{label}</span>
+    </label>
   );
 }
 
-function ValueModeButton({
-  active,
-  children,
-  onClick,
+export function SensitiveDataBadge({
+  sensitive,
 }: {
-  active: boolean;
-  children: ReactNode;
-  onClick: () => void;
+  sensitive: boolean;
 }) {
   return (
-    <Button
-      type="button"
-      variant={active ? "primary" : "secondary"}
-      aria-label={typeof children === "string" ? children : undefined}
-      aria-pressed={active}
-      onClick={onClick}
-    >
-      {children}
-    </Button>
+    <span className="inline-flex w-fit max-w-max">
+      <Badge
+        tone={sensitive ? "warning" : "neutral"}
+      >
+        {sensitive ? "Sensitive" : "Plain"}
+      </Badge>
+    </span>
   );
 }
 
@@ -307,12 +305,7 @@ export function PlatformVariableFormFields({
 }) {
   return (
     <div className="space-y-5">
-      <Field
-        label="Variable Key"
-        hint={keyEditable
-          ? "Keys may use letters, digits, underscore, hyphen, or dot."
-          : "Renaming is intentionally disabled for stable inheritance."}
-      >
+      <Field label="Variable Key" hint={keyEditable ? "Letters, digits, underscore, hyphen, or dot." : undefined}>
         <TextInput
           aria-label="Platform variable key"
           disabled={!keyEditable}
@@ -320,49 +313,27 @@ export function PlatformVariableFormFields({
           onChange={(event) => onChange({ ...form, key: event.target.value })}
         />
       </Field>
-      <Field label="Sensitivity">
-        <SensitiveToggleButton
+      <Field label="Sensitive Data">
+        <SensitiveDataCheckbox
           checked={form.isSensitive}
           onChange={(checked) => onChange({
             ...form,
             isSensitive: checked,
-            value: checked ? "" : form.value,
             valueMode: "REPLACE",
           })}
         />
       </Field>
-      {form.isSensitive && !keyEditable ? (
-        <Field label="Sensitive Value Mode" hint="Preserve keeps the stored encrypted value; replace submits a new value.">
-          <div className="flex flex-wrap gap-2">
-            <ValueModeButton
-              active={form.valueMode === "PRESERVE"}
-              onClick={() => onChange({ ...form, value: "", valueMode: "PRESERVE" })}
-            >
-              Keep existing sensitive value
-            </ValueModeButton>
-            <ValueModeButton
-              active={form.valueMode === "REPLACE"}
-              onClick={() => onChange({ ...form, valueMode: "REPLACE" })}
-            >
-              Replace sensitive value
-            </ValueModeButton>
-          </div>
-        </Field>
-      ) : null}
       <Field
         label="Variable Value"
         hint={form.isSensitive
-          ? form.valueMode === "PRESERVE"
-            ? "The current sensitive value stays encrypted and is not loaded into the form."
-            : "The replacement is sent once and returns to a mask after save."
+          ? "Masked by default and requires verification to reveal."
           : "This value becomes the inherited default for all workspaces."}
       >
         <TextArea
           aria-label="Platform variable value"
           className="min-h-44 font-mono"
-          disabled={form.isSensitive && form.valueMode === "PRESERVE"}
           value={form.value}
-          onChange={(event) => onChange({ ...form, value: event.target.value })}
+          onChange={(event) => onChange({ ...form, value: event.target.value, valueMode: "REPLACE" })}
         />
       </Field>
       <Field label="Description" hint="Optional operator-facing note about how this platform variable is used.">
