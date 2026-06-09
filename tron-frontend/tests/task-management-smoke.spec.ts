@@ -329,6 +329,32 @@ function listItem(tasks: Task[], item: Task) {
   };
 }
 
+function taskPriorityRank(priority: TaskPriority) {
+  if (priority === "High") return 0;
+  if (priority === "Medium") return 1;
+  return 2;
+}
+
+function taskCodeSequence(taskCode: string) {
+  const matched = taskCode.match(/(\d+)(?!.*\d)/);
+  if (!matched) return null;
+  const sequence = Number.parseInt(matched[1], 10);
+  return Number.isFinite(sequence) ? sequence : null;
+}
+
+function compareTasks(left: Pick<Task, "priority" | "taskCode">, right: Pick<Task, "priority" | "taskCode">) {
+  const priorityComparison = taskPriorityRank(left.priority) - taskPriorityRank(right.priority);
+  if (priorityComparison !== 0) return priorityComparison;
+  const leftSequence = taskCodeSequence(left.taskCode);
+  const rightSequence = taskCodeSequence(right.taskCode);
+  if (leftSequence !== null && rightSequence !== null && leftSequence !== rightSequence) {
+    return rightSequence - leftSequence;
+  }
+  if (leftSequence !== null && rightSequence === null) return -1;
+  if (leftSequence === null && rightSequence !== null) return 1;
+  return right.taskCode.localeCompare(left.taskCode);
+}
+
 function filtered(tasks: Task[], query: Record<string, string>) {
   const includeArchived = query.includeArchived === "true";
   const search = query.search?.trim().toLowerCase();
@@ -357,6 +383,24 @@ async function openDesktopRightSidebar(page: Page) {
     await reopen.click();
   }
   await expect(page.getByTestId("tron-right-sidebar")).toBeVisible();
+}
+
+async function dispatchTaskDrag(page: Page, taskCode: string, status: TaskStatus) {
+  await page.evaluate(({ sourceTestId, targetTestId }) => {
+    const source = document.querySelector(`[data-testid="${sourceTestId}"]`);
+    const target = document.querySelector(`[data-testid="${targetTestId}"]`);
+    if (!(source instanceof HTMLElement)) throw new Error(`Drag source not found: ${sourceTestId}`);
+    if (!(target instanceof HTMLElement)) throw new Error(`Drop target not found: ${targetTestId}`);
+
+    const dataTransfer = new DataTransfer();
+    source.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer }));
+    target.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer }));
+    target.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer }));
+    source.dispatchEvent(new DragEvent("dragend", { bubbles: true, cancelable: true, dataTransfer }));
+  }, {
+    sourceTestId: `task-kanban-card-${taskCode}`,
+    targetTestId: `task-kanban-dropzone-${status}`,
+  });
 }
 
 async function openWorkspaceSelector(page: Page) {
@@ -477,7 +521,7 @@ async function routeApi(
     }
     if (captured.pathname === "/api/v1/tasks/kanban") {
       const records = filtered(tasks, captured.searchParams);
-      return fulfillJson(route, successEnvelope(kanbanStatusesForTaskType(captured.searchParams.taskType as TaskType | undefined).filter((status) => captured.searchParams.includeArchived === "true" || status !== "Archived").map((status) => ({ status, title: statusTitle(status), tasks: records.filter((item) => item.status === status).map((item) => listItem(tasks, item)) }))));
+      return fulfillJson(route, successEnvelope(kanbanStatusesForTaskType(captured.searchParams.taskType as TaskType | undefined).filter((status) => captured.searchParams.includeArchived === "true" || status !== "Archived").map((status) => ({ status, title: statusTitle(status), tasks: records.filter((item) => item.status === status).sort(compareTasks).map((item) => listItem(tasks, item)) }))));
     }
     if (captured.pathname === "/api/v1/tasks" && captured.method === "GET") return fulfillJson(route, pageEnvelope(filtered(tasks, captured.searchParams).map((item) => listItem(tasks, item))));
     if (captured.pathname === "/api/v1/tasks" && captured.method === "POST") {
@@ -894,6 +938,49 @@ test("task kanban drag restores the prior board when status update fails", async
   await expect(page.getByTestId("task-kanban-dropzone-Open").getByTestId("task-kanban-card-TSK-DRAG-FAIL")).toBeVisible();
   await expect(page.getByTestId("task-kanban-dropzone-Green").getByTestId("task-kanban-card-TSK-DRAG-FAIL")).toHaveCount(0);
   await expect(toast(page, "backend rejected status move")).toBeVisible();
+});
+
+test("task kanban sorts cards by priority and descending task code, including after drag", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  const tasks: Task[] = [
+    task({ priority: "Low", status: "Open", taskCode: "TSK-100", title: "Low priority older task" }),
+    task({ priority: "High", status: "Open", taskCode: "TSK-150", title: "High priority lower code" }),
+    task({ priority: "High", status: "Open", taskCode: "TSK-200", title: "High priority higher code" }),
+    task({ priority: "Medium", status: "Open", taskCode: "TSK-300", title: "Medium priority highest code" }),
+    task({ priority: "High", status: "Green", taskCode: "TSK-180", title: "Existing green high task" }),
+  ];
+  await routeApi(page, requests, tasks);
+  await seedTronCoreShellSelection(page);
+
+  await page.goto(`${frontendBaseUrl}/tasks`);
+  await expect(page.getByTestId("task-kanban-card-TSK-200")).toBeVisible();
+
+  const openOrder = await page
+    .getByTestId("task-kanban-dropzone-Open")
+    .locator("button[data-testid^='task-kanban-card-']")
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-testid")));
+  expect(openOrder).toEqual([
+    "task-kanban-card-TSK-200",
+    "task-kanban-card-TSK-150",
+    "task-kanban-card-TSK-300",
+    "task-kanban-card-TSK-100",
+  ]);
+
+  await dispatchTaskDrag(page, "TSK-200", "Green");
+
+  await expect.poll(() => requests.some((request) => request.method === "POST"
+    && request.pathname === "/api/v1/tasks/TSK-200/status"
+    && (request.body as { status?: TaskStatus } | null)?.status === "Green")).toBe(true);
+  await expect(page.getByTestId("task-kanban-dropzone-Green").getByTestId("task-kanban-card-TSK-200")).toBeVisible();
+
+  const greenOrder = await page
+    .getByTestId("task-kanban-dropzone-Green")
+    .locator("button[data-testid^='task-kanban-card-']")
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-testid")));
+  expect(greenOrder).toEqual([
+    "task-kanban-card-TSK-200",
+    "task-kanban-card-TSK-180",
+  ]);
 });
 
 test("task detail description preview stays bounded inline and expands in fullscreen", async ({ page }) => {

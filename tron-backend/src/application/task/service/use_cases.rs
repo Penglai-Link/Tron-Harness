@@ -24,7 +24,8 @@ impl TaskService {
 
     pub fn kanban(&self, query: TaskListQuery) -> Result<Vec<TaskKanbanColumn>, TaskError> {
         let include_archived = query.include_archived.unwrap_or(false);
-        let items = self.filtered_task_items(&query)?;
+        let mut items = self.filtered_task_items(&query)?;
+        sort_kanban_task_items(&mut items);
         let statuses = match query.task_type {
             Some(TaskType::Bug) => {
                 task_statuses_for_role(crate::domain::task::TaskRole::Bug).to_vec()
@@ -245,5 +246,97 @@ impl TaskService {
         let result = self.lifecycle_result(task_code)?;
         self.publish_task_lifecycle_event("task.restored", "Restored task", &result);
         Ok(result)
+    }
+}
+
+fn sort_kanban_task_items(items: &mut [TaskListItem]) {
+    items.sort_by(compare_kanban_task_items);
+}
+
+fn compare_kanban_task_items(
+    left: &TaskListItem,
+    right: &TaskListItem,
+) -> std::cmp::Ordering {
+    kanban_priority_rank(left.priority)
+        .cmp(&kanban_priority_rank(right.priority))
+        .then_with(|| match (
+            task_code_sequence(&left.task_code),
+            task_code_sequence(&right.task_code),
+        ) {
+            (Some(left_sequence), Some(right_sequence)) => right_sequence.cmp(&left_sequence),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => right.task_code.cmp(&left.task_code),
+        })
+        .then_with(|| right.task_code.cmp(&left.task_code))
+}
+
+fn kanban_priority_rank(priority: TaskPriority) -> u8 {
+    match priority {
+        TaskPriority::High => 0,
+        TaskPriority::Medium => 1,
+        TaskPriority::Low => 2,
+    }
+}
+
+fn task_code_sequence(task_code: &str) -> Option<i64> {
+    let digits = task_code
+        .chars()
+        .rev()
+        .take_while(|character| character.is_ascii_digit())
+        .collect::<Vec<_>>();
+    if digits.is_empty() {
+        return None;
+    }
+    digits
+        .into_iter()
+        .rev()
+        .collect::<String>()
+        .parse::<i64>()
+        .ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn list_item(priority: TaskPriority, task_code: &str) -> TaskListItem {
+        TaskListItem {
+            task_code: task_code.into(),
+            workspace_code: "TRON_CORE".into(),
+            parent_task_code: None,
+            title: task_code.into(),
+            status: TaskStatus::Open,
+            priority,
+            progress: 0,
+            task_type: TaskType::Feature,
+            source_type: TaskSourceType::Internal,
+            source_url: Some(String::new()),
+            assignee_user_codes: vec![],
+            agent_codes: vec![],
+            app_codes: vec![],
+            subtask_count: 0,
+            updated_at: "2026-06-09T00:00:00Z".into(),
+            archived_at: None,
+        }
+    }
+
+    #[test]
+    fn sort_kanban_task_items_prioritizes_priority_then_descending_task_code() {
+        let mut items = vec![
+            list_item(TaskPriority::Medium, "TSK-12"),
+            list_item(TaskPriority::High, "TSK-10"),
+            list_item(TaskPriority::Low, "TSK-999"),
+            list_item(TaskPriority::High, "TSK-20"),
+            list_item(TaskPriority::Medium, "TSK-30"),
+        ];
+
+        sort_kanban_task_items(&mut items);
+
+        let task_codes = items
+            .iter()
+            .map(|item| item.task_code.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(task_codes, vec!["TSK-20", "TSK-10", "TSK-30", "TSK-12", "TSK-999"]);
     }
 }

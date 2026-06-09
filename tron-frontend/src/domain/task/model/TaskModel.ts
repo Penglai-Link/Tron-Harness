@@ -52,6 +52,33 @@ export function inferTaskRole(taskType: TaskType, parentTaskCode?: string | null
   return parentTaskCode ? "featureChild" : "featureRoot";
 }
 
+function taskPriorityRank(priority: TaskPriority) {
+  if (priority === "High") return 0;
+  if (priority === "Medium") return 1;
+  return 2;
+}
+
+function taskCodeSequence(taskCode: string) {
+  const matched = taskCode.match(/(\d+)(?!.*\d)/);
+  if (!matched) return null;
+  const sequence = Number.parseInt(matched[1], 10);
+  return Number.isFinite(sequence) ? sequence : null;
+}
+
+export function compareTaskListItems(left: TaskListItem, right: TaskListItem) {
+  const priorityComparison = taskPriorityRank(left.priority) - taskPriorityRank(right.priority);
+  if (priorityComparison !== 0) return priorityComparison;
+
+  const leftSequence = taskCodeSequence(left.taskCode);
+  const rightSequence = taskCodeSequence(right.taskCode);
+  if (leftSequence !== null && rightSequence !== null && leftSequence !== rightSequence) {
+    return rightSequence - leftSequence;
+  }
+  if (leftSequence !== null && rightSequence === null) return -1;
+  if (leftSequence === null && rightSequence !== null) return 1;
+  return right.taskCode.localeCompare(left.taskCode);
+}
+
 export function statusLabel(value: TaskStatus): string {
   if (value === "InProgress") return "In Progress";
   return value;
