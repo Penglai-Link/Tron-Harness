@@ -1,14 +1,19 @@
+mod error;
+mod parsing;
 mod paths;
 
-use std::{env, error::Error, fmt, fs, net::SocketAddr, path::Path};
+use std::{fs, net::SocketAddr, path::Path};
 
 use serde::Deserialize;
 
 use crate::shared::event_bus::EventBusConfig;
 
+pub use self::error::ConfigError;
+use self::parsing::{env_port_override, ldap_env_override, required_config_string};
 use self::paths::{
     default_database_url_from_home, default_graph_storage_path_from_home,
-    default_skills_registry_root_from_home, env_database_url_override, normalize_storage_path,
+    default_skills_registry_root_from_home, env_database_url_override,
+    env_graph_storage_path_override, normalize_storage_path,
 };
 
 const DEFAULT_BIND_ADDRESS: &str = "127.0.0.1";
@@ -29,6 +34,7 @@ const DEFAULT_SYSTEM_AGENT_CODEX_COMMAND: &str = "codex";
 const DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND: &str = "opencode";
 const DEFAULT_APPLICATION_CONFIG_PATH: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/application.yaml");
+const ENV_BACKEND_PORT: &str = "TRON_BACKEND_PORT";
 const ENV_LDAP_URL: &str = "LDAP_URL";
 const ENV_LDAP_BIND_DN: &str = "LDAP_BIND_DN";
 const ENV_LDAP_BIND_PASSWORD: &str = "LDAP_BIND_PASSWORD";
@@ -196,8 +202,14 @@ impl AppConfig {
     }
 
     fn apply_env_overrides(&mut self) -> Result<(), ConfigError> {
+        if let Some(value) = env_port_override()? {
+            self.port = value;
+        }
         if let Some(value) = env_database_url_override() {
             self.database_url = value;
+        }
+        if let Some(value) = env_graph_storage_path_override() {
+            self.graph_storage_path = value;
         }
         if let Some(value) = ldap_env_override().transpose()? {
             self.auth.ldap = Some(value);
@@ -555,104 +567,4 @@ impl Default for AppConfig {
             event_bus: EventBusConfig::default(),
         }
     }
-}
-
-#[derive(Debug)]
-pub enum ConfigError {
-    MissingConfigField {
-        key: String,
-    },
-    InvalidSocketAddr {
-        bind_address: String,
-        port: u16,
-        source: std::net::AddrParseError,
-    },
-    ConfigFileReadFailed {
-        path: String,
-        source: std::io::Error,
-    },
-    ConfigFileInvalid {
-        path: String,
-        source: serde_yaml::Error,
-    },
-}
-
-impl fmt::Display for ConfigError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::MissingConfigField { key } => {
-                write!(formatter, "missing required config field `{key}`")
-            }
-            Self::InvalidSocketAddr {
-                bind_address, port, ..
-            } => write!(
-                formatter,
-                "invalid backend bind socket address `{bind_address}:{port}`"
-            ),
-            Self::ConfigFileReadFailed { path, .. } => {
-                write!(formatter, "failed to read backend config file `{path}`")
-            }
-            Self::ConfigFileInvalid { path, .. } => {
-                write!(formatter, "invalid backend config file `{path}`")
-            }
-        }
-    }
-}
-
-impl Error for ConfigError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::MissingConfigField { .. } => None,
-            Self::InvalidSocketAddr { source, .. } => Some(source),
-            Self::ConfigFileReadFailed { source, .. } => Some(source),
-            Self::ConfigFileInvalid { source, .. } => Some(source),
-        }
-    }
-}
-
-fn required_config_string(value: Option<String>, key: &str) -> Result<String, ConfigError> {
-    match value {
-        Some(value) if !value.trim().is_empty() => Ok(value),
-        _ => Err(ConfigError::MissingConfigField {
-            key: key.to_string(),
-        }),
-    }
-}
-
-fn ldap_env_override() -> Option<Result<LdapConfig, ConfigError>> {
-    let url = env::var(ENV_LDAP_URL)
-        .ok()
-        .filter(|value| !value.trim().is_empty());
-    let bind_dn = env::var(ENV_LDAP_BIND_DN)
-        .ok()
-        .filter(|value| !value.trim().is_empty());
-    let bind_password = env::var(ENV_LDAP_BIND_PASSWORD)
-        .ok()
-        .filter(|value| !value.trim().is_empty());
-    let search_base = env::var(ENV_LDAP_SEARCH_BASE)
-        .ok()
-        .filter(|value| !value.trim().is_empty());
-    let search_filter = env::var(ENV_LDAP_SEARCH_FILTER)
-        .ok()
-        .filter(|value| !value.trim().is_empty());
-
-    if url.is_none()
-        && bind_dn.is_none()
-        && bind_password.is_none()
-        && search_base.is_none()
-        && search_filter.is_none()
-    {
-        return None;
-    }
-
-    Some((|| -> Result<LdapConfig, ConfigError> {
-        Ok(LdapConfig {
-            name: DEFAULT_AUTH_LDAP_NAME.into(),
-            url: required_config_string(url, ENV_LDAP_URL)?,
-            bind_dn: required_config_string(bind_dn, ENV_LDAP_BIND_DN)?,
-            bind_password: required_config_string(bind_password, ENV_LDAP_BIND_PASSWORD)?,
-            search_base: required_config_string(search_base, ENV_LDAP_SEARCH_BASE)?,
-            search_filter: required_config_string(search_filter, ENV_LDAP_SEARCH_FILTER)?,
-        })
-    })())
 }

@@ -3,7 +3,7 @@ FRONTEND_NPM := cd $(FRONTEND_DIR) && npm
 BACKEND_DIR := tron-backend
 BACKEND_MANIFEST := $(BACKEND_DIR)/Cargo.toml
 BACKEND_ENV_FILE := $(BACKEND_DIR)/.env
-BE_RUN_ENV = $(if $(strip $(PORT)),TRON_BACKEND_PORT=$(PORT))
+BE_RUN_ENV = $(if $(strip $(PORT)),TRON_BACKEND_PORT=$(PORT)) $(if $(strip $(GRAPH_STORAGE_PATH)),TRON_BACKEND_GRAPH_STORAGE_PATH=$(GRAPH_STORAGE_PATH))
 
 .PHONY: help
 help:
@@ -24,6 +24,7 @@ help:
 	@echo "  make be-run       Run backend server"
 	@echo "                    Sources $(BACKEND_ENV_FILE) when present"
 	@echo "                    Example: make be-run PORT=8081"
+	@echo "                    Example: make be-run PORT=8081 GRAPH_STORAGE_PATH=/tmp/tron-8081.graph.grafeo"
 
 .PHONY: fe-install
 fe-install:
