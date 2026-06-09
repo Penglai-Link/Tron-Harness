@@ -332,7 +332,7 @@ impl TestFixture {
             ..AppConfig::default()
         });
 
-        let _router = build_router(config.clone());
+        let _router = build_router(config.clone()).expect("router should build");
 
         Self {
             config,

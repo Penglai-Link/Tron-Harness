@@ -23,13 +23,13 @@ use crate::{
         variables::routes::routes as variable_routes,
     },
     config::AppConfig,
-    health::health,
+    health::{health, readiness},
 };
 
-use super::AppState;
+use super::{AppBootstrapError, AppState};
 
-pub fn build_router(config: AppConfig) -> Router {
-    let state = AppState::new(config);
+pub fn build_router(config: AppConfig) -> Result<Router, AppBootstrapError> {
+    let state = AppState::new(config)?;
     let protected_routes = user_routes()
         .merge(admin_model_routes())
         .merge(admin_variable_routes())
@@ -50,11 +50,12 @@ pub fn build_router(config: AppConfig) -> Router {
             require_auth,
         ));
 
-    Router::new()
+    Ok(Router::new()
         .route("/api/v1/health", get(health))
+        .route("/api/v1/readiness", get(readiness))
         .merge(auth_routes())
         .merge(mcp_transport_routes())
         .merge(protected_routes)
         .merge(frontend_routes())
-        .with_state(state)
+        .with_state(state))
 }

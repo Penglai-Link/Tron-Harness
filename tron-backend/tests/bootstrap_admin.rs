@@ -21,7 +21,7 @@ async fn startup_bootstraps_platform_admin_when_database_is_empty() {
     let mut config = AppConfig::default();
     config.database_url = database_path.to_string_lossy().into_owned();
 
-    let router = build_router(config);
+    let router = build_router(config).expect("router should build");
 
     let login_response = request(
         &router,
@@ -110,7 +110,7 @@ async fn startup_backfills_existing_admin_related_data() {
     let mut config = AppConfig::default();
     config.database_url = database_path.to_string_lossy().into_owned();
 
-    let router = build_router(config);
+    let router = build_router(config).expect("router should build");
 
     let login_response = request(
         &router,

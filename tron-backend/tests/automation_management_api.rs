@@ -48,7 +48,7 @@ async fn automation_options_and_empty_workspace_list() {
 async fn automation_list_stays_workspace_scoped_and_hides_archived_by_default() {
     let database_path = database_path("list-filters");
     let config = prepared_config(config_for_path(database_path));
-    let state = AppState::new(config.clone());
+    let state = AppState::new(config.clone()).expect("app state should build");
     let service = state.automations.clone();
 
     let active = service
@@ -259,7 +259,7 @@ async fn manual_execution_persists_history_and_rolls_up_latest_result() {
 async fn lifecycle_and_bootstrap_scheduler_only_track_active_automations() {
     let database_path = database_path("scheduler-bootstrap");
     let config = prepared_config(config_for_path(database_path));
-    let state = AppState::new(config.clone());
+    let state = AppState::new(config.clone()).expect("app state should build");
     let service = state.automations.clone();
 
     let active = service
@@ -318,7 +318,7 @@ async fn lifecycle_and_bootstrap_scheduler_only_track_active_automations() {
 
     drop(state);
 
-    let rebooted = AppState::new(config);
+    let rebooted = AppState::new(config).expect("app state should reboot");
     assert!(rebooted.automations.scheduler_snapshot().is_empty());
 }
 

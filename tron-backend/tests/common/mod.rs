@@ -109,11 +109,11 @@ pub struct GitHubMockServer {
 }
 
 pub fn app() -> Router {
-    build_router(prepared_config(AppConfig::default()))
+    build_router(prepared_config(AppConfig::default())).expect("test router should build")
 }
 
 pub fn app_with_config(config: AppConfig) -> Router {
-    build_router(prepared_config(config))
+    build_router(prepared_config(config)).expect("test router should build")
 }
 
 pub fn prepared_config(mut config: AppConfig) -> AppConfig {
