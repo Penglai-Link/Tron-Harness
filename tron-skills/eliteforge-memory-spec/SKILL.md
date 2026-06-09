@@ -1,13 +1,12 @@
 ---
 name: eliteforge-memory-spec
 description: >
-  MUST be loaded at the beginning of every session. After loading it, the agent
-  MUST fan out memory_search with mode=CONTEXT_PACK for USER, SPACE, and
-  WORK_DOMAIN before the first user-visible response or repository action,
-  including greetings, acknowledgements, status replies, and clarification
-  questions. Reading this skill is not memory retrieval.
-  This spec governs memory retrieval, creation, review, update, deletion,
-  deduplication, conflict handling, scope, memory_type, language, evidence,
+  MUST load at session start. Then MUST fan out memory_search with
+  mode=CONTEXT_PACK for USER, SPACE, and
+  WORK_DOMAIN before any user-visible response or repository action.
+  Reading this skill is not memory retrieval.
+  Governs memory retrieval, creation, review, updates, deletion,
+  deduplication, conflicts, scope, memory_type, language, evidence,
   status, injectable, and proof rules.
 metadata:
   version: 1.2.1
@@ -18,42 +17,40 @@ metadata:
 
 # EliteForge Memory Spec
 
-Define persisted memory content format, type-specific text structure, quality gates, and governance rules.
-
-This skill is not an MCP invocation schema. When calling memory tools, follow the current tool schema/help. Use the record envelope below only to author and review memory content before mapping it to tool parameters.
+Define persisted memory content format, type-specific text structure, quality gates, governance rules, and proof boundaries. It is not a memory tool parameter schema.
 
 ## Mandatory Fan-Out Bootstrap
 
-After loading this skill, fan out `memory_search(mode=CONTEXT_PACK)` for `scope=USER`, `scope=SPACE`, and `scope=WORK_DOMAIN` before the first user-visible response or repository action. Reading this skill is not reading long-term memory; only current memory tool results prove retrieval happened.
+After loading, fan out `memory_search(mode=CONTEXT_PACK)` for `scope=USER`, `scope=SPACE`, and `scope=WORK_DOMAIN` before any user-visible response or repository action. Reading this skill does not satisfy that bootstrap; current `memory_search` results do.
 
-Greetings, acknowledgements, status replies, and clarification questions are user-visible responses. Do not answer them before the fan-out bootstrap.
+All user responses are user-visible, including greetings, acknowledgements, status replies, and clarification questions. Do not answer before the three-scope fan-out bootstrap.
 
 Always attempt all three bootstrap scopes:
 
-1. Request `USER` context for user preferences, collaboration rules, and personal constraints.
-2. Request `SPACE` context for workspace, repository, project, and team constraints.
-3. Request `WORK_DOMAIN` context for reusable professional-domain procedures, risks, and lessons.
+1. Request context with `scope=USER`.
+2. Request context with `scope=SPACE`.
+3. Request context with `scope=WORK_DOMAIN`.
 
-Do not skip any bootstrap scope because the user message is a greeting, acknowledgement, status question, unclear task, unclear workspace, or unclear domain. Relevance controls whether retrieved memory affects behavior; it does not control whether retrieval is attempted.
+Do not skip any bootstrap scope because the task looks trivial, unclear, or unrelated. Relevance controls whether retrieved memory affects behavior; it does not control whether retrieval is attempted.
 
-When `scope_code` is unknown, first use the scope-only call supported by the current tool schema, such as `scope=USER`, `scope=SPACE`, or `scope=WORK_DOMAIN` without `scope_code`. Do not replace a missing or failing scoped bootstrap with an unscoped `CONTEXT_PACK` call and then claim the three-domain bootstrap is complete.
+When `scope_code` is unknown, use a scope-only call supported by the current tool schema: `scope=USER`, `scope=SPACE`, or `scope=WORK_DOMAIN` without `scope_code`. Do not replace a missing or failing scoped bootstrap with an unscoped `CONTEXT_PACK` call and then claim the three-domain bootstrap is complete.
 
 If one bootstrap scope fails, record only that scope as degraded and proceed with no durable-memory assumptions for that scope until retrieval succeeds. Retry that scope when the task depends on prior preferences, project rules, procedures, risks, or decisions.
 
 Before the first response or action, confirm internally:
 
 - This skill was loaded and the current memory tool was called with `mode=CONTEXT_PACK` for `USER`, `SPACE`, and `WORK_DOMAIN`.
-- Each of `USER`, `SPACE`, and `WORK_DOMAIN` has current tool evidence: loaded results, an empty result, or a disclosed failure/degraded result for that specific scope.
+- Each of `USER`, `SPACE`, and `WORK_DOMAIN` has current tool evidence: results, empty results, or a disclosed degraded/failure result for that scope.
 - Full bootstrap complete may be claimed only when all three scopes have current tool evidence.
 - Only current `ACTIVE`/`APPROVED` retrieval results can affect behavior.
 - Obvious smoke, test, placeholder, low-quality, conflicting, or irrelevant memories must not affect behavior, even if returned as injectable. Do not treat such memories as a reason to skip `SPACE` retrieval.
 
 ## Boundary
 
-- Use this skill for persisted long-term memory content, memory quality review, or converting memory extraction and governance signals into durable records.
+- Use for persisted long-term memory content, memory quality review, or converting memory extraction and governance signals into durable records.
 - Do not use it for memory tool setup, authentication, retry syntax, or parameter lookup.
-- Prefer no memory over weak, source-poor, transient, or ambiguous memory.
-- Never persist raw transcripts, raw tool output, secrets, temporary task state, or assistant guesses as durable facts.
+- Prefer no memory over weak, source-poor, transient, ambiguous, or polluted material.
+- Never persist raw transcripts, raw command/tool output, secrets, temporary task state, or assistant guesses.
 
 ## Workflow
 
@@ -81,7 +78,7 @@ Before the first response or action, confirm internally:
 
 Scope is the governance boundary, not always the subject. A `USER` memory can describe third-party reference material owned by that user; it must not silently become the user's identity.
 
-For `WORK_DOMAIN`, choose the narrowest recognizable domain that remains reusable. Use a broad domain such as software development when the lesson applies across many development contexts. Use a subdomain such as frontend development, backend development, testing/QA, DevOps/release engineering, security/compliance, data analysis, product management, documentation governance, or project management when the lesson depends on that area. Use a technology-specific domain such as Java development or Python development only when the lesson depends on that language, framework, runtime, or ecosystem.
+For `WORK_DOMAIN`, choose the narrowest recognizable reusable domain: broad domains such as software development, subdomains such as frontend, backend, testing/QA, DevOps/release engineering, security/compliance, data analysis, product management, documentation governance, or project management, and technology-specific domains such as Java or Python only when the lesson depends on that language, framework, runtime, or ecosystem.
 
 Do not turn domain names into `scope` values. The scope remains `WORK_DOMAIN`. Do not invent `scope_code` values; use `scope_code` only when the tool configuration, user instruction, or project convention provides a recognized work-domain code. Put the domain in `metadata.subject`, `metadata.purpose`, or `semantic_key` when useful; use `metadata.typeSpecific` only when the selected type reference or current schema explicitly defines a domain/category field. If no recognizable professional domain can be named, do not use `WORK_DOMAIN`.
 
@@ -105,9 +102,9 @@ Do not turn domain names into `scope` values. The scope remains `WORK_DOMAIN`. D
 
 ### Review Status
 
-- `APPROVED`: review status meaning the memory is accepted for its current status.
-- `PENDING_REVIEW`: review status meaning the memory needs human or later governance review.
-- `REJECTED`: review status meaning the memory is not accepted as valid active memory.
+- `APPROVED`: accepted for its current status.
+- `PENDING_REVIEW`: needs human or later governance review.
+- `REJECTED`: not accepted as valid active memory.
 
 ### Injectable
 
@@ -122,7 +119,7 @@ Do not set `injectable=true` merely because a memory is true, approved, or usefu
 
 ## Shared Record Envelope
 
-Use this shared content model when authoring or reviewing a persisted memory. It is not an MCP invocation schema; map it to the current memory tool schema or help when saving:
+Use this shared content model when authoring or reviewing a persisted memory; map it to the current memory tool schema or help when saving:
 
 ```yaml
 scope: "USER | WORK_DOMAIN | SPACE"
@@ -150,12 +147,12 @@ metadata:
 - `memory_type` must be one of the seven exact values listed above.
 - `title` must be short, stable, and specific enough to choose from search results.
 - `semantic_key` is required for new durable memories. Use lowercase ASCII segments separated by `:`. Use stable subject and purpose segments, not date-only keys or random ids.
-- `source_refs` is required and must contain at least one durable evidence pointer. A source ref should identify source type, stable id, locator or range when available, and observed date or hash when available.
+- `source_refs` must contain at least one durable evidence pointer. A source ref should identify source type, stable id, locator or range when available, and observed date or hash when available.
 - `metadata.formatVersion` must be `memory-spec.v1`.
 - `metadata.language` must identify the source or user-requested language with a BCP-47 tag such as `zh-CN` or `en-US`.
 - `metadata.subject` must name the stable subject described by the memory.
 - `metadata.purpose` must name the future use that makes the memory worth retrieving.
-- `metadata.typeSpecific` is required and must contain the exact required fields from the selected type reference.
+- `metadata.typeSpecific` must contain the exact required fields from the selected type reference.
 - Type references constrain type-specific `text`, `semantic_key`, `metadata.typeSpecific`, and minimum `source_refs` rules. Combine them with this shared envelope before saving.
 - `text` is plain Markdown intended for retrieval and context injection. Do not use YAML front matter inside `text`; keep structured fields in metadata.
 - `text` must state the durable claim first, then when to apply it, when not to apply it, how to use it, and what evidence supports it.
@@ -170,13 +167,12 @@ metadata:
 
 ## Memory Tool Use
 
-- Use the current memory tool schema or help as the only parameter contract; this skill defines memory content and governance rules, not tool signatures.
-- Treat the three-scope fan-out bootstrap `CONTEXT_PACK` gate as mandatory. Refresh `CONTEXT_PACK` when the active user, space, domain, or task scope changes; use `SEARCH` for follow-up lookup, duplicate checks, conflict checks, and governance.
+- Use the current memory tool schema or help as the only parameter contract.
+- After the mandatory bootstrap, refresh `CONTEXT_PACK` when the active user, space, domain, or task scope changes; use `SEARCH` for follow-up lookup, duplicate checks, conflict checks, and governance.
 - Before saving, search the same scope, subject, and purpose for duplicates and conflicts. Include non-active history when it could affect update, archive, disable, or rejection decisions.
 - When updating or deleting by `memory_code`, do not also pass `scope` or `scope_code`.
 - When using `scope_code`, pass `scope` in the same call.
-- For new ordinary memories, pass `memory_status=ACTIVE`, `review_status=APPROVED`, and `injectable=false` unless the memory is explicitly a scope baseline memory.
-- For candidate, rejected, archived, or disabled memories, keep `injectable=false`.
+- For new ordinary memories, pass `memory_status=ACTIVE` and `review_status=APPROVED`; keep `injectable=false` for every non-baseline memory, including candidate, rejected, archived, and disabled records.
 - Do not keep conflicting `ACTIVE` memories side by side in the same scope for the same subject and purpose. Update, disable, archive, reject, or ask for confirmation.
 - Use `memory_delete` for soft deletion. Provide `memory_code`, a concrete `reason`, and `delete_mode` as `ARCHIVE` or `DISABLE`. Use `ARCHIVE` for obsolete or superseded records and `DISABLE` for unsafe, wrong, polluted, or misleading records.
 - A memory retrieval claim is proven only by the current `memory_search` result. Do not claim long-term memory was loaded, unavailable, empty, scoped, or fully bootstrapped without current tool evidence for `USER`, `SPACE`, and `WORK_DOMAIN`.
@@ -184,11 +180,11 @@ metadata:
 
 ## Text Quality
 
-A persisted memory text is good when a future agent can decide whether and how to use it without reading the original transcript.
+Good persisted memory text lets a future agent decide whether and how to use it without reading the original transcript.
 
 - Make one memory about one stable claim, preference, rule, decision, procedure, experience, risk, or fact.
 - Write concrete subjects. Avoid drifting phrases such as "this project", "the user", "we", or "current agent" unless the scope and subject are explicit nearby.
 - Include limits, exceptions, time boundaries, and review needs when they matter.
 - Keep operational details reusable. Remove one-off commands, temporary filenames, transient errors, and unverified hypotheses.
 - If the source is uncertain, conflicting, stale, or only inferred, do not persist it as `ACTIVE` durable memory.
-- Reject task status, command output, file-change lists, transient errors, repository facts already maintained in files, assistant guesses, role-play content, test-only samples, and raw secrets.
+- Reject task status, file-change lists, transient errors, repository facts already maintained in files, role-play content, and test-only samples.
