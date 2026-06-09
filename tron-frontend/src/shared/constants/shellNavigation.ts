@@ -39,6 +39,7 @@ export const tronNavigation: TronNavSection[] = [
     items: [
       { label: "Chats", href: "/chats", icon: MessageSquareText, translationKey: "shell:nav.items.chats" },
       { label: "Agents", href: "/agents", icon: Bot, translationKey: "shell:nav.items.agents" },
+      { label: "MCP Servers", href: "/mcp-servers", icon: Network, translationKey: "shell:nav.items.mcpServers" },
       { label: "Prompts", href: "/prompts", icon: ScrollText, translationKey: "shell:nav.items.prompts" },
       { label: "Models", href: "/models", icon: Sparkles, translationKey: "shell:nav.items.models" },
       { label: "Skills", href: "/skills", icon: Wrench, translationKey: "shell:nav.items.skills" },

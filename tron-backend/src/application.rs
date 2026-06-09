@@ -4,6 +4,7 @@ pub mod automation;
 pub mod chat;
 pub mod graph;
 pub mod llm;
+pub mod mcp;
 pub mod model;
 pub mod role;
 pub mod skill;

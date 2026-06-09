@@ -8,6 +8,7 @@ import type {
 import { forwardRef } from "react";
 
 import { cn } from "@/shared/lib/utils";
+import { InfoTooltip } from "@/shared/ui/InfoTooltip";
 
 interface FieldProps {
   children: ReactNode;
@@ -20,13 +21,21 @@ const disabledControlClasses =
   "disabled:cursor-not-allowed disabled:border-[var(--color-outline-variant)] disabled:bg-[var(--color-surface-container)] disabled:text-[var(--color-on-surface-variant)] disabled:opacity-100 disabled:placeholder:text-[var(--color-outline)] disabled:focus:border-[var(--color-outline-variant)] disabled:focus:ring-0";
 
 export function Field({ children, error, hint, label }: FieldProps) {
+  const tooltipLabel = typeof label === "string" ? label : "Field";
+
   return (
-    <label className="grid gap-1.5">
-      <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{label}</span>
+    <div className="grid gap-1.5">
+      <div className="flex items-center gap-1.5">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{label}</span>
+        {hint ? (
+          <InfoTooltip ariaLabel={`${tooltipLabel} help`}>
+            <p>{hint}</p>
+          </InfoTooltip>
+        ) : null}
+      </div>
       {children}
       {error ? <span className="text-[12px] text-[var(--color-error)]">{error}</span> : null}
-      {hint && !error ? <span className="text-[12px] text-[var(--color-on-surface-variant)]">{hint}</span> : null}
-    </label>
+    </div>
   );
 }
 
@@ -80,11 +89,12 @@ export function SelectInput({ className, ...props }: SelectHTMLAttributes<HTMLSe
 interface ToggleSwitchProps {
   checked: boolean;
   disabled?: boolean;
-  label: string;
+  ariaLabel?: string;
+  label?: string;
   onCheckedChange: (checked: boolean) => void;
 }
 
-export function ToggleSwitch({ checked, disabled = false, label, onCheckedChange }: ToggleSwitchProps) {
+export function ToggleSwitch({ checked, disabled = false, ariaLabel, label, onCheckedChange }: ToggleSwitchProps) {
   return (
     <button
       className={cn(
@@ -92,6 +102,7 @@ export function ToggleSwitch({ checked, disabled = false, label, onCheckedChange
         disabled ? "cursor-not-allowed opacity-60" : undefined,
       )}
       type="button"
+      aria-label={ariaLabel ?? label}
       aria-disabled={disabled}
       aria-pressed={checked}
       disabled={disabled}
@@ -108,7 +119,7 @@ export function ToggleSwitch({ checked, disabled = false, label, onCheckedChange
       >
         <span className={cn("absolute size-4 rounded-full bg-[var(--color-elevated-surface-strong)] shadow transition-transform", checked ? "translate-x-[18px]" : "translate-x-0.5")} />
       </span>
-      <span>{label}</span>
+      {label ? <span>{label}</span> : null}
     </button>
   );
 }

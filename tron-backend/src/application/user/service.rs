@@ -13,8 +13,9 @@ use crate::{
     config::{AuthConfig, GitHubOAuthConfig},
     domain::{
         auth::{
-            AuthError, AuthMethod, AuthProviderDescriptor, AuthProviderKind, AuthenticatedUser,
-            CurrentSession, OAuth2IdentityLink, OAuth2Profile, RefreshSession,
+            AccessTokenIdentity, AuthError, AuthMethod, AuthProviderDescriptor, AuthProviderKind,
+            AuthenticatedAccess, AuthenticatedUser, CurrentSession, OAuth2IdentityLink,
+            OAuth2Profile, RefreshSession,
         },
         user::{
             ListUsersQuery, PagedUsers, PasswordResetResult, User, UserError, UserSourceType,
@@ -80,14 +81,39 @@ pub struct AuthorizedSession {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct AccessTokenClaims {
     sub: String,
     sid: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    user_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    session_code: Option<String>,
     auth_method: String,
     provider_code: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    role_codes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    space_codes: Vec<String>,
     exp: usize,
     iat: usize,
     kind: String,
+}
+
+impl AccessTokenClaims {
+    fn resolved_user_code(&self) -> &str {
+        self.user_code
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(self.sub.as_str())
+    }
+
+    fn resolved_session_code(&self) -> &str {
+        self.session_code
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(self.sid.as_str())
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

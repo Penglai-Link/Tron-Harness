@@ -17,6 +17,10 @@ export const agentApiEndpoints = {
     "PATCH /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}/policy",
   updateWorkspaceInternalAgentToolAssignments:
     "PUT /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}/tool-assignments",
+  patchWorkspaceInternalAgentMcpPolicy:
+    "PATCH /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}/mcp-policy",
+  updateWorkspaceInternalAgentMcpServerAssignments:
+    "PUT /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}/mcp-server-assignments",
   resetWorkspaceInternalAgentPolicy:
     "POST /api/v1/agents/workspaces/{workspaceCode}/internal/{agentCode}/reset-policy",
 } as const;

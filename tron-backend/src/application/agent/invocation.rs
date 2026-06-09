@@ -1,15 +1,17 @@
+mod helpers;
+
 use std::sync::Arc;
 
 use rand::RngCore;
 
 use crate::{
     application::{
-        app::AppService, skill::SkillRegistryService, variable::VariableService,
+        app::AppService, mcp::McpService, skill::SkillRegistryService, variable::VariableService,
         workspace::WorkspaceService,
     },
     domain::{
         agent::{
-            AgentExecutionScope, AgentKind, AgentManagementError, AgentMessage, AgentModelConfig,
+            AgentExecutionScope, AgentManagementError, AgentMessage, AgentModelConfig,
             AgentModelProtocol, AgentRunContext, AgentRunHistoryRecord, AgentRunLimits,
             AgentRunStatus, AgentRuntimeType, AgentToolExposureState, EffectiveSkill,
             EffectiveVariable, ToolAvailabilityState, ToolExposureMode, ToolRegistry,
@@ -28,7 +30,10 @@ use super::{
     build_domain_discovery_guidance, discovery_expand_tool_definition,
     tool_record_to_effective_tool,
 };
-
+use helpers::{
+    agent_kind_for_runtime, is_internal_agent, is_main_agent, normalize_optional,
+    required_runtime_command_name, runtime_type_label, safe_preview,
+};
 const MAIN_AGENT_CODE: &str = "main-agent";
 const MAIN_AGENT_FINAL_OUTPUT_GUIDANCE: &str = r#"Final assistant output contract:
 - The UI already renders Thinking and tool progress separately.
@@ -44,6 +49,7 @@ pub struct AgentInvocationService {
     skills: SkillRegistryService,
     management: AgentManagementService,
     history: AgentRunHistoryService,
+    mcp: McpService,
     event_bus: EventBusHandle,
     model_client: Arc<dyn ModelClient>,
     tool_registry: Arc<ToolRegistry>,
@@ -58,6 +64,7 @@ impl AgentInvocationService {
         skills: SkillRegistryService,
         management: AgentManagementService,
         history: AgentRunHistoryService,
+        mcp: McpService,
         event_bus: EventBusHandle,
         model_client: Arc<dyn ModelClient>,
         tool_registry: Arc<ToolRegistry>,
@@ -70,6 +77,7 @@ impl AgentInvocationService {
             skills,
             management,
             history,
+            mcp,
             event_bus,
             model_client,
             tool_registry,
@@ -153,6 +161,7 @@ impl AgentInvocationService {
             resolve_invocation_model(&resolved_agent, requested_model, requested_system_model_id)?;
         let model_code = model.model_code.clone();
         let locale = locale.unwrap_or_else(|| "en-US".to_string());
+        let run_code = requested_run_code.unwrap_or_else(generate_agent_run_code);
         let mut tools = requested_tools;
         let mut tool_exposure = AgentToolExposureState::default();
         let internal_agent_policy = if is_internal_agent(&resolved_agent.agent_code) {
@@ -232,6 +241,10 @@ impl AgentInvocationService {
                 source: variable.source_label,
             })
             .collect::<Vec<_>>();
+        let variable_values = variables
+            .iter()
+            .map(|variable| (variable.key.clone(), variable.value.clone()))
+            .collect::<std::collections::HashMap<_, _>>();
         let skills = self
             .skills
             .list_workspace_skills(
@@ -249,7 +262,22 @@ impl AgentInvocationService {
             })
             .collect::<Vec<_>>();
 
-        let run_code = requested_run_code.unwrap_or_else(generate_agent_run_code);
+        if let Some(policy) = internal_agent_policy.as_ref() {
+            let mcp_tools = self
+                .mcp
+                .materialize_runtime_tools(
+                    &run_code,
+                    &workspace.workspace_code,
+                    policy.mcp_access_mode,
+                    &policy.selected_server_codes,
+                    &variable_values,
+                    self.tool_registry.as_ref(),
+                )
+                .await
+                .map_err(map_mcp_error)?;
+            tools.extend(mcp_tools);
+        }
+
         let mut messages = Vec::new();
         if requested_task_code.is_none() && is_main_agent(&resolved_agent.agent_code) {
             if let Some(guidance) = self.management.current_main_agent_guidance().map_err(|_| {
@@ -470,9 +498,10 @@ fn map_agent_error(agent_code: &str, error: AgentManagementError) -> AgentInvoca
             format!("internal agent `{agent_code}` was not found"),
         ),
         AgentManagementError::InternalToolAssignmentStale(message)
+        | AgentManagementError::InternalMcpServerAssignmentStale(message)
         | AgentManagementError::InternalToolUnknown(message) => {
             AgentInvocationError::RuntimeFailed(format!(
-                "internal tool policy is invalid: {message}"
+                "internal agent policy is invalid: {message}"
             ))
         }
         AgentManagementError::SystemAgentNotFound => {
@@ -487,55 +516,20 @@ fn map_agent_error(agent_code: &str, error: AgentManagementError) -> AgentInvoca
     }
 }
 
-fn normalize_optional(value: Option<String>) -> Option<String> {
-    value
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-}
-
-fn is_main_agent(agent_code: &str) -> bool {
-    agent_code.eq_ignore_ascii_case(MAIN_AGENT_CODE)
-}
-
-fn is_internal_agent(agent_code: &str) -> bool {
-    agent_code.eq_ignore_ascii_case(MAIN_AGENT_CODE)
-}
-
-fn agent_kind_for_runtime(runtime_type: AgentRuntimeType) -> AgentKind {
-    match runtime_type {
-        AgentRuntimeType::React => AgentKind::React,
-        AgentRuntimeType::CodexExec
-        | AgentRuntimeType::CodexAppServer
-        | AgentRuntimeType::OpenCodeRun
-        | AgentRuntimeType::OpenCodeServe
-        | AgentRuntimeType::OpenCodeAcp => AgentKind::SystemCli,
-    }
-}
-
-fn required_runtime_command_name(
-    runtime: &ResolvedAgentRuntime,
-) -> Result<String, AgentInvocationError> {
-    runtime
-        .command_name
-        .as_ref()
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            AgentInvocationError::RuntimeFailed(format!(
-                "agent `{}` runtime command is empty",
-                runtime.agent_code
-            ))
-        })
-}
-
-fn runtime_type_label(runtime_type: AgentRuntimeType) -> &'static str {
-    match runtime_type {
-        AgentRuntimeType::React => "REACT",
-        AgentRuntimeType::CodexExec => "CODEX_EXEC",
-        AgentRuntimeType::CodexAppServer => "CODEX_APP_SERVER",
-        AgentRuntimeType::OpenCodeRun => "OPENCODE_RUN",
-        AgentRuntimeType::OpenCodeServe => "OPENCODE_SERVE",
-        AgentRuntimeType::OpenCodeAcp => "OPENCODE_ACP",
+fn map_mcp_error(error: crate::domain::mcp::McpError) -> AgentInvocationError {
+    match error {
+        crate::domain::mcp::McpError::InvalidWorkspace
+        | crate::domain::mcp::McpError::WorkspaceRequired
+        | crate::domain::mcp::McpError::VerifyContextRequired => {
+            AgentInvocationError::WorkspaceInvalid
+        }
+        crate::domain::mcp::McpError::RuntimeDiscoveryFailed(message)
+        | crate::domain::mcp::McpError::VerificationFailed(message) => {
+            AgentInvocationError::RuntimeFailed(message)
+        }
+        other => {
+            AgentInvocationError::RuntimeFailed(format!("MCP runtime preparation failed: {other}"))
+        }
     }
 }
 
@@ -543,10 +537,6 @@ pub fn generate_agent_run_code() -> String {
     let timestamp = chrono::Utc::now().timestamp_millis();
     let mut rng = rand::rng();
     format!("RUN-{timestamp}-{:016X}", rng.next_u64())
-}
-
-fn safe_preview(label: &str, value: &str) -> String {
-    format!("{label}_chars:{}", value.chars().count())
 }
 
 pub(crate) fn build_system_runtime_model_config(

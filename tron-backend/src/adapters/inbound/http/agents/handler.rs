@@ -10,11 +10,14 @@ use crate::{
     app::AppState,
     application::agent::{
         AgentAguiStreamService, AgentInvocationCommand, AgentInvocationService,
-        AgentManagementService, UpdateWorkspaceInternalAgentPolicyCommand,
+        AgentManagementService, UpdateWorkspaceInternalAgentMcpPolicyCommand,
+        UpdateWorkspaceInternalAgentPolicyCommand,
     },
     domain::agent::{
-        AgentRunHistoryQuery, ExpandedDomainPersistenceMode, ToolAssignmentMode, ToolExposureMode,
+        AgentRunHistoryQuery, ExpandedDomainPersistenceMode, McpAccessMode, ToolAssignmentMode,
+        ToolExposureMode,
     },
+    domain::mcp::WorkspaceMcpServerListQuery,
     response::ApiResponse,
 };
 
@@ -23,8 +26,9 @@ use super::error_mapper::{
     agent_management_error_response,
 };
 use super::request::{
-    ListToolsQuery, ReplaceInternalAgentToolAssignmentsRequest, UpdateInternalAgentPolicyRequest,
-    UpdateMainAgentConfigRequest,
+    ListToolsQuery, ReplaceInternalAgentMcpServerAssignmentsRequest,
+    ReplaceInternalAgentToolAssignmentsRequest, UpdateInternalAgentMcpPolicyRequest,
+    UpdateInternalAgentPolicyRequest, UpdateMainAgentConfigRequest,
 };
 
 pub async fn create_agent_run(
@@ -39,6 +43,7 @@ pub async fn create_agent_run(
         state.skills.clone(),
         state.agent_management.clone(),
         state.agent_runs.clone(),
+        state.mcp.clone(),
         state.event_bus.clone(),
         state.agent_model_client.clone(),
         state.agent_tool_registry.clone(),
@@ -228,6 +233,49 @@ pub async fn reset_workspace_internal_agent_policy(
     }
 }
 
+pub async fn update_workspace_internal_agent_mcp_policy(
+    State(agent_management): State<AgentManagementService>,
+    _auth: RequestAuthContext,
+    Path((workspace_code, agent_code)): Path<(String, String)>,
+    Json(request): Json<UpdateInternalAgentMcpPolicyRequest>,
+) -> Response {
+    let command = match to_internal_agent_mcp_policy_command(request) {
+        Ok(command) => command,
+        Err((code, message)) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(ApiResponse::error(code, message)),
+            )
+                .into_response();
+        }
+    };
+    match agent_management.update_internal_agent_mcp_policy(&workspace_code, &agent_code, command) {
+        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Err(error) => agent_management_error_response(error),
+    }
+}
+
+pub async fn replace_workspace_internal_agent_mcp_server_assignments(
+    State(state): State<AppState>,
+    _auth: RequestAuthContext,
+    Path((workspace_code, agent_code)): Path<(String, String)>,
+    Json(request): Json<ReplaceInternalAgentMcpServerAssignmentsRequest>,
+) -> Response {
+    let server_codes = normalize_tool_codes(request.server_codes);
+    if let Err(error) =
+        validate_workspace_mcp_server_assignments(&state, &workspace_code, &server_codes)
+    {
+        return agent_management_error_response(error);
+    }
+    match state
+        .agent_management
+        .replace_internal_agent_mcp_server_assignments(&workspace_code, &agent_code, server_codes)
+    {
+        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Err(error) => agent_management_error_response(error),
+    }
+}
+
 pub async fn list_platform_system_agents(
     State(agent_management): State<AgentManagementService>,
     _auth: RequestAuthContext,
@@ -373,6 +421,17 @@ fn to_internal_agent_policy_command(
     })
 }
 
+fn to_internal_agent_mcp_policy_command(
+    request: UpdateInternalAgentMcpPolicyRequest,
+) -> Result<UpdateWorkspaceInternalAgentMcpPolicyCommand, (&'static str, &'static str)> {
+    let mcp_access_mode = match request.mcp_access_mode {
+        Some(value) => Some(parse_mcp_access_mode(&value)?),
+        None => None,
+    };
+
+    Ok(UpdateWorkspaceInternalAgentMcpPolicyCommand { mcp_access_mode })
+}
+
 fn parse_tool_assignment_mode(
     raw: &str,
 ) -> Result<ToolAssignmentMode, (&'static str, &'static str)> {
@@ -410,6 +469,15 @@ fn parse_expanded_domain_persistence_mode(
     }
 }
 
+fn parse_mcp_access_mode(raw: &str) -> Result<McpAccessMode, (&'static str, &'static str)> {
+    match normalize_mode_token(raw).as_str() {
+        "disabled" => Ok(McpAccessMode::Disabled),
+        "all_enabled_servers" => Ok(McpAccessMode::AllEnabledServers),
+        "selected_servers" => Ok(McpAccessMode::SelectedServers),
+        _ => Err(("AGENT_MCP_ACCESS_MODE_INVALID", "invalid MCP access mode")),
+    }
+}
+
 fn normalize_tool_codes(values: Vec<String>) -> Vec<String> {
     let mut deduped = Vec::new();
     for value in values {
@@ -425,6 +493,47 @@ fn normalize_tool_codes(values: Vec<String>) -> Vec<String> {
         }
     }
     deduped
+}
+
+fn validate_workspace_mcp_server_assignments(
+    state: &AppState,
+    workspace_code: &str,
+    server_codes: &[String],
+) -> Result<(), crate::domain::agent::AgentManagementError> {
+    let effective_servers = state
+        .mcp
+        .list_workspace_effective_servers(
+            workspace_code,
+            WorkspaceMcpServerListQuery { search: None },
+        )
+        .map_err(map_mcp_assignment_error)?;
+    let effective_codes = effective_servers
+        .into_iter()
+        .filter(|server| server.effective_enabled)
+        .map(|server| server.server_code)
+        .collect::<std::collections::HashSet<_>>();
+    for server_code in server_codes {
+        if !effective_codes.contains(server_code) {
+            return Err(
+                crate::domain::agent::AgentManagementError::InternalMcpServerAssignmentStale(
+                    server_code.clone(),
+                ),
+            );
+        }
+    }
+    Ok(())
+}
+
+fn map_mcp_assignment_error(
+    error: crate::domain::mcp::McpError,
+) -> crate::domain::agent::AgentManagementError {
+    match error {
+        crate::domain::mcp::McpError::InvalidWorkspace
+        | crate::domain::mcp::McpError::WorkspaceRequired => {
+            crate::domain::agent::AgentManagementError::InvalidWorkspace
+        }
+        _ => crate::domain::agent::AgentManagementError::StorageFailure,
+    }
 }
 
 fn normalize_mode_token(raw: &str) -> String {

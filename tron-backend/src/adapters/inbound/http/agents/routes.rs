@@ -12,9 +12,10 @@ use super::handler::{
     get_workspace_internal_agent, list_agent_runs, list_agui_stream_events,
     list_agui_stream_protocol_events, list_platform_system_agents, list_runtime_capabilities,
     list_tool_domains, list_tools, list_workspace_internal_agents, list_workspace_system_agents,
+    replace_workspace_internal_agent_mcp_server_assignments,
     replace_workspace_internal_agent_tool_assignments, rescan_platform_system_agents,
     reset_workspace_internal_agent_policy, update_main_agent_config,
-    update_workspace_internal_agent_policy,
+    update_workspace_internal_agent_mcp_policy, update_workspace_internal_agent_policy,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -79,6 +80,14 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/api/v1/agents/workspaces/{workspace_code}/internal/{agent_code}/tool-assignments",
             put(replace_workspace_internal_agent_tool_assignments),
+        )
+        .route(
+            "/api/v1/agents/workspaces/{workspace_code}/internal/{agent_code}/mcp-policy",
+            patch(update_workspace_internal_agent_mcp_policy),
+        )
+        .route(
+            "/api/v1/agents/workspaces/{workspace_code}/internal/{agent_code}/mcp-server-assignments",
+            put(replace_workspace_internal_agent_mcp_server_assignments),
         )
         .route(
             "/api/v1/agents/workspaces/{workspace_code}/internal/{agent_code}/reset-policy",

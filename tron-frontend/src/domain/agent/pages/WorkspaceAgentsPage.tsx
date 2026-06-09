@@ -10,12 +10,15 @@ import {
   fetchWorkspaceInternalAgents,
   fetchWorkspaceSystemAgents,
   listTools,
+  patchWorkspaceInternalAgentMcpPolicy,
   patchWorkspaceInternalAgentPolicy,
+  updateWorkspaceInternalAgentMcpServerAssignments,
   updateWorkspaceInternalAgentToolAssignments,
 } from "@/domain/agent/api";
 import {
   AgentPolicySwitch,
   AgentStatusBadge,
+  InternalAgentMcpServerSelector,
   InternalAgentToolSelector,
 } from "@/domain/agent/components";
 import {
@@ -28,7 +31,9 @@ import {
   listToolDomainsMock,
   listToolsMock,
   listWorkspaceInternalAgentsMock,
+  patchWorkspaceInternalAgentMcpPolicyMock,
   patchWorkspaceInternalAgentPolicyMock,
+  updateWorkspaceInternalAgentMcpServerAssignmentsMock,
   updateWorkspaceInternalAgentToolAssignmentsMock,
   listWorkspaceSystemAgentsMock,
   setWorkspaceSystemAgentEnabledMock,
@@ -40,10 +45,16 @@ import {
 import type {
   PlatformToolRecord,
   ToolCatalogDomainRecord,
+  WorkspaceInternalAgentMcpPolicyPayload,
   WorkspaceInternalAgentPolicyPayload,
   WorkspaceInternalAgentRecord,
   WorkspaceSystemAgentRecord,
 } from "@/domain/agent/model";
+import {
+  fetchWorkspaceMcpServers,
+  listWorkspaceMcpServersMock,
+} from "@/domain/mcp";
+import type { WorkspaceMcpServerRecord } from "@/domain/mcp/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
   DataTable,
@@ -65,6 +76,8 @@ interface InternalAgentDraft {
   maxSteps: number;
   maxToolCalls: number;
   maxParallelToolCalls: number;
+  mcpAccessMode: WorkspaceInternalAgentRecord["mcpAccessMode"];
+  selectedServerCodes: string[];
   selectedToolCodes: string[];
   toolAssignmentMode: WorkspaceInternalAgentRecord["toolAssignmentMode"];
   toolExposureMode: WorkspaceInternalAgentRecord["toolExposureMode"];
@@ -76,7 +89,25 @@ function normalizeToolCodes(toolCodes: string[]) {
   return [...new Set(toolCodes)].sort((left, right) => left.localeCompare(right));
 }
 
+function normalizeServerCodes(serverCodes: string[]) {
+  return [...new Set(serverCodes)].sort((left, right) => left.localeCompare(right));
+}
+
 function hasSameToolCodes(left: string[], right: string[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function hasSameServerCodes(left: string[], right: string[]) {
   if (left.length !== right.length) {
     return false;
   }
@@ -96,6 +127,8 @@ function draftFromRecord(record: WorkspaceInternalAgentRecord): InternalAgentDra
     maxSteps: record.maxSteps,
     maxToolCalls: record.maxToolCalls,
     maxParallelToolCalls: record.maxParallelToolCalls,
+    mcpAccessMode: record.mcpAccessMode,
+    selectedServerCodes: normalizeServerCodes(record.selectedServerCodes),
     selectedToolCodes: normalizeToolCodes(record.selectedToolCodes),
     toolAssignmentMode: record.toolAssignmentMode,
     toolExposureMode: record.toolExposureMode,
@@ -110,6 +143,8 @@ function hasDraftChanges(record: WorkspaceInternalAgentRecord, draft: InternalAg
     || record.maxSteps !== draft.maxSteps
     || record.maxToolCalls !== draft.maxToolCalls
     || record.maxParallelToolCalls !== draft.maxParallelToolCalls
+    || record.mcpAccessMode !== draft.mcpAccessMode
+    || !hasSameServerCodes(normalizeServerCodes(record.selectedServerCodes), normalizeServerCodes(draft.selectedServerCodes))
     || !hasSameToolCodes(normalizeToolCodes(record.selectedToolCodes), normalizeToolCodes(draft.selectedToolCodes))
   );
 }
@@ -122,6 +157,9 @@ function buildDraft(
   return {
     ...currentDraft,
     ...patch,
+    selectedServerCodes: patch.selectedServerCodes
+      ? normalizeServerCodes(patch.selectedServerCodes)
+      : currentDraft.selectedServerCodes ?? normalizeServerCodes(baseRecord.selectedServerCodes),
     selectedToolCodes: patch.selectedToolCodes
       ? normalizeToolCodes(patch.selectedToolCodes)
       : currentDraft.selectedToolCodes ?? normalizeToolCodes(baseRecord.selectedToolCodes),
@@ -132,6 +170,7 @@ export function WorkspaceAgentsPage() {
   const { t } = useTranslation(["pages"]);
   const toast = useToast();
   const dataSource = getServiceDataSource("agent");
+  const mcpDataSource = getServiceDataSource("mcp");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspaceCode =
     selectedSecondarySpace?.workspaceCode
@@ -145,6 +184,7 @@ export function WorkspaceAgentsPage() {
   const [internalAgents, setInternalAgents] = useState<WorkspaceInternalAgentRecord[]>([]);
   const [toolDomains, setToolDomains] = useState<ToolCatalogDomainRecord[]>([]);
   const [tools, setTools] = useState<PlatformToolRecord[]>([]);
+  const [workspaceMcpServers, setWorkspaceMcpServers] = useState<WorkspaceMcpServerRecord[]>([]);
   const [systemAgents, setSystemAgents] = useState<WorkspaceSystemAgentRecord[]>([]);
   const [internalDrafts, setInternalDrafts] = useState<Record<string, InternalAgentDraft>>({});
   const [internalSaveStates, setInternalSaveStates] = useState<Record<string, InternalSaveState>>({});
@@ -172,6 +212,7 @@ export function WorkspaceAgentsPage() {
       | "maxSteps"
       | "maxToolCalls"
       | "maxParallelToolCalls"
+      | "mcpAccessMode"
       | "toolAssignmentMode"
       | "toolExposureMode",
     defaultValue: string,
@@ -269,7 +310,7 @@ export function WorkspaceAgentsPage() {
 
   useEffect(() => {
     void refreshWorkspaceData();
-  }, [activeWorkspaceCode, dataSource]);
+  }, [activeWorkspaceCode, dataSource, mcpDataSource]);
 
   useEffect(() => (
     () => {
@@ -348,6 +389,10 @@ export function WorkspaceAgentsPage() {
     return !hasSameToolCodes(normalizeToolCodes(record.selectedToolCodes), normalizeToolCodes(draft.selectedToolCodes));
   }
 
+  function hasMcpServerChanges(record: WorkspaceInternalAgentRecord, draft: InternalAgentDraft) {
+    return !hasSameServerCodes(normalizeServerCodes(record.selectedServerCodes), normalizeServerCodes(draft.selectedServerCodes));
+  }
+
   function setInternalDraft(agentCode: string, patch: Partial<InternalAgentDraft>) {
     const baseRecord = internalAgents.find((item) => item.agentCode === agentCode);
     if (!baseRecord) {
@@ -421,11 +466,48 @@ export function WorkspaceAgentsPage() {
     });
   }
 
+  function handleServerSelection(agentCode: string, serverCode: string, checked: boolean) {
+    const draft = internalDrafts[agentCode];
+    if (!draft) return;
+
+    const next = new Set(draft.selectedServerCodes);
+    if (checked) {
+      next.add(serverCode);
+    } else {
+      next.delete(serverCode);
+    }
+
+    setInternalDraft(agentCode, {
+      mcpAccessMode: "selected_servers",
+      selectedServerCodes: [...next],
+    });
+  }
+
+  function handleBulkServerSelection(agentCode: string, serverCodes: string[], checked: boolean) {
+    const draft = internalDrafts[agentCode];
+    if (!draft || serverCodes.length === 0) return;
+
+    const next = new Set(draft.selectedServerCodes);
+    serverCodes.forEach((serverCode) => {
+      if (checked) {
+        next.add(serverCode);
+      } else {
+        next.delete(serverCode);
+      }
+    });
+
+    setInternalDraft(agentCode, {
+      mcpAccessMode: "selected_servers",
+      selectedServerCodes: [...next],
+    });
+  }
+
   async function refreshWorkspaceData() {
     if (!activeWorkspaceCode) {
       setInternalAgents([]);
       setToolDomains([]);
       setTools([]);
+      setWorkspaceMcpServers([]);
       setSystemAgents([]);
       setInternalDrafts({});
       setInternalSaveStates({});
@@ -437,23 +519,29 @@ export function WorkspaceAgentsPage() {
 
     setLoading(true);
     try {
-      const [nextInternalAgents, nextToolDomains, nextTools, nextSystemAgents] = dataSource === "api"
-        ? await Promise.all([
-          fetchWorkspaceInternalAgents(activeWorkspaceCode),
-          fetchToolDomains(),
-          listTools(),
-          fetchWorkspaceSystemAgents(activeWorkspaceCode),
-        ])
-        : await Promise.all([
-          listWorkspaceInternalAgentsMock(activeWorkspaceCode),
-          listToolDomainsMock(),
-          listToolsMock(),
-          listWorkspaceSystemAgentsMock(activeWorkspaceCode),
+      const [nextInternalAgents, nextToolDomains, nextTools, nextSystemAgents, nextWorkspaceMcpServers] =
+        await Promise.all([
+          dataSource === "api"
+            ? fetchWorkspaceInternalAgents(activeWorkspaceCode)
+            : Promise.resolve(listWorkspaceInternalAgentsMock(activeWorkspaceCode)),
+          dataSource === "api"
+            ? fetchToolDomains()
+            : Promise.resolve(listToolDomainsMock()),
+          dataSource === "api"
+            ? listTools()
+            : Promise.resolve(listToolsMock()),
+          dataSource === "api"
+            ? fetchWorkspaceSystemAgents(activeWorkspaceCode)
+            : Promise.resolve(listWorkspaceSystemAgentsMock(activeWorkspaceCode)),
+          mcpDataSource === "api"
+            ? fetchWorkspaceMcpServers(activeWorkspaceCode)
+            : Promise.resolve(listWorkspaceMcpServersMock(activeWorkspaceCode)),
         ]);
 
       setInternalAgents(nextInternalAgents);
       setToolDomains(nextToolDomains);
       setTools(nextTools);
+      setWorkspaceMcpServers(nextWorkspaceMcpServers);
       setSystemAgents(nextSystemAgents);
       updateDraftMap(nextInternalAgents);
       setInternalSaveStates({});
@@ -503,9 +591,16 @@ export function WorkspaceAgentsPage() {
     if (row.maxParallelToolCalls !== draft.maxParallelToolCalls) {
       payload.maxParallelToolCalls = draft.maxParallelToolCalls;
     }
+    const mcpPayload: WorkspaceInternalAgentMcpPolicyPayload = {};
+    if (row.mcpAccessMode !== draft.mcpAccessMode) {
+      mcpPayload.mcpAccessMode = draft.mcpAccessMode;
+    }
 
     const shouldSaveTools = draft.toolAssignmentMode === "selected_tools"
       ? hasToolChanges(row, draft)
+      : false;
+    const shouldSaveServers = draft.mcpAccessMode === "selected_servers"
+      ? hasMcpServerChanges(row, draft)
       : false;
 
     clearInternalSaveTimer(agentCode);
@@ -520,11 +615,25 @@ export function WorkspaceAgentsPage() {
           patchWorkspaceInternalAgentPolicyMock(activeWorkspaceCode, agentCode, payload);
         }
       }
+      if (Object.keys(mcpPayload).length > 0) {
+        if (dataSource === "api") {
+          await patchWorkspaceInternalAgentMcpPolicy(activeWorkspaceCode, agentCode, mcpPayload);
+        } else {
+          patchWorkspaceInternalAgentMcpPolicyMock(activeWorkspaceCode, agentCode, mcpPayload);
+        }
+      }
       if (shouldSaveTools) {
         if (dataSource === "api") {
           await updateWorkspaceInternalAgentToolAssignments(activeWorkspaceCode, agentCode, draft.selectedToolCodes);
         } else {
           updateWorkspaceInternalAgentToolAssignmentsMock(activeWorkspaceCode, agentCode, draft.selectedToolCodes);
+        }
+      }
+      if (shouldSaveServers) {
+        if (dataSource === "api") {
+          await updateWorkspaceInternalAgentMcpServerAssignments(activeWorkspaceCode, agentCode, draft.selectedServerCodes);
+        } else {
+          updateWorkspaceInternalAgentMcpServerAssignmentsMock(activeWorkspaceCode, agentCode, draft.selectedServerCodes);
         }
       }
       await refreshInternalAgents();
@@ -643,6 +752,27 @@ export function WorkspaceAgentsPage() {
               </div>
 
               <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                <Field label={fieldLabel("mcpAccessMode", "MCP access mode")}>
+                  <SelectInput
+                    disabled={internalBusy}
+                    value={draft.mcpAccessMode}
+                    onChange={(event) => {
+                      setInternalDraft(agent.agentCode, {
+                        mcpAccessMode: event.target.value as WorkspaceInternalAgentRecord["mcpAccessMode"],
+                      });
+                    }}
+                  >
+                    <option value="disabled">
+                      {internalPageT("modes.mcpDisabled", "Disabled")}
+                    </option>
+                    <option value="all_enabled_servers">
+                      {internalPageT("modes.allEnabledServers", "All enabled servers")}
+                    </option>
+                    <option value="selected_servers">
+                      {internalPageT("modes.selectedServers", "Selected servers")}
+                    </option>
+                  </SelectInput>
+                </Field>
                 <Field label={fieldLabel("toolAssignmentMode", "Tool assignment mode")}>
                   <SelectInput
                     disabled={internalBusy}
@@ -738,6 +868,20 @@ export function WorkspaceAgentsPage() {
                   />
                 </Field>
               </div>
+
+              {draft.mcpAccessMode === "selected_servers" ? (
+                <InternalAgentMcpServerSelector
+                  busy={internalBusy}
+                  selectedServerCodes={draft.selectedServerCodes}
+                  servers={workspaceMcpServers}
+                  onSetServersChecked={(serverCodes, checked) => {
+                    handleBulkServerSelection(agent.agentCode, serverCodes, checked);
+                  }}
+                  onToggleServer={(serverCode, checked) => {
+                    handleServerSelection(agent.agentCode, serverCode, checked);
+                  }}
+                />
+              ) : null}
 
               {draft.toolAssignmentMode === "selected_tools" ? (
                 <InternalAgentToolSelector

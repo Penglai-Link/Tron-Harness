@@ -19,6 +19,7 @@ export * from "./ui/ConfirmDialog";
 export * from "./ui/Forms";
 export * from "./ui/InfoTooltip";
 export * from "./ui/Button";
+export * from "./ui/Badge";
 export * from "./ui/MarkdownContent";
 export * from "./ui/PixelBlast";
 export * from "./ui/SearchField";

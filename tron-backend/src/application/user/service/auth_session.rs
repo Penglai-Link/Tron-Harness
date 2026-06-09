@@ -60,25 +60,45 @@ impl UserService {
     pub(super) fn session_from_access_token(
         &self,
         access_token: &str,
-    ) -> Result<CurrentSession, AuthError> {
+    ) -> Result<AuthenticatedAccess, AuthError> {
         let claims = decode_access_token(access_token, &self.auth_config.jwt_secret)?;
         let mut repository = self
             .repository
             .lock()
             .expect("user repository mutex poisoned");
         let user = repository
-            .get_user(&claims.sub)
+            .get_user(claims.resolved_user_code())
             .map_err(map_user_error_to_auth)?;
         ensure_active_user(&user)?;
-
-        Ok(CurrentSession {
+        let auth_method = auth_method_from_claims(&claims.auth_method)?;
+        let session = CurrentSession {
             authenticated: true,
-            auth_method: auth_method_from_claims(&claims.auth_method)?,
+            auth_method,
             provider: claims
                 .provider_code
                 .as_deref()
                 .and_then(|value| self.session_provider_descriptor(value)),
             user: AuthenticatedUser::from(&user),
+        };
+
+        Ok(AuthenticatedAccess {
+            session,
+            token_identity: AccessTokenIdentity {
+                user_code: claims.resolved_user_code().to_string(),
+                session_code: claims.resolved_session_code().to_string(),
+                role_codes: if claims.role_codes.is_empty() {
+                    user.role_codes.clone()
+                } else {
+                    claims.role_codes.clone()
+                },
+                space_codes: if claims.space_codes.is_empty() {
+                    user.space_codes.clone()
+                } else {
+                    claims.space_codes.clone()
+                },
+                auth_method,
+                provider_code: claims.provider_code.clone(),
+            },
         })
     }
 
@@ -93,8 +113,12 @@ impl UserService {
         let claims = AccessTokenClaims {
             sub: user.user_code.clone(),
             sid: session_code.into(),
+            user_code: Some(user.user_code.clone()),
+            session_code: Some(session_code.into()),
             auth_method: auth_method_as_str(auth_method).into(),
             provider_code,
+            role_codes: user.role_codes.clone(),
+            space_codes: user.space_codes.clone(),
             exp: to_usize(now + self.auth_config.access_token_ttl_seconds)?,
             iat: to_usize(now)?,
             kind: "access".into(),
@@ -118,8 +142,12 @@ impl UserService {
         let claims = AccessTokenClaims {
             sub: user.user_code.clone(),
             sid: session_code.into(),
+            user_code: Some(user.user_code.clone()),
+            session_code: Some(session_code.into()),
             auth_method: auth_method_as_str(auth_method).into(),
             provider_code,
+            role_codes: user.role_codes.clone(),
+            space_codes: user.space_codes.clone(),
             exp: to_usize(now + self.auth_config.refresh_token_ttl_seconds)?,
             iat: to_usize(now)?,
             kind: "refresh".into(),

@@ -109,7 +109,7 @@ impl UserService {
             && let Ok(session) = self.session_from_access_token(access_token)
         {
             return Ok(Some(AuthorizedSession {
-                session,
+                session: session.session,
                 access_token: access_token.into(),
                 refresh_token: refresh_token.unwrap_or_default().into(),
                 redirect_path: None,
@@ -244,7 +244,7 @@ impl UserService {
     pub fn authenticate_access_token(
         &self,
         access_token: Option<&str>,
-    ) -> Result<CurrentSession, AuthError> {
+    ) -> Result<AuthenticatedAccess, AuthError> {
         let access_token = access_token.ok_or(AuthError::Unauthorized)?;
         self.session_from_access_token(access_token)
     }

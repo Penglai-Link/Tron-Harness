@@ -30,6 +30,7 @@ use crate::{
         chat::{ChatError, ChatSession},
     },
     response::ApiResponse,
+    shared::auth_holder::AuthHolder,
 };
 
 use super::error_mapper::{chat_error_response, chat_send_error_response};
@@ -147,6 +148,7 @@ pub async fn send_message(
         state.skills.clone(),
         state.agent_management.clone(),
         state.agent_runs.clone(),
+        state.mcp.clone(),
         state.event_bus.clone(),
         state.agent_model_client.clone(),
         state.agent_tool_registry.clone(),
@@ -218,6 +220,7 @@ pub async fn stream_message(
         state.skills.clone(),
         state.agent_management.clone(),
         state.agent_runs.clone(),
+        state.mcp.clone(),
         state.event_bus.clone(),
         state.agent_model_client.clone(),
         state.agent_tool_registry.clone(),
@@ -231,7 +234,7 @@ pub async fn stream_message(
 
     let replay_service_for_task = agui_stream.clone();
     let live_replay_recorder_for_task = live_replay_recorder.clone();
-    tokio::spawn(async move {
+    AuthHolder::spawn(async move {
         let result = chats
             .send_message_stream(
                 &session_code_for_task,
@@ -498,6 +501,7 @@ fn resolve_chat_agent_runtime(
                 )))
             }
             crate::domain::agent::AgentManagementError::InternalAgentNotFound
+            | crate::domain::agent::AgentManagementError::InternalMcpServerAssignmentStale(_)
             | crate::domain::agent::AgentManagementError::InternalToolAssignmentStale(_)
             | crate::domain::agent::AgentManagementError::InternalToolUnknown(_) => {
                 ChatSendError::Agent(AgentInvocationError::RuntimeFailed(format!(

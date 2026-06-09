@@ -37,6 +37,14 @@ struct ScriptedModelServer {
     _task: JoinHandle<()>,
 }
 
+struct BlockingMcpServer {
+    base_url: String,
+    requests: Arc<Mutex<Vec<Value>>>,
+    release_call: Arc<tokio::sync::Notify>,
+    tool_call_started: tokio::sync::oneshot::Receiver<()>,
+    _task: JoinHandle<()>,
+}
+
 static DB_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 async fn recording_model_server() -> RecordingModelServer {
@@ -83,6 +91,124 @@ async fn scripted_model_server(responses: Vec<Value>) -> ScriptedModelServer {
         base_url: format!("http://{address}/v1"),
         requests,
         _task: task,
+    }
+}
+
+async fn blocking_mcp_server(tool_name: &str, tool_output: &str) -> BlockingMcpServer {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("blocking MCP server should bind");
+    let address = listener
+        .local_addr()
+        .expect("blocking MCP server should expose address");
+    let requests = Arc::new(Mutex::new(Vec::<Value>::new()));
+    let release_call = Arc::new(tokio::sync::Notify::new());
+    let (tool_call_started_sender, tool_call_started) = tokio::sync::oneshot::channel();
+    let state = Arc::new(BlockingMcpServerState {
+        requests: requests.clone(),
+        tool_name: tool_name.to_string(),
+        tool_output: tool_output.to_string(),
+        release_call: release_call.clone(),
+        tool_call_started: Mutex::new(Some(tool_call_started_sender)),
+    });
+    let app = Router::new()
+        .route("/mcp", post(blocking_mcp_transport))
+        .with_state(state);
+    let task = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("blocking MCP server should stay available");
+    });
+    BlockingMcpServer {
+        base_url: format!("http://{address}/mcp"),
+        requests,
+        release_call,
+        tool_call_started,
+        _task: task,
+    }
+}
+
+struct BlockingMcpServerState {
+    requests: Arc<Mutex<Vec<Value>>>,
+    tool_name: String,
+    tool_output: String,
+    release_call: Arc<tokio::sync::Notify>,
+    tool_call_started: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+}
+
+async fn blocking_mcp_transport(
+    axum::extract::State(state): axum::extract::State<Arc<BlockingMcpServerState>>,
+    Json(payload): Json<Value>,
+) -> Json<Value> {
+    state
+        .requests
+        .lock()
+        .expect("blocking MCP request mutex poisoned")
+        .push(payload.clone());
+    let method = payload
+        .get("method")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let id = payload.get("id").cloned().unwrap_or(Value::Null);
+    match method {
+        "initialize" => Json(json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "serverInfo": {
+                    "name": "test-mcp",
+                    "version": "1.0.0"
+                },
+                "capabilities": {
+                    "tools": {}
+                }
+            }
+        })),
+        "tools/list" => Json(json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "result": {
+                "tools": [{
+                    "name": state.tool_name,
+                    "description": "Search MCP knowledge",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "query": { "type": "string" }
+                        }
+                    }
+                }]
+            }
+        })),
+        "tools/call" => {
+            if let Some(sender) = state
+                .tool_call_started
+                .lock()
+                .expect("blocking MCP started mutex poisoned")
+                .take()
+            {
+                let _ = sender.send(());
+            }
+            state.release_call.notified().await;
+            Json(json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "result": {
+                    "content": [{
+                        "type": "text",
+                        "text": state.tool_output
+                    }]
+                }
+            }))
+        }
+        _ => Json(json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "error": {
+                "code": -32601,
+                "message": "unsupported method"
+            }
+        })),
     }
 }
 
@@ -1151,10 +1277,51 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
         get_body["data"]["toolAssignmentMode"],
         json!("ALL_PLATFORM_TOOLS")
     );
+    assert_eq!(get_body["data"]["mcpAccessMode"], json!("DISABLED"));
+    assert_eq!(get_body["data"]["selectedServerCodes"], json!([]));
     assert_eq!(get_body["data"]["toolExposureMode"], json!("DIRECT_LIST"));
     assert_eq!(get_body["data"]["maxSteps"], json!(100));
     assert_eq!(get_body["data"]["maxToolCalls"], json!(100));
     assert_eq!(get_body["data"]["maxParallelToolCalls"], json!(4));
+
+    let create_knowledge_server = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/mcp/servers",
+        Some(json!({
+            "serverCode": "knowledge_tools",
+            "name": "Knowledge Tools",
+            "description": "Knowledge MCP",
+            "url": "https://mcp.example.com/knowledge",
+            "authKind": "none",
+            "headers": {}
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    if create_knowledge_server.status() != StatusCode::CREATED {
+        let body = response_json(create_knowledge_server).await;
+        panic!("create_knowledge_server failed: {body}");
+    }
+
+    let create_memory_server = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/mcp/servers",
+        Some(json!({
+            "serverCode": "memory_tools",
+            "name": "Memory Tools",
+            "description": "Memory MCP",
+            "url": "https://mcp.example.com/memory",
+            "authKind": "none",
+            "headers": {}
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(create_memory_server.status(), StatusCode::CREATED);
 
     let patch_response = request_with_headers(
         &app,
@@ -1186,6 +1353,24 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
     assert_eq!(patched["data"]["maxToolCalls"], json!(6));
     assert_eq!(patched["data"]["maxParallelToolCalls"], json!(3));
 
+    let mcp_patch_response = request_with_headers(
+        &app,
+        Method::PATCH,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/mcp-policy",
+        Some(json!({
+            "mcpAccessMode": "selected_servers"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(mcp_patch_response.status(), StatusCode::OK);
+    let mcp_patched = response_json(mcp_patch_response).await;
+    assert_eq!(
+        mcp_patched["data"]["mcpAccessMode"],
+        json!("SELECTED_SERVERS")
+    );
+
     let assign_response = request_with_headers(
         &app,
         Method::PUT,
@@ -1205,6 +1390,69 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
         json!(["app.list", "workspace.list"])
     );
 
+    let mcp_assign_response = request_with_headers(
+        &app,
+        Method::PUT,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/mcp-server-assignments",
+        Some(json!({
+            "serverCodes": ["knowledge_tools", "memory_tools", "knowledge_tools"]
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(mcp_assign_response.status(), StatusCode::OK);
+    let mcp_assigned = response_json(mcp_assign_response).await;
+    assert_eq!(
+        mcp_assigned["data"]["selectedServerCodes"],
+        json!(["knowledge_tools", "memory_tools"])
+    );
+
+    let delete_memory_server = request_with_headers(
+        &app,
+        Method::DELETE,
+        "/api/v1/mcp/servers/memory_tools",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(delete_memory_server.status(), StatusCode::OK);
+
+    let stale_mcp_assign_response = request_with_headers(
+        &app,
+        Method::PUT,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/mcp-server-assignments",
+        Some(json!({
+            "serverCodes": ["knowledge_tools", "memory_tools"]
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(stale_mcp_assign_response.status(), StatusCode::BAD_REQUEST);
+    let stale_mcp_assigned = response_json(stale_mcp_assign_response).await;
+    assert_eq!(
+        stale_mcp_assigned["code"],
+        json!("AGENT_INTERNAL_MCP_SERVER_ASSIGNMENT_STALE")
+    );
+
+    let refreshed_mcp_policy = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(refreshed_mcp_policy.status(), StatusCode::OK);
+    let refreshed_mcp_policy_body = response_json(refreshed_mcp_policy).await;
+    assert_eq!(
+        refreshed_mcp_policy_body["data"]["selectedServerCodes"],
+        json!(["knowledge_tools"])
+    );
+
     let reset_response = request_with_headers(
         &app,
         Method::POST,
@@ -1220,6 +1468,8 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
     assert_eq!(reset["data"]["maxSteps"], json!(100));
     assert_eq!(reset["data"]["maxToolCalls"], json!(100));
     assert_eq!(reset["data"]["maxParallelToolCalls"], json!(4));
+    assert_eq!(reset["data"]["mcpAccessMode"], json!("DISABLED"));
+    assert_eq!(reset["data"]["selectedServerCodes"], json!([]));
 }
 
 #[tokio::test]
@@ -1300,6 +1550,199 @@ async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
         .expect("recorded scripted model request mutex poisoned")
         .clone();
     assert_eq!(recorded_requests.len(), 1);
+}
+
+#[tokio::test]
+async fn internal_agent_mcp_tools_materialize_and_keep_run_snapshots_stable() {
+    let codex_command = temp_command_path("codex-mcp-runtime");
+    let opencode_command = temp_command_path("opencode-mcp-runtime");
+    write_fake_command(&codex_command);
+    write_fake_command(&opencode_command);
+
+    let blocking_mcp = blocking_mcp_server("search_docs", "knowledge snapshot").await;
+    let BlockingMcpServer {
+        base_url: mcp_base_url,
+        requests: mcp_requests,
+        release_call,
+        tool_call_started,
+        ..
+    } = blocking_mcp;
+    let model_server = scripted_model_server(vec![
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "function": {
+                            "name": "mcp.knowledge_tools.search_docs",
+                            "arguments": "{\"query\":\"snapshot\"}"
+                        }
+                    }]
+                }
+            }]
+        }),
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "run one finished"
+                }
+            }]
+        }),
+    ])
+    .await;
+    let app = app_with_config(test_config(&codex_command, &opencode_command));
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let create_server = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/mcp/servers",
+        Some(json!({
+            "serverCode": "knowledge_tools",
+            "name": "Knowledge Tools",
+            "description": "Knowledge MCP",
+            "url": mcp_base_url,
+            "authKind": "none",
+            "headers": {}
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    if create_server.status() != StatusCode::CREATED {
+        let body = response_json(create_server).await;
+        panic!("create_server failed: {body}");
+    }
+
+    let patch_mcp_policy = request_with_headers(
+        &app,
+        Method::PATCH,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/mcp-policy",
+        Some(json!({
+            "mcpAccessMode": "all_enabled_servers"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(patch_mcp_policy.status(), StatusCode::OK);
+
+    let run_app = app.clone();
+    let run_authorization = authorization.clone();
+    let run_model_base_url = model_server.base_url.clone();
+    let run_task = tokio::spawn(async move {
+        request_with_headers(
+            &run_app,
+            Method::POST,
+            "/api/v1/agents/runs",
+            Some(json!({
+                "prompt": "Use the MCP knowledge server.",
+                "workspaceCode": "TRON_CORE",
+                "model": {
+                    "modelCode": "TEST_MODEL",
+                    "protocol": "CHAT_COMPLETIONS",
+                    "baseUrl": run_model_base_url,
+                    "apiKey": "sk-test-api",
+                    "modelName": "gpt-test"
+                }
+            })),
+            None,
+            Some(&run_authorization),
+        )
+        .await
+    });
+
+    assert!(
+        tool_call_started.await.is_ok(),
+        "first run should reach MCP tool execution"
+    );
+
+    let disable_server = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/mcp/servers/knowledge_tools/disable",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(disable_server.status(), StatusCode::OK);
+
+    release_call.notify_waiters();
+
+    let run_response = run_task
+        .await
+        .expect("first run task should join successfully");
+    assert_eq!(run_response.status(), StatusCode::OK);
+    let run_body = response_json(run_response).await;
+    assert_eq!(run_body["data"]["finalOutput"], json!("run one finished"));
+
+    let recorded_model_requests = model_server
+        .requests
+        .lock()
+        .expect("recorded scripted model request mutex poisoned")
+        .clone();
+    let first_run_tools = recorded_model_requests[0]["tools"]
+        .as_array()
+        .expect("first run tools should be an array");
+    assert!(
+        first_run_tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == json!("mcp.knowledge_tools.search_docs"))
+    );
+
+    let recorded_mcp_requests = mcp_requests
+        .lock()
+        .expect("recorded MCP request mutex poisoned")
+        .clone();
+    assert!(
+        recorded_mcp_requests
+            .iter()
+            .any(|request| request["method"] == json!("tools/list"))
+    );
+    assert!(
+        recorded_mcp_requests
+            .iter()
+            .any(|request| request["method"] == json!("tools/call"))
+    );
+
+    let second_model_server = recording_model_server().await;
+    let second_run = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/agents/runs",
+        Some(json!({
+            "prompt": "Run without the disabled MCP server.",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "TEST_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": second_model_server.base_url,
+                "apiKey": "sk-test-api",
+                "modelName": "gpt-test"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(second_run.status(), StatusCode::OK);
+
+    let second_run_requests = second_model_server
+        .requests
+        .lock()
+        .expect("recorded second-run model request mutex poisoned")
+        .clone();
+    let second_run_tools = second_run_requests[0]["tools"]
+        .as_array()
+        .expect("second run tools should be an array");
+    assert!(
+        second_run_tools
+            .iter()
+            .all(|tool| tool["function"]["name"] != json!("mcp.knowledge_tools.search_docs"))
+    );
 }
 
 #[tokio::test]

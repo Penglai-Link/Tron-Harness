@@ -24,6 +24,7 @@ export type ServiceDomain =
   | "chat"
   | "dashboard"
   | "knowledge-graph"
+  | "mcp"
   | "memory"
   | "model"
   | "observability"
@@ -53,6 +54,7 @@ const domainEnvKeys: Record<ServiceDomain, string> = {
   chat: "CHAT",
   dashboard: "DASHBOARD",
   "knowledge-graph": "KNOWLEDGE_GRAPH",
+  mcp: "MCP",
   memory: "MEMORY",
   model: "MODEL",
   observability: "OBSERVABILITY",

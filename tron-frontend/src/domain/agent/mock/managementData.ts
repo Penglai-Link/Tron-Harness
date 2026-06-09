@@ -3,16 +3,19 @@ import type {
   ExpandedDomainPersistenceMode,
   ListToolsQuery,
   MainAgentConfig,
+  McpAccessMode,
   PlatformSystemAgentRecord,
   PlatformSystemAgentRescanResult,
   PlatformToolRecord,
   ToolCatalogDomainRecord,
   ToolExposureMode,
   ToolAssignmentMode,
+  WorkspaceInternalAgentMcpPolicyPayload,
   WorkspaceInternalAgentPolicyPayload,
   WorkspaceInternalAgentRecord,
   WorkspaceSystemAgentRecord,
 } from "@/domain/agent/model";
+import { listEffectiveEnabledWorkspaceMcpServerCodesMock } from "@/domain/mcp/mock";
 
 const scanBaseMs = Date.parse("2026-05-29T09:30:00Z");
 let scanSequence = 0;
@@ -176,7 +179,9 @@ type WorkspaceInternalAgentSeed = {
   maxSteps: number;
   maxToolCalls: number;
   maxParallelToolCalls: number;
+  mcpAccessMode: McpAccessMode;
   name: string;
+  selectedServerCodes: string[];
   selectedToolCodes: string[];
   toolAssignmentMode: ToolAssignmentMode;
   toolExposureMode: ToolExposureMode;
@@ -190,7 +195,9 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     maxSteps: 100,
     maxToolCalls: 100,
     maxParallelToolCalls: 4,
+    mcpAccessMode: "all_enabled_servers",
     name: "Main Agent",
+    selectedServerCodes: [],
     selectedToolCodes: [],
     toolAssignmentMode: "all_platform_tools",
     toolExposureMode: "direct_list",
@@ -342,10 +349,14 @@ function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: str
   const override = getWorkspaceInternalAgentOverride(workspaceCode, agentCode);
   const effective = override ? { ...base, ...override } : { ...base };
   const source = override ? "workspace_override" : "platform_default";
+  const effectiveEnabledServerCodeSet = new Set(listEffectiveEnabledWorkspaceMcpServerCodesMock(workspaceCode));
 
   const selectedToolCodes = effective.toolAssignmentMode === "all_platform_tools"
     ? []
     : normalizeWorkspaceInternalAgentSelectedTools(effective.selectedToolCodes);
+  const selectedServerCodes = effective.mcpAccessMode === "selected_servers"
+    ? [...new Set(effective.selectedServerCodes)].filter((serverCode) => effectiveEnabledServerCodeSet.has(serverCode))
+    : [];
 
   return {
     agentCode: effective.agentCode,
@@ -354,7 +365,9 @@ function buildWorkspaceInternalAgentRecord(workspaceCode: string, agentCode: str
     maxSteps: effective.maxSteps,
     maxToolCalls: effective.maxToolCalls,
     maxParallelToolCalls: effective.maxParallelToolCalls,
+    mcpAccessMode: effective.mcpAccessMode,
     name: effective.name,
+    selectedServerCodes,
     selectedToolCodes,
     source,
     toolAssignmentMode: effective.toolAssignmentMode,
@@ -376,6 +389,7 @@ function validateInternalAgentPatch(payload: WorkspaceInternalAgentPolicyPayload
       "maxSteps",
       "maxToolCalls",
       "maxParallelToolCalls",
+      "mcpAccessMode",
     ].includes(key)) {
       return false;
     }
@@ -432,6 +446,29 @@ export function patchWorkspaceInternalAgentPolicyMock(
   return buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
 }
 
+export function patchWorkspaceInternalAgentMcpPolicyMock(
+  workspaceCode: string,
+  agentCode: string,
+  payload: WorkspaceInternalAgentMcpPolicyPayload,
+) {
+  const base = workspaceInternalAgentSeed.find((item) => item.agentCode === agentCode);
+  if (!base) {
+    throw new Error(`Internal agent ${agentCode} was not found.`);
+  }
+
+  const next: WorkspaceInternalAgentSeed = {
+    ...base,
+    ...getWorkspaceInternalAgentOverride(workspaceCode, agentCode),
+    ...payload,
+    agentCode,
+    description: base.description,
+    name: base.name,
+  };
+
+  upsertWorkspaceInternalAgentOverride(workspaceCode, next);
+  return buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
+}
+
 export function updateWorkspaceInternalAgentToolAssignmentsMock(
   workspaceCode: string,
   agentCode: string,
@@ -448,6 +485,34 @@ export function updateWorkspaceInternalAgentToolAssignmentsMock(
     agentCode,
     selectedToolCodes: normalizeWorkspaceInternalAgentSelectedTools(toolCodes),
     toolAssignmentMode: "selected_tools",
+  };
+
+  upsertWorkspaceInternalAgentOverride(workspaceCode, next);
+  return buildWorkspaceInternalAgentRecord(workspaceCode, agentCode);
+}
+
+export function updateWorkspaceInternalAgentMcpServerAssignmentsMock(
+  workspaceCode: string,
+  agentCode: string,
+  serverCodes: string[],
+) {
+  const base = workspaceInternalAgentSeed.find((item) => item.agentCode === agentCode);
+  if (!base) {
+    throw new Error(`Internal agent ${agentCode} was not found.`);
+  }
+
+  const allowedServerCodes = new Set(listEffectiveEnabledWorkspaceMcpServerCodesMock(workspaceCode));
+  const normalizedServerCodes = [...new Set(serverCodes)].filter((serverCode) => allowedServerCodes.has(serverCode));
+  if (normalizedServerCodes.length !== [...new Set(serverCodes)].length) {
+    throw new Error("One or more selected MCP servers are no longer effective in this workspace.");
+  }
+
+  const next: WorkspaceInternalAgentSeed = {
+    ...base,
+    ...getWorkspaceInternalAgentOverride(workspaceCode, agentCode),
+    agentCode,
+    mcpAccessMode: "selected_servers",
+    selectedServerCodes: normalizedServerCodes,
   };
 
   upsertWorkspaceInternalAgentOverride(workspaceCode, next);

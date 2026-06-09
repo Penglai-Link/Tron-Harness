@@ -41,3 +41,15 @@ pub struct UpdateInternalAgentPolicyRequest {
 pub struct ReplaceInternalAgentToolAssignmentsRequest {
     pub tool_codes: Vec<String>,
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct UpdateInternalAgentMcpPolicyRequest {
+    pub mcp_access_mode: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReplaceInternalAgentMcpServerAssignmentsRequest {
+    pub server_codes: Vec<String>,
+}

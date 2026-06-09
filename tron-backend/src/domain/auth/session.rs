@@ -81,6 +81,22 @@ pub struct CurrentSession {
     pub user: AuthenticatedUser,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccessTokenIdentity {
+    pub user_code: String,
+    pub session_code: String,
+    pub role_codes: Vec<String>,
+    pub space_codes: Vec<String>,
+    pub auth_method: AuthMethod,
+    pub provider_code: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AuthenticatedAccess {
+    pub session: CurrentSession,
+    pub token_identity: AccessTokenIdentity,
+}
+
 #[derive(Debug, Clone)]
 pub struct RefreshSession {
     pub id: i64,

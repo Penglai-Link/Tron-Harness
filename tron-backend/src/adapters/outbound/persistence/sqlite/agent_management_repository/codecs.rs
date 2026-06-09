@@ -3,8 +3,8 @@ use std::{fs, path::Path};
 use rusqlite::Connection;
 
 use crate::domain::agent::{
-    AgentManagementError, AgentRuntimeType, ExpandedDomainPersistenceMode, ToolAssignmentMode,
-    ToolExposureMode,
+    AgentManagementError, AgentRuntimeType, ExpandedDomainPersistenceMode, McpAccessMode,
+    ToolAssignmentMode, ToolExposureMode,
 };
 
 pub(super) fn ensure_database_parent(database_url: &str) -> Result<(), AgentManagementError> {
@@ -104,5 +104,21 @@ pub(super) fn expanded_domain_persistence_mode_from_storage(
     match value.trim().to_ascii_uppercase().as_str() {
         "EPHEMERAL_EXPANDED" => ExpandedDomainPersistenceMode::EphemeralExpanded,
         _ => ExpandedDomainPersistenceMode::StickyExpanded,
+    }
+}
+
+pub(super) fn mcp_access_mode_to_storage(value: McpAccessMode) -> &'static str {
+    match value {
+        McpAccessMode::Disabled => "DISABLED",
+        McpAccessMode::AllEnabledServers => "ALL_ENABLED_SERVERS",
+        McpAccessMode::SelectedServers => "SELECTED_SERVERS",
+    }
+}
+
+pub(super) fn mcp_access_mode_from_storage(value: String) -> McpAccessMode {
+    match value.trim().to_ascii_uppercase().as_str() {
+        "ALL_ENABLED_SERVERS" => McpAccessMode::AllEnabledServers,
+        "SELECTED_SERVERS" => McpAccessMode::SelectedServers,
+        _ => McpAccessMode::Disabled,
     }
 }

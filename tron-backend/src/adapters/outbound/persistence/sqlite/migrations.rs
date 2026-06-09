@@ -80,3 +80,16 @@ pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_LIMITS_MIGRATION: &str = includ
 pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_PARALLEL_LIMIT_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260604_0002_add_internal_agent_parallel_limits_to_workspace_internal_agent_policies.sql"
 );
+pub(super) const MCP_GATEWAY_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260605_0001_create_platform_mcp_gateway_configs.sql");
+pub(super) const MCP_PLATFORM_SERVERS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260605_0002_create_platform_mcp_servers.sql");
+pub(super) const MCP_PLATFORM_SERVERS_TRANSPORT_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260608_0004_add_platform_mcp_server_transport_columns.sql"
+);
+pub(super) const MCP_WORKSPACE_POLICIES_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260605_0003_create_workspace_mcp_server_policies.sql"
+);
+pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_MCP_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260605_1001_add_internal_agent_mcp_access_to_workspace_internal_agent_policies.sql"
+);

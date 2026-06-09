@@ -31,6 +31,7 @@ export const shell = {
       dashboard: "Dashboard",
       knowledgeBase: "KnowledgeBase",
       knowledgeGraph: "KnowledgeGraph",
+      mcpServers: "MCP Servers",
       memory: "Memory",
       models: "Models",
       observability: "Observability",
@@ -58,6 +59,7 @@ export const shell = {
     items: {
       agents: "Agents",
       general: "General",
+      mcpServers: "MCP Servers",
       models: "Models",
       tools: "Tools",
       skillCenter: "Skill Center",

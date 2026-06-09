@@ -8,6 +8,7 @@ import type {
   PlatformSystemAgentRecord,
   PlatformSystemAgentRescanResult,
   WorkspaceSystemAgentRecord,
+  WorkspaceInternalAgentMcpPolicyPayload,
   WorkspaceInternalAgentPolicyPayload,
   WorkspaceInternalAgentRecord,
   ListToolsQuery,
@@ -32,6 +33,7 @@ type ToolAssignmentModeApi = WorkspaceInternalAgentRecord["toolAssignmentMode"] 
 type ToolExposureModeApi = WorkspaceInternalAgentRecord["toolExposureMode"] | Uppercase<WorkspaceInternalAgentRecord["toolExposureMode"]>;
 type ExpandedDomainPersistenceModeApi = WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"] | Uppercase<WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"]>;
 type WorkspaceInternalAgentSourceApi = WorkspaceInternalAgentRecord["source"] | "PLATFORM_DEFAULT" | "WORKSPACE_OVERRIDE";
+type McpAccessModeApi = WorkspaceInternalAgentRecord["mcpAccessMode"] | Uppercase<WorkspaceInternalAgentRecord["mcpAccessMode"]>;
 
 interface ManagedSystemAgentRecordApi {
   agentCode: string;
@@ -70,12 +72,14 @@ interface WorkspaceInternalAgentRecordApi {
   name: string;
   description: string;
   source?: WorkspaceInternalAgentSourceApi;
+  mcpAccessMode?: McpAccessModeApi;
   toolAssignmentMode: ToolAssignmentModeApi;
   toolExposureMode: ToolExposureModeApi;
   expandedDomainPersistenceMode: ExpandedDomainPersistenceModeApi;
   maxSteps: number;
   maxToolCalls: number;
   maxParallelToolCalls?: number;
+  selectedServerCodes?: string[];
   selectedToolCodes: string[];
 }
 
@@ -169,6 +173,19 @@ function normalizeWorkspaceInternalAgentSource(
   }
 }
 
+function normalizeMcpAccessMode(mode: McpAccessModeApi | undefined): WorkspaceInternalAgentRecord["mcpAccessMode"] {
+  switch (mode) {
+    case "ALL_ENABLED_SERVERS":
+    case "all_enabled_servers":
+      return "all_enabled_servers";
+    case "SELECTED_SERVERS":
+    case "selected_servers":
+      return "selected_servers";
+    default:
+      return "disabled";
+  }
+}
+
 function normalizeToolCatalogDomainRecord(record: ToolCatalogDomainRecordApi): ToolCatalogDomainRecord {
   return {
     description: record.description,
@@ -197,6 +214,7 @@ function normalizeWorkspaceInternalAgentRecord(record: WorkspaceInternalAgentRec
     agentCode: record.agentCode,
     description: record.description,
     expandedDomainPersistenceMode: normalizeExpandedDomainPersistenceMode(record.expandedDomainPersistenceMode),
+    mcpAccessMode: normalizeMcpAccessMode(record.mcpAccessMode),
     name: record.name,
     maxSteps: typeof record.maxSteps === "number" && Number.isFinite(record.maxSteps) ? record.maxSteps : 100,
     maxToolCalls: typeof record.maxToolCalls === "number" && Number.isFinite(record.maxToolCalls) ? record.maxToolCalls : 100,
@@ -205,6 +223,7 @@ function normalizeWorkspaceInternalAgentRecord(record: WorkspaceInternalAgentRec
         ? record.maxParallelToolCalls
         : 4,
     source: normalizeWorkspaceInternalAgentSource(record.source),
+    selectedServerCodes: Array.isArray(record.selectedServerCodes) ? [...new Set(record.selectedServerCodes)] : [],
     selectedToolCodes: Array.isArray(record.selectedToolCodes) ? [...new Set(record.selectedToolCodes)] : [],
     toolAssignmentMode: normalizeToolAssignmentMode(record.toolAssignmentMode),
     toolExposureMode: normalizeToolExposureMode(record.toolExposureMode),
@@ -376,6 +395,28 @@ export function updateWorkspaceInternalAgentToolAssignments(workspaceCode: strin
   return requestApi<WorkspaceInternalAgentRecordApi>(agentApiEndpoints.updateWorkspaceInternalAgentToolAssignments, {
     pathParams: { workspaceCode, agentCode },
     body: { toolCodes },
+  }).then(normalizeWorkspaceInternalAgentRecord);
+}
+
+export function patchWorkspaceInternalAgentMcpPolicy(
+  workspaceCode: string,
+  agentCode: string,
+  payload: WorkspaceInternalAgentMcpPolicyPayload,
+) {
+  return requestApi<WorkspaceInternalAgentRecordApi>(agentApiEndpoints.patchWorkspaceInternalAgentMcpPolicy, {
+    pathParams: { workspaceCode, agentCode },
+    body: payload,
+  }).then(normalizeWorkspaceInternalAgentRecord);
+}
+
+export function updateWorkspaceInternalAgentMcpServerAssignments(
+  workspaceCode: string,
+  agentCode: string,
+  serverCodes: string[],
+) {
+  return requestApi<WorkspaceInternalAgentRecordApi>(agentApiEndpoints.updateWorkspaceInternalAgentMcpServerAssignments, {
+    pathParams: { workspaceCode, agentCode },
+    body: { serverCodes },
   }).then(normalizeWorkspaceInternalAgentRecord);
 }
 

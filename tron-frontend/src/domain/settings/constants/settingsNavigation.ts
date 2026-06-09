@@ -1,6 +1,7 @@
 import {
   Bot,
   KeyRound,
+  Network,
   Package,
   Settings2,
   Sparkles,
@@ -31,6 +32,12 @@ export const settingsNavigation = [
     href: "/settings/tools",
     icon: Wrench,
     translationKey: "shell:settings.items.tools",
+  },
+  {
+    label: "MCP Servers",
+    href: "/settings/mcp-servers",
+    icon: Network,
+    translationKey: "shell:settings.items.mcpServers",
   },
   {
     label: "Variables",

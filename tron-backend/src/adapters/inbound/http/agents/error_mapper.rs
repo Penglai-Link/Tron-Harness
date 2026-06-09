@@ -114,6 +114,11 @@ pub fn agent_management_error_response(error: AgentManagementError) -> Response 
             "AGENT_INTERNAL_TOOL_ASSIGNMENT_STALE",
             format!("internal tool assignment is stale: {message}"),
         ),
+        AgentManagementError::InternalMcpServerAssignmentStale(message) => (
+            StatusCode::BAD_REQUEST,
+            "AGENT_INTERNAL_MCP_SERVER_ASSIGNMENT_STALE",
+            format!("internal MCP server assignment is stale: {message}"),
+        ),
         AgentManagementError::InternalToolUnknown(message) => (
             StatusCode::BAD_REQUEST,
             "AGENT_INTERNAL_TOOL_UNKNOWN",

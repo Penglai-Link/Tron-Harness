@@ -31,6 +31,7 @@ export const shell = {
       dashboard: "仪表盘",
       knowledgeBase: "知识库",
       knowledgeGraph: "知识图谱",
+      mcpServers: "MCP 服务",
       memory: "记忆",
       models: "模型",
       observability: "可观测性",
@@ -58,6 +59,7 @@ export const shell = {
     items: {
       agents: "智能体",
       general: "通用",
+      mcpServers: "MCP 服务",
       models: "模型",
       tools: "工具",
       skillCenter: "技能中心",

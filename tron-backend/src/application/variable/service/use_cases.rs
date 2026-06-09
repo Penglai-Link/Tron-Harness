@@ -1,6 +1,15 @@
 use super::*;
 
 impl VariableService {
+    pub fn get_variable(
+        &self,
+        workspace_code: &str,
+        variable_key: &str,
+    ) -> Result<EffectiveVariable, VariableError> {
+        let key = normalized_key(variable_key.to_owned())?;
+        self.effective_variable(workspace_code, &key)
+    }
+
     pub fn list_variables(
         &self,
         workspace_code: &str,
@@ -131,6 +140,42 @@ impl VariableService {
             .expect("variable repository mutex poisoned")
             .create_variable(&variable)?;
         self.effective_variable(&workspace.workspace_code, &key)
+    }
+
+    pub fn upsert_variable(
+        &self,
+        workspace_code: &str,
+        command: CreateVariableCommand,
+    ) -> Result<EffectiveVariable, VariableError> {
+        let workspace = self.active_workspace_detail(workspace_code)?;
+        let key = normalized_key(command.key)?;
+        let current = self
+            .list_variables(
+                &workspace.workspace_code,
+                VariableCatalogQuery { search: None },
+            )?
+            .into_iter()
+            .find(|record| record.key == key);
+
+        match current {
+            Some(record) if record.source_workspace_code == workspace.workspace_code => self
+                .update_variable(
+                    &workspace.workspace_code,
+                    &key,
+                    UpdateVariableCommand {
+                        value: command.value,
+                        description: command.description,
+                    },
+                ),
+            _ => self.create_variable(
+                &workspace.workspace_code,
+                CreateVariableCommand {
+                    key,
+                    value: command.value,
+                    description: command.description,
+                },
+            ),
+        }
     }
 
     pub fn update_variable(

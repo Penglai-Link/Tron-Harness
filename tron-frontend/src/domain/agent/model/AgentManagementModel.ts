@@ -4,6 +4,7 @@ export type ToolAssignmentMode = "all_platform_tools" | "selected_tools";
 export type ToolExposureMode = "direct_list" | "domain_discovery";
 export type ExpandedDomainPersistenceMode = "sticky_expanded" | "ephemeral_expanded";
 export type WorkspaceInternalAgentPolicySource = "platform_default" | "workspace_override";
+export type McpAccessMode = "disabled" | "all_enabled_servers" | "selected_servers";
 
 export interface SystemAgentModelRecord {
   modelId: string;
@@ -65,12 +66,14 @@ export interface WorkspaceInternalAgentRecord {
   agentCode: string;
   name: string;
   description: string;
+  mcpAccessMode: McpAccessMode;
   toolAssignmentMode: ToolAssignmentMode;
   toolExposureMode: ToolExposureMode;
   expandedDomainPersistenceMode: ExpandedDomainPersistenceMode;
   maxSteps: number;
   maxToolCalls: number;
   maxParallelToolCalls: number;
+  selectedServerCodes: string[];
   selectedToolCodes: string[];
   source: WorkspaceInternalAgentPolicySource;
 }
@@ -82,6 +85,10 @@ export interface WorkspaceInternalAgentPolicyPayload {
   maxSteps?: number;
   maxToolCalls?: number;
   maxParallelToolCalls?: number;
+}
+
+export interface WorkspaceInternalAgentMcpPolicyPayload {
+  mcpAccessMode?: McpAccessMode;
 }
 
 export interface ListToolsQuery {

@@ -40,6 +40,14 @@ pub enum ExpandedDomainPersistenceMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum McpAccessMode {
+    Disabled,
+    AllEnabledServers,
+    SelectedServers,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum InternalAgentPolicySource {
     PlatformDefault,
     WorkspaceOverride,
@@ -51,6 +59,7 @@ pub struct WorkspaceInternalAgentPolicy {
     pub workspace_code: String,
     pub agent_code: String,
     pub tool_assignment_mode: ToolAssignmentMode,
+    pub mcp_access_mode: McpAccessMode,
     pub tool_exposure_mode: ToolExposureMode,
     pub expanded_domain_persistence_mode: ExpandedDomainPersistenceMode,
     pub max_steps: u32,
@@ -72,6 +81,16 @@ pub struct WorkspaceInternalAgentToolAssignment {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct WorkspaceInternalAgentMcpServerAssignment {
+    pub workspace_code: String,
+    pub agent_code: String,
+    pub server_code: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct InternalAgentToolPolicy {
     pub workspace_code: String,
     pub agent_code: String,
@@ -79,12 +98,14 @@ pub struct InternalAgentToolPolicy {
     pub description: String,
     pub source: InternalAgentPolicySource,
     pub tool_assignment_mode: ToolAssignmentMode,
+    pub mcp_access_mode: McpAccessMode,
     pub tool_exposure_mode: ToolExposureMode,
     pub expanded_domain_persistence_mode: ExpandedDomainPersistenceMode,
     pub max_steps: u32,
     pub max_tool_calls: u32,
     pub max_parallel_tool_calls: u32,
     pub selected_tool_codes: Vec<String>,
+    pub selected_server_codes: Vec<String>,
     pub assigned_tool_count: usize,
     pub effective_tool_count: usize,
 }
@@ -202,6 +223,7 @@ pub enum AgentManagementError {
     InternalAgentNotFound,
     SystemAgentNotFound,
     InternalToolAssignmentStale(String),
+    InternalMcpServerAssignmentStale(String),
     InternalToolUnknown(String),
     SystemAgentUnavailable,
     StorageFailure,

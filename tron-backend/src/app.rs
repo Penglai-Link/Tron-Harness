@@ -15,6 +15,10 @@ use crate::{
             auth::{require_auth, routes as auth_routes},
             automations::routes as automation_routes,
             chats::routes::routes as chat_routes,
+            mcp::routes::{
+                management_routes as mcp_management_routes,
+                transport_routes as mcp_transport_routes,
+            },
             models::routes::routes as model_routes,
             skills::routes::routes as skill_routes,
             tasks::routes as task_routes,
@@ -27,9 +31,10 @@ use crate::{
                 GrafeoAdapterConfig, GrafeoGraphStore, GrafeoOntologyStore, GrafeoStoreCore,
                 SqliteAgentEventReplayStore, SqliteAgentManagementRepository,
                 SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
-                SqliteChatRepository, SqliteModelRepository, SqliteRoleRepository,
-                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteUserRepository,
-                SqliteVariableRepository, SqliteWorkspaceRepository, bootstrap_platform_admin,
+                SqliteChatRepository, SqliteMcpRepository, SqliteModelRepository,
+                SqliteRoleRepository, SqliteSkillRegistryRepository, SqliteTaskRepository,
+                SqliteUserRepository, SqliteVariableRepository, SqliteWorkspaceRepository,
+                bootstrap_platform_admin,
             },
         },
     },
@@ -42,6 +47,7 @@ use crate::{
     application::chat::ChatService,
     application::graph::{GraphService, OntologyService, ScopeResolver},
     application::llm::LlmRuntimeService,
+    application::mcp::McpService,
     application::model::ModelService,
     application::role::RoleService,
     application::skill::SkillRegistryService,
@@ -94,6 +100,7 @@ pub struct AppState {
     pub skills: SkillRegistryService,
     pub models: ModelService,
     pub llm_runtime: LlmRuntimeService,
+    pub mcp: McpService,
 }
 
 impl AppState {
@@ -185,6 +192,12 @@ impl AppState {
         } else {
             build_variable_service(&config.database_url, workspaces.clone())
         };
+        let mcp = build_mcp_service(
+            &config.database_url,
+            workspaces.clone(),
+            variables.clone(),
+            runtime_http_client.clone(),
+        );
         let skills = if config.database_url == ":memory:" {
             GLOBAL_SKILL_SERVICE
                 .get_or_init(|| {
@@ -280,6 +293,7 @@ impl AppState {
             ontologies,
             models,
             llm_runtime,
+            mcp,
             skills,
             roles,
             tasks,
@@ -386,6 +400,12 @@ impl FromRef<AppState> for AgentManagementService {
     }
 }
 
+impl FromRef<AppState> for McpService {
+    fn from_ref(state: &AppState) -> Self {
+        state.mcp.clone()
+    }
+}
+
 pub fn build_router(config: AppConfig) -> Router {
     let state = AppState::new(config);
     let protected_routes = user_routes()
@@ -398,6 +418,7 @@ pub fn build_router(config: AppConfig) -> Router {
         .merge(chat_routes())
         .merge(app_routes())
         .merge(agent_routes())
+        .merge(mcp_management_routes())
         .merge(task_routes())
         .merge(variable_routes())
         .merge(skill_routes())
@@ -409,6 +430,7 @@ pub fn build_router(config: AppConfig) -> Router {
     Router::new()
         .route("/api/v1/health", get(health))
         .merge(auth_routes())
+        .merge(mcp_transport_routes())
         .merge(protected_routes)
         .with_state(state)
 }
@@ -478,6 +500,17 @@ fn build_variable_service(database_url: &str, workspaces: WorkspaceService) -> V
     let repository = SqliteVariableRepository::connect(database_url)
         .expect("variable SQLite repository should initialize");
     VariableService::new(repository, workspaces)
+}
+
+fn build_mcp_service(
+    database_url: &str,
+    workspaces: WorkspaceService,
+    variables: VariableService,
+    runtime_http_client: reqwest::Client,
+) -> McpService {
+    let repository = SqliteMcpRepository::connect(database_url)
+        .expect("MCP SQLite repository should initialize");
+    McpService::new(repository, workspaces, variables, runtime_http_client)
 }
 
 fn build_skill_registry_service(

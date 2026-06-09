@@ -30,7 +30,8 @@ pub(crate) use invocation::build_system_runtime_model_config;
 pub use invocation::{AgentInvocationService, generate_agent_run_code};
 pub use management::{
     AgentManagementRepository, AgentManagementService, ResolvedAgentRuntime,
-    UpdatePlatformMainAgentCommand, UpdateWorkspaceInternalAgentPolicyCommand,
+    UpdatePlatformMainAgentCommand, UpdateWorkspaceInternalAgentMcpPolicyCommand,
+    UpdateWorkspaceInternalAgentPolicyCommand,
 };
 pub use orchestrator::{AgentOrchestrator, OrchestratedRunResult, RunLifecycleState};
 pub use port::AgentRunHistoryRepository;

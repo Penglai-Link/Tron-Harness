@@ -47,7 +47,7 @@ pub async fn login(
 pub async fn current_session(State(users): State<UserService>, headers: HeaderMap) -> Response {
     let access_token = read_access_token(&headers);
     match users.authenticate_access_token(access_token.as_deref()) {
-        Ok(session) => Json(ApiResponse::success(session)).into_response(),
+        Ok(authenticated) => Json(ApiResponse::success(authenticated.session)).into_response(),
         Err(error) => auth_error_response(error),
     }
 }

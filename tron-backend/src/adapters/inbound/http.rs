@@ -4,6 +4,7 @@ pub mod apps;
 pub mod auth;
 pub mod automations;
 pub mod chats;
+pub mod mcp;
 pub mod models;
 pub mod skills;
 pub mod tasks;
