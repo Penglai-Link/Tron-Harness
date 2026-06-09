@@ -891,9 +891,9 @@ test("task kanban drag updates a valid task status and refreshes the board", asy
     && request.pathname === "/api/v1/tasks/TSK-DRAG-ROOT/status"
     && (request.body as { progress?: number; status?: TaskStatus } | null)?.status === "Green"
     && (request.body as { progress?: number } | null)?.progress === undefined)).toBe(true);
+  await expect(toast(page, "Task TSK-DRAG-ROOT moved to Green")).toBeVisible();
   await expect(page.getByTestId("task-kanban-dropzone-Green").getByTestId("task-kanban-card-TSK-DRAG-ROOT")).toBeVisible();
   await expect(page.getByTestId("task-kanban-dropzone-Open").getByTestId("task-kanban-card-TSK-DRAG-ROOT")).toHaveCount(0);
-  await expect(toast(page, "Task TSK-DRAG-ROOT moved to Green")).toBeVisible();
 });
 
 test("task kanban drag blocks invalid and same-column drops without calling the status API", async ({ page }) => {
