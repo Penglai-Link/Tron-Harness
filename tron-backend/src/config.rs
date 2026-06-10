@@ -1,7 +1,7 @@
+mod defaults;
 mod error;
 mod parsing;
 mod paths;
-mod defaults;
 mod variable_crypto;
 
 use serde::Deserialize;
@@ -11,12 +11,12 @@ use crate::shared::event_bus::EventBusConfig;
 
 pub use self::error::ConfigError;
 use self::parsing::{env_port_override, ldap_env_override, required_config_string};
-pub use variable_crypto::{VariableCryptoConfig, VariableCryptoKeyConfig};
 use self::paths::{
     default_database_url_from_home, default_graph_storage_path_from_home,
     default_skills_registry_root_from_home, env_database_url_override,
     env_graph_storage_path_override, normalize_storage_path,
 };
+pub use variable_crypto::VariableCryptoConfig;
 
 const DEFAULT_BIND_ADDRESS: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 8080;

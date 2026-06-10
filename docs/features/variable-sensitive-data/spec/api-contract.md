@@ -172,7 +172,7 @@ All error responses keep:
 - Backend mutation validates inheritance sensitivity before writing.
 - Sensitive writes encrypt before repository persistence.
 - Sensitive update with `PRESERVE` keeps the stored encrypted payload and metadata unchanged.
-- Sensitive update with `REPLACE` encrypts a new payload using active key version.
+- Sensitive update with `REPLACE` encrypts a new payload using the configured variable crypto key.
 - Sensitive-to-non-sensitive update requires a new value and writes plaintext only from the submitted replacement.
 - Reveal decrypts after auth, scope, step-up, and variable identity checks.
 - Runtime plaintext resolution is backend-only and cannot reuse display DTOs.

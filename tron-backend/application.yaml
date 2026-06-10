@@ -15,10 +15,7 @@ httpClients:
     tcpKeepaliveMs: 30000
 
 variableCrypto:
-  activeKeyVersion: v1
-  keys:
-    - version: v1
-      keyBase64: sbxNdQm4XiwQyfXNEtjZCQ==
+  keyBase64: sbxNdQm4XiwQyfXNEtjZCQ==
 
 auth:
   jwtSecret: tron-dev-jwt-secret

@@ -122,8 +122,7 @@ pub fn prepared_config(mut config: AppConfig) -> AppConfig {
             .to_string_lossy()
             .into_owned();
     }
-    if config.variable_crypto.active_key_version.is_none() && config.variable_crypto.keys.is_empty()
-    {
+    if config.variable_crypto.key_base64.trim().is_empty() {
         config.variable_crypto = VariableCryptoConfig::test_default();
     }
     seed_default_fixture_data(&config);

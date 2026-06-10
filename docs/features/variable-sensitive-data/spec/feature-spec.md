@@ -73,14 +73,14 @@ This workspace owns the v1 sensitive-variable capability for platform and worksp
 - The backend owns encryption and decryption; frontend code never receives ciphertext, nonce, tag, algorithm, or key version.
 - The reveal flow uses password step-up for local-password users and denies OAuth-only users in v1.
 - `react_runtime` is trusted because it runs in process; `service_mode_runtime` is untrusted by default.
-- Key rotation in v1 supports active-version encryption and historical-version decryption, not bulk re-encryption.
+- Key configuration in v1 uses one configured SM4 key; key rotation and historical-key decryption are out of scope.
 - `gmcrypto-core` API use will be confirmed by a small implementation spike before the cipher wrapper is finalized.
 
 ## In Scope
 
 - Add `isSensitive`, `valueMasked`, and `hasValue` to variable display contracts.
 - Add sensitive metadata columns to workspace and platform variable storage.
-- Encrypt sensitive rows with SM4-GCM using a configured active key version.
+- Encrypt sensitive rows with SM4-GCM using the configured variable crypto key.
 - Bind encrypted payloads to platform or workspace record identity with GCM AAD.
 - Mask sensitive values in list, detail, edit, search, mock, and browser surfaces.
 - Preserve or replace sensitive values safely during edit.

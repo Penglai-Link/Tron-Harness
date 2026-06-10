@@ -68,9 +68,9 @@ Rollback expectation:
 ## Data Governance
 
 - Sensitive plaintext must not be written to database, logs, errors, test snapshots, or frontend mock fixtures.
-- Crypto config must contain an active SM4 key version and base64 128-bit key material.
-- Historical key versions may be configured for decryption only.
-- Missing key, missing key version, bad nonce, bad tag, or AAD mismatch fails closed.
+- Crypto config must contain one base64 128-bit SM4 key.
+- Historical key configuration is out of scope for v1.
+- Missing key, bad key material, bad nonce, bad tag, or AAD mismatch fails closed.
 - Record identity AAD uses platform or workspace scope plus variable key.
 - Renaming or moving a sensitive row requires decrypting with old AAD and re-encrypting with new AAD.
 
