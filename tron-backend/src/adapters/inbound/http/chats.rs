@@ -1,5 +1,5 @@
 pub mod error_mapper;
 pub mod handler;
-mod protocol_replay;
+pub(crate) mod protocol_replay;
 pub mod routes;
-mod stream_live;
+pub(crate) mod stream_live;

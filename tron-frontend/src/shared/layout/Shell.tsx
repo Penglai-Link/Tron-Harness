@@ -10,6 +10,12 @@ import {
 } from "react";
 
 import {
+  defaultFloatingState,
+  readFloatingState,
+  writeFloatingState,
+  type ChatFloatingState,
+} from "@tron/chat-core";
+import {
   Bell,
   Bot,
   ChevronDown,
@@ -32,6 +38,8 @@ import {
 } from "react-router";
 
 import { fetchWorkspaceSwitcher } from "@/domain/admin/api";
+import { useAuthSession } from "@/domain/auth";
+import { MainAgentChatWindow } from "@/domain/agent/components/MainAgentChatWindow";
 import { isUnauthorizedApiError } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { tronNavigation } from "@/shared/constants/shellNavigation";
@@ -85,6 +93,7 @@ type WorkspaceSwitcherTreeNode = WorkspaceTreeNode<WorkspaceSwitcherData["second
 
 const TRON_DESKTOP_SIDEBAR_EXPANDED_WIDTH_CLASS = "w-[240px]";
 const TRON_DESKTOP_SIDEBAR_EXPANDED_PADDING_CLASS = "lg:pl-[240px]";
+const MAIN_AGENT_WINDOW_STORAGE_KEY = "tron.main-agent.window";
 
 export const ConsoleShellConfigContext = createContext<ConsoleShellConfigController | null>(null);
 
@@ -136,6 +145,7 @@ export function TronShell({
   const { t } = useTranslation(["common", "shell"]);
   const { changeLocale, currentLocale, supportedLocales: locales } = useLocale();
   const { setTheme, theme, themes } = useTheme();
+  const { session: authSession } = useAuthSession();
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const shellFrameMounted = useContext(TronShellFrameContext);
@@ -164,6 +174,10 @@ export function TronShell({
   const [sidebarTooltip, setSidebarTooltip] = useState<{ label: string; top: number } | null>(null);
   const [topbarToolsMenuOpen, setTopbarToolsMenuOpen] = useState(false);
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
+  const [mainAgentWindowState, setMainAgentWindowState] = useState<ChatFloatingState>(() => ({
+    ...readFloatingState(MAIN_AGENT_WINDOW_STORAGE_KEY, defaultFloatingState),
+    open: false,
+  }));
   const workspaceSwitcherControllerRef = useRef<AbortController | null>(null);
   const workspaceSwitcherRequestSequenceRef = useRef(0);
   const [expandedWorkspaceCodes, setExpandedWorkspaceCodes] = useState<string[]>([]);
@@ -207,6 +221,7 @@ export function TronShell({
   const selectedWorkspacePathLabel = selectedWorkspaceNode
     ? compactWorkspacePath(selectedWorkspaceNode.label)
     : selectedPrimarySpace?.name ?? t("shell:utilityPanel.workspace");
+  const activeWorkspaceCode = effectiveSecondarySpaceId || effectivePrimarySpaceId;
   const workspaceTree = useMemo(
     () => buildWorkspaceTree(workspaceSwitcher.secondarySpaces),
     [workspaceSwitcher.secondarySpaces],
@@ -297,6 +312,10 @@ export function TronShell({
   useEffect(() => {
     setExpandedWorkspaceCodes(defaultExpandedWorkspaceCodes);
   }, [defaultExpandedWorkspaceCodes]);
+
+  useEffect(() => {
+    writeFloatingState(MAIN_AGENT_WINDOW_STORAGE_KEY, mainAgentWindowState);
+  }, [mainAgentWindowState]);
 
   useEffect(() => {
     if (!shellFrameMounted || !shellConfigController) {
@@ -423,6 +442,17 @@ export function TronShell({
     }
 
     setAgentOpen(!agentOpen);
+    setMainAgentWindowState((current) => ({
+      ...current,
+      open: !agentOpen,
+    }));
+  }
+
+  function handleMainAgentWindowStateChange(nextState: ChatFloatingState) {
+    setMainAgentWindowState(nextState);
+    if (agentOpen !== nextState.open) {
+      setAgentOpen(nextState.open);
+    }
   }
 
   function openSystemSettings() {
@@ -752,13 +782,12 @@ export function TronShell({
           </div>
         ) : null}
         {agentOpen ? (
-          <section className="absolute right-4 top-[calc(100%+8px)] z-[55] w-[min(320px,calc(100vw-2rem))] rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-4 text-sm shadow-[0_18px_50px_rgba(0,0,0,0.14)] sm:right-6">
-            <p className="font-semibold">{t("shell:assistant.title")}</p>
-            <p className="mt-2 text-[13px] leading-5 text-[var(--color-on-surface-variant)]">{t("shell:assistant.body")}</p>
-            <button className="mt-3 h-8 rounded-lg bg-[var(--color-surface-container)] px-3 text-[13px] font-medium hover:bg-[var(--color-hover-surface)]" type="button" onClick={() => setAgentOpen(false)}>
-              {t("common:actions.close")}
-            </button>
-          </section>
+          <MainAgentChatWindow
+            currentUserDisplayName={authSession?.user.displayName ?? ""}
+            workspaceCode={activeWorkspaceCode}
+            windowState={{ ...mainAgentWindowState, open: true }}
+            onWindowStateChange={handleMainAgentWindowStateChange}
+          />
         ) : null}
       </header>
 

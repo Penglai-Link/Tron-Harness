@@ -1,0 +1,16 @@
+{
+  "name": "@tron/chat-react",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@tron/chat-core": "file:../chat-core",
+    "lucide-react": "^0.553.0",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
+  }
+}

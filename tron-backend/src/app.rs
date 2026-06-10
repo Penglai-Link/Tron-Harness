@@ -1,6 +1,13 @@
 use std::sync::{Arc, OnceLock};
 
-use axum::{Router, extract::FromRef, middleware, routing::get};
+use axum::{
+    Router,
+    extract::FromRef,
+    http::{Method, header},
+    middleware,
+    routing::get,
+};
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::{
     adapters::{
@@ -24,6 +31,8 @@ use crate::{
             tasks::routes as task_routes,
             variables::routes::routes as variable_routes,
         },
+        inbound::open_api::chats::routes::routes as open_api_chat_routes,
+        inbound::open_api::auth::require_open_api_auth,
         outbound::{
             crypto::BcryptPasswordHasher,
             model::{HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient},
@@ -426,13 +435,29 @@ pub fn build_router(config: AppConfig) -> Router {
             state.users.clone(),
             require_auth,
         ));
+    let open_api_routes = open_api_chat_routes()
+        .route_layer(middleware::from_fn_with_state(state.users.clone(), require_open_api_auth))
+        .layer(open_api_cors_layer());
 
     Router::new()
         .route("/api/v1/health", get(health))
         .merge(auth_routes())
         .merge(mcp_transport_routes())
         .merge(protected_routes)
+        .merge(open_api_routes)
         .with_state(state)
+}
+
+fn open_api_cors_layer() -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::OPTIONS])
+        .allow_headers([
+            header::ACCEPT, header::ACCEPT_LANGUAGE, header::AUTHORIZATION, header::CONTENT_TYPE,
+            header::HeaderName::from_static("x-tron-app-id"),
+            header::HeaderName::from_static("x-tron-app-key"),
+            header::HeaderName::from_static("x-tron-user-id"),
+        ])
 }
 
 fn build_user_service(config: &AppConfig, event_bus: EventBusHandle) -> UserService {

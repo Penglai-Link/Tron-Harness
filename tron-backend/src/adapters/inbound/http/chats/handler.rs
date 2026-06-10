@@ -364,7 +364,7 @@ pub async fn stream_message(
         .into_response()
 }
 
-fn protocol_event_belongs_to_run(data: &Value, run_code: &str) -> bool {
+pub(crate) fn protocol_event_belongs_to_run(data: &Value, run_code: &str) -> bool {
     data.get("runId").and_then(Value::as_str) == Some(run_code)
 }
 
@@ -427,7 +427,7 @@ impl ChatStreamCompletion {
     }
 }
 
-fn chat_send_error_code(error: &ChatSendError) -> &'static str {
+pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
     match error {
         ChatSendError::Chat(ChatError::MessageRequired) => "CHAT_MESSAGE_REQUIRED",
         ChatSendError::Chat(ChatError::SessionNotFound) => "CHAT_SESSION_NOT_FOUND",
@@ -439,7 +439,7 @@ fn chat_send_error_code(error: &ChatSendError) -> &'static str {
     }
 }
 
-fn chat_send_error_message(error: ChatSendError) -> String {
+pub(crate) fn chat_send_error_message(error: ChatSendError) -> String {
     match error {
         ChatSendError::Chat(ChatError::MessageRequired) => "message content is required".into(),
         ChatSendError::Chat(ChatError::SessionNotFound) => "chat session was not found".into(),
@@ -453,19 +453,19 @@ fn chat_send_error_message(error: ChatSendError) -> String {
     }
 }
 
-fn normalized_required(value: Option<String>) -> Option<String> {
+pub(crate) fn normalized_required(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
 }
 
-fn normalized_optional(value: Option<String>) -> Option<String> {
+pub(crate) fn normalized_optional(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
 }
 
-fn effective_agent_code(session: &ChatSession, request: &SendChatMessageCommand) -> String {
+pub(crate) fn effective_agent_code(session: &ChatSession, request: &SendChatMessageCommand) -> String {
     let selected = if session.last_run_code.is_some() {
         session.agent_code.clone()
     } else {
@@ -474,11 +474,7 @@ fn effective_agent_code(session: &ChatSession, request: &SendChatMessageCommand)
     selected.unwrap_or_else(|| "main-agent".to_string())
 }
 
-fn resolve_chat_agent_runtime(
-    state: &AppState,
-    session: &ChatSession,
-    request: &SendChatMessageCommand,
-) -> Result<ResolvedAgentRuntime, ChatSendError> {
+pub(crate) fn resolve_chat_agent_runtime(state: &AppState, session: &ChatSession, request: &SendChatMessageCommand) -> Result<ResolvedAgentRuntime, ChatSendError> {
     let effective_agent_code = effective_agent_code(session, request);
     state
         .agent_management
@@ -514,11 +510,11 @@ fn resolve_chat_agent_runtime(
         })
 }
 
-fn uses_system_live_stream(runtime: &ResolvedAgentRuntime) -> bool {
+pub(crate) fn uses_system_live_stream(runtime: &ResolvedAgentRuntime) -> bool {
     !matches!(runtime.runtime_type, AgentRuntimeType::React)
 }
 
-fn prepare_send_model(
+pub(crate) fn prepare_send_model(
     state: &AppState,
     session: &ChatSession,
     request: &SendChatMessageCommand,

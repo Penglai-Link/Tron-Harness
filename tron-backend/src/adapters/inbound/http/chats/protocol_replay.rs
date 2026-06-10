@@ -2,7 +2,7 @@ use serde_json::Value;
 
 use crate::{application::agent::AgentAguiStreamService, domain::agent::AgentAguiProtocolEvent};
 
-pub(super) fn record_protocol_event(
+pub(crate) fn record_protocol_event(
     service: &AgentAguiStreamService,
     stream_key: &str,
     sse_event: &str,

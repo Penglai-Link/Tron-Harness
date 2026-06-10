@@ -11,6 +11,7 @@ help:
 	@echo "  make fe-install   Install frontend dependencies"
 	@echo "  make fe-dev       Start the Vite dev server"
 	@echo "  make fe-check     Run frontend typecheck and build"
+	@echo "  make fe-unit-test Run frontend unit tests"
 	@echo "  make fe-test      Run frontend Playwright browser tests"
 	@echo "  make fe-build     Build the frontend"
 	@echo "  make fe-preview   Preview the production build"
@@ -50,6 +51,10 @@ fe-check:
 .PHONY: fe-test
 fe-test:
 	$(FRONTEND_NPM) exec playwright test $(TEST)
+
+.PHONY: fe-unit-test
+fe-unit-test:
+	$(FRONTEND_NPM) run test:unit
 
 .PHONY: fe-clean
 fe-clean:

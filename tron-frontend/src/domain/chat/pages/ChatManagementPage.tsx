@@ -34,7 +34,6 @@ import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
   ConfirmDialog,
-  TextArea,
   MarkdownContent,
   useWorkspaceSpaces,
   useConsoleShellConfig,
@@ -62,12 +61,15 @@ import { getWorkspaceModelCatalog } from "@/domain/model/mock";
 import type { ModelRecord } from "@/domain/model/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
+  resolveAguiDebugEventTypes,
   shouldShowAguiEventType,
   useAguiDebugPreferences,
   type AguiDebugPreferences,
 } from "@/domain/settings/model/aguiDebugPreferences";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
+import { TronChatPanel } from "@tron/chat-react";
 import { deriveReasoningPreview, truncateLabel } from "./chatReasoningPreview";
+import { inferChatAgentCodeFromModel } from "../model/chatAgentCode";
 import type {
   ChatAguiEvent,
   ChatAguiStreamEvent,
@@ -2438,13 +2440,14 @@ export function ChatManagementPage() {
   const liveAssistantDraftRef = useRef("");
   const liveAguiObservedRef = useRef(false);
   const currentLiveAguiRunCodesRef = useRef<Set<string>>(new Set());
-  const effectiveAgentCode = selectedAgentCode || mainChatAgentOption.agentCode;
-  const selectedAgent = chatAgents.find((agent) => agent.agentCode === effectiveAgentCode) ?? null;
+  const selectedAgent = chatAgents.find((agent) => agent.agentCode === selectedAgentCode) ?? null;
   const agentScopedModels = useMemo(
     () => modelsForAgent(chatModels, selectedAgent),
     [chatModels, selectedAgent],
   );
   const selectedModel = agentScopedModels.find((model) => model.optionCode === selectedModelCode) ?? null;
+  const selectedModelAgentCode = inferChatAgentCodeFromModel(selectedModel, selectedAgentCode || mainChatAgentOption.agentCode);
+  const effectiveAgentCode = selectedModelAgentCode || selectedAgentCode || mainChatAgentOption.agentCode;
   const selectedMainAgentModel = selectedModel?.modelCode
     ? chatModels.find((model) => model.modelCode === selectedModel.modelCode) ?? null
     : null;
@@ -2452,8 +2455,8 @@ export function ChatManagementPage() {
   const sessionStarted = Boolean(activeSession?.lastRunCode || visibleMessages.length > 0);
   const agentSelectionLocked = Boolean(activeSession && sessionStarted);
   const displayedAgentCode = sessionStarted
-    ? (activeSession?.agentCode ?? selectedAgentCode ?? mainChatAgentOption.agentCode)
-    : (selectedAgentCode || activeSession?.agentCode || mainChatAgentOption.agentCode);
+    ? (activeSession?.agentCode ?? selectedModelAgentCode ?? selectedAgentCode ?? mainChatAgentOption.agentCode)
+    : (selectedModelAgentCode || selectedAgentCode || activeSession?.agentCode || mainChatAgentOption.agentCode);
   const modelEmptyLabel = isMainChatAgent(effectiveAgentCode)
     ? "No text model"
     : `No models for ${selectedAgent?.name ?? effectiveAgentCode}`;
@@ -2761,6 +2764,48 @@ export function ChatManagementPage() {
       />
     );
   }, [activeSession, aguiEvents, hasActiveSession, selectedMainAgentModel, selectedModel, visibleMessages]);
+  const transcriptDebugOptions = useMemo(() => ({
+    debugEventTypes: resolveAguiDebugEventTypes(aguiDebugPreferences),
+    recentTurnLimit: aguiWorkReplayPreferences.recentTurnLimit,
+  }), [aguiDebugPreferences, aguiWorkReplayPreferences.recentTurnLimit]);
+  const transcriptFooterAddon = useMemo(() => (
+    <div className="flex min-w-0 max-w-full items-center gap-1">
+      {agentSelectionLocked ? null : (
+        <div className="min-w-0 max-w-[9.5rem] shrink">
+          <ChatAgentSelector
+            locked={agentSelectionLocked}
+            loading={agentsLoading}
+            agents={chatAgents}
+            selectedAgentCode={selectedAgentCode}
+            onSelect={handleAgentSelect}
+          />
+        </div>
+      )}
+      <div
+        className={cn(
+          "min-w-0 max-w-full",
+          agentSelectionLocked ? "w-[min(100%,16rem)]" : "w-[min(100%,14rem)]",
+        )}
+      >
+        <ChatModelSelector
+          emptyLabel={modelEmptyLabel}
+          loading={modelsLoading}
+          models={agentScopedModels}
+          selectedModelCode={selectedModelCode}
+          onSelect={handleModelSelect}
+        />
+      </div>
+    </div>
+  ), [
+    agentScopedModels,
+    agentSelectionLocked,
+    agentsLoading,
+    chatAgents,
+    modelEmptyLabel,
+    modelsLoading,
+    selectedAgentCode,
+    selectedModelCode,
+  ]);
 
   useConsoleShellConfig({ rightPanel });
 
@@ -2795,8 +2840,26 @@ export function ChatManagementPage() {
     });
   }
 
+  function handleAgentSelect(agentCode: string) {
+    setSelectedAgentCode(agentCode);
+    if (!activeSession) return;
+    setSessionGroups((current) => replaceSession(current, {
+      ...activeSession,
+      agentCode,
+    }));
+  }
+
   function handleModelSelect(optionCode: string) {
     setSelectedModelCode(optionCode);
+    const selectedOption = agentScopedModels.find((model) => model.optionCode === optionCode) ?? null;
+    const nextAgentCode = inferChatAgentCodeFromModel(selectedOption, selectedAgentCode || mainChatAgentOption.agentCode);
+    setSelectedAgentCode((current) => (current === nextAgentCode ? current : nextAgentCode));
+    if (activeSession) {
+      setSessionGroups((current) => replaceSession(current, {
+        ...activeSession,
+        agentCode: nextAgentCode,
+      }));
+    }
     const sessionCode = activeSession?.sessionCode;
     if (!sessionCode) return;
     setSessionModelSelections((current) => (
@@ -3022,7 +3085,7 @@ export function ChatManagementPage() {
     setCreatingSession(true);
     try {
       const session = await createChatSession({
-        agentCode: mainChatAgentOption.agentCode,
+        agentCode: effectiveAgentCode,
         title: "New chat",
         workspaceCode: activeWorkspaceCode,
       });
@@ -3225,147 +3288,36 @@ export function ChatManagementPage() {
           </div>
         </header>
 
-        {hasActiveSession ? (
-          <>
-            <section
-              aria-label="Chat transcript"
-              className="flex-1 overflow-y-auto bg-[var(--color-surface-container-low)] px-5 py-5"
-              ref={messageScrollRef}
-              onScroll={handleTranscriptScroll}
-            >
-              <div className="mx-auto flex max-w-6xl flex-col gap-4">
-                {visibleMessages.length ? visibleMessages.map((message) => (
-                  <Fragment key={message.messageCode}>
-                    <ChatBubble
-                      currentUserDisplayName={currentUserDisplayName}
-                      message={message}
-                      onEditMessage={(content) => {
-                        setComposer(content);
-                        window.requestAnimationFrame(() => {
-                          const composerElement = composerRef.current;
-                          if (!composerElement) return;
-                          composerElement.focus();
-                          const cursor = content.length;
-                          composerElement.setSelectionRange(cursor, cursor);
-                        });
-                      }}
-                    />
-                    {message.messageCode === waitingForModelAnchorMessageCode ? (
-                      <AguiWaitingForModelRail />
-                    ) : null}
-                    {(workRailsByMessageCode.get(message.messageCode) ?? []).map((run) => (
-                      <AguiRunWorkRail
-                        key={run.runCode}
-                        events={run.events}
-                        preferences={aguiDebugPreferences}
-                      />
-                    ))}
-                  </Fragment>
-                )) : activeWorkspaceCode ? (
-                  <div className="flex min-h-[360px] items-center justify-center rounded-md bg-[var(--color-surface-container-lowest)] text-sm text-[var(--color-on-surface-variant)] shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">
-                    No persisted messages in this session.
-                  </div>
-                ) : (
-                  <div className="flex min-h-[360px] items-center justify-center rounded-md bg-[var(--color-surface-container-lowest)] text-sm text-[var(--color-on-surface-variant)] shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">
-                    Select or create a workspace before loading chat sessions.
-                  </div>
-                )}
-              </div>
-            </section>
-
-            <footer className="relative bg-white px-4 py-3 shadow-[0_-10px_28px_rgba(15,23,42,0.04)]">
-              {showScrollToBottom ? (
-                <button
-                  aria-label="Jump to latest message"
-                  className="absolute left-1/2 top-0 z-20 inline-flex size-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-[0_10px_26px_rgba(15,23,42,0.18)] ring-1 ring-[var(--color-outline-variant)] transition hover:bg-[var(--color-hover-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]"
-                  type="button"
-                  onClick={() => scrollToLatestMessage("smooth")}
-                >
-                  <ArrowDown size={16} />
-                </button>
-              ) : null}
-              <div className="flex min-h-28 w-full flex-col rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-3 shadow-[inset_0_0_0_1px_rgba(15,23,42,0.055)]">
-                <TextArea
-                  ref={composerRef}
-                  className="min-h-16 w-full flex-1 resize-none rounded-none border-0 bg-transparent p-0 text-sm shadow-none focus:border-transparent focus:ring-0"
-                  placeholder="Enter to send, Shift+Enter for newline"
-                  value={composer}
-                  onChange={(event) => setComposer(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
-                    event.preventDefault();
-                    if (event.shiftKey) {
-                      setComposer(insertNewlineAtCursor(event.currentTarget));
-                      return;
-                    }
-                    void handleSend();
-                  }}
-                />
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <div className="flex min-w-0 max-w-full items-center gap-1">
-                    {agentSelectionLocked ? null : (
-                      <div className="min-w-0 max-w-[9.5rem] shrink">
-                        <ChatAgentSelector
-                          locked={agentSelectionLocked}
-                          loading={agentsLoading}
-                          agents={chatAgents}
-                          selectedAgentCode={selectedAgentCode}
-                          onSelect={setSelectedAgentCode}
-                        />
-                      </div>
-                    )}
-                    <div
-                      className={cn(
-                        "min-w-0 max-w-full",
-                        agentSelectionLocked ? "w-[min(100%,16rem)]" : "w-[min(100%,14rem)]",
-                      )}
-                    >
-                      <ChatModelSelector
-                        emptyLabel={modelEmptyLabel}
-                        loading={modelsLoading}
-                        models={agentScopedModels}
-                        selectedModelCode={selectedModelCode}
-                        onSelect={handleModelSelect}
-                      />
-                    </div>
-                  </div>
-                  <Button
-                    className={cn(
-                      "ml-auto shrink-0",
-                      canAbortCurrentSession && "bg-[var(--color-error)] text-[var(--color-on-error)] hover:bg-[var(--color-error-container)]",
-                    )}
-                    disabled={!canAbortCurrentSession && (sending || !activeSession || !selectedModel)}
-                    size="sm"
-                    onClick={() => {
-                      if (canAbortCurrentSession) {
-                        handleAbortSend();
-                        return;
-                      }
-                      void handleSend();
-                    }}
-                  >
-                    {canAbortCurrentSession ? <Square size={14} /> : <Send size={15} />}
-                    {canAbortCurrentSession ? "Stop" : "Send"}
-                  </Button>
-                </div>
-              </div>
-            </footer>
-          </>
-        ) : (
-          <section
-            aria-label="Chat onboarding"
-            className="flex flex-1 items-center justify-center bg-[var(--color-surface-container-low)] px-5 py-8"
-          >
-            <div className="w-full max-w-2xl rounded-lg bg-[var(--color-surface-container-lowest)] p-8 text-center shadow-[inset_0_0_0_1px_rgba(15,23,42,0.05)]">
-              <h2 className="text-base font-semibold text-[var(--color-on-surface)]">
-                No session selected
-              </h2>
-              <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
-                Create a new session or pick one from the left panel to view chat details and start messaging.
-              </p>
-            </div>
-          </section>
-        )}
+        <TronChatPanel
+          createSessionLabel="Create session"
+          currentUserDisplayName={currentUserDisplayName}
+          debugOptions={transcriptDebugOptions}
+          draft={composer}
+          emptyDescription={activeWorkspaceCode
+            ? "Create a new session or pick one from the left panel to view chat details and start messaging."
+            : "Select or create a workspace before loading chat sessions."}
+          footerAddon={transcriptFooterAddon}
+          inputPlaceholder="Enter to send, Shift+Enter for newline"
+          liveAguiAnchorMessageCodes={liveAguiAnchorMessageCodes}
+          liveAguiEvents={liveAguiEvents}
+          liveAguiPending={liveAguiPending}
+          messages={visibleMessages}
+          onCreateSession={() => {
+            void handleCreateSession();
+          }}
+          onDraftChange={setComposer}
+          onEditMessage={setComposer}
+          onSend={() => {
+            void handleSend();
+          }}
+          onStop={handleAbortSend}
+          protocolEvents={aguiProtocolEvents}
+          sendDisabled={!canAbortCurrentSession && (sending || !activeSession || !selectedModel)}
+          sending={canAbortCurrentSession}
+          session={activeSession}
+          showHeader={false}
+          title={activeSession?.title ?? "Chat Management"}
+        />
       </main>
       <ConfirmDialog
         ariaLabel="Delete chat session confirmation"

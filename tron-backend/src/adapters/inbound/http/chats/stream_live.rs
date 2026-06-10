@@ -7,9 +7,9 @@ use crate::domain::agent::{ModelStreamEvent, ModelStreamEventKind};
 
 use super::protocol_replay::record_protocol_event;
 
-pub(super) struct SystemAgentLiveProtocolEvent {
-    pub(super) data: Value,
-    pub(super) sse_event: String,
+pub(crate) struct SystemAgentLiveProtocolEvent {
+    pub(crate) data: Value,
+    pub(crate) sse_event: String,
 }
 
 impl SystemAgentLiveProtocolEvent {
@@ -22,7 +22,7 @@ impl SystemAgentLiveProtocolEvent {
 }
 
 #[derive(Clone)]
-pub(super) struct SystemAgentLiveReplayRecorder {
+pub(crate) struct SystemAgentLiveReplayRecorder {
     builder: Arc<Mutex<SystemAgentLiveEventBuilder>>,
     enabled: bool,
     service: AgentAguiStreamService,
@@ -30,7 +30,7 @@ pub(super) struct SystemAgentLiveReplayRecorder {
 }
 
 impl SystemAgentLiveReplayRecorder {
-    pub(super) fn new(
+    pub(crate) fn new(
         service: AgentAguiStreamService,
         stream_key: &str,
         run_code: &str,
@@ -46,7 +46,7 @@ impl SystemAgentLiveReplayRecorder {
         }
     }
 
-    pub(super) fn ingest(&self, event: ModelStreamEvent) {
+    pub(crate) fn ingest(&self, event: ModelStreamEvent) {
         if !self.enabled {
             return;
         }
@@ -58,7 +58,7 @@ impl SystemAgentLiveReplayRecorder {
         self.record(payloads);
     }
 
-    pub(super) fn finalize(&self) {
+    pub(crate) fn finalize(&self) {
         if !self.enabled {
             return;
         }
@@ -82,7 +82,7 @@ impl SystemAgentLiveReplayRecorder {
     }
 }
 
-pub(super) struct SystemAgentLiveEventBuilder {
+pub(crate) struct SystemAgentLiveEventBuilder {
     enabled: bool,
     reasoning_started: bool,
     reasoning_message_started: bool,
@@ -97,7 +97,7 @@ pub(super) struct SystemAgentLiveEventBuilder {
 }
 
 impl SystemAgentLiveEventBuilder {
-    pub(super) fn new(stream_key: &str, run_code: &str, enabled: bool) -> Self {
+    pub(crate) fn new(stream_key: &str, run_code: &str, enabled: bool) -> Self {
         Self {
             enabled,
             reasoning_started: false,
@@ -113,11 +113,11 @@ impl SystemAgentLiveEventBuilder {
         }
     }
 
-    pub(super) fn enabled(&self) -> bool {
+    pub(crate) fn enabled(&self) -> bool {
         self.enabled
     }
 
-    pub(super) fn ingest(&mut self, event: ModelStreamEvent) -> Vec<SystemAgentLiveProtocolEvent> {
+    pub(crate) fn ingest(&mut self, event: ModelStreamEvent) -> Vec<SystemAgentLiveProtocolEvent> {
         if !self.enabled {
             return Vec::new();
         }
@@ -130,7 +130,7 @@ impl SystemAgentLiveEventBuilder {
         }
     }
 
-    pub(super) fn finalize(&mut self) -> Vec<SystemAgentLiveProtocolEvent> {
+    pub(crate) fn finalize(&mut self) -> Vec<SystemAgentLiveProtocolEvent> {
         if !self.enabled {
             return Vec::new();
         }

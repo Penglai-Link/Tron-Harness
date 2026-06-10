@@ -3,14 +3,21 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "test:unit": "vitest run --dir packages",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.6",
+    "@tron/chat-core": "file:packages/chat-core",
+    "@tron/chat-internal-adapter": "file:packages/chat-internal-adapter",
+    "@tron/chat-react": "file:packages/chat-react",
     "@radix-ui/react-slot": "^1.2.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -30,13 +37,16 @@
   "devDependencies": {
     "@playwright/test": "^1.59.1",
     "@tailwindcss/vite": "^4.2.4",
+    "@testing-library/react": "^16.3.0",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@types/three": "^0.184.1",
     "@vitejs/plugin-react": "^5.1.1",
+    "jsdom": "^26.1.0",
     "tailwindcss": "^4.2.4",
     "typescript": "^6.0.3",
-    "vite": "^8.0.10"
+    "vite": "^8.0.10",
+    "vitest": "^4.0.8"
   }
 }

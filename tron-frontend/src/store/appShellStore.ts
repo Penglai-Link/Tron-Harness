@@ -58,7 +58,7 @@ export const useAppShellStore = create<AppShellState>()(
       sidebarCollapsed: false,
       utilityPanel: null,
       workspaceSwitcherSnapshot: defaultWorkspaceSwitcherSnapshot,
-      closeFloatingPanels: () => set({ utilityPanel: null }),
+      closeFloatingPanels: () => set({ agentOpen: false, utilityPanel: null }),
       ensureSectionOpen: (sectionLabel) =>
         set((state) => {
           if (!sectionLabel || state.openSections[sectionLabel]) {

@@ -294,4 +294,41 @@ impl UserService {
         let access_token = access_token.ok_or(AuthError::Unauthorized)?;
         self.session_from_access_token(access_token)
     }
+
+    pub fn authenticate_open_api_user(
+        &self,
+        user_identifier: &str,
+    ) -> Result<AuthenticatedAccess, AuthError> {
+        let identifier = user_identifier.trim();
+        if identifier.is_empty() {
+            return Err(AuthError::Unauthorized);
+        }
+
+        let mut repository = self
+            .repository
+            .lock()
+            .expect("user repository mutex poisoned");
+        let user = repository
+            .find_user_by_login(identifier)?
+            .or_else(|| repository.get_user(identifier).ok())
+            .ok_or(AuthError::Unauthorized)?;
+        ensure_active_user(&user)?;
+
+        Ok(AuthenticatedAccess {
+            session: CurrentSession {
+                authenticated: true,
+                auth_method: AuthMethod::Internal,
+                provider: None,
+                user: AuthenticatedUser::from(&user),
+            },
+            token_identity: AccessTokenIdentity {
+                user_code: user.user_code.clone(),
+                session_code: format!("OPENAPI-{}", user.user_code),
+                role_codes: user.role_codes.clone(),
+                space_codes: user.space_codes.clone(),
+                auth_method: AuthMethod::Internal,
+                provider_code: None,
+            },
+        })
+    }
 }
