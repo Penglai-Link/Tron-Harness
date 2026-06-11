@@ -12,6 +12,8 @@ import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { getWorkspaceSwitcherMock } from "../src/shared/constants/workspaceSpaces";
+
 const thisFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = resolve(thisFilePath, "..", "..");
 
@@ -215,6 +217,22 @@ async function signIn(page: Page, targetPath: string, expectedPath = targetPath)
   await expect(page).toHaveURL(expectedUrlPattern);
 }
 
+async function seedWorkspaceSelection(page: Page) {
+  await page.addInitScript((snapshot) => {
+    window.localStorage.setItem("tron-app-shell", JSON.stringify({
+      state: {
+        openSections: { Core: true },
+        selectedPrimarySpaceId: "ENTERPRISE",
+        selectedSecondarySpaceId: "TRON_CORE",
+        rightSidebarCollapsed: false,
+        sidebarCollapsed: false,
+        workspaceSwitcherSnapshot: snapshot,
+      },
+      version: 4,
+    }));
+  }, getWorkspaceSwitcherMock());
+}
+
 function rightSidebar(page: Page) {
   return page.getByTestId("tron-right-sidebar");
 }
@@ -224,6 +242,10 @@ function rightReopenControl(page: Page) {
 }
 
 async function openRightSidebar(page: Page) {
+  if (await rightSidebar(page).count()) {
+    await expect(rightSidebar(page)).toBeVisible();
+    return;
+  }
   await expect(rightReopenControl(page)).toBeVisible();
   await rightReopenControl(page).click();
   await expect(rightSidebar(page)).toBeVisible();
@@ -253,6 +275,7 @@ test.beforeAll(async () => {
         VITE_TRON_AGENT_DATA_SOURCE: "mock",
         VITE_TRON_APP_DATA_SOURCE: "mock",
         VITE_TRON_AUTOMATION_DATA_SOURCE: "mock",
+        VITE_TRON_CHAT_DATA_SOURCE: "mock",
         VITE_TRON_MODEL_DATA_SOURCE: "mock",
         VITE_TRON_SKILL_DATA_SOURCE: "mock",
         VITE_TRON_TASK_DATA_SOURCE: "mock",
@@ -347,9 +370,11 @@ test("AC-RCS-02: mobile right sidebar opens as a drawer and closes by all requir
 
 test("AC-RCS-03: shell right-panel pages retain content and no-panel pages show no stale controls", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
+  await seedWorkspaceSelection(page);
   await routeAuthApi(page);
   await signIn(page, "/chats/8842-alpha");
   await expect(page).toHaveURL(/\/chats\/8842-alpha$/);
+  await page.getByText("Refactor discussion", { exact: true }).first().click();
   await openRightSidebar(page);
   await expect(rightSidebar(page).getByText("Run Context")).toBeVisible();
 
@@ -445,6 +470,7 @@ test("AC-RCS-04: graph and memory inspectors render in shell right sidebar and p
 
 test("AC-RCS-05: management inspectors render in shell right sidebar and preserve page actions", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
+  await seedWorkspaceSelection(page);
   await routeAuthApi(page);
 
   await signIn(page, "/tasks/detail?taskCode=TSK-SEED-FEATURE");

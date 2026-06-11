@@ -48,8 +48,18 @@ export function reasoningFirstClause(value: string) {
   return stripped || normalized;
 }
 
-export function deriveReasoningPreview(detail: string, _toolCards: ReasoningPreviewToolCard[]) {
+function reasoningToolSummary(toolCards: ReasoningPreviewToolCard[]) {
+  if (toolCards.length === 0) return "";
+  return `Used ${toolCards.length} ${toolCards.length === 1 ? "tool" : "tools"}.`;
+}
+
+export function deriveReasoningPreview(detail: string, toolCards: ReasoningPreviewToolCard[]) {
   const sentence = reasoningLastSentence(detail);
   const previewSource = sentence || detail;
-  return reasoningPreviewLabel(previewSource, 120);
+  const toolSummary = reasoningToolSummary(toolCards);
+  if (!toolSummary) return reasoningPreviewLabel(previewSource, 120);
+  const separator = previewSource ? " " : "";
+  const detailBudget = Math.max(0, 120 - toolSummary.length - separator.length);
+  const detailPreview = detailBudget > 0 ? reasoningPreviewLabel(previewSource, detailBudget) : "";
+  return `${detailPreview}${separator}${toolSummary}`.trim();
 }

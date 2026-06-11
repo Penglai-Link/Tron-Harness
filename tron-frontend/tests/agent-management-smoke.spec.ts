@@ -216,14 +216,16 @@ test("agent management works fully in mock mode without backend requests", async
 
   const mainAgentSection = page.locator("section").filter({ has: page.getByRole("heading", { name: "Internal Agents", exact: true }) });
   const mainAgentHeader = mainAgentSection.getByRole("heading", { name: "Main Agent", exact: true }).first();
-  const internalAgentComboboxes = mainAgentSection.getByRole("combobox");
-  const toolAssignmentSelect = internalAgentComboboxes.nth(0);
-  const toolExposureSelect = internalAgentComboboxes.nth(1);
-  const expandedPersistenceSelect = internalAgentComboboxes.nth(2);
+  const mcpAccessSelect = mainAgentSection.getByRole("combobox", { name: /^mcp access mode/i });
+  const toolAssignmentSelect = mainAgentSection.getByRole("combobox", { name: /^tool assignment mode/i });
+  const toolExposureSelect = mainAgentSection.getByRole("combobox", { name: /^tool exposure mode/i });
+  const expandedPersistenceSelect = mainAgentSection.getByRole("combobox", { name: /^expanded domain persistence mode/i });
   await expect(mainAgentHeader).toBeVisible();
+  await expect(mcpAccessSelect).toBeVisible();
   await expect(toolAssignmentSelect).toBeVisible();
   await expect(toolExposureSelect).toBeVisible();
   await expect(expandedPersistenceSelect).toBeVisible();
+  await expect(mcpAccessSelect).toHaveValue("all_enabled_servers");
   await expect(mainAgentSection.getByRole("button", { name: "Explain tool assignment mode" })).toBeVisible();
   await expect(mainAgentSection.getByRole("button", { name: "Explain tool exposure mode" })).toBeVisible();
   await expect(mainAgentSection.getByRole("button", { name: "Explain expanded domain persistence mode" })).toBeVisible();

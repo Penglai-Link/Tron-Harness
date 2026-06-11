@@ -36,8 +36,10 @@ import {
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  type Ref,
   Fragment,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -496,8 +498,10 @@ function WaitingRail() {
 }
 
 export interface TronChatPanelProps {
+  autoFocusComposer?: boolean;
   createSessionLabel?: string;
   currentUserDisplayName?: string;
+  composerRef?: Ref<HTMLTextAreaElement>;
   debugOptions?: ChatDebugOptions;
   disabledInput?: boolean;
   draft: string;
@@ -528,8 +532,10 @@ export interface TronChatPanelProps {
 }
 
 export function TronChatPanel({
+  autoFocusComposer = false,
   createSessionLabel = "Create session",
   currentUserDisplayName,
+  composerRef,
   debugOptions,
   disabledInput = false,
   draft,
@@ -559,7 +565,7 @@ export function TronChatPanel({
   title,
 }: TronChatPanelProps) {
   const transcriptRef = useRef<HTMLElement | null>(null);
-  const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerElementRef = useRef<HTMLTextAreaElement | null>(null);
   const [showJumpButton, setShowJumpButton] = useState(false);
   const autoStickToBottomRef = useRef(true);
   const presentation = useMemo(() => (
@@ -599,6 +605,21 @@ export function TronChatPanel({
     autoStickToBottomRef.current = true;
     setShowJumpButton(false);
   }, [session?.sessionCode]);
+
+  useLayoutEffect(() => {
+    if (!autoFocusComposer || !session?.sessionCode) return;
+    composerElementRef.current?.focus();
+  }, [autoFocusComposer, session?.sessionCode]);
+
+  function setComposerNode(node: HTMLTextAreaElement | null) {
+    composerElementRef.current = node;
+    if (!composerRef) return;
+    if (typeof composerRef === "function") {
+      composerRef(node);
+      return;
+    }
+    composerRef.current = node;
+  }
 
   return (
     <div className="tron-chat">
@@ -652,7 +673,9 @@ export function TronChatPanel({
             ) : null}
             <div className="tron-chat__composer">
               <textarea
-                ref={composerRef}
+                autoFocus={autoFocusComposer}
+                key={session?.sessionCode ?? "composer"}
+                ref={setComposerNode}
                 className="tron-chat__textarea"
                 disabled={disabledInput}
                 placeholder={inputPlaceholder}

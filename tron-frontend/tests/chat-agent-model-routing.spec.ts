@@ -92,6 +92,15 @@ async function stopFrontend() {
   }
 }
 
+async function expectMainComposerFocused(page: Page) {
+  await expect.poll(() => page.evaluate(() => {
+    const active = document.activeElement;
+    return active instanceof HTMLTextAreaElement
+      && active.placeholder === "Enter to send, Shift+Enter for newline"
+      && active.closest("main") !== null;
+  })).toBe(true);
+}
+
 function successEnvelope(data: unknown) {
   return {
     code: "SUCCESS",
@@ -290,7 +299,7 @@ test("chat agent and model selectors are linked and agent locks after first turn
   await expect(systemModelList.getByText("GPT-4o Main")).toHaveCount(0);
   await systemModelList.getByRole("option", { name: /GPT-5 Codex/ }).first().click();
 
-  const composer = page.getByPlaceholder("Enter to send, Shift+Enter for newline");
+  const composer = page.locator("main").getByPlaceholder("Enter to send, Shift+Enter for newline");
   await composer.fill("lock agent after first turn");
   await composer.press("Enter");
 
@@ -384,14 +393,13 @@ test("composer autofocuses when opening or creating a session on desktop", async
   await page.goto(`${frontendBaseUrl}/chats`);
   await expect(page).toHaveURL(/\/chats$/);
 
-  const composer = page.getByPlaceholder("Enter to send, Shift+Enter for newline");
-  await expect(composer).toBeFocused();
+  await expectMainComposerFocused(page);
 
   await page.getByText("Refactor discussion", { exact: true }).first().click();
-  await expect(composer).toBeFocused();
+  await expectMainComposerFocused(page);
 
   await page.locator("[aria-label='New session']").first().click();
-  await expect(composer).toBeFocused();
+  await expectMainComposerFocused(page);
 });
 
 test("system agent sessions show history snapshot in context sidebar", async ({ page }) => {

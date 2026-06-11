@@ -50,7 +50,7 @@ fe-check:
 
 .PHONY: fe-test
 fe-test:
-	$(FRONTEND_NPM) exec playwright test $(TEST)
+	$(FRONTEND_NPM) exec playwright test -- $(TEST)
 
 .PHONY: fe-unit-test
 fe-unit-test:

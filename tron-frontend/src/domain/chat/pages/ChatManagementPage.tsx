@@ -122,8 +122,12 @@ function writeChatSessionModelSelections(selections: Record<string, string>) {
 }
 
 function shouldAutoFocusChatComposer() {
-  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
-  return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+  if (typeof window === "undefined") return false;
+  if (typeof window.matchMedia !== "function") {
+    return window.innerWidth >= 1024;
+  }
+  return window.matchMedia("(min-width: 1024px)").matches
+    || window.matchMedia("(hover: hover) and (pointer: fine)").matches;
 }
 
 function sessionAgentTagLabel(agentCode: string | null | undefined) {
@@ -3082,10 +3086,11 @@ export function ChatManagementPage() {
       return;
     }
 
+    const nextSessionAgentCode = mainChatAgentOption.agentCode;
     setCreatingSession(true);
     try {
       const session = await createChatSession({
-        agentCode: effectiveAgentCode,
+        agentCode: nextSessionAgentCode,
         title: "New chat",
         workspaceCode: activeWorkspaceCode,
       });
@@ -3289,6 +3294,8 @@ export function ChatManagementPage() {
         </header>
 
         <TronChatPanel
+          autoFocusComposer={shouldAutoFocusChatComposer()}
+          composerRef={composerRef}
           createSessionLabel="Create session"
           currentUserDisplayName={currentUserDisplayName}
           debugOptions={transcriptDebugOptions}
