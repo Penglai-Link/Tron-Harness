@@ -45,7 +45,10 @@ export function SettingsGeneralPage() {
 
       <div className="grid gap-4 xl:grid-cols-2">
         <SurfaceCard className="space-y-3">
-          <Field label={t("shell:theme.label")}>
+          <label className="grid gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
+              {t("shell:theme.label")}
+            </span>
             <SelectInput
               value={theme}
               onChange={(event) => setTheme(event.target.value === "matrix-dark" ? "matrix-dark" : "light")}
@@ -56,12 +59,15 @@ export function SettingsGeneralPage() {
                 </option>
               ))}
             </SelectInput>
-          </Field>
+          </label>
           <p className="text-sm text-[var(--color-on-surface-variant)]">{t("shell:theme.hint")}</p>
         </SurfaceCard>
 
         <SurfaceCard className="space-y-3">
-          <Field label={t("common:locale.label")}>
+          <label className="grid gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
+              {t("common:locale.label")}
+            </span>
             <SelectInput
               value={currentLocale}
               onChange={(event) => void changeLocale(event.target.value as typeof currentLocale)}
@@ -72,7 +78,7 @@ export function SettingsGeneralPage() {
                 </option>
               ))}
             </SelectInput>
-          </Field>
+          </label>
           <p className="text-sm text-[var(--color-on-surface-variant)]">{t("common:locale.unavailable")}</p>
         </SurfaceCard>
 

@@ -781,15 +781,16 @@ export function TronShell({
             )}
           </div>
         ) : null}
-        {agentOpen ? (
-          <MainAgentChatWindow
-            currentUserDisplayName={authSession?.user.displayName ?? ""}
-            workspaceCode={activeWorkspaceCode}
-            windowState={{ ...mainAgentWindowState, open: true }}
-            onWindowStateChange={handleMainAgentWindowStateChange}
-          />
-        ) : null}
       </header>
+
+      {agentOpen ? (
+        <MainAgentChatWindow
+          currentUserDisplayName={authSession?.user.displayName ?? ""}
+          workspaceCode={activeWorkspaceCode}
+          windowState={{ ...mainAgentWindowState, open: true }}
+          onWindowStateChange={handleMainAgentWindowStateChange}
+        />
+      ) : null}
 
       {mobileSidebarOpen ? (
         <>

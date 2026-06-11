@@ -1,11 +1,12 @@
 import type {
   ForwardedRef,
   InputHTMLAttributes,
+  ReactElement,
   ReactNode,
   SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
-import { forwardRef } from "react";
+import { cloneElement, forwardRef, isValidElement, useId } from "react";
 
 import { cn } from "@/shared/lib/utils";
 import { InfoTooltip } from "@/shared/ui/InfoTooltip";
@@ -17,24 +18,54 @@ interface FieldProps {
   label: ReactNode;
 }
 
+interface FieldChildProps {
+  "aria-describedby"?: string;
+  id?: string;
+}
+
 const disabledControlClasses =
   "disabled:cursor-not-allowed disabled:border-[var(--color-outline-variant)] disabled:bg-[var(--color-surface-container)] disabled:text-[var(--color-on-surface-variant)] disabled:opacity-100 disabled:placeholder:text-[var(--color-outline)] disabled:focus:border-[var(--color-outline-variant)] disabled:focus:ring-0";
 
+function mergeAriaReferences(...references: Array<string | undefined>) {
+  const normalized = references.map((value) => value?.trim()).filter(Boolean);
+  return normalized.length > 0 ? normalized.join(" ") : undefined;
+}
+
 export function Field({ children, error, hint, label }: FieldProps) {
+  const fieldId = useId().replace(/:/g, "");
   const tooltipLabel = typeof label === "string" ? label : "Field";
+  const hintId = hint ? `field-hint-${fieldId}` : undefined;
+  const errorId = error ? `field-error-${fieldId}` : undefined;
+  let controlId: string | undefined;
+  let content = children;
+
+  if (isValidElement<FieldChildProps>(children)) {
+    const child = children as ReactElement<FieldChildProps>;
+    controlId = child.props.id ?? `field-control-${fieldId}`;
+    content = cloneElement(child, {
+      id: controlId,
+      "aria-describedby": mergeAriaReferences(child.props["aria-describedby"], errorId),
+    });
+  }
 
   return (
     <div className="grid gap-1.5">
       <div className="flex items-center gap-1.5">
-        <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{label}</span>
+        {controlId ? (
+          <label className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]" htmlFor={controlId}>
+            {label}
+          </label>
+        ) : (
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{label}</span>
+        )}
         {hint ? (
-          <InfoTooltip ariaLabel={`${tooltipLabel} help`}>
-            <p>{hint}</p>
+          <InfoTooltip ariaLabel="Open field help">
+            <p id={hintId}>{hint}</p>
           </InfoTooltip>
         ) : null}
       </div>
-      {children}
-      {error ? <span className="text-[12px] text-[var(--color-error)]">{error}</span> : null}
+      {content}
+      {error ? <span className="text-[12px] text-[var(--color-error)]" id={errorId}>{error}</span> : null}
     </div>
   );
 }

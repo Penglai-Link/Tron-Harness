@@ -159,6 +159,7 @@ test.beforeAll(async () => {
       cwd: frontendRoot,
       env: {
         ...process.env,
+        VITE_TRON_ADMIN_DATA_SOURCE: "mock",
         VITE_TRON_AGENT_DATA_SOURCE: "mock",
         VITE_TRON_AUTH_DATA_SOURCE: "mock",
         VITE_TRON_DATA_SOURCE: "mock",
@@ -209,9 +210,11 @@ test("mcp settings, workspace policy, and agent assignment work in mock mode", a
   await page.getByRole("button", { name: "Verify" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Release Tools verified" })).toBeVisible();
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Release Tools created" })).toBeVisible();
+  const releaseToolsCreatedToast = page.getByRole("status").filter({ hasText: "Release Tools created" });
+  await expect(releaseToolsCreatedToast).toBeVisible();
   await expect(page).toHaveURL(/\/settings\/mcp-servers\/detail\?serverCode=release_tools/);
   await expect(page.getByRole("heading", { name: "Release Tools" })).toBeVisible();
+  await expect(releaseToolsCreatedToast).toBeHidden();
   await page.getByRole("button", { name: "Edit" }).click();
   await expect(page).toHaveURL(/\/settings\/mcp-servers\/edit\?serverCode=release_tools/);
   await expect(page.getByRole("heading", { name: "Edit Release Tools" })).toBeVisible();

@@ -20,7 +20,7 @@ export function InfoTooltip({
         className="inline-flex size-4 items-center justify-center rounded-full border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] text-[10px] font-bold leading-none text-[var(--color-on-surface-variant)] transition-colors hover:border-[var(--color-outline)] hover:text-[var(--color-on-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-2"
         type="button"
       >
-        ?
+        <span aria-hidden="true">?</span>
       </button>
       <span
         className={cn(
