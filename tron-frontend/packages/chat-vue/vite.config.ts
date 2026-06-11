@@ -1,5 +1,5 @@
 import tailwindcss from "@tailwindcss/vite";
-import react from "@vitejs/plugin-react";
+import vue from "@vitejs/plugin-vue";
 import { fileURLToPath, URL } from "node:url";
 import { defineConfig, loadEnv } from "vite";
 
@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => {
     runtimeEnv.TRON_FRONTEND_API_PROXY_TARGET ?? DEFAULT_BACKEND_PROXY_TARGET;
 
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [vue(), tailwindcss()],
     server: {
       host: "0.0.0.0",
       proxy: apiBaseUrl

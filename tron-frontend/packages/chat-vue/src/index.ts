@@ -1,13 +1,13 @@
 import "./styles.css";
 
-export { TronChatPanel } from "./TronChatPanel";
-export type { TronChatPanelProps } from "./TronChatPanel";
-export { TronChatRuntimeWindow } from "./TronChatRuntimeWindow";
+import TronChatRuntimeWindow from "./components/TronChatRuntimeWindow.vue";
+import TronChatWindow from "./components/TronChatWindow.vue";
+
 export type {
-  ToastLikeCallback,
+  TronChatPanelProps,
   TronChatRuntimeWindowProps,
-} from "./TronChatRuntimeWindow";
-export { TronChatWindow } from "./TronChatWindow";
-export type { TronChatWindowProps } from "./TronChatWindow";
-export { TronChatRuntimeWindow as TronChatVue } from "./TronChatRuntimeWindow";
-export { TronChatRuntimeWindow as default } from "./TronChatRuntimeWindow";
+  ToastLikeCallback,
+  TronChatWindowProps,
+} from "./types";
+
+export { TronChatRuntimeWindow, TronChatWindow };

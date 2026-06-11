@@ -12,5 +12,8 @@
     "@tron/chat-core": "file:../chat-core",
     "lucide-vue-next": "^1.0.0",
     "vue": "^3.5.18"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.7"
   }
 }
