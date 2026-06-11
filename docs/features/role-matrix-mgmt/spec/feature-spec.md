@@ -26,6 +26,13 @@ This feature implements `/admin/roles` as a real operator workspace instead of a
 - intent: Replace placeholder buttons and local-only notices with meaningful page interactions for searching, filtering, inline renaming of custom roles, toggling permissions, creating, cloning, saving, discarding, and deleting role drafts inside one main workspace, then persist the saved catalog through backend APIs.
 - outcome: Operators can manage a permission matrix workflow on the page, keep saved role catalogs across reloads through backend persistence, and review role-management data without redundant sub-page tags, summary cards, a dedicated right-side inspector, or an inline metadata editor.
 
+## Product Source Slices
+
+- PRD feature inventory slice: Administration and Workspace Governance.
+- Product page slices: `/admin/roles`, `/admin/users`.
+- Product rule slices: fixed role-code compatibility with `user-management-model`, full-catalog replacement save, and route-local admin shell continuity.
+- Product exception slices: deny silent removal of system roles and keep non-persisted draft actions visible through concrete page feedback.
+
 ## Scope Boundary
 
 ### Assumptions

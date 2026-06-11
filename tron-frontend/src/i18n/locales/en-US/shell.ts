@@ -61,6 +61,7 @@ export const shell = {
       general: "General",
       mcpServers: "MCP Servers",
       models: "Models",
+      openapi: "OpenAPI",
       tools: "Tools",
       skillCenter: "Skill Center",
       variables: "Variables",

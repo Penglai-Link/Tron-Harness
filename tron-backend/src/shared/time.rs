@@ -4,6 +4,10 @@ pub fn current_timestamp() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true)
 }
 
+pub fn current_timestamp_seconds() -> i64 {
+    Utc::now().timestamp()
+}
+
 pub fn timestamp_to_millis(value: &str) -> i64 {
     chrono::DateTime::parse_from_rfc3339(value)
         .map(|timestamp| timestamp.timestamp_millis())

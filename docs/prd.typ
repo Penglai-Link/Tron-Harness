@@ -115,7 +115,7 @@
 === Page: /settings/openapi - OpenAPI Management
 - entry: settings shell navigation for platform configuration
 - layout: settings shell with an OpenAPI navigation item, open-app catalog table, and detail workspace for overview, user grants, and API grants
-- data display: open-app name, appId, status, key fingerprint or last4, granted-user count, granted-capability count, and last-rotated timestamp
+- data display: open-app name, openAppCode, status, key fingerprint or last4, granted-user count, granted-capability count, and last-rotated timestamp
 - actions: create open-app, edit metadata, enable or disable, rotate key, add or remove user grants, and update capability-operation grants
 - states: empty catalog, loading, populated list, one-time key reveal, grant editing, disabled open-app, and API failure feedback
 
@@ -123,7 +123,7 @@
 - trigger control: primary create button in the OpenAPI catalog
 - preconditions: current operator is a platform admin
 - button or control behavior: opens a create form, validates unique naming and description inputs, submits to the platform open-app create API, and navigates to the saved detail view
-- form rules: appId is backend-generated; name is required; description is optional; new open-app starts active with no user grants and no API grants
+- form rules: openAppCode is backend-generated; name is required; description is optional; new open-app starts active with no user grants and no API grants
 - confirmation behavior: after successful create, show a blocking one-time secret reveal modal
 - success feedback: created open-app appears in the catalog and detail view, with the generated appKey shown once
 - failure feedback: inline validation and toast feedback use the backend error envelope
@@ -160,7 +160,7 @@
 - trigger control: external caller signs and sends an HTTP request
 - preconditions: open-app is active, request carries required headers, acting user grant exists, capability grant exists, and route maps to a supported operation
 - button or control behavior: middleware canonicalizes the request, verifies HMAC, enforces time and nonce rules, resolves acting user, and either rejects early or forwards to the target handler
-- form rules: request must include `X-Tron-App-Id`, `X-Tron-User-Code`, `X-Tron-Timestamp`, `X-Tron-Nonce`, `X-Tron-Signature`, and `X-Tron-Signature-Version`
+- form rules: request must include `X-Tron-App-Code`, `X-Tron-User-Code`, `X-Tron-Timestamp`, `X-Tron-Nonce`, `X-Tron-Signature`, and `X-Tron-Signature-Version`
 - confirmation behavior: none
 - success feedback: route returns its normal open-api success envelope or stream result
 - failure feedback: route returns a uniform auth or authorization error envelope without exposing secret material
@@ -185,7 +185,7 @@
 
 === Rule: Platform Integrations And External Access - Signed Request Verification
 - condition: any request enters `/open-api/v1/*`
-- decision or calculation: compute the canonical request string from method, normalized path, normalized query, body hash, appId, userCode, timestamp, and nonce, then verify `TRON-HMAC-SHA256-V1` with constant-time comparison
+- decision or calculation: compute the canonical request string from method, normalized path, normalized query, body hash, openAppCode, userCode, timestamp, and nonce, then verify `TRON-HMAC-SHA256-V1` with constant-time comparison
 - state transition: valid request proceeds to authorization checks; invalid request stops before handler execution
 - permission or data boundary: bearer-token fallback is not allowed for formal external open-api traffic
 - conflict or priority rule: stale timestamp, replayed nonce, or invalid signature each reject the request even if the acting user would otherwise be valid

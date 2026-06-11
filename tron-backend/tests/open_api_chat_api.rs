@@ -13,10 +13,15 @@ use axum::{
     routing::post,
 };
 use serde_json::{Value, json};
-use tower::ServiceExt;
 use tokio::{net::TcpListener, task::JoinHandle};
+use tower::ServiceExt;
+use tron_backend::shared::time::current_timestamp_seconds;
 
-use common::{app, authenticated_bearer_token, request_with_headers, response_json};
+use common::{
+    OPEN_API_TEST_APP_CODE, OPEN_API_TEST_APP_KEY, app, authenticated_bearer_token,
+    authenticated_request, request_with_headers, response_json, signed_open_api_request,
+    signed_open_api_request_as, signed_open_api_request_custom,
+};
 
 struct AgentModelMockServer {
     base_url: String,
@@ -96,7 +101,7 @@ async fn agent_chat_completion(Json(payload): Json<Value>) -> Response {
 #[tokio::test]
 async fn open_api_chat_session_groups_and_messages_use_public_contract() {
     let app = app();
-    let created = open_api_request(
+    let created = signed_open_api_request(
         &app,
         Method::POST,
         "/open-api/v1/chats/sessions",
@@ -117,7 +122,7 @@ async fn open_api_chat_session_groups_and_messages_use_public_contract() {
     assert_eq!(created_body["data"]["workspaceCode"], json!("TRON_CORE"));
     assert_eq!(created_body["data"]["status"], json!("ACTIVE"));
 
-    let groups = open_api_request(
+    let groups = signed_open_api_request(
         &app,
         Method::GET,
         "/open-api/v1/chats/session-groups?workspaceCode=TRON_CORE",
@@ -141,7 +146,7 @@ async fn open_api_chat_session_groups_and_messages_use_public_contract() {
             })
     );
 
-    let messages = open_api_request(
+    let messages = signed_open_api_request(
         &app,
         Method::GET,
         &format!("/open-api/v1/chats/sessions/{session_code}/messages"),
@@ -166,7 +171,7 @@ async fn open_api_chat_routes_support_browser_cors_preflight() {
                 .header("Access-Control-Request-Method", "POST")
                 .header(
                     "Access-Control-Request-Headers",
-                    "content-type,x-tron-app-id,x-tron-app-key,x-tron-user-id",
+                    "content-type,x-tron-app-code,x-tron-user-code,x-tron-timestamp,x-tron-nonce,x-tron-signature-version,x-tron-signature",
                 )
                 .body(Body::empty())
                 .expect("request should be constructible"),
@@ -191,6 +196,168 @@ async fn open_api_chat_routes_support_browser_cors_preflight() {
 }
 
 #[tokio::test]
+async fn open_api_chat_routes_reject_bearer_token_fallback() {
+    let app = app();
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let response = request_with_headers(
+        &app,
+        Method::GET,
+        "/open-api/v1/chats/session-groups?workspaceCode=TRON_CORE",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let payload = response_json(response).await;
+    assert_eq!(payload["code"], json!("OPEN_API_UNAUTHORIZED"));
+}
+
+#[tokio::test]
+async fn open_api_chat_routes_reject_invalid_signatures() {
+    let app = app();
+    let response = signed_open_api_request_as(
+        &app,
+        Method::GET,
+        "/open-api/v1/chats/session-groups?workspaceCode=TRON_CORE",
+        None,
+        OPEN_API_TEST_APP_CODE,
+        "wrong-open-api-key",
+        "USR-0001",
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let payload = response_json(response).await;
+    assert_eq!(payload["code"], json!("OPEN_API_UNAUTHORIZED"));
+}
+
+#[tokio::test]
+async fn open_api_chat_routes_require_explicit_user_grants() {
+    let app = app();
+    let response = signed_open_api_request_as(
+        &app,
+        Method::GET,
+        "/open-api/v1/chats/session-groups?workspaceCode=TRON_CORE",
+        None,
+        OPEN_API_TEST_APP_CODE,
+        OPEN_API_TEST_APP_KEY,
+        "USR-0007",
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    let payload = response_json(response).await;
+    assert_eq!(payload["code"], json!("OPEN_API_USER_FORBIDDEN"));
+}
+
+#[tokio::test]
+async fn open_api_chat_routes_reject_disabled_and_archived_open_apps() {
+    let app = app();
+
+    for status in ["Disabled", "Archived"] {
+        let update_response = authenticated_request(
+            &app,
+            Method::PATCH,
+            &format!("/api/v1/admin/platform/open-apps/{OPEN_API_TEST_APP_CODE}"),
+            Some(json!({
+                "name": "EliteForge KB",
+                "description": "OpenAPI integration fixture",
+                "status": status,
+            })),
+        )
+        .await;
+        assert_eq!(update_response.status(), StatusCode::OK);
+
+        let response = signed_open_api_request(
+            &app,
+            Method::GET,
+            "/open-api/v1/chats/session-groups?workspaceCode=TRON_CORE",
+            None,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        let payload = response_json(response).await;
+        assert_eq!(payload["code"], json!("OPEN_API_APP_DISABLED"));
+
+        let restore_response = authenticated_request(
+            &app,
+            Method::PATCH,
+            &format!("/api/v1/admin/platform/open-apps/{OPEN_API_TEST_APP_CODE}"),
+            Some(json!({
+                "name": "EliteForge KB",
+                "description": "OpenAPI integration fixture",
+                "status": "Enabled",
+            })),
+        )
+        .await;
+        assert_eq!(restore_response.status(), StatusCode::OK);
+    }
+}
+
+#[tokio::test]
+async fn open_api_chat_routes_reject_stale_timestamps() {
+    let app = app();
+    let response = signed_open_api_request_custom(
+        &app,
+        Method::GET,
+        "/open-api/v1/chats/session-groups?workspaceCode=TRON_CORE",
+        None,
+        OPEN_API_TEST_APP_CODE,
+        OPEN_API_TEST_APP_KEY,
+        "USR-0001",
+        current_timestamp_seconds() - 1_000,
+        "nonce-stale-0001",
+        "TRON-HMAC-SHA256-V1",
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    let payload = response_json(response).await;
+    assert_eq!(payload["code"], json!("OPEN_API_TIMESTAMP_INVALID"));
+}
+
+#[tokio::test]
+async fn open_api_chat_routes_reject_replayed_nonces() {
+    let app = app();
+    let timestamp = current_timestamp_seconds();
+    let first = signed_open_api_request_custom(
+        &app,
+        Method::GET,
+        "/open-api/v1/chats/session-groups?workspaceCode=TRON_CORE",
+        None,
+        OPEN_API_TEST_APP_CODE,
+        OPEN_API_TEST_APP_KEY,
+        "USR-0001",
+        timestamp,
+        "nonce-replay-0001",
+        "TRON-HMAC-SHA256-V1",
+    )
+    .await;
+    assert_eq!(first.status(), StatusCode::OK);
+
+    let second = signed_open_api_request_custom(
+        &app,
+        Method::GET,
+        "/open-api/v1/chats/session-groups?workspaceCode=TRON_CORE",
+        None,
+        OPEN_API_TEST_APP_CODE,
+        OPEN_API_TEST_APP_KEY,
+        "USR-0001",
+        timestamp,
+        "nonce-replay-0001",
+        "TRON-HMAC-SHA256-V1",
+    )
+    .await;
+
+    assert_eq!(second.status(), StatusCode::UNAUTHORIZED);
+    let payload = response_json(second).await;
+    assert_eq!(payload["code"], json!("OPEN_API_NONCE_REPLAYED"));
+}
+
+#[tokio::test]
 async fn open_api_chat_stream_and_agui_replay_follow_public_contract() {
     let app = app();
     let server = agent_model_mock_server().await;
@@ -198,7 +365,7 @@ async fn open_api_chat_stream_and_agui_replay_follow_public_contract() {
     let authorization = format!("Bearer {token}");
     let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
 
-    let created = open_api_request(
+    let created = signed_open_api_request(
         &app,
         Method::POST,
         "/open-api/v1/chats/sessions",
@@ -215,7 +382,7 @@ async fn open_api_chat_stream_and_agui_replay_follow_public_contract() {
         .expect("session code should be returned")
         .to_string();
 
-    let stream = open_api_request(
+    let stream = signed_open_api_request(
         &app,
         Method::POST,
         &format!("/open-api/v1/chats/sessions/{session_code}/messages/stream"),
@@ -236,7 +403,7 @@ async fn open_api_chat_stream_and_agui_replay_follow_public_contract() {
     assert!(body.contains("\"type\":\"RUN_FINISHED\""));
     assert!(body.contains("\"reply: stream via open api\""));
 
-    let messages = open_api_request(
+    let messages = signed_open_api_request(
         &app,
         Method::GET,
         &format!("/open-api/v1/chats/sessions/{session_code}/messages"),
@@ -253,7 +420,7 @@ async fn open_api_chat_stream_and_agui_replay_follow_public_contract() {
         json!("chat reply: stream via open api")
     );
 
-    let replay = open_api_request(
+    let replay = signed_open_api_request(
         &app,
         Method::GET,
         &format!("/open-api/v1/agents/agui/streams/{session_code}/protocol-events"),
@@ -300,33 +467,4 @@ async fn create_platform_text_model(app: &Router, authorization: &str, base_url:
         .as_str()
         .expect("created model should return modelCode")
         .to_string()
-}
-
-async fn open_api_request(
-    app: &Router,
-    method: Method,
-    uri: &str,
-    body: Option<Value>,
-) -> axum::response::Response {
-    let mut builder = Request::builder()
-        .method(method)
-        .uri(uri)
-        .header("X-Tron-App-Id", "eliteforge-kb")
-        .header("X-Tron-App-Key", "dev-open-api-key")
-        .header("X-Tron-User-Id", "alex.johnson");
-    let request_body = if let Some(json_body) = body {
-        builder = builder.header("Content-Type", "application/json");
-        Body::from(json_body.to_string())
-    } else {
-        Body::empty()
-    };
-
-    app.clone()
-        .oneshot(
-            builder
-                .body(request_body)
-                .expect("request should be constructible"),
-        )
-        .await
-        .expect("router should return a response")
 }

@@ -26,10 +26,7 @@ use crate::{
         agent::{AgentAguiStreamService, AgentInvocationService, generate_agent_run_code},
         chat::ChatSessionQuery,
     },
-    domain::{
-        agent::ModelStreamEvent,
-        chat::ChatError,
-    },
+    domain::{agent::ModelStreamEvent, chat::ChatError},
     response::ApiResponse,
     shared::auth_holder::AuthHolder,
 };
@@ -41,8 +38,8 @@ use super::{
     },
     response::{
         OpenApiAguiEventSnapshotResponse, OpenApiAguiProtocolEventResponse,
-        OpenApiChatMessageResponse, OpenApiChatSendResultResponse,
-        OpenApiChatSessionGroupResponse, OpenApiChatSessionResponse,
+        OpenApiChatMessageResponse, OpenApiChatSendResultResponse, OpenApiChatSessionGroupResponse,
+        OpenApiChatSessionResponse,
     },
 };
 
@@ -97,7 +94,9 @@ pub async fn create_session(
     ) {
         Ok(session) => (
             StatusCode::CREATED,
-            Json(ApiResponse::success(OpenApiChatSessionResponse::from(session))),
+            Json(ApiResponse::success(OpenApiChatSessionResponse::from(
+                session,
+            ))),
         )
             .into_response(),
         Err(error) => chat_error_response(error),
@@ -114,7 +113,10 @@ pub async fn list_messages(
     }
     match state.chats.list_messages(&session_code) {
         Ok(messages) => Json(ApiResponse::success(
-            messages.into_iter().map(OpenApiChatMessageResponse::from).collect::<Vec<_>>(),
+            messages
+                .into_iter()
+                .map(OpenApiChatMessageResponse::from)
+                .collect::<Vec<_>>(),
         ))
         .into_response(),
         Err(error) => chat_error_response(error),
@@ -129,9 +131,14 @@ pub async fn patch_session(
 ) -> Response {
     match state.chats.update_session(
         &session_code,
-        crate::application::chat::UpdateChatSessionCommand { title: request.title },
+        crate::application::chat::UpdateChatSessionCommand {
+            title: request.title,
+        },
     ) {
-        Ok(session) => Json(ApiResponse::success(OpenApiChatSessionResponse::from(session))).into_response(),
+        Ok(session) => Json(ApiResponse::success(OpenApiChatSessionResponse::from(
+            session,
+        )))
+        .into_response(),
         Err(error) => chat_error_response(error),
     }
 }
@@ -179,7 +186,10 @@ pub async fn send_message(
         )
         .await
     {
-        Ok(result) => Json(ApiResponse::success(OpenApiChatSendResultResponse::from(result))).into_response(),
+        Ok(result) => Json(ApiResponse::success(OpenApiChatSendResultResponse::from(
+            result,
+        )))
+        .into_response(),
         Err(error) => chat_send_error_response(error),
     }
 }
@@ -216,12 +226,13 @@ pub async fn stream_message(
         tokio::sync::mpsc::channel::<ChatSsePayload>(1);
     let (model_event_sender, mut model_event_receiver) =
         tokio::sync::mpsc::unbounded_channel::<ModelStreamEvent>();
-    let live_replay_recorder = crate::adapters::inbound::http::chats::stream_live::SystemAgentLiveReplayRecorder::new(
-        agui_stream.clone(),
-        &session_code,
-        &run_code,
-        system_agent_live_stream,
-    );
+    let live_replay_recorder =
+        crate::adapters::inbound::http::chats::stream_live::SystemAgentLiveReplayRecorder::new(
+            agui_stream.clone(),
+            &session_code,
+            &run_code,
+            system_agent_live_stream,
+        );
     let chats = state.chats.clone();
     let session_code_for_task = session_code.clone();
     let run_code_for_task = run_code.clone();
@@ -383,7 +394,10 @@ pub async fn list_agui_stream_events(
         state.agui_replay_store.clone(),
     );
     match service.events(&stream_key) {
-        Ok(result) => Json(ApiResponse::success(OpenApiAguiEventSnapshotResponse::from(result))).into_response(),
+        Ok(result) => Json(ApiResponse::success(
+            OpenApiAguiEventSnapshotResponse::from(result),
+        ))
+        .into_response(),
         Err(error) => agent_agui_error_response(error),
     }
 }
@@ -409,7 +423,9 @@ pub async fn list_agui_stream_protocol_events(
     }
 }
 
-fn map_send_request(request: OpenApiSendChatMessageRequest) -> crate::application::chat::SendChatMessageCommand {
+fn map_send_request(
+    request: OpenApiSendChatMessageRequest,
+) -> crate::application::chat::SendChatMessageCommand {
     crate::application::chat::SendChatMessageCommand {
         run_code: request.run_code,
         content: request.content,

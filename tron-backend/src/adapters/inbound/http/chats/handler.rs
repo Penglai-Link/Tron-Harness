@@ -465,7 +465,10 @@ pub(crate) fn normalized_optional(value: Option<String>) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-pub(crate) fn effective_agent_code(session: &ChatSession, request: &SendChatMessageCommand) -> String {
+pub(crate) fn effective_agent_code(
+    session: &ChatSession,
+    request: &SendChatMessageCommand,
+) -> String {
     let selected = if session.last_run_code.is_some() {
         session.agent_code.clone()
     } else {
@@ -474,7 +477,11 @@ pub(crate) fn effective_agent_code(session: &ChatSession, request: &SendChatMess
     selected.unwrap_or_else(|| "main-agent".to_string())
 }
 
-pub(crate) fn resolve_chat_agent_runtime(state: &AppState, session: &ChatSession, request: &SendChatMessageCommand) -> Result<ResolvedAgentRuntime, ChatSendError> {
+pub(crate) fn resolve_chat_agent_runtime(
+    state: &AppState,
+    session: &ChatSession,
+    request: &SendChatMessageCommand,
+) -> Result<ResolvedAgentRuntime, ChatSendError> {
     let effective_agent_code = effective_agent_code(session, request);
     state
         .agent_management

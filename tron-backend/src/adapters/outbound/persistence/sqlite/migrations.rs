@@ -96,3 +96,5 @@ pub(super) const MCP_WORKSPACE_POLICIES_MIGRATION: &str = include_str!(
 pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_MCP_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260605_1001_add_internal_agent_mcp_access_to_workspace_internal_agent_policies.sql"
 );
+pub(super) const OPEN_APPS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260611_0001_create_platform_open_apps.sql");

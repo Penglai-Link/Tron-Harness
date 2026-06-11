@@ -28,6 +28,18 @@
 
 No worker worktrees. Solo execution in the main feature worktree only.
 
+## Dispatch Decisions
+
+| ac_refs | decision | execution_owner | rationale | worker_ref | status |
+| --- | --- | --- | --- | --- | --- |
+| AC-RM-01 | solo | lead | user approved the bounded role-matrix slice and the interaction work stays inside one page plus one browser proof path | none | done |
+| AC-RM-02 | solo | lead | user approved the bounded role-matrix slice and draft-state mutations are tightly coupled to the same page workspace | none | done |
+| AC-RM-03 | solo | lead | user approved the bounded role-matrix slice and add or clone flows share the same draft model and browser proof | none | done |
+| AC-RM-04 | solo | lead | user approved the bounded role-matrix slice and reset or delete flows stay in the same page state machine | none | done |
+| AC-RM-05 | solo | lead | user approved the bounded role-matrix slice and save or discard behavior shares the same UI plus API write boundary | none | done |
+| AC-RM-06 | solo | lead | user approved the bounded role-matrix slice and backend catalog APIs plus SQLite persistence are one tightly coupled full-stack boundary | none | done |
+| AC-RM-07 | solo | lead | user approved the bounded role-matrix slice and documentation plus interaction regression closure stayed inside the same feature worktree | none | done |
+
 ## Branch And Path Rules
 
 - Selected git skill: `eliteforge-git-feature-oriented-lite-spec`

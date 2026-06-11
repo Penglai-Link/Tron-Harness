@@ -1,38 +1,14 @@
 use std::sync::{Arc, OnceLock};
 
-use axum::{
-    Router,
-    extract::FromRef,
-    http::{Method, header},
-    middleware,
-    routing::get,
-};
-use tower_http::cors::{Any, CorsLayer};
+mod routing;
+
+use axum::{Router, extract::FromRef, routing::get};
 
 use crate::{
     adapters::{
         inbound::http::{
-            admin::{
-                models::routes::routes as admin_model_routes, roles::routes as role_routes,
-                users::routes as user_routes, variables::routes::routes as admin_variable_routes,
-                workspaces::routes as workspace_routes,
-            },
-            agents::routes::routes as agent_routes,
-            apps::routes::routes as app_routes,
-            auth::{require_auth, routes as auth_routes},
-            automations::routes as automation_routes,
-            chats::routes::routes as chat_routes,
-            mcp::routes::{
-                management_routes as mcp_management_routes,
-                transport_routes as mcp_transport_routes,
-            },
-            models::routes::routes as model_routes,
-            skills::routes::routes as skill_routes,
-            tasks::routes as task_routes,
-            variables::routes::routes as variable_routes,
+            auth::routes as auth_routes, mcp::routes::transport_routes as mcp_transport_routes,
         },
-        inbound::open_api::chats::routes::routes as open_api_chat_routes,
-        inbound::open_api::auth::require_open_api_auth,
         outbound::{
             crypto::BcryptPasswordHasher,
             model::{HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient},
@@ -41,9 +17,9 @@ use crate::{
                 SqliteAgentEventReplayStore, SqliteAgentManagementRepository,
                 SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
                 SqliteChatRepository, SqliteMcpRepository, SqliteModelRepository,
-                SqliteRoleRepository, SqliteSkillRegistryRepository, SqliteTaskRepository,
-                SqliteUserRepository, SqliteVariableRepository, SqliteWorkspaceRepository,
-                bootstrap_platform_admin,
+                SqliteOpenAppRepository, SqliteRoleRepository, SqliteSkillRegistryRepository,
+                SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
+                SqliteWorkspaceRepository, bootstrap_platform_admin,
             },
         },
     },
@@ -58,6 +34,7 @@ use crate::{
     application::llm::LlmRuntimeService,
     application::mcp::McpService,
     application::model::ModelService,
+    application::open_app::OpenAppService,
     application::role::RoleService,
     application::skill::SkillRegistryService,
     application::task::TaskService,
@@ -68,11 +45,14 @@ use crate::{
     domain::agent::ToolRegistry,
     health::health,
     shared::{
+        crypto::Aes256SecretBox,
         event_bus::{AguiEventSink, EventBusHandle, EventBusRuntimeBuilder},
         http_client::HttpClientPool,
         id::SnowflakedSnowflakeIdProvider,
     },
 };
+
+use self::routing::{build_open_api_routes, build_protected_routes};
 
 static GLOBAL_USER_SERVICE: OnceLock<UserService> = OnceLock::new();
 static GLOBAL_ROLE_SERVICE: OnceLock<RoleService> = OnceLock::new();
@@ -83,6 +63,7 @@ static GLOBAL_VARIABLE_SERVICE: OnceLock<VariableService> = OnceLock::new();
 static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
 static GLOBAL_MODEL_SERVICE: OnceLock<ModelService> = OnceLock::new();
 static GLOBAL_CHAT_SERVICE: OnceLock<ChatService> = OnceLock::new();
+static GLOBAL_OPEN_APP_SERVICE: OnceLock<OpenAppService> = OnceLock::new();
 static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService)> = OnceLock::new();
 
 #[derive(Clone)]
@@ -108,6 +89,7 @@ pub struct AppState {
     pub workspaces: WorkspaceService,
     pub skills: SkillRegistryService,
     pub models: ModelService,
+    pub open_apps: OpenAppService,
     pub llm_runtime: LlmRuntimeService,
     pub mcp: McpService,
 }
@@ -207,6 +189,15 @@ impl AppState {
             variables.clone(),
             runtime_http_client.clone(),
         );
+        let open_apps = if config.database_url == ":memory:" {
+            GLOBAL_OPEN_APP_SERVICE
+                .get_or_init(|| {
+                    build_open_app_service(":memory:", users.clone(), &config.auth.jwt_secret)
+                })
+                .clone()
+        } else {
+            build_open_app_service(&config.database_url, users.clone(), &config.auth.jwt_secret)
+        };
         let skills = if config.database_url == ":memory:" {
             GLOBAL_SKILL_SERVICE
                 .get_or_init(|| {
@@ -301,6 +292,7 @@ impl AppState {
             graphs,
             ontologies,
             models,
+            open_apps,
             llm_runtime,
             mcp,
             skills,
@@ -397,6 +389,12 @@ impl FromRef<AppState> for ModelService {
     }
 }
 
+impl FromRef<AppState> for OpenAppService {
+    fn from_ref(state: &AppState) -> Self {
+        state.open_apps.clone()
+    }
+}
+
 impl FromRef<AppState> for AgentRunHistoryService {
     fn from_ref(state: &AppState) -> Self {
         state.agent_runs.clone()
@@ -417,27 +415,8 @@ impl FromRef<AppState> for McpService {
 
 pub fn build_router(config: AppConfig) -> Router {
     let state = AppState::new(config);
-    let protected_routes = user_routes()
-        .merge(admin_model_routes())
-        .merge(admin_variable_routes())
-        .merge(role_routes())
-        .merge(model_routes())
-        .merge(workspace_routes())
-        .merge(automation_routes())
-        .merge(chat_routes())
-        .merge(app_routes())
-        .merge(agent_routes())
-        .merge(mcp_management_routes())
-        .merge(task_routes())
-        .merge(variable_routes())
-        .merge(skill_routes())
-        .route_layer(middleware::from_fn_with_state(
-            state.users.clone(),
-            require_auth,
-        ));
-    let open_api_routes = open_api_chat_routes()
-        .route_layer(middleware::from_fn_with_state(state.users.clone(), require_open_api_auth))
-        .layer(open_api_cors_layer());
+    let protected_routes = build_protected_routes(&state);
+    let open_api_routes = build_open_api_routes(&state);
 
     Router::new()
         .route("/api/v1/health", get(health))
@@ -446,18 +425,6 @@ pub fn build_router(config: AppConfig) -> Router {
         .merge(protected_routes)
         .merge(open_api_routes)
         .with_state(state)
-}
-
-fn open_api_cors_layer() -> CorsLayer {
-    CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::OPTIONS])
-        .allow_headers([
-            header::ACCEPT, header::ACCEPT_LANGUAGE, header::AUTHORIZATION, header::CONTENT_TYPE,
-            header::HeaderName::from_static("x-tron-app-id"),
-            header::HeaderName::from_static("x-tron-app-key"),
-            header::HeaderName::from_static("x-tron-user-id"),
-        ])
 }
 
 fn build_user_service(config: &AppConfig, event_bus: EventBusHandle) -> UserService {
@@ -552,6 +519,16 @@ fn build_model_service(database_url: &str, workspaces: WorkspaceService) -> Mode
     let repository = SqliteModelRepository::connect(database_url)
         .expect("model SQLite repository should initialize");
     ModelService::new(repository, workspaces)
+}
+
+fn build_open_app_service(
+    database_url: &str,
+    users: UserService,
+    jwt_secret: &str,
+) -> OpenAppService {
+    let repository = SqliteOpenAppRepository::connect(database_url)
+        .expect("open-app SQLite repository should initialize");
+    OpenAppService::new(repository, users, Aes256SecretBox::new(jwt_secret))
 }
 
 fn build_graph_services(

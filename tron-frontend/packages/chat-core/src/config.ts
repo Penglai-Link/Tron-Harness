@@ -41,7 +41,6 @@ export function fromEnv(
     accept: String(envValue(env, prefix, "ACCEPT", fallbackPrefix) ?? ""),
     agentCode: String(envValue(env, prefix, "AGENT_CODE", fallbackPrefix) ?? ""),
     appCode: String(envValue(env, prefix, "APP_CODE", fallbackPrefix) ?? ""),
-    appId: String(envValue(env, prefix, "APP_ID", fallbackPrefix) ?? ""),
     appKey: String(envValue(env, prefix, "APP_KEY", fallbackPrefix) ?? ""),
     baseUrl: String(
       envValue(env, prefix, "BASE_URL", fallbackPrefix)
@@ -60,6 +59,11 @@ export function fromEnv(
     ),
     maxFileSize: readNumber(envValue(env, prefix, "MAX_FILE_SIZE", fallbackPrefix), 20 * 1024 * 1024),
     maxLimitFile: readNumber(envValue(env, prefix, "MAX_LIMIT_FILE", fallbackPrefix), 10),
+    openAppCode: String(
+      envValue(env, prefix, "OPEN_APP_CODE", fallbackPrefix)
+      ?? envValue(env, prefix, "APP_ID", fallbackPrefix)
+      ?? "",
+    ),
     productPrefix: String(envValue(env, prefix, "PRODUCT_PREFIX", fallbackPrefix) ?? ""),
     showAgui: readBoolean(envValue(env, prefix, "SHOW_AGUI", fallbackPrefix), true),
     showSessionList: readBoolean(envValue(env, prefix, "SHOW_SESSION_LIST", fallbackPrefix)),
@@ -67,6 +71,11 @@ export function fromEnv(
     taskCode: String(envValue(env, prefix, "TASK_CODE", fallbackPrefix) ?? ""),
     title: String(envValue(env, prefix, "TITLE", fallbackPrefix) ?? ""),
     tokenPrefix: String(envValue(env, prefix, "TOKEN_PREFIX", fallbackPrefix) ?? ""),
+    userCode: String(
+      envValue(env, prefix, "USER_CODE", fallbackPrefix)
+      ?? envValue(env, prefix, "USER_ID", fallbackPrefix)
+      ?? "",
+    ),
     userId: String(envValue(env, prefix, "USER_ID", fallbackPrefix) ?? ""),
     variables: readJson(envValue(env, prefix, "VARIABLES", fallbackPrefix)),
     workspaceCode: String(envValue(env, prefix, "WORKSPACE_CODE", fallbackPrefix) ?? ""),

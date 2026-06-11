@@ -299,8 +299,8 @@ impl UserService {
         &self,
         user_identifier: &str,
     ) -> Result<AuthenticatedAccess, AuthError> {
-        let identifier = user_identifier.trim();
-        if identifier.is_empty() {
+        let user_code = user_identifier.trim();
+        if user_code.is_empty() {
             return Err(AuthError::Unauthorized);
         }
 
@@ -309,9 +309,8 @@ impl UserService {
             .lock()
             .expect("user repository mutex poisoned");
         let user = repository
-            .find_user_by_login(identifier)?
-            .or_else(|| repository.get_user(identifier).ok())
-            .ok_or(AuthError::Unauthorized)?;
+            .get_user(user_code)
+            .map_err(map_user_error_to_auth)?;
         ensure_active_user(&user)?;
 
         Ok(AuthenticatedAccess {

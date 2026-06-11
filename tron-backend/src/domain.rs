@@ -6,6 +6,7 @@ pub mod chat;
 pub mod graph;
 pub mod mcp;
 pub mod model;
+pub mod open_app;
 pub mod role;
 pub mod skill;
 pub mod task;

@@ -1,10 +1,20 @@
 export type EndpointParams = Record<string, string | number | boolean | null | undefined>;
 type MaybePromise<T> = T | Promise<T>;
+export type BodyInitLike = BodyInit | ArrayBuffer | ArrayBufferView | object | unknown[];
+
+export interface FetchTransportRequestContext {
+  body?: BodyInitLike;
+  method: string;
+  path: string;
+  rawQuery: string;
+  signal?: AbortSignal;
+  url: string;
+}
 
 export interface FetchTransportOptions {
   baseUrl?: string;
   credentials?: RequestCredentials;
-  getHeaders?: () => MaybePromise<HeadersInit | undefined>;
+  getHeaders?: (context: FetchTransportRequestContext) => MaybePromise<HeadersInit | undefined>;
   unwrapEnvelope?: boolean;
 }
 
@@ -25,7 +35,8 @@ export function buildApiUrl(
   queryParams: EndpointParams = {},
 ) {
   const resolvedPath = path.replace(/\{([^}]+)\}/g, (_, key: string) => encodeURIComponent(String(pathParams[key] ?? "")));
-  const url = new URL(`${baseUrl ?? ""}${resolvedPath}`, window.location.origin);
+  const fallbackOrigin = typeof window === "undefined" ? "http://localhost" : window.location.origin;
+  const url = new URL(`${baseUrl ?? ""}${resolvedPath}`, fallbackOrigin);
   Object.entries(queryParams).forEach(([key, value]) => {
     if (value === undefined || value === null || value === "") return;
     url.searchParams.set(key, String(value));
@@ -43,35 +54,71 @@ export function unwrapEnvelope<T>(payload: unknown): T {
   return payload.data as T;
 }
 
+function resolveRequestBody(body: BodyInitLike | undefined) {
+  if (body === undefined) return undefined;
+  if (
+    body instanceof Blob
+    || body instanceof FormData
+    || body instanceof URLSearchParams
+    || typeof body === "string"
+    || body instanceof ArrayBuffer
+  ) {
+    return body;
+  }
+  if (ArrayBuffer.isView(body)) {
+    const bytes = new Uint8Array(body.byteLength);
+    bytes.set(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
+    return bytes;
+  }
+
+  return JSON.stringify(body);
+}
+
+function requestContextUrl(url: string) {
+  const fallbackOrigin = typeof window === "undefined" ? "http://localhost" : window.location.origin;
+  return new URL(url, fallbackOrigin);
+}
+
 export function createFetchTransport(options: FetchTransportOptions = {}) {
   async function requestJson<T>(args: {
-    body?: BodyInit | object | unknown[];
+    body?: BodyInitLike;
     method?: string;
     path: string;
     pathParams?: EndpointParams;
     queryParams?: EndpointParams;
     signal?: AbortSignal;
   }) {
-    const headers = new Headers(await options.getHeaders?.() ?? {});
-    const body = args.body === undefined
-      ? undefined
-      : args.body instanceof Blob
-        || args.body instanceof FormData
-        || args.body instanceof URLSearchParams
-        || typeof args.body === "string"
-        ? args.body
-        : JSON.stringify(args.body);
-    if (body && !(body instanceof Blob) && !(body instanceof FormData) && !(body instanceof URLSearchParams) && typeof body !== "string") {
+    const body = resolveRequestBody(args.body);
+    const method = args.method ?? "GET";
+    const url = buildApiUrl(options.baseUrl, args.path, args.pathParams, args.queryParams);
+    const parsedUrl = requestContextUrl(url);
+    const headers = new Headers(await options.getHeaders?.({
+      body: args.body,
+      method,
+      path: parsedUrl.pathname,
+      rawQuery: parsedUrl.search.startsWith("?") ? parsedUrl.search.slice(1) : parsedUrl.search,
+      signal: args.signal,
+      url,
+    }) ?? {});
+    if (
+      body
+      && !(body instanceof Blob)
+      && !(body instanceof FormData)
+      && !(body instanceof URLSearchParams)
+      && !(body instanceof ArrayBuffer)
+      && !ArrayBuffer.isView(body)
+      && typeof body !== "string"
+    ) {
       headers.set("Content-Type", "application/json");
     }
     if (body && typeof body === "string" && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
-    const response = await fetch(buildApiUrl(options.baseUrl, args.path, args.pathParams, args.queryParams), {
+    const response = await fetch(url, {
       body,
       credentials: options.credentials ?? "include",
       headers,
-      method: args.method ?? "GET",
+      method,
       signal: args.signal,
     });
     const payload = await response.json().catch(() => null);
@@ -85,7 +132,7 @@ export function createFetchTransport(options: FetchTransportOptions = {}) {
   }
 
   async function streamSse<T>(args: {
-    body?: object | unknown[];
+    body?: BodyInitLike;
     handlers?: {
       onFrame?: (eventName: string, payload: Record<string, unknown>) => void;
     };
@@ -95,13 +142,24 @@ export function createFetchTransport(options: FetchTransportOptions = {}) {
     pathParams?: EndpointParams;
     signal?: AbortSignal;
   }) {
-    const headers = new Headers(await options.getHeaders?.() ?? {});
+    const method = args.method ?? "POST";
+    const body = resolveRequestBody(args.body ?? {});
+    const url = buildApiUrl(options.baseUrl, args.path, args.pathParams);
+    const parsedUrl = requestContextUrl(url);
+    const headers = new Headers(await options.getHeaders?.({
+      body: args.body ?? {},
+      method,
+      path: parsedUrl.pathname,
+      rawQuery: parsedUrl.search.startsWith("?") ? parsedUrl.search.slice(1) : parsedUrl.search,
+      signal: args.signal,
+      url,
+    }) ?? {});
     headers.set("Content-Type", "application/json");
-    const response = await fetch(buildApiUrl(options.baseUrl, args.path, args.pathParams), {
-      body: JSON.stringify(args.body ?? {}),
+    const response = await fetch(url, {
+      body: body === undefined ? undefined : body,
       credentials: options.credentials ?? "include",
       headers,
-      method: args.method ?? "POST",
+      method,
       signal: args.signal,
     });
 
