@@ -186,9 +186,11 @@ watch(
 );
 
 const panelStyle = computed(() => ({
-  height: visibleState.value.collapsed ? 72 : visibleState.value.height,
+  height: visibleState.value.collapsed
+    ? 72 + "px"
+    : visibleState.value.height + "px",
   transform: `translate(${-visibleState.value.x}px, ${-visibleState.value.y}px)`,
-  width: visibleState.value.width,
+  width: visibleState.value.width + "px",
 }));
 
 function startDrag(event: PointerEvent) {

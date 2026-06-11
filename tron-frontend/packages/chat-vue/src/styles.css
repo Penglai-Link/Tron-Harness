@@ -131,6 +131,8 @@
   overflow: auto;
   background: var(--tron-chat-transcript-bg, var(--tron-chat-surface-muted));
   padding: 20px;
+  overflow-y: auto;
+  min-height: 200px;
 }
 
 .tron-chat__sidebar {
@@ -926,12 +928,6 @@
     max-height: 280px;
     border-left: 0;
     border-top: 1px solid var(--tron-chat-border);
-  }
-
-  .tron-chat-window {
-    right: 12px;
-    bottom: 12px;
-    left: 12px;
   }
 
   .tron-chat-window__panel {
