@@ -1,23 +1,77 @@
 .tron-chat,
 .tron-chat-window__panel {
-  --tron-chat-surface: var(--tron-chat-surface-color, var(--color-elevated-surface, #ffffff));
-  --tron-chat-surface-strong: var(--tron-chat-surface-strong-color, var(--color-surface-container-lowest, #ffffff));
-  --tron-chat-surface-muted: var(--tron-chat-surface-muted-color, var(--color-surface-container-low, #f7f3f2));
-  --tron-chat-surface-soft: var(--tron-chat-surface-soft-color, var(--color-surface-container, #f1edec));
-  --tron-chat-text: var(--tron-chat-text-color, var(--color-on-surface, #1c1b1b));
-  --tron-chat-text-muted: var(--tron-chat-text-muted-color, var(--color-on-surface-variant, #444748));
-  --tron-chat-border: var(--tron-chat-border-color, var(--color-outline-variant, #c4c7c7));
-  --tron-chat-hover: var(--tron-chat-hover-color, var(--color-hover-surface, #f2f2f7));
-  --tron-chat-focus: var(--tron-chat-focus-color, var(--color-focus-ring, #2f5f9f));
-  --tron-chat-primary: var(--tron-chat-primary-color, var(--color-primary, #0f172a));
-  --tron-chat-on-primary: var(--tron-chat-on-primary-color, var(--color-on-primary, #ffffff));
-  --tron-chat-danger: var(--tron-chat-danger-color, var(--color-error, #ba1a1a));
-  --tron-chat-danger-hover: var(--tron-chat-danger-hover-color, var(--color-error-container, #ffdad6));
-  --tron-chat-danger-text: var(--tron-chat-danger-text-color, var(--color-on-error, #ffffff));
-  --tron-chat-success-bg: var(--tron-chat-success-bg-color, var(--color-success-container, #e4efe5));
-  --tron-chat-success-text: var(--tron-chat-success-text-color, var(--color-on-success-container, #253927));
-  --tron-chat-neutral-bg: var(--tron-chat-neutral-bg-color, var(--color-secondary-container, #e0dfe4));
-  --tron-chat-neutral-text: var(--tron-chat-neutral-text-color, var(--color-on-secondary-container, #626267));
+  --tron-chat-surface: var(
+    --tron-chat-surface-color,
+    var(--color-elevated-surface, #ffffff)
+  );
+  --tron-chat-surface-strong: var(
+    --tron-chat-surface-strong-color,
+    var(--color-surface-container-lowest, #ffffff)
+  );
+  --tron-chat-surface-muted: var(
+    --tron-chat-surface-muted-color,
+    var(--color-surface-container-low, #f7f3f2)
+  );
+  --tron-chat-surface-soft: var(
+    --tron-chat-surface-soft-color,
+    var(--color-surface-container, #f1edec)
+  );
+  --tron-chat-text: var(
+    --tron-chat-text-color,
+    var(--color-on-surface, #1c1b1b)
+  );
+  --tron-chat-text-muted: var(
+    --tron-chat-text-muted-color,
+    var(--color-on-surface-variant, #444748)
+  );
+  --tron-chat-border: var(
+    --tron-chat-border-color,
+    var(--color-outline-variant, #c4c7c7)
+  );
+  --tron-chat-hover: var(
+    --tron-chat-hover-color,
+    var(--color-hover-surface, #f2f2f7)
+  );
+  --tron-chat-focus: var(
+    --tron-chat-focus-color,
+    var(--color-focus-ring, #2f5f9f)
+  );
+  --tron-chat-primary: var(
+    --tron-chat-primary-color,
+    var(--color-primary, #0f172a)
+  );
+  --tron-chat-on-primary: var(
+    --tron-chat-on-primary-color,
+    var(--color-on-primary, #ffffff)
+  );
+  --tron-chat-danger: var(
+    --tron-chat-danger-color,
+    var(--color-error, #ba1a1a)
+  );
+  --tron-chat-danger-hover: var(
+    --tron-chat-danger-hover-color,
+    var(--color-error-container, #ffdad6)
+  );
+  --tron-chat-danger-text: var(
+    --tron-chat-danger-text-color,
+    var(--color-on-error, #ffffff)
+  );
+  --tron-chat-success-bg: var(
+    --tron-chat-success-bg-color,
+    var(--color-success-container, #e4efe5)
+  );
+  --tron-chat-success-text: var(
+    --tron-chat-success-text-color,
+    var(--color-on-success-container, #253927)
+  );
+  --tron-chat-neutral-bg: var(
+    --tron-chat-neutral-bg-color,
+    var(--color-secondary-container, #e0dfe4)
+  );
+  --tron-chat-neutral-text: var(
+    --tron-chat-neutral-text-color,
+    var(--color-on-secondary-container, #626267)
+  );
 }
 
 .tron-chat {
@@ -184,7 +238,10 @@
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
-  transition: transform 120ms ease, background 120ms ease, opacity 120ms ease;
+  transition:
+    transform 120ms ease,
+    background 120ms ease,
+    opacity 120ms ease;
 }
 
 .tron-chat__button:hover,
@@ -310,7 +367,14 @@
   margin: 0 0 10px;
 }
 
-.tron-chat__markdown :where(p:last-child, ul:last-child, ol:last-child, blockquote:last-child, pre:last-child) {
+.tron-chat__markdown
+  :where(
+    p:last-child,
+    ul:last-child,
+    ol:last-child,
+    blockquote:last-child,
+    pre:last-child
+  ) {
   margin-bottom: 0;
 }
 
@@ -339,7 +403,9 @@
   cursor: pointer;
   padding: 4px 0;
   text-align: left;
-  transition: color 120ms ease, background 120ms ease;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
 }
 
 .tron-chat__rail-toggle:hover {
@@ -402,7 +468,9 @@
   cursor: pointer;
   padding: 6px 0;
   text-align: left;
-  transition: color 120ms ease, background 120ms ease;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
 }
 
 .tron-chat__rail-summary:hover {
@@ -447,7 +515,9 @@
   cursor: pointer;
   padding: 4px 0;
   text-align: left;
-  transition: color 120ms ease, background 120ms ease;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
 }
 
 .tron-chat__rail-entry-toggle:hover {
@@ -544,7 +614,9 @@
   cursor: pointer;
   padding: 4px 0;
   text-align: left;
-  transition: color 120ms ease, background 120ms ease;
+  transition:
+    color 120ms ease,
+    background 120ms ease;
 }
 
 .tron-chat__tool-toggle:hover,
@@ -713,7 +785,8 @@
 }
 
 @keyframes tron-chat-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
   }
 

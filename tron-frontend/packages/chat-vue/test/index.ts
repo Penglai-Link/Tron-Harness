@@ -1,7 +1,7 @@
 import { createApp } from "vue";
 import { TronChatRuntimeWindow } from "../src";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
-import "../src/styles.css";
+import "@tron/chat-theme";
 
 fetch("/api/v1/auth/refresh", { method: "POST" })
   .then((res) => res.json())
