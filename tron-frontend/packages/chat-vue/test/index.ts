@@ -1,6 +1,6 @@
 import { createApp } from "vue";
 import { TronChatRuntimeWindow } from "../src";
-import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
+import { createOpenApiChatAdapter } from "@tron/chat-openapi-adapter";
 import "@tron/chat-theme";
 import "../src/styles.css";
 
@@ -8,7 +8,7 @@ fetch("/api/v1/auth/refresh", { method: "POST" })
   .then((res) => res.json())
   .then(({ data }) => {
     createApp(TronChatRuntimeWindow, {
-      adapter: createInternalChatAdapter({
+      adapter: createOpenApiChatAdapter({
         getAccessToken: () => {
           return data.accessToken;
         },
