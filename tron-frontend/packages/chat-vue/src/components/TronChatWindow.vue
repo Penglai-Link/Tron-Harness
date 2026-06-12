@@ -288,22 +288,9 @@ function endResize(event: PointerEvent) {
           <Bot :size="18" />
           <div class="tron-chat-window__title-text">
             <span class="tron-chat-window__title-main">{{ title }}</span>
-            <span class="tron-chat-window__title-sub">{{ titleSubtitle }}</span>
           </div>
         </div>
         <div class="tron-chat-window__actions">
-          <button
-            aria-label="Collapse chat"
-            class="tron-chat-window__control"
-            type="button"
-            @click="
-              applyState(
-                reduceFloatingState(visibleState, { type: 'toggle-collapsed' }),
-              )
-            "
-          >
-            <Minus :size="16" />
-          </button>
           <button
             aria-label="Close chat"
             class="tron-chat-window__control"
@@ -366,9 +353,7 @@ function endResize(event: PointerEvent) {
         @pointermove="handleResize"
         @pointerup="endResize"
         @pointercancel="endResize"
-      >
-        <Grip :size="12" />
-      </button>
+      ></button>
     </div>
   </div>
 </template>
