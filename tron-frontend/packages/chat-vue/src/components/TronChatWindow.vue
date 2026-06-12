@@ -52,6 +52,7 @@ const emit = defineEmits<{
 const localState = ref(
   readFloatingState(props.storageKey, defaultFloatingState),
 );
+const transientState = ref<ChatFloatingState | null>(null);
 const viewportRevision = ref(0);
 const normalizedStateRef = ref<string | null>(null);
 const dragRef = ref<{
@@ -73,7 +74,7 @@ const isControlled = computed(() =>
   Boolean(props.state && props.onStateChange),
 );
 const activeState = computed(() =>
-  isControlled.value ? (props.state as ChatFloatingState) : localState.value,
+  transientState.value ?? (isControlled.value ? (props.state as ChatFloatingState) : localState.value),
 );
 
 function isInteractiveTarget(target: EventTarget | null) {
@@ -111,9 +112,9 @@ const visibleState = computed(() => {
 });
 
 watch(
-  [activeState, visibleState, viewportRevision],
+  [activeState, visibleState, viewportRevision, transientState],
   () => {
-    if (typeof window === "undefined" || !visibleState.value.open) {
+    if (typeof window === "undefined" || !visibleState.value.open || transientState.value !== null) {
       normalizedStateRef.value = null;
       return;
     }
@@ -203,6 +204,7 @@ function startDrag(event: PointerEvent) {
     y: visibleState.value.y,
   };
   (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  transientState.value = visibleState.value;
 }
 
 function handleDrag(event: PointerEvent) {
@@ -212,13 +214,17 @@ function handleDrag(event: PointerEvent) {
     x: dragRef.value.x - (event.clientX - dragRef.value.startX),
     y: dragRef.value.y - (event.clientY - dragRef.value.startY),
   });
-  applyState(next);
+  transientState.value = next;
 }
 
 function endDrag(event: PointerEvent) {
   if (!dragRef.value || dragRef.value.pointerId !== event.pointerId) return;
   dragRef.value = null;
   (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+  if (transientState.value) {
+    applyState(transientState.value);
+    transientState.value = null;
+  }
 }
 
 function startResize(event: PointerEvent) {
@@ -230,6 +236,7 @@ function startResize(event: PointerEvent) {
     width: visibleState.value.width,
   };
   (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  transientState.value = visibleState.value;
 }
 
 function handleResize(event: PointerEvent) {
@@ -239,13 +246,17 @@ function handleResize(event: PointerEvent) {
     height: resizeRef.value.height - (event.clientY - resizeRef.value.startY),
     width: resizeRef.value.width - (event.clientX - resizeRef.value.startX),
   });
-  applyState(next);
+  transientState.value = next;
 }
 
 function endResize(event: PointerEvent) {
   if (!resizeRef.value || resizeRef.value.pointerId !== event.pointerId) return;
   resizeRef.value = null;
   (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+  if (transientState.value) {
+    applyState(transientState.value);
+    transientState.value = null;
+  }
 }
 </script>
 

@@ -42,8 +42,9 @@ export function TronChatWindow({
   const [localState, setLocalState] = useState(() =>
     readFloatingState(storageKey, defaultFloatingState),
   );
+  const [transientState, setTransientState] = useState<ChatFloatingState | null>(null);
   const [viewportRevision, setViewportRevision] = useState(0);
-  const activeState = isControlled ? (state as ChatFloatingState) : localState;
+  const activeState = transientState ?? (isControlled ? (state as ChatFloatingState) : localState);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{
     pointerId: number;
@@ -104,7 +105,7 @@ export function TronChatWindow({
   );
 
   useEffect(() => {
-    if (typeof window === "undefined" || !visibleState.open) {
+    if (typeof window === "undefined" || !visibleState.open || transientState !== null) {
       normalizedStateRef.current = null;
       return;
     }
@@ -137,7 +138,7 @@ export function TronChatWindow({
 
     normalizedStateRef.current = normalizationKey;
     applyState(visibleState, false);
-  }, [activeState, applyState, visibleState]);
+  }, [activeState, applyState, visibleState, transientState]);
 
   useEffect(() => {
     if (typeof window === "undefined" || !visibleState.open) {
@@ -171,6 +172,7 @@ export function TronChatWindow({
       y: visibleState.y,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
+    setTransientState(visibleState);
   }
 
   function handleDrag(event: ReactPointerEvent<HTMLDivElement>) {
@@ -181,7 +183,7 @@ export function TronChatWindow({
       x: dragRef.current.x - (event.clientX - dragRef.current.startX),
       y: dragRef.current.y - (event.clientY - dragRef.current.startY),
     });
-    applyState(next);
+    setTransientState(next);
   }
 
   function endDrag(event: ReactPointerEvent<HTMLDivElement>) {
@@ -189,6 +191,10 @@ export function TronChatWindow({
       return;
     dragRef.current = null;
     event.currentTarget.releasePointerCapture(event.pointerId);
+    if (transientState) {
+      applyState(transientState);
+      setTransientState(null);
+    }
   }
 
   function startResize(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -200,6 +206,7 @@ export function TronChatWindow({
       width: visibleState.width,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
+    setTransientState(visibleState);
   }
 
   function handleResize(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -212,7 +219,7 @@ export function TronChatWindow({
       width:
         resizeRef.current.width - (event.clientX - resizeRef.current.startX),
     });
-    applyState(next);
+    setTransientState(next);
   }
 
   function endResize(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -220,6 +227,10 @@ export function TronChatWindow({
       return;
     resizeRef.current = null;
     event.currentTarget.releasePointerCapture(event.pointerId);
+    if (transientState) {
+      applyState(transientState);
+      setTransientState(null);
+    }
   }
 
   return (

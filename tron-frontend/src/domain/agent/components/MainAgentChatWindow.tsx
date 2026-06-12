@@ -51,13 +51,19 @@ function readPersistedMainAgentSession(storageKey: string) {
   }
 }
 
-function writePersistedMainAgentSession(storageKey: string, session: ChatSession | null) {
+function writePersistedMainAgentSession(
+  storageKey: string,
+  session: ChatSession | null,
+) {
   if (typeof window === "undefined" || !storageKey) return;
   if (!session) {
     window.localStorage.removeItem(storageKey);
     return;
   }
-  window.localStorage.setItem(storageKey, JSON.stringify(normalizeChatSession(session)));
+  window.localStorage.setItem(
+    storageKey,
+    JSON.stringify(normalizeChatSession(session)),
+  );
 }
 
 export function MainAgentChatWindow({
@@ -70,17 +76,20 @@ export function MainAgentChatWindow({
   onWindowStateChange,
 }: MainAgentChatWindowProps) {
   const toast = useToast();
-  const adapter = useMemo(() => (
-    getServiceDataSource("chat") === "mock"
-      ? createMockChatAdapter()
-      : createInternalChatAdapter({
-        getAccessToken: getApiAccessToken,
-      })
-  ), []);
+  const adapter = useMemo(
+    () =>
+      getServiceDataSource("chat") === "mock"
+        ? createMockChatAdapter()
+        : createInternalChatAdapter({
+            getAccessToken: getApiAccessToken,
+          }),
+    [],
+  );
   const controlledWindowState = Boolean(windowState && onWindowStateChange);
-  const [localWindowState, setLocalWindowState] = useState<ChatFloatingState>(() => (
-    readFloatingState(MAIN_AGENT_WINDOW_STORAGE_KEY, defaultFloatingState)
-  ));
+  const [localWindowState, setLocalWindowState] = useState<ChatFloatingState>(
+    () =>
+      readFloatingState(MAIN_AGENT_WINDOW_STORAGE_KEY, defaultFloatingState),
+  );
   const resolvedWindowState = controlledWindowState
     ? (windowState as ChatFloatingState)
     : localWindowState;
@@ -88,9 +97,9 @@ export function MainAgentChatWindow({
     () => mainAgentSessionStorageKey(workspaceCode),
     [workspaceCode],
   );
-  const [persistedSession, setPersistedSession] = useState<ChatSession | null>(() => (
-    readPersistedMainAgentSession(sessionStorageKey)
-  ));
+  const [persistedSession, setPersistedSession] = useState<ChatSession | null>(
+    () => readPersistedMainAgentSession(sessionStorageKey),
+  );
 
   useEffect(() => {
     if (!controlledWindowState) {
@@ -102,27 +111,55 @@ export function MainAgentChatWindow({
     setPersistedSession(readPersistedMainAgentSession(sessionStorageKey));
   }, [sessionStorageKey]);
 
-  const handleWindowStateChange = useCallback((nextState: ChatFloatingState) => {
-    if (controlledWindowState) {
-      onWindowStateChange?.(nextState);
-      return;
-    }
-    setLocalWindowState(nextState);
-  }, [controlledWindowState, onWindowStateChange]);
+  const handleWindowStateChange = useCallback(
+    (nextState: ChatFloatingState) => {
+      if (controlledWindowState) {
+        onWindowStateChange?.(nextState);
+        return;
+      }
+      setLocalWindowState(nextState);
+    },
+    [controlledWindowState, onWindowStateChange],
+  );
 
-  const handleSessionChange = useCallback((nextSession: ChatSession | null) => {
-    setPersistedSession(nextSession);
-    writePersistedMainAgentSession(sessionStorageKey, nextSession);
-  }, [sessionStorageKey]);
+  const handleSessionChange = useCallback(
+    (nextSession: ChatSession | null) => {
+      setPersistedSession(nextSession);
+      writePersistedMainAgentSession(sessionStorageKey, nextSession);
+    },
+    [sessionStorageKey],
+  );
+
+  const windowConfig = useMemo(() => ({
+    agentCode: "main-agent",
+    floating: true,
+    inputPlaceholder: "Message Main Agent...",
+    storageKey: MAIN_AGENT_WINDOW_STORAGE_KEY,
+    title: "Main Agent",
+    workspaceCode,
+  }), [workspaceCode]);
+
+  const handleError = useCallback((message: string, title?: string) => {
+    toast.error(message, { title: title ?? "Main Agent failed" });
+  }, [toast]);
+
+  const handleInfo = useCallback((message: string, title?: string) => {
+    toast.info(message, { title });
+  }, [toast]);
 
   useEffect(() => {
-    if (!resolvedWindowState.open || persistedSession || !workspaceCode.trim()) {
+    if (
+      !resolvedWindowState.open ||
+      persistedSession ||
+      !workspaceCode.trim()
+    ) {
       return;
     }
 
     let active = true;
-    const pendingSession = pendingMainAgentSessions.get(sessionStorageKey)
-      ?? adapter.createSession({
+    const pendingSession =
+      pendingMainAgentSessions.get(sessionStorageKey) ??
+      adapter.createSession({
         agentCode: "main-agent",
         title: floatingTitle,
         workspaceCode: workspaceCode.trim(),
@@ -138,11 +175,16 @@ export function MainAgentChatWindow({
       })
       .catch((error) => {
         if (!active) return;
-        const message = error instanceof Error ? error.message : "Main Agent session could not be created";
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Main Agent session could not be created";
         toast.error(message, { title: "Main Agent failed" });
       })
       .finally(() => {
-        if (pendingMainAgentSessions.get(sessionStorageKey) === pendingSession) {
+        if (
+          pendingMainAgentSessions.get(sessionStorageKey) === pendingSession
+        ) {
           pendingMainAgentSessions.delete(sessionStorageKey);
         }
       });
@@ -150,33 +192,32 @@ export function MainAgentChatWindow({
     return () => {
       active = false;
     };
-  }, [adapter, floatingTitle, persistedSession, resolvedWindowState.open, sessionStorageKey, toast, workspaceCode]);
+  }, [
+    adapter,
+    floatingTitle,
+    persistedSession,
+    resolvedWindowState.open,
+    sessionStorageKey,
+    toast,
+    workspaceCode,
+  ]);
 
   return (
-    <TronChatRuntimeWindow
-      adapter={adapter}
-      config={{
-        agentCode: "main-agent",
-        floating: true,
-        inputPlaceholder: "Message Main Agent...",
-        storageKey: MAIN_AGENT_WINDOW_STORAGE_KEY,
-        title: "Main Agent",
-        workspaceCode,
-      }}
-      currentUserDisplayName={currentUserDisplayName}
-      floatingSubtitle={floatingSubtitle}
-      floatingTitle={floatingTitle}
-      footerAddon={footerAddon}
-      initialSession={persistedSession}
-      onError={(message, title) => {
-        toast.error(message, { title: title ?? "Main Agent failed" });
-      }}
-      onInfo={(message, title) => {
-        toast.info(message, { title });
-      }}
-      onSessionChange={handleSessionChange}
-      windowState={resolvedWindowState}
-      onWindowStateChange={handleWindowStateChange}
-    />
+    <>
+      <TronChatRuntimeWindow
+        adapter={adapter}
+        config={windowConfig}
+        currentUserDisplayName={currentUserDisplayName}
+        floatingSubtitle={floatingSubtitle}
+        floatingTitle={floatingTitle}
+        footerAddon={footerAddon}
+        initialSession={persistedSession}
+        onError={handleError}
+        onInfo={handleInfo}
+        onSessionChange={handleSessionChange}
+        windowState={resolvedWindowState}
+        onWindowStateChange={handleWindowStateChange}
+      />
+    </>
   );
 }
