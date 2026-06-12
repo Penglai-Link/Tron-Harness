@@ -9,6 +9,9 @@ fetch("/api/v1/auth/refresh", { method: "POST" })
   .then(({ data }) => {
     createApp(TronChatRuntimeWindow, {
       adapter: createOpenApiChatAdapter({
+        openAppCode: "",
+        appKey: "",
+        userCode: "",
         getAccessToken: () => {
           return data.accessToken;
         },
