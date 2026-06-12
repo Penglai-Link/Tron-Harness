@@ -945,6 +945,12 @@
   border: 2px solid transparent;
 }
 
+.tron-chat-window__resize:focus,
+.tron-chat-window__resize:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 .tron-chat-window__body {
   display: flex;
   min-height: 0;
