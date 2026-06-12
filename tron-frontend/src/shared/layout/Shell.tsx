@@ -59,6 +59,7 @@ import {
 import { cn } from "@/shared/lib/utils";
 import { useTheme } from "@/shared/theme/ThemeProvider";
 import { SelectInput } from "@/shared/ui/Forms";
+import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
 import type { TronNavSection } from "@/shared/types/ShellNavigation";
 import type {
   WorkspaceSpacesContextValue,
@@ -180,6 +181,10 @@ export function TronShell({
   }));
   const workspaceSwitcherControllerRef = useRef<AbortController | null>(null);
   const workspaceSwitcherRequestSequenceRef = useRef(0);
+  const utilityPanelRef = useRef<HTMLDivElement | null>(null);
+  const utilityPanelTriggerScopeRef = useRef<HTMLDivElement | null>(null);
+  const topbarToolsMenuRef = useRef<HTMLDivElement | null>(null);
+  const topbarToolsMenuContainerRef = useRef<HTMLDivElement | null>(null);
   const [expandedWorkspaceCodes, setExpandedWorkspaceCodes] = useState<string[]>([]);
   const visibleNavigation = useMemo(
     () => tronNavigation.filter((section) => {
@@ -381,6 +386,23 @@ export function TronShell({
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [mobileSidebarOpen, rightDrawerOpen]);
+
+  useDismissibleLayer({
+    open: Boolean(utilityPanel),
+    onDismiss: () => {
+      if (!utilityPanel) return;
+      toggleUtilityPanel(utilityPanel);
+    },
+    popupRef: utilityPanelRef,
+    triggerElement: utilityPanelTriggerScopeRef.current,
+  });
+
+  useDismissibleLayer({
+    open: topbarToolsMenuOpen,
+    onDismiss: () => setTopbarToolsMenuOpen(false),
+    popupRef: topbarToolsMenuRef,
+    triggerElement: topbarToolsMenuContainerRef.current,
+  });
 
   function toggleMobileSidebar() {
     if (!mobileSidebarOpen) {
@@ -620,7 +642,7 @@ export function TronShell({
     <WorkspaceSpacesContext.Provider value={workspaceSpacesValue}>
     <div className="isolate min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]">
       <header className="fixed inset-x-0 top-0 z-[60] h-14 bg-[var(--color-header-backdrop)] px-4 shadow-[0_10px_28px_rgba(15,23,42,0.045)] backdrop-blur sm:px-6">
-        <div className="flex h-full items-center justify-between gap-4">
+        <div ref={utilityPanelTriggerScopeRef} className="flex h-full items-center justify-between gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <Button
               className="-ml-3 lg:hidden"
@@ -669,7 +691,7 @@ export function TronShell({
             <Button className={cn("hidden rounded-full min-[900px]:inline-flex", agentOpen ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]" : "")} size="icon" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} title={t("shell:assistant.title")} onClick={handleAgentLauncherClick}>
               <Bot size={17} aria-hidden="true" />
             </Button>
-            <div className="relative min-[900px]:hidden">
+            <div ref={topbarToolsMenuContainerRef} className="relative min-[900px]:hidden">
               <Button
                 size="icon"
                 type="button"
@@ -682,7 +704,7 @@ export function TronShell({
                 <MoreHorizontal size={18} aria-hidden="true" />
               </Button>
               {topbarToolsMenuOpen ? (
-                <div className="absolute right-0 top-[calc(100%+8px)] z-[70] w-48 rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]" role="menu">
+                <div ref={topbarToolsMenuRef} className="absolute right-0 top-[calc(100%+8px)] z-[70] w-48 rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]" role="menu">
                   <button className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={openSystemSettings}>
                     <Settings2 size={16} aria-hidden="true" />
                     {t("shell:utilityPanel.settings")}
@@ -721,6 +743,7 @@ export function TronShell({
         </div>
         {utilityPanel ? (
           <div
+            ref={utilityPanelRef}
             id={utilityPanel === "workspace" ? "tron-workspace-selector-panel" : undefined}
             className={cn(
               "absolute top-[calc(100%+8px)] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
