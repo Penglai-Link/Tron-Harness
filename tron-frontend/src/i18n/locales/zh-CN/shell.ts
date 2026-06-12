@@ -56,6 +56,12 @@ export const shell = {
   },
   settings: {
     back: "返回",
+    groups: {
+      foundation: "基础配置",
+      integration: "集成接入",
+      platform: "平台能力",
+      registry: "注册中心",
+    },
     items: {
       agents: "智能体",
       general: "通用",

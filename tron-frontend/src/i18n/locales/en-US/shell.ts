@@ -56,6 +56,12 @@ export const shell = {
   },
   settings: {
     back: "Back",
+    groups: {
+      foundation: "Foundation",
+      integration: "Integrations",
+      platform: "Platform Capabilities",
+      registry: "Registry Center",
+    },
     items: {
       agents: "Agents",
       general: "General",

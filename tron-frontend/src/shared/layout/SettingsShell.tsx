@@ -1,9 +1,13 @@
 import {
   useEffect,
+  useMemo,
+  useState,
   type ReactNode,
 } from "react";
 import {
   ArrowLeft,
+  ChevronDown,
+  ChevronRight,
   type LucideIcon,
   Settings2,
 } from "lucide-react";
@@ -23,10 +27,17 @@ interface SettingsNavItem {
   translationKey: string;
 }
 
+interface SettingsNavGroup {
+  groupKey: string;
+  items: readonly SettingsNavItem[];
+  label: string;
+  translationKey: string;
+}
+
 interface SettingsShellProps {
   activeItem: string;
   children: ReactNode;
-  items: readonly SettingsNavItem[];
+  items: readonly SettingsNavGroup[];
 }
 
 const settingsReturnToStorageKey = "tron.settings.returnTo";
@@ -50,12 +61,35 @@ export function SettingsShell({ activeItem, children, items }: SettingsShellProp
   const { t } = useTranslation(["common", "shell"]);
   const location = useLocation();
   const returnTo = resolveReturnTo(location.state);
+  const flatItems = useMemo(() => items.flatMap((group) => group.items), [items]);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => (
+    Object.fromEntries(items.map((group) => [group.groupKey, false]))
+  ));
+  const activeGroupKey = useMemo(
+    () => items.find((group) => group.items.some((item) => item.label === activeItem))?.groupKey ?? null,
+    [activeItem, items],
+  );
 
   useEffect(() => {
     if (typeof window !== "undefined" && returnTo !== "/dashboard") {
       window.sessionStorage.setItem(settingsReturnToStorageKey, returnTo);
     }
   }, [returnTo]);
+
+  useEffect(() => {
+    if (!activeGroupKey) return;
+    setCollapsedGroups((current) => (
+      current[activeGroupKey] ? { ...current, [activeGroupKey]: false } : current
+    ));
+  }, [activeGroupKey]);
+
+  function toggleGroup(groupKey: string) {
+    if (groupKey === activeGroupKey) {
+      return;
+    }
+
+    setCollapsedGroups((current) => ({ ...current, [groupKey]: !current[groupKey] }));
+  }
 
   return (
     <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)] lg:h-screen lg:overflow-hidden">
@@ -81,8 +115,8 @@ export function SettingsShell({ activeItem, children, items }: SettingsShellProp
           <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
             {t("shell:settings.navigation")}
           </p>
-          <nav className="mt-3 flex gap-2 overflow-x-auto lg:block lg:space-y-1" aria-label={t("shell:settings.navigation")}>
-            {items.map((item) => {
+          <nav className="mt-3 flex gap-2 overflow-x-auto lg:hidden" aria-label={t("shell:settings.navigation")}>
+            {flatItems.map((item) => {
               const Icon = item.icon;
               const selected = item.label === activeItem;
               return (
@@ -104,6 +138,61 @@ export function SettingsShell({ activeItem, children, items }: SettingsShellProp
               );
             })}
           </nav>
+          <div className="mt-3 hidden space-y-4 lg:block">
+            {items.map((group) => {
+              const expanded = !collapsedGroups[group.groupKey];
+              const isActiveGroup = group.groupKey === activeGroupKey;
+              const GroupChevron = expanded ? ChevronDown : ChevronRight;
+
+              return (
+                <section key={group.groupKey}>
+                  <button
+                    type="button"
+                    className={cn(
+                      "flex w-full items-center justify-between gap-3 px-2 py-1 text-left transition-colors",
+                      isActiveGroup
+                        ? "text-[var(--color-on-surface)]"
+                        : "text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]",
+                    )}
+                    onClick={() => toggleGroup(group.groupKey)}
+                    aria-expanded={expanded}
+                    aria-controls={`settings-group-${group.groupKey}`}
+                  >
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.05em]">
+                      {t(group.translationKey)}
+                    </span>
+                    <GroupChevron size={16} aria-hidden="true" />
+                  </button>
+                  {expanded ? (
+                    <div id={`settings-group-${group.groupKey}`} className="mt-1 space-y-1">
+                      {group.items.map((item) => {
+                        const Icon = item.icon;
+                        const selected = item.label === activeItem;
+
+                        return (
+                          <Link
+                            key={item.href}
+                            className={cn(
+                              "flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",
+                              selected
+                                ? "bg-[var(--color-surface-container-high)] font-medium text-[var(--color-on-surface)]"
+                                : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]",
+                            )}
+                            to={item.href}
+                            state={{ from: returnTo }}
+                            aria-current={selected ? "page" : undefined}
+                          >
+                            {Icon ? <Icon size={16} aria-hidden="true" /> : null}
+                            <span>{t(item.translationKey)}</span>
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </section>
+              );
+            })}
+          </div>
         </aside>
 
         <main className="min-w-0 px-6 py-6 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">{children}</main>
