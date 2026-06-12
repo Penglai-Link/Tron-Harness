@@ -237,6 +237,25 @@ function removeSession(groups: ChatSessionGroup[], sessionCode: string): ChatSes
     .filter((group) => group.sessions.length > 0));
 }
 
+/**
+ * Clear MainAgentChatWindow's persisted session from localStorage if its sessionCode
+ * matches the one that was just deleted. This prevents the floating agent chat window
+ * from restoring a stale (deleted) session on next open.
+ */
+function forgetMainAgentPersistedSession(workspaceCode: string, sessionCode: string) {
+  const storageKey = `tron.main-agent.session:${workspaceCode.trim() || "__default__"}`;
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return;
+    const persisted = JSON.parse(raw) as { sessionCode?: string };
+    if (persisted?.sessionCode === sessionCode) {
+      localStorage.removeItem(storageKey);
+    }
+  } catch {
+    // Ignore parse errors from corrupt localStorage data
+  }
+}
+
 function latestEventValue(events: ChatAguiEvent[], key: string) {
   return [...events].reverse().find((event) => event.metadata[key])?.metadata[key] ?? null;
 }
@@ -3153,6 +3172,8 @@ export function ChatManagementPage() {
         setVisibleMessages([]);
       }
       forgetSessionModelSelection(deleted.sessionCode);
+      // Clear MainAgentChatWindow's persisted session if it matches the deleted one
+      forgetMainAgentPersistedSession(activeWorkspaceCode, deleted.sessionCode);
       toast.success("Session deleted", { title: deleted.sessionCode });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Delete session failed";
