@@ -210,19 +210,16 @@ export function OpenAppMetrics({
       <MetricCard
         label={pageT("overview.openAppsLabel", "Open Apps")}
         value={recordCount.toString()}
-        trend={pageT("overview.openAppsTrend", "Platform-level integrations currently registered.")}
         icon={<ShieldCheck size={18} aria-hidden="true" />}
       />
       <MetricCard
         label={pageT("overview.enabledLabel", "Enabled")}
         value={activeCount.toString()}
-        trend={pageT("overview.enabledTrend", "Open-apps that can currently use HMAC authentication.")}
         icon={<KeyRound size={18} aria-hidden="true" />}
       />
       <MetricCard
         label={pageT("overview.capabilityGroupsLabel", "Capability Groups")}
         value={catalogCount.toString()}
-        trend={pageT("overview.capabilityGroupsTrend", "Current business OpenAPI families exposed for authorization.")}
         icon={<ShieldCheck size={18} aria-hidden="true" />}
       />
     </div>
