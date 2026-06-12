@@ -264,7 +264,8 @@ function endResize(event: PointerEvent) {
       "
     >
       <Bot :size="16" />
-      <span>{{ title }}</span>
+      <span>{{ title }}</span
+      >12
     </button>
   </div>
   <div v-else class="tron-chat-window">

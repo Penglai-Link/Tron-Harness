@@ -5,8 +5,10 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "dev": "vite"
+  },
   "dependencies": {
-    "@tron/chat-core": "file:../chat-core",
     "lucide-react": "^0.553.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

@@ -131,6 +131,7 @@
   overflow: auto;
   background: var(--tron-chat-transcript-bg, var(--tron-chat-surface-muted));
   padding: 20px;
+  position: relative;
 }
 
 .tron-chat__sidebar {
@@ -147,6 +148,14 @@
   margin: 0 auto;
   flex-direction: column;
   gap: 20px;
+}
+
+.tron-chat__transcript__bot {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: var(--tron-chat-text-muted);
 }
 
 .tron-chat__empty {
@@ -225,6 +234,13 @@
   flex: 1;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.tron-chat__button_send {
+  width: 34px;
+  height: 34px;
+  font-size: 20px !important;
+  padding: 0px !important;
 }
 
 .tron-chat__button,

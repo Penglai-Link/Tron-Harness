@@ -98,9 +98,12 @@ function CopyValueButton({
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<number | null>(null);
 
-  useEffect(() => () => {
-    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-  }, []);
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    },
+    [],
+  );
 
   async function handleCopy() {
     if (!value.trim()) return;
@@ -134,9 +137,13 @@ function ChatBubble({
   onEditMessage?: (content: string) => void;
 }) {
   const isUser = message.role === "USER";
-  const actorName = isUser ? (currentUserDisplayName || message.actor) : message.actor;
+  const actorName = isUser
+    ? currentUserDisplayName || message.actor
+    : message.actor;
   return (
-    <article className={cx("tron-chat__message", isUser && "tron-chat__message--user")}>
+    <article
+      className={cx("tron-chat__message", isUser && "tron-chat__message--user")}
+    >
       <div className="tron-chat__message-header">
         <div className="tron-chat__message-actor">
           {isUser ? <UserRound size={16} /> : <Bot size={16} />}
@@ -158,7 +165,9 @@ function ChatBubble({
               <Pencil size={14} />
             </button>
           ) : null}
-          <span className="tron-chat__message-time">{formatTime(message.createdAt)}</span>
+          <span className="tron-chat__message-time">
+            {formatTime(message.createdAt)}
+          </span>
         </div>
       </div>
       {isUser ? (
@@ -176,7 +185,8 @@ function formatAguiDuration(milliseconds: number) {
   if (totalSeconds < 60) return `${totalSeconds}s`;
   const totalMinutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  if (totalMinutes < 60) return seconds ? `${totalMinutes}m ${seconds}s` : `${totalMinutes}m`;
+  if (totalMinutes < 60)
+    return seconds ? `${totalMinutes}m ${seconds}s` : `${totalMinutes}m`;
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
@@ -193,7 +203,8 @@ function aguiWorkDuration(events: ChatAguiStreamEvent[]) {
 function terminalAguiEvent(events: ChatAguiStreamEvent[]) {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const normalized = aguiEventType(events[index]).toUpperCase();
-    if (normalized.includes("RUN_FINISHED") || normalized.includes("RUN_ERROR")) return events[index];
+    if (normalized.includes("RUN_FINISHED") || normalized.includes("RUN_ERROR"))
+      return events[index];
   }
   return null;
 }
@@ -248,30 +259,59 @@ function ToolCard({
   }, [card.logs.length, complete, expanded]);
 
   return (
-    <div className={cx("tron-chat__tool-row", !nested && "tron-chat__tool-row--standalone")}>
+    <div
+      className={cx(
+        "tron-chat__tool-row",
+        !nested && "tron-chat__tool-row--standalone",
+      )}
+    >
       <button
-        className={cx("tron-chat__tool-toggle", nested && "tron-chat__tool-toggle--nested")}
+        className={cx(
+          "tron-chat__tool-toggle",
+          nested && "tron-chat__tool-toggle--nested",
+        )}
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((value) => !value)}
       >
         <span className="tron-chat__tool-toggle-main">
-          <span className={cx("tron-chat__tool-badge", nested ? "tron-chat__tool-badge--nested" : "tron-chat__tool-badge--standalone")}>
-            {typeof stepNumber === "number"
-              ? stepNumber
-              : complete
-                ? <CheckCircle2 size={14} />
-                : running
-                  ? <LoaderCircle size={14} className="animate-spin" />
-                  : <Terminal size={14} />}
+          <span
+            className={cx(
+              "tron-chat__tool-badge",
+              nested
+                ? "tron-chat__tool-badge--nested"
+                : "tron-chat__tool-badge--standalone",
+            )}
+          >
+            {typeof stepNumber === "number" ? (
+              stepNumber
+            ) : complete ? (
+              <CheckCircle2 size={14} />
+            ) : running ? (
+              <LoaderCircle size={14} className="animate-spin" />
+            ) : (
+              <Terminal size={14} />
+            )}
           </span>
           <span className="tron-chat__tool-toggle-text">
             <span className="tron-chat__tool-title-row">
-              <span className={cx("tron-chat__tool-title", nested && "tron-chat__tool-title--nested")}>
+              <span
+                className={cx(
+                  "tron-chat__tool-title",
+                  nested && "tron-chat__tool-title--nested",
+                )}
+              >
                 {nested ? nestedToolLabel : toolLabel}
               </span>
               {nested ? null : (
-                <span className={cx("tron-chat__tool-status", complete ? "tron-chat__tool-status--done" : "tron-chat__tool-status--running")}>
+                <span
+                  className={cx(
+                    "tron-chat__tool-status",
+                    complete
+                      ? "tron-chat__tool-status--done"
+                      : "tron-chat__tool-status--running",
+                  )}
+                >
                   {complete ? "done" : "running"}
                 </span>
               )}
@@ -283,11 +323,21 @@ function ToolCard({
         </span>
       </button>
       {expanded ? (
-        <div className={cx("tron-chat__tool-body", nested ? "tron-chat__tool-body--nested" : "tron-chat__tool-body--standalone")}>
+        <div
+          className={cx(
+            "tron-chat__tool-body",
+            nested
+              ? "tron-chat__tool-body--nested"
+              : "tron-chat__tool-body--standalone",
+          )}
+        >
           <div className="tron-chat__tool-sections">
             {hasParameters ? (
               <section>
-                <div className="tron-chat__tool-section-header" style={{ marginBottom: parametersExpanded ? 8 : 0 }}>
+                <div
+                  className="tron-chat__tool-section-header"
+                  style={{ marginBottom: parametersExpanded ? 8 : 0 }}
+                >
                   <button
                     className="tron-chat__tool-subtoggle"
                     type="button"
@@ -295,7 +345,11 @@ function ToolCard({
                     onClick={() => setParametersExpanded((value) => !value)}
                   >
                     <span className="tron-chat__tool-subtoggle-label">
-                      {parametersExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                      {parametersExpanded ? (
+                        <ChevronDown size={13} />
+                      ) : (
+                        <ChevronRight size={13} />
+                      )}
                       <span>Parameters</span>
                     </span>
                   </button>
@@ -310,7 +364,10 @@ function ToolCard({
             ) : null}
             {complete ? (
               <section>
-                <div className="tron-chat__tool-section-header" style={{ marginBottom: 8 }}>
+                <div
+                  className="tron-chat__tool-section-header"
+                  style={{ marginBottom: 8 }}
+                >
                   <h3 className="tron-chat__tool-section-title">Result</h3>
                   <CopyValueButton
                     ariaLabel="Copy result"
@@ -319,24 +376,43 @@ function ToolCard({
                   />
                 </div>
                 {card.result ? (
-                  <div className="max-h-64" style={{ maxHeight: 256, overflowY: "auto" }}>
+                  <div
+                    className="max-h-64"
+                    style={{ maxHeight: 256, overflowY: "auto" }}
+                  >
                     <JsonBlock value={card.result} />
                   </div>
                 ) : (
-                  <div className="tron-chat__result-block">No result payload.</div>
+                  <div className="tron-chat__result-block">
+                    No result payload.
+                  </div>
                 )}
               </section>
             ) : (
               <section>
-                <h3 className="tron-chat__tool-section-title" style={{ marginBottom: 8 }}>Log</h3>
+                <h3
+                  className="tron-chat__tool-section-title"
+                  style={{ marginBottom: 8 }}
+                >
+                  Log
+                </h3>
                 <div
                   ref={logRef}
                   className="tron-chat__code-block max-h-64"
                   style={{ maxHeight: 256, overflowY: "auto" }}
                 >
-                  {card.logs.length ? card.logs.map((line, index) => (
-                    <p key={`${card.id}-log-${index}`} style={{ margin: 0, whiteSpace: "pre-wrap" }}>{line}</p>
-                  )) : <p style={{ margin: 0 }}>Waiting for tool activity...</p>}
+                  {card.logs.length ? (
+                    card.logs.map((line, index) => (
+                      <p
+                        key={`${card.id}-log-${index}`}
+                        style={{ margin: 0, whiteSpace: "pre-wrap" }}
+                      >
+                        {line}
+                      </p>
+                    ))
+                  ) : (
+                    <p style={{ margin: 0 }}>Waiting for tool activity...</p>
+                  )}
                 </div>
               </section>
             )}
@@ -349,7 +425,9 @@ function ToolCard({
 
 function ToolGroupCard({ card }: { card: ToolGroupWorkCard }) {
   const toolCards = card.toolCards.filter((toolCard) => toolCard.started);
-  const hasRunningTool = toolCards.some((toolCard) => toolCard.started && !toolCard.ended && !toolCard.result);
+  const hasRunningTool = toolCards.some(
+    (toolCard) => toolCard.started && !toolCard.ended && !toolCard.result,
+  );
   const [expanded, setExpanded] = useState(() => hasRunningTool);
 
   useEffect(() => {
@@ -360,10 +438,18 @@ function ToolGroupCard({ card }: { card: ToolGroupWorkCard }) {
 
   return (
     <section className="tron-chat__rail-entry" aria-label="Tool run steps">
-      <button className="tron-chat__rail-entry-toggle" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
+      <button
+        className="tron-chat__rail-entry-toggle"
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+      >
         <span className="tron-chat__rail-entry-main">
           <span className="tron-chat__rail-entry-icon">
-            <Terminal size={15} className={hasRunningTool ? "animate-pulse" : undefined} />
+            <Terminal
+              size={15}
+              className={hasRunningTool ? "animate-pulse" : undefined}
+            />
           </span>
           <span className="tron-chat__rail-entry-summary tron-chat__rail-entry-summary--strong">
             {`Ran ${toolCards.length} ${toolCards.length === 1 ? "command" : "commands"}`}
@@ -386,10 +472,18 @@ function ToolGroupCard({ card }: { card: ToolGroupWorkCard }) {
   );
 }
 
-function ReasoningCard({ card }: { card: Extract<AguiUserWorkCard, { kind: "reasoning" }>["value"] }) {
-  const hasRunningTool = card.toolCards.some((toolCard) => toolCard.started && !toolCard.ended && !toolCard.result);
+function ReasoningCard({
+  card,
+}: {
+  card: Extract<AguiUserWorkCard, { kind: "reasoning" }>["value"];
+}) {
+  const hasRunningTool = card.toolCards.some(
+    (toolCard) => toolCard.started && !toolCard.ended && !toolCard.result,
+  );
   const shouldStayExpanded = !card.ended || hasRunningTool;
-  const summary = deriveReasoningPreview(card.content) || (card.ended ? "Reasoning captured." : "Thinking...");
+  const summary =
+    deriveReasoningPreview(card.content) ||
+    (card.ended ? "Reasoning captured." : "Thinking...");
   const [expanded, setExpanded] = useState(() => shouldStayExpanded);
 
   useEffect(() => {
@@ -398,12 +492,25 @@ function ReasoningCard({ card }: { card: Extract<AguiUserWorkCard, { kind: "reas
 
   return (
     <section className="tron-chat__rail-entry" aria-label="Thinking">
-      <button className="tron-chat__rail-entry-toggle" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
+      <button
+        className="tron-chat__rail-entry-toggle"
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+      >
         <span className="tron-chat__rail-entry-main">
           <span className="tron-chat__rail-entry-icon">
-            <BrainCircuit size={15} className={card.ended ? undefined : "animate-pulse"} />
+            <BrainCircuit
+              size={15}
+              className={card.ended ? undefined : "animate-pulse"}
+            />
           </span>
-          <span className={cx("tron-chat__rail-entry-summary", !card.ended && "tron-chat__rail-entry-summary--pending")}>
+          <span
+            className={cx(
+              "tron-chat__rail-entry-summary",
+              !card.ended && "tron-chat__rail-entry-summary--pending",
+            )}
+          >
             {summary}
           </span>
         </span>
@@ -443,33 +550,54 @@ function AguiRunWorkRail({
   return (
     <section className="tron-chat__rail" aria-label="AG-UI run work">
       {terminalEvent ? (
-        <button className="tron-chat__rail-summary" type="button" aria-expanded={expanded} onClick={() => setExpanded((value) => !value)}>
+        <button
+          className="tron-chat__rail-summary"
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
           <span className="tron-chat__rail-summary-label">
             <span>{`Worked for ${aguiWorkDuration(events)}`}</span>
           </span>
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
       ) : null}
-      {(!terminalEvent || expanded) ? (
-        <div className="tron-chat__rail-stack" style={{ marginTop: terminalEvent ? 8 : 0 }}>
+      {!terminalEvent || expanded ? (
+        <div
+          className="tron-chat__rail-stack"
+          style={{ marginTop: terminalEvent ? 8 : 0 }}
+        >
           {userCards.length ? (
-            <section className="tron-chat__rail" aria-label="Agent work rail" style={{ maxWidth: "none", paddingLeft: 0 }}>
+            <section
+              className="tron-chat__rail"
+              aria-label="Agent work rail"
+              style={{ maxWidth: "none", paddingLeft: 0 }}
+            >
               <div className="tron-chat__rail-card-list">
-                {userCards.map((card) => (
-                  card.kind === "reasoning"
-                    ? <ReasoningCard card={card.value} key={card.value.id} />
-                    : card.kind === "toolGroup"
-                      ? <ToolGroupCard card={card.value} key={card.value.id} />
-                      : <ToolCard card={card.value} key={card.value.id} />
-                ))}
+                {userCards.map((card) =>
+                  card.kind === "reasoning" ? (
+                    <ReasoningCard card={card.value} key={card.value.id} />
+                  ) : card.kind === "toolGroup" ? (
+                    <ToolGroupCard card={card.value} key={card.value.id} />
+                  ) : (
+                    <ToolCard card={card.value} key={card.value.id} />
+                  ),
+                )}
               </div>
             </section>
           ) : null}
           {debugEvents.length ? (
-            <section className="tron-chat__rail" aria-label="AG-UI debug event cards" style={{ maxWidth: "none", paddingLeft: 0 }}>
+            <section
+              className="tron-chat__rail"
+              aria-label="AG-UI debug event cards"
+              style={{ maxWidth: "none", paddingLeft: 0 }}
+            >
               <div className="tron-chat__debug-list">
                 {debugEvents.map((event, index) => (
-                  <div className="tron-chat__debug-item" key={`${event}-${index}`}>
+                  <div
+                    className="tron-chat__debug-item"
+                    key={`${event}-${index}`}
+                  >
                     <div className="tron-chat__debug-summary">{event}</div>
                   </div>
                 ))}
@@ -568,17 +696,27 @@ export function TronChatPanel({
   const composerElementRef = useRef<HTMLTextAreaElement | null>(null);
   const [showJumpButton, setShowJumpButton] = useState(false);
   const autoStickToBottomRef = useRef(true);
-  const presentation = useMemo(() => (
-    buildTranscriptPresentation({
+  const presentation = useMemo(
+    () =>
+      buildTranscriptPresentation({
+        debugOptions,
+        liveAguiAnchorMessageCodes,
+        liveAguiEvents,
+        liveAguiPending,
+        messages,
+        protocolEvents,
+        sessionCode: session?.sessionCode ?? "",
+      }),
+    [
       debugOptions,
       liveAguiAnchorMessageCodes,
       liveAguiEvents,
       liveAguiPending,
       messages,
       protocolEvents,
-      sessionCode: session?.sessionCode ?? "",
-    })
-  ), [debugOptions, liveAguiAnchorMessageCodes, liveAguiEvents, liveAguiPending, messages, protocolEvents, session?.sessionCode]);
+      session?.sessionCode,
+    ],
+  );
 
   function scrollToBottom(behavior: ScrollBehavior = "auto") {
     const element = transcriptRef.current;
@@ -591,7 +729,8 @@ export function TronChatPanel({
   function handleScroll() {
     const element = transcriptRef.current;
     if (!element) return;
-    const distanceFromBottom = element.scrollHeight - element.scrollTop - element.clientHeight;
+    const distanceFromBottom =
+      element.scrollHeight - element.scrollTop - element.clientHeight;
     autoStickToBottomRef.current = distanceFromBottom <= 96;
     setShowJumpButton(distanceFromBottom > 160);
   }
@@ -628,10 +767,13 @@ export function TronChatPanel({
           <div className="tron-chat__header-content">
             {headerContent ?? (
               <>
-                <span className="tron-chat__title">{title ?? session?.title ?? "Chat"}</span>
+                <span className="tron-chat__title">
+                  {title ?? session?.title ?? "Chat"}
+                </span>
                 {session ? (
                   <span className="tron-chat__subtitle">
-                    {session.sessionCode} · {sessionAgentTagLabel(session.agentCode)}
+                    {session.sessionCode} ·{" "}
+                    {sessionAgentTagLabel(session.agentCode)}
                   </span>
                 ) : null}
               </>
@@ -641,33 +783,72 @@ export function TronChatPanel({
       ) : null}
       {session ? (
         <>
-          <div className={cx("tron-chat__content", Boolean(sidebarContent) && "tron-chat__content--with-sidebar")}>
-            <section className="tron-chat__transcript" aria-label="Chat transcript" ref={transcriptRef} onScroll={handleScroll}>
+          <div
+            className={cx(
+              "tron-chat__content",
+              Boolean(sidebarContent) && "tron-chat__content--with-sidebar",
+            )}
+          >
+            <section
+              className="tron-chat__transcript"
+              aria-label="Chat transcript"
+              ref={transcriptRef}
+              onScroll={handleScroll}
+            >
               <div className="tron-chat__transcript-inner">
-                {messages.length ? messages.map((message) => (
-                  <Fragment key={message.messageCode}>
-                    <ChatBubble
-                      currentUserDisplayName={currentUserDisplayName}
-                      message={message}
-                      onEditMessage={onEditMessage}
-                    />
-                    {showAgui && message.messageCode === presentation.waitingForModelAnchorMessageCode ? <WaitingRail /> : null}
-                    {showAgui ? (presentation.workRailsByMessageCode.get(message.messageCode) ?? []).map((run) => (
-                      <AguiRunWorkRail
-                        debugEvents={(presentation.debugEventsByRunCode.get(run.runCode) ?? []).map(describeDebugEvent)}
-                        events={run.events as ChatAguiStreamEvent[]}
-                        key={run.runCode}
+                {messages.length ? (
+                  messages.map((message) => (
+                    <Fragment key={message.messageCode}>
+                      <ChatBubble
+                        currentUserDisplayName={currentUserDisplayName}
+                        message={message}
+                        onEditMessage={onEditMessage}
                       />
-                    )) : null}
-                  </Fragment>
-                )) : null}
+                      {showAgui &&
+                      message.messageCode ===
+                        presentation.waitingForModelAnchorMessageCode ? (
+                        <WaitingRail />
+                      ) : null}
+                      {showAgui
+                        ? (
+                            presentation.workRailsByMessageCode.get(
+                              message.messageCode,
+                            ) ?? []
+                          ).map((run) => (
+                            <AguiRunWorkRail
+                              debugEvents={(
+                                presentation.debugEventsByRunCode.get(
+                                  run.runCode,
+                                ) ?? []
+                              ).map(describeDebugEvent)}
+                              events={run.events as ChatAguiStreamEvent[]}
+                              key={run.runCode}
+                            />
+                          ))
+                        : null}
+                    </Fragment>
+                  ))
+                ) : (
+                  <Bot
+                    strokeWidth={1}
+                    size="60"
+                    className="tron-chat__transcript__bot"
+                  />
+                )}
               </div>
             </section>
-            {sidebarContent ? <aside className="tron-chat__sidebar">{sidebarContent}</aside> : null}
+            {sidebarContent ? (
+              <aside className="tron-chat__sidebar">{sidebarContent}</aside>
+            ) : null}
           </div>
           <footer className="tron-chat__footer">
             {showJumpButton ? (
-              <button className="tron-chat__button tron-chat__jump" type="button" aria-label="Jump to latest message" onClick={() => scrollToBottom("smooth")}>
+              <button
+                className="tron-chat__button tron-chat__jump"
+                type="button"
+                aria-label="Jump to latest message"
+                onClick={() => scrollToBottom("smooth")}
+              >
                 <ArrowDown size={16} />
               </button>
             ) : null}
@@ -682,7 +863,8 @@ export function TronChatPanel({
                 value={draft}
                 onChange={(event) => onDraftChange(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+                  if (event.key !== "Enter" || event.nativeEvent.isComposing)
+                    return;
                   event.preventDefault();
                   if (event.shiftKey) {
                     onDraftChange(insertNewlineAtCursor(event.currentTarget));
@@ -698,7 +880,10 @@ export function TronChatPanel({
               <div className="tron-chat__composer-row">
                 <div className="tron-chat__composer-addon">{footerAddon}</div>
                 <button
-                  className={cx("tron-chat__button", sending && "tron-chat__button--danger")}
+                  className={cx(
+                    "tron-chat__button tron-chat__button_send",
+                    sending && "tron-chat__button--danger",
+                  )}
                   type="button"
                   disabled={disabledInput || (!sending && sendDisabled)}
                   onClick={() => {
@@ -710,22 +895,32 @@ export function TronChatPanel({
                   }}
                 >
                   {sending ? <Square size={14} /> : <Send size={15} />}
-                  <span>{sending ? stopLabel : sendLabel}</span>
                 </button>
               </div>
             </div>
           </footer>
         </>
       ) : (
-        <div className={cx("tron-chat__content", Boolean(sidebarContent) && "tron-chat__content--with-sidebar")}>
+        <div
+          className={cx(
+            "tron-chat__content",
+            Boolean(sidebarContent) && "tron-chat__content--with-sidebar",
+          )}
+        >
           <section className="tron-chat__transcript">
             <div className="tron-chat__empty">
               <div className="tron-chat__empty-inner">
                 <div className="tron-chat__empty-title">{emptyTitle}</div>
-                <div className="tron-chat__empty-description">{emptyDescription}</div>
+                <div className="tron-chat__empty-description">
+                  {emptyDescription}
+                </div>
                 {onCreateSession ? (
                   <div style={{ marginTop: 16 }}>
-                    <button className="tron-chat__button" type="button" onClick={onCreateSession}>
+                    <button
+                      className="tron-chat__button"
+                      type="button"
+                      onClick={onCreateSession}
+                    >
                       {createSessionLabel}
                     </button>
                   </div>
@@ -733,7 +928,9 @@ export function TronChatPanel({
               </div>
             </div>
           </section>
-          {sidebarContent ? <aside className="tron-chat__sidebar">{sidebarContent}</aside> : null}
+          {sidebarContent ? (
+            <aside className="tron-chat__sidebar">{sidebarContent}</aside>
+          ) : null}
         </div>
       )}
     </div>

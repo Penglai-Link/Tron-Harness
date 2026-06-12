@@ -1,12 +1,23 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Document</title>
-</head>
-<body>
+  </head>
+  <body>
     <div id="app"></div>
+    <button style="position: absolute">切换主题</button>
     <script src="./test/index.ts" type="module"></script>
-</body>
+    <script>
+      // 切换主题
+      document.querySelector("button").addEventListener("click", () => {
+        const currentTheme =
+          document.documentElement.getAttribute("data-theme");
+        const newTheme =
+          currentTheme === "matrix-dark" ? "light" : "matrix-dark";
+        document.documentElement.setAttribute("data-theme", newTheme);
+      });
+    </script>
+  </body>
 </html>

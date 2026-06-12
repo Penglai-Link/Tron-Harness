@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowDown, Send, Square } from "lucide-vue-next";
+import { ArrowDown, Send, Square, Bot } from "lucide-vue-next";
 import {
   buildTranscriptPresentation,
   describeDebugEvent,
@@ -187,6 +187,12 @@ onMounted(() => {
               </template>
             </template>
           </div>
+          <Bot
+            :size="40"
+            :strokeWidth="1"
+            class="tron-chat__transcript__bot"
+            v-else
+          />
         </section>
         <aside v-if="$slots.sidebar" class="tron-chat__sidebar">
           <slot name="sidebar" />
@@ -221,7 +227,10 @@ onMounted(() => {
             </div>
             <button
               :class="
-                cx('tron-chat__button', sending && 'tron-chat__button--danger')
+                cx(
+                  'tron-chat__button tron-chat__button_send',
+                  sending && 'tron-chat__button--danger',
+                )
               "
               :disabled="disabledInput || (!sending && sendDisabled)"
               type="button"
@@ -229,7 +238,6 @@ onMounted(() => {
             >
               <Square v-if="sending" :size="14" />
               <Send v-else :size="15" />
-              <span>{{ sending ? stopLabel : sendLabel }}</span>
             </button>
           </div>
         </div>
