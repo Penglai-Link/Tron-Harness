@@ -5,7 +5,6 @@
 - Always use `Makefile` first to bulid,test and cleanup
 - Use a different available port if the default port is already in use, and ensure the frontend matchs the backend port
 - Always follow coding spec
-- Always follow eliteforge-git-feature-oriented-lite-spec skill 
 
 ## API
 
