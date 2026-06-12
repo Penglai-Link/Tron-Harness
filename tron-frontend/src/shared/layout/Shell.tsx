@@ -182,7 +182,9 @@ export function TronShell({
   const workspaceSwitcherControllerRef = useRef<AbortController | null>(null);
   const workspaceSwitcherRequestSequenceRef = useRef(0);
   const utilityPanelRef = useRef<HTMLDivElement | null>(null);
-  const utilityPanelTriggerScopeRef = useRef<HTMLDivElement | null>(null);
+  const workspaceTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const notificationsTriggerRef = useRef<HTMLDivElement | null>(null);
+  const userMenuTriggerRef = useRef<HTMLDivElement | null>(null);
   const topbarToolsMenuRef = useRef<HTMLDivElement | null>(null);
   const topbarToolsMenuContainerRef = useRef<HTMLDivElement | null>(null);
   const [expandedWorkspaceCodes, setExpandedWorkspaceCodes] = useState<string[]>([]);
@@ -394,7 +396,14 @@ export function TronShell({
       toggleUtilityPanel(utilityPanel);
     },
     popupRef: utilityPanelRef,
-    triggerElement: utilityPanelTriggerScopeRef.current,
+    triggerElement:
+      utilityPanel === "workspace"
+        ? workspaceTriggerRef.current
+        : utilityPanel === "notifications"
+          ? notificationsTriggerRef.current
+          : utilityPanel === "user"
+            ? userMenuTriggerRef.current
+            : null,
   });
 
   useDismissibleLayer({
@@ -642,7 +651,7 @@ export function TronShell({
     <WorkspaceSpacesContext.Provider value={workspaceSpacesValue}>
     <div className="isolate min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]">
       <header className="fixed inset-x-0 top-0 z-[60] h-14 bg-[var(--color-header-backdrop)] px-4 shadow-[0_10px_28px_rgba(15,23,42,0.045)] backdrop-blur sm:px-6">
-        <div ref={utilityPanelTriggerScopeRef} className="flex h-full items-center justify-between gap-4">
+        <div className="flex h-full items-center justify-between gap-4">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <Button
               className="-ml-3 lg:hidden"
@@ -657,6 +666,7 @@ export function TronShell({
               {mobileSidebarOpen ? <PanelLeftClose size={17} aria-hidden="true" /> : <PanelLeftOpen size={17} aria-hidden="true" />}
             </Button>
             <button
+              ref={workspaceTriggerRef}
               className="inline-flex h-9 max-w-[min(60vw,28rem)] shrink-0 items-center gap-2 rounded-lg bg-[var(--color-surface-container)] px-3 text-sm font-medium text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
               type="button"
               id="tron-workspace-trigger"
@@ -682,12 +692,16 @@ export function TronShell({
             >
               <Settings2 size={17} aria-hidden="true" />
             </Button>
-            <Button className="hidden min-[900px]:inline-flex" size="icon" variant="ghost" aria-label={t("shell:aria.viewNotifications")} aria-pressed={utilityPanel === "notifications"} onClick={() => handleUtilityPanelClick("notifications")}>
-              <Bell size={17} aria-hidden="true" />
-            </Button>
-            <Button className="hidden rounded-full hover:bg-transparent min-[900px]:inline-flex" size="icon" variant="ghost" aria-label={t("shell:aria.openUserMenu")} aria-pressed={utilityPanel === "user"} onClick={() => handleUtilityPanelClick("user")}>
-              <CircleUserRound size={18} aria-hidden="true" />
-            </Button>
+            <div ref={notificationsTriggerRef} className="hidden min-[900px]:contents">
+              <Button className="hidden min-[900px]:inline-flex" size="icon" variant="ghost" aria-label={t("shell:aria.viewNotifications")} aria-pressed={utilityPanel === "notifications"} onClick={() => handleUtilityPanelClick("notifications")}>
+                <Bell size={17} aria-hidden="true" />
+              </Button>
+            </div>
+            <div ref={userMenuTriggerRef} className="hidden min-[900px]:contents">
+              <Button className="hidden rounded-full hover:bg-transparent min-[900px]:inline-flex" size="icon" variant="ghost" aria-label={t("shell:aria.openUserMenu")} aria-pressed={utilityPanel === "user"} onClick={() => handleUtilityPanelClick("user")}>
+                <CircleUserRound size={18} aria-hidden="true" />
+              </Button>
+            </div>
             <Button className={cn("hidden rounded-full min-[900px]:inline-flex", agentOpen ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]" : "")} size="icon" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} title={t("shell:assistant.title")} onClick={handleAgentLauncherClick}>
               <Bot size={17} aria-hidden="true" />
             </Button>
