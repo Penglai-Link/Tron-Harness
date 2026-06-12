@@ -16,15 +16,15 @@ pub(super) fn rank_route_rows(
     rows: Vec<RagSearchRow>,
     route: &RetrievalRoute,
     strategy: &RetrieverStrategy,
-    request: &RagSearchRequest,
+    query: &str,
     query_embedding: Option<&[f32]>,
 ) -> Vec<RankedCandidate> {
     let mut hits = rows
         .into_iter()
         .filter_map(|row| {
             let score = row.storage_score.unwrap_or_else(|| match strategy.kind {
-                RetrieverKind::Fulltext if fulltext_matches(&row.search_text, &request.query) => {
-                    fulltext_score(&row.search_text, &request.query)
+                RetrieverKind::Fulltext if fulltext_matches(&row.search_text, query) => {
+                    fulltext_score(&row.search_text, query)
                 }
                 RetrieverKind::Vector => row
                     .embedding
@@ -95,6 +95,7 @@ pub(super) async fn apply_rerank<E>(
     runtime: &E,
     compiled: &CompiledRetrievalProfile,
     request: &RagSearchRequest,
+    query: &str,
     hits: &mut Vec<RankedCandidate>,
 ) -> Result<(), RagError>
 where
@@ -108,7 +109,7 @@ where
         .rerank(RagRerankCall {
             workspace_code: request.workspace_code.clone(),
             model_code: compiled.rerank_model_code.clone(),
-            query: request.query.clone(),
+            query: query.to_string(),
             documents,
             top_n: Some(request.limit),
         })

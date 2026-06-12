@@ -72,8 +72,11 @@ impl SqliteOpenAppRepository {
         }
 
         let tx = self.connection.transaction().map_err(storage_error)?;
-        tx.execute("ALTER TABLE platform_open_apps RENAME TO platform_open_apps_legacy", [])
-            .map_err(storage_error)?;
+        tx.execute(
+            "ALTER TABLE platform_open_apps RENAME TO platform_open_apps_legacy",
+            [],
+        )
+        .map_err(storage_error)?;
         tx.execute_batch(
             "CREATE TABLE platform_open_apps (
                 id INTEGER PRIMARY KEY,

@@ -137,16 +137,27 @@ fn invoke_stdio_tool_call_sync(
         env,
         working_directory,
         protocol_mode,
-    )?;
-    session.send_notification("notifications/initialized")?;
-    let result = session.request(
-        "tools/call",
-        json!({
-            "name": remote_tool_name,
-            "arguments": input,
-        }),
-        STDIO_TOOLS_CALL_TIMEOUT,
-    )?;
+    )
+    .map_err(|error| format!("stdio MCP `tools/call` setup failed: {error}"))?;
+    session
+        .send_notification("notifications/initialized")
+        .map_err(|error| format!("stdio MCP `tools/call` setup failed: {error}"))?;
+    let result = session
+        .request(
+            "tools/call",
+            json!({
+                "name": remote_tool_name,
+                "arguments": input,
+            }),
+            STDIO_TOOLS_CALL_TIMEOUT,
+        )
+        .map_err(|error| {
+            if error.contains("tools/call") {
+                error
+            } else {
+                format!("stdio MCP `tools/call` failed: {error}")
+            }
+        })?;
     let _ = server_code;
     Ok(mcp_tool_result_to_output(&result))
 }

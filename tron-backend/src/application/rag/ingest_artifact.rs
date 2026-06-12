@@ -14,6 +14,8 @@ pub(crate) const ARTIFACT_PARSED_DOCUMENT: &str = "PARSED_DOCUMENT";
 pub(crate) const ARTIFACT_TEXT_UNIT_BATCH: &str = "TEXT_UNIT_BATCH";
 pub(crate) const ARTIFACT_FULLTEXT_INDEX_RESULT: &str = "FULLTEXT_INDEX_RESULT";
 pub(crate) const ARTIFACT_VECTOR_INDEX_RESULT: &str = "VECTOR_INDEX_RESULT";
+pub(crate) const ARTIFACT_TREE_GRAPH: &str = "TREE_GRAPH";
+pub(crate) const ARTIFACT_TREE_PERSIST_RESULT: &str = "TREE_PERSIST_RESULT";
 pub(crate) const ARTIFACT_PERSIST_RESULT: &str = "PERSIST_RESULT";
 
 #[derive(Debug, Clone)]
@@ -141,6 +143,8 @@ pub(crate) enum RagArtifactPayload {
     PreparedPayload(PreparedIngestPayload),
     FulltextIndexResult { text_unit_count: usize },
     VectorIndexResult(RagVectorIndexArtifact),
+    TreeGraph(Value),
+    TreePersistResult(Value),
     PersistResult(RagPersistResultArtifact),
 }
 

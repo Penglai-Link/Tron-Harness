@@ -29,6 +29,7 @@ export type ServiceDomain =
   | "model"
   | "observability"
   | "prompt"
+  | "rag"
   | "resource"
   | "skill"
   | "task"
@@ -59,6 +60,7 @@ const domainEnvKeys: Record<ServiceDomain, string> = {
   model: "MODEL",
   observability: "OBSERVABILITY",
   prompt: "PROMPT",
+  rag: "RAG",
   resource: "RESOURCE",
   skill: "SKILL",
   task: "TASK",

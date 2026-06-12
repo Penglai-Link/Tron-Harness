@@ -12,7 +12,8 @@ use crate::{
 
 use super::{
     CompiledRetrievalProfile, ContextPack, RagSearchRepository, RagSearchRequest,
-    RagSearchTraceWrite, publish_rag_event, safe_trace_payload, search::RankedCandidate,
+    RagSearchTraceWrite, RagStageExecutionResult, publish_rag_event, safe_trace_payload,
+    search::RankedCandidate,
 };
 
 pub(super) fn persist_trace_if_enabled<R: RagSearchRepository>(
@@ -21,6 +22,7 @@ pub(super) fn persist_trace_if_enabled<R: RagSearchRepository>(
     compiled: &CompiledRetrievalProfile,
     hits: &[RankedCandidate],
     context_pack: Option<&ContextPack>,
+    stage_results: &[RagStageExecutionResult],
     warnings: &mut Vec<Value>,
 ) -> Result<Option<String>, RagError> {
     if !request.trace.enabled {
@@ -33,6 +35,7 @@ pub(super) fn persist_trace_if_enabled<R: RagSearchRepository>(
         "routeTimingsMs": {},
         "warnings": warnings,
         "candidateRefs": hits.iter().map(candidate_ref).collect::<Vec<_>>(),
+        "stageResults": stage_results.iter().map(stage_result_summary).collect::<Vec<_>>(),
         "resultCount": hits.len(),
         "tokenUsage": {
             "tokenBudget": request.token_budget,
@@ -119,6 +122,19 @@ fn candidate_ref(hit: &RankedCandidate) -> Value {
         "targetType": "TEXT_UNIT",
         "targetCode": hit.target_code,
         "routeIds": hit.route_ids,
+    })
+}
+
+fn stage_result_summary(stage: &RagStageExecutionResult) -> Value {
+    json!({
+        "nodeId": &stage.node_id,
+        "stageType": &stage.stage_type,
+        "strategyId": &stage.strategy_id,
+        "status": &stage.status,
+        "durationMs": stage.duration_ms,
+        "inputArtifactKeys": &stage.input_artifact_keys,
+        "outputArtifactKeys": &stage.output_artifact_keys,
+        "warnings": &stage.warnings,
     })
 }
 

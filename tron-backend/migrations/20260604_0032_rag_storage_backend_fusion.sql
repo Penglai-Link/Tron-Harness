@@ -1,21 +1,4 @@
-UPDATE rag_corpora
-SET
-    storage_binding_json = json_set(storage_binding_json, '$.backend', 'SQLITE'),
-    updated_at = 1780592400000
-WHERE corpus_id IN ('memory-card', 'project-doc', 'skill');
-
-UPDATE rag_corpora
-SET
-    storage_binding_json = json_set(storage_binding_json, '$.backend', 'GRAPH'),
-    updated_at = 1780592400000
-WHERE corpus_id IN ('code-graph', 'skill-graph')
-   OR json_extract(storage_binding_json, '$.layout') = 'GRAPH_SINGLE_NODE';
-
-UPDATE rag_corpora
-SET
-    storage_binding_json = json_set(storage_binding_json, '$.backend', 'SQLITE'),
-    updated_at = 1780592400000
-WHERE json_extract(storage_binding_json, '$.backend') IS NULL;
+-- Backend is now expressed per segment target in storage_binding_json.targets.
 
 INSERT INTO rag_profiles (
     profile_id,

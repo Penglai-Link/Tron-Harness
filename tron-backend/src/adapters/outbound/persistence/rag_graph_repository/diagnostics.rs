@@ -31,7 +31,7 @@ impl GraphBackedRagRepository {
             user_code: String::new(),
             agent_code: String::new(),
         };
-        let Some(node) = self.find_graph_skill_node(corpus, &retry_request)? else {
+        let Some(node) = self.find_graph_main_node(corpus, &retry_request)? else {
             return Ok(None);
         };
         let props = &node.properties;

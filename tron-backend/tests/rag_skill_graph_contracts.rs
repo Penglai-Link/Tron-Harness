@@ -30,10 +30,10 @@ use tron_backend::{
     },
     domain::{
         graph::{
-            GraphFilterOperator, GraphPropertyFilter, GraphPropertyValue, GraphQueryLimit,
-            GraphScopeCommand, GraphSearchQuery,
+            GraphFilterOperator, GraphNodeWrite, GraphPropertyFilter, GraphPropertyValue,
+            GraphQueryLimit, GraphScopeCommand, GraphSearchQuery,
         },
-        rag::{RagError, RagStatus, RagStorageBackend, RagStorageLayout},
+        rag::{RagError, RagStatus, RagStorageBackend},
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceLineageItem, WorkspaceStatus},
     },
 };
@@ -44,34 +44,20 @@ fn skill_graph_seed_is_additive_and_keeps_existing_skill_sqlite_binding() {
 
     let skill = repository.get_corpus("skill").unwrap().unwrap();
     assert_eq!(skill.status, RagStatus::Enabled);
-    assert_eq!(skill.storage_binding.backend, RagStorageBackend::Sqlite);
     assert_eq!(
-        skill.storage_binding.layout,
-        RagStorageLayout::EmbeddedSource
-    );
-    assert_eq!(
-        skill.storage_binding.table.as_deref(),
+        skill.storage_binding.sqlite_table_for_segment("textUnit"),
         Some("rag_skill_text_units")
     );
 
     let skill_graph = repository.get_corpus("skill-graph").unwrap().unwrap();
     assert_eq!(skill_graph.status, RagStatus::Enabled);
-    assert_eq!(
-        skill_graph.storage_binding.backend,
-        RagStorageBackend::Graph
-    );
-    assert_eq!(
-        skill_graph.storage_binding.layout,
-        RagStorageLayout::GraphSingleNode
-    );
-    assert_eq!(
-        skill_graph.storage_binding.namespace.as_deref(),
-        Some("rag_skill")
-    );
-    assert_eq!(
-        skill_graph.storage_binding.node_label.as_deref(),
-        Some("RagSkill")
-    );
+    let skill_graph_target = skill_graph
+        .storage_binding
+        .target_for_segment("textUnit")
+        .expect("skill graph textUnit target should be configured");
+    assert_eq!(skill_graph_target.backend, RagStorageBackend::Graph);
+    assert_eq!(skill_graph_target.namespace.as_deref(), Some("rag_skill"));
+    assert_eq!(skill_graph_target.node_label.as_deref(), Some("RagSkill"));
 
     assert!(repository.get_profile("skill-ingest-v1").unwrap().is_some());
     assert!(
@@ -146,7 +132,7 @@ fn graph_backed_repository_dispatches_by_backend_before_layout() {
                 '{\"fulltext\":true,\"vector\":false,\"graph\":true,\"reserved\":false}',
                 '{\"fields\":{\"scopeType\":{\"type\":\"string\",\"column\":\"scope_type\"}}}',
                 '{\"source\":{\"sourceCode\":\"source_code\",\"sourceVersion\":\"source_version\",\"scopeType\":\"scope_type\",\"scopeCode\":\"scope_code\"},\"textUnit\":{\"text\":\"text\"}}',
-                '{\"backend\":\"GRAPH\",\"layout\":\"EMBEDDED_SOURCE\",\"table\":\"rag_backend_dispatch_text_units\",\"diagnosticsTable\":\"rag_diagnostics\"}',
+                '{\"mode\":\"TARGETED\",\"bindings\":{\"source\":\"graph-backend-store\",\"textUnit\":\"graph-backend-store\",\"fulltext\":\"graph-backend-store\",\"vector\":\"graph-backend-store\"},\"targets\":[{\"id\":\"graph-backend-store\",\"backend\":\"GRAPH\",\"layout\":\"GRAPH_SINGLE_NODE\",\"namespace\":\"rag_backend_dispatch\",\"nodeLabel\":\"RagBackendDispatch\",\"codeStrategy\":\"CORPUS_SOURCE_VERSION_SCOPE_HASH\"}]}',
                 1780592400000, 1780592400000
              );",
         )
@@ -185,7 +171,7 @@ fn graph_backed_repository_dispatches_by_backend_before_layout() {
         })
         .unwrap_err();
 
-    assert_eq!(error, RagError::StorageBindingInvalid);
+    assert_eq!(error, RagError::SearchRouteUnavailable);
 }
 
 #[tokio::test]
@@ -342,6 +328,12 @@ async fn skill_graph_ingest_search_expand_debug_and_retry_use_graph_storage_with
         .iter()
         .find(|edge| edge["relationship"] == json!("REQUIRES_TOOL"))
         .expect("requires tool edge should be present");
+    assert!(
+        requires_tool_edge["edgeCode"]
+            .as_str()
+            .is_some_and(|edge_code| edge_code.starts_with("RAG_RELATED_EDGE_")),
+        "generic graph related edges should no longer use a skill-specific code prefix"
+    );
     assert_eq!(
         requires_tool_edge["properties"]["usage"],
         json!("source-control")
@@ -381,6 +373,350 @@ async fn skill_graph_ingest_search_expand_debug_and_retry_use_graph_storage_with
         .await
         .unwrap_err();
     assert_eq!(vector_retry_error, RagError::RetryStageUnsupported);
+}
+
+#[tokio::test]
+async fn mixed_graph_carrier_search_hydrates_sqlite_canonical_text_units() {
+    let database_url = temp_database_path("rag-skill-graph-mixed-hydrate")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-mixed-hydrate-store")
+        .to_string_lossy()
+        .to_string();
+    let runtime = FakeRuntime::new(embedding_4(1.0, 0.0));
+    let (repository, graph_service) = build_repository(&database_url, &graph_path);
+    enable_skill_graph_sqlite_canonical_storage(&database_url);
+    let ingest_service = RagIngestService::new(
+        repository.clone(),
+        DefaultRagStrategyRegistry::default(),
+        runtime,
+    );
+    ingest_service
+        .ingest(skill_graph_request(
+            "rag-mixed",
+            "Canonical SQLite text should hydrate graph carrier hits.",
+        ))
+        .await
+        .unwrap();
+
+    let connection = Connection::open(&database_url).unwrap();
+    let canonical_text: String = connection
+        .query_row(
+            "SELECT text FROM rag_skill_text_units
+             WHERE source_code = 'skill:TRON_CORE:rag-mixed'
+             ORDER BY ordinal LIMIT 1",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert!(canonical_text.contains("Canonical SQLite text"));
+
+    let graph_hits = graph_service
+        .search(
+            graph_scope(),
+            GraphSearchQuery {
+                filters: vec![GraphPropertyFilter {
+                    property_name: "skill_name".into(),
+                    operator: GraphFilterOperator::Equals,
+                    value: GraphPropertyValue::Text("rag-mixed".into()),
+                }],
+                full_text: None,
+                vector_text: None,
+                embedding_model_code: None,
+                traversal: None,
+                labels: vec!["RagSkill".into()],
+                limit: GraphQueryLimit::new(10).unwrap(),
+                min_score: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(graph_hits.len(), 1);
+    let mut carrier_properties = graph_hits[0].node.properties.clone();
+    carrier_properties.insert(
+        "text".into(),
+        GraphPropertyValue::Text("carrier only recall phrase".into()),
+    );
+    carrier_properties.insert(
+        "searchText".into(),
+        GraphPropertyValue::Text("carrier only recall phrase".into()),
+    );
+    graph_service
+        .update_node(
+            graph_scope(),
+            GraphNodeWrite {
+                node_code: graph_hits[0].node.node_code.clone(),
+                labels: graph_hits[0].node.labels.clone(),
+                properties: carrier_properties,
+                full_text: Some("carrier only recall phrase".into()),
+                embedding_text: None,
+                embedding_model_code: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    let hits = repository
+        .lock()
+        .unwrap()
+        .search_route(RagRouteSearchQuery {
+            corpus_id: "skill-graph".into(),
+            route_id: "skill-graph-fulltext".into(),
+            retriever: "FULLTEXT_GRAPH_SINGLE_NODE_V1".into(),
+            workspace_code: "TRON_CORE".into(),
+            query: "carrier".into(),
+            query_embedding: None,
+            query_embedding_model_code: None,
+            source_version: "v1".into(),
+            scopes: vec![RagSearchScope {
+                scope_type: "SPACE".into(),
+                scope_code: "TRON_CORE".into(),
+            }],
+            filters: json!({ "skillName": { "value": "rag-mixed" } }),
+            return_fields: Vec::new(),
+            limit: 5,
+        })
+        .unwrap();
+
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].search_text, "carrier only recall phrase");
+    assert!(hits[0].text.contains("Canonical SQLite text"));
+    assert!(!hits[0].text.contains("carrier only recall phrase"));
+}
+
+#[tokio::test]
+async fn graph_text_units_can_use_sqlite_fulltext_carrier_without_sqlite_text_units() {
+    let database_url = temp_database_path("rag-skill-graph-sqlite-fulltext-carrier")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-sqlite-fulltext-carrier-store")
+        .to_string_lossy()
+        .to_string();
+    let runtime = FakeRuntime::new(embedding_4(1.0, 0.0));
+    let (repository, _) = build_repository(&database_url, &graph_path);
+    enable_skill_graph_sqlite_fulltext_carrier_storage(&database_url);
+    let ingest_service = RagIngestService::new(
+        repository.clone(),
+        DefaultRagStrategyRegistry::default(),
+        runtime,
+    );
+    ingest_service
+        .ingest(skill_graph_request(
+            "rag-sqlite-carrier",
+            "SQLite fulltext carrier works without a SQLite text unit table.",
+        ))
+        .await
+        .unwrap();
+
+    let hits = repository
+        .lock()
+        .unwrap()
+        .search_route(RagRouteSearchQuery {
+            corpus_id: "skill-graph".into(),
+            route_id: "skill-graph-sqlite-fulltext".into(),
+            retriever: "FULLTEXT_SQLITE_FTS5_SIMPLE_V1".into(),
+            workspace_code: "TRON_CORE".into(),
+            query: "carrier".into(),
+            query_embedding: None,
+            query_embedding_model_code: None,
+            source_version: "v1".into(),
+            scopes: vec![RagSearchScope {
+                scope_type: "SPACE".into(),
+                scope_code: "TRON_CORE".into(),
+            }],
+            filters: json!({}),
+            return_fields: Vec::new(),
+            limit: 5,
+        })
+        .unwrap();
+
+    assert_eq!(hits.len(), 1);
+    assert_eq!(
+        hits[0].target_code,
+        "skill:TRON_CORE:rag-sqlite-carrier:v1:0"
+    );
+    assert!(hits[0].search_text.contains("SQLite fulltext carrier"));
+    assert!(hits[0].text.contains("SQLite fulltext carrier"));
+}
+
+#[tokio::test]
+async fn graph_text_units_can_use_sqlite_source_with_graph_retrieval_segments() {
+    let database_url = temp_database_path("rag-skill-graph-sqlite-source-only")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-sqlite-source-only-store")
+        .to_string_lossy()
+        .to_string();
+    let runtime = FakeRuntime::new(embedding_4(1.0, 0.0));
+    let (repository, graph_service) = build_repository(&database_url, &graph_path);
+    enable_skill_graph_sqlite_source_with_graph_retrieval_storage(&database_url);
+    let ingest_service = RagIngestService::new(
+        repository.clone(),
+        DefaultRagStrategyRegistry::default(),
+        runtime,
+    );
+    ingest_service
+        .ingest(skill_graph_request(
+            "rag-source-sqlite",
+            "SQLite source persists while retrieval segments stay in graph.",
+        ))
+        .await
+        .unwrap();
+
+    let connection = Connection::open(&database_url).unwrap();
+    let persisted_source: String = connection
+        .query_row(
+            "SELECT title FROM rag_skill_graph_sources
+             WHERE source_code = 'skill:TRON_CORE:rag-source-sqlite'
+               AND source_version = 'v1'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(persisted_source, "rag-source-sqlite");
+    drop(connection);
+
+    assert_segment_node(
+        &graph_service,
+        "rag_skill_text_units",
+        "RagSkillTextUnit",
+        "unitSkillName",
+        "rag-source-sqlite",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn segmented_graph_runtime_writes_and_searches_role_specific_nodes() {
+    let database_url = temp_database_path("rag-skill-graph-segmented")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-segmented-store")
+        .to_string_lossy()
+        .to_string();
+    let runtime = FakeRuntime::new(embedding_4(1.0, 0.0));
+    let (repository, graph_service) = build_repository(&database_url, &graph_path);
+    enable_skill_graph_segmented_graph_storage(&database_url);
+    let ingest_service = RagIngestService::new(
+        repository.clone(),
+        DefaultRagStrategyRegistry::default(),
+        runtime,
+    );
+    ingest_service
+        .ingest(skill_graph_request(
+            "rag-segmented",
+            "Segmented graph storage keeps text units and vectors in separate nodes.",
+        ))
+        .await
+        .unwrap();
+
+    assert_segment_node(
+        &graph_service,
+        "rag_skill_source",
+        "RagSkillSource",
+        "sourceSkillName",
+        "rag-segmented",
+    )
+    .await;
+    assert_segment_node(
+        &graph_service,
+        "rag_skill_text_units",
+        "RagSkillTextUnit",
+        "unitSkillName",
+        "rag-segmented",
+    )
+    .await;
+    assert_segment_node(
+        &graph_service,
+        "rag_skill_fulltext",
+        "RagSkillFulltext",
+        "unitSkillName",
+        "rag-segmented",
+    )
+    .await;
+    assert_segment_node(
+        &graph_service,
+        "rag_skill_vectors",
+        "RagSkillVector",
+        "unitSkillName",
+        "rag-segmented",
+    )
+    .await;
+
+    let fulltext_hits = repository
+        .lock()
+        .unwrap()
+        .search_route(RagRouteSearchQuery {
+            corpus_id: "skill-graph".into(),
+            route_id: "skill-graph-fulltext".into(),
+            retriever: "FULLTEXT_GRAPH_SINGLE_NODE_V1".into(),
+            workspace_code: "TRON_CORE".into(),
+            query: "separate nodes".into(),
+            query_embedding: None,
+            query_embedding_model_code: None,
+            source_version: "v1".into(),
+            scopes: vec![RagSearchScope {
+                scope_type: "SPACE".into(),
+                scope_code: "TRON_CORE".into(),
+            }],
+            filters: json!({ "skillName": { "value": "rag-segmented" } }),
+            return_fields: Vec::new(),
+            limit: 5,
+        })
+        .unwrap();
+    assert_eq!(fulltext_hits.len(), 1);
+    assert!(fulltext_hits[0].search_text.contains("separate nodes"));
+
+    let vector_hits = repository
+        .lock()
+        .unwrap()
+        .search_route(RagRouteSearchQuery {
+            corpus_id: "skill-graph".into(),
+            route_id: "skill-graph-vector".into(),
+            retriever: "VECTOR_GRAPH_SINGLE_NODE_V1".into(),
+            workspace_code: "TRON_CORE".into(),
+            query: "semantic segmented lookup".into(),
+            query_embedding: Some(embedding_4(1.0, 0.0)),
+            query_embedding_model_code: Some("FAKE_EMBEDDING".into()),
+            source_version: "v1".into(),
+            scopes: vec![RagSearchScope {
+                scope_type: "SPACE".into(),
+                scope_code: "TRON_CORE".into(),
+            }],
+            filters: json!({ "skillName": { "value": "rag-segmented" } }),
+            return_fields: Vec::new(),
+            limit: 5,
+        })
+        .unwrap();
+    assert_eq!(vector_hits.len(), 1);
+    assert_eq!(
+        vector_hits[0].field_values["skillName"],
+        json!("rag-segmented")
+    );
+}
+
+#[tokio::test]
+async fn graph_related_write_keeps_legacy_skill_anchor_compatible() {
+    let database_url = temp_database_path("rag-skill-graph-legacy-anchor")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-legacy-anchor-store")
+        .to_string_lossy()
+        .to_string();
+    let runtime = FakeRuntime::new(embedding_4(1.0, 0.0));
+    let (repository, _) = build_repository(&database_url, &graph_path);
+    let service = RagIngestService::new(repository, DefaultRagStrategyRegistry::default(), runtime);
+    let mut request = skill_graph_request(
+        "rag-legacy-anchor",
+        "Legacy related graph payloads may still use the old skill anchor.",
+    );
+    request.payload["relatedGraph"]["edges"][0]["from"] = json!("$skill");
+    request.payload["relatedGraph"]["edges"][1]["from"] = json!("$skill");
+
+    let result = service.ingest(request).await.unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(result.text_unit_count, 1);
 }
 
 #[tokio::test]
@@ -672,7 +1008,7 @@ fn skill_graph_request(skill_name: &str, description: &str) -> RagIngestRequest 
                 ],
                 "edges": [
                     {
-                        "from": "$skill",
+                        "from": "$target",
                         "to": "tool.git",
                         "relationship": "REQUIRES_TOOL",
                         "properties": {
@@ -682,7 +1018,7 @@ fn skill_graph_request(skill_name: &str, description: &str) -> RagIngestRequest 
                         }
                     },
                     {
-                        "from": "$skill",
+                        "from": "$target",
                         "to": "tag.review",
                         "relationship": "HAS_TAG"
                     }
@@ -729,6 +1065,304 @@ fn add_skill_alias_field_mapping(database_url: &str) {
             params![serde_json::to_string(&field_mapping).unwrap()],
         )
         .unwrap();
+}
+
+fn enable_skill_graph_sqlite_canonical_storage(database_url: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let sqlite_field_mapping_json: String = connection
+        .query_row(
+            "SELECT field_mapping_json FROM rag_corpora WHERE corpus_id = 'skill'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    connection
+        .execute(
+            "UPDATE rag_corpora
+             SET field_mapping_json = ?1,
+                 storage_binding_json = ?2
+             WHERE corpus_id = 'skill-graph'",
+            params![
+                sqlite_field_mapping_json,
+                json!({
+                    "mode": "TARGETED",
+                    "bindings": {
+                        "source": "skill-sqlite-store",
+                        "textUnit": "skill-sqlite-store",
+                        "fulltext": "skill-graph-store",
+                        "vector": "skill-graph-store",
+                        "diagnostics": "diagnostics-store"
+                    },
+                    "targets": [
+                        {
+                            "id": "skill-sqlite-store",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_skill_text_units"
+                        },
+                        {
+                            "id": "skill-graph-store",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_SINGLE_NODE",
+                            "namespace": "rag_skill",
+                            "nodeLabel": "RagSkill",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        },
+                        {
+                            "id": "diagnostics-store",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_diagnostics"
+                        }
+                    ]
+                })
+                .to_string()
+            ],
+        )
+        .unwrap();
+}
+
+fn enable_skill_graph_sqlite_fulltext_carrier_storage(database_url: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    connection
+        .execute(
+            "UPDATE rag_corpora
+             SET storage_binding_json = ?1
+             WHERE corpus_id = 'skill-graph'",
+            params![
+                json!({
+                    "mode": "TARGETED",
+                    "bindings": {
+                        "source": "skill-graph-store",
+                        "textUnit": "skill-graph-store",
+                        "fulltext": "skill-fulltext-store",
+                        "vector": "skill-graph-store",
+                        "diagnostics": "diagnostics-store"
+                    },
+                    "targets": [
+                        {
+                            "id": "skill-graph-store",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_SINGLE_NODE",
+                            "namespace": "rag_skill",
+                            "nodeLabel": "RagSkill",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        },
+                        {
+                            "id": "skill-fulltext-store",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_skill_graph_fulltext"
+                        },
+                        {
+                            "id": "diagnostics-store",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_diagnostics"
+                        }
+                    ]
+                })
+                .to_string()
+            ],
+        )
+        .unwrap();
+}
+
+fn enable_skill_graph_sqlite_source_with_graph_retrieval_storage(database_url: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    connection
+        .execute(
+            "UPDATE rag_corpora
+             SET field_mapping_json = ?1,
+                 storage_binding_json = ?2
+             WHERE corpus_id = 'skill-graph'",
+            params![
+                json!({
+                    "source": {
+                        "sourceCode": "source_code",
+                        "sourceVersion": "source_version",
+                        "sourceType": "source_type",
+                        "scopeType": "scope_type",
+                        "scopeCode": "scope_code",
+                        "status": "status",
+                        "title": "title",
+                        "sourceMetadata": "metadata",
+                        "skillName": "skill_name",
+                        "skillDescription": "skill_description"
+                    },
+                    "textUnit": {
+                        "sourceCode": "sourceCode",
+                        "sourceVersion": "sourceVersion",
+                        "scopeType": "scopeType",
+                        "scopeCode": "scopeCode",
+                        "targetCode": "targetCode",
+                        "textUnitStatus": "textUnitStatus",
+                        "text": "text",
+                        "skillName": "unitSkillName",
+                        "skillDescription": "unitSkillDescription"
+                    }
+                })
+                .to_string(),
+                json!({
+                    "mode": "TARGETED",
+                    "targets": [
+                        {
+                            "id": "skill-source-sqlite",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_skill_graph_sources"
+                        },
+                        {
+                            "id": "skill-text-unit-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_SINGLE_NODE",
+                            "namespace": "rag_skill_text_units",
+                            "nodeLabel": "RagSkillTextUnit",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        },
+                        {
+                            "id": "skill-fulltext-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_SINGLE_NODE",
+                            "namespace": "rag_skill_fulltext",
+                            "nodeLabel": "RagSkillFulltext",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        },
+                        {
+                            "id": "skill-vector-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_SINGLE_NODE",
+                            "namespace": "rag_skill_vectors",
+                            "nodeLabel": "RagSkillVector",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        }
+                    ],
+                    "bindings": {
+                        "source": "skill-source-sqlite",
+                        "textUnit": "skill-text-unit-graph",
+                        "fulltext": "skill-fulltext-graph",
+                        "vector": "skill-vector-graph"
+                    }
+                })
+                .to_string()
+            ],
+        )
+        .unwrap();
+}
+
+fn enable_skill_graph_segmented_graph_storage(database_url: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    connection
+        .execute(
+            "UPDATE rag_corpora
+             SET field_mapping_json = ?1,
+                 storage_binding_json = ?2
+             WHERE corpus_id = 'skill-graph'",
+            params![
+                json!({
+                    "source": {
+                        "sourceCode": "sourceCode",
+                        "sourceVersion": "sourceVersion",
+                        "sourceType": "sourceType",
+                        "scopeType": "scopeType",
+                        "scopeCode": "scopeCode",
+                        "status": "sourceStatus",
+                        "sourceStatus": "sourceStatus",
+                        "title": "title",
+                        "sourceMetadata": "sourceMetadataJson",
+                        "skillName": "sourceSkillName",
+                        "skillDescription": "sourceSkillDescription"
+                    },
+                    "textUnit": {
+                        "sourceCode": "sourceCode",
+                        "sourceVersion": "sourceVersion",
+                        "scopeType": "scopeType",
+                        "scopeCode": "scopeCode",
+                        "targetCode": "targetCode",
+                        "textUnitStatus": "textUnitStatus",
+                        "text": "text",
+                        "skillName": "unitSkillName",
+                        "skillDescription": "unitSkillDescription"
+                    }
+                })
+                .to_string(),
+                json!({
+                    "mode": "TARGETED",
+                    "targets": [
+                        {
+                            "id": "skill-source-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_SINGLE_NODE",
+                            "namespace": "rag_skill_source",
+                            "nodeLabel": "RagSkillSource",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        },
+                        {
+                            "id": "skill-text-unit-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_SINGLE_NODE",
+                            "namespace": "rag_skill_text_units",
+                            "nodeLabel": "RagSkillTextUnit",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        },
+                        {
+                            "id": "skill-fulltext-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_SINGLE_NODE",
+                            "namespace": "rag_skill_fulltext",
+                            "nodeLabel": "RagSkillFulltext",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        },
+                        {
+                            "id": "skill-vector-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_SINGLE_NODE",
+                            "namespace": "rag_skill_vectors",
+                            "nodeLabel": "RagSkillVector",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        }
+                    ],
+                    "bindings": {
+                        "source": "skill-source-graph",
+                        "textUnit": "skill-text-unit-graph",
+                        "fulltext": "skill-fulltext-graph",
+                        "vector": "skill-vector-graph"
+                    }
+                })
+                .to_string()
+            ],
+        )
+        .unwrap();
+}
+
+async fn assert_segment_node(
+    graph_service: &GraphService<ScopeResolver<FakeWorkspaceProvider>>,
+    namespace: &str,
+    label: &str,
+    skill_name_property: &str,
+    skill_name: &str,
+) {
+    let nodes = graph_service
+        .search(
+            graph_scope_for_namespace(namespace),
+            GraphSearchQuery {
+                filters: vec![GraphPropertyFilter {
+                    property_name: skill_name_property.into(),
+                    operator: GraphFilterOperator::Equals,
+                    value: GraphPropertyValue::Text(skill_name.into()),
+                }],
+                full_text: None,
+                vector_text: None,
+                embedding_model_code: None,
+                traversal: None,
+                labels: vec![label.into()],
+                limit: GraphQueryLimit::new(10).unwrap(),
+                min_score: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(nodes.len(), 1, "{label} should contain one segment node");
 }
 
 fn search_request(profile_id: &str, query: &str) -> RagSearchRequest {
@@ -786,8 +1420,12 @@ fn access_context() -> RagIngestAccessContext {
 }
 
 fn graph_scope() -> GraphScopeCommand {
+    graph_scope_for_namespace("rag_skill")
+}
+
+fn graph_scope_for_namespace(namespace: &str) -> GraphScopeCommand {
     GraphScopeCommand {
-        namespace: "rag_skill".into(),
+        namespace: namespace.into(),
         workspace_code: "TRON_CORE".into(),
         app_code: None,
         user_code: None,

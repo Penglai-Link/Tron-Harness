@@ -96,7 +96,7 @@ fn extension_indexes_use_configured_enabled_corpus_text_unit_tables() {
                 '{\"fulltext\":true,\"vector\":true,\"reserved\":false}',
                 '{\"fields\":{\"scopeType\":{\"type\":\"string\",\"column\":\"scope_type\"}}}',
                 '{\"source\":{\"sourceCode\":\"source_code\",\"sourceVersion\":\"source_version\",\"scopeType\":\"scope_type\",\"scopeCode\":\"scope_code\"},\"textUnit\":{\"text\":\"text\"}}',
-                '{\"layout\":\"EMBEDDED_SOURCE\",\"table\":\"rag_custom_text_units\",\"diagnosticsTable\":\"rag_diagnostics\"}',
+                '{\"mode\":\"TARGETED\",\"bindings\":{\"source\":\"custom-store\",\"textUnit\":\"custom-store\",\"fulltext\":\"custom-store\",\"vector\":\"custom-store\",\"diagnostics\":\"diagnostics-store\"},\"targets\":[{\"id\":\"custom-store\",\"backend\":\"SQLITE\",\"layout\":\"TABLE\",\"table\":\"rag_custom_text_units\"},{\"id\":\"diagnostics-store\",\"backend\":\"SQLITE\",\"layout\":\"TABLE\",\"table\":\"rag_diagnostics\"}]}',
                 1780339200000, 1780339200000
              );",
         )
@@ -267,6 +267,48 @@ fn rag_domain_fields_migration_adds_memory_governance_columns_and_indexes_idempo
             "rag_memory_text_units should expose {required}",
         );
     }
+
+    let _ = fs::remove_file(database_path);
+}
+
+#[test]
+fn rag_domain_fields_migration_backfills_legacy_memory_source_columns_before_indexing() {
+    let database_path = temp_database_path("rag-domain-fields-legacy-memory-source");
+    let database_url = database_path.to_string_lossy().to_string();
+
+    let connection = Connection::open(&database_url).expect("legacy database should open");
+    connection
+        .execute_batch(
+            "CREATE TABLE rag_memory_sources (
+                id INTEGER PRIMARY KEY,
+                body_hash TEXT,
+                content_hash TEXT,
+                created_at INTEGER NOT NULL DEFAULT 0,
+                metadata TEXT,
+                scope_code TEXT,
+                scope_type TEXT,
+                source_code TEXT,
+                source_type TEXT,
+                source_version TEXT,
+                status TEXT,
+                text TEXT NOT NULL,
+                title TEXT,
+                updated_at INTEGER NOT NULL DEFAULT 0
+            );",
+        )
+        .expect("legacy memory source table should be created");
+    drop(connection);
+
+    let repository = SqliteRagRepository::connect(&database_url)
+        .expect("RAG repository should upgrade legacy memory source schema");
+
+    assert!(
+        !repository
+            .rag_table_names()
+            .unwrap()
+            .contains("rag_memory_sources"),
+        "legacy memory source table should still be embedded after backfill"
+    );
 
     let _ = fs::remove_file(database_path);
 }

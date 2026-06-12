@@ -8,6 +8,41 @@ use crate::{domain::rag::RagError, response::ApiResponse};
 
 pub fn rag_error_response(error: RagError) -> Response {
     let (status, code, message) = match error {
+        RagError::ManagementRequestInvalid => (
+            StatusCode::BAD_REQUEST,
+            "RAG_MANAGEMENT_REQUEST_INVALID",
+            "rag management request is invalid",
+        ),
+        RagError::StorageTopologyUnsupported => (
+            StatusCode::BAD_REQUEST,
+            "RAG_STORAGE_TOPOLOGY_UNSUPPORTED",
+            "rag storage topology is unsupported",
+        ),
+        RagError::StorageGraphBindingRequired => (
+            StatusCode::BAD_REQUEST,
+            "RAG_STORAGE_GRAPH_BINDING_REQUIRED",
+            "rag graph capability requires a graph storage binding",
+        ),
+        RagError::FilterFieldInvalid => (
+            StatusCode::BAD_REQUEST,
+            "RAG_FILTER_FIELD_INVALID",
+            "rag filter field is invalid",
+        ),
+        RagError::FilterOperatorUnsupported => (
+            StatusCode::BAD_REQUEST,
+            "RAG_FILTER_OPERATOR_UNSUPPORTED",
+            "rag filter operator is unsupported",
+        ),
+        RagError::ProfileStrategyInvalid => (
+            StatusCode::BAD_REQUEST,
+            "RAG_PROFILE_STRATEGY_INVALID",
+            "rag profile strategy is invalid",
+        ),
+        RagError::ProfileCorpusInvalid => (
+            StatusCode::BAD_REQUEST,
+            "RAG_PROFILE_CORPUS_INVALID",
+            "rag profile corpus reference is invalid",
+        ),
         RagError::IngestRequestInvalid => (
             StatusCode::BAD_REQUEST,
             "RAG_INGEST_REQUEST_INVALID",

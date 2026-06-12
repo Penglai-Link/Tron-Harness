@@ -215,7 +215,7 @@ pub fn project_corpus_for_debug(corpus: crate::domain::rag::RagCorpusRecord) -> 
     json!({
         "corpusId": corpus.corpus_id,
         "status": corpus.status.as_str(),
-        "diagnosticsTable": corpus.storage_binding.diagnostics_table,
+        "diagnosticsTable": corpus.storage_binding.diagnostics_table(),
     })
 }
 

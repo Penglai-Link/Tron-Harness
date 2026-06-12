@@ -8,8 +8,7 @@ use axum::{Router, extract::FromRef, routing::get};
 use crate::{
     adapters::{
         inbound::http::{
-            frontend::routes as frontend_routes,
-            auth::routes as auth_routes,
+            auth::routes as auth_routes, frontend::routes as frontend_routes,
             mcp::routes::transport_routes as mcp_transport_routes,
         },
         outbound::{
@@ -17,18 +16,17 @@ use crate::{
             model::{HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient},
             persistence::{
                 GrafeoStoreCore, GraphBackedRagRepository, SqliteAgentEventReplayStore,
-                SqliteAgentManagementRepository,
-                SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
-                SqliteChatRepository, SqliteMcpRepository, SqliteModelRepository,
-                SqliteOpenAppRepository, SqliteRoleRepository,
+                SqliteAgentManagementRepository, SqliteAgentRunRepository, SqliteAppRepository,
+                SqliteAutomationRepository, SqliteChatRepository, SqliteMcpRepository,
+                SqliteModelRepository, SqliteOpenAppRepository, SqliteRoleRepository,
                 SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteUserRepository,
                 SqliteVariableRepository, SqliteWorkspaceRepository, bootstrap_platform_admin,
             },
         },
     },
     application::agent::{
-        register_default_agent_tools, AgentAguiReplayStore, AgentManagementService,
-        AgentRunHistoryService, ModelClient,
+        AgentAguiReplayStore, AgentManagementService, AgentRunHistoryService, ModelClient,
+        register_default_agent_tools,
     },
     application::app::AppService,
     application::automation::AutomationService,
@@ -76,11 +74,8 @@ static GLOBAL_OPEN_APP_SERVICE: OnceLock<OpenAppService> = OnceLock::new();
 static GLOBAL_GRAPH_CORE: OnceLock<GrafeoStoreCore> = OnceLock::new();
 static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService)> = OnceLock::new();
 
-pub type AppRagService = RagService<
-    Arc<Mutex<GraphBackedRagRepository>>,
-    DefaultRagStrategyRegistry,
-    DefaultRagRuntime,
->;
+pub type AppRagService =
+    RagService<Arc<Mutex<GraphBackedRagRepository>>, DefaultRagStrategyRegistry, DefaultRagRuntime>;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -292,8 +287,11 @@ impl AppState {
             if let Some(services) = GLOBAL_GRAPH_SERVICES.get() {
                 services.clone()
             } else {
-                let services =
-                    build_graph_services(graph_core.clone(), workspaces.clone(), llm_runtime.clone());
+                let services = build_graph_services(
+                    graph_core.clone(),
+                    workspaces.clone(),
+                    llm_runtime.clone(),
+                );
                 let _ = GLOBAL_GRAPH_SERVICES.set(services.clone());
                 services
             }

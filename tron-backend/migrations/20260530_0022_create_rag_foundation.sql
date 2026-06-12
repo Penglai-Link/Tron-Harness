@@ -241,7 +241,7 @@ VALUES
         '{"fulltext":true,"vector":true,"reserved":false,"metadataGroups":[{"name":"memory","fields":["memoryType","memoryStatus","reviewStatus","version","supersededBy","conflictGroup","duplicateGroup","injectable","importanceScore","confidenceScore","qualityScore","pinLevel","expiresAt","derivedSourceType","derivedSourceCode"]}]}',
         '{"fields":{"scopeType":{"type":"string","column":"scope_type"},"scopeCode":{"type":"string","column":"scope_code"},"sourceCode":{"type":"string","column":"source_code"},"status":{"type":"string","column":"status"}}}',
         '{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","text":"text"}',
-        '{"sourceTable":"rag_memory_sources","textUnitTable":"rag_memory_text_units","diagnosticsTable":"rag_diagnostics"}',
+        '{"mode":"TARGETED","bindings":{"source":"memory-source-store","textUnit":"memory-text-store","fulltext":"memory-text-store","vector":"memory-text-store","diagnostics":"diagnostics-store"},"targets":[{"id":"memory-source-store","backend":"SQLITE","layout":"TABLE","table":"rag_memory_sources"},{"id":"memory-text-store","backend":"SQLITE","layout":"TABLE","table":"rag_memory_text_units"},{"id":"diagnostics-store","backend":"SQLITE","layout":"TABLE","table":"rag_diagnostics"}]}',
         1772294400000,
         1772294400000
     ),
@@ -253,7 +253,7 @@ VALUES
         '{"fulltext":true,"vector":true,"reserved":false,"metadataGroups":[{"name":"document","fields":["documentCode","documentType","path","repoCode","moduleCode","moduleName"]}]}',
         '{"fields":{"scopeType":{"type":"string","column":"scope_type"},"scopeCode":{"type":"string","column":"scope_code"},"documentCode":{"type":"string","column":"document_code"},"status":{"type":"string","column":"status"}}}',
         '{"source":{"sourceCode":"source_code","sourceVersion":"source_version","sourceType":"source_type","scopeType":"scope_type","scopeCode":"scope_code","status":"status","title":"title","contentHash":"content_hash","metadata":"metadata","documentCode":"document_code"},"textUnit":{"sourceCode":"source_code","sourceVersion":"source_version","scopeType":"scope_type","scopeCode":"scope_code","documentCode":"document_code","text":"text"}}',
-        '{"sourceTable":"rag_project_doc_sources","textUnitTable":"rag_project_doc_text_units","diagnosticsTable":"rag_diagnostics"}',
+        '{"mode":"TARGETED","bindings":{"source":"project-doc-source-store","textUnit":"project-doc-text-store","fulltext":"project-doc-text-store","vector":"project-doc-text-store","diagnostics":"diagnostics-store"},"targets":[{"id":"project-doc-source-store","backend":"SQLITE","layout":"TABLE","table":"rag_project_doc_sources"},{"id":"project-doc-text-store","backend":"SQLITE","layout":"TABLE","table":"rag_project_doc_text_units"},{"id":"diagnostics-store","backend":"SQLITE","layout":"TABLE","table":"rag_diagnostics"}]}',
         1772294400000,
         1772294400000
     ),
@@ -265,7 +265,7 @@ VALUES
         '{"fulltext":false,"vector":false,"reserved":true}',
         '{"fields":{}}',
         '{}',
-        '{"sourceTable":null,"textUnitTable":null,"diagnosticsTable":"rag_diagnostics"}',
+        '{"mode":"TARGETED","bindings":{"diagnostics":"diagnostics-store"},"targets":[{"id":"diagnostics-store","backend":"SQLITE","layout":"TABLE","table":"rag_diagnostics"}]}',
         1772294400000,
         1772294400000
     )

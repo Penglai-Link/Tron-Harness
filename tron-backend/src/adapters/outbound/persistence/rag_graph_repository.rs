@@ -6,14 +6,15 @@ use crate::{
     application::{
         graph::{GraphScopeResolver, GraphStore},
         rag::{
-            RagConfigRepository, RagDebugSourceRequest, RagDebugSourceResult,
-            RagDiagnosticsRepository, RagGraphExpansionQuery, RagIngestRepository,
-            RagPersistIngestCommand, RagProfileListQuery, RagRetryIndexRepository,
-            RagRetryIndexRequest, RagRetryTextUnit, RagRetryVectorUpdate, RagRouteSearchQuery,
-            RagSearchRepository, RagSearchRow, RagSearchTraceWrite,
+            RagConfigRepository, RagCorpusManagementRecord, RagDebugSourceRequest,
+            RagDebugSourceResult, RagDiagnosticsRepository, RagGraphExpansionQuery,
+            RagIngestRepository, RagManagementRepository, RagPersistIngestCommand,
+            RagProfileListQuery, RagRetryIndexRepository, RagRetryIndexRequest, RagRetryTextUnit,
+            RagRetryVectorUpdate, RagRouteSearchQuery, RagSearchRepository, RagSearchRow,
+            RagSearchTraceWrite,
         },
     },
-    domain::rag::{RagCorpusRecord, RagError, RagProfileRecord, RagStorageLayout},
+    domain::rag::{RagCorpusRecord, RagError, RagProfileRecord},
 };
 
 use super::sqlite::SqliteRagRepository;
@@ -22,6 +23,11 @@ mod diagnostics;
 mod ingest;
 mod model;
 mod search;
+mod write_adapters;
+mod write_plan;
+
+use write_adapters::RagStorageWriteAdapterRegistry;
+use write_plan::RagStorageWritePlan;
 
 pub struct GraphBackedRagRepository {
     pub(super) sqlite: SqliteRagRepository,
@@ -61,6 +67,23 @@ impl RagConfigRepository for GraphBackedRagRepository {
     }
 }
 
+impl RagManagementRepository for GraphBackedRagRepository {
+    fn get_managed_corpus(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Option<RagCorpusManagementRecord>, RagError> {
+        self.sqlite.get_managed_corpus(corpus_id)
+    }
+
+    fn save_managed_corpus(&self, record: &RagCorpusRecord) -> Result<(), RagError> {
+        self.sqlite.save_managed_corpus(record)
+    }
+
+    fn save_profile(&self, record: &RagProfileRecord) -> Result<(), RagError> {
+        self.sqlite.save_profile(record)
+    }
+}
+
 impl RagIngestRepository for GraphBackedRagRepository {
     fn persist_ingest(&self, command: RagPersistIngestCommand) -> Result<(), RagError> {
         let corpus = self
@@ -70,8 +93,8 @@ impl RagIngestRepository for GraphBackedRagRepository {
         if !corpus.storage_binding.is_graph_backend() {
             return self.sqlite.persist_ingest(command);
         }
-        ensure_graph_single_node(&corpus)?;
-        self.persist_graph_single_node(&corpus, command)
+        let plan = RagStorageWritePlan::compile(&corpus)?;
+        RagStorageWriteAdapterRegistry::new(self).execute(&plan, &corpus, &command)
     }
 }
 
@@ -84,8 +107,23 @@ impl RagSearchRepository for GraphBackedRagRepository {
         if !corpus.storage_binding.is_graph_backend() {
             return self.sqlite.search_route(query);
         }
-        ensure_graph_single_node(&corpus)?;
-        self.search_graph_route(&corpus, &query)
+        if is_sqlite_retriever(&query.retriever) {
+            if !has_sqlite_runtime_tables(&corpus) {
+                return Err(RagError::SearchRouteUnavailable);
+            }
+            return self.sqlite.search_route(query);
+        }
+        if !is_graph_retriever(&query.retriever) {
+            return Err(RagError::SearchRouteUnavailable);
+        }
+        ensure_graph_runtime_supported(&corpus)?;
+        let rows = self.search_graph_route(&corpus, &query)?;
+        if has_sqlite_runtime_tables(&corpus) {
+            self.sqlite
+                .hydrate_graph_rows_from_text_units(&corpus, rows)
+        } else {
+            Ok(rows)
+        }
     }
 
     fn persist_search_trace(&self, trace: RagSearchTraceWrite) -> Result<(), RagError> {
@@ -103,7 +141,7 @@ impl RagSearchRepository for GraphBackedRagRepository {
         if !corpus.storage_binding.is_graph_backend() {
             return Ok(None);
         }
-        ensure_graph_single_node(&corpus)?;
+        ensure_graph_runtime_supported(&corpus)?;
         self.expand_graph_hit(&corpus, &query)
     }
 }
@@ -120,7 +158,7 @@ impl RagDiagnosticsRepository for GraphBackedRagRepository {
         if !corpus.storage_binding.is_graph_backend() {
             return self.sqlite.debug_source(request);
         }
-        ensure_graph_single_node(&corpus)?;
+        ensure_graph_runtime_supported(&corpus)?;
         self.debug_graph_source(&corpus, request)
     }
 
@@ -141,11 +179,11 @@ impl RagRetryIndexRepository for GraphBackedRagRepository {
         if !corpus.storage_binding.is_graph_backend() {
             return self.sqlite.retry_text_units(request);
         }
-        ensure_graph_single_node(&corpus)?;
+        ensure_graph_runtime_supported(&corpus)?;
         if request.stages.iter().any(|stage| stage == "vectorIndex") {
             return Err(RagError::RetryStageUnsupported);
         }
-        let Some(node) = self.find_graph_skill_node(&corpus, request)? else {
+        let Some(node) = self.find_graph_main_node(&corpus, request)? else {
             return Ok(Vec::new());
         };
         Ok(vec![RagRetryTextUnit {
@@ -162,9 +200,9 @@ impl RagRetryIndexRepository for GraphBackedRagRepository {
         if !corpus.storage_binding.is_graph_backend() {
             return self.sqlite.rebuild_fulltext_index(request);
         }
-        ensure_graph_single_node(&corpus)?;
+        ensure_graph_runtime_supported(&corpus)?;
         Ok(usize::from(
-            self.find_graph_skill_node(&corpus, request)?.is_some(),
+            self.find_graph_main_node(&corpus, request)?.is_some(),
         ))
     }
 
@@ -188,10 +226,41 @@ impl RagRetryIndexRepository for GraphBackedRagRepository {
     }
 }
 
-fn ensure_graph_single_node(corpus: &RagCorpusRecord) -> Result<(), RagError> {
-    if corpus.storage_binding.layout == RagStorageLayout::GraphSingleNode {
+fn ensure_graph_runtime_supported(corpus: &RagCorpusRecord) -> Result<(), RagError> {
+    if model::has_graph_targets(corpus) {
         Ok(())
     } else {
         Err(RagError::StorageBindingInvalid)
     }
+}
+
+fn has_sqlite_runtime_tables(corpus: &RagCorpusRecord) -> bool {
+    ["textUnit", "fulltext", "vector"]
+        .into_iter()
+        .any(|segment| {
+            corpus
+                .storage_binding
+                .sqlite_table_for_segment(segment)
+                .is_some()
+        })
+}
+
+fn is_graph_retriever(retriever: &str) -> bool {
+    matches!(
+        retriever,
+        "FULLTEXT_GRAPH_SINGLE_NODE_V1" | "VECTOR_GRAPH_SINGLE_NODE_V1"
+    )
+}
+
+fn is_sqlite_retriever(retriever: &str) -> bool {
+    matches!(
+        retriever,
+        "FULLTEXT"
+            | "FULLTEXT_SQLITE_LIKE_V1"
+            | "FULLTEXT_SQLITE_FTS5_SIMPLE_V1"
+            | "VECTOR"
+            | "VECTOR_SQLITE_COSINE_V1"
+            | "VECTOR_SQLITE_VEC0_COSINE_V1"
+            | "STRUCTURED_FILTER_SQLITE_V1"
+    )
 }

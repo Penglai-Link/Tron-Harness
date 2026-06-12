@@ -4,9 +4,7 @@ use serde_json::{Value, json};
 use crate::{
     app::AppState,
     application::{
-        agent::{
-            AgentInvocationError, ResolvedAgentRuntime, build_system_runtime_model_config,
-        },
+        agent::{AgentInvocationError, ResolvedAgentRuntime, build_system_runtime_model_config},
         chat::{ChatSendError, ChatSendResult, SendChatMessageCommand},
     },
     domain::{

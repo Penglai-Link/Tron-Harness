@@ -1,21 +1,10 @@
 use std::{collections::BTreeSet, convert::Infallible, sync::Arc, time::Duration};
 
-use axum::{
-    Json,
-    extract::{Path, Query, State},
-    http::StatusCode,
-    response::{
-        IntoResponse, Response,
-        sse::{Event, KeepAlive, Sse},
-    },
-};
 use crate::{
     adapters::inbound::http::auth::RequestAuthContext,
     app::AppState,
     application::{
-        agent::{
-            AgentAguiStreamService, AgentInvocationService, generate_agent_run_code,
-        },
+        agent::{AgentAguiStreamService, AgentInvocationService, generate_agent_run_code},
         chat::{
             ChatSessionQuery, CreateChatSessionCommand, SendChatMessageCommand,
             UpdateChatSessionCommand,
@@ -25,16 +14,25 @@ use crate::{
     response::ApiResponse,
     shared::auth_holder::AuthHolder,
 };
+use axum::{
+    Json,
+    extract::{Path, Query, State},
+    http::StatusCode,
+    response::{
+        IntoResponse, Response,
+        sse::{Event, KeepAlive, Sse},
+    },
+};
 
 use super::error_mapper::{chat_error_response, chat_send_error_response};
 use super::protocol_replay::record_protocol_event;
 use super::stream_live::{SystemAgentLiveEventBuilder, SystemAgentLiveReplayRecorder};
 mod shared;
+use shared::{ChatSsePayload, ChatStreamCompletion};
 pub(crate) use shared::{
     chat_send_error_code, chat_send_error_message, normalized_required, prepare_send_model,
     protocol_event_belongs_to_run, resolve_chat_agent_runtime, uses_system_live_stream,
 };
-use shared::{ChatSsePayload, ChatStreamCompletion};
 
 const CHAT_STREAM_POLL_INTERVAL_MS: u64 = 25;
 const CHAT_STREAM_DRAIN_AFTER_COMPLETION_TICKS: u16 = 80;

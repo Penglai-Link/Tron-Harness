@@ -90,6 +90,7 @@ pub(super) const RAG_STORAGE_BINDING_LAYOUT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260601_0027_add_rag_storage_binding_layout.sql");
 pub(super) const RAG_MEMORY_EMBEDDED_SOURCE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260601_0028_embed_rag_memory_source.sql");
+pub(super) const RAG_MEMORY_TARGETED_STORAGE_MIGRATION: &str = RAG_MEMORY_EMBEDDED_SOURCE_MIGRATION;
 pub(super) const RAG_SKILL_CORPUS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260602_0030_create_skill_rag_corpus.sql");
 pub(super) const RAG_SKILL_GRAPH_CORPUS_MIGRATION: &str =

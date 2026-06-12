@@ -55,18 +55,25 @@ impl RagRetryIndexRepository for SqliteRagRepository {
 
     fn rebuild_fulltext_index(&self, request: &RagRetryIndexRequest) -> Result<usize, RagError> {
         let plan = retry_plan(self, &request.corpus_id)?;
-        let table = quote_identifier(&plan.text_unit_table)?;
-        let updated_at_column = plan
-            .text_unit_updated_at_column
-            .as_deref()
-            .ok_or(RagError::StorageBindingInvalid)?;
+        let table = quote_identifier(plan.fulltext_storage_table())?;
+        let updated_at_column = if plan.has_distinct_fulltext_table() {
+            plan.fulltext_updated_at_column.as_deref()
+        } else {
+            plan.text_unit_updated_at_column.as_deref()
+        }
+        .ok_or(RagError::StorageBindingInvalid)?;
+        let status_column = if plan.has_distinct_fulltext_table() {
+            "status"
+        } else {
+            &plan.text_unit_status_column
+        };
         let sql = format!(
             "UPDATE {table}
              SET {} = ?1
              WHERE source_code = ?2 AND source_version = ?3 AND scope_type = ?4 AND scope_code = ?5
                AND {} = 'ACTIVE'",
             quote_identifier(updated_at_column)?,
-            quote_identifier(&plan.text_unit_status_column)?
+            quote_identifier(status_column)?
         );
         let updated = self
             .connection
@@ -94,9 +101,9 @@ impl RagRetryIndexRepository for SqliteRagRepository {
 
     fn update_vector_index(&self, update: RagRetryVectorUpdate) -> Result<(), RagError> {
         let plan = retry_plan(self, &update.corpus_id)?;
-        let table = quote_identifier(&plan.text_unit_table)?;
+        let table = quote_identifier(plan.vector_storage_table())?;
         let updated_at_column = plan
-            .text_unit_updated_at_column
+            .vector_updated_at_column
             .as_deref()
             .ok_or(RagError::StorageBindingInvalid)?;
         let sql = format!(
@@ -120,9 +127,9 @@ impl RagRetryIndexRepository for SqliteRagRepository {
 
     fn mark_vector_retry_failed(&self, request: &RagRetryIndexRequest) -> Result<(), RagError> {
         let plan = retry_plan(self, &request.corpus_id)?;
-        let table = quote_identifier(&plan.text_unit_table)?;
+        let table = quote_identifier(plan.vector_storage_table())?;
         let updated_at_column = plan
-            .text_unit_updated_at_column
+            .vector_updated_at_column
             .as_deref()
             .ok_or(RagError::StorageBindingInvalid)?;
         let sql = format!(

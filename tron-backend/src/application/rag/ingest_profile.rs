@@ -4,7 +4,11 @@ use serde_json::Value;
 
 use crate::domain::rag::{RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus};
 
-use super::{RagStrategyRegistry, StrategyRegistrationStatus};
+use super::{
+    CompiledRagPipeline, RagPipelineEdgeInput, RagPipelineInput, RagPipelineNodeInput,
+    RagStrategyRegistry, StrategyRegistrationStatus, execution_stage_for_stage_type,
+    stage_type_for_execution_stage, validate_pipeline,
+};
 
 const DEFAULT_PROJECT_DOC_RESOLVER_MAX_BYTES: usize = 1_048_576;
 const DEFAULT_MARKDOWN_HEADING_DEPTH: usize = 6;
@@ -14,6 +18,8 @@ pub struct CompiledRagIngestProfile {
     pub profile_id: String,
     pub corpus_id: String,
     pub stage_order: Vec<String>,
+    pub pipeline: Option<CompiledRagPipeline>,
+    pub stage_metadata: BTreeMap<String, CompiledRagIngestStage>,
     pub payload_strategy_id: String,
     pub supported_source_types: Vec<String>,
     pub source_resolver_strategy_id: Option<String>,
@@ -27,6 +33,13 @@ pub struct CompiledRagIngestProfile {
     pub embedding_model_code: Option<String>,
     pub embedding_version: String,
     pub graph_write_policy: Value,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompiledRagIngestStage {
+    pub node_id: String,
+    pub stage_type: String,
+    pub strategy_id: String,
 }
 
 pub fn compile_ingest_profile<S>(
@@ -45,32 +58,36 @@ where
         return Err(RagError::IngestProfileInvalid);
     }
 
-    let dag = profile
-        .config
-        .get("dag")
-        .and_then(Value::as_object)
-        .ok_or(RagError::IngestProfileInvalid)?;
-    let nodes = dag
-        .get("nodes")
-        .and_then(Value::as_array)
-        .ok_or(RagError::IngestProfileInvalid)?
-        .iter()
-        .map(|value| value.as_str().map(ToOwned::to_owned))
-        .collect::<Option<Vec<_>>>()
-        .ok_or(RagError::IngestProfileInvalid)?;
-    let stages = profile
-        .config
-        .get("stages")
-        .and_then(Value::as_object)
-        .ok_or(RagError::IngestProfileInvalid)?;
-    if nodes.is_empty() || !nodes.iter().any(|node| node == "persistSource") {
+    let (pipeline_input, stages) = if let Some(pipeline) = profile.config.get("pipeline") {
+        let pipeline_input = serde_json::from_value::<RagPipelineInput>(pipeline.clone())
+            .map_err(|_| RagError::IngestProfileInvalid)?;
+        let stages = stages_from_pipeline(&pipeline_input);
+        (pipeline_input, stages)
+    } else {
+        let stages = profile
+            .config
+            .get("stages")
+            .and_then(Value::as_object)
+            .cloned()
+            .ok_or(RagError::IngestProfileInvalid)?;
+        (legacy_pipeline_input(&profile.config, &stages)?, stages)
+    };
+    let compiled_pipeline = validate_pipeline(&pipeline_input, RagProfileType::Ingest)
+        .map_err(|_| RagError::IngestProfileInvalid)?;
+    if compiled_pipeline.nodes.is_empty()
+        || !compiled_pipeline
+            .nodes
+            .iter()
+            .any(|node| node.stage_type == "PERSIST_SOURCE")
+    {
         return Err(RagError::IngestProfileInvalid);
     }
 
-    let node_set = nodes.iter().cloned().collect::<BTreeSet<_>>();
-    for node in &nodes {
+    let mut stage_metadata = BTreeMap::new();
+    for node in &compiled_pipeline.nodes {
+        let stage_key = node.execution_stage_id.as_str();
         let stage = stages
-            .get(node)
+            .get(stage_key)
             .and_then(Value::as_object)
             .ok_or(RagError::IngestProfileInvalid)?;
         let strategy_id = stage
@@ -80,8 +97,32 @@ where
         if registry.resolve_stage(strategy_id).status != StrategyRegistrationStatus::Enabled {
             return Err(RagError::IngestProfileInvalid);
         }
+        stage_metadata.insert(
+            node.node_id.clone(),
+            CompiledRagIngestStage {
+                node_id: stage
+                    .get("nodeId")
+                    .and_then(Value::as_str)
+                    .unwrap_or(node.node_id.as_str())
+                    .to_string(),
+                stage_type: stage
+                    .get("stageType")
+                    .and_then(Value::as_str)
+                    .unwrap_or(node.stage_type.as_str())
+                    .to_string(),
+                strategy_id: strategy_id.to_string(),
+            },
+        );
+        stage_metadata.insert(
+            node.execution_stage_id.clone(),
+            CompiledRagIngestStage {
+                node_id: node.node_id.clone(),
+                stage_type: node.stage_type.clone(),
+                strategy_id: node.strategy_id.clone(),
+            },
+        );
     }
-    let payload_strategy_id = payload_strategy_id(&profile.config, stages)?;
+    let payload_strategy_id = payload_strategy_id(&profile.config, &stages)?;
     if registry
         .resolve_payload_strategy(&payload_strategy_id)
         .status
@@ -90,23 +131,14 @@ where
         return Err(RagError::IngestProfileInvalid);
     }
     let supported_source_types = supported_source_types(&profile.config)?;
-    let source_resolver_strategy_id = optional_stage_strategy_id(stages, "resolveSource")?;
-    let document_parser_strategy_id = optional_stage_strategy_id(stages, "parseDocument")?;
+    let source_resolver_strategy_id = optional_stage_strategy_id(&stages, "resolveSource")?;
+    let document_parser_strategy_id = optional_stage_strategy_id(&stages, "parseDocument")?;
 
-    let edges = dag
-        .get("edges")
-        .and_then(Value::as_array)
-        .ok_or(RagError::IngestProfileInvalid)?
+    let ordered = compiled_pipeline
+        .execution_levels
         .iter()
-        .map(parse_edge)
-        .collect::<Result<Vec<_>, _>>()?;
-    for (from, to) in &edges {
-        if !node_set.contains(from) || !node_set.contains(to) {
-            return Err(RagError::IngestProfileInvalid);
-        }
-    }
-
-    let ordered = topological_order(&nodes, &edges)?;
+        .flat_map(|level| level.iter().cloned())
+        .collect::<Vec<_>>();
     let embedding_model_code = profile
         .config
         .get("embeddingModelCode")
@@ -120,22 +152,24 @@ where
         .and_then(Value::as_str)
         .unwrap_or("v1")
         .to_string();
-    let source_resolver_max_bytes = source_resolver_max_bytes(&profile.config, stages)?;
+    let source_resolver_max_bytes = source_resolver_max_bytes(&profile.config, &stages)?;
     let (record_resolver_info, record_parser_info) = metadata_policy_flags(&profile.config);
     let markdown_heading_depth = if matches!(
         payload_strategy_id.as_str(),
         "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1"
     ) {
-        markdown_heading_depth(&profile.config, stages)?
+        markdown_heading_depth(&profile.config, &stages)?
     } else {
         DEFAULT_MARKDOWN_HEADING_DEPTH
     };
-    let document_format = document_format(&profile.config, stages);
+    let document_format = document_format(&profile.config, &stages);
 
     Ok(CompiledRagIngestProfile {
         profile_id: profile.profile_id.clone(),
         corpus_id: corpus.corpus_id.clone(),
         stage_order: ordered,
+        pipeline: Some(compiled_pipeline),
+        stage_metadata,
         payload_strategy_id,
         supported_source_types,
         source_resolver_strategy_id,
@@ -154,6 +188,97 @@ where
             .cloned()
             .unwrap_or(Value::Null),
     })
+}
+
+fn legacy_pipeline_input(
+    config: &Value,
+    stages: &serde_json::Map<String, Value>,
+) -> Result<RagPipelineInput, RagError> {
+    let dag = config
+        .get("dag")
+        .and_then(Value::as_object)
+        .ok_or(RagError::IngestProfileInvalid)?;
+    let nodes = dag
+        .get("nodes")
+        .and_then(Value::as_array)
+        .ok_or(RagError::IngestProfileInvalid)?
+        .iter()
+        .map(|value| value.as_str().map(ToOwned::to_owned))
+        .collect::<Option<Vec<_>>>()
+        .ok_or(RagError::IngestProfileInvalid)?;
+    let edges = dag
+        .get("edges")
+        .and_then(Value::as_array)
+        .ok_or(RagError::IngestProfileInvalid)?
+        .iter()
+        .map(parse_edge)
+        .collect::<Result<Vec<_>, _>>()?;
+    let node_set = nodes.iter().cloned().collect::<BTreeSet<_>>();
+    for (from, to) in &edges {
+        if !node_set.contains(from) || !node_set.contains(to) {
+            return Err(RagError::IngestProfileInvalid);
+        }
+    }
+    let nodes = nodes
+        .iter()
+        .map(|node| {
+            let stage = stages
+                .get(node)
+                .and_then(Value::as_object)
+                .ok_or(RagError::IngestProfileInvalid)?;
+            let stage_type = stage
+                .get("stageType")
+                .and_then(Value::as_str)
+                .or_else(|| stage_type_for_execution_stage(node))
+                .ok_or(RagError::IngestProfileInvalid)?;
+            let strategy_id = stage
+                .get("strategyId")
+                .and_then(Value::as_str)
+                .ok_or(RagError::IngestProfileInvalid)?;
+            Ok(RagPipelineNodeInput {
+                node_id: node.clone(),
+                stage_type: stage_type.to_string(),
+                strategy_id: strategy_id.to_string(),
+                enabled: true,
+                join_policy: stage
+                    .get("joinPolicy")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned),
+                failure_policy: stage
+                    .get("failurePolicy")
+                    .and_then(Value::as_str)
+                    .map(ToOwned::to_owned),
+                config: stage.get("config").cloned(),
+            })
+        })
+        .collect::<Result<Vec<_>, RagError>>()?;
+    Ok(RagPipelineInput {
+        mode: "DAG".into(),
+        nodes,
+        edges: edges
+            .into_iter()
+            .map(|(from, to)| RagPipelineEdgeInput { from, to })
+            .collect(),
+    })
+}
+
+fn stages_from_pipeline(pipeline: &RagPipelineInput) -> serde_json::Map<String, Value> {
+    pipeline
+        .nodes
+        .iter()
+        .filter_map(|node| {
+            execution_stage_for_stage_type(&node.stage_type).map(|execution_stage_id| {
+                let mut stage = serde_json::Map::new();
+                stage.insert("nodeId".into(), Value::String(node.node_id.clone()));
+                stage.insert("stageType".into(), Value::String(node.stage_type.clone()));
+                stage.insert("strategyId".into(), Value::String(node.strategy_id.clone()));
+                if let Some(config) = node.config.clone() {
+                    stage.insert("config".into(), config);
+                }
+                (execution_stage_id.to_string(), Value::Object(stage))
+            })
+        })
+        .collect()
 }
 
 fn payload_strategy_id(
@@ -310,42 +435,4 @@ fn parse_edge(value: &Value) -> Result<(String, String), RagError> {
         .and_then(Value::as_str)
         .ok_or(RagError::IngestProfileInvalid)?;
     Ok((from.to_string(), to.to_string()))
-}
-
-fn topological_order(
-    nodes: &[String],
-    edges: &[(String, String)],
-) -> Result<Vec<String>, RagError> {
-    let mut incoming = nodes
-        .iter()
-        .map(|node| (node.clone(), 0usize))
-        .collect::<BTreeMap<_, _>>();
-    let mut outgoing: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (from, to) in edges {
-        *incoming.get_mut(to).ok_or(RagError::IngestProfileInvalid)? += 1;
-        outgoing.entry(from.clone()).or_default().push(to.clone());
-    }
-    let mut ready = incoming
-        .iter()
-        .filter_map(|(node, count)| (*count == 0).then(|| node.clone()))
-        .collect::<Vec<_>>();
-    let mut ordered = Vec::new();
-    while let Some(node) = ready.pop() {
-        ordered.push(node.clone());
-        if let Some(next_nodes) = outgoing.get(&node) {
-            for next in next_nodes {
-                let count = incoming
-                    .get_mut(next)
-                    .ok_or(RagError::IngestProfileInvalid)?;
-                *count -= 1;
-                if *count == 0 {
-                    ready.push(next.clone());
-                }
-            }
-        }
-    }
-    if ordered.len() != nodes.len() {
-        return Err(RagError::IngestProfileInvalid);
-    }
-    Ok(ordered)
 }

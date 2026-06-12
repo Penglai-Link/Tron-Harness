@@ -3,6 +3,10 @@ use serde_json::{Value, json};
 use crate::domain::rag::{RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus};
 
 use super::search_strategy::{RetrieverKind, retriever_strategy};
+use super::{
+    CompiledRagPipeline, RagPipelineEdgeInput, RagPipelineInput, RagPipelineNodeInput,
+    validate_pipeline,
+};
 use super::{RagStrategyRegistry, StrategyRegistrationStatus};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -11,6 +15,7 @@ pub struct CompiledRetrievalProfile {
     pub corpus_id: String,
     pub corpus_ids: Vec<String>,
     pub required_source_version: String,
+    pub pipeline: Option<CompiledRagPipeline>,
     pub routes: Vec<RetrievalRoute>,
     pub supported_context_strategies: Vec<String>,
     pub embedding_model_code: Option<String>,
@@ -114,7 +119,19 @@ where
         .filter(|value| !value.is_empty() && !value.eq_ignore_ascii_case("latest"))
         .ok_or(RagError::RetrievalProfileInvalid)?
         .to_string();
-    let routes = parse_routes(profile, &corpus.corpus_id)?;
+    let pipeline_input = profile
+        .config
+        .get("pipeline")
+        .map(|pipeline| {
+            serde_json::from_value::<RagPipelineInput>(pipeline.clone())
+                .map_err(|_| RagError::RetrievalProfileInvalid)
+        })
+        .transpose()?;
+    let routes = if let Some(pipeline_input) = &pipeline_input {
+        parse_pipeline_routes(profile, pipeline_input, &corpus.corpus_id)?
+    } else {
+        parse_routes(profile, &corpus.corpus_id)?
+    };
     if routes.is_empty() {
         return Err(RagError::RetrievalProfileInvalid);
     }
@@ -126,7 +143,6 @@ where
         }
     }
 
-    let supported_context_strategies = parse_context_strategies(&profile.config)?;
     let rerank_enabled = profile
         .config
         .get("rerankPolicy")
@@ -142,22 +158,166 @@ where
         })
         .unwrap_or(false);
 
+    let supported_context_strategies = parse_context_strategies(&profile.config)?;
+    let fusion_policy = parse_fusion_policy(&profile.config)?;
+    let dedup_policy = parse_dedup_policy(&profile.config)?;
+    let pipeline = if let Some(pipeline_input) = pipeline_input {
+        Some(
+            validate_pipeline(&pipeline_input, RagProfileType::Retrieval)
+                .map_err(|_| RagError::RetrievalProfileInvalid)?,
+        )
+    } else {
+        Some(
+            validate_pipeline(
+                &legacy_pipeline_input(
+                    &routes,
+                    &fusion_policy,
+                    &dedup_policy,
+                    &supported_context_strategies,
+                ),
+                RagProfileType::Retrieval,
+            )
+            .map_err(|_| RagError::RetrievalProfileInvalid)?,
+        )
+    };
+
     Ok(CompiledRetrievalProfile {
         profile_id: profile.profile_id.clone(),
         corpus_id: corpus.corpus_id.clone(),
         corpus_ids: profile.corpus_ids.clone(),
         required_source_version,
+        pipeline,
         routes,
         supported_context_strategies,
         embedding_model_code: string_config(&profile.config, "embeddingModelCode"),
         rerank_model_code: string_config(&profile.config, "rerankModelCode"),
         rerank_enabled,
-        fusion_policy: parse_fusion_policy(&profile.config)?,
-        dedup_policy: parse_dedup_policy(&profile.config)?,
+        fusion_policy,
+        dedup_policy,
         topic_policy: parse_topic_policy(&profile.config)?,
         graph_expansion_policy: profile.config.get("graphExpansionPolicy").cloned(),
         degrade_policy: profile.degrade_policy.clone(),
     })
+}
+
+fn parse_pipeline_routes(
+    profile: &RagProfileRecord,
+    pipeline: &RagPipelineInput,
+    corpus_id: &str,
+) -> Result<Vec<RetrievalRoute>, RagError> {
+    pipeline
+        .nodes
+        .iter()
+        .filter(|node| node.enabled && node.stage_type == "ROUTE_SEARCH")
+        .map(|node| {
+            let config = node.config.as_ref().and_then(Value::as_object);
+            Ok(RetrievalRoute {
+                route_id: node.node_id.clone(),
+                corpus_id: config
+                    .and_then(|config| config.get("corpusId"))
+                    .and_then(Value::as_str)
+                    .unwrap_or(corpus_id)
+                    .to_string(),
+                retriever: node.strategy_id.clone(),
+                top_k: config
+                    .and_then(|config| config.get("topK"))
+                    .and_then(Value::as_u64)
+                    .map(|value| value as usize)
+                    .filter(|value| *value > 0)
+                    .unwrap_or(20),
+                weight: config
+                    .and_then(|config| config.get("weight"))
+                    .and_then(Value::as_f64)
+                    .filter(|value| *value > 0.0)
+                    .unwrap_or(1.0),
+                filters: config
+                    .and_then(|config| config.get("filters"))
+                    .cloned()
+                    .unwrap_or_else(|| json!({})),
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .and_then(|routes| validate_route_corpora(profile, routes))
+}
+
+fn legacy_pipeline_input(
+    routes: &[RetrievalRoute],
+    fusion_policy: &FusionPolicy,
+    dedup_policy: &DedupPolicy,
+    supported_context_strategies: &[String],
+) -> RagPipelineInput {
+    let mut nodes = routes
+        .iter()
+        .map(|route| RagPipelineNodeInput {
+            node_id: route.route_id.clone(),
+            stage_type: "ROUTE_SEARCH".into(),
+            strategy_id: route.retriever.clone(),
+            enabled: true,
+            join_policy: None,
+            failure_policy: None,
+            config: Some(json!({
+                "corpusId": route.corpus_id,
+                "topK": route.top_k,
+                "weight": route.weight,
+                "filters": route.filters
+            })),
+        })
+        .collect::<Vec<_>>();
+    let context_strategy = supported_context_strategies
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "RESULT_LIST".into());
+    nodes.extend([
+        RagPipelineNodeInput {
+            node_id: "fuse-results".into(),
+            stage_type: "FUSE_RESULTS".into(),
+            strategy_id: fusion_policy.type_name().into(),
+            enabled: true,
+            join_policy: Some("BEST_EFFORT".into()),
+            failure_policy: None,
+            config: None,
+        },
+        RagPipelineNodeInput {
+            node_id: "dedup-results".into(),
+            stage_type: "DEDUP_RESULTS".into(),
+            strategy_id: dedup_policy.type_name().into(),
+            enabled: true,
+            join_policy: None,
+            failure_policy: None,
+            config: None,
+        },
+        RagPipelineNodeInput {
+            node_id: "build-context".into(),
+            stage_type: "BUILD_CONTEXT".into(),
+            strategy_id: context_strategy,
+            enabled: true,
+            join_policy: None,
+            failure_policy: None,
+            config: None,
+        },
+    ]);
+    let mut edges = routes
+        .iter()
+        .map(|route| RagPipelineEdgeInput {
+            from: route.route_id.clone(),
+            to: "fuse-results".into(),
+        })
+        .collect::<Vec<_>>();
+    edges.extend([
+        RagPipelineEdgeInput {
+            from: "fuse-results".into(),
+            to: "dedup-results".into(),
+        },
+        RagPipelineEdgeInput {
+            from: "dedup-results".into(),
+            to: "build-context".into(),
+        },
+    ]);
+    RagPipelineInput {
+        mode: "DAG".into(),
+        nodes,
+        edges,
+    }
 }
 
 fn parse_routes(

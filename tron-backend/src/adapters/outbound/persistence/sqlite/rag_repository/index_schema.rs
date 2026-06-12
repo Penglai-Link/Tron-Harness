@@ -1,8 +1,11 @@
+use std::collections::BTreeSet;
+
 use rusqlite::Connection;
+use serde_json::Value;
 
 use crate::{
     application::rag::RagConfigRepository,
-    domain::rag::{RagError, RagStatus, RagStorageLayout},
+    domain::rag::{RagCorpusRecord, RagError, RagStatus},
     shared::sqlite_extensions::{
         sqlite_fts5_available, sqlite_simple_tokenizer_available, sqlite_vec_available,
     },
@@ -19,14 +22,66 @@ pub(super) fn apply_extension_index_migration(
     repository: &SqliteRagRepository,
 ) -> Result<(), RagError> {
     drop_retired_extension_tables(&repository.connection)?;
-    for table in configured_text_unit_tables(repository)? {
-        if !table_exists(&repository.connection, &table)? {
+    for corpus in repository.list_corpora()? {
+        if corpus.status != RagStatus::Enabled || !has_sqlite_runtime_table(&corpus) {
             continue;
         }
-        ensure_fts_table(&repository.connection, &table)?;
-        ensure_vector_tables(&repository.connection, &table)?;
+        ensure_runtime_storage_for_corpus(repository, &corpus)?;
     }
     rebuild_all_extension_indexes(repository)
+}
+
+pub(super) fn ensure_runtime_storage_for_corpus(
+    repository: &SqliteRagRepository,
+    corpus: &RagCorpusRecord,
+) -> Result<(), RagError> {
+    let binding = &corpus.storage_binding;
+    let text_unit_table = binding.sqlite_table_for_segment("textUnit");
+    if !has_sqlite_runtime_table(corpus) {
+        return Ok(());
+    }
+    let source_table = binding.sqlite_table_for_segment("source");
+    if let Some(source_table) = source_table.filter(|table| Some(*table) != text_unit_table) {
+        ensure_source_table(&repository.connection, source_table, corpus)?;
+    }
+    if let Some(text_unit_table) = text_unit_table {
+        ensure_text_unit_table(&repository.connection, text_unit_table, corpus)?;
+        if binding.sqlite_table_for_segment("vector") == Some(text_unit_table) {
+            ensure_vector_tables(&repository.connection, text_unit_table)?;
+        }
+    }
+
+    if let Some(fulltext_table) = binding.sqlite_table_for_segment("fulltext") {
+        if text_unit_table == Some(fulltext_table) {
+            ensure_fts_table(&repository.connection, fulltext_table)?;
+        } else {
+            ensure_fulltext_storage_table(&repository.connection, fulltext_table, corpus)?;
+            ensure_fts_table(&repository.connection, fulltext_table)?;
+        }
+    }
+
+    if let Some(vector_table) = binding
+        .sqlite_table_for_segment("vector")
+        .filter(|table| text_unit_table != Some(*table))
+    {
+        ensure_vector_storage_table(&repository.connection, vector_table, corpus)?;
+        ensure_vector_tables(&repository.connection, vector_table)?;
+    }
+    if let Some(diagnostics_table) = binding.diagnostics_table() {
+        ensure_diagnostics_storage_table(&repository.connection, diagnostics_table)?;
+    }
+    Ok(())
+}
+
+fn has_sqlite_runtime_table(corpus: &RagCorpusRecord) -> bool {
+    ["source", "textUnit", "fulltext", "vector", "diagnostics"]
+        .into_iter()
+        .any(|segment| {
+            corpus
+                .storage_binding
+                .sqlite_table_for_segment(segment)
+                .is_some()
+        })
 }
 
 fn drop_retired_extension_tables(connection: &Connection) -> Result<(), RagError> {
@@ -39,21 +94,21 @@ fn drop_retired_extension_tables(connection: &Connection) -> Result<(), RagError
     Ok(())
 }
 
-fn configured_text_unit_tables(repository: &SqliteRagRepository) -> Result<Vec<String>, RagError> {
+fn configured_fulltext_tables(repository: &SqliteRagRepository) -> Result<Vec<String>, RagError> {
     let mut tables = Vec::new();
     for corpus in repository.list_corpora()? {
         if corpus.status != RagStatus::Enabled {
             continue;
         }
-        if !corpus.storage_binding.is_sqlite_backend() {
+        if !has_sqlite_runtime_table(&corpus) {
             continue;
         }
-        let table = match corpus.storage_binding.layout {
-            RagStorageLayout::EmbeddedSource => corpus.storage_binding.table,
-            RagStorageLayout::Split => corpus.storage_binding.text_unit_table,
-            RagStorageLayout::GraphSingleNode => None,
-        };
-        let Some(table) = table else {
+        let Some(table) = corpus
+            .storage_binding
+            .sqlite_table_for_segment("fulltext")
+            .or_else(|| corpus.storage_binding.sqlite_table_for_segment("textUnit"))
+            .map(ToOwned::to_owned)
+        else {
             continue;
         };
         if tables.contains(&table) {
@@ -66,7 +121,7 @@ fn configured_text_unit_tables(repository: &SqliteRagRepository) -> Result<Vec<S
 }
 
 fn rebuild_all_extension_indexes(repository: &SqliteRagRepository) -> Result<(), RagError> {
-    for table in configured_text_unit_tables(repository)? {
+    for table in configured_fulltext_tables(repository)? {
         if !table_exists(&repository.connection, &table)? {
             continue;
         }
@@ -83,11 +138,16 @@ fn rebuild_table_indexes(connection: &Connection, table_name: &str) -> Result<()
             .execute(&format!("DELETE FROM {fts_table}"), [])
             .map_err(storage_error)?;
         let source_table = quote_identifier(table_name)?;
+        let search_column = if table_has_column(connection, table_name, "search_text")? {
+            "search_text"
+        } else {
+            "text"
+        };
         connection
             .execute(
                 &format!(
                     "INSERT INTO {fts_table}(rowid, search_text)
-                     SELECT id, text
+                     SELECT id, {search_column}
                      FROM {source_table}
                      WHERE status = 'ACTIVE'"
                 ),
@@ -131,4 +191,337 @@ fn ensure_vector_tables(connection: &Connection, table_name: &str) -> Result<(),
             .map_err(storage_error)?;
     }
     Ok(())
+}
+
+fn ensure_vector_storage_table(
+    connection: &Connection,
+    table_name: &str,
+    corpus: &RagCorpusRecord,
+) -> Result<(), RagError> {
+    let columns = carrier_text_unit_columns(corpus)?;
+    let table = quote_identifier(table_name)?;
+    let source_index = quote_identifier(&format!("idx_{table_name}_source_scope"))?;
+    let column_sql = dynamic_columns_sql(&columns);
+    connection
+        .execute_batch(&format!(
+            "CREATE TABLE IF NOT EXISTS {table} (
+                id INTEGER PRIMARY KEY,
+                {column_sql},
+                UNIQUE (text_unit_code),
+                UNIQUE (source_code, source_version, scope_type, scope_code, ordinal)
+            );
+            CREATE INDEX IF NOT EXISTS {source_index}
+                ON {table} (source_code, source_version, scope_type, scope_code, ordinal);"
+        ))
+        .map_err(storage_error)?;
+    ensure_missing_text_columns(connection, table_name, &columns)
+}
+
+fn ensure_source_table(
+    connection: &Connection,
+    table_name: &str,
+    corpus: &RagCorpusRecord,
+) -> Result<(), RagError> {
+    let mut columns = BTreeSet::from([
+        "source_code".to_string(),
+        "source_version".to_string(),
+        "source_type".to_string(),
+        "scope_type".to_string(),
+        "scope_code".to_string(),
+        "status".to_string(),
+        "title".to_string(),
+        "metadata".to_string(),
+        "body_hash".to_string(),
+        "content_hash".to_string(),
+        "created_at".to_string(),
+        "updated_at".to_string(),
+    ]);
+    extend_columns_from_mapping(&mut columns, corpus.source_field_mapping.values())?;
+    extend_columns_from_filter_schema(
+        &mut columns,
+        &corpus.filter_schema,
+        corpus.storage_binding.is_sqlite_backend(),
+    )?;
+    let table = quote_identifier(table_name)?;
+    let source_index = quote_identifier(&format!("idx_{table_name}_source_scope"))?;
+    let column_sql = dynamic_columns_sql(&columns);
+    connection
+        .execute_batch(&format!(
+            "CREATE TABLE IF NOT EXISTS {table} (
+                id INTEGER PRIMARY KEY,
+                {column_sql},
+                UNIQUE (source_code, source_version, scope_type, scope_code)
+            );
+            CREATE INDEX IF NOT EXISTS {source_index}
+                ON {table} (source_code, source_version, scope_type, scope_code);"
+        ))
+        .map_err(storage_error)?;
+    ensure_missing_text_columns(connection, table_name, &columns)
+}
+
+fn ensure_text_unit_table(
+    connection: &Connection,
+    table_name: &str,
+    corpus: &RagCorpusRecord,
+) -> Result<(), RagError> {
+    let mut columns = BTreeSet::from([
+        "text_unit_code".to_string(),
+        "source_code".to_string(),
+        "source_version".to_string(),
+        "scope_type".to_string(),
+        "scope_code".to_string(),
+        "unit_type".to_string(),
+        "text".to_string(),
+        "heading_path".to_string(),
+        "ordinal".to_string(),
+        "token_count".to_string(),
+        "status".to_string(),
+        "metadata".to_string(),
+        "content_hash".to_string(),
+        "created_at".to_string(),
+        "updated_at".to_string(),
+    ]);
+    if has_embedded_sqlite_source(corpus) {
+        columns.extend([
+            "source_type".to_string(),
+            "title".to_string(),
+            "body_hash".to_string(),
+        ]);
+    }
+    extend_columns_from_mapping(&mut columns, corpus.text_unit_field_mapping.values())?;
+    if has_embedded_sqlite_source(corpus) {
+        extend_columns_from_mapping(&mut columns, corpus.source_field_mapping.values())?;
+    }
+    extend_columns_from_filter_schema(
+        &mut columns,
+        &corpus.filter_schema,
+        corpus.storage_binding.is_sqlite_backend(),
+    )?;
+    let table = quote_identifier(table_name)?;
+    let source_index = quote_identifier(&format!("idx_{table_name}_source_scope"))?;
+    let column_sql = dynamic_columns_sql(&columns);
+    connection
+        .execute_batch(&format!(
+            "CREATE TABLE IF NOT EXISTS {table} (
+                id INTEGER PRIMARY KEY,
+                {column_sql},
+                UNIQUE (source_code, source_version, scope_type, scope_code, ordinal),
+                UNIQUE (text_unit_code)
+            );
+            CREATE INDEX IF NOT EXISTS {source_index}
+                ON {table} (source_code, source_version, scope_type, scope_code, ordinal);"
+        ))
+        .map_err(storage_error)?;
+    ensure_missing_text_columns(connection, table_name, &columns)
+}
+
+fn has_embedded_sqlite_source(corpus: &RagCorpusRecord) -> bool {
+    let binding = &corpus.storage_binding;
+    binding.sqlite_table_for_segment("source") == binding.sqlite_table_for_segment("textUnit")
+}
+
+fn ensure_diagnostics_storage_table(
+    connection: &Connection,
+    table_name: &str,
+) -> Result<(), RagError> {
+    let table = quote_identifier(table_name)?;
+    connection
+        .execute_batch(&format!(
+            "CREATE TABLE IF NOT EXISTS {table} (
+                id INTEGER PRIMARY KEY,
+                source_code TEXT NOT NULL,
+                source_version TEXT NOT NULL,
+                scope_type TEXT NOT NULL,
+                scope_code TEXT NOT NULL,
+                stage TEXT NOT NULL,
+                status TEXT NOT NULL,
+                message TEXT,
+                details_json TEXT,
+                created_at INTEGER NOT NULL DEFAULT 0,
+                updated_at INTEGER NOT NULL DEFAULT 0
+            );"
+        ))
+        .map_err(storage_error)?;
+    ensure_missing_text_columns(
+        connection,
+        table_name,
+        &BTreeSet::from([
+            "source_code".to_string(),
+            "source_version".to_string(),
+            "scope_type".to_string(),
+            "scope_code".to_string(),
+            "stage".to_string(),
+            "status".to_string(),
+            "message".to_string(),
+            "details_json".to_string(),
+            "created_at".to_string(),
+            "updated_at".to_string(),
+        ]),
+    )?;
+    let source_index = quote_identifier(&format!("idx_{table_name}_source_scope"))?;
+    connection
+        .execute_batch(&format!(
+            "CREATE INDEX IF NOT EXISTS {source_index}
+                ON {table} (source_code, source_version, scope_type, scope_code, stage);"
+        ))
+        .map_err(storage_error)
+}
+
+fn dynamic_columns_sql(columns: &BTreeSet<String>) -> String {
+    columns
+        .iter()
+        .map(|column| {
+            let column_type = if matches!(
+                column.as_str(),
+                "ordinal" | "token_count" | "created_at" | "updated_at"
+            ) {
+                "INTEGER NOT NULL DEFAULT 0"
+            } else if column == "text" {
+                "TEXT NOT NULL"
+            } else {
+                "TEXT"
+            };
+            format!("\"{column}\" {column_type}")
+        })
+        .collect::<Vec<_>>()
+        .join(",\n                ")
+}
+
+fn ensure_missing_text_columns(
+    connection: &Connection,
+    table_name: &str,
+    columns: &BTreeSet<String>,
+) -> Result<(), RagError> {
+    let existing = table_columns(connection, table_name)?;
+    let table = quote_identifier(table_name)?;
+    for column in columns.iter().filter(|column| !existing.contains(*column)) {
+        let quoted_column = quote_identifier(column)?;
+        connection
+            .execute(
+                &format!("ALTER TABLE {table} ADD COLUMN {quoted_column} TEXT"),
+                [],
+            )
+            .map_err(storage_error)?;
+    }
+    Ok(())
+}
+
+fn extend_columns_from_mapping<'a>(
+    columns: &mut BTreeSet<String>,
+    mapped_columns: impl Iterator<Item = &'a String>,
+) -> Result<(), RagError> {
+    for column in mapped_columns {
+        quote_identifier(column)?;
+        columns.insert(column.clone());
+    }
+    Ok(())
+}
+
+fn extend_columns_from_filter_schema(
+    columns: &mut BTreeSet<String>,
+    filter_schema: &Value,
+    strict: bool,
+) -> Result<(), RagError> {
+    let Some(fields) = filter_schema.get("fields").and_then(Value::as_object) else {
+        return Ok(());
+    };
+    for column in fields
+        .values()
+        .filter_map(|field| field.get("column").and_then(Value::as_str))
+    {
+        if quote_identifier(column).is_ok() {
+            columns.insert(column.to_string());
+        } else if strict {
+            return Err(RagError::StorageBindingInvalid);
+        }
+    }
+    Ok(())
+}
+
+fn ensure_fulltext_storage_table(
+    connection: &Connection,
+    table_name: &str,
+    corpus: &RagCorpusRecord,
+) -> Result<(), RagError> {
+    let columns = carrier_text_unit_columns(corpus)?;
+    let table = quote_identifier(table_name)?;
+    let source_index = quote_identifier(&format!("idx_{table_name}_source_scope"))?;
+    let column_sql = dynamic_columns_sql(&columns);
+    connection
+        .execute_batch(&format!(
+            "CREATE TABLE IF NOT EXISTS {table} (
+                id INTEGER PRIMARY KEY,
+                {column_sql},
+                UNIQUE (text_unit_code),
+                UNIQUE (source_code, source_version, scope_type, scope_code, ordinal)
+            );
+            CREATE INDEX IF NOT EXISTS {source_index}
+                ON {table} (source_code, source_version, scope_type, scope_code, ordinal);"
+        ))
+        .map_err(storage_error)?;
+    ensure_missing_text_columns(connection, table_name, &columns)
+}
+
+fn carrier_text_unit_columns(corpus: &RagCorpusRecord) -> Result<BTreeSet<String>, RagError> {
+    let mut columns = BTreeSet::from([
+        "text_unit_code".to_string(),
+        "source_code".to_string(),
+        "source_version".to_string(),
+        "scope_type".to_string(),
+        "scope_code".to_string(),
+        "unit_type".to_string(),
+        "text".to_string(),
+        "search_text".to_string(),
+        "heading_path".to_string(),
+        "ordinal".to_string(),
+        "token_count".to_string(),
+        "status".to_string(),
+        "metadata".to_string(),
+        "content_hash".to_string(),
+        "created_at".to_string(),
+        "updated_at".to_string(),
+    ]);
+    extend_valid_columns_from_mapping(&mut columns, corpus.text_unit_field_mapping.values());
+    extend_columns_from_filter_schema(&mut columns, &corpus.filter_schema, false)?;
+    Ok(columns)
+}
+
+fn extend_valid_columns_from_mapping<'a>(
+    columns: &mut BTreeSet<String>,
+    mapped_columns: impl Iterator<Item = &'a String>,
+) {
+    for column in mapped_columns {
+        if quote_identifier(column).is_ok() {
+            columns.insert(column.clone());
+        }
+    }
+}
+
+fn table_has_column(
+    connection: &Connection,
+    table_name: &str,
+    column_name: &str,
+) -> Result<bool, RagError> {
+    let table = quote_identifier(table_name)?;
+    let mut statement = connection
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(storage_error)?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(storage_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(storage_error)?;
+    Ok(columns.iter().any(|column| column == column_name))
+}
+
+fn table_columns(connection: &Connection, table_name: &str) -> Result<BTreeSet<String>, RagError> {
+    let table = quote_identifier(table_name)?;
+    let mut statement = connection
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(storage_error)?;
+    statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(storage_error)?
+        .collect::<Result<BTreeSet<_>, _>>()
+        .map_err(storage_error)
 }

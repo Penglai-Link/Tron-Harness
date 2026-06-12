@@ -1,0 +1,23 @@
+# Context Index
+
+Generated navigation index. Agents read this first, then open only the needed file, heading, and AC rows.
+
+| file | kind | owns | headings | source_refs | ac_refs |
+| --- | --- | --- | --- | --- | --- |
+| spec/feature-spec.md | feature-model | feature context | Initial Agent Draft, Feature Identity And Context, Requirement, Product Source Slices, Scope Boundary, Assumptions, In Scope, Out Of Scope, Constraints, Feature Model, Page And Module Surface, Repository Findings, Open Decisions | user supplied design | none |
+| spec/database-design.md | spec-support | persistence facts | Database Decision, Existing Schema Impact, Proposed Schema, Relationships And Cardinality, Migration Plan, Query And Performance Plan, Data Governance, Test Data And Fixtures, Validation Commands | none | none |
+| spec/api-contract.md | spec-support | API facts | API Overview, Endpoints, Auth And Permissions, Error Contract, Frontend Backend Boundary, Database And Transaction Boundary, Mock Or Adapter Expectations | none | none |
+| spec/acceptance.md | acceptance-index | AC-* | Acceptance Index, Open Decisions | none | AC-RPD-01, AC-RPD-02, AC-RPD-03, AC-RPD-04, AC-RPD-05, AC-RPD-06, AC-RPD-07, AC-RPD-08, AC-RPD-09, AC-RPD-10, AC-RPD-11, AC-RPD-12, AC-RPD-13, AC-RPD-14, AC-RPD-15, AC-RPD-16, AC-RPD-17, AC-RPD-18, AC-RPD-19, AC-RPD-20, AC-RPD-21 |
+| spec/test-plan.md | proof-plan | CMD-* | Test Plan Decision, Proof Rows, Command Index, Evidence Rules | none | AC-RPD-01, AC-RPD-02, AC-RPD-03, AC-RPD-04, AC-RPD-05, AC-RPD-06, AC-RPD-07, AC-RPD-08, AC-RPD-09, AC-RPD-10, AC-RPD-11, AC-RPD-12, AC-RPD-13, AC-RPD-14, AC-RPD-15, AC-RPD-16, AC-RPD-17, AC-RPD-18, AC-RPD-19, AC-RPD-20, AC-RPD-21 |
+| tasks/backend-task.md | task-plan | backend-worker | Execution Contract, TDD Contract, Task Rows, Worktree Notes, Integration Notes, Open Decisions | none | AC-RPD-01, AC-RPD-02, AC-RPD-03, AC-RPD-04, AC-RPD-05, AC-RPD-08, AC-RPD-09, AC-RPD-10, AC-RPD-11, AC-RPD-12, AC-RPD-13, AC-RPD-14, AC-RPD-15, AC-RPD-16, AC-RPD-17, AC-RPD-18, AC-RPD-19, AC-RPD-21 |
+| tasks/frontend-task.md | task-plan | frontend-worker | Execution Contract, TDD Contract, Task Rows, Worktree Notes, Integration Notes, Open Decisions | none | AC-RPD-06, AC-RPD-07, AC-RPD-08, AC-RPD-20, AC-RPD-21 |
+| tasks/review-task.md | task-plan | lead-agent | Execution Contract, TDD Contract, Task Rows, Worktree Notes, Integration Notes, Open Decisions | none | AC-RPD-01, AC-RPD-02, AC-RPD-03, AC-RPD-04, AC-RPD-05, AC-RPD-06, AC-RPD-07, AC-RPD-08, AC-RPD-19, AC-RPD-20, AC-RPD-21 |
+| orchestration/worktree-plan.md | orchestration | dispatch decisions | Main Agent, Repository State, Multi-Agent Base Branch, Agent Worktrees, Branch And Path Rules, Merge Strategy, Conflict Rules, Cleanup Plan, Open Decisions | none | AC-RPD-01, AC-RPD-02, AC-RPD-03, AC-RPD-04, AC-RPD-05, AC-RPD-06, AC-RPD-07, AC-RPD-08, AC-RPD-09, AC-RPD-10, AC-RPD-11, AC-RPD-12, AC-RPD-13, AC-RPD-14, AC-RPD-15, AC-RPD-16, AC-RPD-17, AC-RPD-18, AC-RPD-19, AC-RPD-20, AC-RPD-21 |
+| orchestration/integration-log.md | orchestration | integration events | Summary, Integration Events, Conflict Log, Validation After Integration, Blockers | none | none |
+| orchestration/feature-evolution-log.md | orchestration | evolution history | Summary, Change History, Downstream Artifact Migration, Residual Risks | none | none |
+| reports/backend-result.md | evidence-ledger | backend evidence | Summary, Evidence Rows, Changed Paths, Commands, Blockers | none | AC-RPD-01, AC-RPD-02, AC-RPD-03, AC-RPD-04, AC-RPD-05, AC-RPD-08 |
+| reports/phase2-runtime-result.md | evidence-ledger | phase2 backend runtime evidence | Summary, Evidence Rows, Changed Paths, Commands, Blockers | none | AC-RPD-09, AC-RPD-10, AC-RPD-11, AC-RPD-12, AC-RPD-13 |
+| reports/phase3-advanced-stages-result.md | evidence-ledger | phase3 backend advanced stage evidence | Summary, Evidence Rows, Changed Paths, Commands, Blockers | none | AC-RPD-14, AC-RPD-15, AC-RPD-16, AC-RPD-17, AC-RPD-18 |
+| reports/phase4-trace-workbench-result.md | evidence-ledger | phase4 trace and Workbench evidence | Summary, Evidence Rows, Changed Paths, Commands, Blockers | none | AC-RPD-19, AC-RPD-20, AC-RPD-21 |
+| reports/frontend-result.md | evidence-ledger | frontend evidence | Summary, Evidence Rows, Changed Paths, Commands, Blockers | none | AC-RPD-06, AC-RPD-07, AC-RPD-08 |
+| reports/final-evidence.md | evidence-ledger | final evidence | Summary, AC Evidence Matrix, Commands, Risks | none | AC-RPD-01, AC-RPD-02, AC-RPD-03, AC-RPD-04, AC-RPD-05, AC-RPD-06, AC-RPD-07, AC-RPD-08, AC-RPD-09, AC-RPD-10, AC-RPD-11, AC-RPD-12, AC-RPD-13, AC-RPD-14, AC-RPD-15, AC-RPD-16, AC-RPD-17, AC-RPD-18, AC-RPD-19, AC-RPD-20, AC-RPD-21 |

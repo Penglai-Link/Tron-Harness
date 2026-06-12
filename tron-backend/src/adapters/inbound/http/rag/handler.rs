@@ -1,12 +1,19 @@
 use axum::{
     Json,
-    extract::{Query, State},
+    extract::{Path, Query, State},
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
+use serde::Deserialize;
 
 use crate::{
-    adapters::inbound::http::auth::RequestAuthContext, app::AppRagService,
-    application::workspace::WorkspaceService, domain::workspace::WorkspaceAccessListQuery,
+    adapters::inbound::http::auth::RequestAuthContext,
+    app::AppRagService,
+    application::rag::{
+        RagCorpusManagementInput, RagFilterValidateInput, RagProfileManagementInput,
+    },
+    application::workspace::WorkspaceService,
+    domain::workspace::WorkspaceAccessListQuery,
     response::ApiResponse,
 };
 
@@ -45,6 +52,68 @@ pub async fn ingest(
     }
 }
 
+pub async fn list_corpora_management(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+) -> Response {
+    match rag.list_corpora_management() {
+        Ok(records) => Json(ApiResponse::success(records)).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
+pub async fn get_corpus_management(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+    Path(corpus_id): Path<String>,
+) -> Response {
+    match rag.get_corpus_management(&corpus_id) {
+        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
+pub async fn corpus_catalog(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+) -> Response {
+    Json(ApiResponse::success(rag.corpus_catalog())).into_response()
+}
+
+pub async fn verify_corpus_management(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+    Json(request): Json<RagCorpusManagementInput>,
+) -> Response {
+    match rag.verify_corpus_management(request) {
+        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
+pub async fn create_corpus_management(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+    Json(request): Json<RagCorpusManagementInput>,
+) -> Response {
+    match rag.create_corpus_management(request) {
+        Ok(result) => (StatusCode::CREATED, Json(ApiResponse::success(result))).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
+pub async fn update_corpus_management(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+    Path(corpus_id): Path<String>,
+    Json(request): Json<RagCorpusManagementInput>,
+) -> Response {
+    match rag.update_corpus_management(&corpus_id, request) {
+        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
 pub async fn search(
     State(workspaces): State<WorkspaceService>,
     State(rag): State<AppRagService>,
@@ -63,6 +132,112 @@ pub async fn search(
 
     match rag.search(request).await {
         Ok(result) => Json(ApiResponse::success(RagSearchResponse::from(result))).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
+pub async fn list_profiles_management(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+    Query(query): Query<RagProfileManagementQuery>,
+) -> Response {
+    match rag.list_profiles_management(query.profile_type.as_deref()) {
+        Ok(records) => Json(ApiResponse::success(records)).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
+pub async fn get_profile_management(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+    Path(profile_id): Path<String>,
+) -> Response {
+    match rag.get_profile_management(&profile_id) {
+        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
+pub async fn profile_catalog(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+) -> Response {
+    match rag.profile_catalog() {
+        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
+pub async fn pipeline_catalog(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+    Query(query): Query<RagPipelineCatalogQuery>,
+) -> Response {
+    let Some(profile_type) = query.profile_type.as_deref() else {
+        return rag_error_response(crate::domain::rag::RagError::ManagementRequestInvalid);
+    };
+    match rag.pipeline_catalog(profile_type) {
+        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
+pub async fn verify_profile_management(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+    Json(request): Json<RagProfileManagementInput>,
+) -> Response {
+    match rag.verify_profile_management(request) {
+        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
+pub async fn create_profile_management(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+    Json(request): Json<RagProfileManagementInput>,
+) -> Response {
+    match rag.create_profile_management(request) {
+        Ok(result) => (StatusCode::CREATED, Json(ApiResponse::success(result))).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
+pub async fn update_profile_management(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+    Path(profile_id): Path<String>,
+    Json(request): Json<RagProfileManagementInput>,
+) -> Response {
+    match rag.update_profile_management(&profile_id, request) {
+        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
+pub async fn update_profile_management_post(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+    Json(request): Json<RagProfileManagementInput>,
+) -> Response {
+    let profile_id = request.profile_id.clone();
+    if profile_id.trim().is_empty() {
+        return rag_error_response(crate::domain::rag::RagError::ManagementRequestInvalid);
+    }
+    match rag.update_profile_management(&profile_id, request) {
+        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
+pub async fn validate_filters_management(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+    Json(request): Json<RagFilterValidateInput>,
+) -> Response {
+    match rag.validate_filters_management(request) {
+        Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => rag_error_response(error),
     }
 }
@@ -235,4 +410,18 @@ fn scope_allowed_for_http(
         "AGENT" => false,
         _ => false,
     }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagProfileManagementQuery {
+    #[serde(default)]
+    pub profile_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagPipelineCatalogQuery {
+    #[serde(default)]
+    pub profile_type: Option<String>,
 }

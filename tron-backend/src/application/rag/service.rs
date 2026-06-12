@@ -6,8 +6,8 @@ use std::{
 use serde_json::{Value, json};
 
 use crate::domain::rag::{
-    RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus, RagStorageBinding,
-    RagStorageLayout,
+    RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus, RagStorageBackend,
+    RagStorageBinding,
 };
 
 pub trait RagConfigRepository {
@@ -367,37 +367,48 @@ fn validate_storage_binding(
     if *status == RagStatus::Reserved {
         return Ok(());
     }
-    let required_tables = match binding.layout {
-        RagStorageLayout::Split => vec![
-            binding.source_table.as_deref(),
-            binding.text_unit_table.as_deref(),
-            binding.diagnostics_table.as_deref(),
-        ],
-        RagStorageLayout::EmbeddedSource => {
-            vec![
-                binding.table.as_deref(),
-                binding.diagnostics_table.as_deref(),
-            ]
-        }
-        RagStorageLayout::GraphSingleNode => vec![
-            binding.namespace.as_deref(),
-            binding.node_label.as_deref(),
-            binding.diagnostics_table.as_deref(),
-        ],
-    };
-    for table_name in required_tables {
-        let Some(table_name) = table_name else {
+    if binding.segment_bindings.is_empty() || binding.segment_targets.is_empty() {
+        return Err(RagError::StorageBindingInvalid);
+    }
+    for target_id in binding.segment_bindings.values() {
+        if !binding.segment_targets.contains_key(target_id) {
             return Err(RagError::StorageBindingInvalid);
-        };
-        if binding.layout == RagStorageLayout::GraphSingleNode {
-            if !is_valid_graph_binding_name(table_name) {
-                return Err(RagError::StorageBindingInvalid);
+        }
+    }
+    for target in binding.segment_targets.values() {
+        match target.backend {
+            RagStorageBackend::Sqlite => {
+                let Some(table_name) = target.table.as_deref() else {
+                    return Err(RagError::StorageBindingInvalid);
+                };
+                if !is_valid_table_name(table_name) {
+                    return Err(RagError::StorageBindingInvalid);
+                }
             }
-            continue;
+            RagStorageBackend::Graph => {
+                let Some(namespace) = target.namespace.as_deref() else {
+                    return Err(RagError::StorageBindingInvalid);
+                };
+                let Some(node_label) = target.node_label.as_deref() else {
+                    return Err(RagError::StorageBindingInvalid);
+                };
+                if !is_valid_graph_binding_name(namespace)
+                    || !is_valid_graph_binding_name(node_label)
+                {
+                    return Err(RagError::StorageBindingInvalid);
+                }
+            }
         }
-        if !is_valid_table_name(table_name) {
+    }
+    for required_segment in ["source", "textUnit", "vector"] {
+        if !binding.segment_bindings.contains_key(required_segment) {
             return Err(RagError::StorageBindingInvalid);
         }
+    }
+    if let Some(diagnostics_table) = binding.diagnostics_table()
+        && !is_valid_table_name(diagnostics_table)
+    {
+        return Err(RagError::StorageBindingInvalid);
     }
     Ok(())
 }

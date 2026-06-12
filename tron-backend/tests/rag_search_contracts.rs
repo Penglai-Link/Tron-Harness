@@ -15,13 +15,14 @@ use tron_backend::{
         DefaultRagStrategyRegistry, RagConfigRepository, RagDocumentSourceCall,
         RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime,
         RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService,
-        RagIngestSource, RagRerankCall, RagResolvedDocument, RagRouteSearchQuery,
-        RagSearchContextRequest, RagSearchRepository, RagSearchRequest, RagSearchRow,
-        RagSearchRuntime, RagSearchService, RagSearchTraceRequest, RagStrategyRegistry,
-        StrategyRegistrationStatus, TopicFallback, TopicPolicy, compile_retrieval_profile,
-        merge_search_filters,
+        RagIngestSource, RagRerankCall, RagResolvedDocument, RagRetryIndexRequest,
+        RagRetryIndexService, RagRouteSearchQuery, RagSearchContextRequest, RagSearchRepository,
+        RagSearchRequest, RagSearchRow, RagSearchRuntime, RagSearchScope, RagSearchService,
+        RagSearchTraceRequest, RagStrategyRegistry, StrategyRegistrationStatus, TopicFallback,
+        TopicPolicy, compile_retrieval_profile, merge_search_filters,
     },
     domain::rag::{RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus},
+    shared::sqlite_extensions::default_sqlite_extension_context,
 };
 
 #[tokio::test]
@@ -53,6 +54,20 @@ async fn memory_search_returns_active_scoped_fulltext_vector_hits_and_context_pa
     assert_eq!(result.context_strategy, "MEMORY_CONTEXT_PACK");
     assert_eq!(result.hits.len(), 1);
     assert_eq!(result.hits[0].source_code, "memory-rag-rule");
+    assert!(
+        result
+            .stage_results
+            .iter()
+            .any(|stage| stage.stage_type == "ROUTE_SEARCH"
+                && stage.output_artifact_keys == vec!["hits.route"])
+    );
+    assert!(
+        result
+            .stage_results
+            .iter()
+            .any(|stage| stage.stage_type == "BUILD_CONTEXT"
+                && stage.output_artifact_keys == vec!["context.pack"])
+    );
     assert_eq!(result.hits[0].source_version, "v1");
     assert_eq!(result.hits[0].title.as_deref(), Some("RAG citation rule"));
     assert_eq!(
@@ -100,6 +115,141 @@ async fn memory_search_projects_requested_logical_return_fields_only() {
     assert_eq!(
         result.hits[0].metadata,
         json!({ "seed": "search-contract" })
+    );
+}
+
+#[tokio::test]
+async fn pipeline_only_memory_retrieval_profile_preserves_existing_search_contract() {
+    let database_url = temp_database_path("rag-search-pipeline-only-memory")
+        .to_string_lossy()
+        .to_string();
+    seed_memory_fixture(&database_url).await;
+    insert_pipeline_only_retrieval_profile(&database_url, "memory-pipeline-only-v1");
+    let repository = CapturingSearchRepository::connect(&database_url);
+    let route_calls = repository.route_calls.clone();
+    let runtime = FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0));
+    let service = RagSearchService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+
+    let result = service
+        .search(search_request(
+            "memory-pipeline-only-v1",
+            "cite source titles",
+            "RESULT_LIST",
+            json!({ "memoryType": "RULE" }),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(result.context_strategy, "RESULT_LIST");
+    assert_eq!(result.hits.len(), 1);
+    assert_eq!(result.hits[0].source_code, "memory-rag-rule");
+    assert_eq!(runtime.embedding_call_count(), 1);
+    assert_eq!(
+        route_calls
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|call| call.retriever.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "STRUCTURED_FILTER_SQLITE_V1",
+            "FULLTEXT_SQLITE_FTS5_SIMPLE_V1",
+            "VECTOR_SQLITE_VEC0_COSINE_V1"
+        ]
+    );
+    assert_eq!(
+        result
+            .stage_results
+            .iter()
+            .map(|stage| stage.node_id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "structured-route",
+            "fulltext-route",
+            "vector-route",
+            "fuse-results",
+            "dedup-results",
+            "build-context"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn retrieval_pipeline_generalizes_and_rewrites_query_before_route_execution() {
+    let database_url = temp_database_path("rag-search-phase3-query-rewrite")
+        .to_string_lossy()
+        .to_string();
+    seed_memory_fixture(&database_url).await;
+    insert_advanced_query_retrieval_profile(&database_url, "memory-advanced-query-v1");
+    let repository = CapturingSearchRepository::connect(&database_url);
+    let route_calls = repository.route_calls.clone();
+    let service = RagSearchService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new(),
+    );
+
+    let result = service
+        .search(search_request(
+            "memory-advanced-query-v1",
+            "cite?",
+            "RESULT_LIST",
+            json!({ "memoryType": "RULE" }),
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(result.query, "cite?");
+    assert_eq!(result.hits.len(), 1);
+    let route_calls = route_calls.lock().unwrap();
+    assert_eq!(route_calls.len(), 1);
+    assert_eq!(
+        route_calls[0].query,
+        "cite source titles retrieval ordering"
+    );
+    drop(route_calls);
+    assert_eq!(
+        result
+            .stage_results
+            .iter()
+            .map(|stage| stage.node_id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "generalize-question",
+            "rewrite-query",
+            "fulltext-route",
+            "fuse-results",
+            "dedup-results",
+            "build-context"
+        ]
+    );
+    assert!(
+        result.stage_results.iter().any(|stage| {
+            stage.node_id == "generalize-question"
+                && stage.input_artifact_keys == vec!["query.original"]
+                && stage.output_artifact_keys == vec!["query.generalized", "query.effective"]
+        }),
+        "QUESTION_GENERALIZATION should report actual query artifact handoff"
+    );
+    assert!(
+        result.stage_results.iter().any(|stage| {
+            stage.node_id == "rewrite-query"
+                && stage.input_artifact_keys == vec!["query.effective"]
+                && stage.output_artifact_keys == vec!["query.rewritten", "query.effective"]
+        }),
+        "QUERY_REWRITE should report actual query artifact handoff"
+    );
+    assert!(
+        result.stage_results.iter().any(|stage| {
+            stage.node_id == "fulltext-route"
+                && stage.input_artifact_keys == vec!["query.effective"]
+                && stage.output_artifact_keys == vec!["hits.route"]
+        }),
+        "route search should consume the effective query artifact"
     );
 }
 
@@ -240,6 +390,122 @@ async fn project_doc_search_projects_requested_document_fields_and_context_pack(
     );
     assert!(item.metadata.get("targetCode").is_none());
     assert!(item.metadata.get("textUnit").is_none());
+}
+
+#[tokio::test]
+async fn project_doc_vector_route_reads_distinct_vector_storage_table_when_configured() {
+    let database_url = temp_database_path("rag-search-doc-separate-vector")
+        .to_string_lossy()
+        .to_string();
+    seed_project_doc_fixture(&database_url).await;
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    set_project_doc_vector_table(&database_url, "rag_project_doc_vectors");
+    backfill_project_doc_vector_storage(&database_url).await;
+
+    let connection = open_prepared_connection(&database_url);
+    connection
+        .execute(
+            "DROP TABLE IF EXISTS rag_project_doc_text_units_vec_d4096",
+            [],
+        )
+        .unwrap();
+    drop(connection);
+
+    let hits = repository
+        .search_route(RagRouteSearchQuery {
+            corpus_id: "project-doc".into(),
+            route_id: "project-doc-vector".into(),
+            retriever: "VECTOR_SQLITE_VEC0_COSINE_V1".into(),
+            workspace_code: "TRON_CORE".into(),
+            query: "sync dag persist".into(),
+            query_embedding: Some(project_doc_embedding()),
+            query_embedding_model_code: Some("workspace-default-embedding".into()),
+            source_version: "v1".into(),
+            scopes: vec![RagSearchScope {
+                scope_type: "SPACE".into(),
+                scope_code: "TRON_CORE".into(),
+            }],
+            filters: json!({}),
+            return_fields: Vec::new(),
+            limit: 5,
+        })
+        .unwrap();
+
+    assert!(!table_exists(
+        &repository,
+        "rag_project_doc_text_units_vec_d4096"
+    ));
+    assert!(table_exists(
+        &repository,
+        "rag_project_doc_vectors_vec_d4096"
+    ));
+    assert!(hits.iter().any(|hit| hit.text.contains("synchronous DAG")));
+}
+
+#[tokio::test]
+async fn project_doc_fulltext_route_reads_distinct_carrier_and_hydrates_text_units() {
+    let database_url = temp_database_path("rag-search-doc-separate-fulltext")
+        .to_string_lossy()
+        .to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    set_project_doc_fulltext_table(&database_url, "rag_project_doc_fulltext");
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new()
+            .with_embedding(project_doc_embedding())
+            .with_embedding(project_doc_embedding())
+            .with_document(project_doc_markdown()),
+    );
+    service.ingest(project_doc_request()).await.unwrap();
+    let connection = open_prepared_connection(&database_url);
+    connection
+        .execute(
+            "UPDATE rag_project_doc_fulltext
+             SET search_text = 'carrier recall phrase'
+             WHERE ordinal = 1",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute("DELETE FROM rag_project_doc_fulltext_fts", [])
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO rag_project_doc_fulltext_fts(rowid, search_text)
+             SELECT id, search_text FROM rag_project_doc_fulltext WHERE status = 'ACTIVE'",
+            [],
+        )
+        .unwrap();
+    drop(connection);
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    set_project_doc_fulltext_table(&database_url, "rag_project_doc_fulltext");
+
+    let hits = repository
+        .search_route(RagRouteSearchQuery {
+            corpus_id: "project-doc".into(),
+            route_id: "project-doc-fulltext".into(),
+            retriever: "FULLTEXT_SQLITE_FTS5_SIMPLE_V1".into(),
+            workspace_code: "TRON_CORE".into(),
+            query: "carrier".into(),
+            query_embedding: None,
+            query_embedding_model_code: None,
+            source_version: "v1".into(),
+            scopes: vec![RagSearchScope {
+                scope_type: "SPACE".into(),
+                scope_code: "TRON_CORE".into(),
+            }],
+            filters: json!({}),
+            return_fields: Vec::new(),
+            limit: 5,
+        })
+        .unwrap();
+
+    assert!(table_exists(&repository, "rag_project_doc_fulltext_fts"));
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].target_code, "doc-rag-mvp:v1:1");
+    assert_eq!(hits[0].search_text, "carrier recall phrase");
+    assert!(hits[0].text.contains("synchronous DAG"));
 }
 
 #[tokio::test]
@@ -642,6 +908,15 @@ async fn blank_query_executes_only_structured_filter_routes_without_embedding_or
     assert_eq!(route_calls.len(), 1);
     assert_eq!(route_calls[0].retriever, "STRUCTURED_FILTER_SQLITE_V1");
     assert!(route_calls[0].query.trim().is_empty());
+    assert_eq!(
+        result
+            .stage_results
+            .iter()
+            .filter(|stage| stage.stage_type == "ROUTE_SEARCH")
+            .map(|stage| stage.node_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["memory-structured"]
+    );
 }
 
 #[tokio::test]
@@ -1066,9 +1341,22 @@ async fn sqlite_extension_indexes_survive_reconnect_without_main_index_payload()
 #[test]
 fn repository_search_boundary_keeps_graph_summary_and_memory_flow_behavior_out() {
     let rag_http_routes = include_str!("../src/adapters/inbound/http/rag/routes.rs");
-    let rag_application = include_str!("../src/application/rag/search.rs");
-    let repository_search =
-        include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/search.rs");
+    let rag_application = [
+        include_str!("../src/application/rag/search.rs"),
+        include_str!("../src/application/rag/search/split/split_01.rs"),
+        include_str!("../src/application/rag/search/split/split_02.rs"),
+    ]
+    .join("\n");
+    let repository_search = [
+        include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/search.rs"),
+        include_str!(
+            "../src/adapters/outbound/persistence/sqlite/rag_repository/search/split/split_01.rs"
+        ),
+        include_str!(
+            "../src/adapters/outbound/persistence/sqlite/rag_repository/search/split/split_02.rs"
+        ),
+    ]
+    .join("\n");
 
     assert!(rag_http_routes.contains("/api/v1/rag/search"));
     for forbidden_route in ["/api/v1/rag/graph", "/api/v1/rag/memory-flow"] {
@@ -1082,18 +1370,34 @@ fn repository_search_boundary_keeps_graph_summary_and_memory_flow_behavior_out()
 
 #[test]
 fn sqlite_rag_repository_uses_template_plans_instead_of_corpus_sql_branches() {
-    let repository_ingest =
-        include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/ingest.rs");
-    let repository_search =
-        include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/search.rs");
+    let repository_ingest = [
+        include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/ingest.rs"),
+        include_str!(
+            "../src/adapters/outbound/persistence/sqlite/rag_repository/ingest/split_01.rs"
+        ),
+        include_str!(
+            "../src/adapters/outbound/persistence/sqlite/rag_repository/ingest/split_02.rs"
+        ),
+    ]
+    .join("\n");
+    let repository_search = [
+        include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/search.rs"),
+        include_str!(
+            "../src/adapters/outbound/persistence/sqlite/rag_repository/search/split/split_01.rs"
+        ),
+        include_str!(
+            "../src/adapters/outbound/persistence/sqlite/rag_repository/search/split/split_02.rs"
+        ),
+    ]
+    .join("\n");
     let repository_retry =
         include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/retry.rs");
     let repository_diagnostics =
         include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/diagnostics.rs");
 
     for source in [
-        repository_ingest,
-        repository_search,
+        repository_ingest.as_str(),
+        repository_search.as_str(),
         repository_retry,
         repository_diagnostics,
     ] {
@@ -1113,6 +1417,25 @@ fn sqlite_rag_repository_uses_template_plans_instead_of_corpus_sql_branches() {
             "SQLite RAG repository should not branch SQL templates by corpus id",
         );
     }
+}
+
+#[test]
+fn search_runtime_uses_pipeline_stage_results_instead_of_posthoc_synthesis() {
+    let search_source = [
+        include_str!("../src/application/rag/search.rs"),
+        include_str!("../src/application/rag/search/split/split_01.rs"),
+        include_str!("../src/application/rag/search/split/split_02.rs"),
+    ]
+    .join("\n");
+
+    assert!(
+        !search_source.contains("fn search_stage_results("),
+        "search stageResults should be emitted by the generic DAG executor for actually executed nodes"
+    );
+    assert!(
+        search_source.contains("execute_retrieval_pipeline"),
+        "search runtime should execute the compiled retrieval pipeline"
+    );
 }
 
 struct CapturingSearchRepository {
@@ -1624,6 +1947,253 @@ fn insert_structured_filter_profile(
         .unwrap();
 }
 
+fn insert_pipeline_only_retrieval_profile(database_url: &str, profile_id: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let config = json!({
+        "pipeline": {
+            "mode": "DAG",
+            "nodes": [
+                {
+                    "nodeId": "structured-route",
+                    "stageType": "ROUTE_SEARCH",
+                    "strategyId": "STRUCTURED_FILTER_SQLITE_V1",
+                    "config": {
+                        "corpusId": "memory-card",
+                        "topK": 5,
+                        "weight": 1.0,
+                        "filters": {"injectable": true}
+                    }
+                },
+                {
+                    "nodeId": "fulltext-route",
+                    "stageType": "ROUTE_SEARCH",
+                    "strategyId": "FULLTEXT_SQLITE_FTS5_SIMPLE_V1",
+                    "config": {
+                        "corpusId": "memory-card",
+                        "topK": 5,
+                        "weight": 1.0
+                    }
+                },
+                {
+                    "nodeId": "vector-route",
+                    "stageType": "ROUTE_SEARCH",
+                    "strategyId": "VECTOR_SQLITE_VEC0_COSINE_V1",
+                    "config": {
+                        "corpusId": "memory-card",
+                        "topK": 5,
+                        "weight": 1.0
+                    }
+                },
+                {
+                    "nodeId": "fuse-results",
+                    "stageType": "FUSE_RESULTS",
+                    "strategyId": "SUM_SCORE"
+                },
+                {
+                    "nodeId": "dedup-results",
+                    "stageType": "DEDUP_RESULTS",
+                    "strategyId": "TEXT_UNIT"
+                },
+                {
+                    "nodeId": "build-context",
+                    "stageType": "BUILD_CONTEXT",
+                    "strategyId": "RESULT_LIST"
+                }
+            ],
+            "edges": [
+                { "from": "structured-route", "to": "fuse-results" },
+                { "from": "fulltext-route", "to": "fuse-results" },
+                { "from": "vector-route", "to": "fuse-results" },
+                { "from": "fuse-results", "to": "dedup-results" },
+                { "from": "dedup-results", "to": "build-context" }
+            ]
+        },
+        "contextPolicy": {
+            "supportedStrategies": ["RESULT_LIST"]
+        },
+        "rerankPolicy": {"enabled": false}
+    });
+    connection
+        .execute(
+            "INSERT INTO rag_profiles (
+                profile_id, profile_type, status, primary_corpus_id, corpus_ids_json,
+                required_source_version, config_json, filters_json, degrade_policy,
+                created_at, updated_at
+            )
+            VALUES (?1, 'RETRIEVAL', 'enabled', 'memory-card', '[\"memory-card\"]',
+                'v1', ?2, '{}', 'SKIP_VECTOR_ON_UNAVAILABLE', 1, 1)",
+            params![profile_id, config.to_string()],
+        )
+        .unwrap();
+}
+
+fn insert_advanced_query_retrieval_profile(database_url: &str, profile_id: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let config = json!({
+        "pipeline": {
+            "mode": "DAG",
+            "nodes": [
+                {
+                    "nodeId": "generalize-question",
+                    "stageType": "QUESTION_GENERALIZATION",
+                    "strategyId": "RAG_QUESTION_GENERALIZATION_SIMPLE_V1",
+                    "config": {
+                        "appendTerms": ["source titles"]
+                    }
+                },
+                {
+                    "nodeId": "rewrite-query",
+                    "stageType": "QUERY_REWRITE",
+                    "strategyId": "RAG_QUERY_REWRITE_TEMPLATE_V1",
+                    "config": {
+                        "template": "{query} retrieval ordering"
+                    }
+                },
+                {
+                    "nodeId": "fulltext-route",
+                    "stageType": "ROUTE_SEARCH",
+                    "strategyId": "FULLTEXT_SQLITE_FTS5_SIMPLE_V1",
+                    "config": {
+                        "corpusId": "memory-card",
+                        "topK": 5,
+                        "weight": 1.0
+                    }
+                },
+                {
+                    "nodeId": "fuse-results",
+                    "stageType": "FUSE_RESULTS",
+                    "strategyId": "SUM_SCORE"
+                },
+                {
+                    "nodeId": "dedup-results",
+                    "stageType": "DEDUP_RESULTS",
+                    "strategyId": "TEXT_UNIT"
+                },
+                {
+                    "nodeId": "build-context",
+                    "stageType": "BUILD_CONTEXT",
+                    "strategyId": "RESULT_LIST"
+                }
+            ],
+            "edges": [
+                { "from": "generalize-question", "to": "rewrite-query" },
+                { "from": "rewrite-query", "to": "fulltext-route" },
+                { "from": "fulltext-route", "to": "fuse-results" },
+                { "from": "fuse-results", "to": "dedup-results" },
+                { "from": "dedup-results", "to": "build-context" }
+            ]
+        },
+        "contextPolicy": {
+            "supportedStrategies": ["RESULT_LIST"]
+        },
+        "rerankPolicy": {"enabled": false}
+    });
+    connection
+        .execute(
+            "INSERT INTO rag_profiles (
+                profile_id, profile_type, status, primary_corpus_id, corpus_ids_json,
+                required_source_version, config_json, filters_json, degrade_policy,
+                created_at, updated_at
+            )
+            VALUES (?1, 'RETRIEVAL', 'enabled', 'memory-card', '[\"memory-card\"]',
+                'v1', ?2, '{\"memoryType\":\"RULE\"}', 'PARTIAL_ALLOWED', 1, 1)",
+            params![profile_id, config.to_string()],
+        )
+        .unwrap();
+}
+
+fn set_project_doc_vector_table(database_url: &str, table_name: &str) {
+    set_project_doc_segment_table(
+        database_url,
+        "vector",
+        "project-doc-vector-store",
+        table_name,
+    );
+}
+
+fn set_project_doc_fulltext_table(database_url: &str, table_name: &str) {
+    set_project_doc_segment_table(
+        database_url,
+        "fulltext",
+        "project-doc-fulltext-store",
+        table_name,
+    );
+}
+
+fn set_project_doc_segment_table(
+    database_url: &str,
+    segment: &str,
+    target_id: &str,
+    table_name: &str,
+) {
+    let connection = Connection::open(database_url).unwrap();
+    let binding_json = connection
+        .query_row(
+            "SELECT storage_binding_json FROM rag_corpora WHERE corpus_id = 'project-doc'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .unwrap();
+    let mut binding = serde_json::from_str::<Value>(&binding_json).unwrap();
+    binding["bindings"][segment] = json!(target_id);
+    let targets = binding["targets"]
+        .as_array_mut()
+        .expect("storage targets should be an array");
+    if let Some(target) = targets
+        .iter_mut()
+        .find(|target| target["id"] == json!(target_id))
+    {
+        target["table"] = json!(table_name);
+    } else {
+        targets.push(json!({
+            "id": target_id,
+            "backend": "SQLITE",
+            "layout": "TABLE",
+            "table": table_name
+        }));
+    }
+    connection
+        .execute(
+            "UPDATE rag_corpora
+             SET storage_binding_json = ?1
+             WHERE corpus_id = 'project-doc'",
+            params![binding.to_string()],
+        )
+        .unwrap();
+}
+
+async fn backfill_project_doc_vector_storage(database_url: &str) {
+    let repository = SqliteRagRepository::connect(database_url).unwrap();
+    set_project_doc_vector_table(database_url, "rag_project_doc_vectors");
+    let retry = RagRetryIndexService::new(
+        repository,
+        FakeSearchRuntime::new().with_embedding(project_doc_embedding()),
+    );
+    retry
+        .retry_index(RagRetryIndexRequest {
+            workspace_code: "TRON_CORE".into(),
+            corpus_id: "project-doc".into(),
+            source_code: "doc-rag-mvp".into(),
+            source_version: "v1".into(),
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+            stages: vec!["vectorIndex".into()],
+            embedding_model_code: Some("workspace-default-embedding".into()),
+            user_code: "USR-LARGE-ID".into(),
+            agent_code: "AGENT_CODEX".into(),
+        })
+        .await
+        .unwrap();
+}
+
+fn open_prepared_connection(database_url: &str) -> Connection {
+    let connection = Connection::open(database_url).unwrap();
+    default_sqlite_extension_context()
+        .prepare_connection(&connection)
+        .unwrap();
+    connection
+}
+
 fn insert_extension_memory_profile(database_url: &str, profile_id: &str) {
     let connection = Connection::open(database_url).unwrap();
     let config = json!({
@@ -1817,6 +2387,10 @@ fn retrieval_profile(profile_id: &str, version: Option<&str>, config: Value) -> 
         filters: json!({}),
         degrade_policy: "SKIP_VECTOR_ON_UNAVAILABLE".into(),
     }
+}
+
+fn table_exists(repository: &SqliteRagRepository, table_name: &str) -> bool {
+    repository.rag_table_names().unwrap().contains(table_name)
 }
 
 fn temp_database_path(test_name: &str) -> PathBuf {

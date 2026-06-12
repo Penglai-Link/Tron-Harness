@@ -1,0 +1,193 @@
+fn source_properties(
+    corpus: &RagCorpusRecord,
+    command: &RagPersistIngestCommand,
+    node_code: &str,
+) -> Result<BTreeMap<String, GraphPropertyValue>, RagError> {
+    let mut properties = source_base_properties(command, node_code)?;
+    push_domain_field_properties(corpus, "source", command, &mut properties)?;
+    Ok(properties)
+}
+
+fn source_base_properties(
+    command: &RagPersistIngestCommand,
+    node_code: &str,
+) -> Result<BTreeMap<String, GraphPropertyValue>, RagError> {
+    let mut properties = BTreeMap::new();
+    push_text_prop(&mut properties, "corpusId", &command.corpus_id);
+    push_text_prop(&mut properties, "sourceCode", &command.source_code);
+    push_text_prop(&mut properties, "sourceVersion", &command.source_version);
+    push_text_prop(&mut properties, "sourceType", &command.source_type);
+    push_text_prop(&mut properties, "sourceStatus", &command.source_status);
+    push_text_prop(&mut properties, "scopeType", &command.scope.scope_type);
+    push_text_prop(&mut properties, "scopeCode", &command.scope.scope_code);
+    push_text_prop(&mut properties, "ragWorkspaceCode", &command.workspace_code);
+    push_text_prop(&mut properties, "targetCode", node_code);
+    push_text_prop(
+        &mut properties,
+        "title",
+        command.title.as_deref().unwrap_or(""),
+    );
+    push_text_prop(
+        &mut properties,
+        "metadataJson",
+        &json_string(&command.metadata)?,
+    );
+    push_text_prop(
+        &mut properties,
+        "sourceMetadataJson",
+        &json_string(&command.metadata)?,
+    );
+    Ok(properties)
+}
+
+fn text_unit_properties(
+    corpus: &RagCorpusRecord,
+    command: &RagPersistIngestCommand,
+    unit: &RagTextUnitWrite,
+    node_code: &str,
+    text_unit_node_code: &str,
+) -> Result<BTreeMap<String, GraphPropertyValue>, RagError> {
+    let mut properties = source_base_properties(command, node_code)?;
+    push_domain_field_properties(corpus, "textUnit", command, &mut properties)?;
+    push_text_prop(&mut properties, "textUnitCode", &unit.text_unit_code);
+    push_text_prop(&mut properties, "textUnitNodeCode", text_unit_node_code);
+    push_text_prop(&mut properties, "text", &unit.text);
+    push_text_prop(&mut properties, "searchText", &unit.search_text);
+    push_text_prop(&mut properties, "headingPath", &unit.heading_path);
+    push_text_prop(&mut properties, "textUnitStatus", &unit.status);
+    push_text_prop(&mut properties, "fulltextStatus", &unit.fulltext_status);
+    push_text_prop(&mut properties, "embeddingStatus", &unit.embedding_status);
+    push_text_prop(
+        &mut properties,
+        "embeddingModelCode",
+        unit.embedding_model_code.as_deref().unwrap_or(""),
+    );
+    push_text_prop(
+        &mut properties,
+        "metadataJson",
+        &json_string(&unit.metadata)?,
+    );
+    properties.insert(
+        "ordinal".into(),
+        GraphPropertyValue::Integer(unit.ordinal as i64),
+    );
+    properties.insert(
+        "tokenCount".into(),
+        GraphPropertyValue::Integer(unit.token_count),
+    );
+    if let Some(embedding) = unit.embedding.as_deref() {
+        push_text_prop(
+            &mut properties,
+            "embeddingJson",
+            &json_string(&decode_embedding(embedding))?,
+        );
+    }
+    Ok(properties)
+}
+
+fn push_domain_field_properties(
+    corpus: &RagCorpusRecord,
+    segment: &str,
+    command: &RagPersistIngestCommand,
+    properties: &mut BTreeMap<String, GraphPropertyValue>,
+) -> Result<(), RagError> {
+    for (logical_name, value) in &command.domain_fields {
+        let property_name = graph_property_name_for_logical(corpus, segment, logical_name)
+            .ok_or(RagError::StorageBindingInvalid)?;
+        if is_reserved_main_node_property(property_name) {
+            return Err(RagError::StorageBindingInvalid);
+        }
+        properties.insert(property_name.to_string(), json_graph_property_value(value)?);
+    }
+    Ok(())
+}
+
+fn is_reserved_main_node_property(name: &str) -> bool {
+    matches!(
+        name,
+        "corpusId"
+            | "sourceCode"
+            | "sourceVersion"
+            | "sourceType"
+            | "sourceStatus"
+            | "scopeType"
+            | "scopeCode"
+            | "ragWorkspaceCode"
+            | "targetCode"
+            | "textUnitCode"
+            | "title"
+            | "text"
+            | "searchText"
+            | "headingPath"
+            | "textUnitStatus"
+            | "fulltextStatus"
+            | "embeddingStatus"
+            | "embeddingModelCode"
+            | "metadataJson"
+            | "sourceMetadataJson"
+            | "tokenCount"
+            | "embeddingJson"
+    )
+}
+
+fn custom_related_properties(
+    node: &Value,
+) -> Result<BTreeMap<String, GraphPropertyValue>, RagError> {
+    let mut properties = BTreeMap::new();
+    let Some(raw_properties) = node.get("properties") else {
+        return Ok(properties);
+    };
+    let property_map = raw_properties
+        .as_object()
+        .ok_or(RagError::IngestRequestInvalid)?;
+    for (name, value) in property_map {
+        let name = name.trim();
+        if name.is_empty() || is_reserved_related_property(name) {
+            return Err(RagError::IngestRequestInvalid);
+        }
+        properties.insert(name.to_string(), json_graph_property_value(value)?);
+    }
+    Ok(properties)
+}
+
+fn custom_edge_properties(edge: &Value) -> Result<BTreeMap<String, GraphPropertyValue>, RagError> {
+    let mut properties = BTreeMap::new();
+    let Some(raw_properties) = edge.get("properties") else {
+        return Ok(properties);
+    };
+    let property_map = raw_properties
+        .as_object()
+        .ok_or(RagError::IngestRequestInvalid)?;
+    for (name, value) in property_map {
+        let name = name.trim();
+        if name.is_empty() || is_reserved_edge_property(name) {
+            return Err(RagError::IngestRequestInvalid);
+        }
+        properties.insert(name.to_string(), json_graph_property_value(value)?);
+    }
+    Ok(properties)
+}
+
+fn is_reserved_related_property(name: &str) -> bool {
+    matches!(name, "relatedKind" | "relatedRef" | "title" | "text")
+}
+
+fn is_reserved_edge_property(name: &str) -> bool {
+    matches!(
+        name,
+        "edgeCode" | "sourceNodeCode" | "targetNodeCode" | "relationship"
+    )
+}
+
+fn json_graph_property_value(value: &Value) -> Result<GraphPropertyValue, RagError> {
+    match value {
+        Value::String(value) => Ok(GraphPropertyValue::Text(value.clone())),
+        Value::Number(value) => value
+            .as_i64()
+            .map(GraphPropertyValue::Integer)
+            .or_else(|| value.as_f64().map(GraphPropertyValue::Decimal))
+            .ok_or(RagError::IngestRequestInvalid),
+        Value::Bool(value) => Ok(GraphPropertyValue::Boolean(*value)),
+        _ => Err(RagError::IngestRequestInvalid),
+    }
+}

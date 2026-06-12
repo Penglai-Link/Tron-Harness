@@ -78,6 +78,10 @@ impl RagStorageBackend {
             Self::Graph => "GRAPH",
         }
     }
+
+    pub fn is_graph(&self) -> bool {
+        *self == Self::Graph
+    }
 }
 
 impl TryFrom<&str> for RagStorageBackend {
@@ -92,56 +96,64 @@ impl TryFrom<&str> for RagStorageBackend {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RagStorageLayout {
-    Split,
-    EmbeddedSource,
-    GraphSingleNode,
-}
-
-impl RagStorageLayout {
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            Self::Split => "SPLIT",
-            Self::EmbeddedSource => "EMBEDDED_SOURCE",
-            Self::GraphSingleNode => "GRAPH_SINGLE_NODE",
-        }
-    }
-}
-
-impl TryFrom<&str> for RagStorageLayout {
-    type Error = RagError;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "SPLIT" => Ok(Self::Split),
-            "EMBEDDED_SOURCE" => Ok(Self::EmbeddedSource),
-            "GRAPH_SINGLE_NODE" => Ok(Self::GraphSingleNode),
-            _ => Err(RagError::StorageBindingInvalid),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RagStorageBinding {
+pub struct RagStorageSegmentTarget {
+    pub id: String,
     pub backend: RagStorageBackend,
-    pub layout: RagStorageLayout,
+    pub layout: String,
     pub table: Option<String>,
-    pub source_table: Option<String>,
-    pub text_unit_table: Option<String>,
-    pub diagnostics_table: Option<String>,
     pub namespace: Option<String>,
     pub node_label: Option<String>,
     pub code_strategy: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RagStorageBinding {
+    pub segment_bindings: BTreeMap<String, String>,
+    pub segment_targets: BTreeMap<String, RagStorageSegmentTarget>,
+}
+
 impl RagStorageBinding {
+    pub fn target_for_segment(&self, segment: &str) -> Option<&RagStorageSegmentTarget> {
+        let target_id = self.segment_bindings.get(segment).or_else(|| {
+            if segment == "fulltext" {
+                self.segment_bindings.get("textUnit")
+            } else {
+                None
+            }
+        })?;
+        self.segment_targets.get(target_id)
+    }
+
+    pub fn sqlite_table_for_segment(&self, segment: &str) -> Option<&str> {
+        let target = self.target_for_segment(segment)?;
+        (target.backend == RagStorageBackend::Sqlite)
+            .then_some(target.table.as_deref())
+            .flatten()
+    }
+
+    pub fn diagnostics_table(&self) -> Option<&str> {
+        self.sqlite_table_for_segment("diagnostics")
+    }
+
     pub fn is_graph_backend(&self) -> bool {
-        self.backend == RagStorageBackend::Graph
+        self.segment_bindings
+            .iter()
+            .filter(|(segment, _)| segment.as_str() != "diagnostics")
+            .any(|(segment, _)| {
+                self.target_for_segment(segment)
+                    .is_some_and(|target| target.backend == RagStorageBackend::Graph)
+            })
     }
 
     pub fn is_sqlite_backend(&self) -> bool {
-        self.backend == RagStorageBackend::Sqlite
+        self.segment_bindings
+            .iter()
+            .filter(|(segment, _)| segment.as_str() != "diagnostics")
+            .all(|(segment, _)| {
+                self.target_for_segment(segment)
+                    .is_some_and(|target| target.backend == RagStorageBackend::Sqlite)
+            })
     }
 }
 
@@ -178,6 +190,13 @@ pub enum RagError {
     SourceNotFound,
     ProfileNotFound,
     RetrievalProfileNotFound,
+    ManagementRequestInvalid,
+    StorageTopologyUnsupported,
+    StorageGraphBindingRequired,
+    FilterFieldInvalid,
+    FilterOperatorUnsupported,
+    ProfileStrategyInvalid,
+    ProfileCorpusInvalid,
     IngestRequestInvalid,
     IngestProfileInvalid,
     IngestScopeInvalid,
@@ -216,6 +235,19 @@ impl fmt::Display for RagError {
             Self::RetrievalProfileNotFound => {
                 formatter.write_str("RAG retrieval profile not found")
             }
+            Self::ManagementRequestInvalid => formatter.write_str("RAG management request invalid"),
+            Self::StorageTopologyUnsupported => {
+                formatter.write_str("RAG storage topology unsupported")
+            }
+            Self::StorageGraphBindingRequired => {
+                formatter.write_str("RAG graph storage binding is required")
+            }
+            Self::FilterFieldInvalid => formatter.write_str("RAG filter field invalid"),
+            Self::FilterOperatorUnsupported => {
+                formatter.write_str("RAG filter operator unsupported")
+            }
+            Self::ProfileStrategyInvalid => formatter.write_str("RAG profile strategy invalid"),
+            Self::ProfileCorpusInvalid => formatter.write_str("RAG profile corpus invalid"),
             Self::IngestRequestInvalid => formatter.write_str("RAG ingest request invalid"),
             Self::IngestProfileInvalid => formatter.write_str("RAG ingest profile invalid"),
             Self::IngestScopeInvalid => formatter.write_str("RAG ingest scope invalid"),

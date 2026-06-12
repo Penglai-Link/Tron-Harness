@@ -11,7 +11,7 @@ use tron_backend::{
     },
     domain::rag::{
         RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus, RagStorageBackend,
-        RagStorageBinding, RagStorageLayout,
+        RagStorageBinding, RagStorageSegmentTarget,
     },
 };
 
@@ -28,19 +28,16 @@ fn rag_service_resolves_enabled_corpus_storage_binding_from_repository_port() {
 
     assert_eq!(corpus.corpus_id, "memory-card");
     assert_eq!(corpus.status, RagStatus::Enabled);
-    assert_eq!(corpus.storage_binding.backend, RagStorageBackend::Sqlite);
     assert_eq!(
-        corpus.storage_binding.layout,
-        RagStorageLayout::EmbeddedSource
-    );
-    assert_eq!(
-        corpus.storage_binding.table.as_deref(),
+        corpus.storage_binding.sqlite_table_for_segment("textUnit"),
         Some("rag_memory_text_units")
     );
-    assert_eq!(corpus.storage_binding.source_table.as_deref(), None);
-    assert_eq!(corpus.storage_binding.text_unit_table.as_deref(), None);
     assert_eq!(
-        corpus.storage_binding.diagnostics_table.as_deref(),
+        corpus.storage_binding.sqlite_table_for_segment("source"),
+        Some("rag_memory_text_units")
+    );
+    assert_eq!(
+        corpus.storage_binding.diagnostics_table(),
         Some("rag_diagnostics")
     );
     assert_eq!(
@@ -696,6 +693,7 @@ fn http_rag_handler_uses_facade_instead_of_assembling_rag_internals() {
     let app_source = fs::read_to_string("src/app.rs").expect("app source should be readable");
     let app_startup_source =
         fs::read_to_string("src/app/startup.rs").expect("app startup source should be readable");
+    let app_assembly_source = format!("{app_source}\n{app_startup_source}");
 
     assert!(
         handler.contains("State(rag): State<AppRagService>"),
@@ -718,8 +716,8 @@ fn http_rag_handler_uses_facade_instead_of_assembling_rag_internals() {
         "AppState should own the unified RAG facade"
     );
     assert!(
-        app_startup_source.contains("fn build_rag_service("),
-        "app startup assembly should be the only RAG SQLite wiring point"
+        app_assembly_source.contains("fn build_rag_service("),
+        "app assembly should be the only RAG SQLite wiring point"
     );
 }
 
@@ -875,17 +873,45 @@ fn memory_corpus_record() -> RagCorpusRecord {
             ("scopeType".to_string(), "scope_type".to_string()),
         ]),
         text_unit_field_mapping: BTreeMap::new(),
-        storage_binding: RagStorageBinding {
-            backend: RagStorageBackend::Sqlite,
-            layout: RagStorageLayout::EmbeddedSource,
-            table: Some("rag_memory_text_units".to_string()),
-            source_table: None,
-            text_unit_table: None,
-            diagnostics_table: Some("rag_diagnostics".to_string()),
-            namespace: None,
-            node_label: None,
-            code_strategy: None,
-        },
+        storage_binding: targeted_sqlite_binding("rag_memory_text_units"),
+    }
+}
+
+fn targeted_sqlite_binding(table: &str) -> RagStorageBinding {
+    RagStorageBinding {
+        segment_bindings: BTreeMap::from([
+            ("source".to_string(), "primary-store".to_string()),
+            ("textUnit".to_string(), "primary-store".to_string()),
+            ("fulltext".to_string(), "primary-store".to_string()),
+            ("vector".to_string(), "primary-store".to_string()),
+            ("diagnostics".to_string(), "diagnostics-store".to_string()),
+        ]),
+        segment_targets: BTreeMap::from([
+            (
+                "primary-store".to_string(),
+                RagStorageSegmentTarget {
+                    id: "primary-store".to_string(),
+                    backend: RagStorageBackend::Sqlite,
+                    layout: "TABLE".to_string(),
+                    table: Some(table.to_string()),
+                    namespace: None,
+                    node_label: None,
+                    code_strategy: None,
+                },
+            ),
+            (
+                "diagnostics-store".to_string(),
+                RagStorageSegmentTarget {
+                    id: "diagnostics-store".to_string(),
+                    backend: RagStorageBackend::Sqlite,
+                    layout: "TABLE".to_string(),
+                    table: Some("rag_diagnostics".to_string()),
+                    namespace: None,
+                    node_label: None,
+                    code_strategy: None,
+                },
+            ),
+        ]),
     }
 }
 

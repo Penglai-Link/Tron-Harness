@@ -10,17 +10,19 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use rusqlite::Connection;
+use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 use tron_backend::{
     adapters::outbound::persistence::sqlite::SqliteRagRepository,
     application::rag::{
         DefaultRagStrategyRegistry, RagConfigRepository, RagDocumentSourceCall,
         RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime,
-        RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService,
-        RagIngestSource, RagResolvedDocument, compile_ingest_profile,
+        RagIngestAccessContext, RagIngestRepository, RagIngestRequest, RagIngestScope,
+        RagIngestService, RagIngestSource, RagPersistIngestCommand, RagResolvedDocument,
+        compile_ingest_profile,
     },
     domain::rag::{RagError, RagProfileRecord, RagProfileType, RagStatus},
+    shared::sqlite_extensions::default_sqlite_extension_context,
 };
 
 #[tokio::test]
@@ -42,6 +44,20 @@ async fn memory_text_contract_ingest_writes_business_text_unit_and_sidecar_index
     assert_eq!(result.fulltext_status, "INDEXED");
     assert_eq!(result.embedding_status, "INDEXED");
     assert_eq!(embeddings.call_count(), 1);
+    assert!(
+        result
+            .stage_results
+            .iter()
+            .any(|stage| stage.stage_type == "SPLIT_TEXT"
+                && stage.output_artifact_keys == vec!["textUnits.generated"])
+    );
+    assert!(
+        result
+            .stage_results
+            .iter()
+            .any(|stage| stage.node_id == "persistSource"
+                && stage.output_artifact_keys == vec!["source.persisted"])
+    );
 
     let connection = Connection::open(&database_url).unwrap();
     assert_eq!(
@@ -99,6 +115,111 @@ async fn memory_ingest_maps_business_version_from_payload() {
             "SELECT version FROM rag_memory_text_units WHERE source_code = 'memory-rag-rule'"
         ),
         "business-v9"
+    );
+}
+
+#[tokio::test]
+async fn pipeline_only_memory_ingest_profile_preserves_existing_request_contract() {
+    let database_path = temp_database_path("rag-ingest-pipeline-only-memory");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    insert_pipeline_only_ingest_profile(&database_url, "memory-card-pipeline-only-v1");
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75)),
+    );
+    let mut request = memory_request("v1");
+    request.ingest_profile_id = "memory-card-pipeline-only-v1".into();
+
+    let result = service.ingest(request).await.unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(result.text_unit_count, 1);
+    assert_eq!(
+        result
+            .stage_results
+            .iter()
+            .map(|stage| stage.node_id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "validate-source",
+            "prepare-payload",
+            "split-text",
+            "fulltext-index",
+            "vector-index",
+            "persist-source"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn pipeline_extracts_and_persists_tree_graph_without_request_related_graph() {
+    let database_path = temp_database_path("rag-ingest-phase3-tree-graph");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = CapturingIngestRepository::connect(&database_url);
+    insert_tree_pipeline_ingest_profile(&database_url, "memory-card-tree-pipeline-v1");
+    let persisted_commands = repository.persisted_commands.clone();
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75)),
+    );
+    let mut request = memory_request("v1");
+    request.ingest_profile_id = "memory-card-tree-pipeline-v1".into();
+    assert!(
+        request.payload.get("relatedGraph").is_none(),
+        "test request must keep the existing ingest shape and omit relatedGraph"
+    );
+
+    let result = service.ingest(request).await.unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(
+        result
+            .stage_results
+            .iter()
+            .map(|stage| stage.node_id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "validate-source",
+            "prepare-payload",
+            "split-text",
+            "extract-tree",
+            "fulltext-index",
+            "vector-index",
+            "persist-tree",
+            "persist-source"
+        ]
+    );
+    assert!(
+        result.stage_results.iter().any(|stage| {
+            stage.node_id == "extract-tree"
+                && stage.input_artifact_keys == vec!["textUnits.generated"]
+                && stage.output_artifact_keys == vec!["tree.extracted", "graph.related"]
+        }),
+        "EXTRACT_TREE should report the actual tree graph artifact handoff"
+    );
+    assert!(
+        result.stage_results.iter().any(|stage| {
+            stage.node_id == "persist-tree"
+                && stage.input_artifact_keys == vec!["graph.related"]
+                && stage.output_artifact_keys == vec!["tree.persisted"]
+        }),
+        "PERSIST_TREE should report consuming the extracted graph artifact"
+    );
+    let commands = persisted_commands.lock().unwrap();
+    let related_graph = commands
+        .first()
+        .and_then(|command| command.related_graph.as_ref())
+        .expect("tree pipeline should hand a generated related graph to persistence");
+    assert_eq!(related_graph["sourceCode"], json!("memory-rag-rule"));
+    assert_eq!(related_graph["sourceVersion"], json!("v1"));
+    assert!(
+        related_graph["nodes"]
+            .as_array()
+            .is_some_and(|nodes| nodes.iter().any(|node| node["kind"] == json!("TEXT_UNIT"))),
+        "generated related graph should include text unit nodes"
     );
 }
 
@@ -188,6 +309,96 @@ async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_
         &connection,
         "rag_project_doc_text_units_vec_d4096"
     ));
+}
+
+#[tokio::test]
+async fn project_doc_ingest_populates_distinct_vector_storage_when_configured() {
+    let database_path = temp_database_path("rag-ingest-project-doc-separate-vector");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    set_project_doc_vector_table(&database_url, "rag_project_doc_vectors");
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)).with_document(project_doc_markdown()),
+    );
+
+    let result = service.ingest(project_doc_request("v1")).await.unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(result.text_unit_count, 2);
+    assert_eq!(result.embedding_status, "INDEXED");
+
+    let connection = open_prepared_connection(&database_url);
+    assert!(table_exists(&connection, "rag_project_doc_vectors"));
+    assert!(table_exists(
+        &connection,
+        "rag_project_doc_vectors_vec_d4096"
+    ));
+    assert_eq!(
+        query_i64(&connection, "SELECT COUNT(*) FROM rag_project_doc_vectors"),
+        2
+    );
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_project_doc_vectors_vec_d4096"
+        ),
+        2
+    );
+    assert_eq!(
+        query_text_unit_codes(&connection, "rag_project_doc_vectors"),
+        query_text_unit_codes(&connection, "rag_project_doc_text_units"),
+    );
+    assert_eq!(
+        query_ordinals(&connection, "rag_project_doc_vectors"),
+        vec![0, 1]
+    );
+}
+
+#[tokio::test]
+async fn project_doc_ingest_populates_distinct_fulltext_storage_when_configured() {
+    let database_path = temp_database_path("rag-ingest-project-doc-separate-fulltext");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    set_project_doc_fulltext_table(&database_url, "rag_project_doc_fulltext");
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)).with_document(project_doc_markdown()),
+    );
+
+    let result = service.ingest(project_doc_request("v1")).await.unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(result.text_unit_count, 2);
+    assert_eq!(result.fulltext_status, "INDEXED");
+
+    let connection = open_prepared_connection(&database_url);
+    assert!(table_exists(&connection, "rag_project_doc_fulltext"));
+    assert!(table_exists(&connection, "rag_project_doc_fulltext_fts"));
+    assert_eq!(
+        query_i64(&connection, "SELECT COUNT(*) FROM rag_project_doc_fulltext"),
+        2
+    );
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_project_doc_fulltext_fts"
+        ),
+        2
+    );
+    assert_eq!(
+        query_text_unit_codes(&connection, "rag_project_doc_fulltext"),
+        query_text_unit_codes(&connection, "rag_project_doc_text_units"),
+    );
+    assert!(
+        query_string(
+            &connection,
+            "SELECT search_text FROM rag_project_doc_fulltext WHERE ordinal = 1"
+        )
+        .contains("Persist synchronously.")
+    );
 }
 
 #[tokio::test]
@@ -462,6 +673,29 @@ fn ingest_executor_uses_artifact_bundle_for_stage_handoffs() {
     );
     assert!(artifact_source.contains("pub(crate) struct RagArtifact"));
     assert!(artifact_source.contains("pub(crate) enum RagArtifactPayload"));
+    assert!(
+        ingest_source.contains("stage_results"),
+        "ingest should return additive stageResults without changing the request payload"
+    );
+}
+
+#[test]
+fn ingest_executor_uses_generic_pipeline_dispatch_instead_of_fixed_stage_match() {
+    let executor_source = [
+        include_str!("../src/application/rag/ingest/executor.rs"),
+        include_str!("../src/application/rag/ingest/executor/split_01.rs"),
+        include_str!("../src/application/rag/ingest/executor/split_02.rs"),
+    ]
+    .join("\n");
+
+    assert!(
+        !executor_source.contains("match stage_id.as_str()"),
+        "ingest runtime should dispatch registered stage executors through the generic DAG executor"
+    );
+    assert!(
+        executor_source.contains("RagPipelineExecutor"),
+        "ingest runtime should use the shared pipeline executor"
+    );
 }
 
 #[derive(Clone)]
@@ -689,6 +923,71 @@ fn set_project_doc_heading_depth(database_url: &str, heading_depth: u64) {
         .unwrap();
 }
 
+fn set_project_doc_vector_table(database_url: &str, table_name: &str) {
+    set_project_doc_segment_table(
+        database_url,
+        "vector",
+        "project-doc-vector-store",
+        table_name,
+    );
+}
+
+fn set_project_doc_fulltext_table(database_url: &str, table_name: &str) {
+    set_project_doc_segment_table(
+        database_url,
+        "fulltext",
+        "project-doc-fulltext-store",
+        table_name,
+    );
+}
+
+fn set_project_doc_segment_table(
+    database_url: &str,
+    segment: &str,
+    target_id: &str,
+    table_name: &str,
+) {
+    let connection = Connection::open(database_url).unwrap();
+    let binding_json = query_string(
+        &connection,
+        "SELECT storage_binding_json FROM rag_corpora WHERE corpus_id = 'project-doc'",
+    );
+    let mut binding = serde_json::from_str::<Value>(&binding_json).unwrap();
+    binding["bindings"][segment] = json!(target_id);
+    let targets = binding["targets"]
+        .as_array_mut()
+        .expect("storage targets should be an array");
+    if let Some(target) = targets
+        .iter_mut()
+        .find(|target| target["id"] == json!(target_id))
+    {
+        target["table"] = json!(table_name);
+    } else {
+        targets.push(json!({
+            "id": target_id,
+            "backend": "SQLITE",
+            "layout": "TABLE",
+            "table": table_name
+        }));
+    }
+    connection
+        .execute(
+            "UPDATE rag_corpora
+             SET storage_binding_json = ?1
+             WHERE corpus_id = 'project-doc'",
+            params![binding.to_string()],
+        )
+        .unwrap();
+}
+
+fn open_prepared_connection(database_url: &str) -> Connection {
+    let connection = Connection::open(database_url).unwrap();
+    default_sqlite_extension_context()
+        .prepare_connection(&connection)
+        .unwrap();
+    connection
+}
+
 fn ingest_profile(profile_id: &str, config: Value) -> RagProfileRecord {
     RagProfileRecord {
         profile_id: profile_id.into(),
@@ -769,6 +1068,195 @@ fn missing_persist_dag() -> Value {
         .unwrap()
         .remove("persistSource");
     value
+}
+
+fn insert_pipeline_only_ingest_profile(database_url: &str, profile_id: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let config = json!({
+        "sourceInputPolicy": {
+            "supportedSourceTypes": ["MEMORY_CARD"]
+        },
+        "pipeline": {
+            "mode": "DAG",
+            "nodes": [
+                {
+                    "nodeId": "validate-source",
+                    "stageType": "VALIDATE_SOURCE",
+                    "strategyId": "RAG_VALIDATE_SOURCE"
+                },
+                {
+                    "nodeId": "prepare-payload",
+                    "stageType": "PREPARE_PAYLOAD",
+                    "strategyId": "RAG_TEXT_CONTRACT_PAYLOAD_V1"
+                },
+                {
+                    "nodeId": "split-text",
+                    "stageType": "SPLIT_TEXT",
+                    "strategyId": "RAG_SPLIT_TEXT"
+                },
+                {
+                    "nodeId": "fulltext-index",
+                    "stageType": "FULLTEXT_INDEX",
+                    "strategyId": "RAG_FULLTEXT_INDEX"
+                },
+                {
+                    "nodeId": "vector-index",
+                    "stageType": "VECTOR_INDEX",
+                    "strategyId": "RAG_VECTOR_INDEX"
+                },
+                {
+                    "nodeId": "persist-source",
+                    "stageType": "PERSIST_SOURCE",
+                    "strategyId": "RAG_PERSIST_SOURCE"
+                }
+            ],
+            "edges": [
+                { "from": "validate-source", "to": "prepare-payload" },
+                { "from": "prepare-payload", "to": "split-text" },
+                { "from": "split-text", "to": "fulltext-index" },
+                { "from": "split-text", "to": "vector-index" },
+                { "from": "fulltext-index", "to": "persist-source" },
+                { "from": "vector-index", "to": "persist-source" }
+            ]
+        }
+    });
+    connection
+        .execute(
+            "INSERT INTO rag_profiles (
+                profile_id, profile_type, status, primary_corpus_id, corpus_ids_json,
+                required_source_version, config_json, filters_json, degrade_policy,
+                created_at, updated_at
+            )
+            VALUES (?1, 'INGEST', 'enabled', 'memory-card', '[\"memory-card\"]',
+                NULL, ?2, '{}', 'FAIL_FAST', 1, 1)",
+            params![profile_id, config.to_string()],
+        )
+        .unwrap();
+}
+
+fn insert_tree_pipeline_ingest_profile(database_url: &str, profile_id: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let config = json!({
+        "sourceInputPolicy": {
+            "supportedSourceTypes": ["MEMORY_CARD"]
+        },
+        "pipeline": {
+            "mode": "DAG",
+            "nodes": [
+                {
+                    "nodeId": "validate-source",
+                    "stageType": "VALIDATE_SOURCE",
+                    "strategyId": "RAG_VALIDATE_SOURCE"
+                },
+                {
+                    "nodeId": "prepare-payload",
+                    "stageType": "PREPARE_PAYLOAD",
+                    "strategyId": "RAG_TEXT_CONTRACT_PAYLOAD_V1"
+                },
+                {
+                    "nodeId": "split-text",
+                    "stageType": "SPLIT_TEXT",
+                    "strategyId": "RAG_SPLIT_TEXT"
+                },
+                {
+                    "nodeId": "extract-tree",
+                    "stageType": "EXTRACT_TREE",
+                    "strategyId": "RAG_MARKDOWN_TREE_EXTRACT_V1"
+                },
+                {
+                    "nodeId": "fulltext-index",
+                    "stageType": "FULLTEXT_INDEX",
+                    "strategyId": "RAG_FULLTEXT_INDEX"
+                },
+                {
+                    "nodeId": "vector-index",
+                    "stageType": "VECTOR_INDEX",
+                    "strategyId": "RAG_VECTOR_INDEX"
+                },
+                {
+                    "nodeId": "persist-tree",
+                    "stageType": "PERSIST_TREE",
+                    "strategyId": "RAG_PERSIST_TREE_GRAPH_V1"
+                },
+                {
+                    "nodeId": "persist-source",
+                    "stageType": "PERSIST_SOURCE",
+                    "strategyId": "RAG_PERSIST_SOURCE"
+                }
+            ],
+            "edges": [
+                { "from": "validate-source", "to": "prepare-payload" },
+                { "from": "prepare-payload", "to": "split-text" },
+                { "from": "split-text", "to": "extract-tree" },
+                { "from": "split-text", "to": "fulltext-index" },
+                { "from": "split-text", "to": "vector-index" },
+                { "from": "extract-tree", "to": "persist-tree" },
+                { "from": "fulltext-index", "to": "persist-source" },
+                { "from": "vector-index", "to": "persist-source" },
+                { "from": "persist-tree", "to": "persist-source" }
+            ]
+        }
+    });
+    connection
+        .execute(
+            "INSERT INTO rag_profiles (
+                profile_id, profile_type, status, primary_corpus_id, corpus_ids_json,
+                required_source_version, config_json, filters_json, degrade_policy,
+                created_at, updated_at
+            )
+            VALUES (?1, 'INGEST', 'enabled', 'memory-card', '[\"memory-card\"]',
+                NULL, ?2, '{}', 'FAIL_FAST', 1, 1)",
+            params![profile_id, config.to_string()],
+        )
+        .unwrap();
+}
+
+struct CapturingIngestRepository {
+    inner: SqliteRagRepository,
+    persisted_commands: Arc<Mutex<Vec<RagPersistIngestCommand>>>,
+}
+
+impl CapturingIngestRepository {
+    fn connect(database_url: &str) -> Self {
+        Self {
+            inner: SqliteRagRepository::connect(database_url).unwrap(),
+            persisted_commands: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+}
+
+impl RagConfigRepository for CapturingIngestRepository {
+    fn list_corpora(&self) -> Result<Vec<tron_backend::domain::rag::RagCorpusRecord>, RagError> {
+        self.inner.list_corpora()
+    }
+
+    fn get_corpus(
+        &self,
+        corpus_id: &str,
+    ) -> Result<Option<tron_backend::domain::rag::RagCorpusRecord>, RagError> {
+        self.inner.get_corpus(corpus_id)
+    }
+
+    fn list_profiles(
+        &self,
+        query: tron_backend::application::rag::RagProfileListQuery,
+    ) -> Result<Vec<RagProfileRecord>, RagError> {
+        self.inner.list_profiles(query)
+    }
+
+    fn get_profile(&self, profile_id: &str) -> Result<Option<RagProfileRecord>, RagError> {
+        self.inner.get_profile(profile_id)
+    }
+}
+
+impl RagIngestRepository for CapturingIngestRepository {
+    fn persist_ingest(&self, command: RagPersistIngestCommand) -> Result<(), RagError> {
+        self.persisted_commands
+            .lock()
+            .unwrap()
+            .push(command.clone());
+        self.inner.persist_ingest(command)
+    }
 }
 
 fn query_i64(connection: &Connection, sql: &str) -> i64 {
@@ -887,6 +1375,30 @@ fn query_text_unit_document_codes(connection: &Connection) -> Vec<String> {
         .unwrap();
     statement
         .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+}
+
+fn query_text_unit_codes(connection: &Connection, table: &str) -> Vec<String> {
+    let mut statement = connection
+        .prepare(&format!(
+            "SELECT text_unit_code FROM {table} ORDER BY ordinal"
+        ))
+        .unwrap();
+    statement
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+}
+
+fn query_ordinals(connection: &Connection, table: &str) -> Vec<i64> {
+    let mut statement = connection
+        .prepare(&format!("SELECT ordinal FROM {table} ORDER BY ordinal"))
+        .unwrap();
+    statement
+        .query_map([], |row| row.get::<_, i64>(0))
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap()

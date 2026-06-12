@@ -48,6 +48,23 @@ pub(crate) fn push_domain_values(
     Ok(())
 }
 
+pub(crate) fn push_available_domain_values(
+    values: &mut Vec<(String, SqlValue)>,
+    columns: &BTreeSet<String>,
+    mapping: &BTreeMap<String, String>,
+    command: &RagPersistIngestCommand,
+) -> Result<(), RagError> {
+    for (logical_name, value) in &command.domain_fields {
+        let Some(column) = mapping.get(logical_name) else {
+            continue;
+        };
+        if columns.contains(column) && !values.iter().any(|(existing, _)| existing == column) {
+            values.push((column.clone(), json_to_sql_value(value)?));
+        }
+    }
+    Ok(())
+}
+
 pub(crate) fn push_embedded_source_values(
     values: &mut Vec<(String, SqlValue)>,
     plan: &SqliteRagCorpusPlan,

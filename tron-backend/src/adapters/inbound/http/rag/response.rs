@@ -3,7 +3,7 @@ use serde_json::{Map, Value};
 
 use crate::application::rag::{
     CandidateHit, ContextPack, RagDebugProfileResult, RagDebugSourceResult, RagIngestResult,
-    RagRetryIndexResult, RagRetryStageResult, RagSearchResult,
+    RagRetryIndexResult, RagRetryStageResult, RagSearchResult, RagStageExecutionResult,
 };
 
 #[derive(Debug, Serialize)]
@@ -18,6 +18,7 @@ pub struct RagIngestResponse {
     pub fulltext_status: String,
     pub embedding_status: String,
     pub warnings: Vec<Value>,
+    pub stage_results: Vec<RagStageExecutionResult>,
 }
 
 impl From<RagIngestResult> for RagIngestResponse {
@@ -32,6 +33,7 @@ impl From<RagIngestResult> for RagIngestResponse {
             fulltext_status: result.fulltext_status,
             embedding_status: result.embedding_status,
             warnings: result.warnings,
+            stage_results: result.stage_results,
         }
     }
 }
@@ -46,6 +48,7 @@ pub struct RagSearchResponse {
     pub context_pack: Option<RagContextPackResponse>,
     pub warnings: Vec<Value>,
     pub trace_code: Option<String>,
+    pub stage_results: Vec<RagStageExecutionResult>,
 }
 
 #[derive(Debug, Serialize)]
@@ -92,6 +95,7 @@ impl From<RagSearchResult> for RagSearchResponse {
             context_pack: result.context_pack.map(RagContextPackResponse::from),
             warnings: result.warnings,
             trace_code: result.trace_code,
+            stage_results: result.stage_results,
         }
     }
 }

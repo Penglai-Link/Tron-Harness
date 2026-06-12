@@ -6,6 +6,8 @@ mod ingest;
 mod ingest_artifact;
 mod ingest_payload;
 mod ingest_profile;
+mod management;
+mod pipeline;
 mod retry;
 mod runtime;
 mod search;
@@ -32,7 +34,17 @@ pub use ingest::{
     RagIngestSource, RagIngestWarning, RagPersistIngestCommand, RagTextUnitWrite,
     validate_direct_scope,
 };
-pub use ingest_profile::{CompiledRagIngestProfile, compile_ingest_profile};
+pub use ingest_profile::{
+    CompiledRagIngestProfile, CompiledRagIngestStage, compile_ingest_profile,
+};
+pub use management::*;
+pub use pipeline::{
+    CompiledRagPipeline, CompiledRagPipelineNode, RagPipelineCatalogView, RagPipelineEdgeInput,
+    RagPipelineInput, RagPipelineNodeInput, RagPipelineValidationIssue, RagStageExecutionResult,
+    execution_stage_for_stage_type, pipeline_catalog, stage_result_from_definition,
+    stage_type_for_execution_stage, validate_pipeline,
+};
+pub(crate) use pipeline::{RagArtifactStore, RagPipelineExecutor, RagStageOutcome};
 pub use retry::{
     RagRetryIndexRepository, RagRetryIndexRequest, RagRetryIndexResult, RagRetryIndexService,
     RagRetryStageResult, RagRetryTextUnit, RagRetryVectorUpdate,

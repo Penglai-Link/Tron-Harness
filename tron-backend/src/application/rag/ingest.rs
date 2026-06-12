@@ -16,7 +16,7 @@ use crate::{
 };
 
 use super::{
-    RagConfigRepository, RagDocumentSourceRuntime, RagStrategyRegistry,
+    RagConfigRepository, RagDocumentSourceRuntime, RagStageExecutionResult, RagStrategyRegistry,
     ingest_artifact::ArtifactBundle, ingest_profile::compile_ingest_profile, publish_rag_event,
 };
 
@@ -162,6 +162,7 @@ pub struct RagIngestResult {
     pub fulltext_status: String,
     pub embedding_status: String,
     pub warnings: Vec<Value>,
+    pub stage_results: Vec<RagStageExecutionResult>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -223,7 +224,7 @@ where
         let compiled = compile_ingest_profile(&profile, &corpus, &self.strategy_registry)?;
 
         let mut bundle = ArtifactBundle::from_request(&request);
-        let persisted = self
+        let (persisted, stage_results) = self
             .execute_ingest_stages(&request, &compiled, &mut bundle)
             .await?;
         publish_ingest_event(
@@ -267,6 +268,7 @@ where
                     })
                 })
                 .collect(),
+            stage_results,
         })
     }
 }

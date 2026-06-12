@@ -14,10 +14,14 @@ impl RagStrategyRegistry for DefaultRagStrategyRegistry {
                 "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1",
                 "RAG_SPLIT_TEXT",
                 "RAG_FULLTEXT_INDEX",
+                "RAG_MARKDOWN_TREE_EXTRACT_V1",
                 "RAG_VECTOR_INDEX",
+                "RAG_PERSIST_TREE_GRAPH_V1",
                 "RAG_PERSIST_SOURCE",
                 "PROJECT_DOC_RESOLVE_SOURCE",
                 "RAG_PARSE_MARKDOWN_DOCUMENT",
+                "RAG_QUESTION_GENERALIZATION_SIMPLE_V1",
+                "RAG_QUERY_REWRITE_TEMPLATE_V1",
             ],
         )
     }

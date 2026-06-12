@@ -64,10 +64,7 @@ fn debug_source(
     plan: &SqliteRagCorpusPlan,
     request: &RagDebugSourceRequest,
 ) -> Result<Option<RagDebugSourceResult>, RagError> {
-    let source_table = plan
-        .source_table
-        .as_deref()
-        .unwrap_or(plan.text_unit_table.as_str());
+    let source_table = plan.source_storage_table();
     let title_expr = if plan.source_columns.contains("title") {
         quote_identifier("title")?
     } else {
@@ -79,7 +76,7 @@ fn debug_source(
         .map(quote_identifier)
         .transpose()?
         .unwrap_or_else(|| "'{}'".to_string());
-    let order_sql = if plan.source_table.is_some() {
+    let order_sql = if plan.has_distinct_source_table() {
         String::new()
     } else {
         " ORDER BY ordinal LIMIT 1".to_string()
@@ -140,14 +137,25 @@ fn debug_text_units(
     request: &RagDebugSourceRequest,
 ) -> Result<Vec<RagDebugTextUnitRecord>, RagError> {
     let text_table = quote_identifier(&plan.text_unit_table)?;
-    let fts_table_name = fts_table_name(&plan.text_unit_table);
+    let fts_table_name = fts_table_name(plan.fulltext_storage_table());
     let (fulltext_status_expr, fts_join) = if table_exists(&repository.connection, &fts_table_name)?
     {
         let fts_table = quote_identifier(&fts_table_name)?;
-        (
-            format!("CASE WHEN {fts_table}.rowid IS NULL THEN 'PENDING' ELSE 'INDEXED' END"),
-            format!("LEFT JOIN {fts_table} ON {fts_table}.rowid = tu.id"),
-        )
+        if plan.has_distinct_fulltext_table() {
+            let fulltext_table = quote_identifier(plan.fulltext_storage_table())?;
+            (
+                format!("CASE WHEN {fts_table}.rowid IS NULL THEN 'PENDING' ELSE 'INDEXED' END"),
+                format!(
+                    "LEFT JOIN {fulltext_table} ft ON ft.text_unit_code = tu.text_unit_code
+                     LEFT JOIN {fts_table} ON {fts_table}.rowid = ft.id"
+                ),
+            )
+        } else {
+            (
+                format!("CASE WHEN {fts_table}.rowid IS NULL THEN 'PENDING' ELSE 'INDEXED' END"),
+                format!("LEFT JOIN {fts_table} ON {fts_table}.rowid = tu.id"),
+            )
+        }
     } else {
         ("'PENDING'".to_string(), String::new())
     };
@@ -155,14 +163,29 @@ fn debug_text_units(
         .first()
         .copied()
         .ok_or(RagError::StorageBindingInvalid)?;
-    let vec_table_name = vec_table_name(&plan.text_unit_table, vector_dimension);
+    let vec_table_name = vec_table_name(plan.vector_storage_table(), vector_dimension);
     let (embedding_status_expr, vec_join) =
         if table_exists(&repository.connection, &vec_table_name)? {
             let vec_table = quote_identifier(&vec_table_name)?;
-            (
-                format!("CASE WHEN {vec_table}.rowid IS NULL THEN 'PENDING' ELSE 'INDEXED' END"),
-                format!("LEFT JOIN {vec_table} ON {vec_table}.rowid = tu.id"),
-            )
+            if plan.has_distinct_vector_table() {
+                let vector_table = quote_identifier(plan.vector_storage_table())?;
+                (
+                    format!(
+                        "CASE WHEN {vec_table}.rowid IS NULL THEN 'PENDING' ELSE 'INDEXED' END"
+                    ),
+                    format!(
+                        "LEFT JOIN {vector_table} vt ON vt.text_unit_code = tu.text_unit_code
+                         LEFT JOIN {vec_table} ON {vec_table}.rowid = vt.id"
+                    ),
+                )
+            } else {
+                (
+                    format!(
+                        "CASE WHEN {vec_table}.rowid IS NULL THEN 'PENDING' ELSE 'INDEXED' END"
+                    ),
+                    format!("LEFT JOIN {vec_table} ON {vec_table}.rowid = tu.id"),
+                )
+            }
         } else {
             ("'PENDING'".to_string(), String::new())
         };

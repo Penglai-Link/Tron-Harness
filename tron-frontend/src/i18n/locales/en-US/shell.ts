@@ -36,6 +36,7 @@ export const shell = {
       models: "Models",
       observability: "Observability",
       prompts: "Prompts",
+      rag: "RAG",
       resources: "Resources",
       roles: "Roles",
       skills: "Skills",

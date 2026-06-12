@@ -36,6 +36,7 @@ export const shell = {
       models: "模型",
       observability: "可观测性",
       prompts: "提示词",
+      rag: "RAG",
       resources: "资源",
       roles: "角色",
       skills: "技能",

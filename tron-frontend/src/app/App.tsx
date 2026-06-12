@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import {
   BrowserRouter,
   Link,
+  matchPath,
   Navigate,
   Route,
   Routes,
@@ -56,7 +57,11 @@ function resolveAppRoute(pathname: string, search: string) {
   const exactRoute = `${pathname}${search}`;
   const route =
     appRoutes.find((item) => item.route === exactRoute) ??
-    appRoutes.find((item) => item.route === pathname);
+    appRoutes.find((item) => item.route === pathname) ??
+    appRoutes.find((item) => {
+      const routePathname = new URL(item.route, "https://tron.local").pathname;
+      return routePathname.includes(":") && Boolean(matchPath({ end: true, path: routePathname }, pathname));
+    });
 
   const Component = route ? routePages[route.pageId] : undefined;
 

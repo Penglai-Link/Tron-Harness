@@ -437,6 +437,8 @@ mod tests {
             profile_id: "skill-ingest-v1".into(),
             corpus_id: "skill".into(),
             stage_order: vec![],
+            pipeline: None,
+            stage_metadata: Default::default(),
             payload_strategy_id: "RAG_TEXT_CONTRACT_PAYLOAD_V1".into(),
             supported_source_types: vec!["SKILL".into()],
             source_resolver_strategy_id: None,

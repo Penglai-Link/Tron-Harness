@@ -170,6 +170,26 @@ async fn search_api_writes_trace_only_when_enabled() {
         ),
         1
     );
+    let connection = Connection::open(&database_url).unwrap();
+    let payload = query_string(
+        &connection,
+        "SELECT payload_json FROM rag_diagnostics WHERE record_type = 'SEARCH_TRACE'",
+    );
+    let payload: serde_json::Value = serde_json::from_str(&payload).unwrap();
+    let stage_results = payload["stageResults"]
+        .as_array()
+        .expect("API search trace payload should include stageResults");
+    let route_stage = stage_results
+        .iter()
+        .find(|stage| stage["stageType"] == json!("ROUTE_SEARCH"))
+        .expect("API search trace should summarize executed route search nodes");
+    assert!(route_stage["nodeId"].as_str().is_some());
+    assert!(route_stage["strategyId"].as_str().is_some());
+    assert_eq!(route_stage["status"], json!("COMPLETED"));
+    assert!(route_stage["durationMs"].as_u64().is_some());
+    assert_eq!(route_stage["inputArtifactKeys"], json!(["query.effective"]));
+    assert_eq!(route_stage["outputArtifactKeys"], json!(["hits.route"]));
+    assert!(route_stage["warnings"].as_array().is_some());
 }
 
 fn app_with_database(database_url: &str) -> axum::Router {
@@ -233,6 +253,10 @@ fn seed_search_fixture(database_url: &str) {
 }
 
 fn query_i64(connection: &Connection, sql: &str) -> i64 {
+    connection.query_row(sql, [], |row| row.get(0)).unwrap()
+}
+
+fn query_string(connection: &Connection, sql: &str) -> String {
     connection.query_row(sql, [], |row| row.get(0)).unwrap()
 }
 

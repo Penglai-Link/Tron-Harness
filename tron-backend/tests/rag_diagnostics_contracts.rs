@@ -7,7 +7,7 @@ use std::{
 };
 
 use rusqlite::{Connection, params};
-use serde_json::json;
+use serde_json::{Value, json};
 use tron_backend::{
     adapters::outbound::persistence::sqlite::SqliteRagRepository,
     application::rag::{
@@ -21,6 +21,7 @@ use tron_backend::{
     shared::{
         event_bus::{BusRouteClass, EventBusConfig, EventBusRuntimeBuilder, RecordingEventSink},
         id::FixedSnowflakeIdProvider,
+        sqlite_extensions::default_sqlite_extension_context,
     },
 };
 
@@ -111,6 +112,86 @@ async fn retry_rebuilds_fulltext_and_vector_from_persisted_text_units() {
 }
 
 #[tokio::test]
+async fn retry_vector_rebuild_supports_distinct_vector_storage_table() {
+    let database_url = temp_database_path("rag-retry-separate-vector")
+        .to_string_lossy()
+        .to_string();
+    seed_retry_fixture(&database_url);
+    let retry_repository = SqliteRagRepository::connect(&database_url).unwrap();
+    let diagnostics_repository = SqliteRagRepository::connect(&database_url).unwrap();
+    set_project_doc_vector_table(&database_url, "rag_project_doc_vectors");
+
+    let connection = open_prepared_connection(&database_url);
+    connection
+        .execute(
+            "DROP TABLE IF EXISTS rag_project_doc_text_units_vec_d4096",
+            [],
+        )
+        .unwrap();
+    drop(connection);
+
+    let service = RagRetryIndexService::new(
+        retry_repository,
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25)),
+    );
+
+    let result = service
+        .retry_index(RagRetryIndexRequest {
+            workspace_code: "TRON_CORE".into(),
+            corpus_id: "project-doc".into(),
+            source_code: "doc-retry".into(),
+            source_version: "v1".into(),
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+            stages: vec!["vectorIndex".into()],
+            embedding_model_code: Some("fake-embedding".into()),
+            user_code: "USR-AUTH-0001".into(),
+            agent_code: "AGENT_CODEX".into(),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(result.status, "success");
+    let connection = open_prepared_connection(&database_url);
+    assert_eq!(
+        query_i64(&connection, "SELECT COUNT(*) FROM rag_project_doc_vectors"),
+        1
+    );
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_project_doc_vectors_vec_d4096"
+        ),
+        1
+    );
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'rag_project_doc_text_units_vec_d4096'"
+        ),
+        0
+    );
+
+    let diagnostics = RagDiagnosticsService::new(
+        diagnostics_repository,
+        DefaultRagStrategyRegistry::default(),
+    );
+    let debug = diagnostics
+        .debug_source(RagDebugSourceRequest {
+            workspace_code: "TRON_CORE".into(),
+            corpus_id: "project-doc".into(),
+            source_code: "doc-retry".into(),
+            source_version: "v1".into(),
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+            include_text_units: true,
+            include_warnings: false,
+        })
+        .unwrap();
+    assert_eq!(debug.text_units[0].embedding_status, "INDEXED");
+}
+
+#[tokio::test]
 async fn vector_retry_failure_persists_safe_warning_without_provider_payload() {
     let database_url = temp_database_path("rag-retry-vector-warning")
         .to_string_lossy()
@@ -198,9 +279,28 @@ async fn search_trace_writes_lightweight_ttl_row_only_when_enabled() {
         &connection,
         "SELECT payload_json FROM rag_diagnostics WHERE record_type = 'SEARCH_TRACE'",
     );
-    assert!(payload.contains("candidateRefs"));
-    assert!(!payload.contains("Always cite sources"));
-    assert!(!payload.contains("embedding"));
+    let payload: Value = serde_json::from_str(&payload).unwrap();
+    assert!(payload.get("candidateRefs").is_some());
+    let stage_results = payload["stageResults"]
+        .as_array()
+        .expect("search trace payload should include stageResults");
+    let route_stage = stage_results
+        .iter()
+        .find(|stage| stage["stageType"] == json!("ROUTE_SEARCH"))
+        .expect("search trace should summarize executed route search nodes");
+    assert!(route_stage["nodeId"].as_str().is_some());
+    assert!(route_stage["strategyId"].as_str().is_some());
+    assert_eq!(route_stage["status"], json!("COMPLETED"));
+    assert!(route_stage["durationMs"].as_u64().is_some());
+    assert_eq!(route_stage["inputArtifactKeys"], json!(["query.effective"]));
+    assert_eq!(route_stage["outputArtifactKeys"], json!(["hits.route"]));
+    assert!(
+        route_stage["warnings"].as_array().is_some(),
+        "search trace stageResults should always include a warnings array"
+    );
+    let serialized_payload = payload.to_string();
+    assert!(!serialized_payload.contains("Always cite sources"));
+    assert!(!serialized_payload.contains("embedding"));
 }
 
 #[tokio::test]
@@ -509,6 +609,48 @@ fn seed_retry_fixture(database_url: &str) {
             [],
         )
         .unwrap();
+}
+
+fn set_project_doc_vector_table(database_url: &str, table_name: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let binding_json = query_string(
+        &connection,
+        "SELECT storage_binding_json FROM rag_corpora WHERE corpus_id = 'project-doc'",
+    );
+    let mut binding = serde_json::from_str::<Value>(&binding_json).unwrap();
+    binding["bindings"]["vector"] = json!("project-doc-vector-store");
+    let targets = binding["targets"]
+        .as_array_mut()
+        .expect("storage targets should be an array");
+    if let Some(target) = targets
+        .iter_mut()
+        .find(|target| target["id"] == json!("project-doc-vector-store"))
+    {
+        target["table"] = json!(table_name);
+    } else {
+        targets.push(json!({
+            "id": "project-doc-vector-store",
+            "backend": "SQLITE",
+            "layout": "TABLE",
+            "table": table_name
+        }));
+    }
+    connection
+        .execute(
+            "UPDATE rag_corpora
+             SET storage_binding_json = ?1
+             WHERE corpus_id = 'project-doc'",
+            params![binding.to_string()],
+        )
+        .unwrap();
+}
+
+fn open_prepared_connection(database_url: &str) -> Connection {
+    let connection = Connection::open(database_url).unwrap();
+    default_sqlite_extension_context()
+        .prepare_connection(&connection)
+        .unwrap();
+    connection
 }
 
 async fn seed_search_fixture(database_url: &str) {

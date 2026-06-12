@@ -18,7 +18,8 @@ use super::{
     GraphBackedRagRepository,
     model::{
         append_graph_filters, graph_filter, graph_hit_to_row, graph_node_json,
-        graph_properties_json, map_graph_error, node_label,
+        graph_properties_json, graph_segment_for_retriever, graph_target_for_retriever,
+        map_graph_error,
     },
 };
 
@@ -29,9 +30,11 @@ impl GraphBackedRagRepository {
         query: &RagRouteSearchQuery,
     ) -> Result<Vec<RagSearchRow>, RagError> {
         let mut rows = Vec::new();
+        let segment = graph_segment_for_retriever(&query.retriever)?;
+        let target = graph_target_for_retriever(corpus, &query.retriever)?;
         for rag_scope in &query.scopes {
-            let scope = self.resolve_graph_scope(
-                corpus,
+            let scope = self.resolve_graph_scope_for_namespace(
+                &target.namespace,
                 &query.workspace_code,
                 &rag_scope.scope_type,
                 &rag_scope.scope_code,
@@ -44,7 +47,7 @@ impl GraphBackedRagRepository {
                 graph_filter("sourceStatus", "ACTIVE"),
                 graph_filter("textUnitStatus", "ACTIVE"),
             ];
-            append_graph_filters(&mut filters, corpus, &query.filters);
+            append_graph_filters(&mut filters, corpus, &query.filters, segment);
             let full_text = if query.retriever == "FULLTEXT_GRAPH_SINGLE_NODE_V1" {
                 Some(query.query.clone())
             } else {
@@ -56,7 +59,7 @@ impl GraphBackedRagRepository {
                 vector_text: None,
                 embedding_model_code: None,
                 traversal: None,
-                labels: vec![node_label(corpus)?],
+                labels: vec![target.node_label.clone()],
                 limit: GraphQueryLimit::new(query.limit.max(1)).map_err(map_graph_error)?,
                 min_score: None,
             }
@@ -69,7 +72,7 @@ impl GraphBackedRagRepository {
                 .map_err(map_graph_error)?;
             rows.extend(
                 hits.into_iter()
-                    .map(|hit| graph_hit_to_row(corpus, hit.node, hit.score)),
+                    .map(|hit| graph_hit_to_row(corpus, hit.node, hit.score, segment)),
             );
         }
         rows.sort_by(|left, right| {

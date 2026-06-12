@@ -253,20 +253,19 @@ fn sort_kanban_task_items(items: &mut [TaskListItem]) {
     items.sort_by(compare_kanban_task_items);
 }
 
-fn compare_kanban_task_items(
-    left: &TaskListItem,
-    right: &TaskListItem,
-) -> std::cmp::Ordering {
+fn compare_kanban_task_items(left: &TaskListItem, right: &TaskListItem) -> std::cmp::Ordering {
     kanban_priority_rank(left.priority)
         .cmp(&kanban_priority_rank(right.priority))
-        .then_with(|| match (
-            task_code_sequence(&left.task_code),
-            task_code_sequence(&right.task_code),
-        ) {
-            (Some(left_sequence), Some(right_sequence)) => right_sequence.cmp(&left_sequence),
-            (Some(_), None) => std::cmp::Ordering::Less,
-            (None, Some(_)) => std::cmp::Ordering::Greater,
-            (None, None) => right.task_code.cmp(&left.task_code),
+        .then_with(|| {
+            match (
+                task_code_sequence(&left.task_code),
+                task_code_sequence(&right.task_code),
+            ) {
+                (Some(left_sequence), Some(right_sequence)) => right_sequence.cmp(&left_sequence),
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => right.task_code.cmp(&left.task_code),
+            }
         })
         .then_with(|| right.task_code.cmp(&left.task_code))
 }
@@ -337,6 +336,9 @@ mod tests {
             .iter()
             .map(|item| item.task_code.as_str())
             .collect::<Vec<_>>();
-        assert_eq!(task_codes, vec!["TSK-20", "TSK-10", "TSK-30", "TSK-12", "TSK-999"]);
+        assert_eq!(
+            task_codes,
+            vec!["TSK-20", "TSK-10", "TSK-30", "TSK-12", "TSK-999"]
+        );
     }
 }
