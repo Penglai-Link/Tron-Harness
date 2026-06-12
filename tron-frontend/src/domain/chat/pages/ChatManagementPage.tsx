@@ -3285,11 +3285,7 @@ export function ChatManagementPage() {
                   {sessionAgentTagLabel(displayedAgentCode)}
                 </span>
               </p>
-            ) : (
-              <p className="mt-0.5 text-xs text-[var(--color-on-surface-variant)]">
-                Select a session from the left to continue.
-              </p>
-            )}
+            ) : null}
           </div>
         </header>
 

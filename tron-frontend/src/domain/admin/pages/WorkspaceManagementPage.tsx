@@ -1126,13 +1126,7 @@ export function WorkspaceManagementPage() {
                 </div>
 
                 <section className="space-y-4 border-t border-[var(--color-outline-variant)] pt-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <h4 className="text-base font-semibold text-[var(--color-on-surface)]">{pt("Effective Access Users")}</h4>
-                      <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{pt("The derived union of direct-user and role-based access for the selected workspace.")}</p>
-                    </div>
-                    <Badge tone="accent">{pt("{{count}} users", { count: formatNumber(effectiveUserPage.total) })}</Badge>
-                  </div>
+                  <h4 className="text-base font-semibold text-[var(--color-on-surface)]">{pt("Effective Access Users")}</h4>
                   <div className="overflow-x-auto rounded-xl border border-[var(--color-outline-variant)]">
                     <table className="w-full min-w-[52rem] border-collapse text-left text-sm">
                       <thead>

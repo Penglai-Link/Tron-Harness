@@ -153,12 +153,7 @@ export function PlatformToolsPage() {
               header: pageT("domains.columns.domainCode", "Domain"),
               width: "18%",
               render: (row) => (
-                <div>
-                  <p className="font-medium text-[var(--color-on-surface)]">{row.domainCode}</p>
-                  <p className="mt-0.5 text-xs text-[var(--color-on-surface-variant)]">
-                    {row.name}
-                  </p>
-                </div>
+                <span className="font-medium text-[var(--color-on-surface)]">{row.domainCode}</span>
               ),
             },
             {
