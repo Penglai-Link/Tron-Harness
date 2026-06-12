@@ -1,0 +1,360 @@
+<script setup lang="ts">
+import { Bot, Grip, Minus, X } from "lucide-vue-next";
+import {
+  clampFloatingStateToViewport,
+  defaultFloatingState,
+  floatingStatesEqual,
+  readFloatingState,
+  reduceFloatingState,
+  resolveFloatingViewportBounds,
+  writeFloatingState,
+  type ChatFloatingState,
+} from "@tron/chat-core";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { cx } from "../utils";
+import TronChatPanel from "./TronChatPanel.vue";
+import { TronChatWindowProps } from "../types";
+
+const props = withDefaults(defineProps<TronChatWindowProps>(), {
+  createSessionLabel: "Create session",
+  currentUserDisplayName: "",
+  debugOptions: undefined,
+  disabledInput: false,
+  emptyDescription: "Create a session to start chatting.",
+  emptyTitle: "No session selected",
+  inputPlaceholder: "Enter to send, Shift+Enter for newline",
+  liveAguiAnchorMessageCodes: () => ({}),
+  liveAguiEvents: () => [],
+  liveAguiPending: false,
+  onStateChange: undefined,
+  protocolEvents: () => [],
+  sendDisabled: false,
+  sendLabel: "Send",
+  sending: false,
+  session: null,
+  showAgui: true,
+  state: undefined,
+  stopLabel: "Stop",
+  storageKey: "tron.chat.window",
+  title: "Chat",
+  titleSubtitle: "Workspace assistant",
+});
+
+const emit = defineEmits<{
+  "create-session": [];
+  "draft-change": [value: string];
+  "edit-message": [value: string];
+  send: [];
+  stop: [];
+  "state-change": [state: ChatFloatingState];
+}>();
+
+const localState = ref(
+  readFloatingState(props.storageKey, defaultFloatingState),
+);
+const viewportRevision = ref(0);
+const normalizedStateRef = ref<string | null>(null);
+const dragRef = ref<{
+  pointerId: number;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+} | null>(null);
+const resizeRef = ref<{
+  pointerId: number;
+  startX: number;
+  startY: number;
+  width: number;
+  height: number;
+} | null>(null);
+
+const isControlled = computed(() =>
+  Boolean(props.state && props.onStateChange),
+);
+const activeState = computed(() =>
+  isControlled.value ? (props.state as ChatFloatingState) : localState.value,
+);
+
+function isInteractiveTarget(target: EventTarget | null) {
+  return (
+    target instanceof Element &&
+    Boolean(
+      target.closest("button, a, input, textarea, select, [role='button']"),
+    )
+  );
+}
+
+function buildViewportState(next: ChatFloatingState) {
+  if (typeof window === "undefined") return next;
+  return clampFloatingStateToViewport(next, {
+    ...resolveFloatingViewportBounds(window.innerWidth),
+    viewportHeight: window.innerHeight,
+    viewportWidth: window.innerWidth,
+  });
+}
+
+function applyState(next: ChatFloatingState, normalize = true) {
+  const resolvedState = normalize ? buildViewportState(next) : next;
+  if (isControlled.value) {
+    props.onStateChange?.(resolvedState);
+    emit("state-change", resolvedState);
+    return;
+  }
+  localState.value = resolvedState;
+  emit("state-change", resolvedState);
+}
+
+const visibleState = computed(() => {
+  void viewportRevision.value;
+  return buildViewportState(activeState.value);
+});
+
+watch(
+  [activeState, visibleState, viewportRevision],
+  () => {
+    if (typeof window === "undefined" || !visibleState.value.open) {
+      normalizedStateRef.value = null;
+      return;
+    }
+
+    const normalizationKey = [
+      window.innerWidth,
+      window.innerHeight,
+      activeState.value.collapsed,
+      activeState.value.height,
+      activeState.value.open,
+      activeState.value.width,
+      activeState.value.x,
+      activeState.value.y,
+      visibleState.value.collapsed,
+      visibleState.value.height,
+      visibleState.value.open,
+      visibleState.value.width,
+      visibleState.value.x,
+      visibleState.value.y,
+    ].join(":");
+
+    if (floatingStatesEqual(activeState.value, visibleState.value)) {
+      normalizedStateRef.value = null;
+      return;
+    }
+
+    if (normalizedStateRef.value === normalizationKey) return;
+    normalizedStateRef.value = normalizationKey;
+    applyState(visibleState.value, false);
+  },
+  { immediate: true },
+);
+
+watch(
+  () => props.storageKey,
+  (nextStorageKey) => {
+    if (!isControlled.value)
+      localState.value = readFloatingState(
+        nextStorageKey,
+        defaultFloatingState,
+      );
+  },
+);
+
+function handleViewportResize() {
+  viewportRevision.value += 1;
+}
+
+watch(
+  () => visibleState.value.open,
+  (open) => {
+    if (typeof window === "undefined") return;
+    if (open) window.addEventListener("resize", handleViewportResize);
+    else window.removeEventListener("resize", handleViewportResize);
+  },
+  { immediate: true },
+);
+
+onBeforeUnmount(() => {
+  if (typeof window === "undefined") return;
+  window.removeEventListener("resize", handleViewportResize);
+});
+
+watch(
+  localState,
+  (nextState) => {
+    if (!isControlled.value) writeFloatingState(props.storageKey, nextState);
+  },
+  { deep: true },
+);
+
+const panelStyle = computed(() => ({
+  height: visibleState.value.collapsed
+    ? 72 + "px"
+    : visibleState.value.height + "px",
+  transform: `translate(${-visibleState.value.x}px, ${-visibleState.value.y}px)`,
+  width: visibleState.value.width + "px",
+}));
+
+function startDrag(event: PointerEvent) {
+  if (visibleState.value.collapsed || isInteractiveTarget(event.target)) return;
+  dragRef.value = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    x: visibleState.value.x,
+    y: visibleState.value.y,
+  };
+  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+}
+
+function handleDrag(event: PointerEvent) {
+  if (!dragRef.value || dragRef.value.pointerId !== event.pointerId) return;
+  const next = reduceFloatingState(visibleState.value, {
+    type: "move",
+    x: dragRef.value.x - (event.clientX - dragRef.value.startX),
+    y: dragRef.value.y - (event.clientY - dragRef.value.startY),
+  });
+  applyState(next);
+}
+
+function endDrag(event: PointerEvent) {
+  if (!dragRef.value || dragRef.value.pointerId !== event.pointerId) return;
+  dragRef.value = null;
+  (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+}
+
+function startResize(event: PointerEvent) {
+  resizeRef.value = {
+    height: visibleState.value.height,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    width: visibleState.value.width,
+  };
+  (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+}
+
+function handleResize(event: PointerEvent) {
+  if (!resizeRef.value || resizeRef.value.pointerId !== event.pointerId) return;
+  const next = reduceFloatingState(visibleState.value, {
+    type: "resize",
+    height: resizeRef.value.height - (event.clientY - resizeRef.value.startY),
+    width: resizeRef.value.width - (event.clientX - resizeRef.value.startX),
+  });
+  applyState(next);
+}
+
+function endResize(event: PointerEvent) {
+  if (!resizeRef.value || resizeRef.value.pointerId !== event.pointerId) return;
+  resizeRef.value = null;
+  (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+}
+</script>
+
+<template>
+  <div v-if="!visibleState.open" class="tron-chat-window">
+    <button
+      class="tron-chat__button tron-chat-window__fab"
+      type="button"
+      @click="
+        applyState(
+          reduceFloatingState(visibleState, {
+            type: 'toggle-open',
+            open: true,
+          }),
+        )
+      "
+    >
+      <Bot :size="16" />
+      <span>{{ title }}</span
+      >12
+    </button>
+  </div>
+  <div v-else class="tron-chat-window">
+    <div
+      :class="
+        cx(
+          'tron-chat-window__panel',
+          visibleState.collapsed && 'tron-chat-window__panel--collapsed',
+        )
+      "
+      :style="panelStyle"
+    >
+      <div
+        class="tron-chat-window__header"
+        @pointerdown="startDrag"
+        @pointermove="handleDrag"
+        @pointerup="endDrag"
+        @pointercancel="endDrag"
+      >
+        <div class="tron-chat-window__title">
+          <Bot :size="18" />
+          <div class="tron-chat-window__title-text">
+            <span class="tron-chat-window__title-main">{{ title }}</span>
+          </div>
+        </div>
+        <div class="tron-chat-window__actions">
+          <button
+            aria-label="Close chat"
+            class="tron-chat-window__control"
+            type="button"
+            @click="
+              applyState(
+                reduceFloatingState(visibleState, {
+                  type: 'toggle-open',
+                  open: false,
+                }),
+              )
+            "
+          >
+            <X :size="16" />
+          </button>
+        </div>
+      </div>
+
+      <div v-if="!visibleState.collapsed" class="tron-chat-window__body">
+        <TronChatPanel
+          :create-session-label="createSessionLabel"
+          :current-user-display-name="currentUserDisplayName"
+          :debug-options="debugOptions"
+          :disabled-input="disabledInput"
+          :draft="draft"
+          :empty-description="emptyDescription"
+          :empty-title="emptyTitle"
+          :input-placeholder="inputPlaceholder"
+          :live-agui-anchor-message-codes="liveAguiAnchorMessageCodes"
+          :live-agui-events="liveAguiEvents"
+          :live-agui-pending="liveAguiPending"
+          :messages="messages"
+          :protocol-events="protocolEvents"
+          :send-disabled="sendDisabled"
+          :send-label="sendLabel"
+          :sending="sending"
+          :session="session"
+          :show-agui="showAgui"
+          :show-header="false"
+          :stop-label="stopLabel"
+          :title="title"
+          @create-session="emit('create-session')"
+          @draft-change="(v: string) => emit('draft-change', v)"
+          @edit-message="(v: string) => emit('edit-message', v)"
+          @send="emit('send')"
+          @stop="emit('stop')"
+        >
+          <template v-for="(_, name) in $slots" #[name]="slotProps">
+            <slot :name="name" v-bind="slotProps || {}" />
+          </template>
+        </TronChatPanel>
+      </div>
+
+      <button
+        v-if="!visibleState.collapsed"
+        aria-label="Resize chat window"
+        class="tron-chat-window__control tron-chat-window__resize"
+        type="button"
+        @pointerdown="startResize"
+        @pointermove="handleResize"
+        @pointerup="endResize"
+        @pointercancel="endResize"
+      ></button>
+    </div>
+  </div>
+</template>
