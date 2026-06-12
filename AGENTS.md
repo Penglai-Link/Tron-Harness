@@ -4,6 +4,7 @@
 
 - Always use `Makefile` first to bulid,test and cleanup
 - Use a different available port if the default port is already in use, and ensure the frontend matchs the backend port
+- Always follow coding spec
 
 ## API
 
@@ -108,3 +109,4 @@ If you encounter anything counterintuitive, surprising or confusing in this proj
 <!-- Investigation note: as of 2026-06-09, `make fe-test TEST='tests/task-management-smoke.spec.ts --grep "task kanban drag"'` expands through `npm exec playwright test $(TEST)`, so `npm` warns about `--grep` and the run can still execute the broader file instead of reliably narrowing the Playwright selection; tighten Makefile filtering with `npm exec playwright test -- ...` semantics if focused frontend reruns become important. -->
 <!-- Investigation note: as of 2026-06-09, the repository actively uses `release/*` branches for integration even though the mandated `eliteforge-git-feature-oriented-lite-spec` documents only `feature/*` and the default branch; release-branch merge and promotion rules therefore need an explicit local convention to avoid conflicting operator expectations. -->
 <!-- Investigation note: as of 2026-06-09, Playwright assertions for task-kanban success toasts should run immediately after the status-update request is observed; waiting first for board refresh and cross-column reconciliation can exceed the default 2400 ms toast lifetime and create false negatives even when the move succeeds. -->
+<!-- Investigation note: as of 2026-06-12, local startup can fail at compile time when `src/health.rs` keeps unused readiness wiring that no longer matches `src/app.rs`; `make app-run` may finish integrated frontend build successfully but still abort before boot on missing `health` imports or stale readiness types. -->

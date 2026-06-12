@@ -185,7 +185,12 @@ pub(super) fn map_auth_error(error: AuthError) -> OpenAppError {
         | AuthError::OAuth2ProfileInvalid
         | AuthError::OAuth2UpstreamFailed
         | AuthError::LdapProfileInvalid
-        | AuthError::LdapUpstreamFailed => OpenAppError::StorageFailure,
+        | AuthError::LdapUpstreamFailed
+        | AuthError::StepUpFailed
+        | AuthError::StepUpExpired
+        | AuthError::StepUpUnsupported
+        | AuthError::StepUpTokenMismatch
+        | AuthError::StepUpScopeInvalid => OpenAppError::StorageFailure,
     }
 }
 

@@ -694,6 +694,8 @@ fn http_rag_handler_uses_facade_instead_of_assembling_rag_internals() {
     let handler =
         fs::read_to_string("src/adapters/inbound/http/rag/handler.rs").expect("handler source");
     let app_source = fs::read_to_string("src/app.rs").expect("app source should be readable");
+    let app_startup_source =
+        fs::read_to_string("src/app/startup.rs").expect("app startup source should be readable");
 
     assert!(
         handler.contains("State(rag): State<AppRagService>"),
@@ -716,8 +718,8 @@ fn http_rag_handler_uses_facade_instead_of_assembling_rag_internals() {
         "AppState should own the unified RAG facade"
     );
     assert!(
-        app_source.contains("fn build_rag_service("),
-        "app assembly should be the only RAG SQLite wiring point"
+        app_startup_source.contains("fn build_rag_service("),
+        "app startup assembly should be the only RAG SQLite wiring point"
     );
 }
 

@@ -101,6 +101,14 @@ function capabilityOperationKeys(group: OpenApiCapabilityCatalogGroup) {
   return group.operations.map((operation) => capabilityGrantKey(group.capabilityCode, operation.operationCode));
 }
 
+function retainMatchingValues(current: string[], allowedValues: Set<string>) {
+  const next = current.filter((value) => allowedValues.has(value));
+  if (next.length === current.length && next.every((value, index) => value === current[index])) {
+    return current;
+  }
+  return next;
+}
+
 function IndeterminateCheckbox({
   ariaChecked,
   ariaLabel,
@@ -509,8 +517,8 @@ export function OpenAppCapabilityGrantEditorSection({
     const validOperationKeys = new Set(
       catalog.flatMap((group) => group.operations.map((operation) => capabilityGrantKey(group.capabilityCode, operation.operationCode))),
     );
-    setExpandedCapabilityCodes((current) => current.filter((code) => validCapabilityCodes.has(code)));
-    setExpandedOperationKeys((current) => current.filter((key) => validOperationKeys.has(key)));
+    setExpandedCapabilityCodes((current) => retainMatchingValues(current, validCapabilityCodes));
+    setExpandedOperationKeys((current) => retainMatchingValues(current, validOperationKeys));
   }, [catalog]);
 
   function toggleExpandedCapability(capabilityCode: string) {
@@ -784,8 +792,8 @@ export function OpenAppCapabilityGrantSummarySection({
     const validOperationKeys = new Set(
       grantedGroups.flatMap((group) => group.operations.map((operation) => capabilityGrantKey(group.capabilityCode, operation.operationCode))),
     );
-    setExpandedCapabilityCodes((current) => current.filter((code) => validCapabilityCodes.has(code)));
-    setExpandedOperationKeys((current) => current.filter((key) => validOperationKeys.has(key)));
+    setExpandedCapabilityCodes((current) => retainMatchingValues(current, validCapabilityCodes));
+    setExpandedOperationKeys((current) => retainMatchingValues(current, validOperationKeys));
   }, [grantedGroups]);
 
   function toggleExpandedCapability(capabilityCode: string) {
@@ -863,8 +871,22 @@ function CapabilityGrantSummaryGroupCard({
           : pageT("capabilityGrants.expandCapability", "Expand {{name}}", { name: capabilityDisplayName })}
         onClick={() => onToggleExpandedCapability(group.capabilityCode)}
       >
-        <span className="text-base font-semibold text-[var(--color-on-surface)]">
-          {capabilityDisplayName}
+        <span className="min-w-0 flex-1">
+          <span className="block text-base font-semibold text-[var(--color-on-surface)]">
+            {capabilityDisplayName}
+          </span>
+          {!expanded ? (
+            <span className="mt-2 flex flex-wrap gap-2">
+              {group.operations.map((operation) => (
+                <span
+                  key={`${group.capabilityCode}:${operation.operationCode}:summary`}
+                  className="rounded-full bg-[var(--color-surface-container)] px-2.5 py-1 text-xs font-medium text-[var(--color-on-surface-variant)]"
+                >
+                  {operation.operationName}
+                </span>
+              ))}
+            </span>
+          ) : null}
         </span>
         {expanded ? <ChevronDown size={16} aria-hidden="true" /> : <ChevronRight size={16} aria-hidden="true" />}
       </button>

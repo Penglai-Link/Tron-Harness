@@ -27,7 +27,7 @@ impl Default for AppConfig {
                 codex_command: DEFAULT_SYSTEM_AGENT_CODEX_COMMAND.into(),
                 opencode_command: DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND.into(),
             },
-            variable_crypto: VariableCryptoConfig::default(),
+            variable_crypto: VariableCryptoConfig::test_default(),
             http_clients: HttpClientProfilesConfig::default_profiles(),
             auth: AuthConfig {
                 jwt_secret: DEFAULT_AUTH_JWT_SECRET.into(),

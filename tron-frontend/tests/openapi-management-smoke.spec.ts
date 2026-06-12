@@ -32,6 +32,7 @@ let frontendBaseUrl = "";
 let tempRunDir = "";
 
 test.describe.configure({ timeout: 180_000 });
+test.use({ locale: "en-US" });
 
 function delay(ms: number) {
   return new Promise((resolveDelay) => {
@@ -248,10 +249,12 @@ test("platform open-app management works end-to-end with one-time key reveal and
   await expect(page).toHaveURL(/\/settings\/openapi\/edit\?openAppCode=/);
   const userGrantsSection = page.locator("section").filter({ has: page.getByRole("heading", { name: "User Grants" }) });
   const capabilityGrantsSection = page.locator("section").filter({ has: page.getByRole("heading", { name: "OpenAPI Grants" }) });
-  await page.getByLabel("Allowed User Codes").fill(userGrantCode);
+  const userCodesInput = userGrantsSection.getByRole("textbox");
+  await expect(userGrantsSection).toBeVisible();
+  await userCodesInput.fill(userGrantCode);
   await userGrantsSection.getByRole("button", { name: "Grant" }).click();
   await expect(toast(page, "User grants updated")).toBeVisible();
-  await expect(page.getByLabel("Allowed User Codes")).toHaveValue(userGrantCode);
+  await expect(userCodesInput).toHaveValue(userGrantCode);
 
   await expect(capabilityGrantsSection.getByText("Read Sessions")).toHaveCount(0);
   await capabilityGrantsSection.getByRole("button", { name: "Expand Agent Chat" }).click();
