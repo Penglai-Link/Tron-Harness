@@ -1,4 +1,4 @@
-mod error_mapper;
+pub(crate) mod error_mapper;
 mod handler;
 mod request;
 mod response;
@@ -162,7 +162,7 @@ mod tests {
     #[tokio::test]
     async fn require_auth_populates_auth_holder_from_valid_access_token() {
         let (config, database_path) = test_config("auth-holder");
-        let state = AppState::new(config);
+        let state = AppState::new(config).expect("app state should build");
         let authorized = state
             .users
             .login_internal("admin", "TronAdminPass123!")
@@ -215,7 +215,7 @@ mod tests {
     #[tokio::test]
     async fn require_auth_propagates_auth_holder_into_spawned_tasks() {
         let (config, database_path) = test_config("auth-holder-spawn");
-        let state = AppState::new(config);
+        let state = AppState::new(config).expect("app state should build");
         let authorized = state
             .users
             .login_internal("admin", "TronAdminPass123!")

@@ -18,7 +18,6 @@ use crate::{
             EffectiveVariable, ToolAvailabilityState, ToolExposureMode, ToolRegistry,
         },
         skill::WorkspaceSkillListQuery,
-        variable::VariableCatalogQuery,
         workspace::WorkspaceStatus,
     },
     shared::{event_bus::EventBusHandle, time::current_timestamp},
@@ -232,16 +231,14 @@ impl AgentInvocationService {
         });
         let variables = self
             .variables
-            .list_variables(
-                &workspace.workspace_code,
-                VariableCatalogQuery { search: None },
-            )
-            .unwrap_or_default()
+            .runtime_variables(&workspace.workspace_code)
+            .map_err(|_| AgentInvocationError::RuntimeSecretDeliveryUntrusted)?
             .into_iter()
             .map(|variable| EffectiveVariable {
                 key: variable.key,
                 value: variable.value,
-                source: variable.source_label,
+                source: variable.source,
+                sensitive: variable.is_sensitive,
             })
             .collect::<Vec<_>>();
         let variable_values = variables

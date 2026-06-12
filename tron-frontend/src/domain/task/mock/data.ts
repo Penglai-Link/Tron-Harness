@@ -1,6 +1,7 @@
 import { isKnownAppCode } from "@/domain/app/mock";
 import type { TaskListQuery } from "@/domain/task/api";
 import {
+  compareTaskListItems,
   inferTaskRole,
   statusLabel,
   type CreateTaskPayload,
@@ -159,6 +160,10 @@ export function listKanbanColumns(query: TaskListQuery): KanbanColumn[] {
       tasks: records
         .filter((task) => task.status === status)
         .map(toListItem),
+    }))
+    .map((column) => ({
+      ...column,
+      tasks: [...column.tasks].sort(compareTaskListItems),
     }));
 }
 

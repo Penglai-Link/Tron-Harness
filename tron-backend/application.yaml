@@ -1,5 +1,7 @@
 bindAddress: 127.0.0.1
 port: 8080
+frontendDistDir: tron-backend/resources/frontend
+projectDocRoot: .
 
 systemAgents:
   codexCommand: codex
@@ -11,6 +13,9 @@ httpClients:
     poolIdleTimeoutMs: 90000
     poolMaxIdlePerHost: 32
     tcpKeepaliveMs: 30000
+
+variableCrypto:
+  keyBase64: sbxNdQm4XiwQyfXNEtjZCQ==
 
 auth:
   jwtSecret: tron-dev-jwt-secret

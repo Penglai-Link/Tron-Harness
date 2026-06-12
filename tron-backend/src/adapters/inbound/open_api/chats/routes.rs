@@ -12,7 +12,10 @@ use super::handler::{
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/open-api/v1/chats/session-groups", get(list_session_groups))
+        .route(
+            "/open-api/v1/chats/session-groups",
+            get(list_session_groups),
+        )
         .route("/open-api/v1/chats/sessions", post(create_session))
         .route(
             "/open-api/v1/chats/sessions/{session_code}",

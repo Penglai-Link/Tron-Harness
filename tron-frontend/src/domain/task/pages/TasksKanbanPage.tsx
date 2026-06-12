@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -26,10 +27,20 @@ import {
   useTaskOptions,
 } from "@/domain/task/hooks";
 import type {
+  KanbanColumn,
   TaskListItem,
   TaskSourceType,
+  TaskStatus,
   TaskType,
 } from "@/domain/task/model";
+import {
+  compareTaskListItems,
+  inferTaskRole,
+  statusLabel,
+} from "@/domain/task/model";
+import { updateTaskStatus } from "@/domain/task/api";
+import { updateMockTaskStatus } from "@/domain/task/mock/data";
+import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { cn } from "@/shared/lib/utils";
 
 type BoardScalePreset = "fit" | "100" | "90" | "80" | "70" | "60" | "50";
@@ -80,15 +91,115 @@ function sourceTypeTone(sourceType: TaskSourceType) {
   return "success";
 }
 
-function KanbanCard({ task, selected, compact, dense, onSelect }: { task: TaskListItem; selected: boolean; compact: boolean; dense: boolean; onSelect: () => void }) {
+function reorderKanbanColumns(
+  columns: KanbanColumn[],
+  task: TaskListItem,
+  nextStatus: TaskStatus,
+) {
+  return columns.map((column) => {
+    if (column.status === task.status && column.status === nextStatus) {
+      return column;
+    }
+
+    if (column.status === task.status) {
+      return {
+        ...column,
+        tasks: column.tasks.filter((item) => item.taskCode !== task.taskCode),
+      };
+    }
+
+    if (column.status === nextStatus) {
+      const movedTask = {
+        ...task,
+        status: nextStatus,
+      };
+      return {
+        ...column,
+        tasks: [...column.tasks.filter((item) => item.taskCode !== task.taskCode), movedTask].sort(compareTaskListItems),
+      };
+    }
+
+    return column;
+  });
+}
+
+function buildTaskDragPreview(card: HTMLButtonElement) {
+  const bounds = card.getBoundingClientRect();
+  const previewCard = card.cloneNode(true);
+  if (!(previewCard instanceof HTMLButtonElement)) return null;
+
+  const preview = document.createElement("div");
+  const previewPadding = 18;
+  preview.setAttribute("aria-hidden", "true");
+  Object.assign(preview.style, {
+    background: "transparent",
+    left: "-1000px",
+    padding: `${previewPadding}px`,
+    pointerEvents: "none",
+    position: "fixed",
+    top: "-1000px",
+    width: `${bounds.width + previewPadding * 2}px`,
+    zIndex: "9999",
+  });
+
+  previewCard.setAttribute("aria-hidden", "true");
+  previewCard.tabIndex = -1;
+  Object.assign(previewCard.style, {
+    background: "var(--color-elevated-surface-strong)",
+    borderColor: "var(--color-primary)",
+    boxShadow: "0 18px 40px rgba(15, 23, 42, 0.18)",
+    margin: "0",
+    opacity: "1",
+    transform: "translateY(-1px)",
+    width: `${bounds.width}px`,
+  });
+
+  preview.appendChild(previewCard);
+  document.body.appendChild(preview);
+  return {
+    bounds,
+    preview,
+    previewOffsetX: previewPadding + Math.min(bounds.width / 2, 96),
+    previewOffsetY: previewPadding + 24,
+  };
+}
+
+function KanbanCard({
+  compact,
+  dense,
+  dragging,
+  onDragEnd,
+  onDragStart,
+  onSelect,
+  pending,
+  selected,
+  task,
+}: {
+  task: TaskListItem;
+  selected: boolean;
+  compact: boolean;
+  dense: boolean;
+  dragging: boolean;
+  pending: boolean;
+  onDragEnd: () => void;
+  onDragStart: (event: React.DragEvent<HTMLButtonElement>) => void;
+  onSelect: () => void;
+}) {
   return (
     <button
+      aria-busy={pending}
       className={cn(
-        "w-full rounded-lg border bg-white text-left shadow-sm hover:border-[var(--color-outline)]",
+        "relative z-0 w-full rounded-xl border bg-[var(--color-elevated-surface)] text-left shadow-[0_2px_6px_rgba(15,23,42,0.05)] transition-[box-shadow,border-color,background-color,opacity] duration-150 hover:z-10 hover:border-[var(--color-outline)] hover:shadow-[0_12px_28px_rgba(15,23,42,0.10)]",
         dense ? "p-2" : compact ? "p-2.5" : "p-3",
-        selected ? "border-[var(--color-primary)]" : "border-[var(--color-outline-variant)]",
+        selected ? "border-[var(--color-primary)] shadow-[0_10px_24px_rgba(15,23,42,0.08)]" : "border-[var(--color-outline-variant)]",
+        dragging ? "translate-y-0 border-dashed border-[var(--color-primary)]/35 bg-[var(--color-primary)]/5 shadow-none hover:translate-y-0 hover:shadow-none" : "",
+        pending ? "cursor-wait opacity-70" : "cursor-grab active:cursor-grabbing",
       )}
+      data-testid={`task-kanban-card-${task.taskCode}`}
+      draggable={!pending}
       type="button"
+      onDragEnd={onDragEnd}
+      onDragStart={onDragStart}
       onClick={onSelect}
     >
       <div className={cn("flex items-center justify-between gap-2", dense ? "mb-1" : compact ? "mb-1.5" : "mb-2")}>
@@ -116,6 +227,9 @@ export function TasksKanbanPage() {
   const [taskType, setTaskType] = useState<TaskType>("Feature");
   const [priority, setPriority] = useState("");
   const [selectedTaskCode, setSelectedTaskCode] = useState<string | null>(null);
+  const [draggedTask, setDraggedTask] = useState<TaskListItem | null>(null);
+  const [dragOverState, setDragOverState] = useState<{ allowed: boolean; status: TaskStatus } | null>(null);
+  const [pendingTaskCode, setPendingTaskCode] = useState<string | null>(null);
   const [boardScalePreset, setBoardScalePreset] = useState<BoardScalePreset>(() => {
     if (typeof window === "undefined") return "fit";
     return resolveStoredBoardScale(window.localStorage.getItem(BOARD_SCALE_STORAGE_KEY));
@@ -125,6 +239,8 @@ export function TasksKanbanPage() {
   const toast = useToast();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const boardViewportRef = useRef<HTMLDivElement | null>(null);
+  const dragPreviewRef = useRef<HTMLDivElement | null>(null);
+  const dataSource = getServiceDataSource("task");
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const workspaceCode = activeWorkspace?.workspaceCode ?? "";
 
@@ -143,6 +259,13 @@ export function TasksKanbanPage() {
     workspaceCode,
   }), [debouncedSearch, priority, taskType, workspaceCode]);
   const { columns, loading, refresh } = useTaskKanbanColumns(taskQuery);
+  const [optimisticColumns, setOptimisticColumns] = useState<KanbanColumn[] | null>(null);
+
+  useEffect(() => {
+    setOptimisticColumns(null);
+  }, [columns]);
+
+  const displayedColumns = optimisticColumns ?? columns;
 
   useEffect(() => {
     setSelectedTaskCode(null);
@@ -188,6 +311,99 @@ export function TasksKanbanPage() {
     columnWidth: Math.max(160, Math.round(BOARD_BASE_COLUMN_WIDTH * boardScale)),
   }), [boardScale]);
 
+  const parseDraggedTask = useCallback((event: React.DragEvent<HTMLElement>) => {
+    if (draggedTask) return draggedTask;
+    const serialized = event.dataTransfer.getData("application/json");
+    if (!serialized) return null;
+    try {
+      return JSON.parse(serialized) as TaskListItem;
+    } catch {
+      return null;
+    }
+  }, [draggedTask]);
+
+  const canMoveTaskToStatus = useCallback((task: TaskListItem, status: TaskStatus) => {
+    const taskRole = inferTaskRole(task.taskType, task.parentTaskCode);
+    return options.statusRules[taskRole].includes(status);
+  }, [options.statusRules]);
+
+  const cleanupDragPreview = useCallback(() => {
+    dragPreviewRef.current?.remove();
+    dragPreviewRef.current = null;
+  }, []);
+
+  const clearDragState = useCallback(() => {
+    cleanupDragPreview();
+    setDraggedTask(null);
+    setDragOverState(null);
+  }, [cleanupDragPreview]);
+
+  useEffect(() => cleanupDragPreview, [cleanupDragPreview]);
+
+  const handleCardDragStart = useCallback((task: TaskListItem, event: React.DragEvent<HTMLButtonElement>) => {
+    if (pendingTaskCode) {
+      event.preventDefault();
+      return;
+    }
+    clearDragState();
+    setDraggedTask(task);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", task.taskCode);
+    event.dataTransfer.setData("application/json", JSON.stringify(task));
+    const dragPreview = buildTaskDragPreview(event.currentTarget);
+    if (!dragPreview) return;
+    dragPreviewRef.current = dragPreview.preview;
+    event.dataTransfer.setDragImage(dragPreview.preview, dragPreview.previewOffsetX, dragPreview.previewOffsetY);
+  }, [clearDragState, pendingTaskCode]);
+
+  const handleColumnDragOver = useCallback((status: TaskStatus, event: React.DragEvent<HTMLElement>) => {
+    const task = parseDraggedTask(event);
+    if (!task || pendingTaskCode) return;
+    event.preventDefault();
+    if (task.status === status) {
+      setDragOverState(null);
+      event.dataTransfer.dropEffect = "move";
+      return;
+    }
+    const allowed = canMoveTaskToStatus(task, status);
+    event.dataTransfer.dropEffect = "move";
+    setDragOverState({ allowed, status });
+  }, [canMoveTaskToStatus, parseDraggedTask, pendingTaskCode]);
+
+  const handleColumnDrop = useCallback(async (status: TaskStatus, event: React.DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    setDragOverState(null);
+
+    const task = parseDraggedTask(event);
+    cleanupDragPreview();
+    setDraggedTask(null);
+    if (!task || pendingTaskCode) return;
+    if (task.status === status) return;
+
+    if (!canMoveTaskToStatus(task, status)) {
+      toast.warning(`Task ${task.taskCode} cannot move to ${statusLabel(status)}`);
+      return;
+    }
+
+    setPendingTaskCode(task.taskCode);
+    try {
+      if (dataSource === "api") {
+        await updateTaskStatus(task.taskCode, { status });
+      } else {
+        updateMockTaskStatus(task.taskCode, { status });
+      }
+      setOptimisticColumns(reorderKanbanColumns(displayedColumns, task, status));
+      refresh();
+      toast.success(`Task ${task.taskCode} moved to ${statusLabel(status)}`);
+    } catch (error) {
+      setOptimisticColumns(null);
+      refresh();
+      toast.error(error instanceof Error ? error.message : "Task status could not be updated");
+    } finally {
+      setPendingTaskCode(null);
+    }
+  }, [canMoveTaskToStatus, cleanupDragPreview, dataSource, displayedColumns, parseDraggedTask, pendingTaskCode, refresh, toast]);
+
   return (
     <div className="flex min-h-[calc(100vh-6.5rem)] flex-col">
         <PageHeader
@@ -226,11 +442,27 @@ export function TasksKanbanPage() {
           </div>
         </SurfaceCard>
         <div className="flex min-h-0 flex-1 overflow-x-auto pb-4" ref={boardViewportRef} style={{ gap: `${boardLayout.columnGap}px` }}>
-          {columns.map((column) => (
+          {displayedColumns.map((column) => (
             <section
-              className="flex shrink-0 flex-col rounded-lg bg-[var(--color-surface-container)]"
+              aria-label={`${column.title} task column`}
+              className={cn(
+                "flex shrink-0 flex-col rounded-2xl bg-[var(--color-surface-container)] transition-[background-color,box-shadow,border-color] duration-150",
+                dragOverState?.status === column.status
+                  ? dragOverState.allowed
+                    ? "bg-[var(--color-primary)]/6 ring-1 ring-inset ring-[var(--color-primary)]/20"
+                    : "bg-[var(--color-error-container)]/40 ring-1 ring-inset ring-[var(--color-error)]/15"
+                  : "",
+              )}
               data-task-kanban-column={column.status}
+              data-testid={`task-kanban-dropzone-${column.status}`}
               key={column.status}
+              onDragLeave={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                  setDragOverState(null);
+                }
+              }}
+              onDragOver={(event) => handleColumnDragOver(column.status, event)}
+              onDrop={(event) => handleColumnDrop(column.status, event)}
               style={{
                 gap: `${boardLayout.columnGap}px`,
                 padding: `${boardLayout.columnPadding}px`,
@@ -239,16 +471,51 @@ export function TasksKanbanPage() {
             >
               <div className="flex items-center justify-between border-b-2 border-[var(--color-outline-variant)] px-1 py-1">
                 <h2 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{column.title}</h2>
-                <span className="rounded bg-[var(--color-surface-container-high)] px-2 text-[11px]">{column.tasks.length}</span>
+                <span
+                  className={cn(
+                    "rounded-full px-2.5 py-0.5 text-[11px] transition-colors",
+                    dragOverState?.status === column.status
+                      ? dragOverState.allowed
+                        ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]"
+                        : "bg-[var(--color-error-container)] text-[var(--color-on-error-container)]"
+                      : "bg-[var(--color-surface-container-high)]",
+                  )}
+                >
+                  {column.tasks.length}
+                </span>
               </div>
-              <div className="min-h-0 flex-1 space-y-3 overflow-y-auto">
+              <div
+                className="min-h-0 flex-1 space-y-3 overflow-y-auto"
+                onDragOver={(event) => handleColumnDragOver(column.status, event)}
+                onDrop={(event) => handleColumnDrop(column.status, event)}
+              >
+                {dragOverState?.status === column.status ? (
+                  <div
+                    className={cn(
+                      "rounded-xl border border-dashed px-3 py-2 text-[11px] font-medium transition-colors",
+                      dragOverState.allowed
+                        ? "border-[var(--color-primary)]/35 bg-[var(--color-elevated-surface-strong)] text-[var(--color-primary)]"
+                        : "border-[var(--color-error)]/30 bg-[var(--color-error-container)]/45 text-[var(--color-error)]",
+                    )}
+                  >
+                    {dragOverState.allowed
+                      ? `Release to move into ${column.title}`
+                      : `${draggedTask?.taskCode ?? "Task"} cannot move into ${column.title}`}
+                  </div>
+                ) : null}
                 {column.tasks.map((task) => (
                   <KanbanCard
                     key={task.taskCode}
                     task={task}
                     compact={boardLayout.compact}
                     dense={boardLayout.dense}
+                    dragging={draggedTask?.taskCode === task.taskCode}
+                    pending={pendingTaskCode === task.taskCode}
                     selected={selectedTaskCode === task.taskCode}
+                    onDragEnd={() => {
+                      clearDragState();
+                    }}
+                    onDragStart={(event) => handleCardDragStart(task, event)}
                     onSelect={() => {
                       setSelectedTaskCode(task.taskCode);
                       navigate(`/tasks/detail?taskCode=${encodeURIComponent(task.taskCode)}`);

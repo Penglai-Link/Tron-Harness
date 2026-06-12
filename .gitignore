@@ -1,6 +1,8 @@
 docs/tasks/frontend-onboarding/evidence/
 docs/brainstorm/*/runtime/
 tron-backend/resources/frontend/
+.intentforge-dreaming/
+**/.intentforge-dreaming/
 
 # AI Tools
 .codex/
@@ -15,6 +17,9 @@ tron-backend/resources/frontend/
 # JavaScript dependencies
 node_modules
 node_modules/
+
+# Integrated frontend build output
+tron-backend/resources/frontend/
 
 # Archives
 *.tar.gz
@@ -62,3 +67,5 @@ $RECYCLE.BIN/
 .directory
 .Trash-*
 .nfs*
+
+*.pyc

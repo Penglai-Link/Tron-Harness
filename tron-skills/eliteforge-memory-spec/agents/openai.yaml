@@ -1,0 +1,4 @@
+interface:
+  display_name: "EliteForge Memory Spec"
+  short_description: "Load memory context and govern records."
+  default_prompt: "Use $eliteforge-memory-spec at session start: after reading, fan out memory_search(mode=CONTEXT_PACK) for USER, SPACE, and WORK_DOMAIN before any user-visible response or repository action; reading the skill is not memory retrieval."

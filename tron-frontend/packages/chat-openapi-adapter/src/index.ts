@@ -1,8 +1,11 @@
 import {
+  buildOpenApiSignedHeaders,
   createFetchTransport,
   normalizeChatMessage,
   normalizeChatSendResult,
   normalizeChatSession,
+  type FetchTransportRequestContext,
+  type BodyInitLike,
   type ChatAdapter,
   type ChatAguiEvent,
   type ChatAguiStreamEvent,
@@ -14,10 +17,12 @@ import {
   type SendChatMessageInput,
 } from "@tron/chat-core";
 
-interface OpenApiAdapterOptions extends Pick<ChatClientConfig, "appId" | "appKey" | "baseUrl" | "userId"> {
+interface OpenApiAdapterOptions extends Pick<ChatClientConfig, "appKey" | "baseUrl" | "openAppCode" | "userCode" | "userId"> {
   accessToken?: string | null;
   credentials?: RequestCredentials;
   getAccessToken?: () => string | null | undefined | Promise<string | null | undefined>;
+  nonceFactory?: () => string;
+  timestampFactory?: () => number;
 }
 
 interface AguiEventSnapshot {
@@ -29,21 +34,32 @@ interface AguiProtocolEvent {
   sseEvent: string;
 }
 
-async function openApiHeaders(options: OpenApiAdapterOptions) {
-  const headers = new Headers();
-  const accessToken = options.accessToken ?? await options.getAccessToken?.();
-  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
-  if (options.appId) headers.set("X-Tron-App-Id", options.appId);
-  if (options.appKey) headers.set("X-Tron-App-Key", options.appKey);
-  if (options.userId) headers.set("X-Tron-User-Id", options.userId);
-  return headers;
+function resolveUserCode(options: OpenApiAdapterOptions) {
+  return options.userCode?.trim() || options.userId?.trim() || "";
+}
+
+async function openApiHeaders(
+  options: OpenApiAdapterOptions,
+  request: FetchTransportRequestContext,
+) {
+  return buildOpenApiSignedHeaders({
+    openAppCode: options.openAppCode ?? "",
+    appKey: options.appKey ?? "",
+    body: request.body as BodyInitLike | undefined,
+    method: request.method,
+    nonce: options.nonceFactory?.(),
+    path: request.path,
+    rawQuery: request.rawQuery,
+    timestamp: options.timestampFactory?.(),
+    userCode: resolveUserCode(options),
+  });
 }
 
 export function createOpenApiChatAdapter(options: OpenApiAdapterOptions = {}): ChatAdapter {
   const transport = createFetchTransport({
     baseUrl: options.baseUrl,
     credentials: options.credentials ?? "omit",
-    getHeaders: () => openApiHeaders(options),
+    getHeaders: (request) => openApiHeaders(options, request),
   });
 
   return {

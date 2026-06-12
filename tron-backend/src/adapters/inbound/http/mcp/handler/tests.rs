@@ -19,7 +19,7 @@ use super::transport::MCP_PROTOCOL_VERSION;
 #[tokio::test]
 async fn invalid_bearer_token_is_rejected_for_variables_transport() {
     let (config, database_path) = test_config("mcp-variables-auth");
-    let router = build_router(config);
+    let router = build_router(config).expect("router should build");
 
     let response = issue_json_request(
         router,
@@ -52,7 +52,7 @@ async fn invalid_bearer_token_is_rejected_for_variables_transport() {
 #[tokio::test]
 async fn variables_transport_reads_and_writes_effective_workspace_variables() {
     let (config, database_path) = test_config("mcp-variables-runtime");
-    let router = build_router(config);
+    let router = build_router(config).expect("router should build");
 
     let access_token = login(&router).await;
     let workspace_code = create_workspace(&router, &access_token).await;

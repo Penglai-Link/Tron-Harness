@@ -2,18 +2,22 @@ import { requestApi } from "@/shared/api/httpClient";
 
 import type {
   PlatformVariableRecord,
+  VariableValueMode,
   VariableRecord,
 } from "@/domain/variable/model";
 
 export const variableApiEndpoints = {
+  verifyStepUpPassword: "POST /api/v1/auth/verify-step-up-password",
   listPlatformVariables: "GET /api/v1/admin/platform/variables",
   createPlatformVariable: "POST /api/v1/admin/platform/variables",
   updatePlatformVariable: "PATCH /api/v1/admin/platform/variables/{variableKey}",
   deletePlatformVariable: "DELETE /api/v1/admin/platform/variables/{variableKey}",
+  revealPlatformVariable: "POST /api/v1/admin/platform/variables/reveal-platform-variable",
   listVariables: "GET /api/v1/variables/workspaces/{workspaceCode}",
   createVariable: "POST /api/v1/variables/workspaces/{workspaceCode}",
   updateVariable: "PATCH /api/v1/variables/workspaces/{workspaceCode}/{variableKey}",
   deleteVariable: "DELETE /api/v1/variables/workspaces/{workspaceCode}/{variableKey}",
+  revealWorkspaceVariable: "POST /api/v1/variables/reveal-workspace-variable",
 } as const;
 
 export interface VariableCatalogQuery {
@@ -24,16 +28,60 @@ export interface CreateVariablePayload {
   key: string;
   value: string;
   description?: string | null;
+  isSensitive?: boolean;
+  valueMode?: VariableValueMode;
 }
 
 export interface UpdateVariablePayload {
-  value: string;
+  value?: string;
   description?: string | null;
+  isSensitive?: boolean;
+  valueMode?: VariableValueMode;
 }
 
 export interface VariableMutationResult {
   key: string;
   workspaceCode: string;
+}
+
+export interface StepUpPasswordPayload {
+  password: string;
+  target:
+    | {
+      scope: "platform";
+      variableKey: string;
+    }
+    | {
+      scope: "workspace";
+      variableKey: string;
+      workspaceCode: string;
+    };
+}
+
+export interface StepUpPasswordResult {
+  expiresAt: string;
+  stepUpToken: string;
+}
+
+export interface RevealWorkspaceVariablePayload {
+  stepUpToken: string;
+  variableKey: string;
+  workspaceCode: string;
+}
+
+export interface RevealPlatformVariablePayload {
+  stepUpToken: string;
+  variableKey: string;
+}
+
+export interface RevealVariableResult {
+  value: string;
+}
+
+export function verifyStepUpPassword(payload: StepUpPasswordPayload) {
+  return requestApi<StepUpPasswordResult>(variableApiEndpoints.verifyStepUpPassword, {
+    body: payload,
+  });
 }
 
 export function fetchPlatformVariables(signal?: AbortSignal) {
@@ -58,6 +106,12 @@ export function updatePlatformVariable(variableKey: string, payload: UpdateVaria
 export function deletePlatformVariable(variableKey: string) {
   return requestApi<VariableMutationResult>(variableApiEndpoints.deletePlatformVariable, {
     pathParams: { variableKey },
+  });
+}
+
+export function revealPlatformVariable(payload: RevealPlatformVariablePayload) {
+  return requestApi<RevealVariableResult>(variableApiEndpoints.revealPlatformVariable, {
+    body: payload,
   });
 }
 
@@ -102,5 +156,11 @@ export function deleteVariable(workspaceCode: string, variableKey: string) {
       workspaceCode,
       variableKey,
     },
+  });
+}
+
+export function revealWorkspaceVariable(payload: RevealWorkspaceVariablePayload) {
+  return requestApi<RevealVariableResult>(variableApiEndpoints.revealWorkspaceVariable, {
+    body: payload,
   });
 }

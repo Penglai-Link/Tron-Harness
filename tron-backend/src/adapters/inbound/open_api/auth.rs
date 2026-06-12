@@ -1,97 +1,76 @@
 use axum::{
+    Json,
+    body::{Body, to_bytes},
     extract::{Request, State},
     http::{HeaderMap, StatusCode, header},
     middleware::Next,
     response::{IntoResponse, Response},
-    Json,
 };
 
 use crate::{
-    adapters::inbound::http::auth::{
-        RequestAuthContext, authenticate_headers, read_access_token,
-    },
-    application::user::UserService,
-    domain::auth::AuthError,
+    adapters::inbound::http::auth::RequestAuthContext,
+    application::open_app::{OpenAppService, SignedOpenApiRequest, resolve_open_api_route_grant},
+    domain::open_app::OpenAppError,
     response::ApiResponse,
-    shared::{
-        auth_holder::AuthHolder,
-        locale::resolve_request_locale,
-    },
+    shared::{auth_holder::AuthHolder, locale::resolve_request_locale},
 };
 
-const OPEN_API_APP_ID_HEADER: &str = "x-tron-app-id";
-const OPEN_API_APP_KEY_HEADER: &str = "x-tron-app-key";
-const OPEN_API_USER_ID_HEADER: &str = "x-tron-user-id";
+const OPEN_API_APP_CODE_HEADER: &str = "x-tron-app-code";
+const OPEN_API_USER_CODE_HEADER: &str = "x-tron-user-code";
+const OPEN_API_TIMESTAMP_HEADER: &str = "x-tron-timestamp";
+const OPEN_API_NONCE_HEADER: &str = "x-tron-nonce";
+const OPEN_API_SIGNATURE_HEADER: &str = "x-tron-signature";
+const OPEN_API_SIGNATURE_VERSION_HEADER: &str = "x-tron-signature-version";
 
-fn auth_error_response(error: AuthError) -> Response {
+fn open_api_error_response(error: OpenAppError) -> Response {
     let (status, code, message) = match error {
-        AuthError::UserInactive => (
-            StatusCode::FORBIDDEN,
-            "AUTH_USER_INACTIVE",
-            "user is not active",
-        ),
-        AuthError::Unauthorized | AuthError::InvalidCredentials => (
+        OpenAppError::InvalidTimestamp => (
             StatusCode::UNAUTHORIZED,
-            "AUTH_UNAUTHORIZED",
+            "OPEN_API_TIMESTAMP_INVALID",
+            "signature timestamp is invalid",
+        ),
+        OpenAppError::NonceReplayed => (
+            StatusCode::UNAUTHORIZED,
+            "OPEN_API_NONCE_REPLAYED",
+            "nonce was replayed",
+        ),
+        OpenAppError::OpenAppDisabled => (
+            StatusCode::UNAUTHORIZED,
+            "OPEN_API_APP_DISABLED",
+            "open-app is not enabled or credential is revoked",
+        ),
+        OpenAppError::UserForbidden => (
+            StatusCode::FORBIDDEN,
+            "OPEN_API_USER_FORBIDDEN",
+            "acting user is not allowed",
+        ),
+        OpenAppError::OperationForbidden => (
+            StatusCode::FORBIDDEN,
+            "OPEN_API_OPERATION_FORBIDDEN",
+            "requested operation is not allowed",
+        ),
+        OpenAppError::InvalidSignatureVersion
+        | OpenAppError::Unauthorized
+        | OpenAppError::InvalidSignature
+        | OpenAppError::InvalidOpenAppCode
+        | OpenAppError::InvalidUserCode => (
+            StatusCode::UNAUTHORIZED,
+            "OPEN_API_UNAUTHORIZED",
             "authentication required",
         ),
-        AuthError::RefreshInvalid => (
-            StatusCode::UNAUTHORIZED,
-            "AUTH_REFRESH_INVALID",
-            "refresh session is invalid",
-        ),
-        AuthError::ProviderNotFound => (
-            StatusCode::NOT_FOUND,
-            "AUTH_PROVIDER_NOT_FOUND",
-            "auth provider was not found",
-        ),
-        AuthError::UserNotLinked => (
-            StatusCode::FORBIDDEN,
-            "AUTH_USER_NOT_LINKED",
-            "oauth2 identity is not linked to an active internal user",
-        ),
-        AuthError::OAuth2StateInvalid => (
-            StatusCode::BAD_REQUEST,
-            "AUTH_OAUTH2_STATE_INVALID",
-            "oauth2 state is invalid",
-        ),
-        AuthError::OAuth2CodeInvalid => (
-            StatusCode::BAD_REQUEST,
-            "AUTH_OAUTH2_CODE_INVALID",
-            "oauth2 code is invalid",
-        ),
-        AuthError::OAuth2ProviderError => (
-            StatusCode::BAD_REQUEST,
-            "AUTH_OAUTH2_PROVIDER_ERROR",
-            "oauth2 provider returned an error",
-        ),
-        AuthError::OAuth2ProfileInvalid => (
-            StatusCode::BAD_REQUEST,
-            "AUTH_OAUTH2_PROFILE_INVALID",
-            "oauth2 profile payload is invalid",
-        ),
-        AuthError::OAuth2UpstreamFailed => (
-            StatusCode::BAD_GATEWAY,
-            "AUTH_OAUTH2_UPSTREAM_FAILED",
-            "oauth2 upstream request failed",
-        ),
-        AuthError::LdapProfileInvalid => (
-            StatusCode::BAD_GATEWAY,
-            "AUTH_LDAP_PROFILE_INVALID",
-            "ldap profile payload is invalid",
-        ),
-        AuthError::LdapUpstreamFailed => (
-            StatusCode::BAD_GATEWAY,
-            "AUTH_LDAP_UPSTREAM_FAILED",
-            "ldap upstream request failed",
-        ),
-        AuthError::TokenEncodingFailed
-        | AuthError::TokenDecodingFailed
-        | AuthError::PasswordVerifyFailed
-        | AuthError::StorageFailure => (
+        OpenAppError::SecretCryptoFailure | OpenAppError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            "AUTH_INTERNAL_ERROR",
-            "auth operation failed",
+            "OPEN_API_INTERNAL_ERROR",
+            "open-api auth operation failed",
+        ),
+        OpenAppError::NotFound
+        | OpenAppError::NameRequired
+        | OpenAppError::DuplicateName
+        | OpenAppError::InvalidCapability
+        | OpenAppError::InvalidOperation => (
+            StatusCode::BAD_REQUEST,
+            "OPEN_API_REQUEST_INVALID",
+            "open-api auth request is invalid",
         ),
     };
 
@@ -107,52 +86,89 @@ fn read_open_api_header(headers: &HeaderMap, name: &str) -> Option<String> {
         .map(str::to_string)
 }
 
-fn authenticate_open_api_headers(
-    users: &UserService,
-    headers: &HeaderMap,
-) -> Result<RequestAuthContext, AuthError> {
-    let app_id = read_open_api_header(headers, OPEN_API_APP_ID_HEADER)
-        .ok_or(AuthError::Unauthorized)?;
-    let app_key = read_open_api_header(headers, OPEN_API_APP_KEY_HEADER)
-        .ok_or(AuthError::Unauthorized)?;
-    let user_id = read_open_api_header(headers, OPEN_API_USER_ID_HEADER)
-        .ok_or(AuthError::Unauthorized)?;
-    if app_id.is_empty() || app_key.is_empty() || user_id.is_empty() {
-        return Err(AuthError::Unauthorized);
-    }
-
-    let authenticated = users.authenticate_open_api_user(&user_id)?;
-    let locale = resolve_request_locale(
-        headers
-            .get(header::ACCEPT_LANGUAGE)
-            .and_then(|value| value.to_str().ok()),
-    );
-
-    Ok(RequestAuthContext {
-        access_token: format!("open-api:{app_id}:{user_id}"),
+fn build_request_auth_context(
+    auth: crate::application::open_app::AuthenticatedOpenAppRequest,
+    locale: String,
+) -> RequestAuthContext {
+    RequestAuthContext {
+        access_token: format!(
+            "open-api:{}:{}",
+            auth.open_app.open_app_code, auth.authenticated.token_identity.user_code
+        ),
         locale,
-        session: authenticated.session,
-        token_identity: authenticated.token_identity,
-    })
+        session: auth.authenticated.session,
+        token_identity: auth.authenticated.token_identity,
+    }
 }
 
 pub async fn require_open_api_auth(
-    State(users): State<UserService>,
-    mut request: Request,
+    State(open_apps): State<OpenAppService>,
+    request: Request,
     next: Next,
 ) -> Response {
-    let auth = if read_access_token(request.headers()).is_some() {
-        authenticate_headers(&users, request.headers())
-    } else {
-        authenticate_open_api_headers(&users, request.headers())
+    let locale = resolve_request_locale(
+        request
+            .headers()
+            .get(header::ACCEPT_LANGUAGE)
+            .and_then(|value| value.to_str().ok()),
+    );
+    let route_grant =
+        match resolve_open_api_route_grant(request.method().as_str(), request.uri().path()) {
+            Some(route_grant) => route_grant,
+            None => return open_api_error_response(OpenAppError::OperationForbidden),
+        };
+    let (parts, body) = request.into_parts();
+    let body_bytes = match to_bytes(body, usize::MAX).await {
+        Ok(body) => body,
+        Err(_) => return open_api_error_response(OpenAppError::StorageFailure),
+    };
+    let signed_request = match build_signed_request(
+        &parts.headers,
+        parts.method.as_str(),
+        parts.uri.path(),
+        parts.uri.query(),
+        &body_bytes,
+    ) {
+        Ok(request) => request,
+        Err(error) => return open_api_error_response(error),
+    };
+    let auth = match open_apps.authenticate_signed_request(signed_request, route_grant) {
+        Ok(auth) => build_request_auth_context(auth, locale),
+        Err(error) => return open_api_error_response(error),
     };
 
-    match auth {
-        Ok(auth) => {
-            let holder_context = auth.holder_context();
-            request.extensions_mut().insert(auth);
-            AuthHolder::scope(holder_context, next.run(request)).await
-        }
-        Err(error) => auth_error_response(error),
-    }
+    let mut request = Request::from_parts(parts, Body::from(body_bytes));
+    let holder_context = auth.holder_context();
+    request.extensions_mut().insert(auth);
+    AuthHolder::scope(holder_context, next.run(request)).await
+}
+
+fn build_signed_request(
+    headers: &HeaderMap,
+    method: &str,
+    path: &str,
+    raw_query: Option<&str>,
+    body: &[u8],
+) -> Result<SignedOpenApiRequest, OpenAppError> {
+    let timestamp = read_open_api_header(headers, OPEN_API_TIMESTAMP_HEADER)
+        .ok_or(OpenAppError::Unauthorized)?
+        .parse::<i64>()
+        .map_err(|_| OpenAppError::InvalidTimestamp)?;
+    Ok(SignedOpenApiRequest {
+        method: method.to_owned(),
+        path: path.to_owned(),
+        raw_query: raw_query.map(ToOwned::to_owned),
+        body: body.to_vec(),
+        open_app_code: read_open_api_header(headers, OPEN_API_APP_CODE_HEADER)
+            .ok_or(OpenAppError::Unauthorized)?,
+        user_code: read_open_api_header(headers, OPEN_API_USER_CODE_HEADER)
+            .ok_or(OpenAppError::Unauthorized)?,
+        timestamp,
+        nonce: read_open_api_header(headers, OPEN_API_NONCE_HEADER)
+            .ok_or(OpenAppError::Unauthorized)?,
+        signature_version: read_open_api_header(headers, OPEN_API_SIGNATURE_VERSION_HEADER)
+            .ok_or(OpenAppError::Unauthorized)?,
+        signature: read_open_api_header(headers, OPEN_API_SIGNATURE_HEADER)
+            .ok_or(OpenAppError::Unauthorized)?,
+    })
 }

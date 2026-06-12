@@ -20,23 +20,34 @@ use tokio::{net::TcpListener, task::JoinHandle};
 use tower::ServiceExt;
 use tron_backend::{
     adapters::outbound::persistence::{
-        SqliteAppRepository, SqliteRoleRepository, SqliteUserRepository, SqliteVariableRepository,
-        SqliteWorkspaceRepository,
+        SqliteAppRepository, SqliteOpenAppRepository, SqliteRoleRepository, SqliteUserRepository,
+        SqliteVariableRepository, SqliteWorkspaceRepository,
     },
     app::build_router,
     application::{
-        app::AppRepository, role::RoleRepository, user::UserRepository,
-        variable::VariableRepository, workspace::WorkspaceRepository,
+        app::AppRepository, open_app::OpenAppRepository, role::RoleRepository,
+        user::UserRepository, variable::VariableRepository, workspace::WorkspaceRepository,
     },
-    config::{AppConfig, AuthConfig, GitHubOAuthConfig},
+    config::{AppConfig, AuthConfig, GitHubOAuthConfig, VariableCryptoConfig},
     domain::{
         app::{App, AppRuntimeRole, AppStatus, AppTag},
+        open_app::{
+            OPEN_API_CAPABILITY_AGENT_CHAT, OpenApiCanonicalRequest, OpenApp,
+            OpenAppCapabilityGrant, OpenAppCredential, OpenAppCredentialStatus, OpenAppStatus,
+            OpenAppUserGrant, build_open_api_canonical_request, compute_open_api_signature,
+            open_app_secret_fingerprint,
+        },
         role::seeded_roles,
         user::{ListUsersQuery, PhoneNumber, User, UserSourceType, UserStatus},
         variable::Variable,
         workspace::{Workspace, WorkspaceRoleAccess, WorkspaceStatus, WorkspaceUserAccess},
     },
-    shared::id::SnowflakeId,
+    shared::{
+        crypto::Aes256SecretBox,
+        id::SnowflakeId,
+        random::random_hex,
+        time::{current_timestamp, current_timestamp_seconds},
+    },
 };
 
 pub const AUTH_EMAIL: &str = "auth.operator@tron.ai";
@@ -49,6 +60,9 @@ const GITHUB_TEST_ACCESS_TOKEN: &str = "github-access-token";
 pub const GITHUB_TEST_CODE: &str = "github-test-code";
 const FIXTURE_TIMESTAMP: &str = "2026-05-16T00:00:00Z";
 static TEST_DB_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+pub const OPEN_API_TEST_APP_CODE: &str = "OPENAPP-FIXTURE-0001";
+pub const OPEN_API_TEST_APP_KEY: &str = "dev-open-api-key";
+pub const OPEN_API_TEST_USER_CODE: &str = "USR-0001";
 
 #[derive(Clone)]
 struct GitHubMockState {
@@ -95,11 +109,11 @@ pub struct GitHubMockServer {
 }
 
 pub fn app() -> Router {
-    build_router(prepared_config(AppConfig::default()))
+    build_router(prepared_config(AppConfig::default())).expect("test router should build")
 }
 
 pub fn app_with_config(config: AppConfig) -> Router {
-    build_router(prepared_config(config))
+    build_router(prepared_config(config)).expect("test router should build")
 }
 
 pub fn prepared_config(mut config: AppConfig) -> AppConfig {
@@ -108,7 +122,10 @@ pub fn prepared_config(mut config: AppConfig) -> AppConfig {
             .to_string_lossy()
             .into_owned();
     }
-    seed_default_fixture_data(&config.database_url);
+    if config.variable_crypto.key_base64.trim().is_empty() {
+        config.variable_crypto = VariableCryptoConfig::test_default();
+    }
+    seed_default_fixture_data(&config);
     config
 }
 
@@ -170,12 +187,13 @@ pub fn github_oauth_config(server: &GitHubMockServer) -> AppConfig {
     config
 }
 
-fn seed_default_fixture_data(database_url: &str) {
-    seed_roles(database_url);
-    seed_users(database_url);
-    seed_workspaces(database_url);
-    seed_apps(database_url);
-    seed_variables(database_url);
+fn seed_default_fixture_data(config: &AppConfig) {
+    seed_roles(&config.database_url);
+    seed_users(&config.database_url);
+    seed_workspaces(&config.database_url);
+    seed_apps(&config.database_url);
+    seed_variables(&config.database_url);
+    seed_open_apps(config);
 }
 
 fn seed_roles(database_url: &str) {
@@ -273,6 +291,78 @@ fn seed_variables(database_url: &str) {
                 .create_variable(&variable)
                 .expect("variable fixtures should seed");
         }
+    }
+}
+
+fn seed_open_apps(config: &AppConfig) {
+    let mut repository = SqliteOpenAppRepository::connect(&config.database_url)
+        .expect("open-app test repository should connect");
+    if repository
+        .find_open_app_by_open_app_code(OPEN_API_TEST_APP_CODE)
+        .expect("open-app fixtures should load")
+        .is_some()
+    {
+        return;
+    }
+
+    let now = current_timestamp();
+    let secret_box = Aes256SecretBox::new(&config.auth.jwt_secret);
+    let open_app = OpenApp {
+        id: SnowflakeId::new(734_103_002_743_196_000),
+        open_app_code: OPEN_API_TEST_APP_CODE.into(),
+        name: "EliteForge KB".into(),
+        description: Some("OpenAPI integration fixture".into()),
+        status: OpenAppStatus::Enabled,
+        created_at: now.clone(),
+        updated_at: now.clone(),
+        last_rotated_at: Some(now.clone()),
+    };
+    let credential = OpenAppCredential {
+        id: SnowflakeId::new(734_103_002_743_196_001),
+        credential_code: "OPENAPP-CRED-FIXTURE-0001".into(),
+        open_app_code: open_app.open_app_code.clone(),
+        status: OpenAppCredentialStatus::Active,
+        secret_ciphertext: secret_box
+            .encrypt(OPEN_API_TEST_APP_KEY)
+            .expect("fixture app key should encrypt"),
+        secret_fingerprint: open_app_secret_fingerprint(OPEN_API_TEST_APP_KEY),
+        created_at: now.clone(),
+        revoked_at: None,
+    };
+
+    repository
+        .create_open_app(&open_app, &credential)
+        .expect("open-app fixtures should seed");
+    repository
+        .insert_user_grant(&OpenAppUserGrant {
+            id: SnowflakeId::new(734_103_002_743_196_002),
+            grant_code: "OPENAPP-USER-GRANT-FIXTURE-0001".into(),
+            open_app_code: open_app.open_app_code.clone(),
+            user_code: OPEN_API_TEST_USER_CODE.into(),
+            created_at: now.clone(),
+        })
+        .expect("open-app user grant fixture should seed");
+
+    for (offset, operation_code) in [
+        "session.read",
+        "session.write",
+        "message.read",
+        "message.write",
+        "stream.consume",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        repository
+            .insert_capability_grant(&OpenAppCapabilityGrant {
+                id: SnowflakeId::new(734_103_002_743_196_100 + offset as i64),
+                grant_code: format!("OPENAPP-CAP-GRANT-FIXTURE-{:04}", offset + 1),
+                open_app_code: open_app.open_app_code.clone(),
+                capability_code: OPEN_API_CAPABILITY_AGENT_CHAT.into(),
+                operation_code: operation_code.into(),
+                created_at: now.clone(),
+            })
+            .expect("open-app capability grant fixture should seed");
     }
 }
 
@@ -631,6 +721,11 @@ fn seeded_variables() -> Vec<Variable> {
             key: "DEFAULT_REGION".into(),
             value: "us-east-1".into(),
             description: Some("Shared default deployment region.".into()),
+            is_sensitive: false,
+            value_nonce: None,
+            value_tag: None,
+            value_algorithm: None,
+            value_key_version: None,
             created_at: "2026-05-18T00:00:00Z".into(),
             updated_at: "2026-05-18T00:00:00Z".into(),
         },
@@ -640,6 +735,11 @@ fn seeded_variables() -> Vec<Variable> {
             key: "ROUTER_TIMEOUT_MS".into(),
             value: "800".into(),
             description: Some("Root timeout for interactive routing.".into()),
+            is_sensitive: false,
+            value_nonce: None,
+            value_tag: None,
+            value_algorithm: None,
+            value_key_version: None,
             created_at: "2026-05-18T00:00:00Z".into(),
             updated_at: "2026-05-18T00:00:00Z".into(),
         },
@@ -649,6 +749,11 @@ fn seeded_variables() -> Vec<Variable> {
             key: "OPENAI_API_BASE_URL".into(),
             value: "https://api.openai.com/v1".into(),
             description: Some("Shared OpenAI gateway base URL.".into()),
+            is_sensitive: false,
+            value_nonce: None,
+            value_tag: None,
+            value_algorithm: None,
+            value_key_version: None,
             created_at: "2026-05-18T00:00:00Z".into(),
             updated_at: "2026-05-18T00:00:00Z".into(),
         },
@@ -658,6 +763,11 @@ fn seeded_variables() -> Vec<Variable> {
             key: "ROUTER_TIMEOUT_MS".into(),
             value: "600".into(),
             description: Some("Platform override for interactive latency.".into()),
+            is_sensitive: false,
+            value_nonce: None,
+            value_tag: None,
+            value_algorithm: None,
+            value_key_version: None,
             created_at: "2026-05-18T00:00:00Z".into(),
             updated_at: "2026-05-18T00:00:00Z".into(),
         },
@@ -667,6 +777,11 @@ fn seeded_variables() -> Vec<Variable> {
             key: "OPENAI_API_KEY".into(),
             value: "sk-tron-core-demo".into(),
             description: Some("Workspace secret used by the demo workspace.".into()),
+            is_sensitive: false,
+            value_nonce: None,
+            value_tag: None,
+            value_algorithm: None,
+            value_key_version: None,
             created_at: "2026-05-18T00:00:00Z".into(),
             updated_at: "2026-05-18T00:00:00Z".into(),
         },
@@ -676,6 +791,11 @@ fn seeded_variables() -> Vec<Variable> {
             key: "ROUTER_TIMEOUT_MS".into(),
             value: "400".into(),
             description: Some("Tron Core override for agent console flows.".into()),
+            is_sensitive: false,
+            value_nonce: None,
+            value_tag: None,
+            value_algorithm: None,
+            value_key_version: None,
             created_at: "2026-05-18T00:00:00Z".into(),
             updated_at: "2026-05-18T00:00:00Z".into(),
         },
@@ -685,6 +805,11 @@ fn seeded_variables() -> Vec<Variable> {
             key: "AUDIT_RETENTION_DAYS".into(),
             value: "365".into(),
             description: Some("Retention period for compliance exports.".into()),
+            is_sensitive: false,
+            value_nonce: None,
+            value_tag: None,
+            value_algorithm: None,
+            value_key_version: None,
             created_at: "2026-05-18T00:00:00Z".into(),
             updated_at: "2026-05-18T00:00:00Z".into(),
         },
@@ -740,6 +865,104 @@ pub async fn request_with_headers(
             builder
                 .body(request_body)
                 .expect("request should be constructible"),
+        )
+        .await
+        .expect("router should return a response")
+}
+
+pub async fn signed_open_api_request(
+    app: &Router,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+) -> axum::response::Response {
+    signed_open_api_request_as(
+        app,
+        method,
+        uri,
+        body,
+        OPEN_API_TEST_APP_CODE,
+        OPEN_API_TEST_APP_KEY,
+        OPEN_API_TEST_USER_CODE,
+    )
+    .await
+}
+
+pub async fn signed_open_api_request_as(
+    app: &Router,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+    open_app_code: &str,
+    app_key: &str,
+    user_code: &str,
+) -> axum::response::Response {
+    signed_open_api_request_custom(
+        app,
+        method,
+        uri,
+        body,
+        open_app_code,
+        app_key,
+        user_code,
+        current_timestamp_seconds(),
+        &random_hex(12),
+        "TRON-HMAC-SHA256-V1",
+    )
+    .await
+}
+
+pub async fn signed_open_api_request_custom(
+    app: &Router,
+    method: Method,
+    uri: &str,
+    body: Option<Value>,
+    open_app_code: &str,
+    app_key: &str,
+    user_code: &str,
+    timestamp: i64,
+    nonce: &str,
+    signature_version: &str,
+) -> axum::response::Response {
+    let uri_value: axum::http::Uri = uri.parse().expect("signed open-api URI should parse");
+    let request_body = body
+        .as_ref()
+        .map(|json_body| json_body.to_string().into_bytes())
+        .unwrap_or_default();
+    let canonical = build_open_api_canonical_request(&OpenApiCanonicalRequest {
+        method: method.as_str(),
+        path: uri_value.path(),
+        raw_query: uri_value.query(),
+        body: &request_body,
+        open_app_code,
+        user_code,
+        timestamp,
+        nonce,
+    })
+    .expect("fixture canonical request should build");
+    let signature =
+        compute_open_api_signature(app_key, &canonical).expect("fixture signature should build");
+    let mut builder = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("X-Tron-App-Code", open_app_code)
+        .header("X-Tron-User-Code", user_code)
+        .header("X-Tron-Timestamp", timestamp.to_string())
+        .header("X-Tron-Nonce", nonce)
+        .header("X-Tron-Signature-Version", signature_version)
+        .header("X-Tron-Signature", signature);
+    let request_body = if body.is_some() {
+        builder = builder.header(header::CONTENT_TYPE, "application/json");
+        Body::from(request_body)
+    } else {
+        Body::empty()
+    };
+
+    app.clone()
+        .oneshot(
+            builder
+                .body(request_body)
+                .expect("signed open-api request should be constructible"),
         )
         .await
         .expect("router should return a response")

@@ -35,6 +35,8 @@ pub(super) const VARIABLES_MIGRATION: &str = include_str!(
 );
 pub(super) const PLATFORM_VARIABLES_MIGRATION: &str =
     include_str!("../../../../../migrations/20260525_0016_create_platform_variables.sql");
+pub(super) const VARIABLE_SENSITIVE_METADATA_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260602_0028_add_variable_sensitive_metadata.sql");
 pub(super) const MODELS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260520_0012_create_model_management_models.sql");
 pub(super) const MODEL_CAPABILITIES_MIGRATION: &str =
@@ -73,6 +75,29 @@ pub(super) const CHAT_MESSAGE_TOKEN_USAGE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260528_0021_add_chat_message_token_usage.sql");
 pub(super) const AGENT_MANAGEMENT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260529_0022_create_agent_management.sql");
+pub(super) const RAG_FOUNDATION_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260530_0022_create_rag_foundation.sql");
+pub(super) const RAG_DOMAIN_FIELDS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260530_0023_add_rag_domain_fields.sql");
+pub(super) const RAG_INGEST_PROFILES_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260531_0024_add_rag_ingest_profiles.sql");
+pub(super) const RAG_SEARCH_PROFILES_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260531_0025_add_rag_search_profiles.sql");
+pub(super) const RAG_OPTIONAL_MODEL_CODES_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260601_0026_make_rag_profile_model_codes_optional.sql"
+);
+pub(super) const RAG_STORAGE_BINDING_LAYOUT_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260601_0027_add_rag_storage_binding_layout.sql");
+pub(super) const RAG_MEMORY_EMBEDDED_SOURCE_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260601_0028_embed_rag_memory_source.sql");
+pub(super) const RAG_SKILL_CORPUS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260602_0030_create_skill_rag_corpus.sql");
+pub(super) const RAG_SKILL_GRAPH_CORPUS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260604_0031_create_skill_graph_rag_corpus.sql");
+pub(super) const RAG_STORAGE_BACKEND_FUSION_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260604_0032_rag_storage_backend_fusion.sql");
+pub(super) const RAG_MEMORY_QUERY_PROFILE_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260605_0032_add_memory_query_profile.sql");
 pub(super) const AGENT_MANAGEMENT_RUNTIME_TYPE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260601_0027_add_agent_management_runtime_type.sql");
 pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_MIGRATION: &str =
@@ -96,3 +121,5 @@ pub(super) const MCP_WORKSPACE_POLICIES_MIGRATION: &str = include_str!(
 pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_MCP_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260605_1001_add_internal_agent_mcp_access_to_workspace_internal_agent_policies.sql"
 );
+pub(super) const OPEN_APPS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260611_0001_create_platform_open_apps.sql");

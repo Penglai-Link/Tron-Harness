@@ -49,8 +49,9 @@ export function reasoningFirstClause(value: string) {
 }
 
 function reasoningToolSummary(toolCards: ReasoningPreviewToolCard[]) {
-  if (toolCards.length === 0) return "";
-  return `Used ${toolCards.length} ${toolCards.length === 1 ? "tool" : "tools"}.`;
+  const startedToolCount = toolCards.filter((toolCard) => toolCard.started).length;
+  if (startedToolCount === 0) return "";
+  return `Used ${startedToolCount} ${startedToolCount === 1 ? "tool" : "tools"}.`;
 }
 
 export function deriveReasoningPreview(detail: string, toolCards: ReasoningPreviewToolCard[]) {

@@ -12,6 +12,8 @@ pub struct EffectiveVariable {
     pub key: String,
     pub value: String,
     pub source: String,
+    #[serde(default)]
+    pub sensitive: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

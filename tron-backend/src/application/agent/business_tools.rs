@@ -1,12 +1,23 @@
 mod coding_tools;
 mod discovery;
+mod memory_tools;
 mod platform_tools;
 
 use crate::domain::agent::{EffectiveTool, Tool, ToolError, ToolRegistry};
 use crate::{
     application::{
-        app::AppService, model::ModelService, skill::SkillRegistryService, task::TaskService,
-        variable::VariableService, workspace::WorkspaceService,
+        app::AppService,
+        memory::MemoryService,
+        model::ModelService,
+        rag::{
+            RagDiagnosticsRepository, RagDocumentSourceRuntime, RagEmbeddingRuntime,
+            RagIngestRepository, RagRetryIndexRepository, RagSearchRepository, RagSearchRuntime,
+            RagStrategyRegistry,
+        },
+        skill::SkillRegistryService,
+        task::TaskService,
+        variable::VariableService,
+        workspace::WorkspaceService,
     },
     domain::agent::ToolCatalogRecord,
 };
@@ -27,7 +38,7 @@ pub fn tool_record_to_effective_tool(record: ToolCatalogRecord) -> EffectiveTool
     }
 }
 
-pub fn register_default_agent_tools(
+pub fn register_default_agent_tools<R, S, E>(
     registry: &ToolRegistry,
     workspaces: WorkspaceService,
     apps: AppService,
@@ -35,10 +46,24 @@ pub fn register_default_agent_tools(
     models: ModelService,
     skills: SkillRegistryService,
     variables: VariableService,
-) -> Result<(), ToolError> {
+    memory: MemoryService<R, S, E>,
+) -> Result<(), ToolError>
+where
+    R: RagIngestRepository
+        + RagSearchRepository
+        + RagDiagnosticsRepository
+        + RagRetryIndexRepository
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+    S: RagStrategyRegistry + Send + Sync + 'static,
+    E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime + Send + Sync + 'static,
+{
     let mut tools: Vec<std::sync::Arc<dyn Tool>> =
         platform_tools::platform_business_tools(workspaces, apps, tasks, models, skills, variables);
     tools.extend(coding_tools::coding_domain_tools());
+    tools.extend(memory_tools::memory_business_tools(memory));
     tools.push(discovery::discovery_tool());
 
     for tool in tools {

@@ -4,6 +4,7 @@ import {
   Network,
   Package,
   Settings2,
+  ShieldCheck,
   Sparkles,
   Wrench,
 } from "lucide-react";
@@ -44,6 +45,12 @@ export const settingsNavigation = [
     href: "/settings/variables",
     icon: KeyRound,
     translationKey: "shell:settings.items.variables",
+  },
+  {
+    label: "OpenAPI",
+    href: "/settings/openapi",
+    icon: ShieldCheck,
+    translationKey: "shell:settings.items.openapi",
   },
   {
     label: "Skill Center",

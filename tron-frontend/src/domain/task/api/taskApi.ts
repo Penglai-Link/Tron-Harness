@@ -1,7 +1,7 @@
 import { requestApi } from "@/shared/api/httpClient";
 import type { CreateTaskPayload, KanbanColumn, TaskDetailData, TaskLifecycleResult, TaskListItem, TaskOptions, TaskPage, UpdateTaskPayload, UpdateTaskStatusPayload } from "@/domain/task/model";
 
-export const taskApiEndpoints = { archiveTask: "POST /api/v1/tasks/{taskCode}/archive", createTask: "POST /api/v1/tasks", getTaskDetail: "GET /api/v1/tasks/{taskCode}", getTaskOptions: "GET /api/v1/tasks/options", getTaskQuickReference: "GET /api/v1/tasks/quick-reference", listKanbanColumns: "GET /api/v1/tasks/kanban", listTasks: "GET /api/v1/tasks", restoreTask: "POST /api/v1/tasks/{taskCode}/restore", updateTask: "PATCH /api/v1/tasks/{taskCode}", updateTaskStatus: "PATCH /api/v1/tasks/{taskCode}/status" } as const;
+export const taskApiEndpoints = { archiveTask: "POST /api/v1/tasks/{taskCode}/archive", createTask: "POST /api/v1/tasks", getTaskDetail: "GET /api/v1/tasks/{taskCode}", getTaskOptions: "GET /api/v1/tasks/options", getTaskQuickReference: "GET /api/v1/tasks/quick-reference", listKanbanColumns: "GET /api/v1/tasks/kanban", listTasks: "GET /api/v1/tasks", restoreTask: "POST /api/v1/tasks/{taskCode}/restore", updateTask: "PATCH /api/v1/tasks/{taskCode}", updateTaskStatus: "POST /api/v1/tasks/{taskCode}/status" } as const;
 
 type TaskQueryParams = Record<string, string | number | boolean | null | undefined>;
 export interface TaskListQuery { assigneeUserCode?: string; current?: number; includeArchived?: boolean; parentTaskCode?: string; priority?: string; search?: string; size?: number; sourceType?: string; status?: string; taskType?: string; workspaceCode: string; }

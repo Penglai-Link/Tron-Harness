@@ -15,25 +15,39 @@ import {
 import {
   deletePlatformVariable,
   fetchPlatformVariables,
+  revealPlatformVariable,
+  verifyStepUpPassword,
 } from "@/domain/variable/api";
 import {
   deletePlatformVariableRecord,
   listPlatformVariableRecords,
+  revealPlatformVariableRecord,
+  verifyStepUpPasswordRecord,
 } from "@/domain/variable/mock/data";
 import type { PlatformVariableRecord } from "@/domain/variable/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { Button } from "@/shared/ui/Button";
 import {
   DataTable,
+  Field,
   PageHeader,
   SearchField,
+  SelectInput,
+  SurfaceCard,
   TablePagination,
   useTablePagination,
   useToast,
 } from "@/shared";
 
 import {
+  SensitiveDataBadge,
+  SensitiveRevealIconButton,
+  SensitiveValueCode,
+  StepUpRevealDialog,
   formatPlatformVariableTimestamp,
+  getSensitiveDisplayValue,
+  getSensitiveState,
+  isSensitiveRecord,
   matchesPlatformVariableSearch,
 } from "./platformVariablePageHelpers";
 
@@ -44,24 +58,41 @@ interface RowMenuState {
   variableKey: string;
 }
 
+type PlatformSensitiveFilter = "All" | "Sensitive" | "Plain";
+
+const platformSensitiveFilters = ["All", "Sensitive", "Plain"] as const satisfies readonly PlatformSensitiveFilter[];
+
 export function PlatformVariablesPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const dataSource = getServiceDataSource("variable");
   const [records, setRecords] = useState<PlatformVariableRecord[]>([]);
   const [query, setQuery] = useState("");
+  const [sensitiveFilter, setSensitiveFilter] = useState<PlatformSensitiveFilter>("All");
   const [loading, setLoading] = useState(false);
   const [rowBusyKey, setRowBusyKey] = useState("");
   const [openRowMenu, setOpenRowMenu] = useState<RowMenuState | null>(null);
+  const [revealedValues, setRevealedValues] = useState<Record<string, string>>({});
+  const [revealTargetKey, setRevealTargetKey] = useState("");
+  const [revealPending, setRevealPending] = useState(false);
+  const [revealError, setRevealError] = useState("");
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
 
   const filteredRecords = useMemo(
-    () => records.filter((record) => matchesPlatformVariableSearch(record, query)),
-    [query, records],
+    () => records.filter((record) => {
+      const matchesSensitive = sensitiveFilter === "All"
+        || (sensitiveFilter === "Sensitive" && isSensitiveRecord(record))
+        || (sensitiveFilter === "Plain" && !isSensitiveRecord(record));
+      return matchesSensitive && matchesPlatformVariableSearch(record, query);
+    }),
+    [query, records, sensitiveFilter],
   );
   const pagination = useTablePagination(filteredRecords);
   const openMenuRow = openRowMenu
     ? records.find((record) => record.key === openRowMenu.variableKey) ?? null
+    : null;
+  const revealTarget = revealTargetKey
+    ? records.find((record) => record.key === revealTargetKey) ?? null
     : null;
 
   async function refreshPlatformVariables() {
@@ -71,6 +102,9 @@ export function PlatformVariablesPage() {
         ? await fetchPlatformVariables()
         : listPlatformVariableRecords();
       setRecords(nextRecords);
+      setRevealedValues({});
+      setRevealTargetKey("");
+      setRevealError("");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Platform variables could not be loaded");
     } finally {
@@ -88,6 +122,11 @@ export function PlatformVariablesPage() {
           ? await fetchPlatformVariables()
           : listPlatformVariableRecords();
         if (active) setRecords(nextRecords);
+        if (active) {
+          setRevealedValues({});
+          setRevealTargetKey("");
+          setRevealError("");
+        }
       } catch (error) {
         if (active) toast.error(error instanceof Error ? error.message : "Platform variables could not be loaded");
       } finally {
@@ -162,12 +201,84 @@ export function PlatformVariablesPage() {
       } else {
         deletePlatformVariableRecord(row.key);
       }
+      setRevealedValues((current) => {
+        const next = { ...current };
+        delete next[row.key];
+        return next;
+      });
       toast.success(`${row.key} deleted`);
       await refreshPlatformVariables();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Platform variable could not be deleted");
     } finally {
       setRowBusyKey("");
+    }
+  }
+
+  function sensitiveFilterLabel(filter: PlatformSensitiveFilter) {
+    if (filter === "Sensitive") return "Sensitive Data";
+    if (filter === "Plain") return "Plain Data";
+    return "All Data";
+  }
+
+  function sensitiveFilterValue(filter: string): PlatformSensitiveFilter {
+    return platformSensitiveFilters.includes(filter as PlatformSensitiveFilter)
+      ? filter as PlatformSensitiveFilter
+      : "All";
+  }
+
+  function hideSensitiveValue(record: PlatformVariableRecord) {
+    setRevealedValues((current) => {
+      const next = { ...current };
+      delete next[record.key];
+      return next;
+    });
+  }
+
+  function openSensitiveReveal(record: PlatformVariableRecord) {
+    if (!isSensitiveRecord(record)) return;
+    setRevealTargetKey(record.key);
+    setRevealError("");
+  }
+
+  async function revealSensitiveValue(password: string) {
+    if (!revealTarget) return;
+
+    setRevealPending(true);
+    setRevealError("");
+    try {
+      const stepUp = dataSource === "api"
+        ? await verifyStepUpPassword({
+          password,
+          target: {
+            scope: "platform",
+            variableKey: revealTarget.key,
+          },
+        })
+        : verifyStepUpPasswordRecord({
+          password,
+          target: {
+            scope: "platform",
+            variableKey: revealTarget.key,
+          },
+        });
+      const revealed = dataSource === "api"
+        ? await revealPlatformVariable({
+          variableKey: revealTarget.key,
+          stepUpToken: stepUp.stepUpToken,
+        })
+        : revealPlatformVariableRecord(revealTarget.key, stepUp.stepUpToken);
+
+      setRevealedValues((current) => ({
+        ...current,
+        [revealTarget.key]: revealed.value,
+      }));
+      setRevealTargetKey("");
+      setRevealError("");
+    } catch (error) {
+      setRevealError(error instanceof Error ? error.message : "Sensitive value could not be revealed");
+    } finally {
+      setRevealPending(false);
     }
   }
 
@@ -189,79 +300,145 @@ export function PlatformVariablesPage() {
         )}
       />
 
-      <DataTable<PlatformVariableRecord>
-        rows={pagination.visibleItems}
-        rowKey={(row) => row.key}
-        onRowClick={(row) => navigate(`/settings/variables/detail?variableKey=${encodeURIComponent(row.key)}`)}
-        pagination={<TablePagination itemLabel="platform variables" {...pagination.paginationProps} />}
-        emptyState="No platform variables match the current filters."
-        toolbar={(
-          <SearchField
-            ariaLabel="Search platform variables"
-            className="min-w-0 grow basis-full sm:basis-0 sm:max-w-[360px]"
-            placeholder="Search platform variables..."
-            value={query}
-            onChange={setQuery}
-          />
-        )}
-        columns={[
-          {
-            id: "key",
-            header: "Key",
-            width: "30%",
-            render: (row) => (
-              <div>
-                <p className="font-mono text-[13px] font-medium text-[var(--color-on-surface)]">{row.key}</p>
-                {row.description ? (
-                  <p className="mt-1 line-clamp-1 text-[13px] text-[var(--color-on-surface-variant)]">{row.description}</p>
-                ) : null}
-              </div>
-            ),
-          },
-          {
-            id: "value",
-            header: "Value",
-            width: "30%",
-            render: (row) => <span className="block max-w-[28rem] truncate font-mono text-[13px]">{row.value}</span>,
-          },
-          {
-            id: "updatedAt",
-            header: "Updated",
-            width: "30%",
-            render: (row) => formatPlatformVariableTimestamp(row.updatedAt),
-          },
-          {
-            align: "right",
-            cellClassName: "w-16",
-            header: "Actions",
-            headerClassName: "w-16",
-            id: "actions",
-            width: "10%",
-            render: (row) => {
-              const isMenuOpen = openRowMenu?.variableKey === row.key;
-              const isBusy = rowBusyKey === row.key;
+      <div className="space-y-5">
+        <SurfaceCard className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Search">
+              <SearchField
+                ariaLabel="Search platform variables"
+                className="w-full"
+                placeholder="Search platform variables..."
+                value={query}
+                onChange={setQuery}
+              />
+            </Field>
+            <Field label="Sensitive Data">
+              <SelectInput
+                aria-label="Filter platform variables by sensitive data"
+                className="w-full"
+                value={sensitiveFilter}
+                onChange={(event) => setSensitiveFilter(sensitiveFilterValue(event.target.value))}
+              >
+                {platformSensitiveFilters.map((filter) => (
+                  <option key={filter} value={filter}>
+                    {sensitiveFilterLabel(filter)}
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+          </div>
+        </SurfaceCard>
 
-              return (
-                <div className="flex justify-end">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    aria-label={`Open actions for ${row.key}`}
-                    aria-expanded={isMenuOpen}
-                    disabled={isBusy}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      toggleRowMenu(row, event.currentTarget);
-                    }}
-                  >
-                    <MoreHorizontal size={16} aria-hidden="true" />
-                  </Button>
+        <DataTable<PlatformVariableRecord>
+          rows={pagination.visibleItems}
+          rowKey={(row) => row.key}
+          tableClassName="table-fixed min-w-[1080px]"
+          onRowClick={(row) => navigate(`/settings/variables/detail?variableKey=${encodeURIComponent(row.key)}`)}
+          pagination={<TablePagination itemLabel="platform variables" {...pagination.paginationProps} />}
+          emptyState="No platform variables match the current filters."
+          columns={[
+            {
+              id: "key",
+              header: "Key",
+              width: "310px",
+              cellClassName: "min-w-0",
+              render: (row) => (
+                <div className="min-w-0 max-h-11 overflow-hidden">
+                  <p className="truncate font-mono text-[13px] font-medium text-[var(--color-on-surface)]" title={row.key}>{row.key}</p>
+                  {row.description ? (
+                    <p className="mt-1 truncate text-[13px] text-[var(--color-on-surface-variant)]" title={row.description}>{row.description}</p>
+                  ) : null}
                 </div>
-              );
+              ),
             },
-          },
-        ]}
-      />
+            {
+              id: "value",
+              header: "Value",
+              width: "310px",
+              cellClassName: "min-w-0",
+              render: (row) => {
+                const revealedValue = revealedValues[row.key];
+                const sensitive = isSensitiveRecord(row);
+                return (
+                  <div className="flex min-w-0 max-w-full items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate font-mono text-[13px]">
+                      <SensitiveValueCode
+                        className="!block !truncate !whitespace-nowrap !text-[13px] !leading-5"
+                        state={getSensitiveState(sensitive, revealedValue)}
+                        testId={`platform-list-sensitive-value-${row.key}`}
+                      >
+                        {getSensitiveDisplayValue(row, revealedValue)}
+                      </SensitiveValueCode>
+                    </span>
+                    {sensitive ? (
+                      <SensitiveRevealIconButton
+                        revealed={Boolean(revealedValue)}
+                        variableKey={row.key}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          if (revealedValue) {
+                            hideSensitiveValue(row);
+                          } else {
+                            openSensitiveReveal(row);
+                          }
+                        }}
+                      />
+                    ) : null}
+                  </div>
+                );
+              },
+            },
+            {
+              id: "sensitive",
+              header: "Sensitive Data",
+              width: "150px",
+              render: (row) => (
+                <SensitiveDataBadge sensitive={isSensitiveRecord(row)} />
+              ),
+            },
+            {
+              id: "updatedAt",
+              header: "Updated",
+              width: "210px",
+              render: (row) => (
+                <span className="whitespace-nowrap text-[13px] text-[var(--color-on-surface)]">
+                  {formatPlatformVariableTimestamp(row.updatedAt)}
+                </span>
+              ),
+            },
+            {
+              align: "right",
+              cellClassName: "sticky right-0 z-10 w-24 border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[-8px_0_12px_rgba(0,0,0,0.04)] group-hover:bg-[var(--color-hover-surface)]",
+              header: "Actions",
+              headerClassName: "sticky right-0 z-20 w-24 border-l border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] shadow-[-8px_0_12px_rgba(0,0,0,0.04)]",
+              id: "actions",
+              width: "100px",
+              render: (row) => {
+                const isMenuOpen = openRowMenu?.variableKey === row.key;
+                const isBusy = rowBusyKey === row.key;
+
+                return (
+                  <div className="flex justify-end">
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`Open actions for ${row.key}`}
+                      aria-expanded={isMenuOpen}
+                      disabled={isBusy}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleRowMenu(row, event.currentTarget);
+                      }}
+                    >
+                      <MoreHorizontal size={16} aria-hidden="true" />
+                    </Button>
+                  </div>
+                );
+              },
+            },
+          ]}
+        />
+      </div>
       {openRowMenu && openMenuRow
         ? createPortal(
           <div
@@ -278,7 +455,7 @@ export function PlatformVariablesPage() {
               className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]"
               onClick={() => {
                 setOpenRowMenu(null);
-                navigate(`/settings/variables/edit?variableKey=${encodeURIComponent(openMenuRow.key)}`);
+                navigate(`/settings/variables/detail?variableKey=${encodeURIComponent(openMenuRow.key)}&mode=edit`);
               }}
             >
               Edit
@@ -298,6 +475,19 @@ export function PlatformVariablesPage() {
           document.body,
         )
         : null}
+      {revealTarget ? (
+        <StepUpRevealDialog
+          error={revealError}
+          onCancel={() => {
+            setRevealTargetKey("");
+            setRevealError("");
+          }}
+          onSubmit={(password) => void revealSensitiveValue(password)}
+          open={Boolean(revealTarget)}
+          pending={revealPending}
+          variableKey={revealTarget.key}
+        />
+      ) : null}
     </>
   );
 }

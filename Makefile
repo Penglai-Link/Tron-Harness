@@ -3,7 +3,10 @@ FRONTEND_NPM := cd $(FRONTEND_DIR) && npm
 BACKEND_DIR := tron-backend
 BACKEND_MANIFEST := $(BACKEND_DIR)/Cargo.toml
 BACKEND_ENV_FILE := $(BACKEND_DIR)/.env
+BACKEND_FRONTEND_DIR := $(BACKEND_DIR)/resources/frontend
+FRONTEND_INTEGRATED_OUT_DIR := ../$(BACKEND_FRONTEND_DIR)
 BE_RUN_ENV = $(if $(strip $(PORT)),TRON_BACKEND_PORT=$(PORT)) $(if $(strip $(GRAPH_STORAGE_PATH)),TRON_BACKEND_GRAPH_STORAGE_PATH=$(GRAPH_STORAGE_PATH))
+APP_FRONTEND_ENV = VITE_TRON_API_BASE_URL= VITE_TRON_DATA_SOURCE=api VITE_TRON_AUTH_DATA_SOURCE=api VITE_TRON_ADMIN_DATA_SOURCE=api TRON_FRONTEND_OUT_DIR=$(FRONTEND_INTEGRATED_OUT_DIR)
 
 .PHONY: help
 help:
@@ -26,6 +29,18 @@ help:
 	@echo "                    Sources $(BACKEND_ENV_FILE) when present"
 	@echo "                    Example: make be-run PORT=8081"
 	@echo "                    Example: make be-run PORT=8081 GRAPH_STORAGE_PATH=/tmp/tron-8081.graph.grafeo"
+	@echo ""
+	@echo "Integrated app commands:"
+	@echo "  make app-build    Build frontend into backend resources in integrated API mode and compile backend"
+	@echo "  make app-run      Build integrated app in integrated API mode and run backend server"
+	@echo "                    Example: make app-run PORT=8081"
+	@echo "  make app-clean    Remove standalone and integrated frontend build artifacts"
+	@echo ""
+	@echo "Skill commands:"
+	@echo "  make skill-memory-dreaming-test"
+	@echo "                    Validate the memory dreaming skill"
+	@echo "  make skill-memory-spec-test"
+	@echo "                    Validate the memory spec skill"
 
 .PHONY: fe-install
 fe-install:
@@ -84,3 +99,27 @@ be-clean:
 .PHONY: be-run
 be-run:
 	@if [ -f $(BACKEND_ENV_FILE) ]; then set -a; . $(BACKEND_ENV_FILE); set +a; fi; $(BE_RUN_ENV) cargo run --manifest-path $(BACKEND_MANIFEST)
+
+.PHONY: app-build
+app-build:
+	rm -rf $(BACKEND_FRONTEND_DIR)
+	mkdir -p $(BACKEND_FRONTEND_DIR)
+	cd $(FRONTEND_DIR) && $(APP_FRONTEND_ENV) npm run build
+	cargo build --manifest-path $(BACKEND_MANIFEST)
+
+.PHONY: app-run
+app-run: app-build
+	@if [ -f $(BACKEND_ENV_FILE) ]; then set -a; . $(BACKEND_ENV_FILE); set +a; fi; $(BE_RUN_ENV) cargo run --manifest-path $(BACKEND_MANIFEST)
+
+.PHONY: app-clean
+app-clean: fe-clean
+	rm -rf $(BACKEND_FRONTEND_DIR)
+	mkdir -p $(BACKEND_FRONTEND_DIR)
+
+.PHONY: skill-memory-dreaming-test
+skill-memory-dreaming-test:
+	python3 /home/baiyihuan/.codex/skills/.system/skill-creator/scripts/quick_validate.py tron-skills/eliteforge-memory-dreaming
+
+.PHONY: skill-memory-spec-test
+skill-memory-spec-test:
+	python3 /home/baiyihuan/.codex/skills/.system/skill-creator/scripts/quick_validate.py tron-skills/eliteforge-memory-spec

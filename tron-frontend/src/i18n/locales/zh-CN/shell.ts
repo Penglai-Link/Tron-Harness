@@ -61,6 +61,7 @@ export const shell = {
       general: "通用",
       mcpServers: "MCP 服务",
       models: "模型",
+      openapi: "OpenAPI",
       tools: "工具",
       skillCenter: "技能中心",
       variables: "变量",

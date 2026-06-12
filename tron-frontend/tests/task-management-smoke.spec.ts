@@ -329,6 +329,32 @@ function listItem(tasks: Task[], item: Task) {
   };
 }
 
+function taskPriorityRank(priority: TaskPriority) {
+  if (priority === "High") return 0;
+  if (priority === "Medium") return 1;
+  return 2;
+}
+
+function taskCodeSequence(taskCode: string) {
+  const matched = taskCode.match(/(\d+)(?!.*\d)/);
+  if (!matched) return null;
+  const sequence = Number.parseInt(matched[1], 10);
+  return Number.isFinite(sequence) ? sequence : null;
+}
+
+function compareTasks(left: Pick<Task, "priority" | "taskCode">, right: Pick<Task, "priority" | "taskCode">) {
+  const priorityComparison = taskPriorityRank(left.priority) - taskPriorityRank(right.priority);
+  if (priorityComparison !== 0) return priorityComparison;
+  const leftSequence = taskCodeSequence(left.taskCode);
+  const rightSequence = taskCodeSequence(right.taskCode);
+  if (leftSequence !== null && rightSequence !== null && leftSequence !== rightSequence) {
+    return rightSequence - leftSequence;
+  }
+  if (leftSequence !== null && rightSequence === null) return -1;
+  if (leftSequence === null && rightSequence !== null) return 1;
+  return right.taskCode.localeCompare(left.taskCode);
+}
+
 function filtered(tasks: Task[], query: Record<string, string>) {
   const includeArchived = query.includeArchived === "true";
   const search = query.search?.trim().toLowerCase();
@@ -357,6 +383,24 @@ async function openDesktopRightSidebar(page: Page) {
     await reopen.click();
   }
   await expect(page.getByTestId("tron-right-sidebar")).toBeVisible();
+}
+
+async function dispatchTaskDrag(page: Page, taskCode: string, status: TaskStatus) {
+  await page.evaluate(({ sourceTestId, targetTestId }) => {
+    const source = document.querySelector(`[data-testid="${sourceTestId}"]`);
+    const target = document.querySelector(`[data-testid="${targetTestId}"]`);
+    if (!(source instanceof HTMLElement)) throw new Error(`Drag source not found: ${sourceTestId}`);
+    if (!(target instanceof HTMLElement)) throw new Error(`Drop target not found: ${targetTestId}`);
+
+    const dataTransfer = new DataTransfer();
+    source.dispatchEvent(new DragEvent("dragstart", { bubbles: true, cancelable: true, dataTransfer }));
+    target.dispatchEvent(new DragEvent("dragover", { bubbles: true, cancelable: true, dataTransfer }));
+    target.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer }));
+    source.dispatchEvent(new DragEvent("dragend", { bubbles: true, cancelable: true, dataTransfer }));
+  }, {
+    sourceTestId: `task-kanban-card-${taskCode}`,
+    targetTestId: `task-kanban-dropzone-${status}`,
+  });
 }
 
 async function openWorkspaceSelector(page: Page) {
@@ -402,6 +446,7 @@ async function routeApi(
   options: {
     apps?: AppRecord[];
     createTaskDelayMs?: number;
+    failStatusUpdatesFor?: Record<string, string>;
     workspaceSwitcherResolver?: (requestCount: number) => WorkspaceSwitcherPayload;
   } = {},
 ) {
@@ -476,7 +521,7 @@ async function routeApi(
     }
     if (captured.pathname === "/api/v1/tasks/kanban") {
       const records = filtered(tasks, captured.searchParams);
-      return fulfillJson(route, successEnvelope(kanbanStatusesForTaskType(captured.searchParams.taskType as TaskType | undefined).filter((status) => captured.searchParams.includeArchived === "true" || status !== "Archived").map((status) => ({ status, title: statusTitle(status), tasks: records.filter((item) => item.status === status).map((item) => listItem(tasks, item)) }))));
+      return fulfillJson(route, successEnvelope(kanbanStatusesForTaskType(captured.searchParams.taskType as TaskType | undefined).filter((status) => captured.searchParams.includeArchived === "true" || status !== "Archived").map((status) => ({ status, title: statusTitle(status), tasks: records.filter((item) => item.status === status).sort(compareTasks).map((item) => listItem(tasks, item)) }))));
     }
     if (captured.pathname === "/api/v1/tasks" && captured.method === "GET") return fulfillJson(route, pageEnvelope(filtered(tasks, captured.searchParams).map((item) => listItem(tasks, item))));
     if (captured.pathname === "/api/v1/tasks" && captured.method === "POST") {
@@ -526,10 +571,15 @@ async function routeApi(
     if (statusMatch) {
       const selected = tasks.find((item) => item.taskCode === decodeURIComponent(statusMatch[1]));
       if (!selected) return fulfillJson(route, { code: "TASK_NOT_FOUND", message: "task was not found", data: {} }, 404);
+      if (captured.method !== "POST") return fulfillJson(route, { code: "METHOD_NOT_ALLOWED", message: "status updates must use POST", data: {} }, 405);
       if (selected.status === "Archived") {
         return fulfillJson(route, { code: "TASK_ARCHIVED_INVALID", message: "restore archived task before modifying it", data: {} }, 400);
       }
       const body = captured.body as { progress?: number; status: TaskStatus };
+      const failureMessage = options.failStatusUpdatesFor?.[selected.taskCode];
+      if (failureMessage) {
+        return fulfillJson(route, { code: "TASK_STATUS_REJECTED", message: failureMessage, data: {} }, 409);
+      }
       selected.status = body.status;
       selected.progress = body.status === "Completed" ? 100 : body.progress ?? selected.progress;
       selected.updatedAt = now;
@@ -814,6 +864,123 @@ test("parent task detail derives progress from active subtasks and keeps the pro
   await openDesktopRightSidebar(page);
   await expect(page.getByText("Completed child")).toBeVisible();
   await expect(page.getByText("Open child")).toBeVisible();
+});
+
+test("task kanban drag updates a valid task status and refreshes the board", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  const tasks: Task[] = [
+    task({ priority: "High", progress: 35, status: "Open", taskCode: "TSK-DRAG-ROOT", title: "Drag root feature across board" }),
+  ];
+  await routeApi(page, requests, tasks);
+  await seedTronCoreShellSelection(page);
+
+  await page.goto(`${frontendBaseUrl}/tasks`);
+  await expect(page.getByRole("heading", { name: "Task Management" })).toBeVisible();
+
+  const card = page.getByTestId("task-kanban-card-TSK-DRAG-ROOT");
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAttribute("draggable", "true");
+  await card.click();
+  await expect(page).toHaveURL(/\/tasks\/detail\?taskCode=TSK-DRAG-ROOT/);
+  await page.goBack();
+  await expect(card).toBeVisible();
+
+  await card.dragTo(page.getByTestId("task-kanban-dropzone-Green"));
+
+  await expect.poll(() => requests.some((request) => request.method === "POST"
+    && request.pathname === "/api/v1/tasks/TSK-DRAG-ROOT/status"
+    && (request.body as { progress?: number; status?: TaskStatus } | null)?.status === "Green"
+    && (request.body as { progress?: number } | null)?.progress === undefined)).toBe(true);
+  await expect(toast(page, "Task TSK-DRAG-ROOT moved to Green")).toBeVisible();
+  await expect(page.getByTestId("task-kanban-dropzone-Green").getByTestId("task-kanban-card-TSK-DRAG-ROOT")).toBeVisible();
+  await expect(page.getByTestId("task-kanban-dropzone-Open").getByTestId("task-kanban-card-TSK-DRAG-ROOT")).toHaveCount(0);
+});
+
+test("task kanban drag blocks invalid and same-column drops without calling the status API", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  const tasks: Task[] = [
+    task({ parentTaskCode: "TSK-DRAG-PARENT", status: "Open", taskCode: "TSK-DRAG-CHILD", title: "Drag child feature with limited states" }),
+    task({ status: "Designing", taskCode: "TSK-DRAG-PARENT", title: "Parent feature for child drag" }),
+  ];
+  await routeApi(page, requests, tasks);
+  await seedTronCoreShellSelection(page);
+
+  await page.goto(`${frontendBaseUrl}/tasks`);
+  await expect(page.getByTestId("task-kanban-card-TSK-DRAG-CHILD")).toBeVisible();
+
+  const statusRequestCount = () => requests.filter((request) => request.pathname === "/api/v1/tasks/TSK-DRAG-CHILD/status").length;
+  const initialCount = statusRequestCount();
+  await page.getByTestId("task-kanban-card-TSK-DRAG-CHILD").dragTo(page.getByTestId("task-kanban-dropzone-Open"));
+  await expect.poll(statusRequestCount).toBe(initialCount);
+
+  await page.getByTestId("task-kanban-card-TSK-DRAG-CHILD").dragTo(page.getByTestId("task-kanban-dropzone-Red"));
+  await expect.poll(statusRequestCount).toBe(initialCount);
+  await expect(page.getByTestId("task-kanban-dropzone-Open").getByTestId("task-kanban-card-TSK-DRAG-CHILD")).toBeVisible();
+  await expect(toast(page, "Task TSK-DRAG-CHILD cannot move to Red")).toBeVisible();
+});
+
+test("task kanban drag restores the prior board when status update fails", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  const tasks: Task[] = [
+    task({ status: "Open", taskCode: "TSK-DRAG-FAIL", title: "Drag failure keeps original column" }),
+  ];
+  await routeApi(page, requests, tasks, { failStatusUpdatesFor: { "TSK-DRAG-FAIL": "backend rejected status move" } });
+  await seedTronCoreShellSelection(page);
+
+  await page.goto(`${frontendBaseUrl}/tasks`);
+  await expect(page.getByTestId("task-kanban-card-TSK-DRAG-FAIL")).toBeVisible();
+
+  await page.getByTestId("task-kanban-card-TSK-DRAG-FAIL").dragTo(page.getByTestId("task-kanban-dropzone-Green"));
+
+  await expect.poll(() => requests.some((request) => request.method === "POST"
+    && request.pathname === "/api/v1/tasks/TSK-DRAG-FAIL/status"
+    && (request.body as { status?: TaskStatus } | null)?.status === "Green")).toBe(true);
+  await expect(page.getByTestId("task-kanban-dropzone-Open").getByTestId("task-kanban-card-TSK-DRAG-FAIL")).toBeVisible();
+  await expect(page.getByTestId("task-kanban-dropzone-Green").getByTestId("task-kanban-card-TSK-DRAG-FAIL")).toHaveCount(0);
+  await expect(toast(page, "backend rejected status move")).toBeVisible();
+});
+
+test("task kanban sorts cards by priority and descending task code, including after drag", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  const tasks: Task[] = [
+    task({ priority: "Low", status: "Open", taskCode: "TSK-100", title: "Low priority older task" }),
+    task({ priority: "High", status: "Open", taskCode: "TSK-150", title: "High priority lower code" }),
+    task({ priority: "High", status: "Open", taskCode: "TSK-200", title: "High priority higher code" }),
+    task({ priority: "Medium", status: "Open", taskCode: "TSK-300", title: "Medium priority highest code" }),
+    task({ priority: "High", status: "Green", taskCode: "TSK-180", title: "Existing green high task" }),
+  ];
+  await routeApi(page, requests, tasks);
+  await seedTronCoreShellSelection(page);
+
+  await page.goto(`${frontendBaseUrl}/tasks`);
+  await expect(page.getByTestId("task-kanban-card-TSK-200")).toBeVisible();
+
+  const openOrder = await page
+    .getByTestId("task-kanban-dropzone-Open")
+    .locator("button[data-testid^='task-kanban-card-']")
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-testid")));
+  expect(openOrder).toEqual([
+    "task-kanban-card-TSK-200",
+    "task-kanban-card-TSK-150",
+    "task-kanban-card-TSK-300",
+    "task-kanban-card-TSK-100",
+  ]);
+
+  await dispatchTaskDrag(page, "TSK-200", "Green");
+
+  await expect.poll(() => requests.some((request) => request.method === "POST"
+    && request.pathname === "/api/v1/tasks/TSK-200/status"
+    && (request.body as { status?: TaskStatus } | null)?.status === "Green")).toBe(true);
+  await expect(page.getByTestId("task-kanban-dropzone-Green").getByTestId("task-kanban-card-TSK-200")).toBeVisible();
+
+  const greenOrder = await page
+    .getByTestId("task-kanban-dropzone-Green")
+    .locator("button[data-testid^='task-kanban-card-']")
+    .evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-testid")));
+  expect(greenOrder).toEqual([
+    "task-kanban-card-TSK-200",
+    "task-kanban-card-TSK-180",
+  ]);
 });
 
 test("task detail description preview stays bounded inline and expands in fullscreen", async ({ page }) => {

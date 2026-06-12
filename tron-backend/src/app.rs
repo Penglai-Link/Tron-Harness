@@ -1,63 +1,45 @@
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
-use axum::{
-    Router,
-    extract::FromRef,
-    http::{Method, header},
-    middleware,
-    routing::get,
-};
-use tower_http::cors::{Any, CorsLayer};
+mod routing;
+mod startup;
+
+use axum::{Router, extract::FromRef, routing::get};
 
 use crate::{
     adapters::{
         inbound::http::{
-            admin::{
-                models::routes::routes as admin_model_routes, roles::routes as role_routes,
-                users::routes as user_routes, variables::routes::routes as admin_variable_routes,
-                workspaces::routes as workspace_routes,
-            },
-            agents::routes::routes as agent_routes,
-            apps::routes::routes as app_routes,
-            auth::{require_auth, routes as auth_routes},
-            automations::routes as automation_routes,
-            chats::routes::routes as chat_routes,
-            mcp::routes::{
-                management_routes as mcp_management_routes,
-                transport_routes as mcp_transport_routes,
-            },
-            models::routes::routes as model_routes,
-            skills::routes::routes as skill_routes,
-            tasks::routes as task_routes,
-            variables::routes::routes as variable_routes,
+            frontend::routes as frontend_routes,
+            auth::routes as auth_routes,
+            mcp::routes::transport_routes as mcp_transport_routes,
         },
-        inbound::open_api::chats::routes::routes as open_api_chat_routes,
-        inbound::open_api::auth::require_open_api_auth,
         outbound::{
-            crypto::BcryptPasswordHasher,
+            crypto::{BcryptPasswordHasher, Sm4GcmVariableCipher},
             model::{HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient},
             persistence::{
-                GrafeoAdapterConfig, GrafeoGraphStore, GrafeoOntologyStore, GrafeoStoreCore,
-                SqliteAgentEventReplayStore, SqliteAgentManagementRepository,
+                GrafeoStoreCore, GraphBackedRagRepository, SqliteAgentEventReplayStore,
+                SqliteAgentManagementRepository,
                 SqliteAgentRunRepository, SqliteAppRepository, SqliteAutomationRepository,
                 SqliteChatRepository, SqliteMcpRepository, SqliteModelRepository,
-                SqliteRoleRepository, SqliteSkillRegistryRepository, SqliteTaskRepository,
-                SqliteUserRepository, SqliteVariableRepository, SqliteWorkspaceRepository,
-                bootstrap_platform_admin,
+                SqliteOpenAppRepository, SqliteRoleRepository,
+                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteUserRepository,
+                SqliteVariableRepository, SqliteWorkspaceRepository, bootstrap_platform_admin,
             },
         },
     },
     application::agent::{
-        AgentAguiReplayStore, AgentManagementService, AgentRunHistoryService, ModelClient,
-        register_default_agent_tools,
+        register_default_agent_tools, AgentAguiReplayStore, AgentManagementService,
+        AgentRunHistoryService, ModelClient,
     },
     application::app::AppService,
     application::automation::AutomationService,
     application::chat::ChatService,
-    application::graph::{GraphService, OntologyService, ScopeResolver},
+    application::graph::{GraphService, OntologyService},
     application::llm::LlmRuntimeService,
     application::mcp::McpService,
+    application::memory::MemoryService,
     application::model::ModelService,
+    application::open_app::OpenAppService,
+    application::rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
     application::role::RoleService,
     application::skill::SkillRegistryService,
     application::task::TaskService,
@@ -66,12 +48,19 @@ use crate::{
     application::workspace::WorkspaceService,
     config::AppConfig,
     domain::agent::ToolRegistry,
-    health::health,
+    health::{health, readiness},
     shared::{
+        crypto::Aes256SecretBox,
         event_bus::{AguiEventSink, EventBusHandle, EventBusRuntimeBuilder},
         http_client::HttpClientPool,
         id::SnowflakedSnowflakeIdProvider,
     },
+};
+
+pub use self::startup::{AppBootstrapError, AppReadiness, AppReadinessStatus};
+use self::{
+    routing::{build_open_api_routes, build_protected_routes},
+    startup::{build_graph_core, build_graph_services, build_rag_service},
 };
 
 static GLOBAL_USER_SERVICE: OnceLock<UserService> = OnceLock::new();
@@ -83,11 +72,20 @@ static GLOBAL_VARIABLE_SERVICE: OnceLock<VariableService> = OnceLock::new();
 static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
 static GLOBAL_MODEL_SERVICE: OnceLock<ModelService> = OnceLock::new();
 static GLOBAL_CHAT_SERVICE: OnceLock<ChatService> = OnceLock::new();
+static GLOBAL_OPEN_APP_SERVICE: OnceLock<OpenAppService> = OnceLock::new();
+static GLOBAL_GRAPH_CORE: OnceLock<GrafeoStoreCore> = OnceLock::new();
 static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService)> = OnceLock::new();
+
+pub type AppRagService = RagService<
+    Arc<Mutex<GraphBackedRagRepository>>,
+    DefaultRagStrategyRegistry,
+    DefaultRagRuntime,
+>;
 
 #[derive(Clone)]
 pub struct AppState {
     pub config: AppConfig,
+    pub readiness: AppReadiness,
     pub agui_events: Arc<AguiEventSink>,
     pub agui_replay_store: Arc<dyn AgentAguiReplayStore>,
     pub agent_model_client: Arc<dyn ModelClient>,
@@ -108,12 +106,14 @@ pub struct AppState {
     pub workspaces: WorkspaceService,
     pub skills: SkillRegistryService,
     pub models: ModelService,
+    pub open_apps: OpenAppService,
     pub llm_runtime: LlmRuntimeService,
     pub mcp: McpService,
+    pub rag: AppRagService,
 }
 
 impl AppState {
-    pub fn new(config: AppConfig) -> Self {
+    pub fn new(config: AppConfig) -> Result<Self, AppBootstrapError> {
         let agui_events = Arc::new(AguiEventSink::new(&config.event_bus));
         let agui_replay_store = Arc::new(
             SqliteAgentEventReplayStore::connect(&config.database_url)
@@ -196,10 +196,10 @@ impl AppState {
         };
         let variables = if config.database_url == ":memory:" {
             GLOBAL_VARIABLE_SERVICE
-                .get_or_init(|| build_variable_service(":memory:", workspaces.clone()))
+                .get_or_init(|| build_variable_service(":memory:", workspaces.clone(), &config))
                 .clone()
         } else {
-            build_variable_service(&config.database_url, workspaces.clone())
+            build_variable_service(&config.database_url, workspaces.clone(), &config)
         };
         let mcp = build_mcp_service(
             &config.database_url,
@@ -207,6 +207,15 @@ impl AppState {
             variables.clone(),
             runtime_http_client.clone(),
         );
+        let open_apps = if config.database_url == ":memory:" {
+            GLOBAL_OPEN_APP_SERVICE
+                .get_or_init(|| {
+                    build_open_app_service(":memory:", users.clone(), &config.auth.jwt_secret)
+                })
+                .clone()
+        } else {
+            build_open_app_service(&config.database_url, users.clone(), &config.auth.jwt_secret)
+        };
         let skills = if config.database_url == ":memory:" {
             GLOBAL_SKILL_SERVICE
                 .get_or_init(|| {
@@ -244,6 +253,29 @@ impl AppState {
         } else {
             build_model_service(&config.database_url, workspaces.clone())
         };
+        let llm_runtime = LlmRuntimeService::new(
+            Arc::new(models.clone()),
+            Arc::new(HttpLlmRuntimeClient::new(model_inference_client)),
+        );
+        let graph_core = if config.graph_storage_path == ":memory:" {
+            if let Some(core) = GLOBAL_GRAPH_CORE.get() {
+                core.clone()
+            } else {
+                let core = build_graph_core(&config.graph_storage_path)?;
+                let _ = GLOBAL_GRAPH_CORE.set(core.clone());
+                core
+            }
+        } else {
+            build_graph_core(&config.graph_storage_path)?
+        };
+        let rag = build_rag_service(
+            &config.database_url,
+            graph_core.clone(),
+            workspaces.clone(),
+            llm_runtime.clone(),
+            &config.project_doc_root,
+            event_bus.clone(),
+        )?;
         let agent_tool_registry = Arc::new(ToolRegistry::default());
         register_default_agent_tools(
             agent_tool_registry.as_ref(),
@@ -253,28 +285,20 @@ impl AppState {
             models.clone(),
             skills.clone(),
             variables.clone(),
+            MemoryService::new(rag.clone()),
         )
         .expect("default agent tools should register");
-        let llm_runtime = LlmRuntimeService::new(
-            Arc::new(models.clone()),
-            Arc::new(HttpLlmRuntimeClient::new(model_inference_client)),
-        );
         let (graphs, ontologies) = if config.graph_storage_path == ":memory:" {
-            GLOBAL_GRAPH_SERVICES
-                .get_or_init(|| {
-                    build_graph_services(
-                        &config.graph_storage_path,
-                        workspaces.clone(),
-                        llm_runtime.clone(),
-                    )
-                })
-                .clone()
+            if let Some(services) = GLOBAL_GRAPH_SERVICES.get() {
+                services.clone()
+            } else {
+                let services =
+                    build_graph_services(graph_core.clone(), workspaces.clone(), llm_runtime.clone());
+                let _ = GLOBAL_GRAPH_SERVICES.set(services.clone());
+                services
+            }
         } else {
-            build_graph_services(
-                &config.graph_storage_path,
-                workspaces.clone(),
-                llm_runtime.clone(),
-            )
+            build_graph_services(graph_core, workspaces.clone(), llm_runtime.clone())
         };
         let agent_runs = build_agent_run_history_service(&config.database_url);
         let chats = if config.database_url == ":memory:" {
@@ -284,9 +308,11 @@ impl AppState {
         } else {
             build_chat_service(&config.database_url)
         };
+        let readiness = AppReadiness::validated_ready();
 
-        Self {
+        Ok(Self {
             config,
+            readiness,
             agui_events,
             agui_replay_store,
             agent_model_client,
@@ -301,15 +327,17 @@ impl AppState {
             graphs,
             ontologies,
             models,
+            open_apps,
             llm_runtime,
             mcp,
+            rag,
             skills,
             roles,
             tasks,
             users,
             variables,
             workspaces,
-        }
+        })
     }
 }
 
@@ -318,31 +346,31 @@ impl FromRef<AppState> for AppConfig {
         state.config.clone()
     }
 }
-
+impl FromRef<AppState> for AppReadiness {
+    fn from_ref(state: &AppState) -> Self {
+        state.readiness.clone()
+    }
+}
 impl FromRef<AppState> for UserService {
     fn from_ref(state: &AppState) -> Self {
         state.users.clone()
     }
 }
-
 impl FromRef<AppState> for AppService {
     fn from_ref(state: &AppState) -> Self {
         state.apps.clone()
     }
 }
-
 impl FromRef<AppState> for EventBusHandle {
     fn from_ref(state: &AppState) -> Self {
         state.event_bus.clone()
     }
 }
-
 impl FromRef<AppState> for RoleService {
     fn from_ref(state: &AppState) -> Self {
         state.roles.clone()
     }
 }
-
 impl FromRef<AppState> for WorkspaceService {
     fn from_ref(state: &AppState) -> Self {
         state.workspaces.clone()
@@ -354,25 +382,21 @@ impl FromRef<AppState> for GraphService {
         state.graphs.clone()
     }
 }
-
 impl FromRef<AppState> for OntologyService {
     fn from_ref(state: &AppState) -> Self {
         state.ontologies.clone()
     }
 }
-
 impl FromRef<AppState> for TaskService {
     fn from_ref(state: &AppState) -> Self {
         state.tasks.clone()
     }
 }
-
 impl FromRef<AppState> for AutomationService {
     fn from_ref(state: &AppState) -> Self {
         state.automations.clone()
     }
 }
-
 impl FromRef<AppState> for ChatService {
     fn from_ref(state: &AppState) -> Self {
         state.chats.clone()
@@ -397,6 +421,24 @@ impl FromRef<AppState> for ModelService {
     }
 }
 
+impl FromRef<AppState> for OpenAppService {
+    fn from_ref(state: &AppState) -> Self {
+        state.open_apps.clone()
+    }
+}
+
+impl FromRef<AppState> for LlmRuntimeService {
+    fn from_ref(state: &AppState) -> Self {
+        state.llm_runtime.clone()
+    }
+}
+
+impl FromRef<AppState> for AppRagService {
+    fn from_ref(state: &AppState) -> Self {
+        state.rag.clone()
+    }
+}
+
 impl FromRef<AppState> for AgentRunHistoryService {
     fn from_ref(state: &AppState) -> Self {
         state.agent_runs.clone()
@@ -414,50 +456,20 @@ impl FromRef<AppState> for McpService {
         state.mcp.clone()
     }
 }
+pub fn build_router(config: AppConfig) -> Result<Router, AppBootstrapError> {
+    let state = AppState::new(config)?;
+    let protected_routes = build_protected_routes(&state);
+    let open_api_routes = build_open_api_routes(&state);
 
-pub fn build_router(config: AppConfig) -> Router {
-    let state = AppState::new(config);
-    let protected_routes = user_routes()
-        .merge(admin_model_routes())
-        .merge(admin_variable_routes())
-        .merge(role_routes())
-        .merge(model_routes())
-        .merge(workspace_routes())
-        .merge(automation_routes())
-        .merge(chat_routes())
-        .merge(app_routes())
-        .merge(agent_routes())
-        .merge(mcp_management_routes())
-        .merge(task_routes())
-        .merge(variable_routes())
-        .merge(skill_routes())
-        .route_layer(middleware::from_fn_with_state(
-            state.users.clone(),
-            require_auth,
-        ));
-    let open_api_routes = open_api_chat_routes()
-        .route_layer(middleware::from_fn_with_state(state.users.clone(), require_open_api_auth))
-        .layer(open_api_cors_layer());
-
-    Router::new()
+    Ok(Router::new()
         .route("/api/v1/health", get(health))
+        .route("/api/v1/readiness", get(readiness))
         .merge(auth_routes())
         .merge(mcp_transport_routes())
         .merge(protected_routes)
+        .merge(frontend_routes())
         .merge(open_api_routes)
-        .with_state(state)
-}
-
-fn open_api_cors_layer() -> CorsLayer {
-    CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::OPTIONS])
-        .allow_headers([
-            header::ACCEPT, header::ACCEPT_LANGUAGE, header::AUTHORIZATION, header::CONTENT_TYPE,
-            header::HeaderName::from_static("x-tron-app-id"),
-            header::HeaderName::from_static("x-tron-app-key"),
-            header::HeaderName::from_static("x-tron-user-id"),
-        ])
+        .with_state(state))
 }
 
 fn build_user_service(config: &AppConfig, event_bus: EventBusHandle) -> UserService {
@@ -521,10 +533,16 @@ fn build_chat_service(database_url: &str) -> ChatService {
     ChatService::new(repository)
 }
 
-fn build_variable_service(database_url: &str, workspaces: WorkspaceService) -> VariableService {
+fn build_variable_service(
+    database_url: &str,
+    workspaces: WorkspaceService,
+    config: &AppConfig,
+) -> VariableService {
     let repository = SqliteVariableRepository::connect(database_url)
         .expect("variable SQLite repository should initialize");
-    VariableService::new(repository, workspaces)
+    let cipher = Sm4GcmVariableCipher::from_config(config.variable_crypto.clone())
+        .expect("variable crypto should initialize");
+    VariableService::new(repository, workspaces, cipher)
 }
 
 fn build_mcp_service(
@@ -554,26 +572,14 @@ fn build_model_service(database_url: &str, workspaces: WorkspaceService) -> Mode
     ModelService::new(repository, workspaces)
 }
 
-fn build_graph_services(
-    graph_storage_path: &str,
-    workspaces: WorkspaceService,
-    llm_runtime: LlmRuntimeService,
-) -> (GraphService, OntologyService) {
-    let core = GrafeoStoreCore::connect(GrafeoAdapterConfig {
-        storage_path: graph_storage_path.to_owned(),
-    })
-    .expect("graph Grafeo adapter should initialize");
-    let graphs = GraphService::with_embedding_runtime(
-        GrafeoGraphStore::new(core.clone()),
-        ScopeResolver::new(workspaces.clone()),
-        Arc::new(llm_runtime),
-    );
-    let ontologies = OntologyService::new(
-        GrafeoOntologyStore::new(core),
-        ScopeResolver::new(workspaces),
-    );
-
-    (graphs, ontologies)
+fn build_open_app_service(
+    database_url: &str,
+    users: UserService,
+    jwt_secret: &str,
+) -> OpenAppService {
+    let repository = SqliteOpenAppRepository::connect(database_url)
+        .expect("open-app SQLite repository should initialize");
+    OpenAppService::new(repository, users, Aes256SecretBox::new(jwt_secret))
 }
 
 fn build_agent_run_history_service(database_url: &str) -> AgentRunHistoryService {

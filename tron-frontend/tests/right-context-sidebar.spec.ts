@@ -529,20 +529,14 @@ test("AC-RCS-05: management inspectors render in shell right sidebar and preserv
   await rightReopenControl(page).click();
   await expect(rightSidebar(page).getByText("LLM Router System")).toBeVisible();
 
-  await page.goto(`${frontendBaseUrl}/variables/details`);
-  await openRightSidebar(page);
-  await expect(rightSidebar(page).getByText("Variable Studio")).toBeVisible();
-  await page.locator("tbody tr").first().click();
-  await expect(rightSidebar(page).getByText("Variable Studio")).toBeVisible();
-
   await page.goto(`${frontendBaseUrl}/variables`);
-  await expect(rightReopenControl(page)).toBeVisible();
+  await expectNoRightSidebarControls(page);
   const firstVariableRow = page.locator("tbody tr").first();
-  const variableKey = (await firstVariableRow.locator("td").first().textContent())?.trim();
+  const variableKey = (await firstVariableRow.locator("td").first().locator("p").first().textContent())?.trim();
   await firstVariableRow.click();
-  await expect(rightSidebar(page).getByText("Variable Studio")).toBeVisible();
+  await expectNoRightSidebarControls(page);
   if (variableKey) {
-    await expect(rightSidebar(page).getByText(variableKey)).toBeVisible();
+    await expect(page.getByRole("heading", { name: variableKey })).toBeVisible();
   }
 
   await page.goto(`${frontendBaseUrl}/knowledge-base`);

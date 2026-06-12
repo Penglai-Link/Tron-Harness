@@ -5,13 +5,19 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use jsonwebtoken::{
+    Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode,
+    errors::ErrorKind as JwtErrorKind,
+};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
-    application::user::{CreateUserCommand, PasswordHasher, UpdateUserCommand, UserRepository},
+    application::user::{
+        CreateUserCommand, PasswordHasher, StepUpVariableRevealScope, StepUpVariableRevealTarget,
+        UpdateUserCommand, UserRepository,
+    },
     config::{AuthConfig, GitHubOAuthConfig, LdapConfig},
     domain::{
         auth::{
@@ -138,6 +144,18 @@ struct OAuthStateClaims {
     provider: String,
     redirect_path: String,
     nonce: String,
+    exp: usize,
+    iat: usize,
+    kind: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+struct StepUpClaims {
+    sub: String,
+    purpose: String,
+    scope: String,
+    workspace_code: Option<String>,
+    variable_key: String,
     exp: usize,
     iat: usize,
     kind: String,

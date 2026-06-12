@@ -176,7 +176,6 @@ export interface ChatClientConfig {
   accept?: string;
   agentCode?: string;
   appCode?: string;
-  appId?: string;
   appKey?: string;
   baseUrl?: string;
   defaultSessionCode?: string;
@@ -190,6 +189,7 @@ export interface ChatClientConfig {
   maxFileSize?: number;
   maxLimitFile?: number;
   open?: boolean;
+  openAppCode?: string;
   productPrefix?: string;
   resizable?: boolean;
   showAgui?: boolean;
@@ -198,6 +198,7 @@ export interface ChatClientConfig {
   taskCode?: string;
   title?: string;
   tokenPrefix?: string;
+  userCode?: string;
   userId?: string;
   variables?: unknown;
   workspaceCode?: string;

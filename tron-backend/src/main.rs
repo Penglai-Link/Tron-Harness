@@ -8,9 +8,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let config = AppConfig::from_application_yaml()?;
     let socket_addr = config.socket_addr()?;
     let listener = TcpListener::bind(socket_addr).await?;
+    let router = build_router(config)?;
 
     println!("tron-backend listening on http://{socket_addr}");
-    axum::serve(listener, build_router(config)).await?;
+    axum::serve(listener, router).await?;
 
     Ok(())
 }

@@ -40,6 +40,11 @@ pub fn agent_error_response(error: AgentInvocationError) -> Response {
         AgentInvocationError::RuntimeFailed(message) => {
             (StatusCode::BAD_REQUEST, "AGENT_RUNTIME_FAILED", message)
         }
+        AgentInvocationError::RuntimeSecretDeliveryUntrusted => (
+            StatusCode::BAD_REQUEST,
+            "VARIABLE_RUNTIME_SECRET_DELIVERY_UNTRUSTED",
+            "Sensitive runtime variable delivery is not trusted".to_string(),
+        ),
         AgentInvocationError::ModelFailed(message) => {
             (StatusCode::BAD_GATEWAY, "AGENT_MODEL_FAILED", message)
         }

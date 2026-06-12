@@ -47,7 +47,8 @@ async fn auth_middleware_injects_current_user_context_for_protected_handlers() {
     let access_token = authenticated_bearer_token(&login_app).await;
     let authorization = format!("Bearer {access_token}");
 
-    let state = AppState::new(prepared_config(AppConfig::default()));
+    let state =
+        AppState::new(prepared_config(AppConfig::default())).expect("app state should build");
     let router = Router::new()
         .route("/protected", get(protected_identity))
         .route_layer(middleware::from_fn_with_state(

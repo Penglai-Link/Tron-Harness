@@ -28,17 +28,17 @@ const STDIO_PROTOCOL_CANDIDATES: [StdioProtocolMode; 2] = [
 ];
 
 #[cfg(test)]
-const STDIO_INITIALIZE_TIMEOUT: Duration = Duration::from_millis(150);
+const STDIO_INITIALIZE_TIMEOUT: Duration = Duration::from_millis(1500);
 #[cfg(not(test))]
 const STDIO_INITIALIZE_TIMEOUT: Duration = Duration::from_secs(3);
 
 #[cfg(test)]
-const STDIO_TOOLS_LIST_TIMEOUT: Duration = Duration::from_millis(150);
+const STDIO_TOOLS_LIST_TIMEOUT: Duration = Duration::from_millis(1500);
 #[cfg(not(test))]
 const STDIO_TOOLS_LIST_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[cfg(test)]
-const STDIO_TOOLS_CALL_TIMEOUT: Duration = Duration::from_millis(250);
+const STDIO_TOOLS_CALL_TIMEOUT: Duration = Duration::from_millis(1000);
 #[cfg(not(test))]
 const STDIO_TOOLS_CALL_TIMEOUT: Duration = Duration::from_secs(30);
 

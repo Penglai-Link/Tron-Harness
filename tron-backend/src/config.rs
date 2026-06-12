@@ -1,10 +1,11 @@
+mod defaults;
 mod error;
 mod parsing;
 mod paths;
-
-use std::{fs, net::SocketAddr, path::Path};
+mod variable_crypto;
 
 use serde::Deserialize;
+use std::{fs, net::SocketAddr, path::Path};
 
 use crate::shared::event_bus::EventBusConfig;
 
@@ -15,9 +16,12 @@ use self::paths::{
     default_skills_registry_root_from_home, env_database_url_override,
     env_graph_storage_path_override, normalize_storage_path,
 };
+pub use variable_crypto::VariableCryptoConfig;
 
 const DEFAULT_BIND_ADDRESS: &str = "127.0.0.1";
 const DEFAULT_PORT: u16 = 8080;
+const DEFAULT_FRONTEND_DIST_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/resources/frontend");
+const DEFAULT_PROJECT_DOC_ROOT: &str = ".";
 const TEST_DATABASE_URL: &str = ":memory:";
 const DEFAULT_AUTH_JWT_SECRET: &str = "tron-dev-jwt-secret";
 const DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS: i64 = 900;
@@ -52,8 +56,11 @@ pub struct AppConfig {
     pub port: u16,
     pub database_url: String,
     pub graph_storage_path: String,
+    pub frontend_dist_dir: String,
+    pub project_doc_root: String,
     pub skills_registry_root: String,
     pub system_agents: SystemAgentConfig,
+    pub variable_crypto: VariableCryptoConfig,
     pub http_clients: HttpClientProfilesConfig,
     pub auth: AuthConfig,
     pub event_bus: EventBusConfig,
@@ -150,11 +157,14 @@ impl AppConfig {
             port: DEFAULT_PORT,
             database_url: default_database_url_from_home(),
             graph_storage_path: default_graph_storage_path_from_home(),
+            frontend_dist_dir: DEFAULT_FRONTEND_DIST_DIR.into(),
+            project_doc_root: DEFAULT_PROJECT_DOC_ROOT.into(),
             skills_registry_root: default_skills_registry_root_from_home(),
             system_agents: SystemAgentConfig {
                 codex_command: DEFAULT_SYSTEM_AGENT_CODEX_COMMAND.into(),
                 opencode_command: DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND.into(),
             },
+            variable_crypto: VariableCryptoConfig::default(),
             http_clients: HttpClientProfilesConfig::default_profiles(),
             auth: AuthConfig {
                 jwt_secret: DEFAULT_AUTH_JWT_SECRET.into(),
@@ -183,11 +193,20 @@ impl AppConfig {
         if let Some(value) = overrides.graph_storage_path {
             self.graph_storage_path = normalize_storage_path(value);
         }
+        if let Some(value) = overrides.frontend_dist_dir {
+            self.frontend_dist_dir = normalize_storage_path(value);
+        }
+        if let Some(value) = overrides.project_doc_root {
+            self.project_doc_root = normalize_storage_path(value);
+        }
         if let Some(value) = overrides.skills_registry_root {
             self.skills_registry_root = value;
         }
         if let Some(value) = overrides.system_agents {
             self.system_agents.apply_overrides(value);
+        }
+        if let Some(value) = overrides.variable_crypto {
+            self.variable_crypto.apply_overrides(value);
         }
         if let Some(value) = overrides.http_clients {
             self.http_clients.apply_overrides(value);
@@ -210,6 +229,16 @@ impl AppConfig {
         }
         if let Some(value) = env_graph_storage_path_override() {
             self.graph_storage_path = value;
+        }
+        if let Ok(value) = std::env::var("TRON_BACKEND_FRONTEND_DIST_DIR")
+            && !value.trim().is_empty()
+        {
+            self.frontend_dist_dir = normalize_storage_path(value);
+        }
+        if let Ok(value) = std::env::var("TRON_PROJECT_DOC_ROOT")
+            && !value.trim().is_empty()
+        {
+            self.project_doc_root = normalize_storage_path(value);
         }
         if let Some(value) = ldap_env_override().transpose()? {
             self.auth.ldap = Some(value);
@@ -266,8 +295,11 @@ struct AppConfigFile {
     port: Option<u16>,
     database_url: Option<String>,
     graph_storage_path: Option<String>,
+    frontend_dist_dir: Option<String>,
+    project_doc_root: Option<String>,
     skills_registry_root: Option<String>,
     system_agents: Option<SystemAgentFileConfig>,
+    variable_crypto: Option<variable_crypto::VariableCryptoFileConfig>,
     http_clients: Option<HttpClientProfilesFileConfig>,
     auth: Option<AuthFileConfig>,
     event_bus: Option<EventBusFileConfig>,
@@ -534,37 +566,6 @@ impl EventBusConfig {
         }
         if let Some(value) = overrides.agui_stream_idle_ttl_seconds {
             self.agui_stream_idle_ttl_seconds = value;
-        }
-    }
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            bind_address: DEFAULT_BIND_ADDRESS.into(),
-            port: DEFAULT_PORT,
-            database_url: TEST_DATABASE_URL.into(),
-            graph_storage_path: ":memory:".into(),
-            skills_registry_root: std::env::temp_dir()
-                .join("tron-skills-registry-test")
-                .display()
-                .to_string(),
-            system_agents: SystemAgentConfig {
-                codex_command: DEFAULT_SYSTEM_AGENT_CODEX_COMMAND.into(),
-                opencode_command: DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND.into(),
-            },
-            http_clients: HttpClientProfilesConfig::default_profiles(),
-            auth: AuthConfig {
-                jwt_secret: DEFAULT_AUTH_JWT_SECRET.into(),
-                access_token_ttl_seconds: DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS,
-                refresh_token_ttl_seconds: DEFAULT_AUTH_REFRESH_TOKEN_TTL_SECONDS,
-                cookie_secure: false,
-                dev_oauth2_enabled: true,
-                dev_oauth2_name: DEFAULT_AUTH_DEV_OAUTH2_NAME.into(),
-                github_oauth: None,
-                ldap: None,
-            },
-            event_bus: EventBusConfig::default(),
         }
     }
 }

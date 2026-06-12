@@ -50,6 +50,10 @@ export const routePages: Record<string, RoutePageComponent> = {
   "settings.models": lazy(() => import("@/domain/model/pages/PlatformModelsPage").then((module) => ({ default: module.PlatformModelsPage }))),
   "settings.modelsDetail": lazy(() => import("@/domain/model/pages/PlatformModelDetailsPage").then((module) => ({ default: module.PlatformModelDetailsPage }))),
   "settings.modelsNew": lazy(() => import("@/domain/model/pages/CreatePlatformModelPage").then((module) => ({ default: module.CreatePlatformModelPage }))),
+  "settings.openApiDetail": lazy(() => import("@/domain/open-app/pages/PlatformOpenAppDetailsPage").then((module) => ({ default: module.PlatformOpenAppDetailsPage }))),
+  "settings.openApiEdit": lazy(() => import("@/domain/open-app/pages/EditPlatformOpenAppPage").then((module) => ({ default: module.EditPlatformOpenAppPage }))),
+  "settings.openApiNew": lazy(() => import("@/domain/open-app/pages/CreatePlatformOpenAppPage").then((module) => ({ default: module.CreatePlatformOpenAppPage }))),
+  "settings.openApi": lazy(() => import("@/domain/open-app/pages/PlatformOpenAppsPage").then((module) => ({ default: module.PlatformOpenAppsPage }))),
   "settings.variables": lazy(() => import("@/domain/variable/pages/PlatformVariablesPage").then((module) => ({ default: module.PlatformVariablesPage }))),
   "settings.variablesDetail": lazy(() => import("@/domain/variable/pages/PlatformVariableDetailsPage").then((module) => ({ default: module.PlatformVariableDetailsPage }))),
   "settings.variablesEdit": lazy(() => import("@/domain/variable/pages/EditPlatformVariablePage").then((module) => ({ default: module.EditPlatformVariablePage }))),
@@ -64,4 +68,5 @@ export const routePages: Record<string, RoutePageComponent> = {
   "tasks.new": lazy(() => import("@/domain/task/pages/CreateTaskPage").then((module) => ({ default: module.CreateTaskPage }))),
   "variables.details": lazy(() => import("@/domain/variable/pages/VariableDetailsPage").then((module) => ({ default: module.VariableDetailsPage }))),
   "variables.index": lazy(() => import("@/domain/variable/pages/VariablesPage").then((module) => ({ default: module.VariablesPage }))),
+  "variables.new": lazy(() => import("@/domain/variable/pages/CreateVariablePage").then((module) => ({ default: module.CreateVariablePage }))),
 };

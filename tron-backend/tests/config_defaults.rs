@@ -6,6 +6,8 @@ use std::{
 
 use tron_backend::config::AppConfig;
 
+const APPLICATION_VARIABLE_CRYPTO_KEY_BASE64: &str = "sbxNdQm4XiwQyfXNEtjZCQ==";
+
 #[test]
 fn application_yaml_uses_home_storage_defaults() {
     let config = AppConfig::from_application_yaml().expect("application yaml should load");
@@ -17,6 +19,10 @@ fn application_yaml_uses_home_storage_defaults() {
     assert_eq!(
         PathBuf::from(config.graph_storage_path),
         graph_storage_home_default()
+    );
+    assert_eq!(
+        config.variable_crypto.key_base64,
+        APPLICATION_VARIABLE_CRYPTO_KEY_BASE64
     );
 }
 

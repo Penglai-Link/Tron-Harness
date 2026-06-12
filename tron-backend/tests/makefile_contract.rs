@@ -1,7 +1,7 @@
 use std::{fs, path::Path, process::Command};
 
 #[test]
-fn make_help_lists_backend_targets_and_existing_frontend_targets() {
+fn make_help_lists_integrated_backend_and_frontend_targets() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("tron-backend must live under the repository root");
@@ -36,6 +36,41 @@ fn make_help_lists_backend_targets_and_existing_frontend_targets() {
         assert!(
             stdout.contains(frontend_target),
             "make help must preserve existing `{frontend_target}`, stdout:\n{stdout}",
+        );
+    }
+
+    for app_target in ["make app-build", "make app-run", "make app-clean"] {
+        assert!(
+            stdout.contains(app_target),
+            "make help must list integrated `{app_target}`, stdout:\n{stdout}",
+        );
+    }
+}
+
+#[test]
+fn integrated_frontend_build_defaults_integrated_runtime_to_api_mode() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("tron-backend must live under the repository root");
+    let makefile = fs::read_to_string(repo_root.join("Makefile"))
+        .expect("Makefile should be readable from the repository root");
+
+    assert!(
+        makefile.contains("TRON_FRONTEND_OUT_DIR="),
+        "app-build must direct Vite output into backend frontend resources",
+    );
+    assert!(
+        makefile.contains("VITE_TRON_API_BASE_URL="),
+        "app-build must keep API calls same-origin for integrated runtime",
+    );
+    for required in [
+        "VITE_TRON_DATA_SOURCE=api",
+        "VITE_TRON_AUTH_DATA_SOURCE=api",
+        "VITE_TRON_ADMIN_DATA_SOURCE=api",
+    ] {
+        assert!(
+            makefile.contains(required),
+            "integrated app build must default integrated runtime to API mode via `{required}`",
         );
     }
 }

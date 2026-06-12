@@ -22,3 +22,10 @@ pub struct AuthGrantDto {
 pub struct LogoutDto {
     pub logged_out: bool,
 }
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StepUpTokenDto {
+    pub step_up_token: String,
+    pub expires_at: String,
+}

@@ -6,6 +6,8 @@ use axum::{
 };
 use serde_json::{Value, json};
 
+mod variable_errors;
+
 use crate::{
     adapters::inbound::http::auth::authenticate_headers,
     application::{
@@ -16,6 +18,9 @@ use crate::{
     shared::auth_holder::AuthHolder,
 };
 
+use self::variable_errors::{
+    variable_error_code, variable_jsonrpc_error_code, variable_jsonrpc_error_message,
+};
 use super::super::error_mapper::mcp_error_response;
 
 pub(super) const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
@@ -324,6 +329,8 @@ fn handle_tool_call(variables: VariableService, payload: Value) -> Response {
                     key,
                     value,
                     description,
+                    is_sensitive: None,
+                    value_mode: None,
                 },
             ) {
                 Ok(record) => tool_success_result(
@@ -471,49 +478,6 @@ fn tool_business_error_result(code: &str, message: &str) -> Value {
         },
         "isError": true
     })
-}
-
-fn variable_error_code(error: &crate::domain::variable::VariableError) -> &'static str {
-    match error {
-        crate::domain::variable::VariableError::NotFound => "VARIABLE_NOT_FOUND",
-        crate::domain::variable::VariableError::WorkspaceRequired => "VARIABLE_WORKSPACE_REQUIRED",
-        crate::domain::variable::VariableError::InvalidWorkspace => "VARIABLE_WORKSPACE_INVALID",
-        crate::domain::variable::VariableError::InvalidKey => "VARIABLE_KEY_INVALID",
-        crate::domain::variable::VariableError::DuplicateKey => "VARIABLE_KEY_DUPLICATE",
-        crate::domain::variable::VariableError::InheritedMutationDenied => {
-            "VARIABLE_INHERITED_MUTATION_INVALID"
-        }
-        crate::domain::variable::VariableError::StorageFailure => "VARIABLE_STORAGE_FAILED",
-    }
-}
-
-fn variable_jsonrpc_error_code(error: &crate::domain::variable::VariableError) -> i64 {
-    match error {
-        crate::domain::variable::VariableError::StorageFailure => -32603,
-        _ => -32602,
-    }
-}
-
-fn variable_jsonrpc_error_message(error: &crate::domain::variable::VariableError) -> &'static str {
-    match error {
-        crate::domain::variable::VariableError::NotFound => "variable was not found",
-        crate::domain::variable::VariableError::WorkspaceRequired => "workspaceCode is required",
-        crate::domain::variable::VariableError::InvalidWorkspace => {
-            "variable workspace must reference an active workspace"
-        }
-        crate::domain::variable::VariableError::InvalidKey => {
-            "variable key must use letters, digits, underscore, hyphen, or dot"
-        }
-        crate::domain::variable::VariableError::DuplicateKey => {
-            "variable key already exists in the current workspace"
-        }
-        crate::domain::variable::VariableError::InheritedMutationDenied => {
-            "override the inherited variable locally before modifying it"
-        }
-        crate::domain::variable::VariableError::StorageFailure => {
-            "variable storage operation failed"
-        }
-    }
 }
 
 enum VariableResourceTarget {

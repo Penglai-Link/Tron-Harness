@@ -2,6 +2,7 @@ export * from "./config";
 export * from "./display";
 export * from "./mock";
 export * from "./normalize";
+export * from "./openapi-signing";
 export * from "./transcript";
 export * from "./transport";
 export * from "./types";

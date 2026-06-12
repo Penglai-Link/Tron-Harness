@@ -10,8 +10,11 @@ use crate::{application::user::UserService, domain::auth::CurrentSession, respon
 use super::{
     error_mapper::auth_error_response,
     read_access_token, read_cookie,
-    request::{InternalLoginRequest, OAuth2AuthorizeQuery, OAuth2CallbackQuery},
-    response::{AuthGrantDto, AuthProvidersDto, LogoutDto},
+    request::{
+        InternalLoginRequest, OAuth2AuthorizeQuery, OAuth2CallbackQuery,
+        VerifyStepUpPasswordRequest,
+    },
+    response::{AuthGrantDto, AuthProvidersDto, LogoutDto, StepUpTokenDto},
 };
 
 const ACCESS_COOKIE_NAME: &str = "tron_access_token";
@@ -96,6 +99,28 @@ pub async fn logout(State(users): State<UserService>, headers: HeaderMap) -> Res
             Json(ApiResponse::success(LogoutDto { logged_out: true })),
             &users,
         ),
+        Err(error) => auth_error_response(error),
+    }
+}
+
+pub async fn verify_step_up_password(
+    State(users): State<UserService>,
+    headers: HeaderMap,
+    Json(request): Json<VerifyStepUpPasswordRequest>,
+) -> Response {
+    let access_token = read_access_token(&headers);
+    let session = match users.authenticate_access_token(access_token.as_deref()) {
+        Ok(session) => session,
+        Err(error) => return auth_error_response(error),
+    };
+    let target = request.target.into();
+    match users.verify_step_up_password(&session.session.user.user_code, &request.password, &target)
+    {
+        Ok(token) => Json(ApiResponse::success(StepUpTokenDto {
+            step_up_token: token.token,
+            expires_at: token.expires_at,
+        }))
+        .into_response(),
         Err(error) => auth_error_response(error),
     }
 }
