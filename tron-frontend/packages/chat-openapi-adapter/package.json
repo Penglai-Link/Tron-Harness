@@ -5,7 +5,5 @@
   "exports": {
     ".": "./src/index.ts"
   },
-  "dependencies": {
-    "@tron/chat-core": "file:../chat-core"
-  }
+  "dependencies": {}
 }

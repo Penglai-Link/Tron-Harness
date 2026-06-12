@@ -114,9 +114,21 @@ export interface ChatDebugOptions {
 ```vue
 <script setup lang="ts">
 import { TronChatRuntimeWindow } from "@tron/chat-vue";
+import { createOpenApiChatAdapter } from "@tron/chat-openapi-adapter";
+
+const adapter = createOpenApiChatAdapter({
+  baseUrl: "http://localhost:8080",
+  openAppCode: "",
+  appKey: "",
+  userCode: "",
+  getAccessToken: () => {
+    return "";
+  },
+});
 </script>
 <template>
   <TronChatRuntimeWindow
+    :adapter="adapter"
     :config="{
       workspaceCode: 'my-workspace',
       title: '智能助手',

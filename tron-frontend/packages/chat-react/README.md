@@ -113,10 +113,22 @@ export interface ChatDebugOptions {
 
 ```tsx
 import { TronChatRuntimeWindow } from "@tron/chat-react";
+import { createOpenApiChatAdapter } from "@tron/chat-openapi-adapter";
+
+const adapter = createOpenApiChatAdapter({
+  baseUrl: "http://localhost:8080",
+  openAppCode: "",
+  appKey: "",
+  userCode: "",
+  getAccessToken: () => {
+    return "";
+  },
+});
 
 export default function App() {
   return (
     <TronChatRuntimeWindow
+      adapter={adapter}
       config={{
         workspaceCode: "my-workspace",
         title: "智能助手",
