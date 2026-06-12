@@ -362,6 +362,16 @@ function handleStop() {
   abortRef.value?.abort();
 }
 
+function handleNewSession() {
+  handleStop();
+  session.value = null;
+  messages.value = [];
+  aguiEvents.value = [];
+  protocolEvents.value = [];
+  liveAguiEvents.value = [];
+  liveAguiAnchorMessageCodes.value = {};
+}
+
 const presentationDebugEvents = computed(
   () =>
     buildTranscriptPresentation({
@@ -422,6 +432,7 @@ const panelCommonProps = computed(() => ({
   onCreateSession: () => {
     void ensureSession();
   },
+  onNewSession: handleNewSession,
   onDraftChange: handleDraftChange,
   onEditMessage: handleEditMessage,
   onSend: () => {

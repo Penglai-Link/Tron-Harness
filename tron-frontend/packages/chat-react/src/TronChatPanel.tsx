@@ -643,6 +643,7 @@ export interface TronChatPanelProps {
   liveAguiPending?: boolean;
   messages: ChatMessage[];
   onCreateSession?: () => void;
+  onNewSession?: () => void;
   onDraftChange: (value: string) => void;
   onEditMessage?: (content: string) => void;
   onSend: () => void;
@@ -677,6 +678,7 @@ export function TronChatPanel({
   liveAguiPending,
   messages,
   onCreateSession,
+  onNewSession,
   onDraftChange,
   onEditMessage,
   onSend,

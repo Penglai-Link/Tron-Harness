@@ -343,6 +343,16 @@ export function TronChatRuntimeWindow({
     abortRef.current?.abort();
   }
 
+  function handleNewSession() {
+    handleStop();
+    setSession(null);
+    setMessages([]);
+    setAguiEvents([]);
+    setProtocolEvents([]);
+    setLiveAguiEvents([]);
+    setLiveAguiAnchorMessageCodes({});
+  }
+
   const presentationDebugEvents = useMemo(
     () => buildTranscriptPresentation({
       debugOptions,
@@ -390,6 +400,7 @@ export function TronChatRuntimeWindow({
       onCreateSession={() => {
         void ensureSession();
       }}
+      onNewSession={handleNewSession}
       onDraftChange={setDraft}
       onEditMessage={setDraft}
       onSend={() => { void handleSend(); }}
@@ -422,6 +433,7 @@ export function TronChatRuntimeWindow({
         liveAguiPending={liveAguiPending}
         messages={messages}
         onCreateSession={() => { void ensureSession(); }}
+        onNewSession={handleNewSession}
         onDraftChange={setDraft}
         onEditMessage={setDraft}
         onSend={() => { void handleSend(); }}

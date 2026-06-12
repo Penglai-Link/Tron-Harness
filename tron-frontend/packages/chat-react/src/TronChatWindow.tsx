@@ -1,4 +1,4 @@
-import { Bot, Grip, Minus, X } from "lucide-react";
+import { Bot, Grip, Minus, X, Plus } from "lucide-react";
 import {
   clampFloatingStateToViewport,
   defaultFloatingState,
@@ -275,6 +275,15 @@ export function TronChatWindow({
               </div>
             </div>
             <div className="tron-chat-window__actions">
+              <button
+                className="tron-chat-window__control"
+                type="button"
+                title="New chat"
+                aria-label="New chat"
+                onClick={() => panelProps.onNewSession?.()}
+              >
+                <Plus size={16} />
+              </button>
               <button
                 className="tron-chat-window__control"
                 type="button"

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bot, Grip, Minus, X } from "lucide-vue-next";
+import { Bot, Grip, Minus, X, Plus } from "lucide-vue-next";
 import {
   clampFloatingStateToViewport,
   defaultFloatingState,
@@ -42,6 +42,7 @@ const props = withDefaults(defineProps<TronChatWindowProps>(), {
 
 const emit = defineEmits<{
   "create-session": [];
+  "new-session": [];
   "draft-change": [value: string];
   "edit-message": [value: string];
   send: [];
@@ -304,6 +305,15 @@ function endResize(event: PointerEvent) {
         </div>
         <div class="tron-chat-window__actions">
           <button
+            aria-label="New chat"
+            title="New chat"
+            class="tron-chat-window__control"
+            type="button"
+            @click="emit('new-session')"
+          >
+            <Plus :size="16" />
+          </button>
+          <button
             aria-label="Close chat"
             class="tron-chat-window__control"
             type="button"
@@ -345,6 +355,7 @@ function endResize(event: PointerEvent) {
           :stop-label="stopLabel"
           :title="title"
           @create-session="emit('create-session')"
+          @new-session="emit('new-session')"
           @draft-change="(v: string) => emit('draft-change', v)"
           @edit-message="(v: string) => emit('edit-message', v)"
           @send="emit('send')"

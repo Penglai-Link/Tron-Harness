@@ -40,6 +40,7 @@ const props = withDefaults(defineProps<TronChatPanelProps>(), {
 
 const emit = defineEmits<{
   "create-session": [];
+  "new-session": [];
   "draft-change": [value: string];
   "edit-message": [value: string];
   send: [];
