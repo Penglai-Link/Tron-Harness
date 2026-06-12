@@ -13,6 +13,7 @@ import { createPortal } from "react-dom";
 import {
   Edit3,
   Maximize2,
+  Play,
   X,
   Plus,
   Save,
@@ -481,14 +482,14 @@ export function TaskDetailsPage() {
           <>
             <Button variant="primary" onClick={() => {
               toast.info("Task execution is not available in v1");
-            }}>Execute</Button>
+            }}><Play size={15} aria-hidden="true" />Execute</Button>
             {detailEditable ? (
               <>
                 <Button variant="secondary" onClick={resetDetailFields}>Cancel</Button>
                 <Button disabled={!detailDirty} onClick={() => void saveDetailFields()}><Save size={15} aria-hidden="true" />Save</Button>
               </>
             ) : !archived ? (
-              <Button variant="secondary" onClick={() => setEditing(true)}><Edit3 size={15} aria-hidden="true" />Edit Details</Button>
+              <Button variant="secondary" onClick={() => setEditing(true)}><Edit3 size={15} aria-hidden="true" />Edit</Button>
             ) : null}
           </>
         }
