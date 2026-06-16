@@ -1,6 +1,9 @@
-import type { KeyboardEvent } from "react";
-import { useState } from "react";
-import { useNavigate } from "react-router";
+import {
+  type KeyboardEvent,
+  useEffect,
+  useState,
+} from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import {
   FolderSync,
   Search,
@@ -27,21 +30,91 @@ const profileTabs: Array<{ label: string; value: RagProfileType }> = [
   { label: "Retrieval Profiles", value: "Retrieval" },
 ];
 
+const profileTypeStorageKey = "tron.rag.profiles.profileType";
+
+function profileTypeFromValue(value: string | null): RagProfileType | null {
+  const normalizedValue = value?.toLowerCase();
+  if (normalizedValue === "retrieval") return "Retrieval";
+  if (normalizedValue === "ingest") return "Ingest";
+  return null;
+}
+
+function rememberProfileType(value: RagProfileType) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(profileTypeStorageKey, profileTypeToSearch(value));
+  } catch {
+    // URL state still handles the normal path if browser storage is unavailable.
+  }
+}
+
+function readRememberedProfileType(): RagProfileType {
+  if (typeof window === "undefined") return "Ingest";
+  try {
+    return profileTypeFromValue(window.sessionStorage.getItem(profileTypeStorageKey)) ?? "Ingest";
+  } catch {
+    return "Ingest";
+  }
+}
+
+function profileTypeToSearch(value: RagProfileType) {
+  return value === "Retrieval" ? "retrieval" : "ingest";
+}
+
 export function RagProfilesTab({
   profiles,
 }: {
   profiles: ProfileRecord[];
 }) {
   const navigate = useNavigate();
-  const [activeProfileType, setActiveProfileType] = useState<RagProfileType>("Ingest");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedProfileType = profileTypeFromValue(searchParams.get("profileType"));
+  const [rememberedProfileType, setRememberedProfileType] = useState<RagProfileType>(() => readRememberedProfileType());
+  const activeProfileType = requestedProfileType ?? rememberedProfileType;
   const ingestProfiles = profiles.filter((profile): profile is IngestProfileRecord => profile.type === "Ingest");
   const retrievalProfiles = profiles.filter((profile): profile is RetrievalProfileRecord => profile.type === "Retrieval");
   const visibleProfiles = activeProfileType === "Ingest" ? ingestProfiles : retrievalProfiles;
-  const addPath = activeProfileType === "Ingest" ? "/rag/profiles/ingest/new" : "/rag/profiles/retrieval/new";
+  const activeProfileTypeSearch = profileTypeToSearch(activeProfileType);
+  const addPath = activeProfileType === "Ingest"
+    ? `/rag/profiles/ingest/new?returnProfileType=${activeProfileTypeSearch}`
+    : `/rag/profiles/retrieval/new?returnProfileType=${activeProfileTypeSearch}`;
   const addLabel = activeProfileType === "Ingest" ? "Add Ingest Profile" : "Add Retrieval Profile";
   const icon = activeProfileType === "Ingest"
     ? <FolderSync size={17} aria-hidden="true" />
     : <Search size={17} aria-hidden="true" />;
+
+  useEffect(() => {
+    if (!requestedProfileType) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set("tab", "profiles");
+      nextParams.set("profileType", profileTypeToSearch(rememberedProfileType));
+      setSearchParams(nextParams, { replace: true });
+      return;
+    }
+    rememberProfileType(requestedProfileType);
+    setRememberedProfileType(requestedProfileType);
+  }, [rememberedProfileType, requestedProfileType, searchParams, setSearchParams]);
+
+  function setActiveProfileType(nextProfileType: RagProfileType) {
+    rememberProfileType(nextProfileType);
+    setRememberedProfileType(nextProfileType);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("tab", "profiles");
+    nextParams.set("profileType", profileTypeToSearch(nextProfileType));
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  function openAddProfile() {
+    rememberProfileType(activeProfileType);
+    navigate(addPath);
+  }
+
+  function openProfile(profile: ProfileRecord) {
+    rememberProfileType(profile.type);
+    navigate(profile.type === "Ingest"
+      ? `/rag/profiles/ingest/${encodeURIComponent(profile.id)}/edit?returnProfileType=ingest`
+      : `/rag/profiles/retrieval/${encodeURIComponent(profile.id)}/edit?returnProfileType=retrieval`);
+  }
 
   return (
     <SurfaceCard>
@@ -50,7 +123,7 @@ export function RagProfilesTab({
           icon={icon}
           title="Profiles"
         />
-        <Button onClick={() => navigate(addPath)}>
+        <Button onClick={openAddProfile}>
           {addLabel}
         </Button>
       </div>
@@ -96,9 +169,7 @@ export function RagProfilesTab({
           <ProfileRow
             key={profile.id}
             profile={profile}
-            onEdit={() => navigate(profile.type === "Ingest"
-              ? `/rag/profiles/ingest/${encodeURIComponent(profile.id)}/edit`
-              : `/rag/profiles/retrieval/${encodeURIComponent(profile.id)}/edit`)}
+            onEdit={() => openProfile(profile)}
           />
         )) : (
           <div className="min-w-[780px] px-4 py-8 text-center text-sm text-[var(--color-on-surface-variant)]">

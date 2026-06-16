@@ -8,6 +8,7 @@ import {
 import {
   useNavigate,
   useParams,
+  useSearchParams,
 } from "react-router";
 import {
   Plus,
@@ -95,8 +96,27 @@ import {
 } from "@/domain/rag/model/ragProfileForm";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
-function profileFormReturnPath() {
-  return "/rag?tab=profiles";
+type ProfileReturnType = "ingest" | "retrieval";
+
+const profileTypeStorageKey = "tron.rag.profiles.profileType";
+
+function profileReturnTypeFromSearch(value: string | null): ProfileReturnType | null {
+  const normalizedValue = value?.toLowerCase();
+  return normalizedValue === "ingest" || normalizedValue === "retrieval" ? normalizedValue : null;
+}
+
+function rememberProfileReturnType(value: ProfileReturnType) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(profileTypeStorageKey, value);
+  } catch {
+    // Return URL remains the source of truth when browser storage is unavailable.
+  }
+}
+
+function profileFormReturnPath(profileType: ProfileReturnType, searchParams?: URLSearchParams) {
+  const returnProfileType = profileReturnTypeFromSearch(searchParams?.get("returnProfileType") ?? null) ?? profileType;
+  return `/rag?tab=profiles&profileType=${returnProfileType}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -868,6 +888,7 @@ function FilterRow({
 
 export function RagIngestProfileFormPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const toast = useToast();
   const dataSource = getServiceDataSource("rag");
   const isApiMode = dataSource === "api";
@@ -884,6 +905,7 @@ export function RagIngestProfileFormPage() {
   const [verifyResult, setVerifyResult] = useState<RagProfileVerifyResultApi | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const title = mode === "create" ? "Create Ingest Profile" : "Edit Ingest Profile";
+  const returnPath = profileFormReturnPath("ingest", searchParams);
   const payloadPreview = useMemo(
     () => (isApiMode ? buildRagIngestProfileMutationPayload(form, pipelineCatalog) : buildIngestProfilePayloadPreview(form, pipelineCatalog)),
     [form, isApiMode, pipelineCatalog],
@@ -922,6 +944,10 @@ export function RagIngestProfileFormPage() {
     [catalog?.stageStrategiesByCorpus, enabledStages, form.primaryCorpusId, isApiMode, pipelineCatalog],
   );
   const loading = isApiMode && (catalogLoading || (mode === "edit" && detailLoading && !existingProfile));
+
+  useEffect(() => {
+    rememberProfileReturnType("ingest");
+  }, []);
 
   useEffect(() => {
     if (requiredStageIds.length === 0) return;
@@ -1050,7 +1076,7 @@ export function RagIngestProfileFormPage() {
     if (!isApiMode) {
       saveRagMockProfile(buildIngestProfileRecordFromForm(form, pipelineCatalog));
       toast.success(mode === "create" ? "Ingest profile created." : "Profile updated.");
-      navigate(profileFormReturnPath());
+      navigate(returnPath);
       return;
     }
 
@@ -1073,7 +1099,7 @@ export function RagIngestProfileFormPage() {
         ? saved.profileId.trim()
         : form.id.trim();
       toast.success(`${savedId} ${mode === "create" ? "created" : "saved"}`);
-      navigate(profileFormReturnPath());
+      navigate(returnPath);
     } catch (error) {
       const errorData = typeof error === "object" && error !== null && "data" in error
         ? (error as { data?: unknown }).data
@@ -1094,7 +1120,7 @@ export function RagIngestProfileFormPage() {
         <PageHeader
           title="Loading Ingest Profile"
           actions={(
-            <Button variant="secondary" onClick={() => navigate(profileFormReturnPath())}>
+            <Button variant="secondary" onClick={() => navigate(returnPath)}>
               <X size={16} aria-hidden="true" />
               Cancel
             </Button>
@@ -1114,7 +1140,7 @@ export function RagIngestProfileFormPage() {
         <PageHeader
           title="Edit Ingest Profile"
           actions={(
-            <Button variant="secondary" onClick={() => navigate(profileFormReturnPath())}>
+            <Button variant="secondary" onClick={() => navigate(returnPath)}>
               <X size={16} aria-hidden="true" />
               Cancel
             </Button>
@@ -1138,7 +1164,7 @@ export function RagIngestProfileFormPage() {
         title={title}
         actions={(
           <>
-            <Button disabled={loading || submitting} variant="secondary" onClick={() => navigate(profileFormReturnPath())}>
+            <Button disabled={loading || submitting} variant="secondary" onClick={() => navigate(returnPath)}>
               <X size={16} aria-hidden="true" />
               Cancel
             </Button>
@@ -1427,6 +1453,7 @@ export function RagIngestProfileFormPage() {
 
 export function RagRetrievalProfileFormPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const toast = useToast();
   const dataSource = getServiceDataSource("rag");
   const isApiMode = dataSource === "api";
@@ -1443,6 +1470,7 @@ export function RagRetrievalProfileFormPage() {
   const [verifyResult, setVerifyResult] = useState<RagProfileVerifyResultApi | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const title = mode === "create" ? "Create Retrieval Profile" : "Edit Retrieval Profile";
+  const returnPath = profileFormReturnPath("retrieval", searchParams);
   const operatorOptions = useMemo(() => listFilterOperators(), []);
   const profileRecords = useMemo(() => (isApiMode ? [] : getRagMockProfiles()), [isApiMode]);
   const existingIds = useMemo(() => profileRecords.map((profile) => profile.id), [profileRecords]);
@@ -1497,6 +1525,10 @@ export function RagRetrievalProfileFormPage() {
     [form.routes],
   );
   const loading = isApiMode && (catalogLoading || (mode === "edit" && detailLoading && !existingProfile));
+
+  useEffect(() => {
+    rememberProfileReturnType("retrieval");
+  }, []);
 
   useEffect(() => {
     if (!isApiMode) {
@@ -1667,7 +1699,7 @@ export function RagRetrievalProfileFormPage() {
     if (!isApiMode) {
       saveRagMockProfile(buildRetrievalProfileRecordFromForm(form));
       toast.success(mode === "create" ? "Retrieval profile created." : "Profile updated.");
-      navigate(profileFormReturnPath());
+      navigate(returnPath);
       return;
     }
 
@@ -1690,7 +1722,7 @@ export function RagRetrievalProfileFormPage() {
         ? saved.profileId.trim()
         : form.id.trim();
       toast.success(`${savedId} ${mode === "create" ? "created" : "saved"}`);
-      navigate(profileFormReturnPath());
+      navigate(returnPath);
     } catch (error) {
       const errorData = typeof error === "object" && error !== null && "data" in error
         ? (error as { data?: unknown }).data
@@ -1711,7 +1743,7 @@ export function RagRetrievalProfileFormPage() {
         <PageHeader
           title="Loading Retrieval Profile"
           actions={(
-            <Button variant="secondary" onClick={() => navigate(profileFormReturnPath())}>
+            <Button variant="secondary" onClick={() => navigate(returnPath)}>
               <X size={16} aria-hidden="true" />
               Cancel
             </Button>
@@ -1731,7 +1763,7 @@ export function RagRetrievalProfileFormPage() {
         <PageHeader
           title="Edit Retrieval Profile"
           actions={(
-            <Button variant="secondary" onClick={() => navigate(profileFormReturnPath())}>
+            <Button variant="secondary" onClick={() => navigate(returnPath)}>
               <X size={16} aria-hidden="true" />
               Cancel
             </Button>
@@ -1755,7 +1787,7 @@ export function RagRetrievalProfileFormPage() {
         title={title}
         actions={(
           <>
-            <Button disabled={loading || submitting} variant="secondary" onClick={() => navigate(profileFormReturnPath())}>
+            <Button disabled={loading || submitting} variant="secondary" onClick={() => navigate(returnPath)}>
               <X size={16} aria-hidden="true" />
               Cancel
             </Button>
