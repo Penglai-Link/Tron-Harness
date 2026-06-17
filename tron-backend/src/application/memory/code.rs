@@ -12,6 +12,7 @@ use super::{
 };
 
 pub(super) const MEMORY_SOURCE_VERSION: &str = "v1";
+pub(super) const MAIN_WORK_DOMAIN_CODE: &str = "main-domain";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SearchMode {

@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::shared::time::current_timestamp;
 
-use super::MemoryError;
+use super::{MemoryError, code::MAIN_WORK_DOMAIN_CODE};
 
-pub const DEFAULT_WORK_DOMAIN_CODE: &str = "main-domain";
+pub const DEFAULT_WORK_DOMAIN_CODE: &str = MAIN_WORK_DOMAIN_CODE;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]

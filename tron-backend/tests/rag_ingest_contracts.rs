@@ -533,7 +533,7 @@ async fn same_source_version_is_idempotent_and_multiple_versions_coexist() {
 }
 
 #[tokio::test]
-async fn embedding_failure_degrades_project_doc_but_fails_memory() {
+async fn embedding_failure_degrades_project_doc_and_memory_with_warning() {
     let doc_path = temp_database_path("rag-ingest-project-doc-vector-failure");
     let doc_url = doc_path.to_string_lossy().to_string();
     let doc_repository = SqliteRagRepository::connect(&doc_url).unwrap();
@@ -575,19 +575,26 @@ async fn embedding_failure_degrades_project_doc_but_fails_memory() {
         FakeEmbeddingRuntime::failing("fake vector unavailable"),
     );
 
-    let error = memory_service
-        .ingest(memory_request("v1"))
-        .await
-        .expect_err("memory vector failure must fail the ingest");
+    let memory_result = memory_service.ingest(memory_request("v1")).await.unwrap();
 
-    assert_eq!(error, RagError::EmbeddingFailed);
+    assert_eq!(memory_result.status, "ACTIVE");
+    assert_eq!(memory_result.embedding_status, "FAILED");
+    assert_eq!(memory_result.warnings.len(), 1);
+    assert_eq!(
+        memory_result.warnings[0]["code"],
+        json!("RAG_VECTOR_INDEX_WARNING")
+    );
     let memory_connection = Connection::open(&memory_url).unwrap();
+    assert_eq!(
+        query_i64(&memory_connection, "SELECT COUNT(*) FROM rag_diagnostics"),
+        1
+    );
     assert_eq!(
         query_string(
             &memory_connection,
             "SELECT source_status FROM rag_memory_text_units WHERE source_code = 'memory-rag-rule' LIMIT 1"
         ),
-        "FAILED"
+        "ACTIVE"
     );
 }
 
