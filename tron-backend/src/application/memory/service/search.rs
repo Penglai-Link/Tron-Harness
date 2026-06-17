@@ -267,6 +267,8 @@ where
         );
         if let Some(injectable) = injectable {
             filters.insert("injectable".into(), json!(injectable));
+        } else if let Some(injectable) = &command.injectable {
+            filters.insert("injectable".into(), injectable.clone());
         }
         Ok(Value::Object(filters))
     }

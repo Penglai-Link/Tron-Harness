@@ -1,10 +1,28 @@
 use serde::Serialize;
 use serde_json::Value;
 
+use super::work_domain::DEFAULT_WORK_DOMAIN_CODE;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MemoryRunContext {
     pub user_code: String,
     pub workspace_code: String,
+    pub work_domain_code: String,
+}
+
+impl MemoryRunContext {
+    pub fn new(user_code: impl Into<String>, workspace_code: impl Into<String>) -> Self {
+        Self {
+            user_code: user_code.into(),
+            workspace_code: workspace_code.into(),
+            work_domain_code: DEFAULT_WORK_DOMAIN_CODE.into(),
+        }
+    }
+
+    pub fn with_work_domain_code(mut self, work_domain_code: impl Into<String>) -> Self {
+        self.work_domain_code = work_domain_code.into();
+        self
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -17,6 +35,7 @@ pub struct MemorySearchCommand {
     pub memory_type: Option<Value>,
     pub memory_status: Option<Value>,
     pub review_status: Option<Value>,
+    pub injectable: Option<Value>,
     pub limit: Option<usize>,
     pub token_budget: Option<usize>,
     pub trace: Option<bool>,
@@ -100,6 +119,8 @@ pub struct MemoryItem {
     pub derived_source_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub derived_source_code: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub updated_at: Option<i64>,
     #[serde(skip_serializing_if = "is_empty_metadata")]
     pub metadata: Value,
 }

@@ -19,6 +19,7 @@ use crate::adapters::{
         automations::routes as automation_routes,
         chats::routes::routes as chat_routes,
         mcp::routes::management_routes as mcp_management_routes,
+        memory::routes as memory_routes,
         models::routes::routes as model_routes,
         rag::routes as rag_routes,
         skills::routes::routes as skill_routes,
@@ -47,6 +48,7 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
         .merge(mcp_management_routes())
         .merge(task_routes())
         .merge(variable_routes())
+        .merge(memory_routes())
         .merge(rag_routes())
         .merge(skill_routes())
         .route_layer(middleware::from_fn_with_state(

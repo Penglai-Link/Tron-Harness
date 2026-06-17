@@ -2,13 +2,13 @@
   "name": "@tron/chat-theme",
   "version": "0.1.0",
   "type": "module",
-  "types": "./index.d.ts",
   "exports": {
     ".": {
-      "types": "./index.d.ts",
+      "types": "./src/theme.scss.d.ts",
       "default": "./src/theme.scss"
     }
   },
+  "types": "./src/theme.scss.d.ts",
   "scripts": {},
   "dependencies": {}
 }

@@ -67,6 +67,7 @@ export const shell = {
       agents: "Agents",
       general: "General",
       mcpServers: "MCP Servers",
+      memoryDomains: "Memory Domains",
       models: "Models",
       openapi: "OpenAPI",
       tools: "Tools",

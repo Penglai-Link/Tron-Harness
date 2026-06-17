@@ -6,8 +6,8 @@ use crate::application::rag::{CandidateHit, ContextPack};
 
 use super::{
     code::{
-        CurrentMemory, MAIN_WORK_DOMAIN_CODE, MemoryLocator, MemoryScope, SearchMode,
-        encode_memory_code, memory_token_count,
+        CurrentMemory, MemoryLocator, MemoryScope, SearchMode, encode_memory_code,
+        memory_token_count,
     },
     dto::{
         MemoryContextPack, MemoryContextPackItem, MemoryItem, MemoryRunContext,
@@ -37,6 +37,7 @@ pub(super) fn memory_item_from_hit(hit: &CandidateHit, context: &MemoryRunContex
         expires_at: value_i64(fields, "expiresAt"),
         derived_source_type: value_string(fields, "derivedSourceType"),
         derived_source_code: value_string(fields, "derivedSourceCode"),
+        updated_at: value_i64(fields, "sourceUpdatedAt"),
         metadata: agent_facing_metadata(metadata),
     }
 }
@@ -60,6 +61,7 @@ pub(super) fn memory_item_from_current(current: &CurrentMemory) -> MemoryItem {
         expires_at: current.expires_at,
         derived_source_type: current.derived_source_type.clone(),
         derived_source_code: current.derived_source_code.clone(),
+        updated_at: current.updated_at,
         metadata: agent_facing_metadata(&current.metadata),
     }
 }
@@ -193,6 +195,7 @@ pub(super) fn current_matches_filters(
                 .as_ref()
                 .or(Some(&default_review_status)),
         )
+        && bool_filter_matches(current.injectable, command.injectable.as_ref())
         && (*mode != SearchMode::ContextPack || current.injectable.unwrap_or(false))
 }
 
@@ -222,7 +225,7 @@ fn inferred_locator(hit: &CandidateHit, context: &MemoryRunContext) -> MemoryLoc
         .unwrap_or_else(|_| fallback_scope(hit, context));
     let scope_code = normalized_hit_scope_code(&hit.scope_code).unwrap_or_else(|| match scope {
         MemoryScope::User => context.user_code.clone(),
-        MemoryScope::WorkDomain => MAIN_WORK_DOMAIN_CODE.to_string(),
+        MemoryScope::WorkDomain => context.work_domain_code.clone(),
         MemoryScope::Space => context.workspace_code.clone(),
     });
     MemoryLocator {
@@ -248,7 +251,7 @@ fn normalized_hit_scope_code(scope_code: &str) -> Option<String> {
 fn fallback_scope(hit: &CandidateHit, context: &MemoryRunContext) -> MemoryScope {
     if hit.scope_code == context.user_code || hit.source_code.starts_with("memory-user-") {
         MemoryScope::User
-    } else if hit.scope_code == MAIN_WORK_DOMAIN_CODE
+    } else if hit.scope_code == context.work_domain_code
         || hit.source_code.starts_with("memory-work-domain-")
     {
         MemoryScope::WorkDomain
@@ -270,6 +273,21 @@ fn value_filter_matches(actual: &Option<String>, filter: Option<&Value>) -> bool
     filter
         .as_array()
         .is_some_and(|items| items.iter().any(|item| item.as_str() == Some(actual)))
+}
+
+fn bool_filter_matches(actual: Option<bool>, filter: Option<&Value>) -> bool {
+    let Some(filter) = filter else {
+        return true;
+    };
+    let Some(actual) = actual else {
+        return false;
+    };
+    if let Some(expected) = filter.as_bool() {
+        return actual == expected;
+    }
+    filter
+        .as_array()
+        .is_some_and(|items| items.iter().any(|item| item.as_bool() == Some(actual)))
 }
 
 fn value_string(fields: &serde_json::Map<String, Value>, key: &str) -> Option<String> {

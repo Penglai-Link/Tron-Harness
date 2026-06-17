@@ -42,6 +42,7 @@ const MEMORY_RETURN_FIELDS: &[&str] = &[
     "expiresAt",
     "derivedSourceType",
     "derivedSourceCode",
+    "sourceUpdatedAt",
 ];
 
 #[derive(Clone)]
