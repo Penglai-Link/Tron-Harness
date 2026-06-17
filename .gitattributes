@@ -1,5 +1,5 @@
-tron-backend/native/sqlite-simple/v0.7.1/**/*.so filter=lfs diff=lfs merge=lfs -text
-tron-backend/native/sqlite-simple/v0.7.1/**/*.dylib filter=lfs diff=lfs merge=lfs -text
-tron-backend/native/sqlite-simple/v0.7.1/**/*.dll filter=lfs diff=lfs merge=lfs -text
-tron-backend/native/sqlite-simple/v0.7.1/dict/*.utf8 filter=lfs diff=lfs merge=lfs -text
-tron-backend/native/sqlite-simple/v0.7.1/dict/pos_dict/*.utf8 filter=lfs diff=lfs merge=lfs -text
+tron-backend/resources/native/sqlite-simple/v0.7.1/**/*.so filter=lfs diff=lfs merge=lfs -text
+tron-backend/resources/native/sqlite-simple/v0.7.1/**/*.dylib filter=lfs diff=lfs merge=lfs -text
+tron-backend/resources/native/sqlite-simple/v0.7.1/**/*.dll filter=lfs diff=lfs merge=lfs -text
+tron-backend/resources/native/sqlite-simple/v0.7.1/dict/*.utf8 filter=lfs diff=lfs merge=lfs -text
+tron-backend/resources/native/sqlite-simple/v0.7.1/dict/pos_dict/*.utf8 filter=lfs diff=lfs merge=lfs -text

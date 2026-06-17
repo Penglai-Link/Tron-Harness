@@ -10,11 +10,14 @@ const SQLITE_SIMPLE_VERSION: &str = "v0.7.1";
 const SQLITE_VEC_VERSION: &str = "v0.1.9";
 const SIMPLE_RESOURCE_ROOT: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/native/sqlite-simple/",
+    "/resources/native/sqlite-simple/",
     "v0.7.1"
 );
-const VEC_RESOURCE_ROOT: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/native/sqlite-vec/", "v0.1.9");
+const VEC_RESOURCE_ROOT: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/resources/native/sqlite-vec/",
+    "v0.1.9"
+);
 const DEFAULT_RUNTIME_ROOT_SUFFIX: &str = "tron/sqlite-extensions";
 
 static DEFAULT_CONTEXT: OnceLock<SqliteExtensionContext> = OnceLock::new();
