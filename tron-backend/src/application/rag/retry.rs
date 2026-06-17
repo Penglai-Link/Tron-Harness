@@ -155,10 +155,22 @@ where
         publish_retry_event(
             &self.event_bus,
             "rag.retry.started",
-            BusOutcome::Success,
+            BusOutcome::Started,
             &request,
+            "started",
         );
-        let units = self.repository.retry_text_units(&request)?;
+        let result = self.retry_index_after_started(&request).await;
+        if let Err(error) = &result {
+            publish_retry_failed_event(&self.event_bus, &request, error);
+        }
+        result
+    }
+
+    async fn retry_index_after_started(
+        &self,
+        request: &RagRetryIndexRequest,
+    ) -> Result<RagRetryIndexResult, RagError> {
+        let units = self.repository.retry_text_units(request)?;
         if units.is_empty() {
             return Err(RagError::RetryTextUnitsMissing);
         }
@@ -167,17 +179,25 @@ where
         for stage in &request.stages {
             match stage.as_str() {
                 "fulltextIndex" => {
-                    let updated = self.repository.rebuild_fulltext_index(&request)?;
+                    let updated = self.repository.rebuild_fulltext_index(request)?;
                     stage_results.push(RagRetryStageResult {
                         stage_id: stage.clone(),
                         status: "success".into(),
                         updated_count: updated,
                         warnings: Vec::new(),
                     });
-                    publish_stage_event(&self.event_bus, stage, updated, &request);
+                    publish_stage_event(
+                        &self.event_bus,
+                        "rag.retry.stage.completed",
+                        BusOutcome::Completed,
+                        stage,
+                        "completed",
+                        updated,
+                        request,
+                    );
                 }
                 "vectorIndex" => {
-                    let result = self.retry_vector(&request, &units).await?;
+                    let result = self.retry_vector(request, &units).await?;
                     warnings.extend(result.warnings.clone());
                     stage_results.push(result);
                 }
@@ -192,13 +212,14 @@ where
         publish_retry_event(
             &self.event_bus,
             "rag.retry.completed",
-            BusOutcome::Success,
-            &request,
+            BusOutcome::Completed,
+            request,
+            status,
         );
         Ok(RagRetryIndexResult {
-            corpus_id: request.corpus_id,
-            source_code: request.source_code,
-            source_version: request.source_version,
+            corpus_id: request.corpus_id.clone(),
+            source_code: request.source_code.clone(),
+            source_version: request.source_version.clone(),
             status: status.into(),
             stage_results,
             warnings,
@@ -248,6 +269,15 @@ where
                         "RAG_VECTOR_INDEX_WARNING",
                         "vector index degraded",
                     )?;
+                    publish_stage_event(
+                        &self.event_bus,
+                        "rag.retry.stage.warning",
+                        BusOutcome::Failure,
+                        "vectorIndex",
+                        "warning",
+                        updated,
+                        request,
+                    );
                     let warning = json!({
                         "code": "RAG_VECTOR_INDEX_WARNING",
                         "stageId": "vectorIndex",
@@ -262,7 +292,15 @@ where
                 }
             }
         }
-        publish_stage_event(&self.event_bus, "vectorIndex", updated, request);
+        publish_stage_event(
+            &self.event_bus,
+            "rag.retry.stage.completed",
+            BusOutcome::Completed,
+            "vectorIndex",
+            "completed",
+            updated,
+            request,
+        );
         Ok(RagRetryStageResult {
             stage_id: "vectorIndex".into(),
             status: "success".into(),
@@ -303,6 +341,7 @@ fn publish_retry_event(
     event_name: &'static str,
     outcome: BusOutcome,
     request: &RagRetryIndexRequest,
+    status: &str,
 ) {
     publish_rag_event(
         event_bus,
@@ -315,27 +354,52 @@ fn publish_retry_event(
             ("source_version", request.source_version.clone()),
             ("scope_type", request.scope_type.clone()),
             ("scope_code", request.scope_code.clone()),
+            ("status", status.to_string()),
+        ],
+    );
+}
+
+fn publish_retry_failed_event(
+    event_bus: &EventBusHandle,
+    request: &RagRetryIndexRequest,
+    error: &RagError,
+) {
+    publish_rag_event(
+        event_bus,
+        "rag.retry.failed",
+        BusOutcome::Failure,
+        &[
+            ("workspace_code", request.workspace_code.clone()),
+            ("corpus_id", request.corpus_id.clone()),
+            ("source_code", request.source_code.clone()),
+            ("source_version", request.source_version.clone()),
+            ("status", "failed".to_string()),
+            ("error_code", format!("{error:?}")),
         ],
     );
 }
 
 fn publish_stage_event(
     event_bus: &EventBusHandle,
+    event_name: &'static str,
+    outcome: BusOutcome,
     stage_id: &str,
+    status: &str,
     updated: usize,
     request: &RagRetryIndexRequest,
 ) {
     publish_rag_event(
         event_bus,
-        "rag.stage.completed",
-        BusOutcome::Success,
+        event_name,
+        outcome,
         &[
             ("workspace_code", request.workspace_code.clone()),
             ("corpus_id", request.corpus_id.clone()),
             ("source_code", request.source_code.clone()),
             ("source_version", request.source_version.clone()),
             ("stage_id", stage_id.to_string()),
-            ("count", updated.to_string()),
+            ("status", status.to_string()),
+            ("updated_count", updated.to_string()),
         ],
     );
 }

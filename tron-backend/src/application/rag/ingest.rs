@@ -209,7 +209,17 @@ where
             &request,
             "started",
         );
+        let result = self.ingest_after_started(&request).await;
+        if let Err(error) = &result {
+            publish_ingest_failed_event(&self.event_bus, &request, error);
+        }
+        result
+    }
 
+    async fn ingest_after_started(
+        &self,
+        request: &RagIngestRequest,
+    ) -> Result<RagIngestResult, RagError> {
         let corpus = self
             .repository
             .get_corpus(&request.corpus_id)?
@@ -223,36 +233,30 @@ where
             .ok_or(RagError::ProfileNotFound)?;
         let compiled = compile_ingest_profile(&profile, &corpus, &self.strategy_registry)?;
 
-        let mut bundle = ArtifactBundle::from_request(&request);
+        let mut bundle = ArtifactBundle::from_request(request);
         let (persisted, stage_results) = self
-            .execute_ingest_stages(&request, &compiled, &mut bundle)
+            .execute_ingest_stages(request, &compiled, &mut bundle)
             .await?;
+        if let Some(error) = persisted.fatal_error.clone() {
+            return Err(error);
+        }
         publish_ingest_event(
             &self.event_bus,
             "rag.ingest.completed",
-            if persisted.embedding_status == "FAILED" {
-                BusOutcome::Failure
-            } else {
-                BusOutcome::Completed
-            },
-            &request,
-            if persisted.fatal_error.is_some() {
-                "failed"
-            } else if !persisted.warnings.is_empty() {
+            BusOutcome::Completed,
+            request,
+            if !persisted.warnings.is_empty() {
                 "partial_warning"
             } else {
                 "success"
             },
         );
-        if let Some(error) = persisted.fatal_error.clone() {
-            return Err(error);
-        }
 
         Ok(RagIngestResult {
-            corpus_id: request.corpus_id,
+            corpus_id: request.corpus_id.clone(),
             profile_id: compiled.profile_id,
-            source_code: request.source.code,
-            source_version: request.source.version,
+            source_code: request.source.code.clone(),
+            source_version: request.source.version.clone(),
             status: persisted.source_status,
             text_unit_count: persisted.text_unit_count,
             fulltext_status: persisted.fulltext_status,
@@ -297,6 +301,27 @@ fn publish_ingest_event(
     );
 }
 
+fn publish_ingest_failed_event(
+    event_bus: &EventBusHandle,
+    request: &RagIngestRequest,
+    error: &RagError,
+) {
+    publish_rag_event(
+        event_bus,
+        "rag.ingest.failed",
+        BusOutcome::Failure,
+        &[
+            ("workspace_code", request.workspace_code.clone()),
+            ("corpus_id", request.corpus_id.clone()),
+            ("profile_id", request.ingest_profile_id.clone()),
+            ("source_code", request.source.code.clone()),
+            ("source_version", request.source.version.clone()),
+            ("status", "failed".to_string()),
+            ("error_code", format!("{error:?}")),
+        ],
+    );
+}
+
 fn publish_ingest_stage_event(
     event_bus: &EventBusHandle,
     stage_id: &str,
@@ -304,9 +329,20 @@ fn publish_ingest_stage_event(
     count: usize,
     request: &RagIngestRequest,
 ) {
+    if !matches!(
+        stage_id,
+        "fulltextIndex" | "vectorIndex" | "persistTree" | "persistSource"
+    ) {
+        return;
+    }
+    let (event_name, status) = if outcome == BusOutcome::Failure {
+        ("rag.ingest.stage.failed", "failed")
+    } else {
+        ("rag.ingest.stage.completed", "completed")
+    };
     publish_rag_event(
         event_bus,
-        "rag.stage.completed",
+        event_name,
         outcome,
         &[
             ("workspace_code", request.workspace_code.clone()),
@@ -314,6 +350,7 @@ fn publish_ingest_stage_event(
             ("source_code", request.source.code.clone()),
             ("source_version", request.source.version.clone()),
             ("stage_id", stage_id.to_string()),
+            ("status", status.to_string()),
             ("count", count.to_string()),
         ],
     );

@@ -18,7 +18,10 @@ use super::{
     RagEmbeddingCall, RagEmbeddingResult, RagIngestAccessContext, RagPipelineExecutor,
     RagSearchTraceWrite, RagStageExecutionResult, RagStageOutcome, RagStrategyRegistry,
     compile_retrieval_profile, merge_search_filters,
-    search_observability::{persist_trace_if_enabled, publish_route_events, publish_search_event},
+    search_observability::{
+        persist_trace_if_enabled, publish_route_events, publish_route_skipped_event,
+        publish_search_completed_event, publish_search_failed_event, publish_search_started_event,
+    },
     search_ranking::{
         apply_rerank, apply_topic_policy, assemble_context_pack, fuse_and_dedup, rank_route_rows,
         stable_hit_order,
@@ -326,4 +329,3 @@ pub struct RagSearchService<R, S, E> {
     runtime: E,
     event_bus: EventBusHandle,
 }
-
