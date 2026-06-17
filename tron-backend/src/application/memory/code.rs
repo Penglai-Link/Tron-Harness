@@ -11,7 +11,6 @@ use super::{
     payload::agent_metadata_from_source,
 };
 
-pub(super) const MAIN_WORK_DOMAIN_CODE: &str = "main-domain";
 pub(super) const MEMORY_SOURCE_VERSION: &str = "v1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,6 +148,7 @@ pub(super) struct CurrentMemory {
     pub(super) expires_at: Option<i64>,
     pub(super) derived_source_type: Option<String>,
     pub(super) derived_source_code: Option<String>,
+    pub(super) updated_at: Option<i64>,
     pub(super) metadata: Value,
 }
 
@@ -169,6 +169,7 @@ impl CurrentMemory {
             expires_at: None,
             derived_source_type: None,
             derived_source_code: None,
+            updated_at: None,
             metadata: json!({}),
         }
     }
@@ -197,6 +198,7 @@ impl CurrentMemory {
             expires_at: field_i64(&hit.fields, "expiresAt"),
             derived_source_type: field_string(&hit.fields, "derivedSourceType"),
             derived_source_code: field_string(&hit.fields, "derivedSourceCode"),
+            updated_at: field_i64(&hit.fields, "sourceUpdatedAt"),
             metadata: agent_metadata_from_source(&hit.metadata),
         })
     }
@@ -280,7 +282,7 @@ pub(super) fn validate_locator(
 pub(super) fn access_context(context: &MemoryRunContext) -> RagIngestAccessContext {
     RagIngestAccessContext {
         user_code: context.user_code.clone(),
-        agent_code: MAIN_WORK_DOMAIN_CODE.into(),
+        agent_code: context.work_domain_code.clone(),
         workspace_code: context.workspace_code.clone(),
     }
 }
@@ -336,7 +338,7 @@ pub(super) fn resolve_scope_code(
     }
     Ok(match scope {
         MemoryScope::User => context.user_code.clone(),
-        MemoryScope::WorkDomain => MAIN_WORK_DOMAIN_CODE.into(),
+        MemoryScope::WorkDomain => context.work_domain_code.clone(),
         MemoryScope::Space => context.workspace_code.clone(),
     })
 }
@@ -348,7 +350,7 @@ pub(super) fn validate_scope_code(
 ) -> Result<(), MemoryError> {
     let expected = match scope {
         MemoryScope::User => context.user_code.as_str(),
-        MemoryScope::WorkDomain => MAIN_WORK_DOMAIN_CODE,
+        MemoryScope::WorkDomain => context.work_domain_code.as_str(),
         MemoryScope::Space => context.workspace_code.as_str(),
     };
     if scope_code == expected {
@@ -365,7 +367,7 @@ pub(super) fn validate_known_scope_code(
     context: &MemoryRunContext,
 ) -> Result<(), MemoryError> {
     if scope_code == context.user_code
-        || scope_code == MAIN_WORK_DOMAIN_CODE
+        || scope_code == context.work_domain_code
         || scope_code == context.workspace_code
     {
         Ok(())

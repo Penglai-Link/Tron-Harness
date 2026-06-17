@@ -69,6 +69,7 @@ struct MemorySearchInput {
     memory_type: Option<serde_json::Value>,
     memory_status: Option<serde_json::Value>,
     review_status: Option<serde_json::Value>,
+    injectable: Option<serde_json::Value>,
     limit: Option<usize>,
     token_budget: Option<usize>,
     trace: Option<bool>,
@@ -145,6 +146,7 @@ where
                         memory_type: input.memory_type,
                         memory_status: input.memory_status,
                         review_status: input.review_status,
+                        injectable: input.injectable,
                         limit: input.limit,
                         token_budget: input.token_budget,
                         trace: input.trace,
@@ -272,10 +274,7 @@ fn memory_run_context(context: &AgentRunContext) -> Result<MemoryRunContext, Too
             "workspaceCode is required for memory tools".into(),
         ));
     }
-    Ok(MemoryRunContext {
-        user_code: user_code.to_string(),
-        workspace_code: workspace_code.to_string(),
-    })
+    Ok(MemoryRunContext::new(user_code, workspace_code))
 }
 
 fn parse_tool_input<T: for<'de> Deserialize<'de>>(

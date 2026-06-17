@@ -1,5 +1,6 @@
 import {
   Bot,
+  Boxes,
   KeyRound,
   Network,
   Package,
@@ -59,6 +60,12 @@ export const settingsNavigation = [
     label: "Registry",
     translationKey: "shell:settings.groups.registry",
     items: [
+      {
+        label: "Memory Domains",
+        href: "/settings/memory-domains",
+        icon: Boxes,
+        translationKey: "shell:settings.items.memoryDomains",
+      },
       {
         label: "Skill Center",
         href: "/settings/skills",

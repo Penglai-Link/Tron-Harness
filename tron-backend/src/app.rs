@@ -18,9 +18,10 @@ use crate::{
                 GrafeoStoreCore, GraphBackedRagRepository, SqliteAgentEventReplayStore,
                 SqliteAgentManagementRepository, SqliteAgentRunRepository, SqliteAppRepository,
                 SqliteAutomationRepository, SqliteChatRepository, SqliteMcpRepository,
-                SqliteModelRepository, SqliteOpenAppRepository, SqliteRoleRepository,
-                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteUserRepository,
-                SqliteVariableRepository, SqliteWorkspaceRepository, bootstrap_platform_admin,
+                SqliteMemoryWorkDomainRepository, SqliteModelRepository, SqliteOpenAppRepository,
+                SqliteRoleRepository, SqliteSkillRegistryRepository, SqliteTaskRepository,
+                SqliteUserRepository, SqliteVariableRepository, SqliteWorkspaceRepository,
+                bootstrap_platform_admin,
             },
         },
     },
@@ -34,7 +35,7 @@ use crate::{
     application::graph::{GraphService, OntologyService},
     application::llm::LlmRuntimeService,
     application::mcp::McpService,
-    application::memory::MemoryService,
+    application::memory::{MemoryService, MemoryWorkDomainService},
     application::model::ModelService,
     application::open_app::OpenAppService,
     application::rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
@@ -71,11 +72,18 @@ static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
 static GLOBAL_MODEL_SERVICE: OnceLock<ModelService> = OnceLock::new();
 static GLOBAL_CHAT_SERVICE: OnceLock<ChatService> = OnceLock::new();
 static GLOBAL_OPEN_APP_SERVICE: OnceLock<OpenAppService> = OnceLock::new();
+static GLOBAL_MEMORY_WORK_DOMAIN_SERVICE: OnceLock<MemoryWorkDomainService> = OnceLock::new();
 static GLOBAL_GRAPH_CORE: OnceLock<GrafeoStoreCore> = OnceLock::new();
 static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService)> = OnceLock::new();
 
 pub type AppRagService =
     RagService<Arc<Mutex<GraphBackedRagRepository>>, DefaultRagStrategyRegistry, DefaultRagRuntime>;
+
+pub type AppMemoryService = MemoryService<
+    Arc<Mutex<GraphBackedRagRepository>>,
+    DefaultRagStrategyRegistry,
+    DefaultRagRuntime,
+>;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -104,6 +112,8 @@ pub struct AppState {
     pub open_apps: OpenAppService,
     pub llm_runtime: LlmRuntimeService,
     pub mcp: McpService,
+    pub memory: AppMemoryService,
+    pub memory_work_domains: MemoryWorkDomainService,
     pub rag: AppRagService,
 }
 
@@ -271,6 +281,14 @@ impl AppState {
             &config.project_doc_root,
             event_bus.clone(),
         )?;
+        let memory = MemoryService::new(rag.clone());
+        let memory_work_domains = if config.database_url == ":memory:" {
+            GLOBAL_MEMORY_WORK_DOMAIN_SERVICE
+                .get_or_init(|| build_memory_work_domain_service(":memory:"))
+                .clone()
+        } else {
+            build_memory_work_domain_service(&config.database_url)
+        };
         let agent_tool_registry = Arc::new(ToolRegistry::default());
         register_default_agent_tools(
             agent_tool_registry.as_ref(),
@@ -280,7 +298,7 @@ impl AppState {
             models.clone(),
             skills.clone(),
             variables.clone(),
-            MemoryService::new(rag.clone()),
+            memory.clone(),
         )
         .expect("default agent tools should register");
         let (graphs, ontologies) = if config.graph_storage_path == ":memory:" {
@@ -328,6 +346,8 @@ impl AppState {
             open_apps,
             llm_runtime,
             mcp,
+            memory,
+            memory_work_domains,
             rag,
             skills,
             roles,
@@ -437,6 +457,18 @@ impl FromRef<AppState> for AppRagService {
     }
 }
 
+impl FromRef<AppState> for AppMemoryService {
+    fn from_ref(state: &AppState) -> Self {
+        state.memory.clone()
+    }
+}
+
+impl FromRef<AppState> for MemoryWorkDomainService {
+    fn from_ref(state: &AppState) -> Self {
+        state.memory_work_domains.clone()
+    }
+}
+
 impl FromRef<AppState> for AgentRunHistoryService {
     fn from_ref(state: &AppState) -> Self {
         state.agent_runs.clone()
@@ -541,6 +573,12 @@ fn build_variable_service(
     let cipher = Sm4GcmVariableCipher::from_config(config.variable_crypto.clone())
         .expect("variable crypto should initialize");
     VariableService::new(repository, workspaces, cipher)
+}
+
+fn build_memory_work_domain_service(database_url: &str) -> MemoryWorkDomainService {
+    let repository = SqliteMemoryWorkDomainRepository::connect(database_url)
+        .expect("memory work domain SQLite repository should initialize");
+    MemoryWorkDomainService::new(repository)
 }
 
 fn build_mcp_service(

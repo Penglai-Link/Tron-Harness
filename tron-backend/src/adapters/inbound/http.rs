@@ -6,6 +6,7 @@ pub mod automations;
 pub mod chats;
 pub mod frontend;
 pub mod mcp;
+pub mod memory;
 pub mod models;
 pub mod rag;
 pub mod skills;

@@ -67,6 +67,7 @@ export const shell = {
       agents: "智能体",
       general: "通用",
       mcpServers: "MCP 服务",
+      memoryDomains: "记忆领域",
       models: "模型",
       openapi: "OpenAPI",
       tools: "工具",

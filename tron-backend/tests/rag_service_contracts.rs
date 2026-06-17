@@ -185,6 +185,11 @@ fn ingest_profiles_declare_contract_payload_strategies_for_memory_and_project_do
         memory.config["sourceInputPolicy"]["supportedSourceTypes"],
         json!(["MEMORY_CARD"])
     );
+    assert_eq!(
+        memory.degrade_policy,
+        "SKIP_VECTOR_WITH_WARNING",
+        "memory-card ingest should keep fulltext persistence available when vector embedding is unavailable",
+    );
 
     let project_doc = service
         .get_profile("project-doc-ingest-v1")
