@@ -20,7 +20,19 @@ where
 
     pub async fn search(&self, request: RagSearchRequest) -> Result<RagSearchResult, RagError> {
         validate_request(&request)?;
-        publish_search_event(&self.event_bus, "rag.search.started", &request);
+        publish_search_started_event(&self.event_bus, &request);
+        let result = self.search_after_started(&request).await;
+        match &result {
+            Ok(result) => publish_search_completed_event(&self.event_bus, &request, result),
+            Err(error) => publish_search_failed_event(&self.event_bus, &request, error),
+        }
+        result
+    }
+
+    async fn search_after_started(
+        &self,
+        request: &RagSearchRequest,
+    ) -> Result<RagSearchResult, RagError> {
         let profile = self
             .repository
             .get_profile(&request.profile_id)?
@@ -67,17 +79,16 @@ where
             .get_optional_cloned::<Option<ContextPack>>("context.pack")?
             .flatten();
         let mut warnings = pipeline_context.warnings;
-        publish_route_events(&self.event_bus, &ranked_hits, &request);
+        publish_route_events(&self.event_bus, &ranked_hits, request);
         let trace_code = persist_trace_if_enabled(
             &self.repository,
-            &request,
+            request,
             &compiled,
             &ranked_hits,
             context_pack.as_ref(),
             &stage_results,
             &mut warnings,
         )?;
-        publish_search_event(&self.event_bus, "rag.search.completed", &request);
         let hits = ranked_hits
             .into_iter()
             .map(|candidate| candidate.result)
@@ -85,8 +96,8 @@ where
 
         Ok(RagSearchResult {
             profile_id: compiled.profile_id,
-            query: request.query,
-            context_strategy: request.context.strategy,
+            query: request.query.clone(),
+            context_strategy: request.context.strategy.clone(),
             hits,
             context_pack,
             warnings,
@@ -175,6 +186,13 @@ where
                     }
                 }
                 if outcome.status == "SKIPPED" {
+                    if node.stage_type == "ROUTE_SEARCH" {
+                        publish_route_skipped_event(
+                            &self.event_bus,
+                            context.request,
+                            &node.node_id,
+                        );
+                    }
                     continue;
                 }
                 let duration_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);

@@ -19,7 +19,9 @@ use tron_backend::{
         RagSearchTraceRequest,
     },
     shared::{
-        event_bus::{BusRouteClass, EventBusConfig, EventBusRuntimeBuilder, RecordingEventSink},
+        event_bus::{
+            BusEvent, BusRouteClass, EventBusConfig, EventBusRuntimeBuilder, RecordingEventSink,
+        },
         id::FixedSnowflakeIdProvider,
         sqlite_extensions::default_sqlite_extension_context,
     },
@@ -327,19 +329,63 @@ async fn rag_ingest_events_use_safe_payload_and_publish_failure_is_non_blocking(
 
     service.ingest(ingest_request()).await.unwrap();
 
-    assert!(sink.wait_for_len(8, Duration::from_secs(2)));
-    let events = sink.events();
-    let names = events
-        .iter()
-        .map(|event| event.event_name.as_str())
-        .collect::<Vec<_>>();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    let events = loop {
+        let events = sink.events();
+        if events
+            .iter()
+            .any(|event| event.event_name == "rag.ingest.completed")
+            || Instant::now() >= deadline
+        {
+            break events;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    let names = event_names(&events);
+    assert_all_audit(&events);
     assert!(names.contains(&"rag.ingest.started"));
-    assert!(names.contains(&"rag.stage.completed"));
+    assert!(!names.contains(&"rag.stage.completed"));
+    assert!(names.contains(&"rag.ingest.stage.completed"));
     assert!(names.contains(&"rag.ingest.completed"));
+    let stage_ids = events
+        .iter()
+        .filter(|event| event.event_name == "rag.ingest.stage.completed")
+        .filter_map(|event| attr(event, "stage_id"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        stage_ids,
+        vec!["fulltextIndex", "vectorIndex", "persistSource"]
+    );
     let serialized = format!("{events:?}");
     assert!(!serialized.contains("Always cite sources"));
     assert!(!serialized.contains("embedding"));
     assert!(!serialized.contains("sk-test"));
+
+    let failing_sink = Arc::new(RecordingEventSink::with_route_class(
+        "rag-ingest-failed-events",
+        BusRouteClass::Audit,
+    ));
+    let failing_event_bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(7_700)),
+    )
+    .register_sink(failing_sink.clone())
+    .build();
+    let failing_service = RagIngestService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25)),
+    )
+    .with_event_bus(failing_event_bus);
+    let mut failing_request = ingest_request();
+    failing_request.corpus_id = "missing-corpus".into();
+
+    assert!(failing_service.ingest(failing_request).await.is_err());
+    assert!(failing_sink.wait_for_len(2, Duration::from_secs(2)));
+    let failing_events = failing_sink.events();
+    let failing_names = event_names(&failing_events);
+    assert!(failing_names.contains(&"rag.ingest.started"));
+    assert!(failing_names.contains(&"rag.ingest.failed"));
 }
 
 #[tokio::test]
@@ -379,17 +425,139 @@ async fn rag_search_events_use_safe_payload_and_publish_failure_is_non_blocking(
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     };
-    let names = events
-        .iter()
-        .map(|event| event.event_name.as_str())
-        .collect::<Vec<_>>();
+    let names = event_names(&events);
+    assert_all_audit(&events);
     assert!(names.contains(&"rag.search.started"));
-    assert!(names.contains(&"rag.route.completed"));
+    assert!(!names.contains(&"rag.route.completed"));
+    assert!(names.contains(&"rag.search.route.completed"));
     assert!(names.contains(&"rag.search.completed"));
+    let completed = events
+        .iter()
+        .find(|event| event.event_name == "rag.search.completed")
+        .expect("search completed event should be published");
+    assert_eq!(attr(completed, "result_count").as_deref(), Some("1"));
+    assert_eq!(
+        attr(completed, "context_budget_units").as_deref(),
+        Some("100")
+    );
     let serialized = format!("{events:?}");
     assert!(!serialized.contains("Always cite sources"));
+    assert!(!serialized.contains("cite sources"));
     assert!(!serialized.contains("embedding"));
     assert!(!serialized.contains("sk-test"));
+
+    let failing_sink = Arc::new(RecordingEventSink::with_route_class(
+        "rag-search-failed-events",
+        BusRouteClass::Audit,
+    ));
+    let failing_event_bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(7_100)),
+    )
+    .register_sink(failing_sink.clone())
+    .build();
+    let failing_service = RagSearchService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::fixed(embedding_4096(1.0, 0.0)),
+    )
+    .with_event_bus(failing_event_bus);
+    let mut failing_request = search_request(false);
+    failing_request.profile_id = "missing-profile".into();
+
+    assert!(failing_service.search(failing_request).await.is_err());
+    assert!(failing_sink.wait_for_len(2, Duration::from_secs(2)));
+    let failing_events = failing_sink.events();
+    let failing_names = event_names(&failing_events);
+    assert!(failing_names.contains(&"rag.search.started"));
+    assert!(failing_names.contains(&"rag.search.failed"));
+}
+
+#[tokio::test]
+async fn rag_retry_events_are_audit_only_and_include_terminal_failures() {
+    let database_url = temp_database_path("rag-retry-events")
+        .to_string_lossy()
+        .to_string();
+    seed_retry_fixture(&database_url);
+    let sink = Arc::new(RecordingEventSink::with_route_class(
+        "rag-retry-events",
+        BusRouteClass::Audit,
+    ));
+    let event_bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(7_900)),
+    )
+    .register_sink(sink.clone())
+    .build();
+    let service = RagRetryIndexService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25)),
+    )
+    .with_event_bus(event_bus);
+
+    service
+        .retry_index(RagRetryIndexRequest {
+            workspace_code: "TRON_CORE".into(),
+            corpus_id: "project-doc".into(),
+            source_code: "doc-retry".into(),
+            source_version: "v1".into(),
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+            stages: vec!["fulltextIndex".into(), "vectorIndex".into()],
+            embedding_model_code: Some("fake-embedding".into()),
+            user_code: "USR-AUTH-0001".into(),
+            agent_code: "AGENT_CODEX".into(),
+        })
+        .await
+        .unwrap();
+
+    assert!(sink.wait_for_len(4, Duration::from_secs(2)));
+    let events = sink.events();
+    let names = event_names(&events);
+    assert_all_audit(&events);
+    assert!(names.contains(&"rag.retry.started"));
+    assert!(names.contains(&"rag.retry.stage.completed"));
+    assert!(names.contains(&"rag.retry.completed"));
+    let serialized = format!("{events:?}");
+    assert!(!serialized.contains("Retry can rebuild persisted text only."));
+
+    let failing_sink = Arc::new(RecordingEventSink::with_route_class(
+        "rag-retry-failed-events",
+        BusRouteClass::Audit,
+    ));
+    let failing_event_bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(8_100)),
+    )
+    .register_sink(failing_sink.clone())
+    .build();
+    let failing_service = RagRetryIndexService::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25)),
+    )
+    .with_event_bus(failing_event_bus);
+    assert!(
+        failing_service
+            .retry_index(RagRetryIndexRequest {
+                workspace_code: "TRON_CORE".into(),
+                corpus_id: "project-doc".into(),
+                source_code: "missing-source".into(),
+                source_version: "v1".into(),
+                scope_type: "SPACE".into(),
+                scope_code: "TRON_CORE".into(),
+                stages: vec!["fulltextIndex".into()],
+                embedding_model_code: Some("fake-embedding".into()),
+                user_code: "USR-AUTH-0001".into(),
+                agent_code: "AGENT_CODEX".into(),
+            })
+            .await
+            .is_err()
+    );
+    assert!(failing_sink.wait_for_len(2, Duration::from_secs(2)));
+    let failing_events = failing_sink.events();
+    let failing_names = event_names(&failing_events);
+    assert!(failing_names.contains(&"rag.retry.started"));
+    assert!(failing_names.contains(&"rag.retry.failed"));
 }
 
 fn search_request(trace_enabled: bool) -> RagSearchRequest {
@@ -452,6 +620,30 @@ fn ingest_request() -> RagIngestRequest {
             }
         }),
     }
+}
+
+fn event_names(events: &[BusEvent]) -> Vec<&str> {
+    events
+        .iter()
+        .map(|event| event.event_name.as_str())
+        .collect()
+}
+
+fn assert_all_audit(events: &[BusEvent]) {
+    assert!(
+        events
+            .iter()
+            .all(|event| event.route_class == BusRouteClass::Audit),
+        "all RAG events should use Audit route class: {events:?}"
+    );
+}
+
+fn attr(event: &BusEvent, key: &str) -> Option<String> {
+    event
+        .attrs
+        .iter()
+        .find(|attr| attr.key == key)
+        .map(|attr| attr.value.clone())
 }
 
 #[derive(Clone)]

@@ -54,7 +54,7 @@ where
             for node in level {
                 RagPipelineExecutor::ensure_inputs::<RagError>(node, &store)?;
                 let started = std::time::Instant::now();
-                let outcome = self
+                let outcome = match self
                     .execute_ingest_pipeline_node(
                         request,
                         compiled,
@@ -63,7 +63,20 @@ where
                         node,
                         &mut store,
                     )
-                    .await?;
+                    .await
+                {
+                    Ok(outcome) => outcome,
+                    Err(error) => {
+                        publish_ingest_stage_event(
+                            &self.event_bus,
+                            &node.execution_stage_id,
+                            BusOutcome::Failure,
+                            0,
+                            request,
+                        );
+                        return Err(error);
+                    }
+                };
                 for key in &node.output_artifact_keys {
                     if !store.contains(key) {
                         store.put_json(key.clone(), json!({"nodeId": node.node_id}));
@@ -509,4 +522,3 @@ enum IngestStageKind {
     PersistTree,
     PersistSource,
 }
-

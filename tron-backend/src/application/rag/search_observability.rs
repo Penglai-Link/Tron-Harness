@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    CompiledRetrievalProfile, ContextPack, RagSearchRepository, RagSearchRequest,
+    CompiledRetrievalProfile, ContextPack, RagSearchRepository, RagSearchRequest, RagSearchResult,
     RagSearchTraceWrite, RagStageExecutionResult, publish_rag_event, safe_trace_payload,
     search::RankedCandidate,
 };
@@ -77,19 +77,65 @@ pub(super) fn persist_trace_if_enabled<R: RagSearchRepository>(
     }
 }
 
-pub(super) fn publish_search_event(
-    event_bus: &EventBusHandle,
-    event_name: &'static str,
-    request: &RagSearchRequest,
-) {
+pub(super) fn publish_search_started_event(event_bus: &EventBusHandle, request: &RagSearchRequest) {
     publish_rag_event(
         event_bus,
-        event_name,
-        BusOutcome::Success,
+        "rag.search.started",
+        BusOutcome::Started,
         &[
             ("workspace_code", request.workspace_code.clone()),
             ("profile_id", request.profile_id.clone()),
-            ("status", "success".to_string()),
+            ("status", "started".to_string()),
+        ],
+    );
+}
+
+pub(super) fn publish_search_completed_event(
+    event_bus: &EventBusHandle,
+    request: &RagSearchRequest,
+    result: &RagSearchResult,
+) {
+    let mut fields = vec![
+        ("workspace_code", request.workspace_code.clone()),
+        ("profile_id", request.profile_id.clone()),
+        ("status", result.status_for_event()),
+        ("result_count", result.hits.len().to_string()),
+        ("warning_count", result.warnings.len().to_string()),
+        ("context_budget_units", request.token_budget.to_string()),
+        (
+            "context_used_units",
+            result
+                .context_pack
+                .as_ref()
+                .map_or(0, |pack| pack.token_count)
+                .to_string(),
+        ),
+    ];
+    if let Some(trace_code) = &result.trace_code {
+        fields.push(("trace_code", trace_code.clone()));
+    }
+    publish_rag_event(
+        event_bus,
+        "rag.search.completed",
+        BusOutcome::Completed,
+        &fields,
+    );
+}
+
+pub(super) fn publish_search_failed_event(
+    event_bus: &EventBusHandle,
+    request: &RagSearchRequest,
+    error: &RagError,
+) {
+    publish_rag_event(
+        event_bus,
+        "rag.search.failed",
+        BusOutcome::Failure,
+        &[
+            ("workspace_code", request.workspace_code.clone()),
+            ("profile_id", request.profile_id.clone()),
+            ("status", "failed".to_string()),
+            ("error_code", format!("{error:?}")),
         ],
     );
 }
@@ -102,15 +148,49 @@ pub(super) fn publish_route_events(
     for (route_id, count) in route_counts(hits) {
         publish_rag_event(
             event_bus,
-            "rag.route.completed",
-            BusOutcome::Success,
+            "rag.search.route.completed",
+            BusOutcome::Completed,
             &[
                 ("workspace_code", request.workspace_code.clone()),
                 ("profile_id", request.profile_id.clone()),
                 ("route_id", route_id),
+                ("status", "completed".to_string()),
+                ("result_count", count.to_string()),
                 ("count", count.to_string()),
             ],
         );
+    }
+}
+
+pub(super) fn publish_route_skipped_event(
+    event_bus: &EventBusHandle,
+    request: &RagSearchRequest,
+    route_id: &str,
+) {
+    publish_rag_event(
+        event_bus,
+        "rag.search.route.skipped",
+        BusOutcome::Completed,
+        &[
+            ("workspace_code", request.workspace_code.clone()),
+            ("profile_id", request.profile_id.clone()),
+            ("route_id", route_id.to_string()),
+            ("status", "skipped".to_string()),
+        ],
+    );
+}
+
+trait SearchEventStatus {
+    fn status_for_event(&self) -> String;
+}
+
+impl SearchEventStatus for RagSearchResult {
+    fn status_for_event(&self) -> String {
+        if self.warnings.is_empty() {
+            "success".to_string()
+        } else {
+            "partial_warning".to_string()
+        }
     }
 }
 
