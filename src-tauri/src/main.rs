@@ -259,6 +259,80 @@ async fn wait_backend_ready(url: &str) -> bool {
     false
 }
 
+async fn is_backend_ready_once(url: &str) -> bool {
+    let client = Client::new();
+    match client.get(format!("{url}{BACKEND_HEALTH_PATH}")).send().await {
+        Ok(response) if response.status().is_success() => true,
+        Ok(_) | Err(_) => false,
+    }
+}
+
+fn probe_existing_backend_port(start_port: u16) -> Option<u16> {
+    for offset in 0..MAX_PORT_PROBE {
+        let candidate = start_port.saturating_add(offset);
+        if candidate == 0 {
+            continue;
+        }
+
+        let url = format!("http://{}:{candidate}", HOST);
+        if tauri::async_runtime::block_on(is_backend_ready_once(&url)) {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+fn resolve_backend_port(base_port: u16) -> Result<u16, String> {
+    if let Some(existing_port) = probe_existing_backend_port(base_port) {
+        let killed = kill_running_backend_processes()?;
+        if killed {
+            if !wait_until_backend_stopped(existing_port) {
+                return Err("existing backend did not exit after termination".into());
+            }
+        }
+
+        return Ok(existing_port);
+    }
+
+    find_free_port(base_port).map_err(|error| error.to_string())
+}
+
+fn kill_running_backend_processes() -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    let status = Command::new("taskkill")
+        .args(["/F", "/T", "/IM", "tron-backend.exe"])
+        .status()
+        .map_err(|error| format!("failed to execute taskkill: {error}"))?;
+
+    #[cfg(not(target_os = "windows"))]
+    let status = Command::new("pkill")
+        .arg("-x")
+        .arg("tron-backend")
+        .status()
+        .map_err(|error| format!("failed to execute pkill: {error}"))?;
+
+    match status.code() {
+        Some(0) => Ok(true),
+        Some(1) => Ok(false),
+        Some(code) => Err(format!("terminator exited with code {code}")),
+        None => Err("terminator exited without status".to_string()),
+    }
+}
+
+fn wait_until_backend_stopped(port: u16) -> bool {
+    for _ in 0..30 {
+        let url = format!("http://{}:{port}", HOST);
+        let ready = tauri::async_runtime::block_on(is_backend_ready_once(&url));
+        if !ready {
+            return true;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+
+    false
+}
+
 fn build_injection_script(backend_host: &str, page_id: &str, injection_enabled: bool) -> String {
     let injection_flag = if injection_enabled { "true" } else { "false" };
     INJECTION_TEMPLATE
@@ -398,7 +472,7 @@ async fn desktop_injection_event(_state: State<'_, DesktopRuntimeState>, request
     Ok(())
 }
 
-fn build_runtime_state(app_handle: &AppHandle) -> Result<DesktopRuntimeState, String> {
+fn build_runtime_state(app_handle: &AppHandle, backend_port: u16) -> Result<DesktopRuntimeState, String> {
     let app_data_dir = resolve_desktop_data_dir()?;
     std::fs::create_dir_all(&app_data_dir)
         .map_err(|error| format!("app data dir creation failed: {error}"))?;
@@ -407,9 +481,7 @@ fn build_runtime_state(app_handle: &AppHandle) -> Result<DesktopRuntimeState, St
 
     let frontend_dist_dir = build_frontend_dist_dir(app_handle)?;
 
-    let backend_port = find_free_port(load_port()).map_err(|error| error.to_string())?;
     let backend_url = format!("http://{}:{backend_port}", HOST);
-
     Ok(DesktopRuntimeState {
         database_path,
         graph_path,
@@ -523,7 +595,8 @@ fn main() {
     tauri::Builder::default()
         .setup(|app| {
             let app_handle = app.handle().clone();
-            let state = build_runtime_state(&app_handle)?;
+            let backend_port = resolve_backend_port(load_port())?;
+            let state = build_runtime_state(&app_handle, backend_port)?;
             app.manage(state.clone());
 
             let child = start_sidecar_backend(&state, &app_handle)?;
