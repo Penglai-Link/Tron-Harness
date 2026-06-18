@@ -1,3 +1,3 @@
-include!("handler/split_01.rs");
-include!("handler/split_02.rs");
-include!("handler/split_03.rs");
+include!("handler/endpoints.rs");
+include!("handler/request_mapping.rs");
+include!("handler/target_catalog.rs");
