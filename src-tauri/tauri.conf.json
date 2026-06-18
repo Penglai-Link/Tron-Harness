@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Tron",
+  "version": "0.1.0",
+  "identifier": "com.tron.desktop",
+  "build": {
+    "beforeBuildCommand": "",
+    "beforeDevCommand": "",
+    "frontendDist": "resources/frontend",
+    "devUrl": ""
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "tron-main",
+        "title": "Tron",
+        "width": 1440,
+        "height": 920,
+        "url": "about:blank",
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "externalBin": ["tron-backend", "tron-backend.exe"],
+    "resources": ["frontend", "binaries"],
+    "targets": ["deb", "app", "dmg", "msi", "rpm"],
+    "icon": []
+  }
+}

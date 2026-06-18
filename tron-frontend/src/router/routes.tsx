@@ -71,6 +71,7 @@ export const appRoutes: AppRoute[] = [
   { pageId: "resources.index", route: "/resources", activeNav: "Resources", title: "Resources", archetype: "data-table", shellConfig: { searchPlaceholder: "Search resources..." } },
   { pageId: "admin.roles", route: "/admin/roles", activeNav: "Roles", title: "Role Matrix", archetype: "permission-grid", shellConfig: { searchPlaceholder: "Search users or roles..." } },
   { pageId: "admin.workspace", route: "/admin/workspace", activeNav: "Workspace", title: "Workspace Management", archetype: "split-pane", shellConfig: { searchPlaceholder: "Search workspaces..." } },
+  { pageId: "desktop.target", route: "/desktop/target", activeNav: "Desktop", title: "Desktop Target", archetype: "split-pane", shellConfig: { searchPlaceholder: "Open desktop target page" } },
   { pageId: "admin.userDetails", route: "/admin/users/detail", activeNav: "Users", title: "User Detail", archetype: "detail", shellConfig: { searchPlaceholder: "Search users..." } },
   { pageId: "admin.usersNew", route: "/admin/users/new", activeNav: "Users", title: "Create User", archetype: "form", shellConfig: { searchPlaceholder: "Search users..." } },
   { pageId: "skills.index", route: "/skills", activeNav: "Skills", title: "Workspace Skills", archetype: "split-pane", shellConfig: { searchPlaceholder: "Search installed skills..." } },

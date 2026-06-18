@@ -45,6 +45,10 @@ help:
 	@echo "  make app-run      Build integrated app in integrated API mode and run backend server"
 	@echo "                    Example: make app-run PORT=8081"
 	@echo "  make app-clean    Remove standalone and integrated frontend build artifacts"
+	@echo "Desktop commands:"
+	@echo "  make desktop-build     Build desktop package artifacts and sidecar binary"
+	@echo "  make desktop-dev       Build desktop dependencies and run Tauri dev mode"
+	@echo "  make desktop-clean     Remove desktop build artifacts"
 	@echo ""
 	@echo "Skill commands:"
 	@echo "  make skill-memory-dreaming-test"
@@ -153,6 +157,28 @@ app-run: app-build
 app-clean: fe-clean
 	rm -rf $(BACKEND_FRONTEND_DIR)
 	mkdir -p $(BACKEND_FRONTEND_DIR)
+
+.PHONY: desktop-build
+desktop-build: app-build
+	rm -rf $(TAURI_DIR)/resources/frontend
+	mkdir -p $(TAURI_DIR)/resources
+	cp -R $(BACKEND_FRONTEND_DIR) $(TAURI_DIR)/resources/frontend
+	mkdir -p $(TAURI_DIR)/binaries
+	cargo build --manifest-path $(BACKEND_MANIFEST) --release
+	cp tron-backend/target/release/tron-backend $(TAURI_DIR)/binaries/tron-backend || true
+	cp tron-backend/target/release/tron-backend.exe $(TAURI_DIR)/binaries/tron-backend.exe || true
+	@if [ -f $(TAURI_DIR)/package.json ]; then $(TAURI_NPM) install --no-audit --no-fund; fi
+	@if [ -f $(TAURI_DIR)/tauri.conf.json ]; then cd $(TAURI_DIR) && $(TAURI_NPM) run -s tauri build; fi
+
+.PHONY: desktop-dev
+desktop-dev: desktop-build
+	cd $(TAURI_DIR) && $(TAURI_NPM) run -s tauri dev
+
+.PHONY: desktop-clean
+desktop-clean:
+	rm -rf $(TAURI_DIR)/target
+	rm -rf $(TAURI_DIR)/resources/frontend
+	rm -rf $(TAURI_DIR)/binaries
 
 .PHONY: skill-memory-dreaming-test
 skill-memory-dreaming-test:
