@@ -31,6 +31,7 @@ const DEFAULT_TIMESTAMP: &str = "2026-05-19T00:00:00Z";
 mod lock_file;
 mod parser;
 mod rag_index;
+mod rag_index_payload;
 mod registry_files;
 mod registry_paths;
 mod registry_sync;

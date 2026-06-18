@@ -156,6 +156,21 @@ pub async fn refresh_workspace_skills(
     }
 }
 
+pub async fn retry_workspace_skill_rag_index(
+    State(skills): State<SkillRegistryService>,
+    State(rag): State<AppRagService>,
+    Path((workspace_code, skill_name)): Path<(String, String)>,
+) -> Response {
+    let indexer = SkillRagIndexService::new(skills, rag);
+    match indexer
+        .index_workspace_skill(&workspace_code, &skill_name)
+        .await
+    {
+        Ok(summary) => Json(ApiResponse::success(summary)).into_response(),
+        Err(error) => skill_error_response(error),
+    }
+}
+
 pub async fn update_registry_skills(
     State(skills): State<SkillRegistryService>,
     State(rag): State<AppRagService>,
@@ -212,11 +227,11 @@ async fn index_workspace_skill_summary(
     workspace_code: &str,
     skill_name: &str,
 ) -> Option<crate::domain::skill::SkillRagIndexSummary> {
-    match indexer.index_workspace(workspace_code).await {
-        Ok(_) => indexer
-            .state_summary(workspace_code, skill_name)
-            .ok()
-            .flatten(),
+    match indexer
+        .index_workspace_skill(workspace_code, skill_name)
+        .await
+    {
+        Ok(summary) => Some(summary),
         Err(error) => Some(crate::domain::skill::SkillRagIndexSummary {
             desired_enabled: true,
             source_version: "v1".into(),
@@ -225,6 +240,7 @@ async fn index_workspace_skill_summary(
             content_hash: None,
             structure_hash: None,
             last_indexed_at: None,
+            updated_at: crate::shared::time::current_timestamp(),
             last_error: Some(error.to_string()),
             warnings: vec![error.to_string()],
         }),

@@ -10,10 +10,13 @@ import { useNavigate } from "react-router";
 import { createPortal } from "react-dom";
 import {
   CircleAlert,
+  Database,
   Link2,
+  LoaderCircle,
   Maximize2,
   Package,
   RefreshCcw,
+  RotateCcw,
   Unlink2,
   X,
 } from "lucide-react";
@@ -43,9 +46,12 @@ import {
   fetchWorkspaceSkill,
   fetchWorkspaceSkills,
   refreshWorkspaceSkills,
+  retryWorkspaceSkillRagIndex,
   unbindWorkspaceSkill,
 } from "@/domain/skill/api";
 import type {
+  SkillRagIndexStatus,
+  SkillRagIndexSummary,
   SkillRegistryState,
   SkillSourceType,
   SkillUpdateStatus,
@@ -108,6 +114,247 @@ function getUpdateTone(updateStatus: SkillUpdateStatus) {
   }
 }
 
+type RagOperationState = {
+  label: string;
+  skillName?: string;
+};
+
+function getRagOverallStatus(
+  ragIndex: SkillRagIndexSummary | null | undefined,
+  enabled = true,
+): SkillRagIndexStatus {
+  if (!enabled || ragIndex?.desiredEnabled === false) return "DISABLED";
+  if (!ragIndex) return "PENDING";
+  if (ragIndex.vectorStatus === "FAILED" || ragIndex.graphStatus === "FAILED") return "FAILED";
+  if (ragIndex.vectorStatus === "WARNING" || ragIndex.graphStatus === "WARNING") return "WARNING";
+  if (ragIndex.vectorStatus === "STALE" || ragIndex.graphStatus === "STALE") return "STALE";
+  if (ragIndex.vectorStatus === "DISABLED" && ragIndex.graphStatus === "DISABLED") return "DISABLED";
+  if (ragIndex.vectorStatus === "INDEXED" && ragIndex.graphStatus === "INDEXED") return "INDEXED";
+  return "PENDING";
+}
+
+function getRagStatusTone(status: SkillRagIndexStatus) {
+  switch (status) {
+    case "INDEXED":
+      return "success" as const;
+    case "FAILED":
+      return "error" as const;
+    case "WARNING":
+    case "STALE":
+      return "warning" as const;
+    case "PENDING":
+      return "accent" as const;
+    default:
+      return "neutral" as const;
+  }
+}
+
+function getRagStatusLabel(status: SkillRagIndexStatus) {
+  switch (status) {
+    case "INDEXED":
+      return "Indexed";
+    case "WARNING":
+      return "Warning";
+    case "FAILED":
+      return "Failed";
+    case "STALE":
+      return "Stale";
+    case "DISABLED":
+      return "Disabled";
+    default:
+      return "Pending";
+  }
+}
+
+function needsRagRetry(ragIndex: SkillRagIndexSummary | null | undefined, enabled = true) {
+  if (!enabled) return false;
+  const status = getRagOverallStatus(ragIndex, enabled);
+  return status === "FAILED" || status === "WARNING" || status === "STALE";
+}
+
+function isRagOperationForSkill(operation: RagOperationState | null, skillName: string) {
+  return Boolean(operation && (!operation.skillName || operation.skillName === skillName));
+}
+
+function firstRagWarning(ragIndex: SkillRagIndexSummary | null | undefined) {
+  return ragIndex?.warnings.find((warning) => warning.trim().length > 0) ?? ragIndex?.lastError ?? "";
+}
+
+function RagProgressBar() {
+  return (
+    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-highest)]">
+      <div className="h-full w-1/2 animate-pulse rounded-full bg-[var(--color-primary)]" />
+    </div>
+  );
+}
+
+function RagStageBadge({ label, status }: { label: string; status: SkillRagIndexStatus }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-surface-container-high)] px-2 py-1 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
+      <span>{label}</span>
+      <span className={cn(
+        "font-semibold",
+        status === "FAILED" ? "text-[var(--color-error)]" : null,
+        status === "WARNING" || status === "STALE" ? "text-[var(--color-warning)]" : null,
+        status === "INDEXED" ? "text-[var(--color-success)]" : null,
+      )}
+      >
+        {getRagStatusLabel(status)}
+      </span>
+    </span>
+  );
+}
+
+function ragStageStatus(
+  ragIndex: SkillRagIndexSummary | null | undefined,
+  stage: "vector" | "graph",
+  enabled = true,
+) {
+  if (!enabled || ragIndex?.desiredEnabled === false) return "DISABLED";
+  if (!ragIndex) return "PENDING";
+  return stage === "vector" ? ragIndex.vectorStatus : ragIndex.graphStatus;
+}
+
+function RagStatusCell({
+  enabled,
+  indexing,
+  ragIndex,
+  retryDisabled,
+  onRetry,
+}: {
+  enabled: boolean;
+  indexing: boolean;
+  ragIndex?: SkillRagIndexSummary | null;
+  retryDisabled: boolean;
+  onRetry: () => void;
+}) {
+  const warning = firstRagWarning(ragIndex);
+  const canRetry = needsRagRetry(ragIndex, enabled);
+
+  return (
+    <div className="min-w-[12rem] space-y-2" title={warning || undefined}>
+      <div className="flex flex-wrap items-center gap-2">
+        <RagStageBadge
+          label="Vec"
+          status={indexing ? "PENDING" : ragStageStatus(ragIndex, "vector", enabled)}
+        />
+        <RagStageBadge
+          label="Graph"
+          status={indexing ? "PENDING" : ragStageStatus(ragIndex, "graph", enabled)}
+        />
+        {canRetry ? (
+          <Button
+            size="sm"
+            type="button"
+            variant="ghost"
+            disabled={retryDisabled}
+            onClick={(event) => {
+              event.stopPropagation();
+              onRetry();
+            }}
+          >
+            <RotateCcw size={13} aria-hidden="true" />
+            Retry
+          </Button>
+        ) : null}
+      </div>
+      {indexing ? (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1 text-[11px] text-[var(--color-on-surface-variant)]">
+            <LoaderCircle className="animate-spin" size={12} aria-hidden="true" />
+            <span>Indexing</span>
+          </div>
+          <RagProgressBar />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function RagIndexDetailCard({
+  enabled,
+  indexing,
+  lastAttemptLabel,
+  lastIndexedLabel,
+  onRetry,
+  ragIndex,
+  retryDisabled,
+}: {
+  enabled: boolean;
+  indexing: boolean;
+  lastAttemptLabel: string;
+  lastIndexedLabel: string;
+  onRetry: () => void;
+  ragIndex?: SkillRagIndexSummary | null;
+  retryDisabled: boolean;
+}) {
+  const status = getRagOverallStatus(ragIndex, enabled);
+  const warning = firstRagWarning(ragIndex);
+  const canRetry = needsRagRetry(ragIndex, enabled);
+
+  return (
+    <div className="grid gap-4 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Database size={16} aria-hidden="true" className="text-[var(--color-on-surface-variant)]" />
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
+            RAG Index
+          </p>
+        </div>
+        {indexing ? (
+          <Badge tone="accent">
+            <LoaderCircle className="mr-1 animate-spin" size={13} aria-hidden="true" />
+            Indexing
+          </Badge>
+        ) : (
+          <Badge tone={getRagStatusTone(status)}>{getRagStatusLabel(status)}</Badge>
+        )}
+      </div>
+
+      {indexing ? <RagProgressBar /> : null}
+
+      {ragIndex ? (
+        <div className="flex flex-wrap gap-2">
+          <RagStageBadge label="Vector" status={ragIndex.vectorStatus} />
+          <RagStageBadge label="Graph" status={ragIndex.graphStatus} />
+        </div>
+      ) : (
+        <p className="text-sm text-[var(--color-on-surface-variant)]">
+          No RAG index state has been recorded for this skill.
+        </p>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <DetailField label="Last Indexed" value={lastIndexedLabel} />
+        <DetailField label="Last Attempt" value={lastAttemptLabel} />
+      </div>
+
+      {warning ? (
+        <div className="flex items-start gap-2 rounded-2xl bg-[var(--color-warning-container)] p-3 text-sm text-[var(--color-on-warning-container)]">
+          <CircleAlert size={15} aria-hidden="true" className="mt-0.5 shrink-0" />
+          <span>{warning}</span>
+        </div>
+      ) : null}
+
+      {canRetry ? (
+        <div>
+          <Button
+            size="sm"
+            type="button"
+            variant="secondary"
+            disabled={retryDisabled}
+            aria-busy={retryDisabled}
+            onClick={onRetry}
+          >
+            {retryDisabled ? <LoaderCircle className="animate-spin" size={14} aria-hidden="true" /> : <RotateCcw size={14} aria-hidden="true" />}
+            Retry RAG
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function BindingSwitch({
   checked,
   disabled,
@@ -167,6 +414,7 @@ export function SkillsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [bindingSkillName, setBindingSkillName] = useState("");
+  const [ragOperation, setRagOperation] = useState<RagOperationState | null>(null);
   const [skillMarkdownFullscreenOpen, setSkillMarkdownFullscreenOpen] = useState(false);
   const detailRequestIdRef = useRef(0);
   const pagination = useTablePagination(skills);
@@ -271,6 +519,9 @@ export function SkillsPage() {
     }
 
     setRefreshing(true);
+    setRagOperation({
+      label: pageT("rag.progress.workspace", "Rebuilding RAG index for workspace skills"),
+    });
     try {
       const result = await refreshWorkspaceSkills(activeWorkspaceCode);
       const warning = skillIndexWarningMessage(result.ragIndex, pageT("warnings.ragIndex", "Skill RAG index completed with warnings"));
@@ -292,6 +543,7 @@ export function SkillsPage() {
       toast.error(message);
     } finally {
       setRefreshing(false);
+      setRagOperation(null);
     }
   }
 
@@ -304,6 +556,12 @@ export function SkillsPage() {
     setBindingSkillName(skill.skillName);
     try {
       const desiredEnabled = !skill.enabled;
+      setRagOperation({
+        label: desiredEnabled
+          ? pageT("rag.progress.skillIndex", "Indexing {{name}} into RAG", { name: skill.skillName })
+          : pageT("rag.progress.skillDisable", "Updating RAG state for {{name}}", { name: skill.skillName }),
+        skillName: skill.skillName,
+      });
       const shouldRevertInherited =
         skill.sourceKind === "Override" && skill.shadowedEnabled === desiredEnabled;
       const shouldRemoveLocal =
@@ -345,6 +603,7 @@ export function SkillsPage() {
       toast.error(message);
     } finally {
       setBindingSkillName("");
+      setRagOperation(null);
     }
   }
 
@@ -359,6 +618,10 @@ export function SkillsPage() {
     }
 
     setBindingSkillName(skill.skillName);
+    setRagOperation({
+      label: pageT("rag.progress.skillDisable", "Updating RAG state for {{name}}", { name: skill.skillName }),
+      skillName: skill.skillName,
+    });
     try {
       const result = await unbindWorkspaceSkill(activeWorkspaceCode, skill.skillName);
       const warning = skillIndexWarningMessage(result.ragIndex, pageT("warnings.ragIndex", "Skill RAG index completed with warnings"));
@@ -378,8 +641,42 @@ export function SkillsPage() {
       toast.error(message);
     } finally {
       setBindingSkillName("");
+      setRagOperation(null);
     }
   }
+
+  const handleRetryRagIndex = useCallback(async (skill: WorkspaceSkillRecord | WorkspaceSkillDetail) => {
+    if (!activeWorkspaceCode) {
+      toast.error(pageT("errors.selectWorkspaceRefresh", "Select a workspace in the shell header before refreshing skills"));
+      return;
+    }
+
+    setRagOperation({
+      label: pageT("rag.progress.skillRetry", "Retrying RAG index for {{name}}", { name: skill.skillName }),
+      skillName: skill.skillName,
+    });
+    try {
+      const ragIndex = await retryWorkspaceSkillRagIndex(activeWorkspaceCode, skill.skillName);
+      setSkills((current) => current.map((item) => (
+        item.skillName === skill.skillName ? { ...item, ragIndex } : item
+      )));
+      setSelectedSkill((current) => (
+        current?.skillName === skill.skillName ? { ...current, ragIndex } : current
+      ));
+      const warning = skillIndexWarningMessage(ragIndex, pageT("warnings.ragIndex", "Skill RAG index completed with warnings"));
+      if (warning) {
+        toast.warning(warning);
+      } else {
+        toast.success(pageT("messages.ragRetried", "{{name}} RAG index rebuilt", { name: skill.skillName }));
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : pageT("errors.ragRetry", "Skill RAG index retry failed");
+      toast.error(message);
+    } finally {
+      setRagOperation(null);
+    }
+  }, [activeWorkspaceCode, pageT, toast]);
 
   const rightPanel = useMemo(() => (
     <InspectorPanel title={pageT("detail.label", "Skill Detail")}>
@@ -458,6 +755,20 @@ export function SkillsPage() {
             />
           </div>
 
+          <RagIndexDetailCard
+            enabled={selectedSkill.enabled}
+            indexing={isRagOperationForSkill(ragOperation, selectedSkill.skillName)}
+            lastAttemptLabel={selectedSkill.ragIndex?.updatedAt
+              ? formatDateTime(selectedSkill.ragIndex.updatedAt, { dateStyle: "medium", timeStyle: "short" })
+              : pageT("rag.notAttempted", "Not attempted")}
+            lastIndexedLabel={selectedSkill.ragIndex?.lastIndexedAt
+              ? formatDateTime(selectedSkill.ragIndex.lastIndexedAt, { dateStyle: "medium", timeStyle: "short" })
+              : pageT("rag.notIndexed", "Not indexed")}
+            ragIndex={selectedSkill.ragIndex}
+            retryDisabled={Boolean(ragOperation)}
+            onRetry={() => void handleRetryRagIndex(selectedSkill)}
+          />
+
           {selectedSkill.registryState === "Deleted" ? (
             <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-[var(--color-error-container)] p-4 text-sm text-[var(--color-on-error-container)]">
               <div className="flex min-w-0 items-start gap-2">
@@ -535,7 +846,7 @@ export function SkillsPage() {
         </>
       )}
     </InspectorPanel>
-  ), [detailLoading, formatDateTime, navigate, pageT, selectedSkill, selectedSkillName]);
+  ), [detailLoading, formatDateTime, handleRetryRagIndex, navigate, pageT, ragOperation, selectedSkill, selectedSkillName]);
 
   useConsoleShellConfig({ rightPanel });
 
@@ -581,6 +892,17 @@ export function SkillsPage() {
             </div>
             {loading ? <Badge tone="accent">{pageT("loading.badge", "Loading")}</Badge> : null}
           </div>
+          {ragOperation ? (
+            <div className="border-b border-[var(--color-outline-variant)] px-4 py-3">
+              <div className="flex min-w-0 items-center gap-2 text-sm text-[var(--color-on-surface-variant)]">
+                <LoaderCircle className="shrink-0 animate-spin text-[var(--color-primary)]" size={15} aria-hidden="true" />
+                <span className="truncate">{ragOperation.label}</span>
+              </div>
+              <div className="mt-2">
+                <RagProgressBar />
+              </div>
+            </div>
+          ) : null}
           <DataTable<WorkspaceSkillRecord>
             variant="embedded"
             onRowClick={(row) => selectSkill(row.skillName)}
@@ -621,9 +943,6 @@ export function SkillsPage() {
                         {row.sourceRef}
                       </span>
                     ) : null}
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Badge tone={getRegistryStateTone(row.registryState)}>{row.registryState}</Badge>
-                    </div>
                   </div>
                 ),
               },
@@ -636,11 +955,18 @@ export function SkillsPage() {
                 id: "sourceType",
                 header: pageT("columns.source", "Source"),
                 render: (row) => (
-                  row.sourceType ? (
-                    <Badge tone={getSourceTone(row.sourceType)}>{row.sourceType}</Badge>
-                  ) : (
-                    <Badge tone="error">{pageT("status.deleted", "Deleted")}</Badge>
-                  )
+                  <span className="text-sm text-[var(--color-on-surface)]">
+                    {row.sourceType ?? pageT("status.deleted", "Deleted")}
+                  </span>
+                ),
+              },
+              {
+                id: "workspace",
+                header: pageT("columns.workspace", "Workspace"),
+                render: (row) => (
+                  <span className="text-sm text-[var(--color-on-surface)]">
+                    {row.sourceKind}
+                  </span>
                 ),
               },
               {
@@ -655,10 +981,16 @@ export function SkillsPage() {
                 ),
               },
               {
-                id: "workspace",
-                header: pageT("columns.workspace", "Workspace"),
+                id: "ragIndex",
+                header: pageT("columns.rag", "RAG"),
                 render: (row) => (
-                  <Badge tone={getWorkspaceSourceTone(row.sourceKind)}>{row.sourceKind}</Badge>
+                  <RagStatusCell
+                    enabled={row.enabled}
+                    indexing={isRagOperationForSkill(ragOperation, row.skillName)}
+                    ragIndex={row.ragIndex}
+                    retryDisabled={Boolean(ragOperation)}
+                    onRetry={() => void handleRetryRagIndex(row)}
+                  />
                 ),
               },
               {

@@ -5,6 +5,11 @@ import type {
 
 type RagIndexResult = SkillRagIndexBatchSummary | SkillRagIndexSummary | null | undefined;
 
+function joinWarnings(warnings: string[]) {
+  const messages = warnings.map((warning) => warning.trim()).filter(Boolean);
+  return messages.length ? messages.join("; ") : null;
+}
+
 export function skillIndexWarningMessage(
   ragIndex: RagIndexResult,
   fallback = "Skill RAG index completed with warnings",
@@ -14,7 +19,7 @@ export function skillIndexWarningMessage(
   if ("failedCount" in ragIndex) {
     const hasWarning = ragIndex.failedCount > 0 || ragIndex.warningCount > 0;
     if (!hasWarning) return null;
-    return ragIndex.warnings[0] ?? fallback;
+    return joinWarnings(ragIndex.warnings) ?? fallback;
   }
 
   const hasWarning =
@@ -24,5 +29,5 @@ export function skillIndexWarningMessage(
     || ragIndex.graphStatus === "WARNING"
     || ragIndex.warnings.length > 0;
   if (!hasWarning) return null;
-  return ragIndex.warnings[0] ?? ragIndex.lastError ?? fallback;
+  return joinWarnings(ragIndex.warnings) ?? ragIndex.lastError ?? fallback;
 }

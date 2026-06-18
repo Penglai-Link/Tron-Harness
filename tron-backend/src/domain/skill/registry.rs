@@ -109,6 +109,7 @@ pub struct SkillRagIndexSummary {
     pub content_hash: Option<String>,
     pub structure_hash: Option<String>,
     pub last_indexed_at: Option<String>,
+    pub updated_at: String,
     pub last_error: Option<String>,
     pub warnings: Vec<String>,
 }
@@ -133,15 +134,24 @@ impl SkillRagIndexRecord {
             content_hash: self.content_hash.clone(),
             structure_hash: self.structure_hash.clone(),
             last_indexed_at: self.last_indexed_at.clone(),
+            updated_at: self.updated_at.clone(),
             last_error: self.last_error.clone(),
             warnings: self
                 .last_error
-                .iter()
-                .filter(|message| !message.trim().is_empty())
-                .cloned()
-                .collect(),
+                .as_deref()
+                .map(split_rag_index_warnings)
+                .unwrap_or_default(),
         }
     }
+}
+
+fn split_rag_index_warnings(message: &str) -> Vec<String> {
+    message
+        .split(';')
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

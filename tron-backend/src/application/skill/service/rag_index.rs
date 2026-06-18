@@ -1,17 +1,14 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, hash_map::DefaultHasher},
-    hash::{Hash, Hasher},
+    collections::{BTreeMap, BTreeSet},
     path::Path,
 };
-
-use serde_json::{Value, json};
 
 use crate::{
     application::rag::{
         RagDeactivateSourceCommand, RagDiagnosticsRepository, RagDocumentSourceRuntime,
-        RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRepository, RagIngestRequest,
-        RagIngestScope, RagIngestSource, RagRetryIndexRepository, RagSearchRepository,
-        RagSearchRuntime, RagService, RagSourceLifecycleRepository, RagStrategyRegistry,
+        RagEmbeddingRuntime, RagIngestRepository, RagIngestScope, RagRetryIndexRepository,
+        RagSearchRepository, RagSearchRuntime, RagService, RagSourceLifecycleRepository,
+        RagStrategyRegistry,
     },
     domain::{
         skill::{
@@ -25,17 +22,17 @@ use crate::{
 
 use super::{
     SkillRegistryService, list_skill_files, normalized_required, parse_skill_frontmatter,
+    rag_index_payload::{
+        SKILL_SOURCE_VERSION, related_graph_payload, skill_index_text, skill_ingest_request,
+        skill_payload, source_code, stable_hash, stable_structure_hash,
+    },
     read_skill_markdown,
 };
 
-const SKILL_SOURCE_VERSION: &str = "v1";
-const SKILL_SOURCE_TYPE: &str = "SKILL";
 const SKILL_VECTOR_CORPUS_ID: &str = "skill";
 const SKILL_VECTOR_INGEST_PROFILE_ID: &str = "skill-ingest-v1";
 const SKILL_GRAPH_CORPUS_ID: &str = "skill-graph";
 const SKILL_GRAPH_INGEST_PROFILE_ID: &str = "skill-graph-ingest-v1";
-const INDEX_USER_CODE: &str = "SYSTEM";
-const INDEX_AGENT_CODE: &str = "AGENT_CODEX";
 
 #[derive(Clone)]
 pub struct SkillRagIndexService<R, S, E> {
@@ -108,6 +105,42 @@ where
         }
 
         Ok(batch)
+    }
+
+    pub async fn index_workspace_skill(
+        &self,
+        workspace_code: &str,
+        skill_name: &str,
+    ) -> Result<crate::domain::skill::SkillRagIndexSummary, SkillError> {
+        let workspace_code =
+            normalized_required(workspace_code).ok_or(SkillError::WorkspaceRequired)?;
+        let skill_name = normalized_required(skill_name).ok_or(SkillError::SkillNameRequired)?;
+        let workspace = self.skills.active_workspace_detail(&workspace_code)?;
+        let resolved = self.skills.resolve_workspace_bindings(&workspace)?;
+        let Some(binding) = resolved.get(skill_name.as_str()) else {
+            return self.disable_skill(&workspace_code, &skill_name).await;
+        };
+
+        if !binding.binding.enabled {
+            return self.disable_skill(&workspace_code, &skill_name).await;
+        }
+
+        let registry_skills = self.registry_skill_map()?;
+        let Some(skill) = registry_skills.get(skill_name.as_str()) else {
+            self.deactivate_sources(&workspace_code, &skill_name).await;
+            let state = self.failed_state(
+                &workspace_code,
+                &skill_name,
+                true,
+                None,
+                None,
+                "Skill is no longer present in the local registry",
+            );
+            self.upsert_state(&state)?;
+            return Ok(state.summary());
+        };
+
+        self.index_skill(&workspace_code, skill).await
     }
 
     pub async fn index_all_active_workspaces(
@@ -251,9 +284,10 @@ where
         let vector_status = match vector_result {
             Ok(result) if result.embedding_status == "INDEXED" => SkillRagIndexStatus::Indexed,
             Ok(result) => {
-                warnings.push(format!(
-                    "skill vector index completed with embedding status {}",
-                    result.embedding_status
+                warnings.push(rag_embedding_warning(
+                    "skill vector",
+                    &result.embedding_status,
+                    "skill vector index completed without vector embedding; fulltext search remains available",
                 ));
                 SkillRagIndexStatus::Warning
             }
@@ -283,9 +317,10 @@ where
         let graph_status = match graph_result {
             Ok(result) if result.embedding_status == "INDEXED" => SkillRagIndexStatus::Indexed,
             Ok(result) => {
-                warnings.push(format!(
-                    "skill graph index completed with embedding status {}",
-                    result.embedding_status
+                warnings.push(rag_embedding_warning(
+                    "skill graph",
+                    &result.embedding_status,
+                    "skill graph index completed without vector embedding; graph relationships and fulltext search remain available",
                 ));
                 SkillRagIndexStatus::Warning
             }
@@ -394,159 +429,23 @@ where
     }
 }
 
-fn skill_ingest_request(
-    workspace_code: &str,
-    skill_name: &str,
-    corpus_id: &str,
-    ingest_profile_id: &str,
-    payload: Value,
-) -> RagIngestRequest {
-    RagIngestRequest {
-        corpus_id: corpus_id.into(),
-        ingest_profile_id: ingest_profile_id.into(),
-        workspace_code: workspace_code.into(),
-        access_context: RagIngestAccessContext {
-            user_code: INDEX_USER_CODE.into(),
-            agent_code: INDEX_AGENT_CODE.into(),
-            workspace_code: workspace_code.into(),
-        },
-        target_scope: RagIngestScope {
-            scope_type: "SPACE".into(),
-            scope_code: workspace_code.into(),
-        },
-        source: RagIngestSource {
-            code: source_code(workspace_code, skill_name),
-            version: SKILL_SOURCE_VERSION.into(),
-            source_type: SKILL_SOURCE_TYPE.into(),
-        },
-        payload,
-    }
-}
-
-fn skill_payload(
-    workspace_code: &str,
-    skill_name: &str,
-    description: &str,
-    text: &str,
-    related_graph: Option<Value>,
-) -> Value {
-    let mut payload = json!({
-        "source": {
-            "code": source_code(workspace_code, skill_name),
-            "version": SKILL_SOURCE_VERSION,
-            "type": SKILL_SOURCE_TYPE
-        },
-        "title": skill_name,
-        "text": text,
-        "metadata": {
-            "source": "skill-registry"
-        },
-        "domainFields": {
-            "skillName": skill_name,
-            "skillDescription": description
-        }
-    });
-    if let Some(related_graph) = related_graph {
-        payload["relatedGraph"] = related_graph;
-    }
-    payload
-}
-
-fn source_code(workspace_code: &str, skill_name: &str) -> String {
-    format!("skill:{workspace_code}:{skill_name}")
-}
-
-fn skill_index_text(skill_name: &str, description: &str) -> String {
-    format!("Skill: {skill_name}\nDescription: {description}")
-}
-
-fn related_graph_payload(
-    workspace_code: &str,
-    skill_name: &str,
-    files: &[crate::domain::skill::RegistrySkillFile],
-) -> Value {
-    let nodes = files
-        .iter()
-        .map(|file| {
-            let kind = file_kind(&file.path);
-            let reference = file_ref(&file.path);
-            json!({
-                "ref": reference,
-                "kind": kind,
-                "label": "RagSkillFile",
-                "code": file_code(workspace_code, skill_name, &file.path),
-                "title": file.path,
-                "text": file.path,
-                "properties": {
-                    "path": file.path,
-                    "kind": kind,
-                    "isMarkdown": file.is_markdown
-                }
-            })
-        })
-        .collect::<Vec<_>>();
-    let edges = files
-        .iter()
-        .map(|file| {
-            let kind = file_kind(&file.path);
-            json!({
-                "from": "$skill",
-                "to": file_ref(&file.path),
-                "relationship": "CONTAINS",
-                "properties": {
-                    "path": file.path,
-                    "kind": kind
-                }
-            })
-        })
-        .collect::<Vec<_>>();
-    json!({ "nodes": nodes, "edges": edges })
-}
-
-fn file_kind(path: &str) -> &'static str {
-    let normalized = path.replace('\\', "/");
-    if normalized.eq_ignore_ascii_case("SKILL.md") {
-        "SKILL_MD"
-    } else if normalized.starts_with("scripts/") {
-        "SCRIPT"
-    } else if normalized.starts_with("references/") {
-        "REFERENCE"
-    } else {
-        "OTHER"
-    }
-}
-
-fn file_ref(path: &str) -> String {
-    format!("file:{path}")
-}
-
-fn file_code(workspace_code: &str, skill_name: &str, path: &str) -> String {
-    format!(
-        "SKILL_FILE_{}",
-        stable_hash(&format!("{workspace_code}:{skill_name}:{path}")).to_ascii_uppercase()
-    )
-}
-
-fn stable_structure_hash(files: &[crate::domain::skill::RegistrySkillFile]) -> String {
-    let mut paths = files
-        .iter()
-        .map(|file| file.path.as_str())
-        .collect::<Vec<_>>();
-    paths.sort_unstable();
-    stable_hash(&paths.join("\n"))
-}
-
-fn stable_hash(value: &str) -> String {
-    let mut hasher = DefaultHasher::new();
-    value.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
-}
-
 fn join_errors(errors: Vec<String>) -> Option<String> {
     if errors.is_empty() {
         None
     } else {
         Some(errors.join("; "))
+    }
+}
+
+fn rag_embedding_warning(
+    index_label: &str,
+    embedding_status: &str,
+    degraded_message: &str,
+) -> String {
+    if embedding_status == "FAILED" {
+        degraded_message.to_string()
+    } else {
+        format!("{index_label} index completed with embedding status {embedding_status}")
     }
 }
 

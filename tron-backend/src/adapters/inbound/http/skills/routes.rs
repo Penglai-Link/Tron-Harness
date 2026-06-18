@@ -8,8 +8,8 @@ use crate::app::AppState;
 use super::handler::{
     bind_workspace_skill, check_registry_skill_updates, get_registry_skill, get_workspace_skill,
     install_registry_skill, list_registry_skills, list_workspace_skills, refresh_workspace_skills,
-    rescan_registry_skills, search_skills, unbind_workspace_skill, uninstall_registry_skill,
-    update_registry_skills,
+    rescan_registry_skills, retry_workspace_skill_rag_index, search_skills, unbind_workspace_skill,
+    uninstall_registry_skill, update_registry_skills,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -43,6 +43,10 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/api/v1/skills/workspaces/{workspace_code}/skills/{skill_name}",
             get(get_workspace_skill),
+        )
+        .route(
+            "/api/v1/skills/workspaces/{workspace_code}/skills/{skill_name}/rag-index/retry",
+            post(retry_workspace_skill_rag_index),
         )
         .route(
             "/api/v1/skills/workspaces/{workspace_code}/refresh",

@@ -59,6 +59,7 @@ export interface SkillRagIndexSummary {
   contentHash?: string | null;
   structureHash?: string | null;
   lastIndexedAt?: string | null;
+  updatedAt?: string | null;
   lastError?: string | null;
   warnings: string[];
 }

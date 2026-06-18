@@ -96,6 +96,45 @@ async fn indexes_skill_name_description_and_contains_edges() {
 }
 
 #[tokio::test]
+async fn embedding_failure_reports_retryable_rag_warning_without_failed_status_text() {
+    let harness = TestHarness::new_with_runtime(
+        "skill-rag-warning",
+        FakeRuntime::failing_embedding("embedding model is not configured"),
+    );
+    harness.write_skill(
+        "rag-reviewer",
+        "Reviews RAG retrieval changes before release.",
+        &["scripts/review.sh"],
+    );
+    harness.skills.rescan_registry().unwrap();
+    harness
+        .skills
+        .bind_workspace_skill("TRON_CORE", "rag-reviewer", true)
+        .unwrap();
+
+    let summary = harness
+        .indexer
+        .index_workspace_skill("TRON_CORE", "rag-reviewer")
+        .await
+        .unwrap();
+
+    assert_eq!(summary.vector_status, SkillRagIndexStatus::Warning);
+    assert_eq!(summary.graph_status, SkillRagIndexStatus::Warning);
+    assert!(
+        summary
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("fulltext search remains available"))
+    );
+    assert!(
+        summary
+            .warnings
+            .iter()
+            .all(|warning| !warning.contains("embedding status FAILED"))
+    );
+}
+
+#[tokio::test]
 async fn disabling_or_unbinding_skill_deactivates_rag_sources() {
     let harness = TestHarness::new("skill-rag-disable");
     harness.write_skill(
@@ -224,6 +263,10 @@ struct TestHarness {
 
 impl TestHarness {
     fn new(label: &str) -> Self {
+        Self::new_with_runtime(label, FakeRuntime::new(vec![0.25; 4096]))
+    }
+
+    fn new_with_runtime(label: &str, runtime: FakeRuntime) -> Self {
         let database_url = temp_database_path(label).to_string_lossy().to_string();
         let graph_path = temp_database_path(&format!("{label}-graph"))
             .to_string_lossy()
@@ -236,7 +279,6 @@ impl TestHarness {
             &registry_root,
         );
         let repository = build_rag_repository(&database_url, &graph_path);
-        let runtime = FakeRuntime::new(vec![0.25; 4096]);
         let rag = RagService::new(repository, DefaultRagStrategyRegistry::default(), runtime);
         let indexer = SkillRagIndexService::new(skills.clone(), rag.clone());
         Self {
@@ -435,6 +477,7 @@ fn unique_nanos() -> u128 {
 #[derive(Clone)]
 struct FakeRuntime {
     embedding: Vec<f32>,
+    embedding_error: Option<String>,
     embedding_calls: Arc<AtomicUsize>,
 }
 
@@ -442,6 +485,15 @@ impl FakeRuntime {
     fn new(embedding: Vec<f32>) -> Self {
         Self {
             embedding,
+            embedding_error: None,
+            embedding_calls: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    fn failing_embedding(message: &str) -> Self {
+        Self {
+            embedding: Vec::new(),
+            embedding_error: Some(message.to_string()),
             embedding_calls: Arc::new(AtomicUsize::new(0)),
         }
     }
@@ -454,6 +506,9 @@ impl RagEmbeddingRuntime for FakeRuntime {
     ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
         Box::pin(async move {
             self.embedding_calls.fetch_add(1, Ordering::SeqCst);
+            if let Some(error) = &self.embedding_error {
+                return Err(error.clone());
+            }
             Ok(RagEmbeddingResult {
                 model_code: "FAKE_EMBEDDING".into(),
                 embedding: self.embedding.clone(),

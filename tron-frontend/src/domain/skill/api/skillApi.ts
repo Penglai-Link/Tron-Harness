@@ -23,6 +23,7 @@ export const skillApiEndpoints = {
   uninstallRegistrySkill: "DELETE /api/v1/skills/registry/{skillName}",
   listWorkspaceSkills: "GET /api/v1/skills/workspaces/{workspaceCode}/skills",
   getWorkspaceSkill: "GET /api/v1/skills/workspaces/{workspaceCode}/skills/{skillName}",
+  retryWorkspaceSkillRagIndex: "POST /api/v1/skills/workspaces/{workspaceCode}/skills/{skillName}/rag-index/retry",
   installRegistrySkill: "POST /api/v1/skills/registry/install",
   rescanRegistrySkills: "POST /api/v1/skills/registry/rescan",
   checkRegistrySkillUpdates: "POST /api/v1/skills/registry/check-updates",
@@ -83,6 +84,13 @@ export async function fetchWorkspaceSkills(workspaceCode: string, options: {
 
 export async function fetchWorkspaceSkill(workspaceCode: string, skillName: string) {
   return requestApi<WorkspaceSkillDetail>(skillApiEndpoints.getWorkspaceSkill, {
+    pathParams: { workspaceCode, skillName },
+  });
+}
+
+export async function retryWorkspaceSkillRagIndex(workspaceCode: string, skillName: string) {
+  return requestApi<NonNullable<WorkspaceSkillRecord["ragIndex"]>>(skillApiEndpoints.retryWorkspaceSkillRagIndex, {
+    body: {},
     pathParams: { workspaceCode, skillName },
   });
 }
