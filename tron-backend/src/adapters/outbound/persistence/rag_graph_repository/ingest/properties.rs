@@ -1,4 +1,20 @@
-fn source_properties(
+use std::collections::BTreeMap;
+
+use serde_json::Value;
+
+use crate::{
+    application::rag::{RagPersistIngestCommand, RagTextUnitWrite},
+    domain::{
+        graph::GraphPropertyValue,
+        rag::{RagCorpusRecord, RagError},
+    },
+};
+
+use super::super::model::{
+    decode_embedding, graph_property_name_for_logical, json_string, push_text_prop,
+};
+
+pub(super) fn source_properties(
     corpus: &RagCorpusRecord,
     command: &RagPersistIngestCommand,
     node_code: &str,
@@ -40,7 +56,7 @@ fn source_base_properties(
     Ok(properties)
 }
 
-fn text_unit_properties(
+pub(super) fn text_unit_properties(
     corpus: &RagCorpusRecord,
     command: &RagPersistIngestCommand,
     unit: &RagTextUnitWrite,
@@ -85,7 +101,7 @@ fn text_unit_properties(
     Ok(properties)
 }
 
-fn push_domain_field_properties(
+pub(super) fn push_domain_field_properties(
     corpus: &RagCorpusRecord,
     segment: &str,
     command: &RagPersistIngestCommand,
@@ -130,7 +146,7 @@ fn is_reserved_main_node_property(name: &str) -> bool {
     )
 }
 
-fn custom_related_properties(
+pub(super) fn custom_related_properties(
     node: &Value,
 ) -> Result<BTreeMap<String, GraphPropertyValue>, RagError> {
     let mut properties = BTreeMap::new();
@@ -150,7 +166,9 @@ fn custom_related_properties(
     Ok(properties)
 }
 
-fn custom_edge_properties(edge: &Value) -> Result<BTreeMap<String, GraphPropertyValue>, RagError> {
+pub(super) fn custom_edge_properties(
+    edge: &Value,
+) -> Result<BTreeMap<String, GraphPropertyValue>, RagError> {
     let mut properties = BTreeMap::new();
     let Some(raw_properties) = edge.get("properties") else {
         return Ok(properties);

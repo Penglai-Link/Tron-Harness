@@ -1,2 +1,4 @@
-include!("ingest/split_01.rs");
-include!("ingest/split_02.rs");
+mod lifecycle;
+mod persist;
+mod properties;
+mod related_graph;
