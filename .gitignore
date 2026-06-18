@@ -24,7 +24,7 @@ tron-backend/resources/frontend/
 # Tauri generated schema artifacts
 src-tauri/gen/
 
-# Tauri build artifacts
+# Tauri desktop build artifacts (desktop-build / desktop-dev)
 src-tauri/target/
 src-tauri/bundle/
 src-tauri/frontend/
