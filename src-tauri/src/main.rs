@@ -508,7 +508,7 @@ fn build_runtime_state(app_handle: &AppHandle, backend_port: u16) -> Result<Desk
         backend_url,
         backend_process: Arc::new(Mutex::new(None)),
         frontend_dist_dir,
-        injection_enabled: Arc::new(Mutex::new(true)),
+        injection_enabled: Arc::new(Mutex::new(false)),
         backend_ready: Arc::new(Mutex::new(false)),
     })
 }

@@ -5,6 +5,7 @@
   const ENABLED_DEFAULT = __TRON_INJECTION_ENABLED__;
   const AUTO_PAGE_ID = "__TRON_AUTO_PAGE_ID__";
   const TEST_STYLE_ID = "tron-injected-test-background";
+  const ROOT_SELECTOR = "[data-tron-injected='1']";
 
   if (!window || !window.document) {
     return;
@@ -85,12 +86,16 @@
     document.getElementById(TEST_STYLE_ID)?.remove();
   };
 
+  const removeShadowRoot = () => {
+    document.querySelectorAll(ROOT_SELECTOR).forEach((node) => node.remove());
+  };
+
   const installShadowRoot = () => {
     if (!injectionEnabled) {
       return;
     }
 
-    if (document.documentElement.querySelector("[data-tron-injected='1']")) {
+    if (document.querySelector(ROOT_SELECTOR)) {
       return;
     }
 
@@ -130,6 +135,7 @@
   const applyInjectionUi = () => {
     if (!injectionEnabled) {
       removeTestStyle();
+      removeShadowRoot();
       return;
     }
 

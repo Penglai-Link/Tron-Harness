@@ -29,6 +29,7 @@ export const shell = {
       automations: "自动化",
       chats: "会话",
       dashboard: "仪表盘",
+      desktopTest: "桌面测试",
       knowledgeBase: "知识库",
       knowledgeGraph: "知识图谱",
       mcpServers: "MCP 服务",

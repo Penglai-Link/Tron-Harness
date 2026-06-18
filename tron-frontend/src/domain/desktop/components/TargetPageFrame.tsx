@@ -80,6 +80,18 @@ export function TargetPageFrame({
   }, [postInjectionToggle]);
 
   useEffect(() => {
+    if (injectionEnabled) {
+      return;
+    }
+
+    clearTimeoutRef();
+    fallbackDispatchedRef.current = false;
+    setReadyState("pending");
+    setFrameReady(false);
+    setFrameId("");
+  }, [clearTimeoutRef, injectionEnabled]);
+
+  useEffect(() => {
     if (!injectionEnabled || !desktopBackendStatus.ready) {
       clearTimeoutRef();
       return;

@@ -19,12 +19,12 @@ export function TargetPagePage() {
   const [targetInput, setTargetInput] = useState(DEFAULT_TARGET_URL);
   const [activeUrl, setActiveUrl] = useState(DEFAULT_TARGET_URL);
   const [pageId, setPageId] = useState(`desktop-${Date.now()}`);
-  const [injectionEnabled, setInjectionEnabled] = useState(true);
+  const [injectionEnabled, setInjectionEnabled] = useState(false);
   const [backendStatus, setBackendStatus] = useState<DesktopBackendStatus>({
     backendUrl: "",
     backendPort: 0,
     ready: false,
-    injectionEnabled: true,
+    injectionEnabled: false,
     databasePath: "",
     graphPath: "",
   });
@@ -48,8 +48,20 @@ export function TargetPagePage() {
   }, [bridge]);
 
   useEffect(() => {
-    void bridge.setInjectionEnabled(injectionEnabled);
+    void (async () => {
+      const enabled = await bridge.setInjectionEnabled(injectionEnabled);
+      setBackendStatus((current) => ({
+        ...current,
+        injectionEnabled: enabled,
+      }));
+    })();
   }, [bridge, injectionEnabled]);
+
+  useEffect(() => {
+    if (!injectionEnabled) {
+      setFrameReady(false);
+    }
+  }, [injectionEnabled]);
 
   const handleLoadTarget = () => {
     const normalized = sanitizeUrlInput(targetInput);
@@ -136,7 +148,7 @@ export function TargetPagePage() {
             pageId={pageId}
             targetUrl={activeUrl}
             desktopBackendStatus={backendStatus}
-            injectionEnabled={injectionEnabled && backendStatus.ready}
+            injectionEnabled={injectionEnabled}
             onHandshake={() => {
               setFrameReady(true);
               setErrorMessage("");

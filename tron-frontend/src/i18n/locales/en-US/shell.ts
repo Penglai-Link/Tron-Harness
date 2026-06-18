@@ -29,6 +29,7 @@ export const shell = {
       automations: "Automations",
       chats: "Chats",
       dashboard: "Dashboard",
+      desktopTest: "Desktop Test",
       knowledgeBase: "KnowledgeBase",
       knowledgeGraph: "KnowledgeGraph",
       mcpServers: "MCP Servers",
