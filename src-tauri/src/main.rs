@@ -340,6 +340,10 @@ fn build_injection_script(backend_host: &str, page_id: &str, injection_enabled: 
         .replace("__TRON_INJECTION_ENABLED__", injection_flag)
 }
 
+fn should_navigate_main_window_to_backend() -> bool {
+    !tauri::is_dev()
+}
+
 fn create_main_window(app: &tauri::App, state: &DesktopRuntimeState) -> Result<(), String> {
     let window_config = app
         .config()
@@ -351,9 +355,23 @@ fn create_main_window(app: &tauri::App, state: &DesktopRuntimeState) -> Result<(
     let injection_enabled = *tauri::async_runtime::block_on(state.injection_enabled.lock());
     let script = build_injection_script(&state.backend_url, AUTO_PAGE_ID, injection_enabled);
 
-    WebviewWindowBuilder::from_config(app.handle(), window_config)
-        .map_err(|error| format!("failed to create main window builder: {error}"))?
-        .initialization_script_for_all_frames(&script)
+    let mut builder = if should_navigate_main_window_to_backend() {
+        WebviewWindowBuilder::from_config(app.handle(), window_config)
+            .map_err(|error| format!("failed to create main window builder: {error}"))?
+    } else {
+        WebviewWindowBuilder::new(
+            app.handle(),
+            MAIN_WINDOW_LABEL,
+            WebviewUrl::App("index.html".into()),
+        )
+        .title(&window_config.title)
+        .inner_size(window_config.width, window_config.height)
+        .resizable(window_config.resizable)
+        .visible(true)
+    };
+
+    builder = builder.initialization_script_for_all_frames(&script);
+    builder
         .build()
         .map_err(|error| format!("failed to create main window: {error}"))?;
 
@@ -562,6 +580,13 @@ fn start_window_navigator(
         }
 
         if ready {
+            if !should_navigate_main_window_to_backend() {
+                if let Some(main_window) = app_handle_for_monitor.get_webview_window(MAIN_WINDOW_LABEL) {
+                    let _ = main_window.set_focus();
+                }
+                return;
+            }
+
             if let Some(main_window) = app_handle_for_monitor.get_webview_window(MAIN_WINDOW_LABEL) {
                 let target_url = match Url::parse(&backend_url) {
                     Ok(url) => url,
@@ -608,6 +633,16 @@ fn start_window_navigator(
     });
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_navigate_main_window_to_backend;
+
+    #[test]
+    fn main_window_navigation_matches_tauri_runtime_mode() {
+        assert_eq!(should_navigate_main_window_to_backend(), !tauri::is_dev());
+    }
 }
 
 fn main() {

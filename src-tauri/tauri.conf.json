@@ -5,9 +5,9 @@
   "identifier": "com.tron.desktop",
   "build": {
     "beforeBuildCommand": "",
-    "beforeDevCommand": "",
+    "beforeDevCommand": "cd .. && make fe-dev",
     "frontendDist": "frontend",
-    "devUrl": null
+    "devUrl": "http://localhost:5173"
   },
   "app": {
     "windows": [
