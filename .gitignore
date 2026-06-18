@@ -21,6 +21,9 @@ node_modules/
 # Integrated frontend build output
 tron-backend/resources/frontend/
 
+# Tauri generated schema artifacts
+src-tauri/gen/
+
 # Archives
 *.tar.gz
 *.tar
