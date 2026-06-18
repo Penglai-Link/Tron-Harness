@@ -167,7 +167,6 @@ desktop-build: desktop-clean app-build
 	cargo build --manifest-path $(BACKEND_MANIFEST) --release
 	cp tron-backend/target/release/tron-backend $(TAURI_DIR)/binaries/tron-backend || true
 	cp tron-backend/target/release/tron-backend.exe $(TAURI_DIR)/binaries/tron-backend.exe || true
-	@if [ -f $(TAURI_DIR)/package.json ]; then cd $(TAURI_DIR) && $(TAURI_NPM) install --no-audit --no-fund; fi
 	@if [ -f $(TAURI_DIR)/tauri.conf.json ]; then cd $(TAURI_DIR) && $(TAURI_NPM) run -s tauri build; fi
 
 .PHONY: desktop-dev
