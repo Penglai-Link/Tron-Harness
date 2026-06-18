@@ -398,19 +398,6 @@ async fn desktop_injection_event(_state: State<'_, DesktopRuntimeState>, request
     Ok(())
 }
 
-fn spawn_main_window(app_handle: &AppHandle, backend_url: &str) -> Result<(), String> {
-    let main_window = app_handle
-        .get_webview_window(MAIN_WINDOW_LABEL)
-        .ok_or_else(|| "main window was not found".to_string())?;
-
-    let target_url = Url::parse(backend_url).map_err(|error| format!("invalid backend url: {error}"))?;
-    main_window
-        .navigate(target_url)
-        .map_err(|error| format!("navigate main window failed: {error}"))?;
-
-    Ok(())
-}
-
 fn build_runtime_state(app_handle: &AppHandle) -> Result<DesktopRuntimeState, String> {
     let app_data_dir = resolve_desktop_data_dir()?;
     std::fs::create_dir_all(&app_data_dir)
@@ -444,6 +431,94 @@ fn stop_backend_process(state: &DesktopRuntimeState) {
     *process_guard = None;
 }
 
+fn ensure_main_window_ready(app_handle: &AppHandle) -> Result<(), String> {
+    let window = app_handle
+        .get_webview_window(MAIN_WINDOW_LABEL)
+        .ok_or_else(|| "main window was not found".to_string())?;
+
+    let _ = window.set_focus();
+    let _ = window.set_title("Tron");
+    Ok(())
+}
+
+fn show_startup_message(app_handle: &AppHandle, message: &str) {
+    if let Some(window) = app_handle.get_webview_window(MAIN_WINDOW_LABEL) {
+        let html = serde_json::to_string(&format!(
+            "<pre style=\"padding:24px;font-family:monospace;white-space:pre-wrap;\">{message}</pre>"
+        ))
+        .unwrap_or_else(|_| "\"Backend starting...\"".to_string());
+        let _ = window.eval(&format!(
+            "document.documentElement.innerHTML = {html}; document.title = 'Tron';"
+        ));
+    }
+}
+
+fn start_window_navigator(
+    app_handle: AppHandle,
+    state: DesktopRuntimeState,
+) -> Result<(), String> {
+    ensure_main_window_ready(&app_handle)?;
+
+    let backend_url = state.backend_url.clone();
+    let app_handle_for_monitor = app_handle.clone();
+    let state_for_monitor = state.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let ready = wait_backend_ready(&backend_url).await;
+        {
+            let mut ready_guard = state_for_monitor.backend_ready.lock().await;
+            *ready_guard = ready;
+        }
+
+        if ready {
+            if let Some(main_window) = app_handle_for_monitor.get_webview_window(MAIN_WINDOW_LABEL) {
+                let target_url = match Url::parse(&backend_url) {
+                    Ok(url) => url,
+                    Err(error) => {
+                        let _ = main_window.eval(&format!(
+                            "document.documentElement.innerHTML = {error_html};",
+                            error_html = serde_json::to_string(&format!(
+                                "Invalid backend URL: {error}"
+                            ))
+                            .unwrap_or_else(|_| "\"Invalid backend URL\"".to_string())
+                        ));
+                        let _ = main_window.set_focus();
+                        return;
+                    }
+                };
+
+                if let Err(error) = main_window.navigate(target_url) {
+                    let _ = main_window.eval(&format!(
+                        "document.documentElement.innerHTML = {error_html};",
+                        error_html = serde_json::to_string(&format!(
+                            "Failed to open backend UI: {error}"
+                        ))
+                        .unwrap_or_else(|_| "\"Failed to open backend UI\"".to_string())
+                    ));
+                }
+                let _ = main_window.set_focus();
+            }
+            return;
+        }
+
+        {
+            let mut process_guard = state_for_monitor.backend_process.lock().await;
+            if let Some(process) = process_guard.as_mut() {
+                let _ = process.kill();
+                let _ = process.wait();
+            }
+            *process_guard = None;
+        }
+
+        show_startup_message(
+            &app_handle_for_monitor,
+            "Backend failed to start in time. Your data directory is ~/.tron. Check logs and retry.",
+        );
+    });
+
+    Ok(())
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
@@ -451,24 +526,13 @@ fn main() {
             let state = build_runtime_state(&app_handle)?;
             app.manage(state.clone());
 
-            let mut child = start_sidecar_backend(&state, &app_handle)?;
-            let backend_ready = tauri::async_runtime::block_on(wait_backend_ready(&state.backend_url));
-            if !backend_ready {
-                let _ = child.kill();
-                return Err("backend failed to start within expected time".into());
-            }
-
-            {
-                let mut ready_guard = tauri::async_runtime::block_on(state.backend_ready.lock());
-                *ready_guard = true;
-            }
-
+            let child = start_sidecar_backend(&state, &app_handle)?;
             {
                 let mut process_guard = tauri::async_runtime::block_on(state.backend_process.lock());
                 *process_guard = Some(child);
             }
 
-            spawn_main_window(&app_handle, &state.backend_url)?;
+            start_window_navigator(app_handle.clone(), state.clone())?;
 
             Ok(())
         })
