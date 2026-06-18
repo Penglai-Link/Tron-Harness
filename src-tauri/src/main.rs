@@ -1,5 +1,6 @@
 use std::io;
 use std::net::TcpListener;
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
@@ -192,6 +193,27 @@ fn find_free_port(start: u16) -> io::Result<u16> {
     ))
 }
 
+fn resolve_desktop_data_dir() -> Result<PathBuf, String> {
+    let home_dir: Option<PathBuf> = if cfg!(windows) {
+        std::env::var_os("USERPROFILE").map(PathBuf::from).or_else(|| {
+            std::env::var_os("HOMEDRIVE").and_then(|drive| {
+                std::env::var_os("HOMEPATH").map(|path| {
+                    let mut home = PathBuf::from(drive);
+                    home.push(path);
+                    home
+                })
+            })
+        })
+    } else {
+        std::env::var_os("HOME").map(PathBuf::from)
+    };
+
+    let home = home_dir.ok_or_else(|| {
+        "home directory not found (HOME or USERPROFILE is required)".to_string()
+    })?;
+    Ok(Path::new(&home).join(".tron"))
+}
+
 fn start_sidecar_backend(state: &DesktopRuntimeState, handle: &AppHandle) -> Result<Child, String> {
     let sidecar_binary = resolve_sidecar_path(handle)?;
 
@@ -379,10 +401,7 @@ fn spawn_main_window(app_handle: &AppHandle, backend_url: &str) -> Result<(), St
 }
 
 fn build_runtime_state(app_handle: &AppHandle) -> Result<DesktopRuntimeState, String> {
-    let app_data_dir = app_handle
-        .path()
-        .app_data_dir()
-        .map_err(|error| format!("app data dir not available: {error}"))?;
+    let app_data_dir = resolve_desktop_data_dir()?;
     std::fs::create_dir_all(&app_data_dir)
         .map_err(|error| format!("app data dir creation failed: {error}"))?;
 
