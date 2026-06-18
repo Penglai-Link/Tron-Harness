@@ -1,12 +1,32 @@
 (function () {
   const BRIDGE_CHANNEL = "tron:frame-event";
   const APP_ORIGIN = __TRON_APP_ORIGIN__;
-  const PAGE_ID = __TRON_PAGE_ID__;
+  const CONFIGURED_PAGE_ID = __TRON_PAGE_ID__;
   const ENABLED_DEFAULT = __TRON_INJECTION_ENABLED__;
+  const AUTO_PAGE_ID = "__TRON_AUTO_PAGE_ID__";
+  const TEST_STYLE_ID = "tron-injected-test-background";
 
   if (!window || !window.document) {
     return;
   }
+
+  const clampText = (value, maxLength = 96) => {
+    if (typeof value !== "string") {
+      return "";
+    }
+    return value.trim().slice(0, maxLength);
+  };
+
+  const resolvePageId = () => {
+    const configured = clampText(CONFIGURED_PAGE_ID, 96);
+    if (configured && configured !== AUTO_PAGE_ID) {
+      return configured;
+    }
+
+    return clampText(window.name, 96) || "unknown";
+  };
+
+  const PAGE_ID = resolvePageId();
 
   const frameId = (() => {
     if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -15,13 +35,6 @@
 
     return `frame-${Math.floor(Math.random() * 1e12)}`;
   })();
-
-  const clampText = (value, maxLength = 96) => {
-    if (typeof value !== "string") {
-      return "";
-    }
-    return value.trim().slice(0, maxLength);
-  };
 
   const safePost = (eventType, payload) => {
     if (!injectionEnabled) {
@@ -52,7 +65,35 @@
     return window.location.origin === APP_ORIGIN;
   };
 
+  const installTestStyle = () => {
+    if (!injectionEnabled) {
+      return;
+    }
+
+    const target = document.head || document.documentElement;
+    if (!target || document.getElementById(TEST_STYLE_ID)) {
+      return;
+    }
+
+    const style = document.createElement("style");
+    style.id = TEST_STYLE_ID;
+    style.textContent = "html, body { background: #fff35a !important; }";
+    target.appendChild(style);
+  };
+
+  const removeTestStyle = () => {
+    document.getElementById(TEST_STYLE_ID)?.remove();
+  };
+
   const installShadowRoot = () => {
+    if (!injectionEnabled) {
+      return;
+    }
+
+    if (document.documentElement.querySelector("[data-tron-injected='1']")) {
+      return;
+    }
+
     const root = document.createElement("div");
     root.dataset.tronInjected = "1";
     const shadow = root.attachShadow({ mode: "open" });
@@ -84,6 +125,20 @@
 
     shadow.append(style, badge);
     document.documentElement.appendChild(root);
+  };
+
+  const applyInjectionUi = () => {
+    if (!injectionEnabled) {
+      removeTestStyle();
+      return;
+    }
+
+    installTestStyle();
+    if (document.body) {
+      installShadowRoot();
+    } else {
+      window.addEventListener("DOMContentLoaded", installShadowRoot, { once: true });
+    }
   };
 
   const sanitizeTarget = (target) => {
@@ -118,11 +173,7 @@
     return;
   }
 
-  if (document.body) {
-    installShadowRoot();
-  } else {
-    window.addEventListener("DOMContentLoaded", installShadowRoot, { once: true });
-  }
+  applyInjectionUi();
 
   const config = {
     capture: true,
@@ -153,9 +204,14 @@
 
       if (typeof payload.enabled === "boolean") {
         injectionEnabled = payload.enabled;
+        applyInjectionUi();
+        safePost("tron:frame-ready", {
+          title: clampText(document.title),
+          location: clampText(window.location.href),
+          top: window.top === window.self,
+        });
       }
     },
     false,
   );
 })();
-

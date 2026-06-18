@@ -17,6 +17,7 @@
         "width": 1440,
         "height": 920,
         "url": "about:blank",
+        "create": false,
         "resizable": true
       }
     ],

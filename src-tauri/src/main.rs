@@ -19,6 +19,7 @@ const MAIN_WINDOW_LABEL: &str = "tron-main";
 const TARGET_WINDOW_LABEL_PREFIX: &str = "tron-target-";
 const BACKEND_HEALTH_PATH: &str = "/api/v1/health";
 const MAX_PORT_PROBE: u16 = 80;
+const AUTO_PAGE_ID: &str = "__TRON_AUTO_PAGE_ID__";
 
 const INJECTION_TEMPLATE: &str = include_str!("../injection/tron-desktop-injection.js");
 
@@ -339,6 +340,26 @@ fn build_injection_script(backend_host: &str, page_id: &str, injection_enabled: 
         .replace("__TRON_INJECTION_ENABLED__", injection_flag)
 }
 
+fn create_main_window(app: &tauri::App, state: &DesktopRuntimeState) -> Result<(), String> {
+    let window_config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == MAIN_WINDOW_LABEL)
+        .ok_or_else(|| "main window config was not found".to_string())?;
+    let injection_enabled = *tauri::async_runtime::block_on(state.injection_enabled.lock());
+    let script = build_injection_script(&state.backend_url, AUTO_PAGE_ID, injection_enabled);
+
+    WebviewWindowBuilder::from_config(app.handle(), window_config)
+        .map_err(|error| format!("failed to create main window builder: {error}"))?
+        .initialization_script_for_all_frames(&script)
+        .build()
+        .map_err(|error| format!("failed to create main window: {error}"))?;
+
+    Ok(())
+}
+
 async fn open_target_window(
     app: &AppHandle,
     state: &DesktopRuntimeState,
@@ -596,6 +617,7 @@ fn main() {
             let backend_port = resolve_backend_port(load_port())?;
             let state = build_runtime_state(&app_handle, backend_port)?;
             app.manage(state.clone());
+            create_main_window(app, &state)?;
 
             let child = start_sidecar_backend(&state, &app_handle)?;
             {

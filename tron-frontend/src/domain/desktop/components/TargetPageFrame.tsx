@@ -1,13 +1,12 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type CSSProperties,
 } from "react";
 
-import { DesktopBridge, sanitizeInjectionEventPayload, type DesktopInjectionEvent, type DesktopInjectionEventRequest, type DesktopBackendStatus } from "@/shared/desktop/DesktopBridge";
+import { sanitizeInjectionEventPayload, type DesktopInjectionEvent, type DesktopInjectionEventRequest, type DesktopBackendStatus } from "@/shared/desktop/DesktopBridge";
 
 interface FrameHandshake {
   frameId: string;
@@ -24,6 +23,7 @@ interface TargetPageFrameProps {
 }
 
 const FRAME_TIMEOUT_MS = 3500;
+const BRIDGE_CHANNEL = "tron:frame-event";
 
 export function TargetPageFrame({
   pageId,
@@ -34,7 +34,6 @@ export function TargetPageFrame({
   onFrameBlocked,
   onInjectionEvent,
 }: TargetPageFrameProps) {
-  const bridge = useMemo(() => new DesktopBridge(), []);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const [readyState, setReadyState] = useState<"pending" | "ready" | "blocked">("pending");
   const [frameReady, setFrameReady] = useState(false);
@@ -58,6 +57,27 @@ export function TargetPageFrame({
     setReadyState("blocked");
     onFrameBlocked?.(reason);
   }, [onFrameBlocked]);
+
+  const postInjectionToggle = useCallback(() => {
+    frameRef.current?.contentWindow?.postMessage({
+      channel: BRIDGE_CHANNEL,
+      type: "tron:toggle-injection",
+      pageId,
+      enabled: injectionEnabled,
+    }, "*");
+  }, [injectionEnabled, pageId]);
+
+  useEffect(() => {
+    clearTimeoutRef();
+    fallbackDispatchedRef.current = false;
+    setReadyState("pending");
+    setFrameReady(false);
+    setFrameId("");
+  }, [clearTimeoutRef, pageId, targetUrl]);
+
+  useEffect(() => {
+    postInjectionToggle();
+  }, [postInjectionToggle]);
 
   useEffect(() => {
     if (!injectionEnabled || !desktopBackendStatus.ready) {
@@ -119,6 +139,7 @@ export function TargetPageFrame({
 
   const handleLoad = () => {
     clearTimeoutRef();
+    postInjectionToggle();
     if (!frameReady && injectionEnabled) {
       const timer = window.setTimeout(() => {
         if (!frameReady) {
@@ -144,6 +165,7 @@ export function TargetPageFrame({
         ref={frameRef}
         onLoad={handleLoad}
         onError={handleError}
+        name={pageId}
         src={targetUrl}
         style={iframeStyle}
         referrerPolicy="no-referrer"
