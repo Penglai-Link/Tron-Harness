@@ -50,9 +50,9 @@ fn ingest_pipeline_templates() -> Vec<RagPipelineTemplateView> {
                 ],
                 edges: vec![
                     template_edge("validate-source", "prepare-payload"),
-                    template_edge("validate-source", "resolve-source"),
-                    template_edge("prepare-payload", "split-text"),
+                    template_edge("prepare-payload", "resolve-source"),
                     template_edge("resolve-source", "parse-document"),
+                    template_edge("parse-document", "split-text"),
                     template_edge("split-text", "fulltext-index"),
                     template_edge("split-text", "vector-index"),
                     template_edge("fulltext-index", "persist-source"),
@@ -113,4 +113,3 @@ fn template_edge(from: &str, to: &str) -> RagPipelineEdgeInput {
         to: to.into(),
     }
 }
-
