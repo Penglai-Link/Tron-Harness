@@ -11,6 +11,8 @@ export interface DesktopBackendStatus {
   backendPort: number;
   ready: boolean;
   injectionEnabled: boolean;
+  databasePath?: string;
+  graphPath?: string;
 }
 
 export interface OpenTargetPageRequest {
@@ -180,9 +182,13 @@ export class DesktopBridge {
       backendPort?: unknown;
       ready?: unknown;
       injectionEnabled?: unknown;
+      databasePath?: unknown;
+      graphPath?: unknown;
       backend_url?: unknown;
       backend_port?: unknown;
       injection_enabled?: unknown;
+      database_path?: unknown;
+      graph_path?: unknown;
     };
 
     return {
@@ -190,6 +196,8 @@ export class DesktopBridge {
       backendPort: Number(payload.backendPort ?? payload.backend_port ?? 0),
       ready: Boolean(payload.ready),
       injectionEnabled: Boolean(payload.injectionEnabled ?? payload.injection_enabled),
+      databasePath: sanitizeString(payload.databasePath ?? payload.database_path),
+      graphPath: sanitizeString(payload.graphPath ?? payload.graph_path),
     };
   }
 

@@ -24,7 +24,8 @@ const INJECTION_TEMPLATE: &str = include_str!("../injection/tron-desktop-injecti
 
 #[derive(Clone)]
 struct DesktopRuntimeState {
-    app_data_dir: PathBuf,
+    database_path: PathBuf,
+    graph_path: PathBuf,
     backend_port: u16,
     backend_url: String,
     backend_process: Arc<Mutex<Option<Child>>>,
@@ -40,6 +41,8 @@ struct DesktopBackendStatus {
     backend_port: u16,
     ready: bool,
     injection_enabled: bool,
+    database_path: String,
+    graph_path: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -214,14 +217,20 @@ fn resolve_desktop_data_dir() -> Result<PathBuf, String> {
     Ok(Path::new(&home).join(".tron"))
 }
 
+fn resolve_tron_database_path(app_data_dir: &Path) -> PathBuf {
+    let legacy_path = app_data_dir.join("tron.sqlite");
+    if legacy_path.exists() {
+        return legacy_path;
+    }
+
+    app_data_dir.join("tron.sqlite3")
+}
+
 fn start_sidecar_backend(state: &DesktopRuntimeState, handle: &AppHandle) -> Result<Child, String> {
     let sidecar_binary = resolve_sidecar_path(handle)?;
 
-    let data_path = state.app_data_dir.join("tron.sqlite");
-    let graph_path = state.app_data_dir.join("tron.graph.grafeo");
-
-    let db_path = data_path.to_string_lossy().into_owned();
-    let graph_storage_path = graph_path.to_string_lossy().into_owned();
+    let db_path = state.database_path.to_string_lossy().into_owned();
+    let graph_storage_path = state.graph_path.to_string_lossy().into_owned();
     let frontend_dist_dir = state.frontend_dist_dir.to_string_lossy().into_owned();
 
     let child = Command::new(sidecar_binary)
@@ -332,6 +341,8 @@ async fn desktop_backend_status(state: State<'_, DesktopRuntimeState>) -> Result
         backend_port: state.backend_port,
         ready: *state.backend_ready.lock().await,
         injection_enabled: *state.injection_enabled.lock().await,
+        database_path: state.database_path.to_string_lossy().into_owned(),
+        graph_path: state.graph_path.to_string_lossy().into_owned(),
     })
 }
 
@@ -404,6 +415,8 @@ fn build_runtime_state(app_handle: &AppHandle) -> Result<DesktopRuntimeState, St
     let app_data_dir = resolve_desktop_data_dir()?;
     std::fs::create_dir_all(&app_data_dir)
         .map_err(|error| format!("app data dir creation failed: {error}"))?;
+    let database_path = resolve_tron_database_path(&app_data_dir);
+    let graph_path = app_data_dir.join("tron.graph.grafeo");
 
     let frontend_dist_dir = build_frontend_dist_dir(app_handle)?;
 
@@ -411,7 +424,8 @@ fn build_runtime_state(app_handle: &AppHandle) -> Result<DesktopRuntimeState, St
     let backend_url = format!("http://{}:{backend_port}", HOST);
 
     Ok(DesktopRuntimeState {
-        app_data_dir,
+        database_path,
+        graph_path,
         backend_port,
         backend_url,
         backend_process: Arc::new(Mutex::new(None)),

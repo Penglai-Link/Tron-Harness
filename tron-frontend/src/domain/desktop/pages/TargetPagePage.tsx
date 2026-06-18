@@ -25,6 +25,8 @@ export function TargetPagePage() {
     backendPort: 0,
     ready: false,
     injectionEnabled: true,
+    databasePath: "",
+    graphPath: "",
   });
   const [events, setEvents] = useState<DesktopInjectionEvent[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -124,6 +126,8 @@ export function TargetPagePage() {
               Backend: <span className="font-mono">{backendStatus.backendUrl || "not ready"}</span>
             </p>
             <p>Injection enabled: {backendStatus.injectionEnabled ? "yes" : "no"}</p>
+            <p className="truncate">DB path: <span className="font-mono">{backendStatus.databasePath || "-"}</span></p>
+            <p className="truncate">Graph path: <span className="font-mono">{backendStatus.graphPath || "-"}</span></p>
           </div>
           {errorMessage ? <p className="mt-2 text-sm text-[var(--color-error)]">{errorMessage}</p> : null}
         </SurfaceCard>
@@ -169,4 +173,3 @@ export function TargetPagePage() {
     </main>
   );
 }
-
