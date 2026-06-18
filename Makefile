@@ -159,10 +159,10 @@ app-clean: fe-clean
 	mkdir -p $(BACKEND_FRONTEND_DIR)
 
 .PHONY: desktop-build
-desktop-build: app-build
+desktop-build: desktop-clean app-build
 	rm -rf $(TAURI_DIR)/frontend
 	mkdir -p $(TAURI_DIR)/frontend
-	cp -R $(BACKEND_FRONTEND_DIR) $(TAURI_DIR)/frontend
+	cp -R $(BACKEND_FRONTEND_DIR)/. $(TAURI_DIR)/frontend/
 	mkdir -p $(TAURI_DIR)/binaries
 	cargo build --manifest-path $(BACKEND_MANIFEST) --release
 	cp tron-backend/target/release/tron-backend $(TAURI_DIR)/binaries/tron-backend || true
@@ -171,7 +171,7 @@ desktop-build: app-build
 	@if [ -f $(TAURI_DIR)/tauri.conf.json ]; then cd $(TAURI_DIR) && $(TAURI_NPM) run -s tauri build; fi
 
 .PHONY: desktop-dev
-desktop-dev: desktop-build
+desktop-dev: desktop-clean desktop-build
 	cd $(TAURI_DIR) && $(TAURI_NPM) run -s tauri dev
 
 .PHONY: desktop-clean

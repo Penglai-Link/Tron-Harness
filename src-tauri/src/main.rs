@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 use url::Url;
@@ -131,6 +131,15 @@ fn build_frontend_dist_dir(handle: &AppHandle) -> Result<PathBuf, String> {
         .resource_dir()
         .map_err(|error| format!("resource dir resolution failed: {error}"))?;
     let candidate = resource_dir.join("frontend");
+
+    if candidate.join("index.html").exists() {
+        return Ok(candidate);
+    }
+
+    let nested_candidate = candidate.join("frontend");
+    if nested_candidate.join("index.html").exists() {
+        return Ok(nested_candidate);
+    }
 
     if candidate.exists() {
         return Ok(candidate);
@@ -294,8 +303,8 @@ async fn open_target_window(
     })
 }
 
-#[tauri::command]
-async fn desktopBackendStatus(state: State<'_, DesktopRuntimeState>) -> Result<DesktopBackendStatus, String> {
+#[tauri::command(rename = "desktopBackendStatus")]
+async fn desktop_backend_status(state: State<'_, DesktopRuntimeState>) -> Result<DesktopBackendStatus, String> {
     Ok(DesktopBackendStatus {
         backend_url: state.backend_url.clone(),
         backend_port: state.backend_port,
@@ -304,13 +313,13 @@ async fn desktopBackendStatus(state: State<'_, DesktopRuntimeState>) -> Result<D
     })
 }
 
-#[tauri::command]
-async fn openTargetPage(app: AppHandle, state: State<'_, DesktopRuntimeState>, request: OpenTargetPageInput) -> Result<OpenTargetPageOutput, String> {
+#[tauri::command(rename = "openTargetPage")]
+async fn open_target_page(app: AppHandle, state: State<'_, DesktopRuntimeState>, request: OpenTargetPageInput) -> Result<OpenTargetPageOutput, String> {
     open_target_window(&app, &state, request).await
 }
 
-#[tauri::command]
-async fn closeTargetPage(app: AppHandle, request: CloseTargetPageInput) -> Result<CloseTargetPageOutput, String> {
+#[tauri::command(rename = "closeTargetPage")]
+async fn close_target_page(app: AppHandle, request: CloseTargetPageInput) -> Result<CloseTargetPageOutput, String> {
     let label = format!("{TARGET_WINDOW_LABEL_PREFIX}{}", request.page_id);
     if let Some(window) = app.get_webview_window(&label) {
         window
@@ -322,15 +331,15 @@ async fn closeTargetPage(app: AppHandle, request: CloseTargetPageInput) -> Resul
     Ok(CloseTargetPageOutput { closed: false })
 }
 
-#[tauri::command]
-async fn setInjectionEnabled(state: State<'_, DesktopRuntimeState>, request: SetInjectionEnabledInput) -> Result<bool, String> {
+#[tauri::command(rename = "setInjectionEnabled")]
+async fn set_injection_enabled(state: State<'_, DesktopRuntimeState>, request: SetInjectionEnabledInput) -> Result<bool, String> {
     let mut enabled = state.injection_enabled.lock().await;
     *enabled = request.enabled;
     Ok(*enabled)
 }
 
-#[tauri::command]
-async fn desktopInjectionEvent(_state: State<'_, DesktopRuntimeState>, request: DesktopInjectionEventInput) -> Result<(), String> {
+#[tauri::command(rename = "desktopInjectionEvent")]
+async fn desktop_injection_event(_state: State<'_, DesktopRuntimeState>, request: DesktopInjectionEventInput) -> Result<(), String> {
     let value = request
         .event
         .as_object()
@@ -361,13 +370,9 @@ fn spawn_main_window(app_handle: &AppHandle, backend_url: &str) -> Result<(), St
         .get_webview_window(MAIN_WINDOW_LABEL)
         .ok_or_else(|| "main window was not found".to_string())?;
 
-    let script = format!(
-        "window.location.replace({});",
-        serde_json::to_string(backend_url).unwrap_or_else(|_| "\"\"".to_string()),
-    );
-
+    let target_url = Url::parse(backend_url).map_err(|error| format!("invalid backend url: {error}"))?;
     main_window
-        .eval(&script)
+        .navigate(target_url)
         .map_err(|error| format!("navigate main window failed: {error}"))?;
 
     Ok(())
@@ -395,6 +400,15 @@ fn build_runtime_state(app_handle: &AppHandle) -> Result<DesktopRuntimeState, St
         injection_enabled: Arc::new(Mutex::new(true)),
         backend_ready: Arc::new(Mutex::new(false)),
     })
+}
+
+fn stop_backend_process(state: &DesktopRuntimeState) {
+    let mut process_guard = tauri::async_runtime::block_on(state.backend_process.lock());
+    if let Some(process) = process_guard.as_mut() {
+        let _ = process.kill();
+        let _ = process.wait();
+    }
+    *process_guard = None;
 }
 
 fn main() {
@@ -426,12 +440,18 @@ fn main() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            desktopBackendStatus,
-            openTargetPage,
-            closeTargetPage,
-            setInjectionEnabled,
-            desktopInjectionEvent,
+            desktop_backend_status,
+            open_target_page,
+            close_target_page,
+            set_injection_enabled,
+            desktop_injection_event,
         ])
-        .run(tauri::generate_context!("tauri.conf.json"))
-        .expect("error while running tron desktop");
+        .build(tauri::generate_context!("tauri.conf.json"))
+        .expect("error while running tron desktop")
+        .run(|app_handle, event| {
+            if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
+                let state = app_handle.state::<DesktopRuntimeState>();
+                stop_backend_process(&state.inner());
+            }
+        });
 }
