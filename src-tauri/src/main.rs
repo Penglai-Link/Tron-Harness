@@ -4,11 +4,13 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder};
+use tauri::webview::{NewWindowFeatures, NewWindowResponse};
+use tauri::{AppHandle, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, Wry};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, Duration};
 use url::Url;
@@ -20,6 +22,7 @@ const TARGET_WINDOW_LABEL_PREFIX: &str = "tron-target-";
 const BACKEND_HEALTH_PATH: &str = "/api/v1/health";
 const MAX_PORT_PROBE: u16 = 80;
 const AUTO_PAGE_ID: &str = "__TRON_AUTO_PAGE_ID__";
+static POPUP_WINDOW_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 const INJECTION_TEMPLATE: &str = include_str!("../injection/tron-desktop-injection.js");
 
@@ -100,6 +103,11 @@ fn now_millis() -> i64 {
 
 fn next_page_id() -> String {
     format!("target-{}", now_millis())
+}
+
+fn next_popup_window_label() -> String {
+    let sequence = POPUP_WINDOW_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    format!("{TARGET_WINDOW_LABEL_PREFIX}popup-{}-{sequence}", now_millis())
 }
 
 fn is_http_url(input: &str) -> bool {
@@ -340,6 +348,37 @@ fn build_injection_script(backend_host: &str, page_id: &str, injection_enabled: 
         .replace("__TRON_INJECTION_ENABLED__", injection_flag)
 }
 
+fn create_popup_target_window(
+    app: &AppHandle,
+    backend_url: &str,
+    injection_enabled: bool,
+    url: Url,
+    features: NewWindowFeatures,
+) -> NewWindowResponse<Wry> {
+    let page_id = next_page_id();
+    let label = next_popup_window_label();
+    let title = url.as_str().to_string();
+    let script = build_injection_script(backend_url, &page_id, injection_enabled);
+    let builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::External(url))
+        .title(&title)
+        .inner_size(1280.0, 860.0)
+        .window_features(features)
+        .initialization_script_for_all_frames(&script)
+        .resizable(true)
+        .visible(true)
+        .on_document_title_changed(|window, title| {
+            let _ = window.set_title(&title);
+        });
+
+    match builder.build() {
+        Ok(window) => NewWindowResponse::Create { window },
+        Err(error) => {
+            eprintln!("failed to open popup target window: {error}");
+            NewWindowResponse::Deny
+        }
+    }
+}
+
 fn should_navigate_main_window_to_backend() -> bool {
     !tauri::is_dev()
 }
@@ -370,7 +409,19 @@ fn create_main_window(app: &tauri::App, state: &DesktopRuntimeState) -> Result<(
         .visible(true)
     };
 
-    builder = builder.initialization_script_for_all_frames(&script);
+    let app_handle_for_popup = app.handle().clone();
+    let backend_url_for_popup = state.backend_url.clone();
+    builder = builder
+        .initialization_script_for_all_frames(&script)
+        .on_new_window(move |url, features| {
+            create_popup_target_window(
+                &app_handle_for_popup,
+                &backend_url_for_popup,
+                injection_enabled,
+                url,
+                features,
+            )
+        });
     builder
         .build()
         .map_err(|error| format!("failed to create main window: {error}"))?;
@@ -423,6 +474,8 @@ async fn open_target_window(
 
     let target_url = Url::parse(&raw_url).map_err(|error| format!("invalid target URL: {error}"))?;
 
+    let app_handle_for_popup = app.clone();
+    let backend_url_for_popup = state.backend_url.clone();
     let _window = WebviewWindowBuilder::new(
         app,
         &label,
@@ -430,6 +483,15 @@ async fn open_target_window(
     )
     .title(&format!("Tron Target {page_id}"))
     .initialization_script_for_all_frames(&script)
+    .on_new_window(move |url, features| {
+        create_popup_target_window(
+            &app_handle_for_popup,
+            &backend_url_for_popup,
+            injection_enabled,
+            url,
+            features,
+        )
+    })
     .inner_size(1280.0, 860.0)
     .resizable(true)
     .visible(true)
