@@ -286,10 +286,8 @@ fn probe_existing_backend_port(start_port: u16) -> Option<u16> {
 fn resolve_backend_port(base_port: u16) -> Result<u16, String> {
     if let Some(existing_port) = probe_existing_backend_port(base_port) {
         let killed = kill_running_backend_processes()?;
-        if killed {
-            if !wait_until_backend_stopped(existing_port) {
-                return Err("existing backend did not exit after termination".into());
-            }
+        if !killed || !wait_until_backend_stopped(existing_port) {
+            return find_free_port(base_port).map_err(|error| error.to_string());
         }
 
         return Ok(existing_port);
