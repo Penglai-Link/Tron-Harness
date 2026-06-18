@@ -1343,17 +1343,17 @@ fn repository_search_boundary_keeps_graph_summary_and_memory_flow_behavior_out()
     let rag_http_routes = include_str!("../src/adapters/inbound/http/rag/routes.rs");
     let rag_application = [
         include_str!("../src/application/rag/search.rs"),
-        include_str!("../src/application/rag/search/split/split_01.rs"),
-        include_str!("../src/application/rag/search/split/split_02.rs"),
+        include_str!("../src/application/rag/search/split/contracts.rs"),
+        include_str!("../src/application/rag/search/split/service_runtime.rs"),
     ]
     .join("\n");
     let repository_search = [
         include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/search.rs"),
         include_str!(
-            "../src/adapters/outbound/persistence/sqlite/rag_repository/search/split/split_01.rs"
+            "../src/adapters/outbound/persistence/sqlite/rag_repository/search/split/query_repository.rs"
         ),
         include_str!(
-            "../src/adapters/outbound/persistence/sqlite/rag_repository/search/split/split_02.rs"
+            "../src/adapters/outbound/persistence/sqlite/rag_repository/search/split/row_projection.rs"
         ),
     ]
     .join("\n");
@@ -1373,20 +1373,20 @@ fn sqlite_rag_repository_uses_template_plans_instead_of_corpus_sql_branches() {
     let repository_ingest = [
         include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/ingest.rs"),
         include_str!(
-            "../src/adapters/outbound/persistence/sqlite/rag_repository/ingest/split_01.rs"
+            "../src/adapters/outbound/persistence/sqlite/rag_repository/ingest/write_repository.rs"
         ),
         include_str!(
-            "../src/adapters/outbound/persistence/sqlite/rag_repository/ingest/split_02.rs"
+            "../src/adapters/outbound/persistence/sqlite/rag_repository/ingest/write_helpers.rs"
         ),
     ]
     .join("\n");
     let repository_search = [
         include_str!("../src/adapters/outbound/persistence/sqlite/rag_repository/search.rs"),
         include_str!(
-            "../src/adapters/outbound/persistence/sqlite/rag_repository/search/split/split_01.rs"
+            "../src/adapters/outbound/persistence/sqlite/rag_repository/search/split/query_repository.rs"
         ),
         include_str!(
-            "../src/adapters/outbound/persistence/sqlite/rag_repository/search/split/split_02.rs"
+            "../src/adapters/outbound/persistence/sqlite/rag_repository/search/split/row_projection.rs"
         ),
     ]
     .join("\n");
@@ -1423,8 +1423,8 @@ fn sqlite_rag_repository_uses_template_plans_instead_of_corpus_sql_branches() {
 fn search_runtime_uses_pipeline_stage_results_instead_of_posthoc_synthesis() {
     let search_source = [
         include_str!("../src/application/rag/search.rs"),
-        include_str!("../src/application/rag/search/split/split_01.rs"),
-        include_str!("../src/application/rag/search/split/split_02.rs"),
+        include_str!("../src/application/rag/search/split/contracts.rs"),
+        include_str!("../src/application/rag/search/split/service_runtime.rs"),
     ]
     .join("\n");
 

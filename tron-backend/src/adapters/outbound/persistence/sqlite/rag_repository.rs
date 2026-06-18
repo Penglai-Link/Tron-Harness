@@ -9,5 +9,5 @@ mod retry;
 mod search;
 mod sql_plan;
 
-include!("rag_repository/root/split_01.rs");
-include!("rag_repository/root/split_02.rs");
+include!("rag_repository/root/repository.rs");
+include!("rag_repository/root/row_mapping.rs");

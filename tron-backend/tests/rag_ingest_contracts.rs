@@ -780,8 +780,8 @@ fn ingest_executor_uses_artifact_bundle_for_stage_handoffs() {
 fn ingest_executor_uses_generic_pipeline_dispatch_instead_of_fixed_stage_match() {
     let executor_source = [
         include_str!("../src/application/rag/ingest/executor.rs"),
-        include_str!("../src/application/rag/ingest/executor/split_01.rs"),
-        include_str!("../src/application/rag/ingest/executor/split_02.rs"),
+        include_str!("../src/application/rag/ingest/executor/runtime.rs"),
+        include_str!("../src/application/rag/ingest/executor/stage_helpers.rs"),
     ]
     .join("\n");
 
