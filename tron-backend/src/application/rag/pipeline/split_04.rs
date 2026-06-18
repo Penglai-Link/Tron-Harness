@@ -61,6 +61,38 @@ fn ingest_pipeline_templates() -> Vec<RagPipelineTemplateView> {
             },
         },
         RagPipelineTemplateView {
+            template_id: "mineru-document-reference".into(),
+            display_name: "MinerU Document Reference Ingest".into(),
+            description: "Resolve PDF or DOCX project document references, parse them through MinerU into Markdown, then build fulltext and vector indexes.".into(),
+            pipeline: RagPipelineInput {
+                mode: "DAG".into(),
+                nodes: vec![
+                    template_node("validate-source", "VALIDATE_SOURCE", "RAG_VALIDATE_SOURCE"),
+                    template_node(
+                        "prepare-payload",
+                        "PREPARE_PAYLOAD",
+                        "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1",
+                    ),
+                    template_node("resolve-source", "RESOLVE_SOURCE", "PROJECT_DOC_RESOLVE_SOURCE"),
+                    template_node("parse-document", "PARSE_DOCUMENT", "RAG_PARSE_MINERU_DOCUMENT"),
+                    template_node("split-text", "SPLIT_TEXT", "RAG_SPLIT_TEXT"),
+                    template_node("fulltext-index", "FULLTEXT_INDEX", "RAG_FULLTEXT_INDEX"),
+                    template_node("vector-index", "VECTOR_INDEX", "RAG_VECTOR_INDEX"),
+                    template_node("persist-source", "PERSIST_SOURCE", "RAG_PERSIST_SOURCE"),
+                ],
+                edges: vec![
+                    template_edge("validate-source", "prepare-payload"),
+                    template_edge("prepare-payload", "resolve-source"),
+                    template_edge("resolve-source", "parse-document"),
+                    template_edge("parse-document", "split-text"),
+                    template_edge("split-text", "fulltext-index"),
+                    template_edge("split-text", "vector-index"),
+                    template_edge("fulltext-index", "persist-source"),
+                    template_edge("vector-index", "persist-source"),
+                ],
+            },
+        },
+        RagPipelineTemplateView {
             template_id: "graph-tree-enhanced".into(),
             display_name: "Graph Tree Enhanced Ingest".into(),
             description: "Build fulltext and vector indexes while extracting and persisting a graph tree branch for graph-enabled corpora.".into(),

@@ -15,6 +15,7 @@ use crate::{
         rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
         workspace::WorkspaceService,
     },
+    config::MineruConfig,
     domain::rag::RagError,
     shared::event_bus::EventBusHandle,
 };
@@ -128,6 +129,8 @@ pub(super) fn build_rag_service(
     workspaces: WorkspaceService,
     llm_runtime: LlmRuntimeService,
     project_doc_root: &str,
+    mineru: MineruConfig,
+    document_parsing_client: reqwest::Client,
     event_bus: EventBusHandle,
 ) -> Result<AppRagService, AppBootstrapError> {
     let sqlite = SqliteRagRepository::connect(database_url).map_err(|source| {
@@ -144,7 +147,8 @@ pub(super) fn build_rag_service(
     Ok(RagService::new(
         Arc::new(Mutex::new(repository)),
         DefaultRagStrategyRegistry::default(),
-        DefaultRagRuntime::new(llm_runtime, project_doc_root),
+        DefaultRagRuntime::new(llm_runtime, project_doc_root)
+            .with_document_parser(mineru, document_parsing_client),
     )
     .with_event_bus(event_bus))
 }

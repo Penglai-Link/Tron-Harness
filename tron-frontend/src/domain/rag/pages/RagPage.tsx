@@ -114,11 +114,11 @@ export function RagPage() {
   const warningPagination = useTablePagination(filteredWarnings, 10);
   const tracePagination = useTablePagination(filteredTraces, 10);
 
-  useConsoleShellConfig({ searchPlaceholder: "Search RAG corpora, profiles, and sources..." });
+  useConsoleShellConfig({ searchPlaceholder: "搜索知识库语料、配置档案和来源..." });
 
   return (
     <>
-      <PageHeader title="RAG Management" />
+      <PageHeader title="知识检索管理" />
 
       <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <SegmentedTabs
@@ -133,7 +133,7 @@ export function RagPage() {
               nextParams.set("tab", value);
             }
             setSearchParams(nextParams, { replace: true });
-            setNotice(`RAG tab changed to ${value}.`);
+            setNotice(`知识检索标签已切换到 ${ragTabs.find((tab) => tab.value === value)?.label ?? value}。`);
           }}
         />
       </div>
@@ -178,7 +178,7 @@ export function RagPage() {
           onDataViewChange={setDataView}
           onQueryChange={setQuery}
           onSelectSource={(source) => {
-            setNotice(`Source selected: ${source.code}.`);
+            setNotice(`已选择来源：${source.code}。`);
           }}
         />
       ) : null}

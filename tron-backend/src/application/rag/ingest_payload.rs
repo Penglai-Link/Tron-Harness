@@ -146,7 +146,7 @@ fn prepare_document_ref_contract_payload(
     }
     let format = document_payload_string(&request.payload, "format")
         .ok_or(RagError::DocumentFormatUnsupported)?;
-    if format != compiled.document_format {
+    if !compiled.supports_document_format(&format) {
         return Err(RagError::DocumentFormatUnsupported);
     }
     let document_uri =
@@ -448,6 +448,7 @@ mod tests {
             record_parser_info: false,
             markdown_heading_depth: 6,
             document_format: "MARKDOWN".into(),
+            document_formats: vec!["MARKDOWN".into()],
             degrade_policy: "SKIP_VECTOR_WITH_WARNING".into(),
             embedding_model_code: None,
             embedding_version: "v1".into(),

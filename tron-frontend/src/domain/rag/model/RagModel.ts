@@ -295,23 +295,31 @@ export interface TraceRecord {
 }
 
 export const ragTabs = [
-  { label: "Corpora", value: "corpora" },
-  { label: "Profiles", value: "profiles" },
-  { label: "Workbench", value: "workbench" },
-  { label: "Data", value: "data" },
-  { label: "Diagnostics", value: "diagnostics" },
+  { label: "语料库", value: "corpora" },
+  { label: "配置档案", value: "profiles" },
+  { label: "调试台", value: "workbench" },
+  { label: "数据", value: "data" },
+  { label: "诊断", value: "diagnostics" },
 ] as const;
 
 export const dataViews = [
-  { label: "Sources", value: "sources" },
-  { label: "Text Units", value: "textUnits" },
-  { label: "Warnings", value: "warnings" },
-  { label: "Search Traces", value: "traces" },
+  { label: "来源", value: "sources" },
+  { label: "文本单元", value: "textUnits" },
+  { label: "告警", value: "warnings" },
+  { label: "检索追踪", value: "traces" },
 ] as const;
 
 export const pipelineStages = ["source", "parse", "normalize", "split", "persist", "fulltextIndex", "vectorIndex"] as const;
 
 const storageSegmentOrder: RagStorageSegmentKey[] = ["source", "textUnit", "fulltext", "vector", "diagnostics"];
+const storageSegmentLabels: Record<RagStorageSegmentKey, string> = {
+  diagnostics: "诊断",
+  fulltext: "全文",
+  source: "来源",
+  textUnit: "文本单元",
+  vector: "向量",
+};
+
 export function isTargetedStorageBinding(binding: unknown): binding is RagTargetedStorageBinding {
   if (!binding || typeof binding !== "object") return false;
   const candidate = binding as Partial<RagTargetedStorageBinding>;
@@ -326,17 +334,17 @@ export function normalizeRagStorageBinding(binding: RagStorageBinding): RagTarge
 }
 
 export function formatRagStorageTarget(target?: RagStorageTargetBinding) {
-  if (!target) return "unbound";
+  if (!target) return "未绑定";
   if (target.backend === "GRAPH") {
-    return `graph.${target.namespace ?? target.nodeLabel ?? "unbound"}/${target.nodeLabel ?? "node"}`;
+    return `graph.${target.namespace ?? target.nodeLabel ?? "未绑定"}/${target.nodeLabel ?? "节点"}`;
   }
-  return `sqlite.${target.table ?? "unbound"}`;
+  return `sqlite.${target.table ?? "未绑定"}`;
 }
 
 export function formatRagStorageBinding(binding: RagStorageBinding) {
   const normalizedBinding = normalizeRagStorageBinding(binding);
   const targetMap = new Map(normalizedBinding.targets.map((target) => [target.id, target]));
   return storageSegmentOrder
-    .map((segmentKey) => `${segmentKey}=${formatRagStorageTarget(targetMap.get(normalizedBinding.bindings[segmentKey] ?? ""))}`)
+    .map((segmentKey) => `${storageSegmentLabels[segmentKey]}=${formatRagStorageTarget(targetMap.get(normalizedBinding.bindings[segmentKey] ?? ""))}`)
     .join(" | ");
 }

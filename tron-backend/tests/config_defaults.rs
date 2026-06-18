@@ -41,6 +41,46 @@ fn graph_storage_path_yaml_override_still_wins() {
     assert_eq!(config.graph_storage_path, "/tmp/custom-tron.graph.grafeo");
 }
 
+#[test]
+fn mineru_and_document_parsing_config_load_from_yaml() {
+    let config_path = temp_config_path();
+    fs::write(
+        &config_path,
+        r#"
+httpClients:
+  documentParsing:
+    connectTimeoutMs: 2500
+    poolMaxIdlePerHost: 4
+mineru:
+  enabled: true
+  baseUrl: http://127.0.0.1:18000
+  parseEndpoint: /file_parse
+  timeoutSeconds: 120
+  maxBytes: 2097152
+  backend: pipeline
+  parseMethod: auto
+  returnContentList: true
+"#,
+    )
+    .expect("temp config should be written");
+
+    let config = AppConfig::from_yaml_file(&config_path).expect("temp config should load");
+
+    fs::remove_file(&config_path).expect("temp config should be removed");
+    assert_eq!(
+        config.http_clients.document_parsing.connect_timeout_ms,
+        2500
+    );
+    assert_eq!(
+        config.http_clients.document_parsing.pool_max_idle_per_host,
+        4
+    );
+    assert_eq!(config.mineru.base_url, "http://127.0.0.1:18000");
+    assert_eq!(config.mineru.timeout_seconds, 120);
+    assert_eq!(config.mineru.max_bytes, 2_097_152);
+    assert!(config.mineru.return_content_list);
+}
+
 fn database_url_expected_from_environment() -> PathBuf {
     env::var("TRON_BACKEND_DATABASE_URL")
         .ok()

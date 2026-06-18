@@ -29,6 +29,7 @@ pub struct CompiledRagIngestProfile {
     pub record_parser_info: bool,
     pub markdown_heading_depth: usize,
     pub document_format: String,
+    pub document_formats: Vec<String>,
     pub degrade_policy: String,
     pub embedding_model_code: Option<String>,
     pub embedding_version: String,
@@ -162,7 +163,15 @@ where
     } else {
         DEFAULT_MARKDOWN_HEADING_DEPTH
     };
-    let document_format = document_format(&profile.config, &stages);
+    let document_formats = document_formats(
+        &profile.config,
+        &stages,
+        document_parser_strategy_id.as_deref(),
+    );
+    let document_format = document_formats
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "MARKDOWN".into());
 
     Ok(CompiledRagIngestProfile {
         profile_id: profile.profile_id.clone(),
@@ -179,6 +188,7 @@ where
         record_parser_info,
         markdown_heading_depth,
         document_format,
+        document_formats,
         degrade_policy: profile.degrade_policy.clone(),
         embedding_model_code,
         embedding_version,
@@ -188,6 +198,15 @@ where
             .cloned()
             .unwrap_or(Value::Null),
     })
+}
+
+impl CompiledRagIngestProfile {
+    pub fn supports_document_format(&self, format: &str) -> bool {
+        self.document_formats
+            .iter()
+            .any(|candidate| candidate == format)
+            || self.document_format == format
+    }
 }
 
 fn legacy_pipeline_input(
@@ -381,21 +400,43 @@ fn markdown_heading_depth(
     usize::try_from(depth).map_err(|_| RagError::IngestProfileInvalid)
 }
 
-fn document_format(config: &Value, stages: &serde_json::Map<String, Value>) -> String {
-    stage_config(stages, "parseDocument")
-        .and_then(|config| config.get("format"))
-        .and_then(Value::as_str)
+fn document_formats(
+    config: &Value,
+    stages: &serde_json::Map<String, Value>,
+    parser_strategy_id: Option<&str>,
+) -> Vec<String> {
+    if let Some(formats) = stage_config(stages, "parseDocument")
+        .and_then(|config| config.get("supportedFormats"))
+        .and_then(Value::as_array)
         .or_else(|| {
             config
                 .get("parserPolicy")
                 .and_then(Value::as_object)
                 .and_then(|policy| policy.get("supportedFormats"))
                 .and_then(Value::as_array)
-                .and_then(|formats| formats.first())
-                .and_then(Value::as_str)
         })
-        .unwrap_or("MARKDOWN")
-        .to_string()
+    {
+        let values = formats
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+            .collect::<Vec<_>>();
+        if !values.is_empty() {
+            return values;
+        }
+    }
+    if parser_strategy_id == Some("RAG_PARSE_MINERU_DOCUMENT") {
+        return vec!["PDF".into(), "DOCX".into()];
+    }
+    vec![
+        stage_config(stages, "parseDocument")
+            .and_then(|config| config.get("format"))
+            .and_then(Value::as_str)
+            .unwrap_or("MARKDOWN")
+            .to_string(),
+    ]
 }
 
 fn stage_config<'a>(

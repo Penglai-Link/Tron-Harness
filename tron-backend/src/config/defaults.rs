@@ -4,7 +4,8 @@ use super::{
     AppConfig, AuthConfig, DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS, DEFAULT_AUTH_DEV_OAUTH2_NAME,
     DEFAULT_AUTH_JWT_SECRET, DEFAULT_AUTH_REFRESH_TOKEN_TTL_SECONDS, DEFAULT_BIND_ADDRESS,
     DEFAULT_PORT, DEFAULT_SYSTEM_AGENT_CODEX_COMMAND, DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND,
-    HttpClientProfilesConfig, SystemAgentConfig, TEST_DATABASE_URL, VariableCryptoConfig,
+    HttpClientProfilesConfig, MineruConfig, SystemAgentConfig, TEST_DATABASE_URL,
+    VariableCryptoConfig,
 };
 
 impl Default for AppConfig {
@@ -29,6 +30,7 @@ impl Default for AppConfig {
             },
             variable_crypto: VariableCryptoConfig::test_default(),
             http_clients: HttpClientProfilesConfig::default_profiles(),
+            mineru: MineruConfig::default(),
             auth: AuthConfig {
                 jwt_secret: DEFAULT_AUTH_JWT_SECRET.into(),
                 access_token_ttl_seconds: DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS,

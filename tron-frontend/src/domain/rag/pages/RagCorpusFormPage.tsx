@@ -71,21 +71,38 @@ const segmentBindingMeta: Array<{
 }> = [
   {
     key: "source",
-    label: "Source",
+    label: "来源",
   },
   {
     key: "textUnit",
-    label: "Text Unit",
+    label: "文本单元",
   },
   {
     key: "fulltext",
-    label: "Fulltext",
+    label: "全文索引",
   },
   {
     key: "vector",
-    label: "Vector",
+    label: "向量",
   },
 ];
+
+const corpusFieldHints = {
+  code: "语料库的稳定编码，会作为接口参数和配置引用使用；创建后不可修改。",
+  description: "语料库用途说明，便于在列表和配置页面识别该语料库。",
+  filterName: "允许检索配置和工作台用于筛选的业务字段，必须来自字段映射。",
+  filterOperators: "该字段支持的筛选操作符，多个操作符用逗号分隔，例如 eq, in。",
+  filterType: "筛选值的数据类型，用于保存配置和工作台测试时校验输入值。",
+  mappingColumn: "字段写入底层存储时使用的列名或属性名。",
+  mappingLogicalName: "业务侧引用的字段名，会用于筛选结构、工作台业务属性和返回字段。",
+  name: "展示给用户看的语料库名称。",
+  segmentBinding: "指定该数据分段写入哪个存储目标；为空时该分段不会绑定到目标。",
+  storageBackend: "选择该目标使用本地表存储还是图存储。不同后端需要填写不同字段。",
+  storageCodeStrategy: "图节点编码生成策略，用来保证同一来源版本和作用域下节点编码稳定。",
+  storageNamespace: "图存储命名空间，用于隔离不同语料库或不同业务域的图数据。",
+  storageNodeLabel: "图存储中的节点标签，用于标识写入的文本单元或文档节点类型。",
+  storageTable: "本地表存储使用的数据表名。自动生成值可按需手动覆盖。",
+} satisfies Record<string, string>;
 
 function hasGraphStorageTarget(storageTargets: RagStorageTargetFormState[]) {
   return storageTargets.some((target) => target.backend === "GRAPH");
@@ -120,20 +137,20 @@ function StorageTargetCard({
     <div className="space-y-4 rounded-xl border border-[var(--color-outline-variant)] p-4">
       {target.backend === "SQLITE" ? (
         <div className={`grid gap-4 ${showInlineRemove ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end" : "lg:grid-cols-2"}`}>
-          <Field label="Backend" error={error?.backend}>
+          <Field label="后端" error={error?.backend} hint={corpusFieldHints.storageBackend}>
             <SelectInput
-              aria-label={`Storage target ${index + 1} backend`}
+              aria-label={`存储目标 ${index + 1} 后端`}
               className="w-full"
               value={target.backend}
               onChange={(event) => updateTarget(target.formId, { backend: event.target.value as RagStorageTargetFormState["backend"] })}
             >
-              <option value="SQLITE">SQLITE</option>
-              <option value="GRAPH">GRAPH</option>
+              <option value="SQLITE">本地表存储</option>
+              <option value="GRAPH">图存储</option>
             </SelectInput>
           </Field>
-          <Field label="Table" error={error?.table}>
+          <Field label="表名" error={error?.table} hint={corpusFieldHints.storageTable}>
             <TextInput
-              aria-label={`Storage target ${index + 1} table`}
+              aria-label={`存储目标 ${index + 1} 表名`}
               className="w-full font-mono"
               value={target.table}
               onChange={(event) => updateTarget(target.formId, {
@@ -145,7 +162,7 @@ function StorageTargetCard({
           {showInlineRemove ? (
             <div className="flex items-center justify-end lg:pb-1">
               <Button
-                aria-label={`Remove storage target ${index + 1}`}
+                aria-label={`移除存储目标 ${index + 1}`}
                 size="icon"
                 type="button"
                 variant="ghost"
@@ -159,20 +176,20 @@ function StorageTargetCard({
       ) : (
         <>
           <div className={`grid gap-4 ${showInlineRemove ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end" : "lg:grid-cols-2"}`}>
-            <Field label="Backend" error={error?.backend}>
+            <Field label="后端" error={error?.backend} hint={corpusFieldHints.storageBackend}>
               <SelectInput
-                aria-label={`Storage target ${index + 1} backend`}
+                aria-label={`存储目标 ${index + 1} 后端`}
                 className="w-full"
                 value={target.backend}
                 onChange={(event) => updateTarget(target.formId, { backend: event.target.value as RagStorageTargetFormState["backend"] })}
               >
-                <option value="SQLITE">SQLITE</option>
-                <option value="GRAPH">GRAPH</option>
+                <option value="SQLITE">本地表存储</option>
+                <option value="GRAPH">图存储</option>
               </SelectInput>
             </Field>
-            <Field label="Graph Namespace" error={error?.namespace}>
+            <Field label="图命名空间" error={error?.namespace} hint={corpusFieldHints.storageNamespace}>
               <TextInput
-                aria-label={`Storage target ${index + 1} graph namespace`}
+                aria-label={`存储目标 ${index + 1} 图命名空间`}
                 className="w-full font-mono"
                 value={target.namespace}
                 onChange={(event) => updateTarget(target.formId, { namespace: event.target.value })}
@@ -181,7 +198,7 @@ function StorageTargetCard({
             {showInlineRemove ? (
               <div className="flex items-center justify-end lg:pb-1">
                 <Button
-                  aria-label={`Remove storage target ${index + 1}`}
+                  aria-label={`移除存储目标 ${index + 1}`}
                   size="icon"
                   type="button"
                   variant="ghost"
@@ -193,17 +210,17 @@ function StorageTargetCard({
             ) : null}
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
-            <Field label="Node Label" error={error?.nodeLabel}>
+            <Field label="节点标签" error={error?.nodeLabel} hint={corpusFieldHints.storageNodeLabel}>
               <TextInput
-                aria-label={`Storage target ${index + 1} node label`}
+                aria-label={`存储目标 ${index + 1} 节点标签`}
                 className="w-full font-mono"
                 value={target.nodeLabel}
                 onChange={(event) => updateTarget(target.formId, { nodeLabel: event.target.value })}
               />
             </Field>
-            <Field label="Code Strategy">
+            <Field label="编码策略" hint={corpusFieldHints.storageCodeStrategy}>
               <TextInput
-                aria-label={`Storage target ${index + 1} code strategy`}
+                aria-label={`存储目标 ${index + 1} 编码策略`}
                 className="w-full font-mono"
                 value={target.codeStrategy}
                 onChange={(event) => updateTarget(target.formId, { codeStrategy: event.target.value })}
@@ -231,9 +248,9 @@ function FieldMappingRowCard({
 }) {
   const isSource = mappingKey === "sourceMappings";
   const rowLabelPrefix = row.isContract
-    ? (isSource ? "Source Contract Field" : "Text Unit Contract Field")
-    : (isSource ? "Source Mapping" : "Text Unit Mapping");
-  const ariaPrefix = rowLabelPrefix.toLowerCase();
+    ? (isSource ? "来源契约字段" : "文本单元契约字段")
+    : (isSource ? "来源映射" : "文本单元映射");
+  const ariaPrefix = rowLabelPrefix;
   const showInlineRemove = !row.isContract;
 
   return (
@@ -241,23 +258,23 @@ function FieldMappingRowCard({
       {row.isContract ? (
         <div className="flex justify-end">
           <span className="rounded-full border border-[var(--color-outline-variant)] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-            Contract
+            契约
           </span>
         </div>
       ) : null}
       <div className={`grid gap-3 ${showInlineRemove ? "sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end" : "sm:grid-cols-2"}`}>
-        <Field label="Logical">
+        <Field label="逻辑名" hint={corpusFieldHints.mappingLogicalName}>
           <TextInput
-            aria-label={`${ariaPrefix} ${index + 1} logical`}
+            aria-label={`${ariaPrefix} ${index + 1} 逻辑名`}
             className="w-full font-mono"
             disabled={row.isContract}
             value={row.logicalName}
             onChange={(event) => onUpdate({ logicalName: event.target.value })}
           />
         </Field>
-        <Field label="Column">
+        <Field label="列名" hint={corpusFieldHints.mappingColumn}>
           <TextInput
-            aria-label={`${ariaPrefix} ${index + 1} column`}
+            aria-label={`${ariaPrefix} ${index + 1} 列名`}
             className="w-full font-mono"
             value={row.column}
             onChange={(event) => onUpdate({ column: event.target.value })}
@@ -266,7 +283,7 @@ function FieldMappingRowCard({
         {showInlineRemove ? (
           <div className="flex items-center justify-end sm:pb-1">
             <Button
-              aria-label={`Remove ${ariaPrefix.toLowerCase()} ${index + 1}`}
+              aria-label={`移除${ariaPrefix} ${index + 1}`}
               size="icon"
               type="button"
               variant="ghost"
@@ -323,7 +340,7 @@ function FieldMappingSection({
       {showContractRows ? (
         <div className="space-y-3">
           <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">
-            Contract Fields
+            契约字段
           </h4>
           {contractRows.map(({ index, row }, contractIndex) => (
           <FieldMappingRowCard
@@ -340,7 +357,7 @@ function FieldMappingSection({
 
       <div className="space-y-3">
         <h4 className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">
-          Custom Mappings
+          自定义映射
         </h4>
         {customRows.length ? customRows.map(({ index, row }, customIndex) => (
           <FieldMappingRowCard
@@ -353,7 +370,7 @@ function FieldMappingSection({
           />
         )) : (
           <div className="rounded-lg border border-dashed border-[var(--color-outline-variant)] px-3 py-4 text-sm text-[var(--color-on-surface-variant)]">
-            No custom mappings yet.
+            暂无自定义映射。
           </div>
         )}
       </div>
@@ -452,7 +469,7 @@ export function RagCorpusFormPage() {
     () => (isApiMode ? [] : getRagMockCorpora().map((corpus) => corpus.code)),
     [isApiMode],
   );
-  const title = mode === "create" ? "Create Corpus" : "Edit Corpus";
+  const title = mode === "create" ? "新建语料库" : "编辑语料库";
   const payloadPreview = useMemo(
     () => (isApiMode ? buildRagCorpusMutationPayload(form, metadataGroups) : buildRagCorpusPayloadPreview(form)),
     [form, isApiMode, metadataGroups],
@@ -505,7 +522,7 @@ export function RagCorpusFormPage() {
     fetchRagCorpusCatalog(controller.signal)
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        toast.error(error instanceof Error ? error.message : "Corpus catalog could not be loaded");
+        toast.error(error instanceof Error ? error.message : "语料库目录加载失败");
       })
       .finally(() => {
         if (!controller.signal.aborted) setCatalogLoading(false);
@@ -808,13 +825,13 @@ export function RagCorpusFormPage() {
 
     if (hasRagCorpusFormErrors(nextErrors)) {
       setErrors(nextErrors);
-      toast.error("Resolve corpus form errors before saving.", { durationMs: 5000 });
+      toast.error("请先处理语料库表单错误再保存。", { durationMs: 5000 });
       return;
     }
 
     if (!isApiMode) {
       const savedCorpus = saveRagMockCorpus(buildCorpusRecordFromForm(form, existingCorpus));
-      toast.success(`${savedCorpus.name} ${mode === "create" ? "created" : "saved"}`, { durationMs: 6000 });
+      toast.success(`${savedCorpus.name} 已${mode === "create" ? "创建" : "保存"}`, { durationMs: 6000 });
       navigate("/rag");
       return;
     }
@@ -828,7 +845,7 @@ export function RagCorpusFormPage() {
       if (verification.valid === false || issues.length > 0) {
         const apiErrors = mapCorpusApiErrors(issues, form);
         setErrors(apiErrors);
-        toast.error(validationIssueMessage(issues[0] ?? { message: "Resolve corpus form errors before saving." }), { durationMs: 5000 });
+        toast.error(validationIssueMessage(issues[0] ?? { message: "请先处理语料库表单错误再保存。" }), { durationMs: 5000 });
         return;
       }
 
@@ -839,7 +856,7 @@ export function RagCorpusFormPage() {
         ? savedCorpus.displayName.trim()
         : (form.name.trim() || form.code.trim());
       setMetadataGroups(Array.isArray(savedCorpus.metadataGroups) ? savedCorpus.metadataGroups : metadataGroups);
-      toast.success(`${savedName} ${mode === "create" ? "created" : "saved"}`, { durationMs: 6000 });
+      toast.success(`${savedName} 已${mode === "create" ? "创建" : "保存"}`, { durationMs: 6000 });
       navigate("/rag");
     } catch (error) {
       const errorData = typeof error === "object" && error !== null && "data" in error
@@ -851,7 +868,7 @@ export function RagCorpusFormPage() {
       if (issues.length > 0) {
         setErrors(mapCorpusApiErrors(issues, form));
       }
-      toast.error(error instanceof Error ? error.message : "Corpus could not be saved");
+      toast.error(error instanceof Error ? error.message : "语料库保存失败");
     } finally {
       setSubmitting(false);
     }
@@ -861,12 +878,12 @@ export function RagCorpusFormPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "RAG", href: "/rag" }, { label: "Loading corpus" }]}
-          title="Loading Corpus"
-          actions={<Button variant="secondary" onClick={() => navigate("/rag")}>Back to Registry</Button>}
+          breadcrumbs={[{ label: "RAG", href: "/rag" }, { label: "正在加载语料库" }]}
+          title="正在加载语料库"
+          actions={<Button variant="secondary" onClick={() => navigate("/rag")}>返回列表</Button>}
         />
         <SurfaceCard>
-          <p className="text-sm text-[var(--color-on-surface-variant)]">Loading corpus management record...</p>
+          <p className="text-sm text-[var(--color-on-surface-variant)]">正在加载语料库管理记录...</p>
         </SurfaceCard>
       </>
     );
@@ -876,15 +893,15 @@ export function RagCorpusFormPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "RAG", href: "/rag" }, { label: "Corpus not found" }]}
-          title="Corpus Not Found"
-          actions={<Button variant="secondary" onClick={() => navigate("/rag")}>Back to Registry</Button>}
+          breadcrumbs={[{ label: "RAG", href: "/rag" }, { label: "未找到语料库" }]}
+          title="未找到语料库"
+          actions={<Button variant="secondary" onClick={() => navigate("/rag")}>返回列表</Button>}
         />
         <SurfaceCard>
           <p className="text-sm text-[var(--color-on-surface-variant)]">
             {isApiMode
-              ? "The requested corpus could not be loaded from the RAG management API."
-              : "The selected corpus is not available in the browser-local mock registry."}
+              ? "无法从 RAG 管理接口加载请求的语料库。"
+              : "浏览器本地模拟注册表中没有选中的语料库。"}
           </p>
         </SurfaceCard>
       </>
@@ -894,17 +911,17 @@ export function RagCorpusFormPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "RAG", href: "/rag" }, { label: mode === "create" ? "New Corpus" : form.code }]}
+        breadcrumbs={[{ label: "RAG", href: "/rag" }, { label: mode === "create" ? "新建语料库" : form.code }]}
         title={title}
         actions={(
           <>
             <Button disabled={submitting || loading} type="button" variant="secondary" onClick={() => navigate("/rag")}>
               <X size={15} aria-hidden="true" />
-              Cancel
+              取消
             </Button>
             <Button aria-busy={submitting} disabled={submitting || loading} form="rag-corpus-form" type="submit">
               <Save size={15} aria-hidden="true" />
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? "正在保存..." : "保存"}
             </Button>
           </>
         )}
@@ -913,30 +930,30 @@ export function RagCorpusFormPage() {
       <form id="rag-corpus-form" className="space-y-5" onSubmit={handleSubmit}>
         <SurfaceCard>
           <div className="mb-5">
-            <h2 className="text-base font-semibold">Identity</h2>
+            <h2 className="text-base font-semibold">基础信息</h2>
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
-            <Field label="Corpus Code" error={errors.code}>
+            <Field label="语料库编码" error={errors.code} hint={corpusFieldHints.code}>
               <TextInput
-                aria-label="Corpus code"
+                aria-label="语料库编码"
                 className="w-full font-mono"
                 disabled={mode === "edit"}
                 value={form.code}
                 onChange={(event) => updateForm("code", event.target.value)}
               />
             </Field>
-            <Field label="Corpus Name" error={errors.name}>
+            <Field label="语料库名称" error={errors.name} hint={corpusFieldHints.name}>
               <TextInput
-                aria-label="Corpus name"
+                aria-label="语料库名称"
                 className="w-full"
                 value={form.name}
                 onChange={(event) => updateForm("name", event.target.value)}
               />
             </Field>
             <div className="lg:col-span-2">
-              <Field label="Corpus Description">
+              <Field label="语料库描述" hint={corpusFieldHints.description}>
                 <TextArea
-                  aria-label="Corpus description"
+                  aria-label="语料库描述"
                   className="min-h-24 w-full"
                   value={form.description}
                   onChange={(event) => updateForm("description", event.target.value)}
@@ -948,7 +965,7 @@ export function RagCorpusFormPage() {
 
         <SurfaceCard>
           <div className="mb-5">
-            <h2 className="text-base font-semibold">Storage Binding</h2>
+            <h2 className="text-base font-semibold">存储绑定</h2>
             {storageBindingSectionError ? (
               <p
                 aria-live="polite"
@@ -962,14 +979,14 @@ export function RagCorpusFormPage() {
 
           <div className="space-y-4">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold">Storage Targets</h3>
+              <h3 className="text-sm font-semibold">存储目标</h3>
               <Button
                 type="button"
                 variant="secondary"
                 onClick={addStorageTarget}
               >
                 <Plus size={15} aria-hidden="true" />
-                Add Storage Target
+                添加存储目标
               </Button>
             </div>
 
@@ -989,7 +1006,7 @@ export function RagCorpusFormPage() {
           </div>
 
           <div className="mt-6 space-y-4">
-            <h3 className="text-sm font-semibold">Segment Bindings</h3>
+            <h3 className="text-sm font-semibold">分段绑定</h3>
             <div className="grid gap-4 lg:grid-cols-2">
               {editableStorageSegmentOrder.map((segmentKey) => {
                 const segmentMeta = segmentBindingMeta.find((entry) => entry.key === segmentKey);
@@ -997,16 +1014,17 @@ export function RagCorpusFormPage() {
                 return (
                   <Field
                     key={segmentMeta.key}
-                    label={`${segmentMeta.label} Target`}
+                    label={`${segmentMeta.label}目标`}
                     error={errors.segmentBindings?.[segmentMeta.key]}
+                    hint={corpusFieldHints.segmentBinding}
                   >
                     <SelectInput
-                      aria-label={`${segmentMeta.label} target`}
+                      aria-label={`${segmentMeta.label}目标`}
                       className="w-full"
                       value={form.segmentBindings[segmentMeta.key]}
                       onChange={(event) => updateSegmentBinding(segmentMeta.key, event.target.value)}
                     >
-                      <option value="">Select storage target</option>
+                      <option value="">选择存储目标</option>
                       {form.storageTargets.map((target, targetIndex) => (
                         <option key={target.formId} value={target.id.trim()}>
                           {ragStorageTargetOptionLabel(target, targetIndex)}
@@ -1022,14 +1040,14 @@ export function RagCorpusFormPage() {
 
         <SurfaceCard>
           <div className="mb-5">
-            <h2 className="text-base font-semibold">Capabilities</h2>
+            <h2 className="text-base font-semibold">能力</h2>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { key: "fulltextEnabled", label: "Fulltext enabled" },
-              { key: "vectorEnabled", label: "Vector enabled" },
-              { key: "graphEnabled", label: "Graph enabled", disabled: !graphCapabilityAvailable },
-              { key: "reservedEnabled", label: "Reserved corpus" },
+              { key: "fulltextEnabled", label: "启用全文索引" },
+              { key: "vectorEnabled", label: "启用向量索引" },
+              { key: "graphEnabled", label: "启用图能力", disabled: !graphCapabilityAvailable },
+              { key: "reservedEnabled", label: "预留语料库" },
             ].map(({ key, label, disabled }) => (
               <label
                 key={key}
@@ -1052,11 +1070,11 @@ export function RagCorpusFormPage() {
 
         <SurfaceCard>
           <div className="mb-5">
-            <h2 className="text-base font-semibold">Field Mapping</h2>
+            <h2 className="text-base font-semibold">字段映射</h2>
           </div>
           <div className="space-y-5">
             <FieldMappingSection
-              addButtonLabel="Add Source Mapping"
+              addButtonLabel="添加来源映射"
               contractRows={sourceContractMappings}
               customRows={sourceCustomMappings}
               error={errors.sourceMappings}
@@ -1066,11 +1084,11 @@ export function RagCorpusFormPage() {
               onToggleContractFields={() => setShowSourceContractMappings((current) => !current)}
               onUpdate={(index, patch) => updateMapping("sourceMappings", index, patch)}
               showContractRows={showSourceContractMappings}
-              title="Source Mapping"
-              toggleContractLabel={showSourceContractMappings ? "Hide Source Contract Fields" : "Show Source Contract Fields"}
+              title="来源映射"
+              toggleContractLabel={showSourceContractMappings ? "隐藏来源契约字段" : "显示来源契约字段"}
             />
             <FieldMappingSection
-              addButtonLabel="Add Text Unit Mapping"
+              addButtonLabel="添加文本单元映射"
               contractRows={textUnitContractMappings}
               customRows={textUnitCustomMappings}
               error={errors.textUnitMappings}
@@ -1080,52 +1098,52 @@ export function RagCorpusFormPage() {
               onToggleContractFields={() => setShowTextUnitContractMappings((current) => !current)}
               onUpdate={(index, patch) => updateMapping("textUnitMappings", index, patch)}
               showContractRows={showTextUnitContractMappings}
-              title="Text Unit Mapping"
-              toggleContractLabel={showTextUnitContractMappings ? "Hide Text Unit Contract Fields" : "Show Text Unit Contract Fields"}
+              title="文本单元映射"
+              toggleContractLabel={showTextUnitContractMappings ? "隐藏文本单元契约字段" : "显示文本单元契约字段"}
             />
           </div>
         </SurfaceCard>
 
         <SurfaceCard>
           <div className="mb-5 flex items-center justify-between gap-3">
-            <h2 className="text-base font-semibold">Filter Schema</h2>
-            <Button type="button" variant="secondary" onClick={addFilterField}>Add Filter Field</Button>
+            <h2 className="text-base font-semibold">筛选结构</h2>
+            <Button type="button" variant="secondary" onClick={addFilterField}>添加筛选字段</Button>
           </div>
           <div className="space-y-3">
             {form.filterFields.map((row, index) => (
               <div key={row.id} className="space-y-3 rounded-lg border border-[var(--color-outline-variant)] p-3">
                 <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
-                  <Field label="Name">
+                  <Field label="名称" hint={corpusFieldHints.filterName}>
                     <SelectInput
-                      aria-label={`Filter field ${index + 1} name`}
+                      aria-label={`筛选字段 ${index + 1} 名称`}
                       className="w-full"
                       value={row.name}
                       onChange={(event) => updateFilterField(index, { name: event.target.value })}
                     >
-                      <option value="">{filterFieldOptions.length ? "Select mapped field" : "No mapped fields available"}</option>
+                      <option value="">{filterFieldOptions.length ? "选择已映射字段" : "没有可用的已映射字段"}</option>
                       {row.name && !filterFieldOptions.some((option) => option.logicalName === row.name) ? (
-                        <option value={row.name}>{`${row.name} (missing mapping)`}</option>
+                        <option value={row.name}>{`${row.name}（缺少映射）`}</option>
                       ) : null}
                       {filterFieldOptions.map((option) => (
                         <option key={option.logicalName} value={option.logicalName}>{option.logicalName}</option>
                       ))}
                     </SelectInput>
                   </Field>
-                  <Field label="Type">
+                  <Field label="类型" hint={corpusFieldHints.filterType}>
                     <SelectInput
-                      aria-label={`Filter field ${index + 1} type`}
+                      aria-label={`筛选字段 ${index + 1} 类型`}
                       className="w-full"
                       value={row.type}
                       onChange={(event) => updateFilterField(index, { type: event.target.value as RagFilterFieldFormRow["type"] })}
                     >
-                      <option value="string">string</option>
-                      <option value="integer">integer</option>
-                      <option value="boolean">boolean</option>
+                      <option value="string">字符串</option>
+                      <option value="integer">整数</option>
+                      <option value="boolean">布尔值</option>
                     </SelectInput>
                   </Field>
-                  <Field label="Operators">
+                  <Field label="操作符" hint={corpusFieldHints.filterOperators}>
                     <TextInput
-                      aria-label={`Filter field ${index + 1} operators`}
+                      aria-label={`筛选字段 ${index + 1} 操作符`}
                       className="w-full font-mono"
                       value={row.operatorsInput}
                       onChange={(event) => updateFilterField(index, { operatorsInput: event.target.value })}
@@ -1133,7 +1151,7 @@ export function RagCorpusFormPage() {
                   </Field>
                   <div className="flex items-center justify-end lg:pb-1">
                     <Button
-                      aria-label={`Remove filter field ${index + 1}`}
+                      aria-label={`移除筛选字段 ${index + 1}`}
                       size="icon"
                       type="button"
                       variant="ghost"
@@ -1151,7 +1169,7 @@ export function RagCorpusFormPage() {
 
         <SurfaceCard>
           <div className="mb-5">
-            <h2 className="text-base font-semibold">Backend Payload Preview</h2>
+            <h2 className="text-base font-semibold">后端载荷预览</h2>
           </div>
           <pre className="max-h-[420px] overflow-auto rounded-lg bg-[var(--color-surface-container)] p-4 text-xs leading-5 text-[var(--color-on-surface)]">
             {JSON.stringify(payloadPreview, null, 2)}

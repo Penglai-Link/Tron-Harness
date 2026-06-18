@@ -3,6 +3,7 @@ import {
   useState,
 } from "react";
 import {
+  ChevronDown,
   Search,
   Upload,
 } from "lucide-react";
@@ -18,6 +19,7 @@ import {
 import { Button } from "@/shared/ui/Button";
 
 import {
+  formatRagStatusLabel,
   InspectorRow,
   PreviewLine,
   SectionTitle,
@@ -76,21 +78,46 @@ type WorkbenchScopeType = "AGENT" | "SPACE" | "USER";
 
 const workbenchPanels: Array<{ label: string; summary: string; value: WorkbenchPanel }> = [
   {
-    label: "Ingest Request",
-    summary: "Write source payloads into a selected corpus.",
+    label: "写入请求",
+    summary: "把来源载荷写入选中的语料库。",
     value: "ingest",
   },
   {
-    label: "Retrieval Test",
-    summary: "Run retrieval profiles with query fields and filters.",
+    label: "检索测试",
+    summary: "使用查询字段和筛选条件运行检索配置。",
     value: "retrieval",
   },
 ];
 const workbenchScopeOptions: Array<{ label: string; value: WorkbenchScopeType }> = [
-  { label: "Workspace", value: "SPACE" },
-  { label: "User", value: "USER" },
-  { label: "Agent", value: "AGENT" },
+  { label: "工作区", value: "SPACE" },
+  { label: "用户", value: "USER" },
+  { label: "智能体", value: "AGENT" },
 ];
+
+const workbenchFieldHints = {
+  businessField: "写入 payload.domainFields 的业务字段，来自当前语料库字段映射。",
+  businessValue: "业务字段对应的值，会按语料库筛选结构中的类型进行转换。",
+  contextStrategy: "检索结果组装上下文包时使用的策略，来自当前检索配置。",
+  corpus: "本次写入请求要写入的目标语料库。",
+  documentFormat: "文档解析格式，例如 PDF、DOCX 或 MARKDOWN。需要与写入配置的解析策略匹配。",
+  documentUri: "文档来源地址。项目文档通常使用 project-doc:// 开头。",
+  filterField: "本次检索请求附加的筛选字段，来自检索配置绑定语料库的筛选结构。",
+  filterOperator: "筛选字段的比较方式，例如 eq 表示等于，in 表示属于列表。",
+  filterValue: "筛选字段的查询值。in 操作符可使用逗号分隔多个值。",
+  ingestProfile: "本次写入使用的配置，决定来源契约、解析、切分和索引策略。",
+  language: "写入 metadata.language 的语言标记，默认 zh-CN。",
+  limit: "本次检索最多返回的命中数量。",
+  metadataSourcePath: "写入 metadata.sourcePath 的来源路径，便于追踪文档在项目中的位置。",
+  query: "本次检索测试的自然语言查询内容。",
+  retrievalProfile: "本次检索使用的配置，决定路由、融合、去重和上下文策略。",
+  returnField: "要求检索结果额外返回的字段，来自语料库字段映射。",
+  scopeType: "请求目标作用域。系统会根据类型自动填充作用域编码。",
+  sourceCode: "本次写入来源的唯一编码。同一编码和版本会用于幂等更新。",
+  sourceText: "直接文本写入时使用的正文内容。文档引用写入会改用文档地址和格式。",
+  sourceType: "来源类型，必须符合所选写入配置的输入契约。",
+  sourceVersion: "来源版本，通常为 v1；当写入配置要求固定版本时不可编辑。",
+  tokenBudget: "上下文包可使用的最大令牌预算，影响返回给模型的内容长度。",
+} satisfies Record<string, string>;
 
 const workbenchFilterOperators = ["eq", "in", "gt", "gte", "lt", "lte"] as const;
 const workbenchReservedReturnFields = new Set([
@@ -127,12 +154,12 @@ function buildDefaultPayloadForm(corpusId: string, profile?: RagIngestProfileRec
   return {
     documentFormat: "MARKDOWN",
     documentUri: `project-doc://${sourceCode}`,
-    language: "en-US",
+    language: "zh-CN",
     metadataSourcePath: "",
     sourceCode,
     sourceType,
     sourceVersion,
-    text: `Workbench ingest sample for ${corpusId || "RAG"}.`,
+    text: `${corpusId || "RAG"} 的调试台写入示例。`,
   };
 }
 
@@ -170,7 +197,7 @@ function buildPayloadFromForm(
 }
 
 function readErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "RAG workbench request failed.";
+  return error instanceof Error ? error.message : "RAG 调试台请求失败。";
 }
 
 const workbenchAgentCode = "AGENT_CODEX";
@@ -196,7 +223,7 @@ function buildTargetScope(scopeType: WorkbenchScopeType, userCode: string, works
 }
 
 function formatScore(score: number | undefined) {
-  return Number.isFinite(score) ? score!.toFixed(3) : "n/a";
+  return Number.isFinite(score) ? score!.toFixed(3) : "暂无";
 }
 
 function parseCommaSeparatedValues(value: string) {
@@ -239,7 +266,7 @@ function parseFilterValue(value: string, valueType: "boolean" | "integer" | "str
   if (valueType === "integer") {
     const parsed = Number.parseInt(trimmed, 10);
     if (!Number.isFinite(parsed)) {
-      throw new Error(`Filter ${field} must be an integer.`);
+      throw new Error(`筛选字段 ${field} 必须是整数。`);
     }
     return parsed;
   }
@@ -247,7 +274,7 @@ function parseFilterValue(value: string, valueType: "boolean" | "integer" | "str
     const normalized = trimmed.toLowerCase();
     if (["true", "1", "yes"].includes(normalized)) return true;
     if (["false", "0", "no"].includes(normalized)) return false;
-    throw new Error(`Filter ${field} must be true or false.`);
+    throw new Error(`筛选字段 ${field} 必须是 true 或 false。`);
   }
   return trimmed;
 }
@@ -310,7 +337,7 @@ function buildDomainFields(
     const rawValue = row.value.trim();
     if (!field && !rawValue) return;
     if (!field || !rawValue) {
-      throw new Error(`Business attribute ${index + 1} must include field and value.`);
+      throw new Error(`业务属性 ${index + 1} 必须填写字段和值。`);
     }
     const valueType = fieldSchema[field]?.type ?? "string";
     domainFields[field] = parseFilterValue(rawValue, valueType, field);
@@ -330,7 +357,7 @@ function formatFieldValue(value: unknown) {
 }
 
 function formatArtifactKeys(keys: string[] | undefined) {
-  return keys && keys.length > 0 ? keys.join(", ") : "none";
+  return keys && keys.length > 0 ? keys.join(", ") : "无";
 }
 
 function StageResultsList({
@@ -341,46 +368,71 @@ function StageResultsList({
   title: string;
 }) {
   if (!results || results.length === 0) return null;
+  const warningCount = results.reduce((count, result) => count + (result.warnings?.length ?? 0), 0);
+  const totalDurationMs = results.reduce((duration, result) => duration + (result.durationMs ?? 0), 0);
+
   return (
-    <div className="mt-5 space-y-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{title}</h2>
-      {results.map((result, index) => {
-        const warnings = result.warnings ?? [];
-        return (
-          <article
-            className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm"
-            key={`${result.nodeId}-${index}`}
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
+    <details className="group mt-5 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] text-sm">
+      <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 p-4 marker:hidden [&::-webkit-details-marker]:hidden">
+        <div className="flex min-w-0 items-center gap-2">
+          <ChevronDown
+            className="shrink-0 transition-transform group-open:rotate-180"
+            size={16}
+            aria-hidden="true"
+          />
+          <h2 className="truncate text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{title}</h2>
+        </div>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 text-[12px] text-[var(--color-on-surface-variant)]">
+            {results.length} 个阶段 · {totalDurationMs}ms
+          </span>
+          {warningCount > 0 ? (
+            <span className="rounded-full border border-[var(--color-warning)]/30 px-2.5 py-1 text-[12px] text-[var(--color-warning)]">
+              {warningCount} 个告警
+            </span>
+          ) : null}
+          <span className="text-[12px] text-[var(--color-on-surface-variant)]">展开查看</span>
+        </div>
+      </summary>
+      <div className="space-y-3 border-t border-[var(--color-outline-variant)] p-3">
+        {results.map((result, index) => {
+          const warnings = result.warnings ?? [];
+          return (
+            <article
+              className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-4"
+              key={`${result.nodeId}-${index}`}
+            >
               <div>
                 <p className="font-mono text-[12px] text-[var(--color-on-surface)]">{result.nodeId}</p>
                 <p className="mt-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">
                   {result.stageType} · {result.strategyId}
                 </p>
               </div>
-              <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">
-                {result.status} · {result.durationMs ?? 0}ms
-              </span>
-            </div>
-            <dl className="mt-3 grid gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 sm:grid-cols-2">
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Input Artifacts</dt>
-                <dd className="mt-1 break-all font-mono text-[12px]">{formatArtifactKeys(result.inputArtifactKeys)}</dd>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">
+                  {formatRagStatusLabel(result.status)} · {result.durationMs ?? 0}ms
+                </span>
               </div>
-              <div>
-                <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Output Artifacts</dt>
-                <dd className="mt-1 break-all font-mono text-[12px]">{formatArtifactKeys(result.outputArtifactKeys)}</dd>
-              </div>
-            </dl>
-            {warnings.length > 0 ? (
-              <p className="mt-3 text-[12px] text-[var(--color-warning)]">
-                {warnings.length === 1 ? "Warning" : "Warnings"} {warnings.join(", ")}
-              </p>
-            ) : null}
-          </article>
-        );
-      })}
-    </div>
+              <dl className="mt-3 grid gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3 sm:grid-cols-2">
+                <div>
+                  <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">输入产物</dt>
+                  <dd className="mt-1 break-all font-mono text-[12px]">{formatArtifactKeys(result.inputArtifactKeys)}</dd>
+                </div>
+                <div>
+                  <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">输出产物</dt>
+                  <dd className="mt-1 break-all font-mono text-[12px]">{formatArtifactKeys(result.outputArtifactKeys)}</dd>
+                </div>
+              </dl>
+              {warnings.length > 0 ? (
+                <p className="mt-3 text-[12px] text-[var(--color-warning)]">
+                  告警：{warnings.join(", ")}
+                </p>
+              ) : null}
+            </article>
+          );
+        })}
+      </div>
+    </details>
   );
 }
 
@@ -424,7 +476,7 @@ export function RagWorkbenchTab({
   ));
   const [businessAttributeRows, setBusinessAttributeRows] = useState<WorkbenchBusinessAttributeRow[]>([]);
   const [retrievalProfileId, setRetrievalProfileId] = useState(retrievalProfiles[0]?.id ?? "");
-  const [query, setQuery] = useState("How should the RAG context pack respect tokenBudget?");
+  const [query, setQuery] = useState("RAG 上下文包应该如何遵守 tokenBudget？");
   const [contextStrategy, setContextStrategy] = useState(retrievalProfiles[0]?.config.contextStrategies[0] ?? "DOC_QA_CONTEXT_PACK");
   const [returnFieldRows, setReturnFieldRows] = useState<WorkbenchReturnFieldRow[]>([]);
   const [filterRows, setFilterRows] = useState<WorkbenchFilterRow[]>([]);
@@ -524,7 +576,7 @@ export function RagWorkbenchTab({
       const rawValue = row.value.trim();
       if (!field && !operator && !rawValue) return;
       if (!field || !operator || !rawValue) {
-        throw new Error(`Filter ${index + 1} must include field, operator, and value.`);
+        throw new Error(`筛选条件 ${index + 1} 必须填写字段、操作符和值。`);
       }
 
       const schema = filterFieldSchema[field];
@@ -533,7 +585,7 @@ export function RagWorkbenchTab({
         ? parseCommaSeparatedValues(rawValue).map((item) => parseFilterValue(item, valueType, field))
         : parseFilterValue(rawValue, valueType, field);
       if (operator === "in" && Array.isArray(value) && value.length === 0) {
-        throw new Error(`Filter ${index + 1} must include at least one value.`);
+        throw new Error(`筛选条件 ${index + 1} 至少需要一个值。`);
       }
       appendFilter(filters, field, { op: operator, value });
     });
@@ -553,19 +605,19 @@ export function RagWorkbenchTab({
     }
     const payload = buildPayloadFromForm(sourcePayloadForm, usesDocumentPayload, domainFields);
     if (!sourcePayloadForm.sourceCode.trim() || !sourcePayloadForm.sourceType.trim() || !sourcePayloadForm.sourceVersion.trim()) {
-      const message = "Source code, type, and version are required.";
+      const message = "来源编码、类型和版本不能为空。";
       setIngestFeedback(message);
       onNotice(message);
       return;
     }
     if (usesDocumentPayload && (!sourcePayloadForm.documentUri.trim() || !sourcePayloadForm.documentFormat.trim())) {
-      const message = "Document URI and format are required.";
+      const message = "文档地址和格式不能为空。";
       setIngestFeedback(message);
       onNotice(message);
       return;
     }
     if (!usesDocumentPayload && !sourcePayloadForm.text.trim()) {
-      const message = "Text content is required.";
+      const message = "文本内容不能为空。";
       setIngestFeedback(message);
       onNotice(message);
       return;
@@ -585,7 +637,7 @@ export function RagWorkbenchTab({
         targetScope,
       });
       setIngestResult(result);
-      const message = `Ingest completed for ${result.sourceCode || corpusId}.`;
+      const message = `${result.sourceCode || corpusId} 写入完成。`;
       setIngestFeedback(message);
       onNotice(message);
     } catch (error) {
@@ -631,7 +683,7 @@ export function RagWorkbenchTab({
       });
       setSearchResult(result);
       const hitCount = result.hits?.length ?? 0;
-      const message = `Search returned ${hitCount} ${hitCount === 1 ? "hit" : "hits"}.`;
+      const message = `检索返回 ${hitCount} 条命中。`;
       setSearchFeedback(message);
       onNotice(message);
     } catch (error) {
@@ -649,7 +701,7 @@ export function RagWorkbenchTab({
   return (
     <div className="grid gap-5">
       <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-1">
-        <div className="grid gap-1 sm:grid-cols-2" role="tablist" aria-label="Workbench mode">
+        <div className="grid gap-1 sm:grid-cols-2" role="tablist" aria-label="调试台模式">
           {workbenchPanels.map((panel) => {
             const selected = activeWorkbenchPanel === panel.value;
             return (
@@ -684,12 +736,12 @@ export function RagWorkbenchTab({
         >
         <SectionTitle
           icon={<Upload size={17} aria-hidden="true" />}
-          title="Ingest Request"
+          title="写入请求"
         />
         <div className="mt-4 grid gap-3">
-          <Field label="Corpus">
+          <Field label="语料库" hint={workbenchFieldHints.corpus}>
             <SelectInput
-              aria-label="Corpus"
+              aria-label="语料库"
               value={corpusId}
               onChange={(event) => {
                 setCorpusId(event.target.value);
@@ -702,9 +754,9 @@ export function RagWorkbenchTab({
               ))}
             </SelectInput>
           </Field>
-          <Field label="Ingest Profile">
+          <Field label="写入配置" hint={workbenchFieldHints.ingestProfile}>
             <SelectInput
-              aria-label="Ingest Profile"
+              aria-label="写入配置"
               value={ingestProfileId}
               onChange={(event) => {
                 setIngestProfileId(event.target.value);
@@ -717,9 +769,9 @@ export function RagWorkbenchTab({
               ))}
             </SelectInput>
           </Field>
-          <Field label="Scope Type">
+          <Field label="作用域类型" hint={workbenchFieldHints.scopeType}>
             <SelectInput
-              aria-label="Scope Type"
+              aria-label="作用域类型"
               value={targetScopeType}
               onChange={(event) => setTargetScopeType(event.target.value as WorkbenchScopeType)}
             >
@@ -728,17 +780,17 @@ export function RagWorkbenchTab({
               ))}
             </SelectInput>
             <p className="mt-1 text-[12px] text-[var(--color-on-surface-variant)]">
-              Scope code is resolved automatically: <span className="font-mono">{targetScope.scopeCode}</span>
+              作用域编码会自动解析：<span className="font-mono">{targetScope.scopeCode}</span>
             </p>
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Source Code">
-              <TextInput aria-label="Source Code" value={sourcePayloadForm.sourceCode} onChange={(event) => updateSourcePayloadForm({ sourceCode: event.target.value })} />
+            <Field label="来源编码" hint={workbenchFieldHints.sourceCode}>
+              <TextInput aria-label="来源编码" value={sourcePayloadForm.sourceCode} onChange={(event) => updateSourcePayloadForm({ sourceCode: event.target.value })} />
             </Field>
-            <Field label="Source Type">
+            <Field label="来源类型" hint={workbenchFieldHints.sourceType}>
               {sourceTypeOptions.length > 0 ? (
                 <SelectInput
-                  aria-label="Source Type"
+                  aria-label="来源类型"
                   value={sourcePayloadForm.sourceType}
                   onChange={(event) => updateSourcePayloadForm({ sourceType: event.target.value })}
                 >
@@ -747,27 +799,27 @@ export function RagWorkbenchTab({
                   ))}
                 </SelectInput>
               ) : (
-                <TextInput aria-label="Source Type" value={sourcePayloadForm.sourceType} onChange={(event) => updateSourcePayloadForm({ sourceType: event.target.value })} />
+                <TextInput aria-label="来源类型" value={sourcePayloadForm.sourceType} onChange={(event) => updateSourcePayloadForm({ sourceType: event.target.value })} />
               )}
             </Field>
-            <Field label="Source Version">
+            <Field label="来源版本" hint={workbenchFieldHints.sourceVersion}>
               <TextInput
-                aria-label="Source Version"
+                aria-label="来源版本"
                 disabled={Boolean(requiredSourceVersion)}
                 value={sourcePayloadForm.sourceVersion}
                 onChange={(event) => updateSourcePayloadForm({ sourceVersion: event.target.value })}
               />
             </Field>
-            <Field label="Language">
-              <TextInput aria-label="Language" value={sourcePayloadForm.language} onChange={(event) => updateSourcePayloadForm({ language: event.target.value })} />
+            <Field label="语言" hint={workbenchFieldHints.language}>
+              <TextInput aria-label="语言" value={sourcePayloadForm.language} onChange={(event) => updateSourcePayloadForm({ language: event.target.value })} />
             </Field>
           </div>
-          <Field label="Metadata Source Path">
-            <TextInput aria-label="Metadata Source Path" value={sourcePayloadForm.metadataSourcePath} onChange={(event) => updateSourcePayloadForm({ metadataSourcePath: event.target.value })} />
+          <Field label="元数据来源路径" hint={workbenchFieldHints.metadataSourcePath}>
+            <TextInput aria-label="元数据来源路径" value={sourcePayloadForm.metadataSourcePath} onChange={(event) => updateSourcePayloadForm({ metadataSourcePath: event.target.value })} />
           </Field>
           <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Business Attributes</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">业务属性</p>
               <Button
                 disabled={businessFieldOptions.length === 0}
                 size="sm"
@@ -775,30 +827,30 @@ export function RagWorkbenchTab({
                 variant="secondary"
                 onClick={() => setBusinessAttributeRows((current) => [...current, createWorkbenchBusinessAttributeRow(current.length)])}
               >
-                Add Business Attribute
+                添加业务属性
               </Button>
             </div>
             {businessAttributeRows.length > 0 ? (
               <div className="mt-3 grid gap-3">
                 {businessAttributeRows.map((row, index) => (
                   <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" key={row.formId}>
-                    <Field label={`Business Attribute ${index + 1} Field`}>
+                    <Field label={`业务属性 ${index + 1} 字段`} hint={workbenchFieldHints.businessField}>
                       <SelectInput
-                        aria-label={`Business Attribute ${index + 1} Field`}
+                        aria-label={`业务属性 ${index + 1} 字段`}
                         value={row.field}
                         onChange={(event) => setBusinessAttributeRows((current) => current.map((item) => (
                           item.formId === row.formId ? { ...item, field: event.target.value } : item
                         )))}
                       >
-                        <option value="">Select field</option>
+                        <option value="">选择字段</option>
                         {businessFieldOptions.map((option) => (
                           <option key={option.field} value={option.field}>{option.field}</option>
                         ))}
                       </SelectInput>
                     </Field>
-                    <Field label={`Business Attribute ${index + 1} Value`}>
+                    <Field label={`业务属性 ${index + 1} 值`} hint={workbenchFieldHints.businessValue}>
                       <TextInput
-                        aria-label={`Business Attribute ${index + 1} Value`}
+                        aria-label={`业务属性 ${index + 1} 值`}
                         value={row.value}
                         onChange={(event) => setBusinessAttributeRows((current) => current.map((item) => (
                           item.formId === row.formId ? { ...item, value: event.target.value } : item
@@ -806,14 +858,14 @@ export function RagWorkbenchTab({
                       />
                     </Field>
                     <Button
-                      aria-label={`Remove business attribute ${index + 1}`}
+                      aria-label={`移除业务属性 ${index + 1}`}
                       className="self-end"
                       size="sm"
                       type="button"
                       variant="ghost"
                       onClick={() => setBusinessAttributeRows((current) => current.filter((item) => item.formId !== row.formId))}
                     >
-                      Remove
+                      移除
                     </Button>
                   </div>
                 ))}
@@ -822,35 +874,35 @@ export function RagWorkbenchTab({
           </div>
           {usesDocumentPayload ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Document URI">
-                <TextInput aria-label="Document URI" value={sourcePayloadForm.documentUri} onChange={(event) => updateSourcePayloadForm({ documentUri: event.target.value })} />
+              <Field label="文档地址" hint={workbenchFieldHints.documentUri}>
+                <TextInput aria-label="文档地址" value={sourcePayloadForm.documentUri} onChange={(event) => updateSourcePayloadForm({ documentUri: event.target.value })} />
               </Field>
-              <Field label="Document Format">
-                <TextInput aria-label="Document Format" value={sourcePayloadForm.documentFormat} onChange={(event) => updateSourcePayloadForm({ documentFormat: event.target.value })} />
+              <Field label="文档格式" hint={workbenchFieldHints.documentFormat}>
+                <TextInput aria-label="文档格式" value={sourcePayloadForm.documentFormat} onChange={(event) => updateSourcePayloadForm({ documentFormat: event.target.value })} />
               </Field>
             </div>
           ) : (
-            <Field label="Text Content">
-              <TextArea aria-label="Text Content" className="min-h-28" value={sourcePayloadForm.text} onChange={(event) => updateSourcePayloadForm({ text: event.target.value })} />
+            <Field label="文本内容" hint={workbenchFieldHints.sourceText}>
+              <TextArea aria-label="文本内容" className="min-h-28" value={sourcePayloadForm.text} onChange={(event) => updateSourcePayloadForm({ text: event.target.value })} />
             </Field>
           )}
           <Button disabled={ingestLoading || !corpusId || !ingestProfileId} onClick={handleIngestSubmit}>
-            {ingestLoading ? "Submitting Ingest..." : "Submit Ingest"}
+            {ingestLoading ? "正在提交写入..." : "提交写入"}
           </Button>
         </div>
         {ingestResult ? (
           <div className="mt-5 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Ingest Result</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">写入结果</p>
             <div className="mt-3 grid gap-2 text-sm">
-              <InspectorRow label="Status" value={ingestResult.status ?? "unknown"} />
-              <InspectorRow label="Source Code" value={ingestResult.sourceCode ?? sourcePayloadForm.sourceCode} />
-              <InspectorRow label="Text Units" value={String(ingestResult.textUnitCount ?? 0)} />
-              <InspectorRow label="Fulltext" value={ingestResult.fulltextStatus ?? "not started"} />
-              <InspectorRow label="Vector" value={ingestResult.embeddingStatus ?? "not started"} />
+              <InspectorRow label="状态" value={formatRagStatusLabel(ingestResult.status ?? "unknown")} />
+              <InspectorRow label="来源编码" value={ingestResult.sourceCode ?? sourcePayloadForm.sourceCode} />
+              <InspectorRow label="文本单元" value={String(ingestResult.textUnitCount ?? 0)} />
+              <InspectorRow label="全文索引" value={formatRagStatusLabel(ingestResult.fulltextStatus ?? "not started")} />
+              <InspectorRow label="向量索引" value={formatRagStatusLabel(ingestResult.embeddingStatus ?? "not started")} />
             </div>
           </div>
         ) : null}
-        <StageResultsList results={ingestResult?.stageResults} title="Ingest Stage Results" />
+        <StageResultsList results={ingestResult?.stageResults} title="写入阶段结果" />
         {ingestFeedback ? (
           <p className="mt-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3 text-sm text-[var(--color-on-surface)]">
             {ingestFeedback}
@@ -867,12 +919,12 @@ export function RagWorkbenchTab({
         >
         <SectionTitle
           icon={<Search size={17} aria-hidden="true" />}
-          title="Retrieval Test"
+          title="检索测试"
         />
         <div className="mt-4 grid gap-3">
-          <Field label="Retrieval Profile">
+          <Field label="检索配置" hint={workbenchFieldHints.retrievalProfile}>
             <SelectInput
-              aria-label="Retrieval Profile"
+              aria-label="检索配置"
               value={retrievalProfileId}
               onChange={(event) => {
                 setRetrievalProfileId(event.target.value);
@@ -886,11 +938,11 @@ export function RagWorkbenchTab({
               ))}
             </SelectInput>
           </Field>
-          <Field label="Query">
-            <TextArea aria-label="Query" className="min-h-24" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <Field label="查询" hint={workbenchFieldHints.query}>
+            <TextArea aria-label="查询" className="min-h-24" value={query} onChange={(event) => setQuery(event.target.value)} />
           </Field>
-          <Field label="Context Strategy">
-            <SelectInput aria-label="Context Strategy" value={contextStrategy} onChange={(event) => setContextStrategy(event.target.value)}>
+          <Field label="上下文策略" hint={workbenchFieldHints.contextStrategy}>
+            <SelectInput aria-label="上下文策略" value={contextStrategy} onChange={(event) => setContextStrategy(event.target.value)}>
               {contextStrategyOptions.map((strategy) => (
                 <option key={strategy} value={strategy}>{strategy}</option>
               ))}
@@ -898,7 +950,7 @@ export function RagWorkbenchTab({
           </Field>
           <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Query Fields</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">查询字段</p>
               <Button
                 disabled={returnFieldOptions.length === 0}
                 size="sm"
@@ -906,36 +958,36 @@ export function RagWorkbenchTab({
                 variant="secondary"
                 onClick={() => setReturnFieldRows((current) => [...current, createWorkbenchReturnFieldRow(current.length)])}
               >
-                Add Query Field
+                添加查询字段
               </Button>
             </div>
             {returnFieldRows.length > 0 ? (
               <div className="mt-3 grid gap-3">
                 {returnFieldRows.map((row, index) => (
                   <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_auto]" key={row.formId}>
-                    <Field label={`Query Field ${index + 1}`}>
+                    <Field label={`查询字段 ${index + 1}`} hint={workbenchFieldHints.returnField}>
                       <SelectInput
-                        aria-label={`Query Field ${index + 1}`}
+                        aria-label={`查询字段 ${index + 1}`}
                         value={row.field}
                         onChange={(event) => setReturnFieldRows((current) => current.map((item) => (
                           item.formId === row.formId ? { ...item, field: event.target.value } : item
                         )))}
                       >
-                        <option value="">Select field</option>
+                        <option value="">选择字段</option>
                         {returnFieldOptions.map((option) => (
                           <option key={option.field} value={option.field}>{option.field}</option>
                         ))}
                       </SelectInput>
                     </Field>
                     <Button
-                      aria-label={`Remove return selection ${index + 1}`}
+                      aria-label={`移除返回字段 ${index + 1}`}
                       className="self-end"
                       size="sm"
                       type="button"
                       variant="ghost"
                       onClick={() => setReturnFieldRows((current) => current.filter((item) => item.formId !== row.formId))}
                     >
-                      Remove
+                      移除
                     </Button>
                   </div>
                 ))}
@@ -944,14 +996,14 @@ export function RagWorkbenchTab({
           </div>
           <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Filter Conditions</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">筛选条件</p>
               <Button
                 size="sm"
                 type="button"
                 variant="secondary"
                 onClick={() => setFilterRows((current) => [...current, createWorkbenchFilterRow(current.length)])}
               >
-                Add Filter Condition
+                添加筛选条件
               </Button>
             </div>
             {filterRows.length > 0 ? (
@@ -961,23 +1013,23 @@ export function RagWorkbenchTab({
                   const operators = selectedField?.operators?.length ? selectedField.operators : [...workbenchFilterOperators];
                   return (
                     <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)_auto]" key={row.formId}>
-                      <Field label={`Filter ${index + 1} Field`}>
+                      <Field label={`筛选条件 ${index + 1} 字段`} hint={workbenchFieldHints.filterField}>
                         <SelectInput
-                          aria-label={`Filter ${index + 1} Field`}
+                          aria-label={`筛选条件 ${index + 1} 字段`}
                           value={row.field}
                           onChange={(event) => setFilterRows((current) => current.map((item) => (
                             item.formId === row.formId ? { ...item, field: event.target.value } : item
                           )))}
                         >
-                          <option value="">Select field</option>
+                          <option value="">选择字段</option>
                           {filterFieldOptions.map((option) => (
                             <option key={option.field} value={option.field}>{option.field}</option>
                           ))}
                         </SelectInput>
                       </Field>
-                      <Field label={`Filter ${index + 1} Operator`}>
+                      <Field label={`筛选条件 ${index + 1} 操作符`} hint={workbenchFieldHints.filterOperator}>
                         <SelectInput
-                          aria-label={`Filter ${index + 1} Operator`}
+                          aria-label={`筛选条件 ${index + 1} 操作符`}
                           value={row.operator}
                           onChange={(event) => setFilterRows((current) => current.map((item) => (
                             item.formId === row.formId ? { ...item, operator: event.target.value } : item
@@ -988,9 +1040,9 @@ export function RagWorkbenchTab({
                           ))}
                         </SelectInput>
                       </Field>
-                      <Field label={`Filter ${index + 1} Value`}>
+                      <Field label={`筛选条件 ${index + 1} 值`} hint={workbenchFieldHints.filterValue}>
                         <TextInput
-                          aria-label={`Filter ${index + 1} Value`}
+                          aria-label={`筛选条件 ${index + 1} 值`}
                           value={row.value}
                           onChange={(event) => setFilterRows((current) => current.map((item) => (
                             item.formId === row.formId ? { ...item, value: event.target.value } : item
@@ -998,14 +1050,14 @@ export function RagWorkbenchTab({
                         />
                       </Field>
                       <Button
-                        aria-label={`Remove filter ${index + 1}`}
+                        aria-label={`移除筛选条件 ${index + 1}`}
                         className="self-end"
                         size="sm"
                         type="button"
                         variant="ghost"
                         onClick={() => setFilterRows((current) => current.filter((item) => item.formId !== row.formId))}
                       >
-                        Remove
+                        移除
                       </Button>
                     </div>
                   );
@@ -1014,27 +1066,27 @@ export function RagWorkbenchTab({
             ) : null}
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Limit">
-              <TextInput aria-label="Limit" type="number" value={limit} onChange={(event) => setLimit(event.target.value)} />
+            <Field label="返回数量" hint={workbenchFieldHints.limit}>
+              <TextInput aria-label="返回数量" type="number" value={limit} onChange={(event) => setLimit(event.target.value)} />
             </Field>
-            <Field label="Token Budget">
-              <TextInput aria-label="Token Budget" type="number" value={tokenBudget} onChange={(event) => setTokenBudget(event.target.value)} />
+            <Field label="令牌预算" hint={workbenchFieldHints.tokenBudget}>
+              <TextInput aria-label="令牌预算" type="number" value={tokenBudget} onChange={(event) => setTokenBudget(event.target.value)} />
             </Field>
           </div>
-          <ToggleSwitch checked={traceEnabled} label="Enable trace" onCheckedChange={onTraceEnabledChange} />
+          <ToggleSwitch checked={traceEnabled} label="启用追踪" onCheckedChange={onTraceEnabledChange} />
           <Button disabled={searchLoading || retrievalProfileDetailLoading || !retrievalProfileId || !query.trim()} onClick={handleSearchSubmit}>
-            {searchLoading ? "Running Search..." : "Run Search"}
+            {searchLoading ? "正在检索..." : "执行检索"}
           </Button>
         </div>
         <div className="mt-5 grid gap-3">
-          <PreviewLine title="Top Hit" value={searchResult?.hits?.[0]?.title ?? searchResult?.hits?.[0]?.sourceCode ?? "waiting"} />
-          <PreviewLine title="Context Pack" value={String(searchResult?.contextPack?.tokenCount ?? 0)} />
-          <PreviewLine title="Trace Code" value={searchResult?.traceCode ?? (traceEnabled ? "on" : "off")} />
+          <PreviewLine title="首条命中" value={searchResult?.hits?.[0]?.title ?? searchResult?.hits?.[0]?.sourceCode ?? "等待中"} />
+          <PreviewLine title="上下文包" value={String(searchResult?.contextPack?.tokenCount ?? 0)} />
+          <PreviewLine title="追踪编码" value={searchResult?.traceCode ?? (traceEnabled ? "开启" : "关闭")} />
         </div>
-        <StageResultsList results={searchResult?.stageResults} title="Search Stage Results" />
+        <StageResultsList results={searchResult?.stageResults} title="检索阶段结果" />
         {searchHits.length > 0 ? (
           <div className="mt-5 space-y-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Search Results</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">检索结果</p>
             {searchHits.map((hit, index) => {
               const returnedFields = selectedReturnFields
                 .map((field) => [field, hit[field]] as const)
@@ -1047,14 +1099,14 @@ export function RagWorkbenchTab({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-medium text-[var(--color-on-surface)]">
-                        {hit.title ?? hit.sourceCode ?? `Hit ${index + 1}`}
+                        {hit.title ?? hit.sourceCode ?? `命中 ${index + 1}`}
                       </p>
                       <p className="mt-1 break-all font-mono text-[12px] text-[var(--color-on-surface-variant)]">
                         {[hit.corpusId, hit.sourceCode, hit.sourceVersion].filter(Boolean).join(" · ")}
                       </p>
                     </div>
                     <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">
-                      score {formatScore(hit.score)}
+                      得分 {formatScore(hit.score)}
                     </span>
                   </div>
                   {returnedFields.length > 0 ? (
@@ -1079,7 +1131,7 @@ export function RagWorkbenchTab({
         ) : null}
         {contextPackItems.length > 0 ? (
           <div className="mt-5 space-y-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Context Pack Items</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">上下文包条目</p>
             {contextPackItems.map((item, index) => (
               <article
                 className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm"
@@ -1087,10 +1139,10 @@ export function RagWorkbenchTab({
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="break-all font-mono text-[12px] text-[var(--color-on-surface-variant)]">
-                    {item.sourceCode ?? `Context item ${index + 1}`}
+                    {item.sourceCode ?? `上下文条目 ${index + 1}`}
                   </p>
                   <span className="font-mono text-[12px] text-[var(--color-on-surface-variant)]">
-                    {item.tokens ?? 0} tokens
+                    {item.tokens ?? 0} 令牌
                   </span>
                 </div>
                 {item.text ? (

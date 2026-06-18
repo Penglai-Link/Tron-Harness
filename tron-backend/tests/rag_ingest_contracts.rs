@@ -15,11 +15,11 @@ use serde_json::{Value, json};
 use tron_backend::{
     adapters::outbound::persistence::sqlite::SqliteRagRepository,
     application::rag::{
-        DefaultRagStrategyRegistry, RagConfigRepository, RagDocumentSourceCall,
-        RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime,
-        RagIngestAccessContext, RagIngestRepository, RagIngestRequest, RagIngestScope,
-        RagIngestService, RagIngestSource, RagPersistIngestCommand, RagResolvedDocument,
-        compile_ingest_profile,
+        DefaultRagStrategyRegistry, RagConfigRepository, RagDocumentParseCall,
+        RagDocumentSourceCall, RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult,
+        RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRepository, RagIngestRequest,
+        RagIngestScope, RagIngestService, RagIngestSource, RagPersistIngestCommand,
+        RagResolvedDocument, compile_ingest_profile,
     },
     domain::rag::{RagError, RagProfileRecord, RagProfileType, RagStatus},
     shared::sqlite_extensions::default_sqlite_extension_context,
@@ -309,6 +309,75 @@ async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_
         &connection,
         "rag_project_doc_text_units_vec_d4096"
     ));
+}
+
+#[tokio::test]
+async fn project_doc_pdf_mineru_ingest_uses_mineru_markdown_for_split() {
+    let database_path = temp_database_path("rag-ingest-project-doc-mineru-pdf");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    let runtime = FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2))
+        .with_document("binary source placeholder")
+        .with_mineru_document(project_doc_mineru_markdown());
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+
+    let result = service
+        .ingest(project_doc_mineru_request(
+            "v1",
+            "PDF",
+            "project-doc://TRON_CORE/docs/rag-mvp.pdf",
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(result.text_unit_count, 2);
+    assert_eq!(runtime.mineru_call_count(), 1);
+
+    let connection = Connection::open(&database_url).unwrap();
+    assert_eq!(
+        query_text_unit_headings(&connection),
+        vec!["MinerU Parsed", "MinerU Parsed > Parsed Details"]
+    );
+    assert!(
+        query_string(
+            &connection,
+            "SELECT text FROM rag_project_doc_text_units WHERE ordinal = 1"
+        )
+        .contains("Text extracted from PDF by MinerU.")
+    );
+}
+
+#[tokio::test]
+async fn project_doc_docx_mineru_ingest_accepts_same_profile() {
+    let database_path = temp_database_path("rag-ingest-project-doc-mineru-docx");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    let runtime = FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2))
+        .with_document("docx source placeholder")
+        .with_mineru_document("# DOCX Parsed\nText extracted from DOCX by MinerU.");
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+
+    let result = service
+        .ingest(project_doc_mineru_request(
+            "v1",
+            "DOCX",
+            "project-doc://TRON_CORE/docs/rag-mvp.docx",
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(result.text_unit_count, 1);
+    assert_eq!(runtime.mineru_call_count(), 1);
 }
 
 #[tokio::test]
@@ -645,6 +714,27 @@ fn ingest_profile_compiler_rejects_invalid_dag_contracts() {
 }
 
 #[test]
+fn ingest_profile_compiler_accepts_legacy_mineru_format_config_as_pdf_docx() {
+    let repository = SqliteRagRepository::connect(":memory:").unwrap();
+    let corpus = repository.get_corpus("project-doc").unwrap().unwrap();
+    let registry = DefaultRagStrategyRegistry::default();
+    let mut profile = repository
+        .get_profile("project-doc-mineru-ingest-v1")
+        .unwrap()
+        .unwrap();
+
+    profile.profile_id = "project-ingest-test-1".into();
+    profile.config = legacy_mineru_pipeline_config();
+
+    let compiled = compile_ingest_profile(&profile, &corpus, &registry).unwrap();
+
+    assert_eq!(compiled.document_formats, vec!["PDF", "DOCX"]);
+    assert!(compiled.supports_document_format("PDF"));
+    assert!(compiled.supports_document_format("DOCX"));
+    assert!(!compiled.supports_document_format("MARKDOWN"));
+}
+
+#[test]
 fn ingest_boundary_does_not_add_search_debug_retry_or_graph_memory_flow_behavior() {
     let app_source = include_str!("../src/app.rs");
     let rag_source = include_str!("../src/application/rag/service.rs");
@@ -709,7 +799,9 @@ fn ingest_executor_uses_generic_pipeline_dispatch_instead_of_fixed_stage_match()
 struct FakeEmbeddingRuntime {
     result: Arc<Mutex<Result<RagEmbeddingResult, String>>>,
     documents: Arc<Mutex<VecDeque<Result<RagResolvedDocument, RagError>>>>,
+    mineru_documents: Arc<Mutex<VecDeque<Result<RagResolvedDocument, RagError>>>>,
     calls: Arc<AtomicUsize>,
+    mineru_calls: Arc<AtomicUsize>,
     last_model_code: Arc<Mutex<Option<String>>>,
 }
 
@@ -721,7 +813,9 @@ impl FakeEmbeddingRuntime {
                 embedding,
             }))),
             documents: Arc::new(Mutex::new(VecDeque::new())),
+            mineru_documents: Arc::new(Mutex::new(VecDeque::new())),
             calls: Arc::new(AtomicUsize::new(0)),
+            mineru_calls: Arc::new(AtomicUsize::new(0)),
             last_model_code: Arc::new(Mutex::new(None)),
         }
     }
@@ -730,7 +824,9 @@ impl FakeEmbeddingRuntime {
         Self {
             result: Arc::new(Mutex::new(Err(message.to_string()))),
             documents: Arc::new(Mutex::new(VecDeque::new())),
+            mineru_documents: Arc::new(Mutex::new(VecDeque::new())),
             calls: Arc::new(AtomicUsize::new(0)),
+            mineru_calls: Arc::new(AtomicUsize::new(0)),
             last_model_code: Arc::new(Mutex::new(None)),
         }
     }
@@ -747,8 +843,24 @@ impl FakeEmbeddingRuntime {
         self
     }
 
+    fn with_mineru_document(self, content_text: &str) -> Self {
+        self.mineru_documents
+            .lock()
+            .unwrap()
+            .push_back(Ok(RagResolvedDocument {
+                document_uri: "project-doc://TRON_CORE/docs/rag-mvp.pdf".into(),
+                content_length: content_text.len(),
+                content_text: content_text.into(),
+            }));
+        self
+    }
+
     fn call_count(&self) -> usize {
         self.calls.load(Ordering::SeqCst)
+    }
+
+    fn mineru_call_count(&self) -> usize {
+        self.mineru_calls.load(Ordering::SeqCst)
     }
 
     fn last_model_code(&self) -> Option<String> {
@@ -780,6 +892,23 @@ impl RagDocumentSourceRuntime for FakeEmbeddingRuntime {
                 .unwrap()
                 .pop_front()
                 .unwrap_or(Err(RagError::SourceResolveFailed))
+        })
+    }
+
+    fn parse_project_doc_with_mineru<'a>(
+        &'a self,
+        call: RagDocumentParseCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagResolvedDocument, RagError>> + Send + 'a>> {
+        Box::pin(async move {
+            self.mineru_calls.fetch_add(1, Ordering::SeqCst);
+            let mut document = self
+                .mineru_documents
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or(Err(RagError::DocumentParseFailed))?;
+            document.document_uri = call.document_uri;
+            Ok(document)
         })
     }
 }
@@ -906,8 +1035,26 @@ fn project_doc_request(source_version: &str) -> RagIngestRequest {
     }
 }
 
+fn project_doc_mineru_request(
+    source_version: &str,
+    format: &str,
+    document_uri: &str,
+) -> RagIngestRequest {
+    let mut request = project_doc_request(source_version);
+    request.ingest_profile_id = "project-doc-mineru-ingest-v1".into();
+    request.payload["document"]["uri"] = json!(document_uri);
+    request.payload["document"]["format"] = json!(format);
+    request.payload["domainFields"]["path"] =
+        json!(document_uri.trim_start_matches("project-doc://TRON_CORE/"));
+    request
+}
+
 fn project_doc_markdown() -> &'static str {
     "# RAG MVP\nIntro.\n\n## Write Path\nPersist synchronously."
+}
+
+fn project_doc_mineru_markdown() -> &'static str {
+    "# MinerU Parsed\nIntro extracted from PDF.\n\n## Parsed Details\nText extracted from PDF by MinerU."
 }
 
 fn project_doc_nested_markdown() -> &'static str {
@@ -1032,6 +1179,75 @@ fn valid_dag() -> Value {
             "vectorIndex": { "strategyId": "RAG_VECTOR_INDEX" },
             "persistSource": { "strategyId": "RAG_PERSIST_SOURCE" }
         }
+    })
+}
+
+fn legacy_mineru_pipeline_config() -> Value {
+    json!({
+        "sourceInputPolicy": {
+            "supportedSourceTypes": ["PROJECT_DOC_REF"],
+            "directContentEnabled": false
+        },
+        "pipeline": {
+            "mode": "DAG",
+            "nodes": [
+                {
+                    "nodeId": "validate-source",
+                    "stageType": "VALIDATE_SOURCE",
+                    "strategyId": "RAG_VALIDATE_SOURCE"
+                },
+                {
+                    "nodeId": "prepare-payload",
+                    "stageType": "PREPARE_PAYLOAD",
+                    "strategyId": "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1"
+                },
+                {
+                    "nodeId": "resolve-source",
+                    "stageType": "RESOLVE_SOURCE",
+                    "strategyId": "PROJECT_DOC_RESOLVE_SOURCE"
+                },
+                {
+                    "nodeId": "parse-document",
+                    "stageType": "PARSE_DOCUMENT",
+                    "strategyId": "RAG_PARSE_MINERU_DOCUMENT",
+                    "config": {
+                        "format": "MARKDOWN",
+                        "unsupportedFormatPolicy": "FAIL_FAST"
+                    }
+                },
+                {
+                    "nodeId": "split-text",
+                    "stageType": "SPLIT_TEXT",
+                    "strategyId": "RAG_SPLIT_TEXT"
+                },
+                {
+                    "nodeId": "fulltext-index",
+                    "stageType": "FULLTEXT_INDEX",
+                    "strategyId": "RAG_FULLTEXT_INDEX"
+                },
+                {
+                    "nodeId": "vector-index",
+                    "stageType": "VECTOR_INDEX",
+                    "strategyId": "RAG_VECTOR_INDEX"
+                },
+                {
+                    "nodeId": "persist-source",
+                    "stageType": "PERSIST_SOURCE",
+                    "strategyId": "RAG_PERSIST_SOURCE"
+                }
+            ],
+            "edges": [
+                { "from": "validate-source", "to": "prepare-payload" },
+                { "from": "prepare-payload", "to": "resolve-source" },
+                { "from": "resolve-source", "to": "parse-document" },
+                { "from": "parse-document", "to": "split-text" },
+                { "from": "split-text", "to": "fulltext-index" },
+                { "from": "split-text", "to": "vector-index" },
+                { "from": "fulltext-index", "to": "persist-source" },
+                { "from": "vector-index", "to": "persist-source" }
+            ]
+        },
+        "embeddingVersion": "v1"
     })
 }
 

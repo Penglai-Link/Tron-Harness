@@ -405,8 +405,8 @@ function createStorageTargetOptionLabel(target: RagStorageTargetFormState, visib
   const physicalTarget = buildStorageTargetBinding(target);
   void visibleIndex;
   return physicalTarget.backend === "GRAPH"
-    ? `${physicalTarget.namespace ?? "unbound"}/${physicalTarget.nodeLabel ?? "node"}`
-    : `${physicalTarget.table ?? "unbound"}`;
+    ? `${physicalTarget.namespace ?? "未绑定"}/${physicalTarget.nodeLabel ?? "节点"}`
+    : `${physicalTarget.table ?? "未绑定"}`;
 }
 
 export function splitListInput(value: string) {
@@ -548,7 +548,7 @@ export function getGraphCapabilityClosureError(form: RagCorpusFormState) {
   });
 
   if (hasGraphBoundNonDiagnosticsSegment) return undefined;
-  return "Graph enabled requires at least one non-diagnostics segment to bind to a GRAPH target.";
+  return "启用图能力时，至少需要一个非诊断业务分段绑定到 GRAPH 存储目标。";
 }
 
 export const emptyRagCorpusForm: RagCorpusFormState = {
@@ -710,18 +710,18 @@ function validateStorageTarget(target: RagStorageTargetFormState, label: string)
 
   if (target.backend === "GRAPH") {
     if (!target.namespace.trim()) {
-      errors.namespace = `${label} graph namespace is required.`;
+      errors.namespace = `${label} 的图命名空间不能为空。`;
     }
     if (!target.nodeLabel.trim()) {
-      errors.nodeLabel = `${label} node label is required.`;
+      errors.nodeLabel = `${label} 的节点标签不能为空。`;
     }
     return errors;
   }
 
   if (!target.table.trim()) {
-    errors.table = `${label} table is required for SQLite storage.`;
+    errors.table = `${label} 使用 SQLite 存储时表名不能为空。`;
   } else if (!validSqliteIdentifier(target.table)) {
-    errors.table = `${label} table must start with rag_ and use lowercase letters, digits, or underscores.`;
+    errors.table = `${label} 的表名必须以 rag_ 开头，并且只能使用小写字母、数字或下划线。`;
   }
 
   return errors;
@@ -748,22 +748,22 @@ export function validateRagCorpusForm(
     .some((existingCode) => existingCode === normalizedCode && existingCode !== normalizedCurrentCode);
 
   if (!code) {
-    errors.code = "Corpus code is required.";
+    errors.code = "语料库编码不能为空。";
   } else if (mode === "create" && duplicateCode) {
-    errors.code = "Corpus code must be unique.";
+    errors.code = "语料库编码必须唯一。";
   }
 
-  if (!form.name.trim()) errors.name = "Corpus name is required.";
+  if (!form.name.trim()) errors.name = "语料库名称不能为空。";
 
   if (!form.storageTargets.length) {
-    errors.storageBinding = "At least one storage target is required.";
+    errors.storageBinding = "至少需要一个存储目标。";
   }
 
   const seenTargetIds = new Set<string>();
   const targetErrors: Record<string, RagStorageTargetFormErrors> = {};
 
   form.storageTargets.forEach((target, index) => {
-    const nextErrors = validateStorageTarget(target, `Storage target ${index + 1}`);
+    const nextErrors = validateStorageTarget(target, `存储目标 ${index + 1}`);
     const targetId = target.id.trim();
 
     if (targetId) seenTargetIds.add(targetId);
@@ -778,28 +778,28 @@ export function validateRagCorpusForm(
   }
 
   const segmentLabels: Record<RagEditableStorageSegmentKey, string> = {
-    fulltext: "Fulltext",
-    source: "Source",
-    textUnit: "Text unit",
-    vector: "Vector",
+    fulltext: "全文索引",
+    source: "来源",
+    textUnit: "文本单元",
+    vector: "向量",
   };
   const segmentBindingErrors: Partial<Record<RagEditableStorageSegmentKey, string>> = {};
 
   editableStorageSegmentOrder.forEach((segmentKey) => {
     const targetId = form.segmentBindings[segmentKey].trim();
     if (!targetId) {
-      segmentBindingErrors[segmentKey] = `${segmentLabels[segmentKey]} target is required.`;
+      segmentBindingErrors[segmentKey] = `${segmentLabels[segmentKey]}的存储目标不能为空。`;
       return;
     }
     if (!seenTargetIds.has(targetId)) {
-      segmentBindingErrors[segmentKey] = `${segmentLabels[segmentKey]} target must reference an existing storage target.`;
+      segmentBindingErrors[segmentKey] = `${segmentLabels[segmentKey]}的存储目标必须引用已存在的存储目标。`;
     }
   });
 
   if (Object.keys(segmentBindingErrors).length > 0) {
     errors.segmentBindings = segmentBindingErrors;
     if (!errors.storageBinding) {
-      errors.storageBinding = "Every business segment must bind to a storage target.";
+      errors.storageBinding = "每个业务分段都必须绑定到一个存储目标。";
     }
   }
 
@@ -813,46 +813,46 @@ export function validateRagCorpusForm(
     .filter(([, option]) => option.columns.size > 1)
     .map(([logicalName]) => logicalName);
   if (conflictingLogicalFieldNames.length) {
-    const conflictMessage = "Field mapping logical names must resolve to a single physical column across source and text-unit mappings.";
+    const conflictMessage = "字段映射的逻辑名在来源和文本单元映射中必须解析到同一个物理列。";
     errors.sourceMappings = errors.sourceMappings ?? conflictMessage;
     errors.textUnitMappings = errors.textUnitMappings ?? conflictMessage;
   }
 
   if (!form.filterFields.some((row) => row.name.trim())) {
-    errors.filterFields = "At least one filter schema field is required.";
+    errors.filterFields = "至少需要一个筛选 schema 字段。";
   } else if (form.filterFields.some((row) => row.name.trim() && !resolveFilterFieldColumn(form, row.name))) {
-    errors.filterFields = "Filter field name must reference a mapped field.";
+    errors.filterFields = "筛选字段名必须引用已映射字段。";
   } else if (form.filterFields.some((row) => {
     const column = resolveFilterFieldColumn(form, row.name);
     return column ? !selectedFilterColumnExists(form, column) : false;
   })) {
-    errors.filterFields = "Filter field must resolve to a column in one of the bound storage targets.";
+    errors.filterFields = "筛选字段必须解析到某个已绑定存储目标中的列。";
   }
 
   const sourceTarget = resolveStorageTarget(form.storageTargets, form.segmentBindings, "source");
   const missingSourceContractFields = missingContractFieldNames(form.sourceMappings);
   if (missingSourceContractFields.length) {
-    errors.sourceMappings = `Source mapping must keep contract fields: ${missingSourceContractFields.join(", ")}.`;
+    errors.sourceMappings = `来源映射必须保留契约字段：${missingSourceContractFields.join(", ")}。`;
   } else if (duplicateLogicalNames(form.sourceMappings).length) {
-    errors.sourceMappings = "Source mapping logical names must be unique.";
+    errors.sourceMappings = "来源映射的逻辑名必须唯一。";
   } else if (
     sourceTarget
     && form.sourceMappings.some((row) => row.column.trim() && !knownOrUnregisteredTargetHasColumn(sourceTarget, row.column))
   ) {
-    errors.sourceMappings = "Source mapping column must exist in the bound source target.";
+    errors.sourceMappings = "来源映射列必须存在于已绑定的来源存储目标中。";
   }
 
   const textUnitTarget = resolveStorageTarget(form.storageTargets, form.segmentBindings, "textUnit");
   const missingTextUnitContractFields = missingContractFieldNames(form.textUnitMappings);
   if (missingTextUnitContractFields.length) {
-    errors.textUnitMappings = `Text-unit mapping must keep contract fields: ${missingTextUnitContractFields.join(", ")}.`;
+    errors.textUnitMappings = `文本单元映射必须保留契约字段：${missingTextUnitContractFields.join(", ")}。`;
   } else if (duplicateLogicalNames(form.textUnitMappings).length) {
-    errors.textUnitMappings = "Text-unit mapping logical names must be unique.";
+    errors.textUnitMappings = "文本单元映射的逻辑名必须唯一。";
   } else if (
     textUnitTarget
     && form.textUnitMappings.some((row) => row.column.trim() && !knownOrUnregisteredTargetHasColumn(textUnitTarget, row.column))
   ) {
-    errors.textUnitMappings = "Text-unit mapping column must exist in the bound text-unit target.";
+    errors.textUnitMappings = "文本单元映射列必须存在于已绑定的文本单元存储目标中。";
   }
 
   return errors;
@@ -914,7 +914,7 @@ export function buildRagCorpusConfigFromForm(form: RagCorpusFormState): RagCorpu
       vector: form.vectorEnabled,
     },
     corpusId: form.code.trim(),
-    description: form.description.trim() || "Browser-local mock corpus record.",
+    description: form.description.trim() || "浏览器本地模拟语料库记录。",
     displayName: form.name.trim(),
     fieldMapping,
     filterSchema: filterSchemaFromRows(form.filterFields, (logicalName) => resolveFilterFieldColumn(form, logicalName)),
@@ -944,12 +944,12 @@ export function buildCorpusRecordFromForm(form: RagCorpusFormState, existing?: C
     config,
     description: config.description,
     filters: Object.keys(config.filterSchema.fields),
-    fulltextHealth: existing?.fulltextHealth ?? "Healthy",
+    fulltextHealth: existing?.fulltextHealth ?? "健康",
     ingestProfile: existing?.ingestProfile ?? form.ingestProfile.trim(),
-    lastIndexed: existing?.lastIndexed ?? "Browser local",
+    lastIndexed: existing?.lastIndexed ?? "浏览器本地",
     name: config.displayName,
     retrievalProfile: existing?.retrievalProfile ?? form.retrievalProfile.trim(),
-    scope: existing?.scope ?? "workspace",
+    scope: existing?.scope ?? "工作区",
     sources: existing?.sources ?? 0,
     status: form.reservedEnabled ? "Reserved" : (existing?.status === "Indexing" ? "Indexing" : "Active"),
     storageBinding: formatRagStorageBinding(config.storageBinding),

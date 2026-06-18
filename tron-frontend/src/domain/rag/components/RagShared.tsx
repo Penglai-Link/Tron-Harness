@@ -31,8 +31,35 @@ export function statusTone(status: CorpusRecord["status"] | ProfileRecord["statu
   }
 }
 
+export function formatRagStatusLabel(status: string) {
+  const statusLabels: Record<string, string> = {
+    Active: "活跃",
+    COMPLETED: "已完成",
+    Draft: "草稿",
+    FAILED: "失败",
+    High: "高",
+    Indexed: "已索引",
+    Indexing: "索引中",
+    Low: "低",
+    Medium: "中",
+    "Needs Review": "待复核",
+    Pending: "待处理",
+    Ready: "就绪",
+    Reserved: "预留",
+    RUNNING: "运行中",
+    Skipped: "已跳过",
+    SUCCESS: "成功",
+    Warning: "告警",
+    completed: "已完成",
+    failed: "失败",
+    running: "运行中",
+    success: "成功",
+  };
+  return statusLabels[status] ?? status;
+}
+
 export function formatCompactNumber(value: number) {
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 1, notation: "compact" }).format(value);
+  return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1, notation: "compact" }).format(value);
 }
 
 export function SectionTitle({ description, icon, title }: { description?: string; icon: ReactNode; title: string }) {
@@ -86,7 +113,7 @@ export function Pill({ children }: { children: ReactNode }) {
 export function DiagnosticPreview({ rows }: { rows: [string, string][] }) {
   return (
     <div className="mt-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Preview</p>
+      <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">预览</p>
       <div className="mt-3 grid gap-2 text-sm">
         {rows.map(([label, value]) => <InspectorRow key={label} label={label} value={value} />)}
       </div>

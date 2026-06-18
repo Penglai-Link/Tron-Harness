@@ -16,6 +16,7 @@ import { Button } from "@/shared/ui/Button";
 
 import type { CorpusRecord } from "@/domain/rag/model/RagModel";
 import {
+  formatRagStatusLabel,
   statusTone,
 } from "@/domain/rag/components/RagShared";
 
@@ -46,7 +47,7 @@ export function RagCorporaTab({
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
             <TextInput
               className="w-full pl-9"
-              placeholder="Search corpus, code, or description..."
+              placeholder="搜索语料库、编码或描述..."
               type="search"
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
@@ -59,29 +60,29 @@ export function RagCorporaTab({
           >
             {["All", "Active", "Indexing", "Warning", "Reserved"].map((status) => (
               <option key={status} value={status}>
-                {status === "All" ? "All statuses" : status}
+                {status === "All" ? "全部状态" : formatRagStatusLabel(status)}
               </option>
             ))}
           </SelectInput>
           <Button className="justify-self-start md:justify-self-end" size="sm" variant="secondary" onClick={onCreateCorpus}>
             <Sparkles size={17} aria-hidden="true" />
-            New Corpus
+            新建语料库
           </Button>
         </div>
       </SurfaceCard>
 
       <SurfaceCard className="mt-5 p-0">
         <DataTable
-          title="Corpus Registry"
+          title="语料库列表"
           rows={corpusPagination.visibleItems}
           rowKey={(corpus) => corpus.code}
           onRowClick={onEditCorpus}
-          pagination={<TablePagination itemLabel="corpora" {...corpusPagination.paginationProps} />}
-          toolbar={<span className="text-[13px] text-[var(--color-on-surface-variant)]">{filteredCount} visible corpora</span>}
+          pagination={<TablePagination itemLabel="语料库" {...corpusPagination.paginationProps} />}
+          toolbar={<span className="text-[13px] text-[var(--color-on-surface-variant)]">当前显示 {filteredCount} 个语料库</span>}
           columns={[
             {
               id: "corpus",
-              header: "Corpus",
+              header: "语料库",
               render: (corpus) => (
                 <div>
                   <p className="font-medium">{corpus.name}</p>
@@ -91,17 +92,17 @@ export function RagCorporaTab({
             },
             {
               id: "description",
-              header: "Description",
+              header: "描述",
               render: (corpus) => (
                 <p className="line-clamp-3 text-[13px] text-[var(--color-on-surface-variant)]">
-                  {corpus.description || "No description"}
+                  {corpus.description || "暂无描述"}
                 </p>
               ),
             },
             {
               id: "status",
-              header: "Status",
-              render: (corpus) => <Badge tone={statusTone(corpus.status)}>{corpus.status}</Badge>,
+              header: "状态",
+              render: (corpus) => <Badge tone={statusTone(corpus.status)}>{formatRagStatusLabel(corpus.status)}</Badge>,
             },
           ]}
         />

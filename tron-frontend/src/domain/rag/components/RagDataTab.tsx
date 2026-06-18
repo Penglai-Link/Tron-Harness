@@ -59,10 +59,10 @@ export function RagDataTab({
   return (
     <div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard icon={<FileArchive size={18} aria-hidden="true" />} label="Sources" value={String(sources.length)} />
-        <MetricCard icon={<BookCopy size={18} aria-hidden="true" />} label="Text Units" value={String(textUnits.length)} />
-        <MetricCard icon={<Gauge size={18} aria-hidden="true" />} label="Vector Coverage" value="94%" />
-        <MetricCard icon={<Network size={18} aria-hidden="true" />} label="Search Traces 7d" value="318" />
+        <MetricCard icon={<FileArchive size={18} aria-hidden="true" />} label="来源" value={String(sources.length)} />
+        <MetricCard icon={<BookCopy size={18} aria-hidden="true" />} label="文本单元" value={String(textUnits.length)} />
+        <MetricCard icon={<Gauge size={18} aria-hidden="true" />} label="向量覆盖率" value="94%" />
+        <MetricCard icon={<Network size={18} aria-hidden="true" />} label="近 7 天检索追踪" value="318" />
       </div>
 
       <SurfaceCard className="mt-5">
@@ -73,13 +73,13 @@ export function RagDataTab({
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
               <TextInput
                 className="w-full pl-9"
-                placeholder="Search sources, chunks, warnings, or traces..."
+                placeholder="搜索来源、片段、告警或追踪..."
                 type="search"
                 value={query}
                 onChange={(event) => onQueryChange(event.target.value)}
               />
             </div>
-            <Button size="icon" variant="secondary" aria-label="Open RAG data filters">
+            <Button size="icon" variant="secondary" aria-label="打开知识检索数据筛选">
               <Filter size={17} aria-hidden="true" />
             </Button>
           </div>

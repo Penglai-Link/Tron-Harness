@@ -8,6 +8,7 @@ mod ingest_payload;
 mod ingest_profile;
 mod lifecycle;
 mod management;
+mod mineru;
 mod pipeline;
 mod retry;
 mod runtime;
@@ -26,7 +27,9 @@ pub use diagnostics::{
     RagDebugTextUnitRecord, RagDiagnosticWarningRecord, RagDiagnosticsRepository,
     RagDiagnosticsService, RagSearchTraceWrite, safe_trace_payload,
 };
-pub use document_source::{RagDocumentSourceCall, RagDocumentSourceRuntime, RagResolvedDocument};
+pub use document_source::{
+    RagDocumentParseCall, RagDocumentSourceCall, RagDocumentSourceRuntime, RagResolvedDocument,
+};
 pub use events::publish_rag_event;
 pub use facade::RagService;
 pub use ingest::{

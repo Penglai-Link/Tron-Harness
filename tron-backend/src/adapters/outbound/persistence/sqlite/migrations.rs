@@ -104,6 +104,9 @@ pub(super) const RAG_MEMORY_TIMESTAMP_RETURN_FIELDS_MIGRATION: &str = include_st
 );
 pub(super) const RAG_MEMORY_INGEST_VECTOR_DEGRADE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260616_0003_allow_memory_ingest_vector_degrade.sql");
+pub(super) const RAG_PROJECT_DOC_MINERU_INGEST_PROFILE_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260618_0001_add_project_doc_mineru_ingest_profile.sql"
+);
 pub(super) const MEMORY_WORK_DOMAINS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260616_0001_create_memory_work_domains.sql");
 pub(super) const AGENT_MANAGEMENT_RUNTIME_TYPE_MIGRATION: &str =

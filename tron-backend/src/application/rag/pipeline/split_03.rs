@@ -30,6 +30,24 @@ fn strategy_config_schema(strategy_id: &str) -> Value {
                 }
             }
         }),
+        "RAG_PARSE_MINERU_DOCUMENT" => json!({
+            "type": "object",
+            "properties": {
+                "supportedFormats": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["PDF", "DOCX"]
+                    },
+                    "default": ["PDF", "DOCX"]
+                },
+                "unsupportedFormatPolicy": {
+                    "type": "string",
+                    "enum": ["FAIL_FAST", "SKIP"],
+                    "default": "FAIL_FAST"
+                }
+            }
+        }),
         "RAG_SPLIT_TEXT" => json!({
             "type": "object",
             "properties": {
@@ -141,12 +159,20 @@ fn stage_definitions() -> Vec<StageDefinition> {
             parallel: false,
             default_join_policy: "ALL_SUCCESS",
             default_failure_policy: "FAIL_PIPELINE",
-            strategies: &[StrategyDefinition {
-                strategy_id: "RAG_PARSE_MARKDOWN_DOCUMENT",
-                display_name: "Markdown Parser",
-                required_capabilities: &["fulltext"],
-                required_storage_segments: &["source"],
-            }],
+            strategies: &[
+                StrategyDefinition {
+                    strategy_id: "RAG_PARSE_MARKDOWN_DOCUMENT",
+                    display_name: "Markdown Parser",
+                    required_capabilities: &["fulltext"],
+                    required_storage_segments: &["source"],
+                },
+                StrategyDefinition {
+                    strategy_id: "RAG_PARSE_MINERU_DOCUMENT",
+                    display_name: "MinerU Document Parser",
+                    required_capabilities: &["fulltext"],
+                    required_storage_segments: &["source"],
+                },
+            ],
             execution_stage_id: "parseDocument",
         },
         StageDefinition {
@@ -448,4 +474,3 @@ fn pipeline_templates(profile_type: RagProfileType) -> Vec<RagPipelineTemplateVi
         RagProfileType::Retrieval => Vec::new(),
     }
 }
-

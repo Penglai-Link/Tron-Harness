@@ -20,6 +20,7 @@ impl RagStrategyRegistry for DefaultRagStrategyRegistry {
                 "RAG_PERSIST_SOURCE",
                 "PROJECT_DOC_RESOLVE_SOURCE",
                 "RAG_PARSE_MARKDOWN_DOCUMENT",
+                "RAG_PARSE_MINERU_DOCUMENT",
                 "RAG_QUESTION_GENERALIZATION_SIMPLE_V1",
                 "RAG_QUERY_REWRITE_TEMPLATE_V1",
             ],

@@ -12,6 +12,16 @@ pub struct RagDocumentSourceCall {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RagDocumentParseCall {
+    pub workspace_code: String,
+    pub user_code: String,
+    pub agent_code: String,
+    pub document_uri: String,
+    pub document_format: String,
+    pub max_bytes: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RagResolvedDocument {
     pub document_uri: String,
     pub content_text: String,
@@ -23,12 +33,79 @@ pub trait RagDocumentSourceRuntime: Clone + Send + Sync + 'static {
         &'a self,
         call: RagDocumentSourceCall,
     ) -> Pin<Box<dyn Future<Output = Result<RagResolvedDocument, RagError>> + Send + 'a>>;
+
+    fn resolve_project_doc_file<'a>(
+        &'a self,
+        call: RagDocumentSourceCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagResolvedDocument, RagError>> + Send + 'a>> {
+        Box::pin(async move { self.resolve_project_doc_markdown(call).await })
+    }
+
+    fn parse_project_doc_with_mineru<'a>(
+        &'a self,
+        _call: RagDocumentParseCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagResolvedDocument, RagError>> + Send + 'a>> {
+        Box::pin(async { Err(RagError::DocumentParseFailed) })
+    }
 }
 
 pub(crate) fn resolve_project_doc_markdown_file(
     project_doc_root: PathBuf,
     call: &RagDocumentSourceCall,
 ) -> Result<RagResolvedDocument, RagError> {
+    let resolved = resolve_project_doc_file_path(project_doc_root, call)?;
+    let content =
+        std::fs::read_to_string(&resolved.path).map_err(|_| RagError::DocumentParseFailed)?;
+    if content.as_bytes().len() > call.max_bytes {
+        return Err(RagError::DocumentTooLarge);
+    }
+    Ok(RagResolvedDocument {
+        document_uri: call.document_uri.clone(),
+        content_length: content.len(),
+        content_text: content,
+    })
+}
+
+pub(crate) fn resolve_project_doc_reference_file(
+    project_doc_root: PathBuf,
+    call: &RagDocumentSourceCall,
+) -> Result<RagResolvedDocument, RagError> {
+    let resolved = resolve_project_doc_file_path(project_doc_root, call)?;
+    Ok(RagResolvedDocument {
+        document_uri: call.document_uri.clone(),
+        content_length: resolved.content_length,
+        content_text: String::new(),
+    })
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ProjectDocFile {
+    pub document_uri: String,
+    pub path: PathBuf,
+    pub file_name: String,
+    pub content_length: usize,
+}
+
+pub(crate) fn resolve_project_doc_parse_file(
+    project_doc_root: PathBuf,
+    call: &RagDocumentParseCall,
+) -> Result<ProjectDocFile, RagError> {
+    resolve_project_doc_file_path(
+        project_doc_root,
+        &RagDocumentSourceCall {
+            workspace_code: call.workspace_code.clone(),
+            user_code: call.user_code.clone(),
+            agent_code: call.agent_code.clone(),
+            document_uri: call.document_uri.clone(),
+            max_bytes: call.max_bytes,
+        },
+    )
+}
+
+fn resolve_project_doc_file_path(
+    project_doc_root: PathBuf,
+    call: &RagDocumentSourceCall,
+) -> Result<ProjectDocFile, RagError> {
     let relative_path = project_doc_relative_path(&call.document_uri, &call.workspace_code)?;
     let root = canonical_root(project_doc_root)?;
     let path = root.join(relative_path);
@@ -40,18 +117,23 @@ pub(crate) fn resolve_project_doc_markdown_file(
     }
 
     let metadata = std::fs::metadata(&canonical_path).map_err(|_| RagError::SourceResolveFailed)?;
-    if metadata.len() as usize > call.max_bytes {
+    if !metadata.is_file() {
+        return Err(RagError::SourceResolveFailed);
+    }
+    let content_length = usize::try_from(metadata.len()).map_err(|_| RagError::DocumentTooLarge)?;
+    if content_length > call.max_bytes {
         return Err(RagError::DocumentTooLarge);
     }
-    let content =
-        std::fs::read_to_string(&canonical_path).map_err(|_| RagError::DocumentParseFailed)?;
-    if content.as_bytes().len() > call.max_bytes {
-        return Err(RagError::DocumentTooLarge);
-    }
-    Ok(RagResolvedDocument {
+    let file_name = canonical_path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or(RagError::SourceResolveFailed)?
+        .to_string();
+    Ok(ProjectDocFile {
         document_uri: call.document_uri.clone(),
-        content_length: content.len(),
-        content_text: content,
+        path: canonical_path,
+        file_name,
+        content_length,
     })
 }
 

@@ -35,6 +35,7 @@ pub struct HttpClientPool {
     default: Client,
     model_inference: Client,
     runtime_control: Client,
+    document_parsing: Client,
 }
 
 impl HttpClientPool {
@@ -43,6 +44,7 @@ impl HttpClientPool {
             default: build_client("default", &config.default)?,
             model_inference: build_client("modelInference", &config.model_inference)?,
             runtime_control: build_client("runtimeControl", &config.runtime_control)?,
+            document_parsing: build_client("documentParsing", &config.document_parsing)?,
         })
     }
 
@@ -56,6 +58,10 @@ impl HttpClientPool {
 
     pub fn runtime_control_client(&self) -> Client {
         self.runtime_control.clone()
+    }
+
+    pub fn document_parsing_client(&self) -> Client {
+        self.document_parsing.clone()
     }
 }
 

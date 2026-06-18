@@ -209,7 +209,10 @@ where
                 ),
                 (
                     "parseDocument".into(),
-                    vec!["RAG_PARSE_MARKDOWN_DOCUMENT".into()],
+                    vec![
+                        "RAG_PARSE_MARKDOWN_DOCUMENT".into(),
+                        "RAG_PARSE_MINERU_DOCUMENT".into(),
+                    ],
                 ),
                 ("splitText".into(), vec!["RAG_SPLIT_TEXT".into()]),
                 (
@@ -387,4 +390,3 @@ fn build_corpus_record(
         storage_binding,
     })
 }
-

@@ -165,7 +165,12 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             templates,
-            vec!["text-standard", "document-reference", "graph-tree-enhanced"]
+            vec![
+                "text-standard",
+                "document-reference",
+                "mineru-document-reference",
+                "graph-tree-enhanced"
+            ]
         );
 
         for template in ingest.templates {

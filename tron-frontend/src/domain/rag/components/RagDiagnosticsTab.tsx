@@ -24,56 +24,56 @@ export function RagDiagnosticsTab({ onNotice }: { onNotice: (notice: string) => 
       <SurfaceCard>
         <SectionTitle
           icon={<Settings2 size={17} aria-hidden="true" />}
-          title="Debug Profile"
+          title="调试配置"
         />
         <div className="mt-4 grid gap-3">
-          <Field label="Profile ID">
+          <Field label="配置标识">
             <SelectInput defaultValue="project-doc-related-v1">
-              <option value="project-doc-related-v1">project-doc-related-v1</option>
-              <option value="memory-related-v1">memory-related-v1</option>
-              <option value="skill-related-v1">skill-related-v1</option>
+              <option value="project-doc-related-v1">项目文档相关性配置</option>
+              <option value="memory-related-v1">记忆相关性配置</option>
+              <option value="skill-related-v1">技能相关性配置</option>
             </SelectInput>
           </Field>
-          <Button variant="secondary" onClick={() => onNotice("Profile debug response preview refreshed.")}>
-            Load Profile
+          <Button variant="secondary" onClick={() => onNotice("配置调试响应预览已刷新。")}>
+            加载配置
           </Button>
         </div>
-        <DiagnosticPreview rows={[["Routes", "FULLTEXT, VECTOR"], ["Strategy", "DOC_QA_CONTEXT_PACK"], ["Warnings", "2"]]} />
+        <DiagnosticPreview rows={[["路由", "全文、向量"], ["策略", "文档问答上下文包"], ["告警", "2"]]} />
       </SurfaceCard>
 
       <SurfaceCard>
         <SectionTitle
           icon={<FileArchive size={17} aria-hidden="true" />}
-          title="Debug Source"
+          title="调试来源"
         />
         <div className="mt-4 grid gap-3">
-          <Field label="Source Code">
+          <Field label="来源编码">
             <TextInput defaultValue="docs/features/rag-search-context-pack" />
           </Field>
-          <Button variant="secondary" onClick={() => onNotice("Source debug response preview refreshed.")}>
-            Load Source
+          <Button variant="secondary" onClick={() => onNotice("来源调试响应预览已刷新。")}>
+            加载来源
           </Button>
         </div>
-        <DiagnosticPreview rows={[["Status", "Active"], ["Text Units", "348"], ["Last Indexed", "8 min ago"]]} />
+        <DiagnosticPreview rows={[["状态", "活跃"], ["文本单元", "348"], ["上次索引", "8 分钟前"]]} />
       </SurfaceCard>
 
       <SurfaceCard>
         <SectionTitle
           icon={<RefreshCcw size={17} aria-hidden="true" />}
-          title="Retry Index"
+          title="重试索引"
         />
         <div className="mt-4 grid gap-3">
-          <Field label="Stage">
+          <Field label="阶段">
             <SelectInput defaultValue="vectorIndex">
-              <option value="fulltextIndex">fulltextIndex</option>
-              <option value="vectorIndex">vectorIndex</option>
+              <option value="fulltextIndex">全文索引</option>
+              <option value="vectorIndex">向量索引</option>
             </SelectInput>
           </Field>
-          <Field label="Reason">
-            <TextArea className="min-h-24" defaultValue="Backfill missing embeddings after profile validation." />
+          <Field label="原因">
+            <TextArea className="min-h-24" defaultValue="配置校验通过后，补齐缺失的向量索引。" />
           </Field>
-          <Button onClick={() => onNotice("Index retry prototype request queued.")}>
-            Queue Retry
+          <Button onClick={() => onNotice("索引重试请求已加入队列。")}>
+            加入重试队列
           </Button>
         </div>
       </SurfaceCard>

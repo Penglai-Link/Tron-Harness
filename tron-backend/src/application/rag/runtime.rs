@@ -1,11 +1,16 @@
 use std::{future::Future, path::PathBuf, pin::Pin};
 
 use crate::application::llm::{LlmEmbeddingCallCommand, LlmRerankCallCommand, LlmRuntimeService};
+use crate::config::MineruConfig;
 
 use super::{
-    RagDocumentSourceCall, RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult,
-    RagEmbeddingRuntime, RagRerankCall, RagSearchRuntime,
-    document_source::{RagResolvedDocument, resolve_project_doc_markdown_file},
+    RagDocumentParseCall, RagDocumentSourceCall, RagDocumentSourceRuntime, RagEmbeddingCall,
+    RagEmbeddingResult, RagEmbeddingRuntime, RagRerankCall, RagSearchRuntime,
+    document_source::{
+        RagResolvedDocument, resolve_project_doc_markdown_file, resolve_project_doc_parse_file,
+        resolve_project_doc_reference_file,
+    },
+    mineru::MineruDocumentParser,
 };
 
 use crate::domain::rag::RagError;
@@ -14,6 +19,8 @@ use crate::domain::rag::RagError;
 pub struct DefaultRagRuntime {
     llm: LlmRuntimeService,
     project_doc_root: PathBuf,
+    mineru: MineruConfig,
+    document_parser_client: reqwest::Client,
 }
 
 impl DefaultRagRuntime {
@@ -21,7 +28,15 @@ impl DefaultRagRuntime {
         Self {
             llm,
             project_doc_root: project_doc_root.into(),
+            mineru: MineruConfig::default(),
+            document_parser_client: reqwest::Client::new(),
         }
+    }
+
+    pub fn with_document_parser(mut self, mineru: MineruConfig, client: reqwest::Client) -> Self {
+        self.mineru = mineru;
+        self.document_parser_client = client;
+        self
     }
 }
 
@@ -89,5 +104,26 @@ impl RagDocumentSourceRuntime for DefaultRagRuntime {
         Box::pin(
             async move { resolve_project_doc_markdown_file(self.project_doc_root.clone(), &call) },
         )
+    }
+
+    fn resolve_project_doc_file<'a>(
+        &'a self,
+        call: RagDocumentSourceCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagResolvedDocument, RagError>> + Send + 'a>> {
+        Box::pin(
+            async move { resolve_project_doc_reference_file(self.project_doc_root.clone(), &call) },
+        )
+    }
+
+    fn parse_project_doc_with_mineru<'a>(
+        &'a self,
+        call: RagDocumentParseCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagResolvedDocument, RagError>> + Send + 'a>> {
+        Box::pin(async move {
+            let file = resolve_project_doc_parse_file(self.project_doc_root.clone(), &call)?;
+            MineruDocumentParser::new(self.document_parser_client.clone(), self.mineru.clone())
+                .parse(file)
+                .await
+        })
     }
 }

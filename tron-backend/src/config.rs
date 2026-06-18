@@ -1,5 +1,6 @@
 mod defaults;
 mod error;
+mod mineru;
 mod parsing;
 mod paths;
 mod variable_crypto;
@@ -10,6 +11,8 @@ use std::{fs, net::SocketAddr, path::Path};
 use crate::shared::event_bus::EventBusConfig;
 
 pub use self::error::ConfigError;
+pub use self::mineru::MineruConfig;
+use self::mineru::MineruFileConfig;
 use self::parsing::{env_port_override, ldap_env_override, required_config_string};
 use self::paths::{
     default_database_url_from_home, default_graph_storage_path_from_home,
@@ -62,6 +65,7 @@ pub struct AppConfig {
     pub system_agents: SystemAgentConfig,
     pub variable_crypto: VariableCryptoConfig,
     pub http_clients: HttpClientProfilesConfig,
+    pub mineru: MineruConfig,
     pub auth: AuthConfig,
     pub event_bus: EventBusConfig,
 }
@@ -71,6 +75,7 @@ pub struct HttpClientProfilesConfig {
     pub default: HttpClientProfileConfig,
     pub model_inference: HttpClientProfileConfig,
     pub runtime_control: HttpClientProfileConfig,
+    pub document_parsing: HttpClientProfileConfig,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -92,7 +97,8 @@ impl HttpClientProfilesConfig {
         Self {
             default: default.clone(),
             model_inference: default.clone(),
-            runtime_control: default,
+            runtime_control: default.clone(),
+            document_parsing: default,
         }
     }
 }
@@ -166,6 +172,7 @@ impl AppConfig {
             },
             variable_crypto: VariableCryptoConfig::default(),
             http_clients: HttpClientProfilesConfig::default_profiles(),
+            mineru: MineruConfig::default(),
             auth: AuthConfig {
                 jwt_secret: DEFAULT_AUTH_JWT_SECRET.into(),
                 access_token_ttl_seconds: DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS,
@@ -210,6 +217,9 @@ impl AppConfig {
         }
         if let Some(value) = overrides.http_clients {
             self.http_clients.apply_overrides(value);
+        }
+        if let Some(value) = overrides.mineru {
+            self.mineru.apply_overrides(value);
         }
         if let Some(value) = overrides.auth {
             self.auth.apply_overrides(value)?;
@@ -268,6 +278,9 @@ impl HttpClientProfilesConfig {
         if let Some(profile) = overrides.runtime_control {
             self.runtime_control.apply_overrides(profile);
         }
+        if let Some(profile) = overrides.document_parsing {
+            self.document_parsing.apply_overrides(profile);
+        }
     }
 }
 
@@ -301,6 +314,7 @@ struct AppConfigFile {
     system_agents: Option<SystemAgentFileConfig>,
     variable_crypto: Option<variable_crypto::VariableCryptoFileConfig>,
     http_clients: Option<HttpClientProfilesFileConfig>,
+    mineru: Option<MineruFileConfig>,
     auth: Option<AuthFileConfig>,
     event_bus: Option<EventBusFileConfig>,
 }
@@ -334,6 +348,7 @@ struct HttpClientProfilesFileConfig {
     default: Option<HttpClientProfileFileConfig>,
     model_inference: Option<HttpClientProfileFileConfig>,
     runtime_control: Option<HttpClientProfileFileConfig>,
+    document_parsing: Option<HttpClientProfileFileConfig>,
 }
 
 #[derive(Debug, Deserialize, Default)]

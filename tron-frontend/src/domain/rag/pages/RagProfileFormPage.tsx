@@ -59,6 +59,7 @@ import {
   type RagProfileVerifyResultApi,
   type RagRetrievalProfileHiddenFields,
 } from "@/domain/rag/api/ragManagementApi";
+import { formatRagStatusLabel } from "@/domain/rag/components/RagShared";
 import { useRagProfileDetail } from "@/domain/rag/hooks/useRagProfileDetail";
 import type {
   CorpusRecord,
@@ -70,6 +71,7 @@ import type {
   RagProfileStatus,
 } from "@/domain/rag/model/RagModel";
 import {
+  applyIngestStageStrategyDefaults,
   buildIngestPipelineFromForm,
   buildIngestProfileFormState,
   buildIngestProfilePayloadPreview,
@@ -85,6 +87,7 @@ import {
   listFilterOperators,
   listProfileStatuses,
   listRetrievalFilterFieldOptions,
+  mineruParseStrategyId,
   type RagIngestProfileFormErrors,
   type RagIngestProfileFormState,
   type RagRetrievalFilterFormRow,
@@ -110,7 +113,7 @@ function rememberProfileReturnType(value: ProfileReturnType) {
   try {
     window.sessionStorage.setItem(profileTypeStorageKey, value);
   } catch {
-    // Return URL remains the source of truth when browser storage is unavailable.
+    // 浏览器存储不可用时，返回 URL 仍然是状态来源。
   }
 }
 
@@ -233,7 +236,7 @@ function ValidationSummary({ errors }: { errors: string[] }) {
 
   return (
     <SurfaceCard>
-      <h2 className="text-base font-semibold">Validation Summary</h2>
+      <h2 className="text-base font-semibold">校验摘要</h2>
       <div className="mt-4 grid gap-2 rounded-xl border border-[var(--color-error-container)] bg-[var(--color-error-container)] p-4 text-sm text-[var(--color-on-error-container)]">
         {errors.map((error) => <p key={error}>{error}</p>)}
       </div>
@@ -270,14 +273,117 @@ function strategyDefinitionForNode(stageDefinition: RagPipelineStageDefinition |
   return stageDefinition?.strategies.find((strategy) => strategy.strategyId === strategyId);
 }
 
+const pipelineStageDisplayNames: Record<string, string> = {
+  BUILD_CONTEXT: "构建上下文",
+  DEDUP_RESULTS: "结果去重",
+  EXTRACT_TREE: "提取结构树",
+  FULLTEXT_INDEX: "全文索引",
+  FUSE_RESULTS: "结果融合",
+  PARSE_DOCUMENT: "文档解析",
+  PERSIST_SOURCE: "持久化来源",
+  PERSIST_TREE: "持久化结构树",
+  PREPARE_PAYLOAD: "准备载荷",
+  RESOLVE_SOURCE: "解析来源",
+  ROUTE_SEARCH: "路由检索",
+  SPLIT_TEXT: "文本切分",
+  VALIDATE_SOURCE: "校验来源",
+  VECTOR_INDEX: "向量索引",
+};
+
+function localizePipelineStageName(value: string) {
+  const normalized = value.trim().replace(/[\s-]+/g, "_").toUpperCase();
+  return pipelineStageDisplayNames[normalized] ?? value;
+}
+
 function strategyOptionLabel(stageDefinition: RagPipelineStageDefinition | undefined, strategyId: string) {
-  const strategy = strategyDefinitionForNode(stageDefinition, strategyId);
-  if (!strategy?.displayName || strategy.displayName === strategyId) return strategyId;
-  return `${strategy.displayName} · ${strategyId}`;
+  void stageDefinition;
+  return strategyId;
+}
+
+const templateDisplayText: Record<string, { description: string; name: string }> = {
+  "document-reference": {
+    description: "校验文档来源引用，解析并切分文本后写入全文和向量索引。",
+    name: "文档引用写入",
+  },
+  "graph-tree-enhanced": {
+    description: "构建全文和向量索引，同时为图语料库提取并持久化结构树分支。",
+    name: "图结构增强写入",
+  },
+  "mineru-document-reference": {
+    description: "解析 PDF 或 DOCX 项目文档引用，通过 MinerU 转换为 Markdown 后构建全文和向量索引。",
+    name: "MinerU 文档引用写入",
+  },
+  "text-standard": {
+    description: "准备文本载荷、切分文本单元、构建全文和向量索引，然后持久化来源。",
+    name: "标准文本写入",
+  },
+};
+
+function templateName(template: RagPipelineTemplate) {
+  return templateDisplayText[template.templateId]?.name ?? template.displayName;
+}
+
+function templateDescription(template: RagPipelineTemplate) {
+  return templateDisplayText[template.templateId]?.description ?? template.description;
+}
+
+function capabilityLabel(capability: string) {
+  const labels: Record<string, string> = {
+    fulltext: "全文",
+    graph: "图",
+    vector: "向量",
+  };
+  return labels[capability.trim().toLowerCase()] ?? capability;
+}
+
+const ingestFieldHints = {
+  description: "显示在配置列表和详情中的可读描述。",
+  embeddingModelCode: "向量嵌入使用的可选模型编码。留空时使用工作区默认嵌入模型。",
+  embeddingVersion: "写入向量索引条目的版本标记，默认值为 v1。",
+  graphWritePolicy: "图存储语料库可使用的图写入策略 JSON 内容。不写入图数据时留空。",
+  parseDocumentFormat: "解析器接受的文档格式。Markdown 解析器使用 MARKDOWN；MinerU 使用逗号分隔列表，例如 PDF, DOCX。",
+  parseDocumentUnsupportedFormatPolicy: "不支持格式的处理策略。FAIL_FAST 会在解析前拒绝请求。",
+  profileId: "写入接口请求使用的稳定配置标识。",
+  primaryCorpus: "该写入配置写入的语料库，同时用于限定可用阶段策略。",
+  requiredSourceVersion: "该配置要求的来源版本。默认 v1 与当前写入请求契约一致。",
+  resolveSourceAllowedUriSchemes: "来源解析器接受的地址协议，多个值用逗号分隔。项目文档引用应使用 project-doc。",
+  resolveSourceMaxBytes: "来源解析器读取的最大文档字节数。文档引用配置对 PDF/DOCX 默认使用 52428800 字节。",
+  splitTextHeadingDepth: "用于生成分块路径的最大 Markdown 标题层级。markdownHeading 的有效范围是 1 到 6。",
+  splitTextMaxTokens: "每个文本单元的目标最大令牌数，默认 800。",
+  splitTextOverlapTokens: "相邻文本单元之间的重叠令牌数，默认 80。",
+  splitTextType: "切分器实现。文档解析后建议使用 markdownHeading；直接文本载荷可使用 plainText。",
+  status: "当前只有 Ready 状态的配置会保存为运行时可用的 RAG 配置。",
+  strategy: "该阶段的执行策略。选择策略后会自动填充下方推荐配置默认值。",
+  supportedSourceTypes: "该配置接受的来源类型，多个值用逗号分隔，例如 PROJECT_DOC_REF、MEMORY_CARD 或 SKILL。",
+} satisfies Record<string, string>;
+
+const retrievalFieldHints = {
+  contextStrategy: "检索结果组装上下文包时使用的策略。至少需要启用一个策略供工作台和接口调用。",
+  dedupPolicy: "多路召回结果合并后如何去重，避免同一来源片段重复进入上下文。",
+  description: "显示在配置列表和详情中的可读描述。",
+  filterField: "该配置固定附加的筛选字段，必须来自主语料库和路由语料库的可筛选字段。",
+  filterOperator: "筛选条件使用的比较方式，例如 eq 表示等于，in 表示属于列表。",
+  filterValue: "筛选条件的固定值。保存后每次使用该检索配置都会带上这个条件。",
+  fusionPolicy: "多条检索路由返回结果后的融合方式。",
+  graphExpansionPolicy: "启用图检索路由时用于扩展邻接节点或结构关系的策略。",
+  primaryCorpus: "该检索配置的默认语料库，也用于推导可选筛选字段。",
+  profileId: "检索接口请求使用的稳定配置标识。",
+  rerankModelCode: "用于结果重排的模型编码。启用重排后才会生效，留空时使用默认配置。",
+  routeCorpus: "该路由实际查询的语料库。不同语料库会影响可选检索策略。",
+  routeStrategy: "该路由使用的召回策略，决定走全文、向量、图或结构化检索。",
+  status: "当前只有 Ready 状态的检索配置会作为运行时可用配置。",
+  topicPolicy: "上下文包按主题聚合或排序时使用的策略。",
+} satisfies Record<string, string>;
+
+function parseDocumentFormatHint(strategyId: string) {
+  return strategyId.trim() === mineruParseStrategyId
+    ? "MinerU 接受的格式列表，多个值用逗号分隔。默认值为 PDF, DOCX。"
+    : ingestFieldHints.parseDocumentFormat;
 }
 
 function stageDisplayName(pipelineCatalog: RagPipelineCatalog | null, stageType: string) {
-  return findPipelineStageDefinition(pipelineCatalog, stageType)?.displayName || stageType;
+  const displayName = findPipelineStageDefinition(pipelineCatalog, stageType)?.displayName || stageType;
+  return localizePipelineStageName(displayName);
 }
 
 function pipelineExecutionLevels(pipeline: RagProfilePipeline) {
@@ -339,7 +445,7 @@ function applyIngestTemplateToForm(
       .filter(([stageId]) => Boolean(stageId)),
   ) as Partial<Record<RagIngestStageId, RagPipelineTemplate["pipeline"]["nodes"][number]>>;
 
-  return {
+  let nextForm: RagIngestProfileFormState = {
     ...currentForm,
     pipelineStages: currentForm.pipelineStages.map((stage) => {
       const templateNode = nodesByStageId[stage.id];
@@ -350,6 +456,14 @@ function applyIngestTemplateToForm(
       };
     }),
   };
+
+  template.pipeline.nodes.forEach((node) => {
+    const stageId = ingestStageTypeToStageId(node.stageType);
+    if (!stageId) return;
+    nextForm = applyIngestStageStrategyDefaults(nextForm, stageId, node.strategyId);
+  });
+
+  return nextForm;
 }
 
 function PipelineEdgesTable({ edges }: { edges: Array<{ from: string; to: string }> }) {
@@ -358,8 +472,8 @@ function PipelineEdgesTable({ edges }: { edges: Array<{ from: string; to: string
       <table className="min-w-full divide-y divide-[var(--color-outline-variant)] text-left text-sm">
         <thead className="bg-[var(--color-surface-container-low)] text-[11px] uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
           <tr>
-            <th className="px-4 py-3 font-semibold">From</th>
-            <th className="px-4 py-3 font-semibold">To</th>
+            <th className="px-4 py-3 font-semibold">来源节点</th>
+            <th className="px-4 py-3 font-semibold">目标节点</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-[var(--color-outline-variant)]">
@@ -370,7 +484,7 @@ function PipelineEdgesTable({ edges }: { edges: Array<{ from: string; to: string
             </tr>
           )) : (
             <tr>
-              <td className="px-4 py-3 text-[var(--color-on-surface-variant)]" colSpan={2}>Enable at least two connected nodes to create a DAG edge.</td>
+              <td className="px-4 py-3 text-[var(--color-on-surface-variant)]" colSpan={2}>至少启用两个相连节点后才会生成有向无环图边。</td>
             </tr>
           )}
         </tbody>
@@ -382,7 +496,7 @@ function PipelineEdgesTable({ edges }: { edges: Array<{ from: string; to: string
 function PipelineEdgesCard({ edges }: { edges: Array<{ from: string; to: string }> }) {
   return (
     <SurfaceCard>
-      <h2 className="text-base font-semibold">Pipeline Edges</h2>
+      <h2 className="text-base font-semibold">流水线边</h2>
       <div className="mt-4">
         <PipelineEdgesTable edges={edges} />
       </div>
@@ -407,9 +521,9 @@ function IngestTemplateCard({
     <SurfaceCard>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold">Pipeline Template</h2>
+          <h2 className="text-base font-semibold">流水线模板</h2>
           <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-            Pick a backend-declared ingest pattern first, then adjust stages only when needed.
+            先选择后端声明的写入模式，仅在需要时再调整具体阶段。
           </p>
         </div>
       </div>
@@ -433,17 +547,17 @@ function IngestTemplateCard({
               onClick={() => onApply(template)}
             >
               <div className="flex items-center justify-between gap-3">
-                <p className="font-medium">{template.displayName}</p>
+                <p className="font-medium">{templateName(template)}</p>
                 <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] ${
                   selected
                     ? "border-[var(--color-primary)] bg-[var(--color-primary-container)] text-[var(--color-on-primary-container)]"
                     : "border-[var(--color-outline-variant)]"
                 }`}>
-                    {selected ? "Selected" : `${template.pipeline.nodes.length} nodes`}
+                    {selected ? "已选择" : `${template.pipeline.nodes.length} 个节点`}
                   </span>
               </div>
-              {template.description ? (
-                <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{template.description}</p>
+              {templateDescription(template) ? (
+                <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{templateDescription(template)}</p>
               ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
                 {capabilities.length > 0 ? capabilities.map((capability) => (
@@ -452,20 +566,20 @@ function IngestTemplateCard({
                       ? "bg-[var(--color-primary-container)] text-[var(--color-on-primary-container)]"
                       : "bg-[var(--color-surface)]"
                   }`} key={capability}>
-                    {capability}
+                    {capabilityLabel(capability)}
                   </span>
                 )) : (
-                  <span className="rounded-full bg-[var(--color-surface)] px-2 py-0.5 text-[11px]">basic</span>
+                  <span className="rounded-full bg-[var(--color-surface)] px-2 py-0.5 text-[11px]">基础</span>
                 )}
               </div>
               {disabled ? (
-                <p className="mt-3 text-[12px] text-[var(--color-error)]">Select a graph-backed corpus to use this template.</p>
+                <p className="mt-3 text-[12px] text-[var(--color-error)]">选择图存储语料库后才能使用此模板。</p>
               ) : null}
             </button>
           );
         }) : (
           <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm text-[var(--color-on-surface-variant)] lg:col-span-3">
-            No backend templates are available yet. Use advanced node controls below.
+            暂无可用的后端模板。请使用下方高级节点控制。
           </div>
         )}
       </div>
@@ -487,12 +601,12 @@ function PipelineFlowCard({
     <SurfaceCard>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold">Pipeline Flow</h2>
+          <h2 className="text-base font-semibold">流水线流程</h2>
           <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-            The saved pipeline remains a DAG; branches in the same column can run in parallel.
+            保存后的流水线仍是有向无环图；同一列中的分支可以并行运行。
           </p>
         </div>
-        <span className="rounded-full border border-[var(--color-outline-variant)] px-3 py-1 text-sm">{nodeCount} enabled nodes</span>
+        <span className="rounded-full border border-[var(--color-outline-variant)] px-3 py-1 text-sm">{nodeCount} 个已启用节点</span>
       </div>
       {levels.length > 0 ? (
         <div className="mt-5 overflow-x-auto">
@@ -502,15 +616,14 @@ function PipelineFlowCard({
                 <div className="grid min-w-52 gap-3">
                   {level.length > 1 ? (
                     <span className="w-fit rounded-full bg-[var(--color-surface-container-high)] px-2 py-0.5 text-[11px] uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                      parallel
+                      并行
                     </span>
                   ) : null}
                   {level.map((node) => {
-                    const stageDefinition = findPipelineStageDefinition(pipelineCatalog, node.stageType);
                     return (
                       <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3" key={node.nodeId}>
-                        <p className="font-medium">{stageDefinition?.displayName || node.stageType}</p>
-                        <p className="mt-1 font-mono text-[11px] text-[var(--color-on-surface-variant)]">{node.strategyId || "No strategy"}</p>
+                        <p className="font-medium">{stageDisplayName(pipelineCatalog, node.stageType)}</p>
+                        <p className="mt-1 font-mono text-[11px] text-[var(--color-on-surface-variant)]">{node.strategyId || "未设置策略"}</p>
                       </div>
                     );
                   })}
@@ -524,11 +637,11 @@ function PipelineFlowCard({
         </div>
       ) : (
         <p className="mt-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm text-[var(--color-on-surface-variant)]">
-          Apply a template or enable nodes to preview the DAG.
+          应用模板或启用节点后即可预览有向无环图。
         </p>
       )}
       <details className="mt-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
-        <summary className="cursor-pointer text-sm font-medium">Edge details</summary>
+        <summary className="cursor-pointer text-sm font-medium">边详情</summary>
         <div className="mt-3">
           <PipelineEdgesTable edges={pipeline.edges} />
         </div>
@@ -541,11 +654,11 @@ function VerifyResultCard({ result }: { result: RagProfileVerifyResultApi | null
   const issues = normalizeRagValidationIssues(result?.errors);
   return (
     <SurfaceCard>
-      <h2 className="text-base font-semibold">Verify Result</h2>
+      <h2 className="text-base font-semibold">校验结果</h2>
       <div className="mt-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm">
         {result ? (
           <>
-            <p className="font-medium">{result.valid === false || issues.length > 0 ? "Backend rejected the profile." : "Backend verification passed."}</p>
+            <p className="font-medium">{result.valid === false || issues.length > 0 ? "后端拒绝了该配置。" : "后端校验通过。"}</p>
             {issues.length > 0 ? (
               <div className="mt-3 grid gap-2 text-[var(--color-error)]">
                 {issues.map((issue, index) => (
@@ -555,7 +668,7 @@ function VerifyResultCard({ result }: { result: RagProfileVerifyResultApi | null
             ) : null}
           </>
         ) : (
-          <p className="text-[var(--color-on-surface-variant)]">Save Profile runs backend verification before mutation.</p>
+          <p className="text-[var(--color-on-surface-variant)]">保存配置前会先执行后端校验。</p>
         )}
       </div>
     </SurfaceCard>
@@ -704,9 +817,9 @@ function PayloadPreview({ payload }: { payload: unknown }) {
   return (
     <SurfaceCard>
       <details>
-        <summary className="cursor-pointer text-base font-semibold">Developer Preview</summary>
+        <summary className="cursor-pointer text-base font-semibold">开发者预览</summary>
         <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
-          This is the exact management payload sent to the existing profile save and verify APIs.
+          这里展示发送给配置保存和校验接口的完整管理载荷。
         </p>
         <pre className="mt-4 overflow-x-auto rounded-xl bg-[var(--color-surface-container-low)] p-4 text-[13px] leading-6 text-[var(--color-on-surface)]">
           {JSON.stringify(payload, null, 2)}
@@ -721,25 +834,25 @@ function RetrievalFlowCard({ form }: { form: RagRetrievalProfileFormState }) {
   const contextStrategy = form.contextStrategies[0] || "RESULT_LIST";
   const steps = [
     {
-      label: "Route Search",
-      value: enabledRoutes.length > 0 ? `${enabledRoutes.length} enabled route${enabledRoutes.length === 1 ? "" : "s"}` : "No route selected",
+      label: "路由检索",
+      value: enabledRoutes.length > 0 ? `${enabledRoutes.length} 条已启用路由` : "未选择路由",
     },
-    { label: "Fuse Results", value: form.fusionPolicy || "SUM_SCORE" },
-    { label: "Dedup Results", value: form.dedupPolicy || "TEXT_UNIT" },
-    { label: "Build Context", value: contextStrategy },
+    { label: "结果融合", value: form.fusionPolicy || "SUM_SCORE" },
+    { label: "结果去重", value: form.dedupPolicy || "TEXT_UNIT" },
+    { label: "构建上下文", value: contextStrategy },
   ];
 
   return (
     <SurfaceCard>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold">Retrieval Flow</h2>
+          <h2 className="text-base font-semibold">检索流程</h2>
           <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-            The saved profile runs route search in parallel, then applies result processing and context building.
+            保存后的配置会并行执行路由检索，然后进行结果处理和上下文构建。
           </p>
         </div>
         <span className="rounded-full border border-[var(--color-outline-variant)] px-3 py-1 text-sm">
-          {enabledRoutes.length} route{enabledRoutes.length === 1 ? "" : "s"}
+          {enabledRoutes.length} 条路由
         </span>
       </div>
       <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] lg:items-center">
@@ -781,33 +894,33 @@ function RouteRow({
   return (
     <div className="space-y-3 rounded-lg border border-[var(--color-outline-variant)] p-3">
       <div className={`grid gap-3 ${canRemove ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto] lg:items-end" : "lg:grid-cols-2"}`}>
-        <Field label="Corpus" error={error?.corpusId}>
+        <Field label="语料库" error={error?.corpusId} hint={retrievalFieldHints.routeCorpus}>
           <SelectInput
-            aria-label={`Route ${index + 1} corpus`}
+            aria-label={`路由 ${index + 1} 语料库`}
             className="w-full"
             value={row.corpusId}
             onChange={(event) => onUpdate({ corpusId: event.target.value, strategyId: "" })}
           >
-            <option value="">Select corpus</option>
+            <option value="">选择语料库</option>
             {corpusOptions.map((corpus) => (
               <option key={corpus.code} value={corpus.code}>{corpus.code}</option>
             ))}
           </SelectInput>
         </Field>
-        <Field label="Retriever Strategy" error={error?.strategyId}>
+        <Field label="检索策略" error={error?.strategyId} hint={retrievalFieldHints.routeStrategy}>
           <SelectInput
-            aria-label={`Route ${index + 1} retriever strategy`}
+            aria-label={`路由 ${index + 1} 检索策略`}
             className="w-full font-mono"
             value={row.strategyId}
             onChange={(event) => onUpdate({ strategyId: event.target.value })}
           >
-            <option value="">{strategyOptions.length > 0 ? "Select route strategy" : "No supported strategies"}</option>
+            <option value="">{strategyOptions.length > 0 ? "选择路由策略" : "暂无支持的策略"}</option>
             {strategyOptions.map((strategyId) => <option key={strategyId} value={strategyId}>{strategyId}</option>)}
           </SelectInput>
         </Field>
         {canRemove ? (
           <div className="flex items-center justify-end lg:pb-1">
-            <Button aria-label={`Remove route ${index + 1}`} size="icon" type="button" variant="ghost" onClick={onRemove}>
+            <Button aria-label={`移除路由 ${index + 1}`} size="icon" type="button" variant="ghost" onClick={onRemove}>
               <Trash2 size={16} aria-hidden="true" />
             </Button>
           </div>
@@ -815,10 +928,10 @@ function RouteRow({
       </div>
       {row.corpusId && strategyOptions.length === 0 ? (
         <p className="text-[12px] text-[var(--color-on-surface-variant)]">
-          No backend-supported retrieval strategies exist for this corpus yet.
+          该语料库暂无后端支持的检索策略。
         </p>
       ) : null}
-      <ToggleSwitch checked={row.enabled} label={`Enable route ${index + 1}`} onCheckedChange={(checked) => onUpdate({ enabled: checked })} />
+      <ToggleSwitch checked={row.enabled} label={`启用路由 ${index + 1}`} onCheckedChange={(checked) => onUpdate({ enabled: checked })} />
     </div>
   );
 }
@@ -845,20 +958,20 @@ function FilterRow({
   return (
     <div className="space-y-3 rounded-lg border border-[var(--color-outline-variant)] p-3">
       <div className={`grid gap-3 ${canRemove ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end" : "lg:grid-cols-3"}`}>
-        <Field label="Field" error={error?.field}>
+        <Field label="字段" error={error?.field} hint={retrievalFieldHints.filterField}>
           <SelectInput
-            aria-label={`Filter ${index + 1} field`}
+            aria-label={`筛选条件 ${index + 1} 字段`}
             className="w-full"
             value={row.field}
             onChange={(event) => onUpdate({ field: event.target.value })}
           >
-            <option value="">Select mapped field</option>
+            <option value="">选择已映射字段</option>
             {fieldOptions.map((field) => <option key={field} value={field}>{field}</option>)}
           </SelectInput>
         </Field>
-        <Field label="Operator" error={error?.operator}>
+        <Field label="操作符" error={error?.operator} hint={retrievalFieldHints.filterOperator}>
           <SelectInput
-            aria-label={`Filter ${index + 1} operator`}
+            aria-label={`筛选条件 ${index + 1} 操作符`}
             className="w-full"
             value={row.operator}
             onChange={(event) => onUpdate({ operator: event.target.value })}
@@ -866,9 +979,9 @@ function FilterRow({
             {operatorOptions.map((operator) => <option key={operator} value={operator}>{operator}</option>)}
           </SelectInput>
         </Field>
-        <Field label="Value" error={error?.value}>
+        <Field label="值" error={error?.value} hint={retrievalFieldHints.filterValue}>
           <TextInput
-            aria-label={`Filter ${index + 1} value`}
+            aria-label={`筛选条件 ${index + 1} 值`}
             className="w-full font-mono"
             value={row.value}
             onChange={(event) => onUpdate({ value: event.target.value })}
@@ -876,7 +989,7 @@ function FilterRow({
         </Field>
         {canRemove ? (
           <div className="flex items-center justify-end lg:pb-1">
-            <Button aria-label={`Remove filter ${index + 1}`} size="icon" type="button" variant="ghost" onClick={onRemove}>
+            <Button aria-label={`移除筛选条件 ${index + 1}`} size="icon" type="button" variant="ghost" onClick={onRemove}>
               <Trash2 size={16} aria-hidden="true" />
             </Button>
           </div>
@@ -904,7 +1017,7 @@ export function RagIngestProfileFormPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [verifyResult, setVerifyResult] = useState<RagProfileVerifyResultApi | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const title = mode === "create" ? "Create Ingest Profile" : "Edit Ingest Profile";
+  const title = mode === "create" ? "新建写入配置" : "编辑写入配置";
   const returnPath = profileFormReturnPath("ingest", searchParams);
   const payloadPreview = useMemo(
     () => (isApiMode ? buildRagIngestProfileMutationPayload(form, pipelineCatalog) : buildIngestProfilePayloadPreview(form, pipelineCatalog)),
@@ -981,7 +1094,7 @@ export function RagIngestProfileFormPage() {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        toast.error(error instanceof Error ? error.message : "Profile catalog could not be loaded");
+        toast.error(error instanceof Error ? error.message : "配置目录加载失败");
       })
       .finally(() => {
         if (!controller.signal.aborted) setCatalogLoading(false);
@@ -1039,11 +1152,8 @@ export function RagIngestProfileFormPage() {
     });
   }
 
-  function updateStageStrategy(stageId: string, strategyId: string) {
-    setForm((currentForm) => ({
-      ...currentForm,
-      pipelineStages: currentForm.pipelineStages.map((stage) => (stage.id === stageId ? { ...stage, strategyId } : stage)),
-    }));
+  function updateStageStrategy(stageId: RagIngestStageId, strategyId: string) {
+    setForm((currentForm) => applyIngestStageStrategyDefaults(currentForm, stageId, strategyId));
     setSelectedTemplateId("custom");
     setErrors((currentErrors) => {
       if (!currentErrors.stageRows?.[stageId as keyof typeof currentErrors.stageRows]) return currentErrors;
@@ -1075,7 +1185,7 @@ export function RagIngestProfileFormPage() {
 
     if (!isApiMode) {
       saveRagMockProfile(buildIngestProfileRecordFromForm(form, pipelineCatalog));
-      toast.success(mode === "create" ? "Ingest profile created." : "Profile updated.");
+      toast.success(mode === "create" ? "写入配置已创建。" : "配置已更新。");
       navigate(returnPath);
       return;
     }
@@ -1088,7 +1198,7 @@ export function RagIngestProfileFormPage() {
       const issues = normalizeRagValidationIssues(verification.errors);
       if (verification.valid === false || issues.length > 0) {
         setErrors(mapIngestApiErrors(issues, form));
-        toast.error(validationIssueMessage(issues[0] ?? { message: "Resolve profile form errors before saving." }));
+        toast.error(validationIssueMessage(issues[0] ?? { message: "请先处理配置表单错误再保存。" }));
         return;
       }
 
@@ -1098,7 +1208,7 @@ export function RagIngestProfileFormPage() {
       const savedId = typeof saved.profileId === "string" && saved.profileId.trim()
         ? saved.profileId.trim()
         : form.id.trim();
-      toast.success(`${savedId} ${mode === "create" ? "created" : "saved"}`);
+      toast.success(`${savedId} 已${mode === "create" ? "创建" : "保存"}`);
       navigate(returnPath);
     } catch (error) {
       const errorData = typeof error === "object" && error !== null && "data" in error
@@ -1108,7 +1218,7 @@ export function RagIngestProfileFormPage() {
       if (issues.length > 0) {
         setErrors(mapIngestApiErrors(issues, form));
       }
-      toast.error(error instanceof Error ? error.message : "Ingest profile could not be saved");
+      toast.error(error instanceof Error ? error.message : "写入配置保存失败");
     } finally {
       setSubmitting(false);
     }
@@ -1118,17 +1228,17 @@ export function RagIngestProfileFormPage() {
     return (
       <>
         <PageHeader
-          title="Loading Ingest Profile"
+          title="正在加载写入配置"
           actions={(
             <Button variant="secondary" onClick={() => navigate(returnPath)}>
               <X size={16} aria-hidden="true" />
-              Cancel
+              取消
             </Button>
           )}
         />
         <SurfaceCard>
-          <h2 className="text-base font-semibold">Loading Profile</h2>
-          <p className="mt-3 text-sm text-[var(--color-on-surface-variant)]">Loading ingest profile management data...</p>
+          <h2 className="text-base font-semibold">正在加载配置</h2>
+          <p className="mt-3 text-sm text-[var(--color-on-surface-variant)]">正在加载写入配置管理数据...</p>
         </SurfaceCard>
       </>
     );
@@ -1138,20 +1248,20 @@ export function RagIngestProfileFormPage() {
     return (
       <>
         <PageHeader
-          title="Edit Ingest Profile"
+          title="编辑写入配置"
           actions={(
             <Button variant="secondary" onClick={() => navigate(returnPath)}>
               <X size={16} aria-hidden="true" />
-              Cancel
+              取消
             </Button>
           )}
         />
         <SurfaceCard>
-          <h2 className="text-base font-semibold">Profile Not Found</h2>
+          <h2 className="text-base font-semibold">未找到配置</h2>
           <p className="mt-3 text-sm text-[var(--color-on-surface-variant)]">
             {isApiMode
-              ? "The requested ingest profile could not be loaded from the RAG management API."
-              : "The requested ingest profile does not exist in the mock registry."}
+              ? "无法从 RAG 管理接口加载请求的写入配置。"
+              : "模拟注册表中不存在请求的写入配置。"}
           </p>
         </SurfaceCard>
       </>
@@ -1166,11 +1276,11 @@ export function RagIngestProfileFormPage() {
           <>
             <Button disabled={loading || submitting} variant="secondary" onClick={() => navigate(returnPath)}>
               <X size={16} aria-hidden="true" />
-              Cancel
+              取消
             </Button>
             <Button aria-busy={submitting} disabled={loading || submitting} type="submit" form="rag-ingest-profile-form">
               <Save size={16} aria-hidden="true" />
-              {submitting ? "Saving..." : "Save Profile"}
+              {submitting ? "正在保存..." : "保存配置"}
             </Button>
           </>
         )}
@@ -1178,30 +1288,30 @@ export function RagIngestProfileFormPage() {
 
       <form className="grid gap-5" id="rag-ingest-profile-form" onSubmit={handleSubmit}>
         <SurfaceCard>
-          <h2 className="text-base font-semibold">Identity</h2>
+          <h2 className="text-base font-semibold">基础信息</h2>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <Field label="Profile ID" error={errors.id}>
+            <Field label="配置标识" error={errors.id} hint={ingestFieldHints.profileId}>
               <TextInput
-                aria-label="Profile ID"
+                aria-label="配置标识"
                 className="font-mono"
                 disabled={mode === "edit"}
                 value={form.id}
                 onChange={(event) => updateForm("id", event.target.value)}
               />
             </Field>
-            <Field label="Status" error={errors.status}>
-              <SelectInput aria-label="Status" value={form.status} onChange={(event) => updateForm("status", event.target.value as RagProfileStatus)}>
-                {listProfileStatuses().map((status) => <option key={status} value={status}>{status}</option>)}
+            <Field label="状态" error={errors.status} hint={ingestFieldHints.status}>
+              <SelectInput aria-label="状态" value={form.status} onChange={(event) => updateForm("status", event.target.value as RagProfileStatus)}>
+                {listProfileStatuses().map((status) => <option key={status} value={status}>{formatRagStatusLabel(status)}</option>)}
               </SelectInput>
             </Field>
-            <Field label="Primary Corpus" error={errors.primaryCorpusId}>
-              <SelectInput aria-label="Primary Corpus" value={form.primaryCorpusId} onChange={(event) => updateForm("primaryCorpusId", event.target.value)}>
-                <option value="">Select corpus</option>
+            <Field label="主语料库" error={errors.primaryCorpusId} hint={ingestFieldHints.primaryCorpus}>
+              <SelectInput aria-label="主语料库" value={form.primaryCorpusId} onChange={(event) => updateForm("primaryCorpusId", event.target.value)}>
+                <option value="">选择语料库</option>
                 {corpusOptions.map((corpus) => <option key={corpus.code} value={corpus.code}>{corpus.code}</option>)}
               </SelectInput>
             </Field>
-            <Field label="Description">
-              <TextArea aria-label="Description" className="min-h-28" value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
+            <Field label="描述" hint={ingestFieldHints.description}>
+              <TextArea aria-label="描述" className="min-h-28" value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
             </Field>
           </div>
         </SurfaceCard>
@@ -1218,9 +1328,9 @@ export function RagIngestProfileFormPage() {
 
         <SurfaceCard>
           <details>
-            <summary className="cursor-pointer text-base font-semibold">Advanced Node Controls</summary>
+            <summary className="cursor-pointer text-base font-semibold">高级节点控制</summary>
             <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
-              Use these controls when the selected template needs a custom stage combination.
+              当选中的模板需要自定义阶段组合时使用这些控制项。
             </p>
             <div className="mt-4 grid gap-3">
               {form.pipelineStages.map((stage) => {
@@ -1231,22 +1341,22 @@ export function RagIngestProfileFormPage() {
                   <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3" key={stage.id}>
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{stageDefinition?.displayName || stageType}</span>
+                        <span className="font-medium">{stageDisplayName(pipelineCatalog, stageType)}</span>
                         {required ? (
-                          <span className="rounded-full bg-[var(--color-primary-container)] px-2 py-0.5 text-[11px] text-[var(--color-on-primary-container)]">Required</span>
+                          <span className="rounded-full bg-[var(--color-primary-container)] px-2 py-0.5 text-[11px] text-[var(--color-on-primary-container)]">必需</span>
                         ) : null}
                         {stageDefinition?.orchestration?.actsAsBarrier ? (
-                          <span className="rounded-full bg-[var(--color-surface)] px-2 py-0.5 text-[11px] text-[var(--color-on-surface-variant)]">Control barrier</span>
+                          <span className="rounded-full bg-[var(--color-surface)] px-2 py-0.5 text-[11px] text-[var(--color-on-surface-variant)]">控制屏障</span>
                         ) : null}
                       </div>
                       <p className="mt-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">{ingestStageNodeId(stage.id)} · {stageType}</p>
                       {(stageDefinition?.orchestration?.mustRunBeforeStageTypes.length ?? 0) > 0 ? (
                         <p className="mt-1 text-[12px] text-[var(--color-on-surface-variant)]">
-                          Before {stageDefinition?.orchestration?.mustRunBeforeStageTypes.join(", ")}
+                          必须早于 {stageDefinition?.orchestration?.mustRunBeforeStageTypes.join(", ")}
                         </p>
                       ) : null}
                     </div>
-                    <ToggleSwitch checked={stage.enabled} disabled={required} label={`Enable ${stageType} node`} onCheckedChange={(checked) => updateStage(stage.id, checked)} />
+                    <ToggleSwitch checked={stage.enabled} disabled={required} label={`启用 ${stageDisplayName(pipelineCatalog, stageType)} 节点`} onCheckedChange={(checked) => updateStage(stage.id, checked)} />
                   </div>
                 );
               })}
@@ -1256,25 +1366,25 @@ export function RagIngestProfileFormPage() {
         </SurfaceCard>
 
         <SurfaceCard>
-          <h2 className="text-base font-semibold">Input Contract</h2>
+          <h2 className="text-base font-semibold">输入契约</h2>
           <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-            These fields define what the workbench and ingest API should accept for this profile.
+            这些字段定义调试台和写入接口对该配置可接受的输入。
           </p>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <Field label="Supported Source Types" error={errors.supportedSourceTypesText}>
-              <TextInput aria-label="Supported Source Types" className="font-mono" value={form.supportedSourceTypesText} onChange={(event) => updateForm("supportedSourceTypesText", event.target.value)} />
+            <Field label="支持的来源类型" error={errors.supportedSourceTypesText} hint={ingestFieldHints.supportedSourceTypes}>
+              <TextInput aria-label="支持的来源类型" className="font-mono" value={form.supportedSourceTypesText} onChange={(event) => updateForm("supportedSourceTypesText", event.target.value)} />
             </Field>
-            <Field label="Required Source Version">
-              <TextInput aria-label="Required Source Version" className="font-mono" value={form.requiredSourceVersion} onChange={(event) => updateForm("requiredSourceVersion", event.target.value)} />
+            <Field label="要求的来源版本" hint={ingestFieldHints.requiredSourceVersion}>
+              <TextInput aria-label="要求的来源版本" className="font-mono" value={form.requiredSourceVersion} onChange={(event) => updateForm("requiredSourceVersion", event.target.value)} />
             </Field>
           </div>
         </SurfaceCard>
 
         <SurfaceCard>
-          <h2 className="text-base font-semibold">Stage Strategies</h2>
+          <h2 className="text-base font-semibold">阶段策略</h2>
           <div className="mt-4 grid gap-4">
             {enabledStages.length === 0 ? (
-              <p className="text-sm text-[var(--color-on-surface-variant)]">Enable one or more stages above to configure stage strategies.</p>
+              <p className="text-sm text-[var(--color-on-surface-variant)]">请先在上方启用一个或多个阶段，再配置阶段策略。</p>
             ) : null}
             {enabledStages.map((stage) => {
               const stageType = ingestStageIdToStageType(stage.id);
@@ -1284,19 +1394,19 @@ export function RagIngestProfileFormPage() {
               <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4" key={stage.id}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="font-medium">{stageDefinition?.displayName || stageType}</p>
+                    <p className="font-medium">{stageDisplayName(pipelineCatalog, stageType)}</p>
                     <p className="mt-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">{stageType}</p>
                   </div>
                   <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 font-mono text-[11px] text-[var(--color-on-surface-variant)]">{ingestStageNodeId(stage.id)}</span>
                 </div>
                 <div className="mt-3 grid gap-4 lg:grid-cols-2">
-                  <Field label="Strategy" error={errors.stageRows?.[stage.id]?.strategyId}>
+                  <Field label="策略" error={errors.stageRows?.[stage.id]?.strategyId} hint={ingestFieldHints.strategy}>
                     <SelectInput
-                      aria-label={`${stageType} strategy ID`}
+                      aria-label={`${stageType} 策略标识`}
                       value={stage.strategyId}
                       onChange={(event) => updateStageStrategy(stage.id, event.target.value)}
                     >
-                      <option value="">{(allowedStageStrategies[stage.id]?.length ?? 0) > 0 ? "Select stage strategy" : "No supported strategies"}</option>
+                      <option value="">{(allowedStageStrategies[stage.id]?.length ?? 0) > 0 ? "选择阶段策略" : "暂无支持的策略"}</option>
                       {(allowedStageStrategies[stage.id] ?? []).map((strategyId) => (
                         <option key={strategyId} value={strategyId}>{strategyOptionLabel(stageDefinition, strategyId)}</option>
                       ))}
@@ -1305,17 +1415,17 @@ export function RagIngestProfileFormPage() {
 
                   {stage.id === "resolveSource" ? (
                     <>
-                      <Field label="Allowed URI Schemes">
+                      <Field label="允许的地址协议" hint={ingestFieldHints.resolveSourceAllowedUriSchemes}>
                         <TextInput
-                          aria-label="Resolve Source allowed URI schemes"
+                          aria-label="解析来源允许的地址协议"
                           className="font-mono"
                           value={form.resolveSourceAllowedUriSchemesText}
                           onChange={(event) => updateForm("resolveSourceAllowedUriSchemesText", event.target.value)}
                         />
                       </Field>
-                      <Field label="Max Bytes" error={errors.resolveSourceMaxBytes}>
+                      <Field label="最大字节数" error={errors.resolveSourceMaxBytes} hint={ingestFieldHints.resolveSourceMaxBytes}>
                         <TextInput
-                          aria-label="Resolve Source max bytes"
+                          aria-label="解析来源最大字节数"
                           className="font-mono"
                           value={form.resolveSourceMaxBytes}
                           onChange={(event) => updateForm("resolveSourceMaxBytes", event.target.value)}
@@ -1326,17 +1436,21 @@ export function RagIngestProfileFormPage() {
 
                   {stage.id === "parseDocument" ? (
                     <>
-                      <Field label="Document Format" error={errors.parseDocumentFormat}>
+                      <Field
+                        label={stage.strategyId.trim() === mineruParseStrategyId ? "支持的格式" : "文档格式"}
+                        error={errors.parseDocumentFormat}
+                        hint={parseDocumentFormatHint(stage.strategyId)}
+                      >
                         <TextInput
-                          aria-label="Parse Document format"
+                          aria-label={stage.strategyId.trim() === mineruParseStrategyId ? "文档解析支持的格式" : "文档解析格式"}
                           className="font-mono"
                           value={form.parseDocumentFormat}
                           onChange={(event) => updateForm("parseDocumentFormat", event.target.value)}
                         />
                       </Field>
-                      <Field label="Unsupported Format Policy">
+                      <Field label="不支持格式策略" hint={ingestFieldHints.parseDocumentUnsupportedFormatPolicy}>
                         <TextInput
-                          aria-label="Parse Document unsupported format policy"
+                          aria-label="文档解析不支持格式策略"
                           className="font-mono"
                           value={form.parseDocumentUnsupportedFormatPolicy}
                           onChange={(event) => updateForm("parseDocumentUnsupportedFormatPolicy", event.target.value)}
@@ -1347,33 +1461,33 @@ export function RagIngestProfileFormPage() {
 
                   {stage.id === "splitText" ? (
                     <>
-                      <Field label="Splitter Type" error={errors.splitTextType}>
+                      <Field label="切分器类型" error={errors.splitTextType} hint={ingestFieldHints.splitTextType}>
                         <TextInput
-                          aria-label="Split Text splitter type"
+                          aria-label="文本切分切分器类型"
                           className="font-mono"
                           value={form.splitTextType}
                           onChange={(event) => updateForm("splitTextType", event.target.value)}
                         />
                       </Field>
-                      <Field label="Max Tokens" error={errors.splitTextMaxTokens}>
+                      <Field label="最大令牌数" error={errors.splitTextMaxTokens} hint={ingestFieldHints.splitTextMaxTokens}>
                         <TextInput
-                          aria-label="Split Text max tokens"
+                          aria-label="文本切分最大令牌数"
                           className="font-mono"
                           value={form.splitTextMaxTokens}
                           onChange={(event) => updateForm("splitTextMaxTokens", event.target.value)}
                         />
                       </Field>
-                      <Field label="Overlap Tokens" error={errors.splitTextOverlapTokens}>
+                      <Field label="重叠令牌数" error={errors.splitTextOverlapTokens} hint={ingestFieldHints.splitTextOverlapTokens}>
                         <TextInput
-                          aria-label="Split Text overlap tokens"
+                          aria-label="文本切分重叠令牌数"
                           className="font-mono"
                           value={form.splitTextOverlapTokens}
                           onChange={(event) => updateForm("splitTextOverlapTokens", event.target.value)}
                         />
                       </Field>
-                      <Field label="Heading Depth" error={errors.splitTextHeadingDepth}>
+                      <Field label="标题深度" error={errors.splitTextHeadingDepth} hint={ingestFieldHints.splitTextHeadingDepth}>
                         <TextInput
-                          aria-label="Split Text heading depth"
+                          aria-label="文本切分标题深度"
                           className="font-mono"
                           value={form.splitTextHeadingDepth}
                           onChange={(event) => updateForm("splitTextHeadingDepth", event.target.value)}
@@ -1384,17 +1498,17 @@ export function RagIngestProfileFormPage() {
 
                   {stage.id === "vectorIndex" ? (
                     <>
-                      <Field label="Embedding Model Code">
+                      <Field label="嵌入模型编码" hint={ingestFieldHints.embeddingModelCode}>
                         <TextInput
-                          aria-label="Embedding Model Code"
+                          aria-label="嵌入模型编码"
                           className="font-mono"
                           value={form.embeddingModelCode}
                           onChange={(event) => updateForm("embeddingModelCode", event.target.value)}
                         />
                       </Field>
-                      <Field label="Embedding Version">
+                      <Field label="嵌入版本" hint={ingestFieldHints.embeddingVersion}>
                         <TextInput
-                          aria-label="Embedding Version"
+                          aria-label="嵌入版本"
                           className="font-mono"
                           value={form.embeddingVersion}
                           onChange={(event) => updateForm("embeddingVersion", event.target.value)}
@@ -1405,15 +1519,15 @@ export function RagIngestProfileFormPage() {
                 </div>
                 {(allowedStageStrategies[stage.id]?.length ?? 0) === 0 ? (
                   <p className="mt-3 text-[12px] text-[var(--color-on-surface-variant)]">
-                    No supported strategies exist for this stage and corpus yet.
+                    该阶段和语料库暂无可用策略。
                   </p>
                 ) : null}
                 <details className="mt-4 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface)] p-3">
-                  <summary className="cursor-pointer text-sm font-medium">Developer contract</summary>
+                  <summary className="cursor-pointer text-sm font-medium">开发者契约</summary>
                   <div className="mt-3 grid gap-3">
                     <div className="grid gap-2 text-[12px] text-[var(--color-on-surface-variant)] lg:grid-cols-2">
-                      <p><span className="font-semibold">Input:</span> {stageDefinition?.inputArtifactKeys.join(", ") || "n/a"}</p>
-                      <p><span className="font-semibold">Output:</span> {stageDefinition?.outputArtifactKeys.join(", ") || "n/a"}</p>
+                      <p><span className="font-semibold">输入：</span>{stageDefinition?.inputArtifactKeys.join(", ") || "无"}</p>
+                      <p><span className="font-semibold">输出：</span>{stageDefinition?.outputArtifactKeys.join(", ") || "无"}</p>
                     </div>
                     <JsonPreview value={configSchema} />
                   </div>
@@ -1422,22 +1536,22 @@ export function RagIngestProfileFormPage() {
             );
             })}
             {graphBackedCorpus ? (
-              <Field label="Graph Write Policy">
-                <TextInput aria-label="Graph Write Policy" className="font-mono" value={form.graphWritePolicy} onChange={(event) => updateForm("graphWritePolicy", event.target.value)} />
+              <Field label="图写入策略" hint={ingestFieldHints.graphWritePolicy}>
+                <TextInput aria-label="图写入策略" className="font-mono" value={form.graphWritePolicy} onChange={(event) => updateForm("graphWritePolicy", event.target.value)} />
               </Field>
             ) : null}
           </div>
         </SurfaceCard>
 
         <SurfaceCard>
-          <h2 className="text-base font-semibold">Pipeline Summary</h2>
+          <h2 className="text-base font-semibold">流水线摘要</h2>
           <div className="mt-4">
             <SummaryList rows={[
-              { label: "Primary Corpus", value: form.primaryCorpusId || "Not set" },
-              { label: "Enabled Stages", value: String(form.pipelineStages.filter((stage) => stage.enabled).length) },
+              { label: "主语料库", value: form.primaryCorpusId || "未设置" },
+              { label: "已启用阶段", value: String(form.pipelineStages.filter((stage) => stage.enabled).length) },
               {
-                label: "Payload Strategy",
-                value: form.pipelineStages.find((stage) => stage.id === "preparePayload")?.strategyId || "Not set",
+                label: "载荷策略",
+                value: form.pipelineStages.find((stage) => stage.id === "preparePayload")?.strategyId || "未设置",
               },
             ]} />
           </div>
@@ -1469,7 +1583,7 @@ export function RagRetrievalProfileFormPage() {
   const [errors, setErrors] = useState<RagRetrievalProfileFormErrors>({});
   const [verifyResult, setVerifyResult] = useState<RagProfileVerifyResultApi | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const title = mode === "create" ? "Create Retrieval Profile" : "Edit Retrieval Profile";
+  const title = mode === "create" ? "新建检索配置" : "编辑检索配置";
   const returnPath = profileFormReturnPath("retrieval", searchParams);
   const operatorOptions = useMemo(() => listFilterOperators(), []);
   const profileRecords = useMemo(() => (isApiMode ? [] : getRagMockProfiles()), [isApiMode]);
@@ -1549,7 +1663,7 @@ export function RagRetrievalProfileFormPage() {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        toast.error(error instanceof Error ? error.message : "Profile catalog could not be loaded");
+        toast.error(error instanceof Error ? error.message : "配置目录加载失败");
       })
       .finally(() => {
         if (!controller.signal.aborted) setCatalogLoading(false);
@@ -1698,7 +1812,7 @@ export function RagRetrievalProfileFormPage() {
 
     if (!isApiMode) {
       saveRagMockProfile(buildRetrievalProfileRecordFromForm(form));
-      toast.success(mode === "create" ? "Retrieval profile created." : "Profile updated.");
+      toast.success(mode === "create" ? "检索配置已创建。" : "配置已更新。");
       navigate(returnPath);
       return;
     }
@@ -1711,7 +1825,7 @@ export function RagRetrievalProfileFormPage() {
       const issues = normalizeRagValidationIssues(verification.errors);
       if (verification.valid === false || issues.length > 0) {
         setErrors(mapRetrievalApiErrors(issues, form));
-        toast.error(validationIssueMessage(issues[0] ?? { message: "Resolve profile form errors before saving." }));
+        toast.error(validationIssueMessage(issues[0] ?? { message: "请先处理配置表单错误再保存。" }));
         return;
       }
 
@@ -1721,7 +1835,7 @@ export function RagRetrievalProfileFormPage() {
       const savedId = typeof saved.profileId === "string" && saved.profileId.trim()
         ? saved.profileId.trim()
         : form.id.trim();
-      toast.success(`${savedId} ${mode === "create" ? "created" : "saved"}`);
+      toast.success(`${savedId} 已${mode === "create" ? "创建" : "保存"}`);
       navigate(returnPath);
     } catch (error) {
       const errorData = typeof error === "object" && error !== null && "data" in error
@@ -1731,7 +1845,7 @@ export function RagRetrievalProfileFormPage() {
       if (issues.length > 0) {
         setErrors(mapRetrievalApiErrors(issues, form));
       }
-      toast.error(error instanceof Error ? error.message : "Retrieval profile could not be saved");
+      toast.error(error instanceof Error ? error.message : "检索配置保存失败");
     } finally {
       setSubmitting(false);
     }
@@ -1741,17 +1855,17 @@ export function RagRetrievalProfileFormPage() {
     return (
       <>
         <PageHeader
-          title="Loading Retrieval Profile"
+          title="正在加载检索配置"
           actions={(
             <Button variant="secondary" onClick={() => navigate(returnPath)}>
               <X size={16} aria-hidden="true" />
-              Cancel
+              取消
             </Button>
           )}
         />
         <SurfaceCard>
-          <h2 className="text-base font-semibold">Loading Profile</h2>
-          <p className="mt-3 text-sm text-[var(--color-on-surface-variant)]">Loading retrieval profile management data...</p>
+          <h2 className="text-base font-semibold">正在加载配置</h2>
+          <p className="mt-3 text-sm text-[var(--color-on-surface-variant)]">正在加载检索配置管理数据...</p>
         </SurfaceCard>
       </>
     );
@@ -1761,20 +1875,20 @@ export function RagRetrievalProfileFormPage() {
     return (
       <>
         <PageHeader
-          title="Edit Retrieval Profile"
+          title="编辑检索配置"
           actions={(
             <Button variant="secondary" onClick={() => navigate(returnPath)}>
               <X size={16} aria-hidden="true" />
-              Cancel
+              取消
             </Button>
           )}
         />
         <SurfaceCard>
-          <h2 className="text-base font-semibold">Profile Not Found</h2>
+          <h2 className="text-base font-semibold">未找到配置</h2>
           <p className="mt-3 text-sm text-[var(--color-on-surface-variant)]">
             {isApiMode
-              ? "The requested retrieval profile could not be loaded from the RAG management API."
-              : "The requested retrieval profile does not exist in the mock registry."}
+              ? "无法从 RAG 管理接口加载请求的检索配置。"
+              : "模拟注册表中不存在请求的检索配置。"}
           </p>
         </SurfaceCard>
       </>
@@ -1789,11 +1903,11 @@ export function RagRetrievalProfileFormPage() {
           <>
             <Button disabled={loading || submitting} variant="secondary" onClick={() => navigate(returnPath)}>
               <X size={16} aria-hidden="true" />
-              Cancel
+              取消
             </Button>
             <Button aria-busy={submitting} disabled={loading || submitting} type="submit" form="rag-retrieval-profile-form">
               <Save size={16} aria-hidden="true" />
-              {submitting ? "Saving..." : "Save Profile"}
+              {submitting ? "正在保存..." : "保存配置"}
             </Button>
           </>
         )}
@@ -1801,30 +1915,30 @@ export function RagRetrievalProfileFormPage() {
 
       <form className="grid gap-5" id="rag-retrieval-profile-form" onSubmit={handleSubmit}>
         <SurfaceCard>
-          <h2 className="text-base font-semibold">Identity</h2>
+          <h2 className="text-base font-semibold">基础信息</h2>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <Field label="Profile ID" error={errors.id}>
+            <Field label="配置标识" error={errors.id} hint={retrievalFieldHints.profileId}>
               <TextInput
-                aria-label="Profile ID"
+                aria-label="配置标识"
                 className="font-mono"
                 disabled={mode === "edit"}
                 value={form.id}
                 onChange={(event) => updateForm("id", event.target.value)}
               />
             </Field>
-            <Field label="Status" error={errors.status}>
-              <SelectInput aria-label="Status" value={form.status} onChange={(event) => updateForm("status", event.target.value as RagProfileStatus)}>
-                {listProfileStatuses().map((status) => <option key={status} value={status}>{status}</option>)}
+            <Field label="状态" error={errors.status} hint={retrievalFieldHints.status}>
+              <SelectInput aria-label="状态" value={form.status} onChange={(event) => updateForm("status", event.target.value as RagProfileStatus)}>
+                {listProfileStatuses().map((status) => <option key={status} value={status}>{formatRagStatusLabel(status)}</option>)}
               </SelectInput>
             </Field>
-            <Field label="Primary Corpus" error={errors.primaryCorpusId}>
-              <SelectInput aria-label="Primary Corpus" value={form.primaryCorpusId} onChange={(event) => updateForm("primaryCorpusId", event.target.value)}>
-                <option value="">Select corpus</option>
+            <Field label="主语料库" error={errors.primaryCorpusId} hint={retrievalFieldHints.primaryCorpus}>
+              <SelectInput aria-label="主语料库" value={form.primaryCorpusId} onChange={(event) => updateForm("primaryCorpusId", event.target.value)}>
+                <option value="">选择语料库</option>
                 {corpusOptions.map((corpus) => <option key={corpus.code} value={corpus.code}>{corpus.code}</option>)}
               </SelectInput>
             </Field>
-            <Field label="Description">
-              <TextArea aria-label="Description" className="min-h-28" value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
+            <Field label="描述" hint={retrievalFieldHints.description}>
+              <TextArea aria-label="描述" className="min-h-28" value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
             </Field>
           </div>
         </SurfaceCard>
@@ -1832,14 +1946,14 @@ export function RagRetrievalProfileFormPage() {
         <SurfaceCard>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-base font-semibold">Retrieval Routes</h2>
+              <h2 className="text-base font-semibold">检索路由</h2>
               <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-                Each route selects a corpus and retrieval strategy. The strategy decides whether it is fulltext, vector, graph, or structured recall.
+                每条路由选择一个语料库和检索策略；策略决定使用全文、向量、图或结构化召回。
               </p>
             </div>
             <Button type="button" variant="secondary" onClick={addRoute}>
               <Plus size={16} aria-hidden="true" />
-              Add Route
+              添加路由
             </Button>
           </div>
           <div className="mt-4 grid gap-3">
@@ -1863,41 +1977,41 @@ export function RagRetrievalProfileFormPage() {
         <RetrievalFlowCard form={form} />
 
         <SurfaceCard>
-          <h2 className="text-base font-semibold">Result Policies</h2>
+          <h2 className="text-base font-semibold">结果策略</h2>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <Field label="Fusion Policy">
-              <SelectInput aria-label="Fusion Policy" className="font-mono" value={form.fusionPolicy} onChange={(event) => updateForm("fusionPolicy", event.target.value)}>
+            <Field label="融合策略" hint={retrievalFieldHints.fusionPolicy}>
+              <SelectInput aria-label="融合策略" className="font-mono" value={form.fusionPolicy} onChange={(event) => updateForm("fusionPolicy", event.target.value)}>
                 {fusionPolicyOptions.map((policy) => <option key={policy} value={policy}>{policy}</option>)}
               </SelectInput>
             </Field>
-            <Field label="Dedup Policy">
-              <SelectInput aria-label="Dedup Policy" className="font-mono" value={form.dedupPolicy} onChange={(event) => updateForm("dedupPolicy", event.target.value)}>
+            <Field label="去重策略" hint={retrievalFieldHints.dedupPolicy}>
+              <SelectInput aria-label="去重策略" className="font-mono" value={form.dedupPolicy} onChange={(event) => updateForm("dedupPolicy", event.target.value)}>
                 {dedupPolicyOptions.map((policy) => <option key={policy} value={policy}>{policy}</option>)}
               </SelectInput>
             </Field>
-            <Field label="Topic Policy">
-              <SelectInput aria-label="Topic Policy" className="font-mono" value={form.topicPolicy} onChange={(event) => updateForm("topicPolicy", event.target.value)}>
+            <Field label="主题策略" hint={retrievalFieldHints.topicPolicy}>
+              <SelectInput aria-label="主题策略" className="font-mono" value={form.topicPolicy} onChange={(event) => updateForm("topicPolicy", event.target.value)}>
                 {topicPolicyOptions.map((policy) => <option key={policy} value={policy}>{policy}</option>)}
               </SelectInput>
             </Field>
-            <Field label="Rerank Model Code">
-              <TextInput aria-label="Rerank Model Code" className="font-mono" value={form.rerankModelCode} onChange={(event) => updateForm("rerankModelCode", event.target.value)} />
+            <Field label="重排模型编码" hint={retrievalFieldHints.rerankModelCode}>
+              <TextInput aria-label="重排模型编码" className="font-mono" value={form.rerankModelCode} onChange={(event) => updateForm("rerankModelCode", event.target.value)} />
             </Field>
           </div>
           <div className="mt-4">
-            <ToggleSwitch checked={form.rerankEnabled} label="Rerank Enabled" onCheckedChange={(checked) => updateForm("rerankEnabled", checked)} />
+            <ToggleSwitch checked={form.rerankEnabled} label="启用重排" onCheckedChange={(checked) => updateForm("rerankEnabled", checked)} />
           </div>
         </SurfaceCard>
 
         <SurfaceCard>
-          <h2 className="text-base font-semibold">Context Strategies</h2>
+          <h2 className="text-base font-semibold">上下文策略</h2>
           <div className="mt-4 grid gap-3">
             {contextStrategyOptions.map((strategyId) => (
               <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3" key={strategyId}>
                 <span className="font-mono text-sm">{strategyId}</span>
                 <ToggleSwitch
                   checked={form.contextStrategies.includes(strategyId)}
-                  label={`Enable context strategy ${strategyId}`}
+                  label={`启用上下文策略 ${strategyId}`}
                   onCheckedChange={(checked) => toggleContextStrategy(strategyId, checked)}
                 />
               </div>
@@ -1907,13 +2021,13 @@ export function RagRetrievalProfileFormPage() {
         </SurfaceCard>
 
         <SurfaceCard>
-          <h2 className="text-base font-semibold">Graph Expansion</h2>
+          <h2 className="text-base font-semibold">图扩展</h2>
           <div className="mt-4">
-            <Field label="Graph Expansion Policy" error={errors.graphExpansionPolicy}>
+            <Field label="图扩展策略" error={errors.graphExpansionPolicy} hint={retrievalFieldHints.graphExpansionPolicy}>
               <TextInput
-                aria-label="Graph Expansion Policy"
+                aria-label="图扩展策略"
                 className="font-mono"
-                placeholder={enabledGraphRouteExists ? "" : "Select an enabled graph strategy to use this policy"}
+                placeholder={enabledGraphRouteExists ? "" : "选择已启用的图策略后才能使用该策略"}
                 value={form.graphExpansionPolicy}
                 onChange={(event) => updateForm("graphExpansionPolicy", event.target.value)}
               />
@@ -1923,10 +2037,10 @@ export function RagRetrievalProfileFormPage() {
 
         <SurfaceCard>
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <h2 className="text-base font-semibold">Profile Filters</h2>
+            <h2 className="text-base font-semibold">配置筛选条件</h2>
             <Button type="button" variant="secondary" onClick={addFilter}>
               <Plus size={16} aria-hidden="true" />
-              Add Filter
+              添加筛选条件
             </Button>
           </div>
           <div className="mt-4 grid gap-3">

@@ -201,6 +201,22 @@ fn ingest_profiles_declare_contract_payload_strategies_for_memory_and_project_do
         project_doc.config["stages"]["parseDocument"]["config"]["format"],
         json!("MARKDOWN")
     );
+
+    let mineru_project_doc = service
+        .get_profile("project-doc-mineru-ingest-v1")
+        .expect("MinerU project-doc ingest profile should be readable");
+    assert_eq!(
+        mineru_project_doc.config["stages"]["preparePayload"]["strategyId"],
+        json!("RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1")
+    );
+    assert_eq!(
+        mineru_project_doc.config["stages"]["parseDocument"]["strategyId"],
+        json!("RAG_PARSE_MINERU_DOCUMENT")
+    );
+    assert_eq!(
+        mineru_project_doc.config["stages"]["parseDocument"]["config"]["supportedFormats"],
+        json!(["PDF", "DOCX"])
+    );
 }
 
 #[test]

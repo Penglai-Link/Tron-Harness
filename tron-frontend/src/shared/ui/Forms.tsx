@@ -44,7 +44,7 @@ export function Field({ children, error, hint, label }: FieldProps) {
     controlId = child.props.id ?? `field-control-${fieldId}`;
     content = cloneElement(child, {
       id: controlId,
-      "aria-describedby": mergeAriaReferences(child.props["aria-describedby"], errorId),
+      "aria-describedby": mergeAriaReferences(child.props["aria-describedby"], hintId, errorId),
     });
   }
 
@@ -59,7 +59,7 @@ export function Field({ children, error, hint, label }: FieldProps) {
           <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{label}</span>
         )}
         {hint ? (
-          <InfoTooltip ariaLabel="Open field help">
+          <InfoTooltip ariaLabel="打开字段说明">
             <p id={hintId}>{hint}</p>
           </InfoTooltip>
         ) : null}

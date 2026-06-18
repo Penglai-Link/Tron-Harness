@@ -135,6 +135,7 @@ impl AppState {
             .expect("http client pool should initialize");
         let model_inference_client = http_client_pool.model_inference_client();
         let runtime_http_client = http_client_pool.runtime_control_client();
+        let document_parsing_client = http_client_pool.document_parsing_client();
         let agent_model_client = Arc::new(HttpModelClient::new(Arc::new(
             HttpModelProviderClient::new(model_inference_client.clone()),
         )));
@@ -279,6 +280,8 @@ impl AppState {
             workspaces.clone(),
             llm_runtime.clone(),
             &config.project_doc_root,
+            config.mineru.clone(),
+            document_parsing_client,
             event_bus.clone(),
         )?;
         let memory = MemoryService::new(rag.clone());

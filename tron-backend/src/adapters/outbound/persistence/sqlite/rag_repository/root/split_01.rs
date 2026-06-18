@@ -25,8 +25,8 @@ use super::migrations::{
     RAG_DOMAIN_FIELDS_MIGRATION, RAG_FOUNDATION_MIGRATION, RAG_INGEST_PROFILES_MIGRATION,
     RAG_MEMORY_INGEST_VECTOR_DEGRADE_MIGRATION, RAG_MEMORY_QUERY_PROFILE_MIGRATION,
     RAG_MEMORY_TARGETED_STORAGE_MIGRATION, RAG_MEMORY_TIMESTAMP_RETURN_FIELDS_MIGRATION,
-    RAG_OPTIONAL_MODEL_CODES_MIGRATION, RAG_SEARCH_PROFILES_MIGRATION,
-    RAG_SKILL_CORPUS_MIGRATION, RAG_SKILL_GRAPH_CORPUS_MIGRATION,
+    RAG_OPTIONAL_MODEL_CODES_MIGRATION, RAG_PROJECT_DOC_MINERU_INGEST_PROFILE_MIGRATION,
+    RAG_SEARCH_PROFILES_MIGRATION, RAG_SKILL_CORPUS_MIGRATION, RAG_SKILL_GRAPH_CORPUS_MIGRATION,
     RAG_STORAGE_BACKEND_FUSION_MIGRATION, RAG_STORAGE_BINDING_LAYOUT_MIGRATION,
 };
 
@@ -71,6 +71,7 @@ impl SqliteRagRepository {
         self.apply_rag_memory_query_profile_migration()?;
         self.apply_rag_memory_timestamp_return_fields_migration()?;
         self.apply_rag_memory_ingest_vector_degrade_migration()?;
+        self.apply_rag_project_doc_mineru_ingest_profile_migration()?;
         self.apply_rag_sqlite_extension_index_migration()
     }
 
@@ -151,6 +152,12 @@ impl SqliteRagRepository {
     pub fn apply_rag_memory_ingest_vector_degrade_migration(&self) -> Result<(), RagError> {
         self.connection
             .execute_batch(RAG_MEMORY_INGEST_VECTOR_DEGRADE_MIGRATION)
+            .map_err(storage_error)
+    }
+
+    pub fn apply_rag_project_doc_mineru_ingest_profile_migration(&self) -> Result<(), RagError> {
+        self.connection
+            .execute_batch(RAG_PROJECT_DOC_MINERU_INGEST_PROFILE_MIGRATION)
             .map_err(storage_error)
     }
 

@@ -13,6 +13,21 @@ httpClients:
     poolIdleTimeoutMs: 90000
     poolMaxIdlePerHost: 32
     tcpKeepaliveMs: 30000
+  documentParsing:
+    connectTimeoutMs: 1500
+    poolIdleTimeoutMs: 90000
+    poolMaxIdlePerHost: 8
+    tcpKeepaliveMs: 30000
+
+mineru:
+  enabled: true
+  baseUrl: http://127.0.0.1:8000
+  parseEndpoint: /file_parse
+  timeoutSeconds: 300
+  maxBytes: 52428800
+  backend: pipeline
+  parseMethod: auto
+  returnContentList: false
 
 variableCrypto:
   keyBase64: sbxNdQm4XiwQyfXNEtjZCQ==

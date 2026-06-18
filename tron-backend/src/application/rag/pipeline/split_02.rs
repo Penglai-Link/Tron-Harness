@@ -384,6 +384,12 @@ fn stage_orchestration(stage_type: &str) -> StageOrchestrationDefinition {
             must_run_before_stage_types: &["PREPARE_PAYLOAD", "RESOLVE_SOURCE"],
             must_run_after_stage_types: &[],
         },
+        "PARSE_DOCUMENT" => StageOrchestrationDefinition {
+            required: false,
+            acts_as_barrier: true,
+            must_run_before_stage_types: &["SPLIT_TEXT"],
+            must_run_after_stage_types: &[],
+        },
         _ => StageOrchestrationDefinition::default(),
     }
 }
@@ -450,4 +456,3 @@ impl From<StageDefinition> for RagPipelineStageDefinitionView {
         }
     }
 }
-

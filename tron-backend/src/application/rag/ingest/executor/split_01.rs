@@ -10,8 +10,8 @@ use super::{
 };
 use crate::application::rag::{
     CompiledRagIngestProfile, CompiledRagPipelineNode, RagArtifactStore, RagConfigRepository,
-    RagDocumentSourceCall, RagDocumentSourceRuntime, RagPipelineExecutor, RagStageExecutionResult,
-    RagStageOutcome, RagStrategyRegistry,
+    RagDocumentParseCall, RagDocumentSourceCall, RagDocumentSourceRuntime, RagPipelineExecutor,
+    RagStageExecutionResult, RagStageOutcome, RagStrategyRegistry,
     ingest_artifact::{
         ARTIFACT_FULLTEXT_INDEX_RESULT, ARTIFACT_PARSED_DOCUMENT, ARTIFACT_PERSIST_RESULT,
         ARTIFACT_RESOLVED_DOCUMENT, ARTIFACT_TEXT_UNIT_BATCH, ARTIFACT_TREE_GRAPH,
@@ -123,7 +123,8 @@ where
                 store.put_json("document.resolved", json!({"nodeId": node.node_id}));
             }
             IngestStageKind::ParseDocument => {
-                self.execute_parse_document_stage(request, compiled, bundle)?;
+                self.execute_parse_document_stage(request, compiled, bundle)
+                    .await?;
                 store.put_json("document.parsed", json!({"nodeId": node.node_id}));
             }
             IngestStageKind::SplitText => {
@@ -203,16 +204,24 @@ where
         bundle.validated_source_payload()?;
         validate_project_doc_ref_request(request)?;
         let document_uri = document_uri(request, compiled)?;
-        let resolved = self
-            .embedding_runtime
-            .resolve_project_doc_markdown(RagDocumentSourceCall {
-                workspace_code: request.workspace_code.clone(),
-                user_code: request.access_context.user_code.clone(),
-                agent_code: request.access_context.agent_code.clone(),
-                document_uri: document_uri.to_string(),
-                max_bytes: compiled.source_resolver_max_bytes,
-            })
-            .await?;
+        let format = document_format(request, compiled)?;
+        if !compiled.supports_document_format(format) {
+            return Err(RagError::DocumentFormatUnsupported);
+        }
+        let call = RagDocumentSourceCall {
+            workspace_code: request.workspace_code.clone(),
+            user_code: request.access_context.user_code.clone(),
+            agent_code: request.access_context.agent_code.clone(),
+            document_uri: document_uri.to_string(),
+            max_bytes: compiled.source_resolver_max_bytes,
+        };
+        let resolved = if format == "MARKDOWN" {
+            self.embedding_runtime
+                .resolve_project_doc_markdown(call)
+                .await?
+        } else {
+            self.embedding_runtime.resolve_project_doc_file(call).await?
+        };
         bundle.append(
             request,
             ARTIFACT_RESOLVED_DOCUMENT,
@@ -232,17 +241,37 @@ where
         Ok(())
     }
 
-    fn execute_parse_document_stage(
+    async fn execute_parse_document_stage(
         &self,
         request: &RagIngestRequest,
         compiled: &CompiledRagIngestProfile,
         bundle: &mut ArtifactBundle,
     ) -> Result<(), RagError> {
         let format = document_format(request, compiled)?;
-        if format != compiled.document_format {
+        if !compiled.supports_document_format(format) {
             return Err(RagError::DocumentFormatUnsupported);
         }
-        let resolved = bundle.resolved_document()?.clone();
+        let strategy_id = compiled
+            .document_parser_strategy_id
+            .as_deref()
+            .unwrap_or("RAG_PARSE_MARKDOWN_DOCUMENT");
+        let resolved = match strategy_id {
+            "RAG_PARSE_MARKDOWN_DOCUMENT" => bundle.resolved_document()?.clone(),
+            "RAG_PARSE_MINERU_DOCUMENT" => {
+                let document_uri = document_uri(request, compiled)?;
+                self.embedding_runtime
+                    .parse_project_doc_with_mineru(RagDocumentParseCall {
+                        workspace_code: request.workspace_code.clone(),
+                        user_code: request.access_context.user_code.clone(),
+                        agent_code: request.access_context.agent_code.clone(),
+                        document_uri: document_uri.to_string(),
+                        document_format: format.to_string(),
+                        max_bytes: compiled.source_resolver_max_bytes,
+                    })
+                    .await?
+            }
+            _ => return Err(RagError::DocumentParseFailed),
+        };
         if resolved.content_text.trim().is_empty() {
             return Err(RagError::DocumentParseFailed);
         }
