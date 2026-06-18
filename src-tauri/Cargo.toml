@@ -10,3 +10,6 @@ serde_json = "1.0"
 tauri = { version = "2", features = [] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "process", "io-util"] }
 url = "2"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

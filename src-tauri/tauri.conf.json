@@ -6,8 +6,8 @@
   "build": {
     "beforeBuildCommand": "",
     "beforeDevCommand": "",
-    "frontendDist": "resources/frontend",
-    "devUrl": ""
+    "frontendDist": "frontend",
+    "devUrl": null
   },
   "app": {
     "windows": [
@@ -26,9 +26,9 @@
   },
   "bundle": {
     "active": true,
-    "externalBin": ["tron-backend", "tron-backend.exe"],
+    "externalBin": [],
     "resources": ["frontend", "binaries"],
     "targets": ["deb", "app", "dmg", "msi", "rpm"],
-    "icon": []
+    "icon": ["icons/icon.icns"]
   }
 }

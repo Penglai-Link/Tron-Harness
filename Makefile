@@ -160,9 +160,9 @@ app-clean: fe-clean
 
 .PHONY: desktop-build
 desktop-build: app-build
-	rm -rf $(TAURI_DIR)/resources/frontend
-	mkdir -p $(TAURI_DIR)/resources
-	cp -R $(BACKEND_FRONTEND_DIR) $(TAURI_DIR)/resources/frontend
+	rm -rf $(TAURI_DIR)/frontend
+	mkdir -p $(TAURI_DIR)/frontend
+	cp -R $(BACKEND_FRONTEND_DIR) $(TAURI_DIR)/frontend
 	mkdir -p $(TAURI_DIR)/binaries
 	cargo build --manifest-path $(BACKEND_MANIFEST) --release
 	cp tron-backend/target/release/tron-backend $(TAURI_DIR)/binaries/tron-backend || true
@@ -177,7 +177,7 @@ desktop-dev: desktop-build
 .PHONY: desktop-clean
 desktop-clean:
 	rm -rf $(TAURI_DIR)/target
-	rm -rf $(TAURI_DIR)/resources/frontend
+	rm -rf $(TAURI_DIR)/frontend
 	rm -rf $(TAURI_DIR)/binaries
 
 .PHONY: skill-memory-dreaming-test
