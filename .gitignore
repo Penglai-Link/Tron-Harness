@@ -24,6 +24,12 @@ tron-backend/resources/frontend/
 # Tauri generated schema artifacts
 src-tauri/gen/
 
+# Tauri build artifacts
+src-tauri/target/
+src-tauri/bundle/
+src-tauri/frontend/
+src-tauri/binaries/
+
 # Archives
 *.tar.gz
 *.tar
