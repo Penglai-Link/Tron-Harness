@@ -5,8 +5,8 @@ use rusqlite::{Connection, params};
 use crate::{
     application::skill::SkillRegistryRepository,
     domain::skill::{
-        RegistrySkill, SkillError, SkillManagedBy, SkillSourceType, SkillUpdateStatus,
-        WorkspaceSkillBinding,
+        RegistrySkill, SkillError, SkillManagedBy, SkillRagIndexRecord, SkillRagIndexStatus,
+        SkillSourceType, SkillUpdateStatus, WorkspaceSkillBinding,
     },
     shared::time::{
         option_timestamp_from_millis, option_timestamp_to_millis, timestamp_from_millis,
@@ -228,6 +228,114 @@ impl SkillRegistryRepository for SqliteSkillRegistryRepository {
             .map_err(storage_error)?;
         Ok(())
     }
+
+    fn get_rag_index_state(
+        &mut self,
+        workspace_code: &str,
+        skill_name: &str,
+    ) -> Result<Option<SkillRagIndexRecord>, SkillError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT workspace_code, skill_name, source_version, desired_enabled,
+                        vector_status, graph_status, content_hash, structure_hash,
+                        last_indexed_at, last_error, updated_at
+                 FROM skill_rag_index_states
+                 WHERE workspace_code = ?1 AND skill_name = ?2",
+            )
+            .map_err(storage_error)?;
+        match statement.query_row(params![workspace_code, skill_name], map_rag_index_state_row) {
+            Ok(state) => Ok(Some(state)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(error) => Err(storage_error(error)),
+        }
+    }
+
+    fn list_rag_index_states(
+        &mut self,
+        workspace_code: Option<&str>,
+    ) -> Result<Vec<SkillRagIndexRecord>, SkillError> {
+        let sql = if workspace_code.is_some() {
+            "SELECT workspace_code, skill_name, source_version, desired_enabled,
+                    vector_status, graph_status, content_hash, structure_hash,
+                    last_indexed_at, last_error, updated_at
+             FROM skill_rag_index_states
+             WHERE workspace_code = ?1
+             ORDER BY skill_name ASC"
+        } else {
+            "SELECT workspace_code, skill_name, source_version, desired_enabled,
+                    vector_status, graph_status, content_hash, structure_hash,
+                    last_indexed_at, last_error, updated_at
+             FROM skill_rag_index_states
+             ORDER BY workspace_code ASC, skill_name ASC"
+        };
+        let mut statement = self.connection.prepare(sql).map_err(storage_error)?;
+        if let Some(workspace_code) = workspace_code {
+            statement
+                .query_map(params![workspace_code], map_rag_index_state_row)
+                .map_err(storage_error)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(storage_error)
+        } else {
+            statement
+                .query_map([], map_rag_index_state_row)
+                .map_err(storage_error)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(storage_error)
+        }
+    }
+
+    fn upsert_rag_index_state(&mut self, state: &SkillRagIndexRecord) -> Result<(), SkillError> {
+        self.connection
+            .execute(
+                "INSERT INTO skill_rag_index_states (
+                    workspace_code, skill_name, source_version, desired_enabled,
+                    vector_status, graph_status, content_hash, structure_hash,
+                    last_indexed_at, last_error, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                 ON CONFLICT(workspace_code, skill_name) DO UPDATE SET
+                    source_version = excluded.source_version,
+                    desired_enabled = excluded.desired_enabled,
+                    vector_status = excluded.vector_status,
+                    graph_status = excluded.graph_status,
+                    content_hash = excluded.content_hash,
+                    structure_hash = excluded.structure_hash,
+                    last_indexed_at = excluded.last_indexed_at,
+                    last_error = excluded.last_error,
+                    updated_at = excluded.updated_at",
+                params![
+                    state.workspace_code,
+                    state.skill_name,
+                    state.source_version,
+                    if state.desired_enabled { 1_i64 } else { 0_i64 },
+                    rag_status_to_storage(state.vector_status),
+                    rag_status_to_storage(state.graph_status),
+                    state.content_hash,
+                    state.structure_hash,
+                    option_timestamp_to_millis(state.last_indexed_at.as_deref()),
+                    state.last_error,
+                    timestamp_to_millis(&state.updated_at),
+                ],
+            )
+            .map_err(storage_error)?;
+        Ok(())
+    }
+}
+
+fn map_rag_index_state_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<SkillRagIndexRecord> {
+    Ok(SkillRagIndexRecord {
+        workspace_code: row.get(0)?,
+        skill_name: row.get(1)?,
+        source_version: row.get(2)?,
+        desired_enabled: row.get::<_, i64>(3)? != 0,
+        vector_status: rag_status_from_storage(&row.get::<_, String>(4)?)?,
+        graph_status: rag_status_from_storage(&row.get::<_, String>(5)?)?,
+        content_hash: row.get(6)?,
+        structure_hash: row.get(7)?,
+        last_indexed_at: option_timestamp_from_millis(row.get(8)?),
+        last_error: row.get(9)?,
+        updated_at: timestamp_from_millis(row.get(10)?),
+    })
 }
 
 fn ensure_database_parent(database_url: &str) -> Result<(), SkillError> {
@@ -306,6 +414,29 @@ fn update_status_from_storage(value: &str) -> Result<SkillUpdateStatus, rusqlite
         "UpdateAvailable" => Ok(SkillUpdateStatus::UpdateAvailable),
         "Manual" => Ok(SkillUpdateStatus::Manual),
         "Error" => Ok(SkillUpdateStatus::Error),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn rag_status_to_storage(value: SkillRagIndexStatus) -> &'static str {
+    match value {
+        SkillRagIndexStatus::Pending => "PENDING",
+        SkillRagIndexStatus::Indexed => "INDEXED",
+        SkillRagIndexStatus::Disabled => "DISABLED",
+        SkillRagIndexStatus::Warning => "WARNING",
+        SkillRagIndexStatus::Failed => "FAILED",
+        SkillRagIndexStatus::Stale => "STALE",
+    }
+}
+
+fn rag_status_from_storage(value: &str) -> Result<SkillRagIndexStatus, rusqlite::Error> {
+    match value {
+        "PENDING" => Ok(SkillRagIndexStatus::Pending),
+        "INDEXED" => Ok(SkillRagIndexStatus::Indexed),
+        "DISABLED" => Ok(SkillRagIndexStatus::Disabled),
+        "WARNING" => Ok(SkillRagIndexStatus::Warning),
+        "FAILED" => Ok(SkillRagIndexStatus::Failed),
+        "STALE" => Ok(SkillRagIndexStatus::Stale),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }

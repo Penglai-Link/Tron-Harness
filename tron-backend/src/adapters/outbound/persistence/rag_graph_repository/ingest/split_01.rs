@@ -5,10 +5,13 @@ use serde_json::Value;
 use crate::{
     application::{
         graph::{GraphSemanticProjection, PreparedGraphEdgeWrite, PreparedGraphNodeWrite},
-        rag::{RagPersistIngestCommand, RagTextUnitWrite},
+        rag::{RagDeactivateSourceCommand, RagPersistIngestCommand, RagTextUnitWrite},
     },
     domain::{
-        graph::{GraphEdgeWrite, GraphNodeWrite, GraphPropertyValue},
+        graph::{
+            GraphEdgeWrite, GraphNodeWrite, GraphPropertyValue, GraphQueryLimit,
+            GraphTraversalClause, GraphTraversalDirection, GraphTraverseQuery,
+        },
         rag::{RagCorpusRecord, RagError},
     },
 };
@@ -17,14 +20,75 @@ use super::{
     GraphBackedRagRepository,
     model::{
         GraphRuntimeTarget, decode_embedding, fold_text_units, graph_main_node_code,
-        graph_property_name_for_logical, graph_segment_node_code, json_string,
-        legacy_graph_skill_node_code, map_graph_error, node_label, normalize_related_code,
-        optional_graph_target_for_segment, optional_str, push_text_prop, required_str,
-        stable_graph_code,
+        graph_main_node_code_parts, graph_property_name_for_logical, graph_segment_node_code,
+        json_string, legacy_graph_skill_node_code, legacy_graph_skill_node_code_parts,
+        map_graph_error, node_label, normalize_related_code, optional_graph_target_for_segment,
+        optional_str, push_text_prop, required_str, stable_graph_code,
     },
 };
 
 impl GraphBackedRagRepository {
+    pub(super) fn deactivate_graph_single_node(
+        &self,
+        corpus: &RagCorpusRecord,
+        command: RagDeactivateSourceCommand,
+    ) -> Result<(), RagError> {
+        let scope = self.resolve_graph_scope(
+            corpus,
+            &command.workspace_code,
+            &command.scope.scope_type,
+            &command.scope.scope_code,
+        )?;
+        let node_codes = [
+            graph_main_node_code_parts(
+                &command.corpus_id,
+                &command.source_code,
+                &command.source_version,
+                &command.scope.scope_type,
+                &command.scope.scope_code,
+            ),
+            legacy_graph_skill_node_code_parts(
+                &command.corpus_id,
+                &command.source_code,
+                &command.source_version,
+                &command.scope.scope_type,
+                &command.scope.scope_code,
+            ),
+        ];
+        for node_code in node_codes {
+            let Some(node) = self
+                .graph_store
+                .get_node(&scope, &node_code)
+                .map_err(map_graph_error)?
+            else {
+                continue;
+            };
+            let mut properties = node.properties;
+            properties.insert(
+                "sourceStatus".into(),
+                GraphPropertyValue::Text("DISABLED".into()),
+            );
+            properties.insert(
+                "textUnitStatus".into(),
+                GraphPropertyValue::Text("DISABLED".into()),
+            );
+            let write = GraphNodeWrite {
+                node_code,
+                labels: node.labels,
+                properties,
+                full_text: node.full_text,
+                embedding_text: node.embedding_text,
+                embedding_model_code: None,
+            }
+            .validate()
+            .map_err(map_graph_error)?;
+            self.graph_store
+                .update_node(&scope, PreparedGraphNodeWrite::plain(write))
+                .map_err(map_graph_error)?;
+        }
+        Ok(())
+    }
+
     pub(super) fn persist_graph_single_node(
         &self,
         corpus: &RagCorpusRecord,
@@ -137,6 +201,7 @@ impl GraphBackedRagRepository {
                 .create_node(&scope, write)
                 .map_err(map_graph_error)?;
         }
+        self.replace_contains_edges(&scope, &node_code)?;
         self.persist_related_graph(
             &scope,
             &node_code,
@@ -261,6 +326,7 @@ impl GraphBackedRagRepository {
                 &command.scope.scope_type,
                 &command.scope.scope_code,
             )?;
+            self.replace_contains_edges(&scope, &node_code)?;
             self.persist_related_graph(
                 &scope,
                 &node_code,
@@ -296,6 +362,43 @@ impl GraphBackedRagRepository {
         } else {
             self.graph_store
                 .create_node(&scope, write)
+                .map_err(map_graph_error)?;
+        }
+        Ok(())
+    }
+
+    fn replace_contains_edges(
+        &self,
+        scope: &crate::domain::graph::ResolvedGraphScope,
+        target_node_code: &str,
+    ) -> Result<(), RagError> {
+        let query = GraphTraverseQuery {
+            start_node_codes: vec![target_node_code.to_string()],
+            clauses: vec![GraphTraversalClause {
+                direction: GraphTraversalDirection::Outgoing,
+                relationships: vec!["CONTAINS".into()],
+                min_depth: 1,
+                max_depth: 1,
+            }],
+            filters: Vec::new(),
+            limit: GraphQueryLimit::new(500).map_err(map_graph_error)?,
+        }
+        .validate()
+        .map_err(map_graph_error)?;
+        let paths = self
+            .graph_store
+            .traverse(scope, query)
+            .map_err(map_graph_error)?;
+        for edge_code in paths
+            .into_iter()
+            .flat_map(|path| path.edges)
+            .filter(|edge| {
+                edge.source_node_code == target_node_code && edge.relationship == "CONTAINS"
+            })
+            .map(|edge| edge.edge_code)
+        {
+            self.graph_store
+                .delete_edge(scope, &edge_code)
                 .map_err(map_graph_error)?;
         }
         Ok(())
@@ -513,4 +616,3 @@ fn valid_business_code(value: &str) -> bool {
             .chars()
             .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_' || ch == '-')
 }
-

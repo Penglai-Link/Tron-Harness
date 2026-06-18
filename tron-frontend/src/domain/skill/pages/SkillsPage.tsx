@@ -53,6 +53,7 @@ import type {
   WorkspaceSkillDetail,
   WorkspaceSkillRecord,
 } from "@/domain/skill/model";
+import { skillIndexWarningMessage } from "@/domain/skill/utils/ragIndexWarning";
 
 function getWorkspaceSourceTone(sourceKind: SkillWorkspaceSourceKind) {
   switch (sourceKind) {
@@ -271,8 +272,13 @@ export function SkillsPage() {
 
     setRefreshing(true);
     try {
-      await refreshWorkspaceSkills(activeWorkspaceCode);
-      toast.success(pageT("messages.refreshed", "Workspace skills refreshed"));
+      const result = await refreshWorkspaceSkills(activeWorkspaceCode);
+      const warning = skillIndexWarningMessage(result.ragIndex, pageT("warnings.ragIndex", "Skill RAG index completed with warnings"));
+      if (warning) {
+        toast.warning(warning);
+      } else {
+        toast.success(pageT("messages.refreshed", "Workspace skills refreshed"));
+      }
       await loadWorkspaceSkills();
       if (selectedSkillName) {
         const detail = await fetchWorkspaceSkill(activeWorkspaceCode, selectedSkillName);
@@ -304,19 +310,29 @@ export function SkillsPage() {
         skill.sourceKind === "Local" && !desiredEnabled;
 
       if (shouldRevertInherited || shouldRemoveLocal) {
-        await unbindWorkspaceSkill(activeWorkspaceCode, skill.skillName);
-        toast.success(
-          shouldRevertInherited
-            ? pageT("messages.reverted", "{{name}} reverted to inherited setting in {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode })
-            : pageT("messages.removed", "{{name}} removed from {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode }),
-        );
+        const result = await unbindWorkspaceSkill(activeWorkspaceCode, skill.skillName);
+        const warning = skillIndexWarningMessage(result.ragIndex, pageT("warnings.ragIndex", "Skill RAG index completed with warnings"));
+        if (warning) {
+          toast.warning(warning);
+        } else {
+          toast.success(
+            shouldRevertInherited
+              ? pageT("messages.reverted", "{{name}} reverted to inherited setting in {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode })
+              : pageT("messages.removed", "{{name}} removed from {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode }),
+          );
+        }
       } else {
-        await bindWorkspaceSkill(activeWorkspaceCode, skill.skillName, desiredEnabled);
-        toast.success(
-          desiredEnabled
-            ? pageT("messages.enabled", "{{name}} enabled in {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode })
-            : pageT("messages.disabled", "{{name}} disabled in {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode }),
-        );
+        const result = await bindWorkspaceSkill(activeWorkspaceCode, skill.skillName, desiredEnabled);
+        const warning = skillIndexWarningMessage(result.ragIndex, pageT("warnings.ragIndex", "Skill RAG index completed with warnings"));
+        if (warning) {
+          toast.warning(warning);
+        } else {
+          toast.success(
+            desiredEnabled
+              ? pageT("messages.enabled", "{{name}} enabled in {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode })
+              : pageT("messages.disabled", "{{name}} disabled in {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode }),
+          );
+        }
       }
       await loadWorkspaceSkills();
       if (selectedSkillName === skill.skillName) {
@@ -344,8 +360,13 @@ export function SkillsPage() {
 
     setBindingSkillName(skill.skillName);
     try {
-      await unbindWorkspaceSkill(activeWorkspaceCode, skill.skillName);
-      toast.success(pageT("messages.unbound", "{{name}} unbound from {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode }));
+      const result = await unbindWorkspaceSkill(activeWorkspaceCode, skill.skillName);
+      const warning = skillIndexWarningMessage(result.ragIndex, pageT("warnings.ragIndex", "Skill RAG index completed with warnings"));
+      if (warning) {
+        toast.warning(warning);
+      } else {
+        toast.success(pageT("messages.unbound", "{{name}} unbound from {{workspace}}", { name: skill.skillName, workspace: activeWorkspaceCode }));
+      }
       await loadWorkspaceSkills();
       if (selectedSkillName === skill.skillName) {
         const detail = await fetchWorkspaceSkill(activeWorkspaceCode, skill.skillName).catch(() => null);

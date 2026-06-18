@@ -42,6 +42,17 @@ pub enum SkillRegistryState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SkillRagIndexStatus {
+    Pending,
+    Indexed,
+    Disabled,
+    Warning,
+    Failed,
+    Stale,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SkillSearchMode {
     Find,
@@ -71,6 +82,66 @@ pub struct WorkspaceSkillBinding {
     pub enabled: bool,
     pub created_at: String,
     pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SkillRagIndexRecord {
+    pub workspace_code: String,
+    pub skill_name: String,
+    pub source_version: String,
+    pub desired_enabled: bool,
+    pub vector_status: SkillRagIndexStatus,
+    pub graph_status: SkillRagIndexStatus,
+    pub content_hash: Option<String>,
+    pub structure_hash: Option<String>,
+    pub last_indexed_at: Option<String>,
+    pub last_error: Option<String>,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillRagIndexSummary {
+    pub desired_enabled: bool,
+    pub source_version: String,
+    pub vector_status: SkillRagIndexStatus,
+    pub graph_status: SkillRagIndexStatus,
+    pub content_hash: Option<String>,
+    pub structure_hash: Option<String>,
+    pub last_indexed_at: Option<String>,
+    pub last_error: Option<String>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SkillRagIndexBatchSummary {
+    pub indexed_count: usize,
+    pub disabled_count: usize,
+    pub failed_count: usize,
+    pub warning_count: usize,
+    pub warnings: Vec<String>,
+}
+
+impl SkillRagIndexRecord {
+    pub fn summary(&self) -> SkillRagIndexSummary {
+        SkillRagIndexSummary {
+            desired_enabled: self.desired_enabled,
+            source_version: self.source_version.clone(),
+            vector_status: self.vector_status,
+            graph_status: self.graph_status,
+            content_hash: self.content_hash.clone(),
+            structure_hash: self.structure_hash.clone(),
+            last_indexed_at: self.last_indexed_at.clone(),
+            last_error: self.last_error.clone(),
+            warnings: self
+                .last_error
+                .iter()
+                .filter(|message| !message.trim().is_empty())
+                .cloned()
+                .collect(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -156,6 +227,7 @@ pub struct WorkspaceSkillListItem {
     pub shadowed_label: Option<String>,
     pub shadowed_enabled: Option<bool>,
     pub registry_state: SkillRegistryState,
+    pub rag_index: Option<SkillRagIndexSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -183,6 +255,7 @@ pub struct WorkspaceSkillDetail {
     pub shadowed_label: Option<String>,
     pub shadowed_enabled: Option<bool>,
     pub registry_state: SkillRegistryState,
+    pub rag_index: Option<SkillRagIndexSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -202,6 +275,7 @@ pub struct SkillRegistryMutationResult {
     pub skill_name: String,
     pub workspace_code: Option<String>,
     pub enabled: bool,
+    pub rag_index: Option<SkillRagIndexSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -210,6 +284,7 @@ pub struct SkillRegistryUninstallResult {
     pub skill_name: String,
     pub removed_bindings_count: usize,
     pub kept_bindings_count: usize,
+    pub rag_index: Option<SkillRagIndexBatchSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -218,6 +293,7 @@ pub struct SkillBindingMutationResult {
     pub workspace_code: String,
     pub skill_name: String,
     pub enabled: bool,
+    pub rag_index: Option<SkillRagIndexSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -228,6 +304,7 @@ pub struct SkillRegistrySyncResult {
     pub removed_count: usize,
     pub checked: bool,
     pub updated: bool,
+    pub rag_index: Option<SkillRagIndexBatchSummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

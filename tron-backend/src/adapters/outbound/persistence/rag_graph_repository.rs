@@ -6,12 +6,12 @@ use crate::{
     application::{
         graph::{GraphScopeResolver, GraphStore},
         rag::{
-            RagConfigRepository, RagCorpusManagementRecord, RagDebugSourceRequest,
-            RagDebugSourceResult, RagDiagnosticsRepository, RagGraphExpansionQuery,
-            RagIngestRepository, RagManagementRepository, RagPersistIngestCommand,
-            RagProfileListQuery, RagRetryIndexRepository, RagRetryIndexRequest, RagRetryTextUnit,
-            RagRetryVectorUpdate, RagRouteSearchQuery, RagSearchRepository, RagSearchRow,
-            RagSearchTraceWrite,
+            RagConfigRepository, RagCorpusManagementRecord, RagDeactivateSourceCommand,
+            RagDebugSourceRequest, RagDebugSourceResult, RagDiagnosticsRepository,
+            RagGraphExpansionQuery, RagIngestRepository, RagManagementRepository,
+            RagPersistIngestCommand, RagProfileListQuery, RagRetryIndexRepository,
+            RagRetryIndexRequest, RagRetryTextUnit, RagRetryVectorUpdate, RagRouteSearchQuery,
+            RagSearchRepository, RagSearchRow, RagSearchTraceWrite, RagSourceLifecycleRepository,
         },
     },
     domain::rag::{RagCorpusRecord, RagError, RagProfileRecord},
@@ -95,6 +95,20 @@ impl RagIngestRepository for GraphBackedRagRepository {
         }
         let plan = RagStorageWritePlan::compile(&corpus)?;
         RagStorageWriteAdapterRegistry::new(self).execute(&plan, &corpus, &command)
+    }
+}
+
+impl RagSourceLifecycleRepository for GraphBackedRagRepository {
+    fn deactivate_source(&self, command: RagDeactivateSourceCommand) -> Result<(), RagError> {
+        let corpus = self
+            .sqlite
+            .get_corpus(&command.corpus_id)?
+            .ok_or(RagError::CorpusNotFound)?;
+        if !corpus.storage_binding.is_graph_backend() {
+            return self.sqlite.deactivate_source(command);
+        }
+        ensure_graph_runtime_supported(&corpus)?;
+        self.deactivate_graph_single_node(&corpus, command)
     }
 }
 

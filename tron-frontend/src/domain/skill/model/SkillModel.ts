@@ -43,6 +43,34 @@ export type SkillWorkspaceSourceKind =
 
 export type SkillRegistryState = "Present" | "Deleted";
 
+export type SkillRagIndexStatus =
+  | "PENDING"
+  | "INDEXED"
+  | "DISABLED"
+  | "WARNING"
+  | "FAILED"
+  | "STALE";
+
+export interface SkillRagIndexSummary {
+  desiredEnabled: boolean;
+  sourceVersion: string;
+  vectorStatus: SkillRagIndexStatus;
+  graphStatus: SkillRagIndexStatus;
+  contentHash?: string | null;
+  structureHash?: string | null;
+  lastIndexedAt?: string | null;
+  lastError?: string | null;
+  warnings: string[];
+}
+
+export interface SkillRagIndexBatchSummary {
+  indexedCount: number;
+  disabledCount: number;
+  failedCount: number;
+  warningCount: number;
+  warnings: string[];
+}
+
 export interface RegistrySkillRecord {
   skillName: string;
   sourceRef: string;
@@ -118,6 +146,7 @@ export interface WorkspaceSkillRecord {
   shadowedLabel?: string | null;
   shadowedEnabled?: boolean | null;
   registryState: SkillRegistryState;
+  ragIndex?: SkillRagIndexSummary | null;
 }
 
 export interface WorkspaceSkillDetail {
@@ -143,6 +172,7 @@ export interface WorkspaceSkillDetail {
   shadowedLabel?: string | null;
   shadowedEnabled?: boolean | null;
   registryState: SkillRegistryState;
+  ragIndex?: SkillRagIndexSummary | null;
 }
 
 export interface SkillSearchCandidate {
@@ -165,18 +195,21 @@ export interface RegistrySkillMutationResult {
   skillName: string;
   workspaceCode?: string | null;
   enabled: boolean;
+  ragIndex?: SkillRagIndexSummary | null;
 }
 
 export interface RegistrySkillUninstallResult {
   skillName: string;
   removedBindingsCount: number;
   keptBindingsCount: number;
+  ragIndex?: SkillRagIndexBatchSummary | null;
 }
 
 export interface SkillBindingMutationResult {
   workspaceCode: string;
   skillName: string;
   enabled: boolean;
+  ragIndex?: SkillRagIndexSummary | null;
 }
 
 export interface RegistrySkillSyncResult {
@@ -185,4 +218,5 @@ export interface RegistrySkillSyncResult {
   removedCount: number;
   checked: boolean;
   updated: boolean;
+  ragIndex?: SkillRagIndexBatchSummary | null;
 }

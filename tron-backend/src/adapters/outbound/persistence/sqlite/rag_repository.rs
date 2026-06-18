@@ -4,6 +4,7 @@ mod index_schema;
 mod indexes;
 mod ingest;
 mod ingest_values;
+mod lifecycle;
 mod retry;
 mod search;
 mod sql_plan;

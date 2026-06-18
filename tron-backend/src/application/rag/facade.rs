@@ -13,7 +13,7 @@ use super::{
     RagProfileManagementView, RagProfileValidationView, RagProfileVerifyView, RagProfileView,
     RagRetryIndexRepository, RagRetryIndexRequest, RagRetryIndexResult, RagRetryIndexService,
     RagSearchRepository, RagSearchRequest, RagSearchResult, RagSearchRuntime, RagSearchService,
-    RagStrategyRegistry,
+    RagSourceLifecycleRepository, RagStrategyRegistry,
 };
 
 #[derive(Clone)]
@@ -22,6 +22,20 @@ pub struct RagService<R, S, E> {
     strategy_registry: S,
     runtime: E,
     event_bus: EventBusHandle,
+}
+
+impl<R, S, E> RagService<R, S, E>
+where
+    R: RagSourceLifecycleRepository + Clone,
+    S: Clone,
+    E: Clone,
+{
+    pub fn deactivate_source(
+        &self,
+        command: super::RagDeactivateSourceCommand,
+    ) -> Result<(), RagError> {
+        self.repository.deactivate_source(command)
+    }
 }
 
 impl<R, S, E> RagService<R, S, E>

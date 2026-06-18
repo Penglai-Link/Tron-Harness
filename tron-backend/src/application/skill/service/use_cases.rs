@@ -167,12 +167,24 @@ impl SkillRegistryService {
             .into_iter()
             .map(|skill| (skill.skill_name.clone(), skill))
             .collect::<HashMap<_, _>>();
+        let rag_index_states = self
+            .repository
+            .lock()
+            .expect("skill registry repository mutex poisoned")
+            .list_rag_index_states(Some(&workspace_code))?
+            .into_iter()
+            .map(|state| (state.skill_name.clone(), state))
+            .collect::<HashMap<_, _>>();
 
         let mut items = resolved_bindings
             .into_iter()
             .filter(|(skill_name, _)| matches_workspace_skill_search(skill_name, search.as_deref()))
             .map(|(skill_name, resolved)| {
-                build_workspace_skill_list_item(skill_map.get(skill_name.as_str()), &resolved)
+                build_workspace_skill_list_item(
+                    skill_map.get(skill_name.as_str()),
+                    &resolved,
+                    rag_index_states.get(skill_name.as_str()),
+                )
             })
             .collect::<Vec<_>>();
         items.sort_by(|left, right| left.skill_name.cmp(&right.skill_name));
@@ -205,18 +217,30 @@ impl SkillRegistryService {
             let registry_path = PathBuf::from(&skill.registry_path);
             let skill_markdown = read_skill_markdown(&registry_path)?;
             let files = list_skill_files(&registry_path)?;
+            let rag_index = self
+                .repository
+                .lock()
+                .expect("skill registry repository mutex poisoned")
+                .get_rag_index_state(&workspace_code, &skill_name)?;
             Ok(build_workspace_skill_detail(
                 Some(&skill),
                 &resolved,
                 Some(skill_markdown),
                 files,
+                rag_index.as_ref(),
             ))
         } else {
+            let rag_index = self
+                .repository
+                .lock()
+                .expect("skill registry repository mutex poisoned")
+                .get_rag_index_state(&workspace_code, &skill_name)?;
             Ok(build_workspace_skill_detail(
                 None,
                 &resolved,
                 None,
                 Vec::new(),
+                rag_index.as_ref(),
             ))
         }
     }
@@ -278,6 +302,7 @@ impl SkillRegistryService {
                 skill_name,
                 workspace_code: Some(workspace_code),
                 enabled: true,
+                rag_index: None,
             });
         }
 
@@ -285,6 +310,7 @@ impl SkillRegistryService {
             skill_name,
             workspace_code: None,
             enabled: false,
+            rag_index: None,
         })
     }
 
@@ -350,6 +376,7 @@ impl SkillRegistryService {
             } else {
                 kept_bindings_count
             },
+            rag_index: None,
         })
     }
 
@@ -407,6 +434,7 @@ impl SkillRegistryService {
             workspace_code,
             skill_name,
             enabled,
+            rag_index: None,
         })
     }
 
@@ -427,6 +455,7 @@ impl SkillRegistryService {
             workspace_code,
             skill_name,
             enabled: false,
+            rag_index: None,
         })
     }
 

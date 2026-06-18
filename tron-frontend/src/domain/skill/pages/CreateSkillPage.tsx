@@ -35,6 +35,7 @@ import type {
   SkillSearchCandidate,
   SkillSearchMode,
 } from "@/domain/skill/model";
+import { skillIndexWarningMessage } from "@/domain/skill/utils/ragIndexWarning";
 
 type InstallCandidateState = "pending" | "installing" | "success" | "error";
 
@@ -349,6 +350,7 @@ export function CreateSkillPage() {
     });
     try {
       const failures: Array<{ message: string; packageRef: string; skillName: string }> = [];
+      const warnings: Array<{ message: string; skillName: string }> = [];
       const failedPackageRefs: string[] = [];
       let successCount = 0;
       let failureCount = 0;
@@ -366,11 +368,15 @@ export function CreateSkillPage() {
           totalCount: current?.totalCount ?? installQueue.length,
         }));
         try {
-          await installRegistrySkill({
+          const result = await installRegistrySkill({
             packageRef: candidate.packageRef,
             skillName: candidate.skillName,
             sourceRef: candidate.sourceRef,
           });
+          const warning = skillIndexWarningMessage(result.ragIndex);
+          if (warning) {
+            warnings.push({ message: warning, skillName: candidate.skillName });
+          }
           successCount += 1;
           setInstallProgress((current) => ({
             completedCount: index + 1,
@@ -411,7 +417,11 @@ export function CreateSkillPage() {
 
       const installedCount = installQueue.length - failures.length;
       if (!failures.length) {
-        toast.success(`${installedCount} skill${installedCount > 1 ? "s" : ""} installed`);
+        if (warnings.length) {
+          toast.warning(`${warnings[0]?.skillName}: ${warnings[0]?.message}`);
+        } else {
+          toast.success(`${installedCount} skill${installedCount > 1 ? "s" : ""} installed`);
+        }
         setSelectedPackageRefs([]);
         return;
       }

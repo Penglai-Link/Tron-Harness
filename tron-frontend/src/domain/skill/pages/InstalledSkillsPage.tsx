@@ -45,6 +45,7 @@ import type {
   SkillSourceType,
   SkillUpdateStatus,
 } from "@/domain/skill/model";
+import { skillIndexWarningMessage } from "@/domain/skill/utils/ragIndexWarning";
 
 function getSourceTone(sourceType: SkillSourceType) {
   switch (sourceType) {
@@ -210,11 +211,19 @@ export function InstalledSkillsPage() {
   async function handleRegistrySync(mode: "refresh" | "update") {
     setSyncing(mode);
     try {
+      const result = mode === "refresh"
+        ? await rescanRegistrySkills()
+        : await updateRegistrySkills();
+      const warning = skillIndexWarningMessage(result.ragIndex, pageT("warnings.ragIndex", "Skill RAG index completed with warnings"));
       if (mode === "refresh") {
-        const result = await rescanRegistrySkills();
-        toast.success(pageT("messages.discovered", "Discovered {{count}} installed skills", { count: formatNumber(result.discoveredCount) }));
+        if (warning) {
+          toast.warning(warning);
+        } else {
+          toast.success(pageT("messages.discovered", "Discovered {{count}} installed skills", { count: formatNumber(result.discoveredCount) }));
+        }
+      } else if (warning) {
+        toast.warning(warning);
       } else {
-        await updateRegistrySkills();
         toast.success(pageT("messages.updated", "Registry skills updated"));
       }
       await loadRegistry();
@@ -240,7 +249,10 @@ export function InstalledSkillsPage() {
       await loadRegistry();
       setSelectedSkill(null);
       setUninstallTarget(null);
-      if (result.removedBindingsCount > 0) {
+      const warning = skillIndexWarningMessage(result.ragIndex, pageT("warnings.ragIndex", "Skill RAG index completed with warnings"));
+      if (warning) {
+        toast.warning(warning);
+      } else if (result.removedBindingsCount > 0) {
         toast.success(
           pageT("messages.uninstalledRemoved", "{{name}} uninstalled and removed from {{count}} workspace binding{{suffix}}", {
             name: skill.skillName,

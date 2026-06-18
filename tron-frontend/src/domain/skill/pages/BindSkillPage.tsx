@@ -27,6 +27,7 @@ import {
   fetchRegistrySkills,
 } from "@/domain/skill/api";
 import type { RegistrySkillRecord } from "@/domain/skill/model";
+import { skillIndexWarningMessage } from "@/domain/skill/utils/ragIndexWarning";
 
 function truncateDescription(value?: string | null, maxLength = 140) {
   if (!value) {
@@ -230,10 +231,15 @@ export function BindSkillPage() {
     setBinding(true);
     try {
       const failures: string[] = [];
+      const warnings: string[] = [];
 
       for (const candidate of selectedCandidates) {
         try {
-          await bindWorkspaceSkill(activeWorkspaceCode, candidate.skillName, true);
+          const result = await bindWorkspaceSkill(activeWorkspaceCode, candidate.skillName, true);
+          const warning = skillIndexWarningMessage(result.ragIndex);
+          if (warning) {
+            warnings.push(`${candidate.skillName}: ${warning}`);
+          }
         } catch (error) {
           const message =
             error instanceof Error ? error.message : "Skill install failed";
@@ -243,7 +249,11 @@ export function BindSkillPage() {
 
       const boundCount = selectedCandidates.length - failures.length;
       if (!failures.length) {
-        toast.success(`${boundCount} skill${boundCount > 1 ? "s" : ""} installed in ${activeWorkspaceCode}`);
+        if (warnings.length) {
+          toast.warning(warnings[0]);
+        } else {
+          toast.success(`${boundCount} skill${boundCount > 1 ? "s" : ""} installed in ${activeWorkspaceCode}`);
+        }
         navigate("/skills");
         return;
       }

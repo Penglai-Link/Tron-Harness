@@ -14,11 +14,11 @@ use crate::{
         skill::{
             PreparedWorkspaceSkill, PreparedWorkspaceSkills, RegistrySkill, RegistrySkillDetail,
             RegistrySkillFile, RegistrySkillListItem, RegistrySkillListQuery,
-            SkillBindingMutationResult, SkillError, SkillManagedBy, SkillRegistryMutationResult,
-            SkillRegistryState, SkillRegistrySyncResult, SkillRegistryUninstallResult,
-            SkillSearchCandidate, SkillSearchMode, SkillSourceType, SkillUpdateStatus,
-            SkillWorkspaceSourceKind, WorkspaceSkillBinding, WorkspaceSkillDetail,
-            WorkspaceSkillListItem, WorkspaceSkillListQuery,
+            SkillBindingMutationResult, SkillError, SkillManagedBy, SkillRagIndexRecord,
+            SkillRegistryMutationResult, SkillRegistryState, SkillRegistrySyncResult,
+            SkillRegistryUninstallResult, SkillSearchCandidate, SkillSearchMode, SkillSourceType,
+            SkillUpdateStatus, SkillWorkspaceSourceKind, WorkspaceSkillBinding,
+            WorkspaceSkillDetail, WorkspaceSkillListItem, WorkspaceSkillListQuery,
         },
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceStatus},
     },
@@ -30,6 +30,7 @@ const DEFAULT_TIMESTAMP: &str = "2026-05-19T00:00:00Z";
 
 mod lock_file;
 mod parser;
+mod rag_index;
 mod registry_files;
 mod registry_paths;
 mod registry_sync;
@@ -40,6 +41,7 @@ mod workspace_bindings;
 mod workspace_projection;
 
 use self::{lock_file::*, parser::*, registry_files::*, workspace_projection::*};
+pub use rag_index::SkillRagIndexService;
 
 #[derive(Debug, Clone, Default)]
 pub struct InstallSkillCommand {
@@ -67,6 +69,16 @@ pub trait SkillRegistryRepository: Send {
         skill_name: &str,
     ) -> Result<bool, SkillError>;
     fn delete_bindings_for_skill(&mut self, skill_name: &str) -> Result<(), SkillError>;
+    fn get_rag_index_state(
+        &mut self,
+        workspace_code: &str,
+        skill_name: &str,
+    ) -> Result<Option<SkillRagIndexRecord>, SkillError>;
+    fn list_rag_index_states(
+        &mut self,
+        workspace_code: Option<&str>,
+    ) -> Result<Vec<SkillRagIndexRecord>, SkillError>;
+    fn upsert_rag_index_state(&mut self, state: &SkillRagIndexRecord) -> Result<(), SkillError>;
 }
 
 #[derive(Clone)]

@@ -41,6 +41,7 @@ pub(super) fn matches_workspace_skill_search(skill_name: &str, search: Option<&s
 pub(super) fn build_workspace_skill_list_item(
     skill: Option<&RegistrySkill>,
     resolved: &ResolvedSkillBinding,
+    rag_index: Option<&SkillRagIndexRecord>,
 ) -> WorkspaceSkillListItem {
     WorkspaceSkillListItem {
         skill_name: resolved.binding.skill_name.clone(),
@@ -72,6 +73,7 @@ pub(super) fn build_workspace_skill_list_item(
         } else {
             SkillRegistryState::Deleted
         },
+        rag_index: rag_index.map(SkillRagIndexRecord::summary),
     }
 }
 
@@ -80,6 +82,7 @@ pub(super) fn build_workspace_skill_detail(
     resolved: &ResolvedSkillBinding,
     skill_markdown: Option<String>,
     files: Vec<RegistrySkillFile>,
+    rag_index: Option<&SkillRagIndexRecord>,
 ) -> WorkspaceSkillDetail {
     WorkspaceSkillDetail {
         skill_name: resolved.binding.skill_name.clone(),
@@ -113,6 +116,7 @@ pub(super) fn build_workspace_skill_detail(
         } else {
             SkillRegistryState::Deleted
         },
+        rag_index: rag_index.map(SkillRagIndexRecord::summary),
     }
 }
 

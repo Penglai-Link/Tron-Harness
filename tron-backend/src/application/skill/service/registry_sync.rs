@@ -103,6 +103,7 @@ impl SkillRegistryService {
             removed_count,
             checked,
             updated,
+            rag_index: None,
         })
     }
 }

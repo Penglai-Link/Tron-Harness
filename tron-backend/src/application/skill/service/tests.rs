@@ -12,7 +12,7 @@ use crate::{
         auth::{AuthError, OAuth2IdentityLink, RefreshSession},
         role::{Role, RoleError},
         skill::{
-            RegistrySkill, SkillManagedBy, SkillSourceType, SkillUpdateStatus,
+            RegistrySkill, SkillManagedBy, SkillRagIndexRecord, SkillSourceType, SkillUpdateStatus,
             WorkspaceSkillBinding,
         },
         user::{ListUsersQuery, PagedUsers, User, UserError, UserStatistics},
@@ -30,6 +30,7 @@ use super::{
 struct TestSkillRegistryRepository {
     registry_skills: BTreeMap<String, RegistrySkill>,
     workspace_bindings: Vec<WorkspaceSkillBinding>,
+    rag_index_states: BTreeMap<(String, String), SkillRagIndexRecord>,
 }
 
 impl SkillRegistryRepository for TestSkillRegistryRepository {
@@ -100,6 +101,40 @@ impl SkillRegistryRepository for TestSkillRegistryRepository {
     ) -> Result<(), crate::domain::skill::SkillError> {
         self.workspace_bindings
             .retain(|binding| binding.skill_name != skill_name);
+        Ok(())
+    }
+
+    fn get_rag_index_state(
+        &mut self,
+        workspace_code: &str,
+        skill_name: &str,
+    ) -> Result<Option<SkillRagIndexRecord>, crate::domain::skill::SkillError> {
+        Ok(self
+            .rag_index_states
+            .get(&(workspace_code.to_string(), skill_name.to_string()))
+            .cloned())
+    }
+
+    fn list_rag_index_states(
+        &mut self,
+        workspace_code: Option<&str>,
+    ) -> Result<Vec<SkillRagIndexRecord>, crate::domain::skill::SkillError> {
+        Ok(self
+            .rag_index_states
+            .values()
+            .filter(|state| workspace_code.is_none_or(|code| state.workspace_code == code))
+            .cloned()
+            .collect())
+    }
+
+    fn upsert_rag_index_state(
+        &mut self,
+        state: &SkillRagIndexRecord,
+    ) -> Result<(), crate::domain::skill::SkillError> {
+        self.rag_index_states.insert(
+            (state.workspace_code.clone(), state.skill_name.clone()),
+            state.clone(),
+        );
         Ok(())
     }
 }
@@ -485,6 +520,7 @@ fn sync_registry_keeps_workspace_bindings_when_registry_skill_disappears() {
             created_at: DEFAULT_TIMESTAMP.into(),
             updated_at: DEFAULT_TIMESTAMP.into(),
         }],
+        rag_index_states: BTreeMap::new(),
     };
 
     let service =

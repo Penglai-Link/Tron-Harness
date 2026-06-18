@@ -6,6 +6,7 @@ mod ingest;
 mod ingest_artifact;
 mod ingest_payload;
 mod ingest_profile;
+mod lifecycle;
 mod management;
 mod pipeline;
 mod retry;
@@ -37,6 +38,7 @@ pub use ingest::{
 pub use ingest_profile::{
     CompiledRagIngestProfile, CompiledRagIngestStage, compile_ingest_profile,
 };
+pub use lifecycle::{RagDeactivateSourceCommand, RagSourceLifecycleRepository};
 pub use management::*;
 pub use pipeline::{
     CompiledRagPipeline, CompiledRagPipelineNode, RagPipelineCatalogView, RagPipelineEdgeInput,

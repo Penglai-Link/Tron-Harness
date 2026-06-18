@@ -34,3 +34,21 @@ CREATE INDEX IF NOT EXISTS idx_workspace_skill_bindings_workspace
 
 CREATE INDEX IF NOT EXISTS idx_workspace_skill_bindings_skill
     ON workspace_skill_bindings(skill_name);
+
+CREATE TABLE IF NOT EXISTS skill_rag_index_states (
+    workspace_code TEXT NOT NULL,
+    skill_name TEXT NOT NULL,
+    source_version TEXT NOT NULL,
+    desired_enabled INTEGER NOT NULL,
+    vector_status TEXT NOT NULL CHECK (vector_status IN ('PENDING', 'INDEXED', 'DISABLED', 'WARNING', 'FAILED', 'STALE')),
+    graph_status TEXT NOT NULL CHECK (graph_status IN ('PENDING', 'INDEXED', 'DISABLED', 'WARNING', 'FAILED', 'STALE')),
+    content_hash TEXT NULL,
+    structure_hash TEXT NULL,
+    last_indexed_at INTEGER NULL,
+    last_error TEXT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (workspace_code, skill_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_skill_rag_index_states_status
+    ON skill_rag_index_states(workspace_code, vector_status, graph_status);

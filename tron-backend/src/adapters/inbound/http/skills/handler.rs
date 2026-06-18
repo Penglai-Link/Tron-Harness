@@ -6,8 +6,11 @@ use axum::{
 };
 
 use crate::{
-    application::skill::SkillRegistryService,
-    domain::skill::{RegistrySkillListQuery, SkillSearchMode},
+    app::AppRagService,
+    application::skill::{SkillRagIndexService, SkillRegistryService},
+    domain::skill::{
+        RegistrySkillListQuery, SkillRagIndexBatchSummary, SkillRagIndexStatus, SkillSearchMode,
+    },
     response::ApiResponse,
 };
 
@@ -18,6 +21,14 @@ use super::{
         SearchSkillsRequest, WorkspaceSkillBindingRequest, WorkspaceSkillsQuery,
     },
 };
+
+type AppSkillRagIndexService = SkillRagIndexService<
+    std::sync::Arc<
+        std::sync::Mutex<crate::adapters::outbound::persistence::GraphBackedRagRepository>,
+    >,
+    crate::application::rag::DefaultRagStrategyRegistry,
+    crate::application::rag::DefaultRagRuntime,
+>;
 
 pub async fn search_skills(
     State(skills): State<SkillRegistryService>,
@@ -76,28 +87,49 @@ pub async fn get_workspace_skill(
 
 pub async fn install_registry_skill(
     State(skills): State<SkillRegistryService>,
+    State(rag): State<AppRagService>,
     Json(request): Json<InstallRegistrySkillRequest>,
 ) -> Response {
     match skills.install_skill(request.into()) {
-        Ok(record) => (StatusCode::CREATED, Json(ApiResponse::success(record))).into_response(),
+        Ok(mut record) => {
+            if let Some(workspace_code) = record.workspace_code.clone() {
+                let indexer = SkillRagIndexService::new(skills, rag);
+                record.rag_index =
+                    index_workspace_skill_summary(&indexer, &workspace_code, &record.skill_name)
+                        .await;
+            }
+            (StatusCode::CREATED, Json(ApiResponse::success(record))).into_response()
+        }
         Err(error) => skill_error_response(error),
     }
 }
 
 pub async fn uninstall_registry_skill(
     State(skills): State<SkillRegistryService>,
+    State(rag): State<AppRagService>,
     Path(skill_name): Path<String>,
     Query(query): Query<RegistrySkillUninstallQuery>,
 ) -> Response {
     match skills.uninstall_skill(&skill_name, query.remove_bindings.unwrap_or(false)) {
-        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Ok(mut record) => {
+            let indexer = SkillRagIndexService::new(skills, rag);
+            record.rag_index = Some(index_all_workspaces_summary(&indexer).await);
+            Json(ApiResponse::success(record)).into_response()
+        }
         Err(error) => skill_error_response(error),
     }
 }
 
-pub async fn rescan_registry_skills(State(skills): State<SkillRegistryService>) -> Response {
+pub async fn rescan_registry_skills(
+    State(skills): State<SkillRegistryService>,
+    State(rag): State<AppRagService>,
+) -> Response {
     match skills.rescan_registry() {
-        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Ok(mut record) => {
+            let indexer = SkillRagIndexService::new(skills, rag);
+            record.rag_index = Some(index_all_workspaces_summary(&indexer).await);
+            Json(ApiResponse::success(record)).into_response()
+        }
         Err(error) => skill_error_response(error),
     }
 }
@@ -111,23 +143,36 @@ pub async fn check_registry_skill_updates(State(skills): State<SkillRegistryServ
 
 pub async fn refresh_workspace_skills(
     State(skills): State<SkillRegistryService>,
+    State(rag): State<AppRagService>,
     Path(workspace_code): Path<String>,
 ) -> Response {
     match skills.refresh_workspace_skills(&workspace_code) {
-        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Ok(mut record) => {
+            let indexer = SkillRagIndexService::new(skills, rag);
+            record.rag_index = Some(index_workspace_summary(&indexer, &workspace_code).await);
+            Json(ApiResponse::success(record)).into_response()
+        }
         Err(error) => skill_error_response(error),
     }
 }
 
-pub async fn update_registry_skills(State(skills): State<SkillRegistryService>) -> Response {
+pub async fn update_registry_skills(
+    State(skills): State<SkillRegistryService>,
+    State(rag): State<AppRagService>,
+) -> Response {
     match skills.update_registry() {
-        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Ok(mut record) => {
+            let indexer = SkillRagIndexService::new(skills, rag);
+            record.rag_index = Some(index_all_workspaces_summary(&indexer).await);
+            Json(ApiResponse::success(record)).into_response()
+        }
         Err(error) => skill_error_response(error),
     }
 }
 
 pub async fn bind_workspace_skill(
     State(skills): State<SkillRegistryService>,
+    State(rag): State<AppRagService>,
     Path(workspace_code): Path<String>,
     Json(request): Json<WorkspaceSkillBindingRequest>,
 ) -> Response {
@@ -136,17 +181,79 @@ pub async fn bind_workspace_skill(
         &request.skill_name,
         request.enabled.unwrap_or(true),
     ) {
-        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Ok(mut record) => {
+            let indexer = SkillRagIndexService::new(skills, rag);
+            record.rag_index =
+                index_workspace_skill_summary(&indexer, &workspace_code, &record.skill_name).await;
+            Json(ApiResponse::success(record)).into_response()
+        }
         Err(error) => skill_error_response(error),
     }
 }
 
 pub async fn unbind_workspace_skill(
     State(skills): State<SkillRegistryService>,
+    State(rag): State<AppRagService>,
     Path((workspace_code, skill_name)): Path<(String, String)>,
 ) -> Response {
     match skills.unbind_workspace_skill(&workspace_code, &skill_name) {
-        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Ok(mut record) => {
+            let indexer = SkillRagIndexService::new(skills, rag);
+            record.rag_index =
+                index_workspace_skill_summary(&indexer, &workspace_code, &record.skill_name).await;
+            Json(ApiResponse::success(record)).into_response()
+        }
         Err(error) => skill_error_response(error),
+    }
+}
+
+async fn index_workspace_skill_summary(
+    indexer: &AppSkillRagIndexService,
+    workspace_code: &str,
+    skill_name: &str,
+) -> Option<crate::domain::skill::SkillRagIndexSummary> {
+    match indexer.index_workspace(workspace_code).await {
+        Ok(_) => indexer
+            .state_summary(workspace_code, skill_name)
+            .ok()
+            .flatten(),
+        Err(error) => Some(crate::domain::skill::SkillRagIndexSummary {
+            desired_enabled: true,
+            source_version: "v1".into(),
+            vector_status: SkillRagIndexStatus::Failed,
+            graph_status: SkillRagIndexStatus::Failed,
+            content_hash: None,
+            structure_hash: None,
+            last_indexed_at: None,
+            last_error: Some(error.to_string()),
+            warnings: vec![error.to_string()],
+        }),
+    }
+}
+
+async fn index_workspace_summary(
+    indexer: &AppSkillRagIndexService,
+    workspace_code: &str,
+) -> SkillRagIndexBatchSummary {
+    indexer
+        .index_workspace(workspace_code)
+        .await
+        .unwrap_or_else(index_error_batch)
+}
+
+async fn index_all_workspaces_summary(
+    indexer: &AppSkillRagIndexService,
+) -> SkillRagIndexBatchSummary {
+    indexer
+        .index_all_active_workspaces()
+        .await
+        .unwrap_or_else(index_error_batch)
+}
+
+fn index_error_batch(error: crate::domain::skill::SkillError) -> SkillRagIndexBatchSummary {
+    SkillRagIndexBatchSummary {
+        failed_count: 1,
+        warnings: vec![error.to_string()],
+        ..SkillRagIndexBatchSummary::default()
     }
 }
