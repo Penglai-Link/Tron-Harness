@@ -4,18 +4,21 @@
   const CONFIGURED_PAGE_ID = __TRON_PAGE_ID__;
   const ENABLED_DEFAULT = __TRON_INJECTION_ENABLED__;
   const AUTO_PAGE_ID = "__TRON_AUTO_PAGE_ID__";
-  const TEST_STYLE_ID = "tron-injected-test-background";
-  const ROOT_SELECTOR = "[data-tron-injected='1']";
+  const UI_ATTR = "data-tron-inspector-ui";
+  const MAX_TEXT_LENGTH = 160;
 
-  if (!window || !window.document) {
+  if (!window || !window.document || window.__tronDesktopInspectorLoaded) {
     return;
   }
 
-  const clampText = (value, maxLength = 96) => {
+  window.__tronDesktopInspectorLoaded = true;
+
+  const clampText = (value, maxLength = 160) => {
     if (typeof value !== "string") {
       return "";
     }
-    return value.trim().slice(0, maxLength);
+
+    return value.replace(/\s+/g, " ").trim().slice(0, maxLength);
   };
 
   const resolvePageId = () => {
@@ -37,8 +40,13 @@
     return `frame-${Math.floor(Math.random() * 1e12)}`;
   })();
 
-  const safePost = (eventType, payload) => {
-    if (!injectionEnabled) {
+  let injectionEnabled = ENABLED_DEFAULT === true || ENABLED_DEFAULT === "true";
+  let selectedElement = null;
+  let hoverOverlay = null;
+  let inputPanel = null;
+
+  const safePost = (eventType, payload, options = {}) => {
+    if (!injectionEnabled && !options.force) {
       return;
     }
 
@@ -66,135 +74,982 @@
     return window.location.origin === APP_ORIGIN;
   };
 
-  const installTestStyle = () => {
-    if (!injectionEnabled) {
-      return;
+  const isInspectorUi = (element) => Boolean(
+    element
+      && element.closest
+      && element.closest("[" + UI_ATTR + "]"),
+  );
+
+  const escapeCssIdentifier = (value) => {
+    if (window.CSS && typeof window.CSS.escape === "function") {
+      return window.CSS.escape(value);
     }
 
-    const target = document.head || document.documentElement;
-    if (!target || document.getElementById(TEST_STYLE_ID)) {
-      return;
-    }
-
-    const style = document.createElement("style");
-    style.id = TEST_STYLE_ID;
-    style.textContent = "html, body { background: #fff35a !important; }";
-    target.appendChild(style);
+    return String(value).replace(/[^A-Za-z0-9_-]/g, "\\$&");
   };
 
-  const removeTestStyle = () => {
-    document.getElementById(TEST_STYLE_ID)?.remove();
-  };
-
-  const removeShadowRoot = () => {
-    document.querySelectorAll(ROOT_SELECTOR).forEach((node) => node.remove());
-  };
-
-  const installShadowRoot = () => {
-    if (!injectionEnabled) {
-      return;
+  const createSelector = (element) => {
+    if (!element || element.nodeType !== Node.ELEMENT_NODE) {
+      return "";
     }
 
-    if (document.querySelector(ROOT_SELECTOR)) {
-      return;
+    if (element.id) {
+      return "#" + escapeCssIdentifier(element.id);
     }
 
-    const root = document.createElement("div");
-    root.dataset.tronInjected = "1";
-    const shadow = root.attachShadow({ mode: "open" });
+    const parts = [];
+    let current = element;
 
-    const style = document.createElement("style");
-    style.textContent = `
-      :host {
-        all: initial;
+    while (current && current.nodeType === Node.ELEMENT_NODE && parts.length < 5) {
+      let part = current.tagName.toLowerCase();
+
+      if (current.classList && current.classList.length) {
+        part += "." + Array.from(current.classList)
+          .slice(0, 2)
+          .map((className) => escapeCssIdentifier(className))
+          .join(".");
       }
-      .tron-badge {
-        position: fixed;
-        top: 12px;
-        left: 12px;
-        z-index: 2147483647;
-        pointer-events: none;
-        border-radius: 9999px;
-        padding: 2px 10px;
-        background: rgba(14, 165, 233, 0.18);
-        color: #0ea5e9;
-        font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        font-size: 12px;
-        border: 1px solid rgba(14, 165, 233, 0.32);
+
+      const siblings = current.parentElement
+        ? Array.from(current.parentElement.children).filter(
+          (child) => child.tagName === current.tagName,
+        )
+        : [];
+
+      if (siblings.length > 1) {
+        part += ":nth-of-type(" + (siblings.indexOf(current) + 1) + ")";
       }
-    `;
 
-    const badge = document.createElement("div");
-    badge.className = "tron-badge";
-    badge.textContent = "Tron Injected";
+      parts.unshift(part);
+      current = current.parentElement;
+    }
 
-    shadow.append(style, badge);
-    document.documentElement.appendChild(root);
+    return parts.join(" > ");
   };
 
-  const applyInjectionUi = () => {
-    if (!injectionEnabled) {
-      removeTestStyle();
-      removeShadowRoot();
+  const summarizeText = (element) => clampText(
+    element && (element.innerText || element.textContent || ""),
+    MAX_TEXT_LENGTH,
+  );
+
+  const collectAttributes = (element) => {
+    const attributes = {};
+
+    for (const attr of Array.from(element.attributes || []).slice(0, 16)) {
+      attributes[attr.name] = clampText(attr.value, 240);
+    }
+
+    return attributes;
+  };
+
+  const copyComputedStyles = (source, target) => {
+    if (!source || !target || source.nodeType !== Node.ELEMENT_NODE || target.nodeType !== Node.ELEMENT_NODE) {
       return;
     }
 
-    installTestStyle();
-    if (document.body) {
-      installShadowRoot();
-    } else {
-      window.addEventListener("DOMContentLoaded", installShadowRoot, { once: true });
+    const style = window.getComputedStyle(source);
+    let inlineStyle = "";
+    for (const property of Array.from(style)) {
+      inlineStyle += property + ":" + style.getPropertyValue(property) + ";";
     }
-  };
+    inlineStyle += "box-sizing:" + style.boxSizing + ";";
+    inlineStyle += "margin:0;";
+    target.setAttribute("style", inlineStyle);
 
-  const sanitizeTarget = (target) => {
-    if (!target || typeof target !== "object") {
-      return null;
-    }
-
-    const tagName = clampText(target.tagName, 32).toLowerCase();
-    const id = clampText(target.id, 64);
-    const name = clampText(target.getAttribute ? target.getAttribute("name") : "", 64);
-    const className = clampText(typeof target.className === "string" ? target.className : "", 80);
-
-    return { tagName, id, name, className };
-  };
-
-  const handleEvent = (eventType, event) => {
-    safePost(eventType, {
-      tag: sanitizeTarget(event?.target),
-      x: Number.isFinite(event?.clientX) ? event.clientX : undefined,
-      y: Number.isFinite(event?.clientY) ? event.clientY : undefined,
-      value: clampText(
-        event && (event.target?.value ?? event.target?.textContent ?? ""),
-        160,
-      ),
-      key: clampText(event?.key, 40),
+    const sourceChildren = Array.from(source.children || []);
+    const targetChildren = Array.from(target.children || []);
+    sourceChildren.forEach((child, index) => {
+      copyComputedStyles(child, targetChildren[index]);
     });
   };
 
-  let injectionEnabled = ENABLED_DEFAULT === true || ENABLED_DEFAULT === "true";
+  const serializeNodePreview = (element, width, height) => {
+    const clone = element.cloneNode(true);
+    copyComputedStyles(element, clone);
+    clone.removeAttribute(UI_ATTR);
+    clone.querySelectorAll?.("[" + UI_ATTR + "]").forEach((node) => node.remove());
+
+    const wrapper = document.createElement("div");
+    wrapper.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+    Object.assign(wrapper.style, {
+      width: width + "px",
+      height: height + "px",
+      overflow: "hidden",
+      display: "block",
+      boxSizing: "border-box",
+      background: "transparent",
+    });
+    wrapper.appendChild(clone);
+
+    return new XMLSerializer().serializeToString(wrapper);
+  };
+
+  const loadImage = (source) => new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("annotation image load failed"));
+    image.src = source;
+  });
+
+  const drawWrappedFallbackText = (context, text, x, y, maxWidth, lineHeight) => {
+    const words = String(text || "").split(/\s+/).filter(Boolean);
+    let line = "";
+    let cursorY = y;
+
+    for (const word of words) {
+      const candidate = line ? line + " " + word : word;
+      if (context.measureText(candidate).width <= maxWidth || !line) {
+        line = candidate;
+        continue;
+      }
+
+      context.fillText(line, x, cursorY, maxWidth);
+      line = word;
+      cursorY += lineHeight;
+    }
+
+    if (line) {
+      context.fillText(line, x, cursorY, maxWidth);
+    }
+  };
+
+  const createAnnotationImage = async (element, markerNumber) => {
+    const rect = element.getBoundingClientRect();
+    const computedStyle = window.getComputedStyle(element);
+    const sourceText = summarizeText(element) || element.tagName.toLowerCase();
+    const targetWidth = Math.max(1, Math.round(rect.width || element.scrollWidth || 120));
+    const targetHeight = Math.max(1, Math.round(rect.height || element.scrollHeight || 40));
+    const imageWidth = Math.max(220, Math.round(targetWidth + 96));
+    const imageHeight = Math.max(110, Math.round(targetHeight + 88));
+    const targetX = 46;
+    const targetY = 42;
+    const markerRadius = 18;
+    const markerX = targetX + Math.min(targetWidth - 10, 28);
+    const markerY = targetY + 2;
+    const fontSize = Math.max(14, Math.min(24, Number.parseFloat(computedStyle.fontSize) || 16));
+    const textColor = computedStyle.color || "#111827";
+    const scale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(imageWidth * scale);
+    canvas.height = Math.round(imageHeight * scale);
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      return {
+        dataUrl: "",
+        height: imageHeight,
+        markerNumber,
+        mimeType: "image/png",
+        width: imageWidth,
+      };
+    }
+
+    context.scale(scale, scale);
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, imageWidth, imageHeight);
+    try {
+      const previewHtml = serializeNodePreview(element, targetWidth, targetHeight);
+      const previewSvg = [
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${targetWidth}" height="${targetHeight}">`,
+        `<foreignObject width="100%" height="100%">`,
+        previewHtml,
+        `</foreignObject>`,
+        `</svg>`,
+      ].join("");
+      const previewUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(previewSvg);
+      const previewImage = await loadImage(previewUrl);
+      context.drawImage(previewImage, targetX, targetY, targetWidth, targetHeight);
+    } catch (_error) {
+      context.fillStyle = "#ffffff";
+      context.fillRect(targetX, targetY, targetWidth, targetHeight);
+      context.fillStyle = textColor;
+      context.font = `${fontSize}px ${computedStyle.fontFamily || "system-ui, sans-serif"}`;
+      context.textBaseline = "top";
+      drawWrappedFallbackText(
+        context,
+        sourceText,
+        targetX + 8,
+        targetY + 8,
+        Math.max(40, targetWidth - 16),
+        Math.max(fontSize + 4, Number.parseFloat(computedStyle.lineHeight) || fontSize * 1.35),
+      );
+    }
+    context.strokeStyle = "#2563eb";
+    context.lineWidth = 3;
+    context.strokeRect(targetX + 1.5, targetY + 1.5, targetWidth - 3, targetHeight - 3);
+
+    context.beginPath();
+    context.fillStyle = "#1677ff";
+    context.arc(markerX, markerY, markerRadius, 0, Math.PI * 2);
+    context.fill();
+    context.fillStyle = "#ffffff";
+    context.font = "700 20px system-ui, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(String(markerNumber), markerX, markerY + 1);
+
+    return {
+      dataUrl: canvas.toDataURL("image/png"),
+      height: imageHeight,
+      markerNumber,
+      mimeType: "image/png",
+      width: imageWidth,
+    };
+  };
+
+  const getElementPayload = (element, remark, basicInfo = {}) => {
+    const rect = element.getBoundingClientRect();
+    const markerNumber = 1;
+
+    return {
+      url: window.location.href,
+      title: document.title,
+      selector: createSelector(element),
+      tagName: element.tagName.toLowerCase(),
+      text: summarizeText(element),
+      remark,
+      rect: {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      },
+      attributes: collectAttributes(element),
+      basicInfo,
+      markerNumber,
+    };
+  };
+
+  const ensureOverlay = () => {
+    if (hoverOverlay) {
+      return hoverOverlay;
+    }
+
+    hoverOverlay = document.createElement("div");
+    hoverOverlay.setAttribute(UI_ATTR, "true");
+    Object.assign(hoverOverlay.style, {
+      position: "fixed",
+      pointerEvents: "none",
+      border: "2px solid #2563eb",
+      background: "rgba(37, 99, 235, 0.12)",
+      borderRadius: "0px",
+      boxSizing: "border-box",
+      display: "none",
+      zIndex: "2147483646",
+    });
+    document.documentElement.appendChild(hoverOverlay);
+    return hoverOverlay;
+  };
+
+  const updateOverlay = (element) => {
+    const rect = element.getBoundingClientRect();
+    const overlay = ensureOverlay();
+
+    Object.assign(overlay.style, {
+      display: "block",
+      height: rect.height + "px",
+      left: rect.left + "px",
+      top: rect.top + "px",
+      width: rect.width + "px",
+    });
+  };
+
+  const removeOverlay = () => {
+    if (hoverOverlay) {
+      hoverOverlay.remove();
+      hoverOverlay = null;
+    }
+  };
+
+  const removeInputPanel = () => {
+    if (inputPanel) {
+      inputPanel.remove();
+      inputPanel = null;
+    }
+  };
+
+  const clearSelection = () => {
+    selectedElement = null;
+    removeInputPanel();
+    removeOverlay();
+  };
+
+  const setImportantStyles = (node, styles) => {
+    for (const [property, value] of Object.entries(styles)) {
+      node.style.setProperty(property, value, "important");
+    }
+  };
+
+  const showInputPanel = (element) => {
+    removeInputPanel();
+
+    const rect = element.getBoundingClientRect();
+    const computedStyle = window.getComputedStyle(element);
+    const originalInlineStyle = {
+      backgroundColor: element.style.backgroundColor,
+      color: element.style.color,
+      fontFamily: element.style.fontFamily,
+      opacity: element.style.opacity,
+    };
+    const panel = document.createElement("div");
+    panel.setAttribute(UI_ATTR, "true");
+    const panelWidth = Math.min(345, Math.max(300, window.innerWidth - 24));
+    const viewportPadding = 12;
+    const panelGap = 12;
+
+    const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
+
+    const applyPanelPosition = (expanded) => {
+      const currentRect = element.getBoundingClientRect();
+      const panelHeight = expanded
+        ? Math.min(430, Math.max(panel.offsetHeight || 0, 330))
+        : Math.min(58, Math.max(panel.offsetHeight || 0, 46));
+      const verticalLeft = clamp(
+        currentRect.left,
+        viewportPadding,
+        window.innerWidth - panelWidth - viewportPadding,
+      );
+      const belowTop = currentRect.bottom + panelGap;
+      const aboveTop = currentRect.top - panelGap - panelHeight;
+
+      if (belowTop + panelHeight <= window.innerHeight - viewportPadding) {
+        panel.style.left = verticalLeft + "px";
+        panel.style.top = belowTop + "px";
+        return;
+      }
+
+      if (aboveTop >= viewportPadding) {
+        panel.style.left = verticalLeft + "px";
+        panel.style.top = aboveTop + "px";
+        return;
+      }
+
+      const rightLeft = currentRect.right + panelGap;
+      const sideTop = clamp(
+        currentRect.top,
+        viewportPadding,
+        window.innerHeight - panelHeight - viewportPadding,
+      );
+      if (rightLeft + panelWidth <= window.innerWidth - viewportPadding) {
+        panel.style.left = rightLeft + "px";
+        panel.style.top = sideTop + "px";
+        return;
+      }
+
+      const leftLeft = currentRect.left - panelGap - panelWidth;
+      if (leftLeft >= viewportPadding) {
+        panel.style.left = leftLeft + "px";
+        panel.style.top = sideTop + "px";
+        return;
+      }
+
+      panel.style.left = verticalLeft + "px";
+      panel.style.top = clamp(
+        belowTop,
+        viewportPadding,
+        window.innerHeight - panelHeight - viewportPadding,
+      ) + "px";
+    };
+
+    Object.assign(panel.style, {
+      position: "fixed",
+      left: "0",
+      top: "0",
+      width: panelWidth + "px",
+      display: "block",
+      overflow: "hidden",
+      background: "#ffffff",
+      border: "1px solid #e5e7eb",
+      borderRadius: "999px",
+      boxShadow: "0 10px 32px #d1d5db",
+      boxSizing: "border-box",
+      color: "#111827",
+      fontFamily: "ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      zIndex: "2147483647",
+    });
+    setImportantStyles(panel, {
+      "background": "#ffffff",
+      "opacity": "1",
+      "mix-blend-mode": "normal",
+      "isolation": "isolate",
+      "backdrop-filter": "none",
+      "-webkit-backdrop-filter": "none",
+    });
+
+    const topRow = document.createElement("div");
+    topRow.setAttribute(UI_ATTR, "true");
+    Object.assign(topRow.style, {
+      minHeight: "46px",
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      padding: "6px 8px 6px 12px",
+      boxSizing: "border-box",
+    });
+    setImportantStyles(topRow, {
+      "background": "#ffffff",
+      "opacity": "1",
+      "mix-blend-mode": "normal",
+    });
+
+    const toggleButton = document.createElement("button");
+    toggleButton.setAttribute(UI_ATTR, "true");
+    toggleButton.setAttribute("aria-label", "显示高级设置");
+    toggleButton.type = "button";
+    toggleButton.innerHTML = [
+      '<svg viewBox="0 0 24 24" width="26" height="26" fill="none"',
+      'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">',
+      '<line x1="4" y1="7" x2="14" y2="7"></line>',
+      '<line x1="20" y1="7" x2="18" y2="7"></line>',
+      '<circle cx="16" cy="7" r="2"></circle>',
+      '<line x1="4" y1="17" x2="10" y2="17"></line>',
+      '<line x1="20" y1="17" x2="14" y2="17"></line>',
+      '<circle cx="12" cy="17" r="2"></circle>',
+      '</svg>',
+    ].join("");
+    Object.assign(toggleButton.style, {
+      width: "30px",
+      height: "30px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      border: "0",
+      borderRadius: "9px",
+      background: "transparent",
+      color: "#8b8b8b",
+      cursor: "pointer",
+      flex: "0 0 auto",
+      padding: "0",
+    });
+    setImportantStyles(toggleButton, {
+      "opacity": "1",
+    });
+
+    const input = document.createElement("input");
+    input.setAttribute(UI_ATTR, "true");
+    input.placeholder = "添加评论...";
+    input.type = "text";
+    Object.assign(input.style, {
+      minWidth: "0",
+      flex: "1 1 auto",
+      height: "34px",
+      border: "0",
+      borderLeft: "1px solid #d1d5db",
+      borderRadius: "0",
+      padding: "0 10px",
+      outline: "none",
+      color: "#111827",
+      background: "#fff",
+      fontSize: "15px",
+      lineHeight: "34px",
+      fontFamily: "inherit",
+      boxSizing: "border-box",
+      caretColor: "#2563eb",
+    });
+    setImportantStyles(input, {
+      "background": "#ffffff",
+      "opacity": "1",
+      "mix-blend-mode": "normal",
+    });
+
+    const confirmButton = document.createElement("button");
+    confirmButton.setAttribute(UI_ATTR, "true");
+    confirmButton.setAttribute("aria-label", "确认评论");
+    confirmButton.innerHTML = [
+      '<svg viewBox="0 0 24 24" width="22" height="22" fill="none"',
+      'stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">',
+      '<polyline points="20 6 9 17 4 12"></polyline>',
+      '</svg>',
+    ].join("");
+    Object.assign(confirmButton.style, {
+      width: "34px",
+      height: "34px",
+      flex: "0 0 auto",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "0",
+      border: "0",
+      borderRadius: "50%",
+      background: "#9b9b9b",
+      color: "#ffffff",
+      cursor: "pointer",
+      fontFamily: "inherit",
+      transition: "background 120ms ease, transform 120ms ease",
+    });
+    setImportantStyles(confirmButton, {
+      "background": "#9b9b9b",
+      "opacity": "1",
+      "mix-blend-mode": "normal",
+    });
+
+    confirmButton.addEventListener("pointerenter", () => {
+      confirmButton.style.setProperty("background", "#7f7f7f", "important");
+    });
+    confirmButton.addEventListener("pointerleave", () => {
+      confirmButton.style.setProperty("background", "#9b9b9b", "important");
+    });
+    confirmButton.addEventListener("pointerdown", () => {
+      confirmButton.style.transform = "scale(0.96)";
+    });
+    confirmButton.addEventListener("pointerup", () => {
+      confirmButton.style.transform = "scale(1)";
+    });
+
+    const advancedBody = document.createElement("div");
+    advancedBody.setAttribute(UI_ATTR, "true");
+    Object.assign(advancedBody.style, {
+      display: "none",
+      borderTop: "1px solid #e5e7eb",
+      background: "#ffffff",
+    });
+    setImportantStyles(advancedBody, {
+      "background": "#ffffff",
+      "opacity": "1",
+      "mix-blend-mode": "normal",
+    });
+
+    const elementBar = document.createElement("div");
+    elementBar.setAttribute(UI_ATTR, "true");
+    Object.assign(elementBar.style, {
+      height: "42px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      padding: "0 16px",
+      borderBottom: "1px solid #e5e7eb",
+      background: "#f4f4f5",
+      boxSizing: "border-box",
+      color: "#111827",
+      fontSize: "15px",
+      fontWeight: "600",
+    });
+    setImportantStyles(elementBar, {
+      "background": "#f4f4f5",
+      "opacity": "1",
+      "mix-blend-mode": "normal",
+    });
+
+    const elementTag = document.createElement("div");
+    elementTag.setAttribute(UI_ATTR, "true");
+    elementTag.textContent = element.tagName.toLowerCase();
+
+    const dragDots = document.createElement("div");
+    dragDots.setAttribute(UI_ATTR, "true");
+    dragDots.setAttribute("aria-hidden", "true");
+    dragDots.textContent = "⋮⋮";
+    Object.assign(dragDots.style, {
+      color: "#9ca3af",
+      fontSize: "16px",
+      letterSpacing: "-8px",
+      transform: "rotate(90deg)",
+    });
+
+    elementBar.append(elementTag, dragDots);
+
+    const advancedForm = document.createElement("div");
+    advancedForm.setAttribute(UI_ATTR, "true");
+    Object.assign(advancedForm.style, {
+      display: "grid",
+      gap: "8px",
+      padding: "10px 16px 14px",
+      boxSizing: "border-box",
+    });
+    setImportantStyles(advancedForm, {
+      "background": "#ffffff",
+      "opacity": "1",
+      "mix-blend-mode": "normal",
+    });
+
+    const makeTextInput = (value, options = {}) => {
+      const field = document.createElement("input");
+      field.setAttribute(UI_ATTR, "true");
+      field.type = "text";
+      field.value = value || "";
+      field.placeholder = options.placeholder || "";
+      Object.assign(field.style, {
+        width: "100%",
+        height: "34px",
+        border: "1px solid #d1d5db",
+        borderRadius: "12px",
+        padding: options.compact ? "0 10px" : "0 12px",
+        outline: "none",
+        boxShadow: "inset 0 0 0 1px #f3f4f6",
+        boxSizing: "border-box",
+        color: "#111827",
+        background: "#ffffff",
+        fontFamily: options.mono
+          ? "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace"
+          : "inherit",
+        fontSize: "14px",
+      });
+      setImportantStyles(field, {
+        "background": "#ffffff",
+        "opacity": "1",
+        "mix-blend-mode": "normal",
+      });
+      return field;
+    };
+
+    const makeRow = (label, control) => {
+      const row = document.createElement("label");
+      row.setAttribute(UI_ATTR, "true");
+      Object.assign(row.style, {
+        display: "grid",
+        gridTemplateColumns: "82px 1fr",
+        alignItems: "center",
+        gap: "10px",
+        minHeight: "36px",
+        color: "#676b70",
+        fontSize: "14px",
+        fontWeight: "600",
+      });
+
+      const text = document.createElement("span");
+      text.setAttribute(UI_ATTR, "true");
+      text.textContent = label;
+      row.append(text, control);
+      return row;
+    };
+
+    const makeDivider = () => {
+      const divider = document.createElement("div");
+      divider.setAttribute(UI_ATTR, "true");
+      Object.assign(divider.style, {
+        height: "1px",
+        background: "#e5e7eb",
+      });
+      return divider;
+    };
+
+    const normalizeColorToHex = (value, fallback = "#000000") => {
+      const rawValue = String(value || "").trim();
+      if (!rawValue) {
+        return fallback;
+      }
+
+      const shortHex = rawValue.match(/^#([0-9a-f]{3})$/i);
+      if (shortHex) {
+        return "#" + shortHex[1].split("").map((part) => part + part).join("").toLowerCase();
+      }
+
+      if (/^#[0-9a-f]{6}$/i.test(rawValue)) {
+        return rawValue.toLowerCase();
+      }
+
+      const rgbMatch = rawValue.match(/^rgba?\(([^)]+)\)$/i);
+      if (rgbMatch) {
+        const channels = rgbMatch[1]
+          .split(/[\s,\/]+/)
+          .filter(Boolean)
+          .slice(0, 3)
+          .map((channel) => Math.max(0, Math.min(255, Number.parseFloat(channel))));
+
+        if (channels.length === 3 && channels.every((channel) => Number.isFinite(channel))) {
+          return "#" + channels
+            .map((channel) => Math.round(channel).toString(16).padStart(2, "0"))
+            .join("");
+        }
+      }
+
+      try {
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        if (context) {
+          context.fillStyle = fallback;
+          context.fillStyle = rawValue;
+          return normalizeColorToHex(context.fillStyle, fallback);
+        }
+      } catch (_error) {}
+
+      return fallback;
+    };
+
+    const makeColorControl = (value) => {
+      const wrapper = document.createElement("div");
+      wrapper.setAttribute(UI_ATTR, "true");
+      Object.assign(wrapper.style, {
+        height: "34px",
+        display: "flex",
+        alignItems: "center",
+        gap: "8px",
+        border: "1px solid #d1d5db",
+        borderRadius: "12px",
+        padding: "0 8px",
+        boxShadow: "inset 0 0 0 1px #f3f4f6",
+        boxSizing: "border-box",
+        background: "#ffffff",
+      });
+      setImportantStyles(wrapper, {
+        "background": "#ffffff",
+        "opacity": "1",
+        "mix-blend-mode": "normal",
+      });
+
+      const picker = document.createElement("input");
+      picker.setAttribute(UI_ATTR, "true");
+      picker.type = "color";
+      picker.value = normalizeColorToHex(value);
+      Object.assign(picker.style, {
+        width: "24px",
+        height: "24px",
+        flex: "0 0 auto",
+        border: "0",
+        borderRadius: "8px",
+        padding: "0",
+        background: "#fff",
+        boxSizing: "border-box",
+        cursor: "pointer",
+      });
+      setImportantStyles(picker, {
+        "background": "#ffffff",
+        "opacity": "1",
+      });
+
+      const field = makeTextInput(value, { mono: true, compact: true });
+      Object.assign(field.style, {
+        height: "32px",
+        border: "0",
+        boxShadow: "none",
+        padding: "0",
+        color: "#8b8b8b",
+      });
+      setImportantStyles(field, {
+        "background": "#ffffff",
+        "opacity": "1",
+        "mix-blend-mode": "normal",
+      });
+
+      picker.addEventListener("input", () => {
+        field.value = picker.value;
+      });
+      field.addEventListener("input", () => {
+        picker.value = normalizeColorToHex(field.value, picker.value);
+      });
+
+      wrapper.append(picker, field);
+      return { wrapper, field, picker };
+    };
+
+    const textField = makeTextInput(summarizeText(element), { placeholder: "文本内容" });
+    const textColor = makeColorControl(computedStyle.color);
+    const backgroundColor = makeColorControl(computedStyle.backgroundColor);
+    const opacityField = makeTextInput(computedStyle.opacity || "1", { mono: true });
+    const fontField = makeTextInput(computedStyle.fontFamily || "", { mono: true });
+
+    const applyText = () => {
+      if ("value" in element) {
+        element.value = textField.value;
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+        element.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        element.textContent = textField.value;
+      }
+      updateOverlay(element);
+    };
+
+    const applyStyleValue = (property, value, fallbackValue = "") => {
+      const trimmedValue = value.trim();
+      element.style[property] = trimmedValue || fallbackValue;
+      updateOverlay(element);
+    };
+
+    textField.addEventListener("input", applyText);
+    const applyTextColor = () => {
+      applyStyleValue("color", textColor.field.value, originalInlineStyle.color);
+    };
+    const applyBackgroundColor = () => {
+      applyStyleValue("backgroundColor", backgroundColor.field.value, originalInlineStyle.backgroundColor);
+    };
+
+    textColor.field.addEventListener("input", applyTextColor);
+    textColor.picker.addEventListener("input", applyTextColor);
+    backgroundColor.field.addEventListener("input", applyBackgroundColor);
+    backgroundColor.picker.addEventListener("input", applyBackgroundColor);
+    opacityField.addEventListener("input", () => {
+      const value = opacityField.value.trim();
+      const parsed = Number(value);
+      if (!value) {
+        element.style.opacity = originalInlineStyle.opacity;
+      } else if (Number.isFinite(parsed)) {
+        element.style.opacity = String(Math.max(0, Math.min(1, parsed)));
+      }
+      updateOverlay(element);
+    });
+    fontField.addEventListener("input", () => {
+      applyStyleValue("fontFamily", fontField.value, originalInlineStyle.fontFamily);
+    });
+
+    advancedForm.append(
+      makeRow("文本", textField),
+      makeDivider(),
+      makeRow("文本颜色", textColor.wrapper),
+      makeRow("背景", backgroundColor.wrapper),
+      makeRow("Opacity", opacityField),
+      makeDivider(),
+      makeRow("字体", fontField),
+    );
+    advancedBody.append(elementBar, advancedForm);
+
+    const readBasicInfo = () => ({
+      text: textField.value.trim(),
+      textColor: textColor.field.value.trim(),
+      background: backgroundColor.field.value.trim(),
+      opacity: opacityField.value.trim(),
+      fontFamily: fontField.value.trim(),
+    });
+
+    const setAdvancedVisible = (visible) => {
+      advancedBody.style.display = visible ? "block" : "none";
+      panel.style.borderRadius = visible ? "28px" : "999px";
+      topRow.style.borderBottom = visible ? "1px solid #e5e7eb" : "0";
+      toggleButton.style.background = visible ? "#f3f4f6" : "#fff";
+      toggleButton.style.color = visible ? "#111827" : "#8b8b8b";
+      toggleButton.setAttribute("aria-label", visible ? "隐藏高级设置" : "显示高级设置");
+      requestAnimationFrame(() => {
+        applyPanelPosition(visible);
+      });
+    };
+
+    let advancedVisible = false;
+    toggleButton.addEventListener("click", () => {
+      advancedVisible = !advancedVisible;
+      setAdvancedVisible(advancedVisible);
+    });
+
+    const submit = async () => {
+      const payload = getElementPayload(element, input.value.trim(), readBasicInfo());
+      payload.annotationImage = await createAnnotationImage(element, payload.markerNumber);
+      safePost("tron:node-inspected", payload);
+      clearSelection();
+    };
+
+    confirmButton.addEventListener("click", () => {
+      void submit();
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        void submit();
+      }
+    });
+
+    topRow.append(toggleButton, input, confirmButton);
+    panel.append(topRow, advancedBody);
+    document.documentElement.appendChild(panel);
+    inputPanel = panel;
+    setImportantStyles(panel, {
+      "background": "#ffffff",
+      "opacity": "1",
+    });
+    setImportantStyles(input, {
+      "background": "#ffffff",
+      "opacity": "1",
+    });
+    applyPanelPosition(false);
+    setTimeout(() => input.focus(), 0);
+  };
+
+  const onPointerMove = (event) => {
+    if (!injectionEnabled || selectedElement) {
+      return;
+    }
+
+    const element = document.elementFromPoint(event.clientX, event.clientY);
+
+    if (!element || isInspectorUi(element)) {
+      return;
+    }
+
+    updateOverlay(element);
+  };
+
+  const onPointerDown = (event) => {
+    if (!injectionEnabled) {
+      return;
+    }
+
+    if (isInspectorUi(event.target)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    const element = document.elementFromPoint(event.clientX, event.clientY);
+    if (!element) {
+      return;
+    }
+
+    selectedElement = element;
+    updateOverlay(element);
+    showInputPanel(element);
+  };
+
+  const onClick = (event) => {
+    if (!injectionEnabled || isInspectorUi(event.target)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+  };
+
+  const onKeyDown = (event) => {
+    if (!injectionEnabled || event.key !== "Escape") {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+
+    if (selectedElement) {
+      clearSelection();
+      return;
+    }
+
+    safePost("tron:inspection-exited", { reason: "escape" }, { force: true });
+    injectionEnabled = false;
+    applyInspectorState();
+  };
+
+  const enableInspector = () => {
+    document.addEventListener("pointermove", onPointerMove, true);
+    document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("click", onClick, true);
+    window.addEventListener("keydown", onKeyDown, true);
+  };
+
+  const disableInspector = () => {
+    clearSelection();
+    document.removeEventListener("pointermove", onPointerMove, true);
+    document.removeEventListener("pointerdown", onPointerDown, true);
+    document.removeEventListener("click", onClick, true);
+    window.removeEventListener("keydown", onKeyDown, true);
+  };
+
+  const applyInspectorState = () => {
+    if (injectionEnabled) {
+      enableInspector();
+      safePost("tron:frame-ready", {
+        title: clampText(document.title),
+        location: clampText(window.location.href),
+        top: window.top === window.self,
+      });
+      return;
+    }
+
+    disableInspector();
+  };
 
   if (isTronAppPage()) {
     return;
   }
 
-  applyInjectionUi();
-
-  const config = {
-    capture: true,
-    passive: true,
-  };
-
-  safePost("tron:frame-ready", {
-    title: clampText(document.title),
-    location: clampText(window.location.href),
-    top: window.top === window.self,
-  });
-
-  document.addEventListener("click", (event) => handleEvent("tron:dom-event", event), config);
-  document.addEventListener("change", (event) => handleEvent("tron:dom-event", event), config);
-  document.addEventListener("input", (event) => handleEvent("tron:dom-event", event), config);
+  applyInspectorState();
 
   window.addEventListener(
     "message",
@@ -209,13 +1064,18 @@
       }
 
       if (typeof payload.enabled === "boolean") {
+        const wasEnabled = injectionEnabled;
         injectionEnabled = payload.enabled;
-        applyInjectionUi();
-        safePost("tron:frame-ready", {
-          title: clampText(document.title),
-          location: clampText(window.location.href),
-          top: window.top === window.self,
-        });
+
+        if (wasEnabled !== injectionEnabled) {
+          applyInspectorState();
+        } else if (injectionEnabled) {
+          safePost("tron:frame-ready", {
+            title: clampText(document.title),
+            location: clampText(window.location.href),
+            top: window.top === window.self,
+          });
+        }
       }
     },
     false,

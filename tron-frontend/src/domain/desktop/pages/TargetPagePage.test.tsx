@@ -1,58 +1,76 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ButtonHTMLAttributes } from "react";
+import { forwardRef, useImperativeHandle, useState, type ButtonHTMLAttributes, type HTMLAttributes } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TargetPagePage } from "./TargetPagePage";
 
-const bridgeMethods = {
-  emitInjectionEvent: vi.fn(),
-  getBackendStatus: vi.fn(async () => ({
-    backendUrl: "http://127.0.0.1:8080",
-    backendPort: 8080,
-    ready: true,
-    injectionEnabled: false,
-    databasePath: "",
-    graphPath: "",
-  })),
-  openTargetPage: vi.fn(async () => ({
-    pageId: "page-1",
-    opened: true,
-    mode: "window" as const,
-  })),
-  setInjectionEnabled: vi.fn(async (enabled: boolean) => enabled),
-};
-
 vi.mock("@/shared", () => ({
   Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => <button {...props}>{children}</button>,
-}));
-
-vi.mock("@/shared/desktop/DesktopBridge", () => ({
-  DesktopBridge: class {
-    emitInjectionEvent = bridgeMethods.emitInjectionEvent;
-    getBackendStatus = bridgeMethods.getBackendStatus;
-    openTargetPage = bridgeMethods.openTargetPage;
-    setInjectionEnabled = bridgeMethods.setInjectionEnabled;
-  },
-  sanitizeInjectionEventPayload: (value: unknown) => value,
-  sanitizeUrlInput: (value: string) => value,
+  SurfaceCard: ({ children, ...props }: HTMLAttributes<HTMLElement>) => <section {...props}>{children}</section>,
 }));
 
 vi.mock("../components/TargetPageFrame", () => ({
-  TargetPageFrame: ({
-    injectionEnabled,
-    onInjectionEnabledChange,
+  TargetPageFrame: forwardRef(({
+    onInspectionConfirm,
   }: {
-    injectionEnabled: boolean;
-    onInjectionEnabledChange?: (enabled: boolean) => void;
-  }) => (
-    <div data-testid="target-page-frame">
-      <span>{injectionEnabled ? "injection-on" : "injection-off"}</span>
-      <button type="button" onClick={() => onInjectionEnabledChange?.(!injectionEnabled)}>
-        toggle injection
-      </button>
-    </div>
-  ),
+    onInspectionConfirm?: (result: unknown) => void;
+  }, ref) => {
+    const [visible, setVisible] = useState(false);
+
+    useImperativeHandle(ref, () => ({
+      open: () => setVisible(true),
+    }));
+
+    if (!visible) {
+      return null;
+    }
+
+    return (
+      <div data-testid="target-page-frame">
+        <button
+          type="button"
+          onClick={() => onInspectionConfirm?.({
+            dom: {
+              annotationImage: {
+                dataUrl: "data:image/png;base64,abc",
+                height: 110,
+                markerNumber: 1,
+                mimeType: "image/png",
+                width: 220,
+              },
+              attributes: {
+                class: "primary",
+                id: "hero",
+              },
+              rect: {
+                height: 40,
+                width: 120,
+                x: 12,
+                y: 24,
+              },
+              remark: "Needs clearer copy",
+              selector: "#hero",
+              tagName: "button",
+              text: "Start now",
+              title: "Example",
+              url: "https://example.com",
+            },
+            event: {
+              eventType: "tron:node-inspected",
+              pageId: "desktop-page",
+              frameId: "frame-1",
+              frameUrl: "https://example.com",
+              timestamp: 1000,
+            },
+            remark: "Needs clearer copy",
+          })}
+        >
+          emit inspection
+        </button>
+      </div>
+    );
+  }),
 }));
 
 describe("TargetPagePage", () => {
@@ -68,21 +86,29 @@ describe("TargetPagePage", () => {
     expect(screen.queryByTestId("target-page-frame")).toBeNull();
   });
 
-  it("opens the frame with injection disabled and toggles injection from the frame toolbar", async () => {
+  it("opens the frame through the component method", async () => {
     render(<TargetPagePage />);
 
     fireEvent.click(screen.getByRole("button", { name: "Open target" }));
 
-    expect(screen.getByTestId("target-page-frame")).toBeTruthy();
-    expect(screen.getByText("injection-off")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "toggle injection" }));
-
     await waitFor(() => {
-      expect(screen.getByText("injection-on")).toBeTruthy();
+      expect(screen.getByTestId("target-page-frame")).toBeTruthy();
     });
-    await waitFor(() => {
-      expect(bridgeMethods.setInjectionEnabled).toHaveBeenLastCalledWith(true);
-    });
+  });
+
+  it("shows the latest inspection remark and DOM details from the target frame", async () => {
+    render(<TargetPagePage />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Open target" }));
+    fireEvent.click(screen.getByRole("button", { name: "emit inspection" }));
+
+    expect(await screen.findByLabelText("Inspection result")).toBeTruthy();
+    expect(screen.getByText("Needs clearer copy")).toBeTruthy();
+    expect(screen.getByText("#hero")).toBeTruthy();
+    expect(screen.getByText("button")).toBeTruthy();
+    expect(screen.getByText("Start now")).toBeTruthy();
+    expect(screen.getByText("x:12 y:24 w:120 h:40")).toBeTruthy();
+    expect(screen.getByText('class="primary" id="hero"')).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Annotated DOM selection" })).toBeTruthy();
   });
 });

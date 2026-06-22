@@ -44,7 +44,7 @@ export interface DesktopInjectionEvent {
   };
 }
 
-export type DesktopInjectionEventType = "tron:frame-ready" | "tron:dom-event";
+export type DesktopInjectionEventType = "tron:frame-ready" | "tron:dom-event" | "tron:node-inspected" | "tron:inspection-exited";
 
 export interface DesktopInjectionEventRequest {
   eventType: DesktopInjectionEventType;
@@ -69,6 +69,8 @@ type WindowWithTauri = Window & {
 const ALLOWED_INJECTION_EVENTS = new Set<DesktopInjectionEventType>([
   "tron:frame-ready",
   "tron:dom-event",
+  "tron:node-inspected",
+  "tron:inspection-exited",
 ]);
 
 function resolveInvoke(): InvokeCommand<unknown> | null {
@@ -102,26 +104,67 @@ function sanitizeString(value: unknown): string {
   return value.trim().slice(0, 160);
 }
 
-function sanitizePayload(payload: unknown): Record<string, unknown> | undefined {
+function sanitizePayloadString(key: string, value: string): string {
+  const trimmed = value.trim();
+  if (
+    key === "dataUrl"
+    && (trimmed.startsWith("data:image/svg+xml") || trimmed.startsWith("data:image/png"))
+  ) {
+    return trimmed.slice(0, 3_000_000);
+  }
+
+  return trimmed.slice(0, 160);
+}
+
+function sanitizePayloadValue(value: unknown, key = "", depth = 0): unknown {
+  if (typeof value === "string") {
+    return sanitizePayloadString(key, value);
+  }
+
+  if (typeof value === "number" || typeof value === "boolean" || value === null) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    if (depth >= 3) {
+      return undefined;
+    }
+
+    const output = value
+      .slice(0, 20)
+      .map((item) => sanitizePayloadValue(item, key, depth + 1))
+      .filter((item) => item !== undefined);
+
+    return output.length > 0 ? output : undefined;
+  }
+
+  if (value && typeof value === "object") {
+    if (depth >= 3) {
+      return undefined;
+    }
+
+    return sanitizePayload(value, depth + 1);
+  }
+
+  return undefined;
+}
+
+function sanitizePayload(payload: unknown, depth = 0): Record<string, unknown> | undefined {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return undefined;
   }
 
   const output: Record<string, unknown> = {};
 
-  for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {
+  for (const [key, value] of Object.entries(payload as Record<string, unknown>).slice(0, 40)) {
     const safeKey = sanitizeString(key);
     if (safeKey.length === 0 || safeKey.length > 80) {
       continue;
     }
 
-    if (typeof value === "string") {
-      output[safeKey] = sanitizeString(value);
-      continue;
-    }
-
-    if (typeof value === "number" || typeof value === "boolean" || value === null) {
-      output[safeKey] = value;
+    const safeValue = sanitizePayloadValue(value, safeKey, depth);
+    if (safeValue !== undefined) {
+      output[safeKey] = safeValue;
       continue;
     }
   }

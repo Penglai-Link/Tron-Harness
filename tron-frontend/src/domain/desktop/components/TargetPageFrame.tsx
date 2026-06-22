@@ -1,6 +1,8 @@
 import {
+  forwardRef,
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -9,48 +11,76 @@ import {
 } from "react";
 import { ArrowLeft, ArrowRight, Check, RefreshCw, ScanSearch } from "lucide-react";
 
-import { sanitizeInjectionEventPayload, sanitizeUrlInput, type DesktopInjectionEvent, type DesktopInjectionEventRequest, type DesktopBackendStatus } from "@/shared/desktop/DesktopBridge";
+import {
+  DesktopBridge,
+  sanitizeInjectionEventPayload,
+  sanitizeUrlInput,
+  type DesktopBackendStatus,
+  type DesktopInjectionEvent,
+  type DesktopInjectionEventRequest,
+} from "@/shared/desktop/DesktopBridge";
 
-interface FrameHandshake {
-  frameId: string;
+export interface TargetPageFrameHandle {
+  open: (url: string) => void;
+}
+
+export interface TargetPageFrameInspectionResult {
+  dom: Record<string, unknown>;
+  event: DesktopInjectionEvent;
+  remark: string;
 }
 
 interface TargetPageFrameProps {
-  pageId: string;
-  targetUrl: string;
-  desktopBackendStatus: DesktopBackendStatus;
-  injectionEnabled: boolean;
-  onInjectionEnabledChange?: (enabled: boolean) => void;
-  onTargetUrlChange?: (url: string) => void;
-  onHandshake?: (handshake: FrameHandshake) => void;
-  onFrameBlocked?: (reason: string) => void;
-  onInjectionEvent?: (event: DesktopInjectionEvent) => void;
+  onInspectionConfirm?: (result: TargetPageFrameInspectionResult) => void;
 }
 
 const FRAME_TIMEOUT_MS = 3500;
 const BRIDGE_CHANNEL = "tron:frame-event";
+const DEFAULT_PAGE_ID_PREFIX = "desktop";
 
-export function TargetPageFrame({
-  pageId,
-  targetUrl,
-  desktopBackendStatus,
-  injectionEnabled,
-  onInjectionEnabledChange,
-  onTargetUrlChange,
-  onHandshake,
-  onFrameBlocked,
-  onInjectionEvent,
-}: TargetPageFrameProps) {
+function createPageId() {
+  return `${DEFAULT_PAGE_ID_PREFIX}-${Date.now()}`;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function readString(payload: Record<string, unknown> | null, key: string): string {
+  const value = payload?.[key];
+
+  return typeof value === "string" ? value : "";
+}
+
+export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrameProps>(function TargetPageFrame({
+  onInspectionConfirm,
+}, ref) {
+  const bridge = useMemo(() => new DesktopBridge(), []);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const [visible, setVisible] = useState(false);
+  const [pageId, setPageId] = useState(createPageId);
+  const [injectionEnabled, setInjectionEnabled] = useState(false);
+  const [desktopBackendStatus, setDesktopBackendStatus] = useState<DesktopBackendStatus>({
+    backendUrl: "",
+    backendPort: 0,
+    ready: false,
+    injectionEnabled: false,
+  });
+  const [errorMessage, setErrorMessage] = useState("");
   const [frameReady, setFrameReady] = useState(false);
   const [frameId, setFrameId] = useState("");
   const [frameVersion, setFrameVersion] = useState(0);
-  const [historyEntries, setHistoryEntries] = useState<string[]>([targetUrl]);
+  const [historyEntries, setHistoryEntries] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(0);
-  const [addressDraft, setAddressDraft] = useState(targetUrl);
+  const [addressDraft, setAddressDraft] = useState("");
   const [addressEditing, setAddressEditing] = useState(false);
   const fallbackDispatchedRef = useRef(false);
   const timeoutRef = useRef<number | null>(null);
+  const activeUrl = historyEntries[historyIndex] ?? "";
 
   const clearTimeoutRef = useCallback(() => {
     if (timeoutRef.current !== null) {
@@ -65,8 +95,19 @@ export function TargetPageFrame({
     }
 
     fallbackDispatchedRef.current = true;
-    onFrameBlocked?.(reason);
-  }, [onFrameBlocked]);
+    setErrorMessage(`Target page likely blocked (${reason}), open with separate window.`);
+    void (async () => {
+      const result = await bridge.openTargetPage({
+        mode: "window",
+        pageId,
+        url: activeUrl,
+      });
+
+      if (!result.opened) {
+        setErrorMessage(`Fallback launch skipped: ${result.reason ?? "not available"}`);
+      }
+    })();
+  }, [activeUrl, bridge, pageId]);
 
   const postInjectionToggle = useCallback(() => {
     frameRef.current?.contentWindow?.postMessage({
@@ -78,16 +119,54 @@ export function TargetPageFrame({
   }, [injectionEnabled, pageId]);
 
   useEffect(() => {
+    let isMounted = true;
+
+    void (async () => {
+      const status = await bridge.getBackendStatus();
+      if (isMounted) {
+        setDesktopBackendStatus(status);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [bridge]);
+
+  useEffect(() => {
+    void (async () => {
+      const enabled = await bridge.setInjectionEnabled(injectionEnabled);
+      setDesktopBackendStatus((current) => ({
+        ...current,
+        injectionEnabled: enabled,
+      }));
+    })();
+  }, [bridge, injectionEnabled]);
+
+  const open = useCallback((url: string) => {
+    const normalized = sanitizeUrlInput(url);
+    if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
+      return;
+    }
+
     clearTimeoutRef();
     fallbackDispatchedRef.current = false;
+    setVisible(true);
+    setPageId(createPageId());
+    setInjectionEnabled(false);
+    setErrorMessage("");
     setFrameReady(false);
     setFrameId("");
     setFrameVersion((current) => current + 1);
-    setHistoryEntries([targetUrl]);
+    setHistoryEntries([normalized]);
     setHistoryIndex(0);
-    setAddressDraft(targetUrl);
+    setAddressDraft(normalized);
     setAddressEditing(false);
-  }, [clearTimeoutRef, pageId, targetUrl]);
+  }, [clearTimeoutRef]);
+
+  useImperativeHandle(ref, () => ({
+    open,
+  }), [open]);
 
   useEffect(() => {
     postInjectionToggle();
@@ -139,21 +218,37 @@ export function TargetPageFrame({
       if (sanitized.eventType === "tron:frame-ready") {
         clearTimeoutRef();
         setFrameReady(true);
+        setErrorMessage("");
         if (frameId !== sanitized.frameId) {
           setFrameId(sanitized.frameId);
         }
-        onHandshake?.({ frameId: sanitized.frameId });
         return;
       }
 
-      onInjectionEvent?.(sanitized);
+      if (sanitized.eventType === "tron:inspection-exited") {
+        clearTimeoutRef();
+        setFrameReady(false);
+        setInjectionEnabled(false);
+        return;
+      }
+
+      if (sanitized.eventType === "tron:node-inspected") {
+        const dom = asRecord(sanitized.payload) ?? {};
+        void bridge.emitInjectionEvent(sanitized);
+
+        onInspectionConfirm?.({
+          dom,
+          event: sanitized,
+          remark: readString(dom, "remark"),
+        });
+      }
     };
 
     window.addEventListener("message", handler);
     return () => {
       window.removeEventListener("message", handler);
     };
-  }, [clearTimeoutRef, frameId, onHandshake, onInjectionEvent, pageId]);
+  }, [bridge, clearTimeoutRef, frameId, onInspectionConfirm, pageId]);
 
   const iframeStyle: CSSProperties = {
     height: "100%",
@@ -161,7 +256,6 @@ export function TargetPageFrame({
     border: "0",
   };
 
-  const activeUrl = historyEntries[historyIndex] ?? targetUrl;
   const activeHost = useMemo(() => {
     try {
       return new URL(activeUrl).host || activeUrl;
@@ -232,7 +326,7 @@ export function TargetPageFrame({
   };
 
   const handleInjectionToggle = () => {
-    onInjectionEnabledChange?.(!injectionEnabled);
+    setInjectionEnabled((current) => !current);
   };
 
   const loadTargetAddress = () => {
@@ -252,7 +346,6 @@ export function TargetPageFrame({
     setFrameVersion((current) => current + 1);
     setAddressDraft(new URL(normalized).host || normalized);
     setAddressEditing(false);
-    onTargetUrlChange?.(normalized);
   };
 
   const handleAddressFocus = () => {
@@ -273,8 +366,13 @@ export function TargetPageFrame({
     }
   };
 
+  if (!visible || !activeUrl) {
+    return null;
+  }
+
   return (
     <section className="overflow-hidden">
+      {errorMessage ? <p className="mb-2 text-sm text-[var(--color-error)]">{errorMessage}</p> : null}
       <div className="flex h-14 items-center justify-between border-b border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface-strong)] px-4">
         <div className="flex items-center gap-5 text-[var(--color-on-surface-variant)]">
           <button
@@ -332,7 +430,7 @@ export function TargetPageFrame({
         </form>
         <div className="flex items-center text-[var(--color-on-surface-variant)]">
           <button
-            aria-label={injectionEnabled ? "Disable injection" : "Enable injection"}
+            aria-label={injectionEnabled ? "Disable inspection" : "Enable inspection"}
             aria-pressed={injectionEnabled}
             className={`inline-flex items-center justify-center transition-colors hover:text-[var(--color-on-surface)] ${
               injectionEnabled ? "text-[var(--color-on-surface)]" : "text-[var(--color-on-surface-variant)]"
@@ -359,4 +457,4 @@ export function TargetPageFrame({
       />
     </section>
   );
-}
+});

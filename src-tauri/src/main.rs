@@ -92,7 +92,12 @@ struct DesktopInjectionEventInput {
     event: serde_json::Value,
 }
 
-const ALLOWED_INJECTION_EVENTS: &[&str] = &["tron:frame-ready", "tron:dom-event"];
+const ALLOWED_INJECTION_EVENTS: &[&str] = &[
+    "tron:frame-ready",
+    "tron:dom-event",
+    "tron:node-inspected",
+    "tron:inspection-exited",
+];
 
 fn now_millis() -> i64 {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
