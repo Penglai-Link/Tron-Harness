@@ -389,7 +389,17 @@
       backgroundColor: element.style.backgroundColor,
       color: element.style.color,
       fontFamily: element.style.fontFamily,
+      height: element.style.height,
+      marginBottom: element.style.marginBottom,
+      marginLeft: element.style.marginLeft,
+      marginRight: element.style.marginRight,
+      marginTop: element.style.marginTop,
       opacity: element.style.opacity,
+      paddingBottom: element.style.paddingBottom,
+      paddingLeft: element.style.paddingLeft,
+      paddingRight: element.style.paddingRight,
+      paddingTop: element.style.paddingTop,
+      width: element.style.width,
     };
     const panel = document.createElement("div");
     panel.setAttribute(UI_ATTR, "true");
@@ -402,7 +412,7 @@
     const applyPanelPosition = (expanded) => {
       const currentRect = element.getBoundingClientRect();
       const panelHeight = expanded
-        ? Math.min(430, Math.max(panel.offsetHeight || 0, 330))
+        ? Math.min(620, Math.max(panel.offsetHeight || 0, 430))
         : Math.min(58, Math.max(panel.offsetHeight || 0, 46));
       const verticalLeft = clamp(
         currentRect.left,
@@ -831,11 +841,147 @@
       return { wrapper, field, picker };
     };
 
+    const normalizeNumberInput = (value) => {
+      const parsed = Number.parseFloat(String(value || "").replace("px", ""));
+      return Number.isFinite(parsed) ? String(Math.round(parsed)) : "";
+    };
+
+    const readPixelValue = (value, fallback = "") => normalizeNumberInput(value) || normalizeNumberInput(fallback);
+
+    const makePixelInput = (value) => {
+      const wrapper = document.createElement("div");
+      wrapper.setAttribute(UI_ATTR, "true");
+      Object.assign(wrapper.style, {
+        height: "34px",
+        display: "grid",
+        gridTemplateColumns: "1fr auto",
+        alignItems: "center",
+        gap: "6px",
+        border: "1px solid #d1d5db",
+        borderRadius: "12px",
+        padding: "0 10px",
+        boxShadow: "inset 0 0 0 1px #f3f4f6",
+        boxSizing: "border-box",
+        background: "#ffffff",
+      });
+      setImportantStyles(wrapper, {
+        "background": "#ffffff",
+        "opacity": "1",
+        "mix-blend-mode": "normal",
+      });
+
+      const field = document.createElement("input");
+      field.setAttribute(UI_ATTR, "true");
+      field.type = "number";
+      field.min = "0";
+      field.step = "1";
+      field.value = readPixelValue(value);
+      Object.assign(field.style, {
+        width: "100%",
+        minWidth: "0",
+        height: "32px",
+        border: "0",
+        padding: "0",
+        outline: "none",
+        background: "#ffffff",
+        color: "#8b8b8b",
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+        fontSize: "14px",
+        boxSizing: "border-box",
+      });
+      setImportantStyles(field, {
+        "background": "#ffffff",
+        "opacity": "1",
+        "mix-blend-mode": "normal",
+      });
+
+      const unit = document.createElement("span");
+      unit.setAttribute(UI_ATTR, "true");
+      unit.textContent = "px";
+      Object.assign(unit.style, {
+        color: "#8b8b8b",
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+        fontSize: "14px",
+      });
+
+      wrapper.append(field, unit);
+      return { wrapper, field };
+    };
+
+    const makeQuadPixelControl = (values) => {
+      const wrapper = document.createElement("div");
+      wrapper.setAttribute(UI_ATTR, "true");
+      Object.assign(wrapper.style, {
+        height: "34px",
+        display: "grid",
+        gridTemplateColumns: "repeat(4, 1fr)",
+        overflow: "hidden",
+        border: "1px solid #d1d5db",
+        borderRadius: "12px",
+        boxShadow: "inset 0 0 0 1px #f3f4f6",
+        boxSizing: "border-box",
+        background: "#ffffff",
+      });
+      setImportantStyles(wrapper, {
+        "background": "#ffffff",
+        "opacity": "1",
+        "mix-blend-mode": "normal",
+      });
+
+      const fields = values.map((value, index) => {
+        const field = document.createElement("input");
+        field.setAttribute(UI_ATTR, "true");
+        field.type = "number";
+        field.min = "0";
+        field.step = "1";
+        field.value = readPixelValue(value);
+        field.title = ["Top", "Right", "Bottom", "Left"][index];
+        Object.assign(field.style, {
+          width: "100%",
+          minWidth: "0",
+          height: "32px",
+          border: "0",
+          borderLeft: index === 0 ? "0" : "1px solid #edf0f2",
+          padding: "0 4px",
+          outline: "none",
+          textAlign: "center",
+          background: "#ffffff",
+          color: "#8b8b8b",
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+          fontSize: "14px",
+          boxSizing: "border-box",
+        });
+        setImportantStyles(field, {
+          "background": "#ffffff",
+          "opacity": "1",
+          "mix-blend-mode": "normal",
+        });
+        wrapper.append(field);
+        return field;
+      });
+
+      return { wrapper, fields };
+    };
+
     const textField = makeTextInput(summarizeText(element), { placeholder: "文本内容" });
     const textColor = makeColorControl(computedStyle.color);
     const backgroundColor = makeColorControl(computedStyle.backgroundColor);
     const opacityField = makeTextInput(computedStyle.opacity || "1", { mono: true });
     const fontField = makeTextInput(computedStyle.fontFamily || "", { mono: true });
+    const widthControl = makePixelInput(computedStyle.width);
+    const heightControl = makePixelInput(computedStyle.height);
+    const paddingControl = makeQuadPixelControl([
+      computedStyle.paddingTop,
+      computedStyle.paddingRight,
+      computedStyle.paddingBottom,
+      computedStyle.paddingLeft,
+    ]);
+    const marginControl = makeQuadPixelControl([
+      computedStyle.marginTop,
+      computedStyle.marginRight,
+      computedStyle.marginBottom,
+      computedStyle.marginLeft,
+    ]);
 
     const applyText = () => {
       if ("value" in element) {
@@ -880,6 +1026,63 @@
       applyStyleValue("fontFamily", fontField.value, originalInlineStyle.fontFamily);
     });
 
+    const applyPixelStyle = (property, field, fallbackValue = "") => {
+      const value = field.value.trim();
+      if (!value) {
+        element.style[property] = fallbackValue;
+      } else {
+        const parsed = Number.parseFloat(value);
+        if (Number.isFinite(parsed)) {
+          element.style[property] = Math.max(0, parsed) + "px";
+        }
+      }
+      updateOverlay(element);
+      if (advancedVisible) {
+        requestAnimationFrame(() => applyPanelPosition(true));
+      }
+    };
+
+    const applyQuadStyle = (properties, control, fallbacks) => {
+      properties.forEach((property, index) => {
+        applyPixelStyle(property, control.fields[index], fallbacks[index] || "");
+      });
+    };
+
+    widthControl.field.addEventListener("input", () => {
+      applyPixelStyle("width", widthControl.field, originalInlineStyle.width);
+    });
+    heightControl.field.addEventListener("input", () => {
+      applyPixelStyle("height", heightControl.field, originalInlineStyle.height);
+    });
+    paddingControl.fields.forEach((field) => {
+      field.addEventListener("input", () => {
+        applyQuadStyle(
+          ["paddingTop", "paddingRight", "paddingBottom", "paddingLeft"],
+          paddingControl,
+          [
+            originalInlineStyle.paddingTop,
+            originalInlineStyle.paddingRight,
+            originalInlineStyle.paddingBottom,
+            originalInlineStyle.paddingLeft,
+          ],
+        );
+      });
+    });
+    marginControl.fields.forEach((field) => {
+      field.addEventListener("input", () => {
+        applyQuadStyle(
+          ["marginTop", "marginRight", "marginBottom", "marginLeft"],
+          marginControl,
+          [
+            originalInlineStyle.marginTop,
+            originalInlineStyle.marginRight,
+            originalInlineStyle.marginBottom,
+            originalInlineStyle.marginLeft,
+          ],
+        );
+      });
+    });
+
     advancedForm.append(
       makeRow("文本", textField),
       makeDivider(),
@@ -888,6 +1091,11 @@
       makeRow("Opacity", opacityField),
       makeDivider(),
       makeRow("字体", fontField),
+      makeDivider(),
+      makeRow("宽度", widthControl.wrapper),
+      makeRow("高度", heightControl.wrapper),
+      makeRow("内边距", paddingControl.wrapper),
+      makeRow("外边距", marginControl.wrapper),
     );
     advancedBody.append(elementBar, advancedForm);
 
@@ -897,6 +1105,10 @@
       background: backgroundColor.field.value.trim(),
       opacity: opacityField.value.trim(),
       fontFamily: fontField.value.trim(),
+      width: widthControl.field.value.trim(),
+      height: heightControl.field.value.trim(),
+      padding: paddingControl.fields.map((field) => field.value.trim()).join(" "),
+      margin: marginControl.fields.map((field) => field.value.trim()).join(" "),
     });
 
     const setAdvancedVisible = (visible) => {
