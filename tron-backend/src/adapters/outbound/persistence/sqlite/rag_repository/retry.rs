@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rusqlite::params;
+use rusqlite::{Connection, params};
 use serde_json::Value;
 
 use crate::{
@@ -28,21 +28,14 @@ impl RagRetryIndexRepository for SqliteRagRepository {
     ) -> Result<Vec<RagRetryTextUnit>, RagError> {
         let plan = retry_plan(self, &request.corpus_id)?;
         let table = quote_identifier(&plan.text_unit_table)?;
-        let fts_table_name = fts_table_name(plan.fulltext_storage_table());
-        let fts_join =
-            if plan.has_sqlite_fulltext() && table_exists(&self.connection, &fts_table_name)? {
-                format!(
-                    "LEFT JOIN {} fts ON fts.rowid = tu.id",
-                    quote_identifier(&fts_table_name)?
-                )
-            } else {
-                String::new()
-            };
-        let index_text_expr = retry_index_text_expr(&plan, !fts_join.is_empty())?;
+        let (fulltext_join, has_fulltext_carrier_join, has_fts_join) =
+            retry_fulltext_join(&self.connection, &plan)?;
+        let index_text_expr =
+            retry_index_text_expr(&plan, has_fulltext_carrier_join, has_fts_join)?;
         let sql = format!(
             "SELECT tu.text_unit_code, tu.text, {index_text_expr}
              FROM {table} tu
-             {fts_join}
+             {fulltext_join}
              WHERE tu.source_code = ?1 AND tu.source_version = ?2
                AND tu.scope_type = ?3 AND tu.scope_code = ?4
                AND tu.{} = 'ACTIVE'
@@ -239,18 +232,62 @@ fn retry_plan(
     compile_sql_corpus_plan(repository, &corpus)
 }
 
+fn retry_fulltext_join(
+    connection: &Connection,
+    plan: &super::sql_plan::SqliteRagCorpusPlan,
+) -> Result<(String, bool, bool), RagError> {
+    if !plan.has_sqlite_fulltext() {
+        return Ok((String::new(), false, false));
+    }
+    let fts_table_name = fts_table_name(plan.fulltext_storage_table());
+    let has_fts_table = table_exists(connection, &fts_table_name)?;
+    if plan.has_distinct_fulltext_table() {
+        if !table_exists(connection, plan.fulltext_storage_table())? {
+            return Ok((String::new(), false, false));
+        }
+        let fulltext_table = quote_identifier(plan.fulltext_storage_table())?;
+        let mut join =
+            format!("LEFT JOIN {fulltext_table} ft ON ft.text_unit_code = tu.text_unit_code");
+        if has_fts_table {
+            join.push_str(&format!(
+                "\n             LEFT JOIN {} fts ON fts.rowid = ft.id",
+                quote_identifier(&fts_table_name)?
+            ));
+        }
+        return Ok((join, true, has_fts_table));
+    }
+    if has_fts_table {
+        return Ok((
+            format!(
+                "LEFT JOIN {} fts ON fts.rowid = tu.id",
+                quote_identifier(&fts_table_name)?
+            ),
+            false,
+            true,
+        ));
+    }
+    Ok((String::new(), false, false))
+}
+
 fn retry_index_text_expr(
     plan: &super::sql_plan::SqliteRagCorpusPlan,
+    has_fulltext_carrier_join: bool,
     has_fts_join: bool,
 ) -> Result<String, RagError> {
     // Search/index text may live in a carrier column, the FTS sidecar,
     // or only as raw text in legacy layouts.
     let mut candidates = Vec::new();
+    if has_fulltext_carrier_join && plan.fulltext_columns.contains("search_text") {
+        candidates.push(format!("ft.{}", quote_identifier("search_text")?));
+    }
     if plan.text_unit_columns.contains("search_text") {
         candidates.push(format!("tu.{}", quote_identifier("search_text")?));
     }
     if has_fts_join {
         candidates.push(format!("fts.{}", quote_identifier("search_text")?));
+    }
+    if has_fulltext_carrier_join && plan.fulltext_columns.contains("text") {
+        candidates.push(format!("ft.{}", quote_identifier("text")?));
     }
     candidates.push(format!("tu.{}", quote_identifier("text")?));
     Ok(format!("COALESCE({})", candidates.join(", ")))

@@ -169,6 +169,72 @@ async fn retry_rebuilds_fulltext_and_vector_from_persisted_search_text_when_avai
 }
 
 #[tokio::test]
+async fn retry_vector_uses_distinct_fulltext_carrier_search_text_when_rowids_diverge() {
+    let database_url = temp_database_path("rag-retry-distinct-fulltext-search-text")
+        .to_string_lossy()
+        .to_string();
+    seed_retry_fixture(&database_url);
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    set_project_doc_fulltext_table(&database_url, "rag_project_doc_fulltext");
+    seed_distinct_fulltext_carrier_with_diverged_rowid(
+        &database_url,
+        "Debug > Retry\nRetry can rebuild persisted text only.",
+    );
+    let runtime = FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25));
+
+    let result = RagRetryIndexService::new(repository, runtime.clone())
+        .retry_index(RagRetryIndexRequest {
+            workspace_code: "TRON_CORE".into(),
+            corpus_id: "project-doc".into(),
+            source_code: "doc-retry".into(),
+            source_version: "v1".into(),
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+            stages: vec!["fulltextIndex".into(), "vectorIndex".into()],
+            embedding_model_code: Some("fake-embedding".into()),
+            user_code: "USR-AUTH-0001".into(),
+            agent_code: "AGENT_CODEX".into(),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(result.status, "success");
+    assert_eq!(result.stage_results.len(), 2);
+    assert_eq!(
+        runtime.embedding_inputs(),
+        vec!["Debug > Retry\nRetry can rebuild persisted text only.".to_string()]
+    );
+    let connection = open_prepared_connection(&database_url);
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT CASE WHEN ft.id != tu.id THEN 1 ELSE 0 END
+             FROM rag_project_doc_fulltext ft
+             JOIN rag_project_doc_text_units tu ON tu.text_unit_code = ft.text_unit_code
+             WHERE ft.text_unit_code = 'tu-retry-1'"
+        ),
+        1
+    );
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT fts.search_text
+             FROM rag_project_doc_fulltext ft
+             JOIN rag_project_doc_fulltext_fts fts ON fts.rowid = ft.id
+             WHERE ft.text_unit_code = 'tu-retry-1'"
+        ),
+        "Debug > Retry\nRetry can rebuild persisted text only."
+    );
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT text FROM rag_project_doc_text_units WHERE text_unit_code = 'tu-retry-1'"
+        ),
+        "Retry can rebuild persisted text only."
+    );
+}
+
+#[tokio::test]
 async fn retry_vector_rebuild_supports_distinct_vector_storage_table() {
     let database_url = temp_database_path("rag-retry-separate-vector")
         .to_string_lossy()
@@ -891,25 +957,118 @@ fn set_retry_text_unit_fts_search_text(
         .unwrap();
 }
 
+fn seed_distinct_fulltext_carrier_with_diverged_rowid(database_url: &str, search_text: &str) {
+    let connection = open_prepared_connection(database_url);
+    connection
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS rag_project_doc_fulltext (
+                id INTEGER PRIMARY KEY,
+                text_unit_code TEXT NOT NULL,
+                source_code TEXT NOT NULL,
+                source_version TEXT NOT NULL,
+                scope_type TEXT NOT NULL,
+                scope_code TEXT NOT NULL,
+                unit_type TEXT,
+                text TEXT,
+                search_text TEXT,
+                heading_path TEXT,
+                ordinal INTEGER,
+                token_count INTEGER,
+                status TEXT NOT NULL,
+                metadata TEXT,
+                content_hash TEXT,
+                created_at INTEGER,
+                updated_at INTEGER,
+                UNIQUE (text_unit_code),
+                UNIQUE (source_code, source_version, scope_type, scope_code, ordinal)
+            );
+            CREATE VIRTUAL TABLE IF NOT EXISTS rag_project_doc_fulltext_fts
+                USING fts5(search_text, tokenize='unicode61');",
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO rag_project_doc_fulltext (
+                text_unit_code, source_code, source_version, scope_type, scope_code,
+                unit_type, text, search_text, heading_path, ordinal, token_count,
+                status, metadata, content_hash, created_at, updated_at
+             )
+             VALUES (
+                'tu-carrier-dummy', 'doc-dummy', 'v1', 'SPACE', 'TRON_CORE',
+                'LEAF', 'dummy raw text', 'dummy index text', '', 0, 1,
+                'ACTIVE', '{}', 'dummy-hash', 1, 1
+             )",
+            [],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO rag_project_doc_fulltext (
+                text_unit_code, source_code, source_version, scope_type, scope_code,
+                unit_type, text, search_text, heading_path, ordinal, token_count,
+                status, metadata, content_hash, created_at, updated_at
+             )
+             SELECT text_unit_code, source_code, source_version, scope_type, scope_code,
+                    unit_type, text, ?1, heading_path, ordinal, token_count,
+                    status, metadata, content_hash, created_at, updated_at
+             FROM rag_project_doc_text_units
+             WHERE text_unit_code = 'tu-retry-1'",
+            params![search_text],
+        )
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO rag_project_doc_fulltext_fts(rowid, search_text)
+             SELECT id, search_text
+             FROM rag_project_doc_fulltext
+             WHERE text_unit_code = 'tu-retry-1'",
+            [],
+        )
+        .unwrap();
+}
+
+fn set_project_doc_fulltext_table(database_url: &str, table_name: &str) {
+    set_project_doc_segment_table(
+        database_url,
+        "fulltext",
+        "project-doc-fulltext-store",
+        table_name,
+    );
+}
+
 fn set_project_doc_vector_table(database_url: &str, table_name: &str) {
+    set_project_doc_segment_table(
+        database_url,
+        "vector",
+        "project-doc-vector-store",
+        table_name,
+    );
+}
+
+fn set_project_doc_segment_table(
+    database_url: &str,
+    segment: &str,
+    target_id: &str,
+    table_name: &str,
+) {
     let connection = Connection::open(database_url).unwrap();
     let binding_json = query_string(
         &connection,
         "SELECT storage_binding_json FROM rag_corpora WHERE corpus_id = 'project-doc'",
     );
     let mut binding = serde_json::from_str::<Value>(&binding_json).unwrap();
-    binding["bindings"]["vector"] = json!("project-doc-vector-store");
+    binding["bindings"][segment] = json!(target_id);
     let targets = binding["targets"]
         .as_array_mut()
         .expect("storage targets should be an array");
     if let Some(target) = targets
         .iter_mut()
-        .find(|target| target["id"] == json!("project-doc-vector-store"))
+        .find(|target| target["id"] == json!(target_id))
     {
         target["table"] = json!(table_name);
     } else {
         targets.push(json!({
-            "id": "project-doc-vector-store",
+            "id": target_id,
             "backend": "SQLITE",
             "layout": "TABLE",
             "table": table_name
