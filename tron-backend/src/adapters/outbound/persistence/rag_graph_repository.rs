@@ -200,9 +200,11 @@ impl RagRetryIndexRepository for GraphBackedRagRepository {
         let Some(node) = self.find_graph_main_node(&corpus, request)? else {
             return Ok(Vec::new());
         };
+        let text = model::graph_text(&node);
         Ok(vec![RagRetryTextUnit {
             text_unit_code: node.node_code.clone(),
-            text: model::graph_text(&node),
+            index_text: text.clone(),
+            text,
         }])
     }
 

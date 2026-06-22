@@ -13,7 +13,10 @@ use crate::{
 
 use super::{
     SqliteRagRepository,
-    indexes::{rebuild_fulltext_indexes_for_source, upsert_vector_index_for_code},
+    indexes::{
+        fts_table_name, rebuild_fulltext_indexes_for_source, table_exists,
+        upsert_vector_index_for_code,
+    },
     sql_plan::{compile_sql_corpus_plan, quote_identifier},
     storage_error,
 };
@@ -25,12 +28,25 @@ impl RagRetryIndexRepository for SqliteRagRepository {
     ) -> Result<Vec<RagRetryTextUnit>, RagError> {
         let plan = retry_plan(self, &request.corpus_id)?;
         let table = quote_identifier(&plan.text_unit_table)?;
+        let fts_table_name = fts_table_name(plan.fulltext_storage_table());
+        let fts_join =
+            if plan.has_sqlite_fulltext() && table_exists(&self.connection, &fts_table_name)? {
+                format!(
+                    "LEFT JOIN {} fts ON fts.rowid = tu.id",
+                    quote_identifier(&fts_table_name)?
+                )
+            } else {
+                String::new()
+            };
+        let index_text_expr = retry_index_text_expr(&plan, !fts_join.is_empty())?;
         let sql = format!(
-            "SELECT text_unit_code, text
-             FROM {table}
-             WHERE source_code = ?1 AND source_version = ?2 AND scope_type = ?3 AND scope_code = ?4
-               AND {} = 'ACTIVE'
-             ORDER BY ordinal",
+            "SELECT tu.text_unit_code, tu.text, {index_text_expr}
+             FROM {table} tu
+             {fts_join}
+             WHERE tu.source_code = ?1 AND tu.source_version = ?2
+               AND tu.scope_type = ?3 AND tu.scope_code = ?4
+               AND tu.{} = 'ACTIVE'
+             ORDER BY tu.ordinal",
             quote_identifier(&plan.text_unit_status_column)?
         );
         let mut statement = self.connection.prepare(&sql).map_err(storage_error)?;
@@ -46,6 +62,7 @@ impl RagRetryIndexRepository for SqliteRagRepository {
                     Ok(RagRetryTextUnit {
                         text_unit_code: row.get(0)?,
                         text: row.get(1)?,
+                        index_text: row.get(2)?,
                     })
                 },
             )
@@ -220,6 +237,23 @@ fn retry_plan(
         .get_corpus(corpus_id)?
         .ok_or(RagError::CorpusNotFound)?;
     compile_sql_corpus_plan(repository, &corpus)
+}
+
+fn retry_index_text_expr(
+    plan: &super::sql_plan::SqliteRagCorpusPlan,
+    has_fts_join: bool,
+) -> Result<String, RagError> {
+    // Search/index text may live in a carrier column, the FTS sidecar,
+    // or only as raw text in legacy layouts.
+    let mut candidates = Vec::new();
+    if plan.text_unit_columns.contains("search_text") {
+        candidates.push(format!("tu.{}", quote_identifier("search_text")?));
+    }
+    if has_fts_join {
+        candidates.push(format!("fts.{}", quote_identifier("search_text")?));
+    }
+    candidates.push(format!("tu.{}", quote_identifier("text")?));
+    Ok(format!("COALESCE({})", candidates.join(", ")))
 }
 
 fn json_string(value: &Value) -> Result<String, RagError> {

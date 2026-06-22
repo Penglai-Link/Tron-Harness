@@ -155,6 +155,12 @@ pub(super) fn rebuild_fulltext_indexes_for_source(
     if table_exists(connection, &fts_table_name)? {
         let fts_table = quote_identifier(&fts_table_name)?;
         let table = quote_identifier(plan.fulltext_storage_table())?;
+        let search_text_expr = fulltext_rebuild_search_text_expr(plan)?;
+        let status_column = if plan.has_distinct_fulltext_table() || !plan.has_sqlite_text_units() {
+            "status"
+        } else {
+            &plan.text_unit_status_column
+        };
         connection
             .execute(
                 &format!(
@@ -164,31 +170,44 @@ pub(super) fn rebuild_fulltext_indexes_for_source(
                         FROM {table}
                      WHERE source_code = ?1 AND source_version = ?2
                        AND scope_type = ?3 AND scope_code = ?4
-                     )"
+                       AND {} != 'ACTIVE'
+                     )",
+                    quote_identifier(status_column)?
                 ),
                 params![source_code, source_version, scope_type, scope_code],
             )
             .map_err(storage_error)?;
-        let search_column = if plan.has_distinct_fulltext_table() || !plan.has_sqlite_text_units() {
-            "search_text"
-        } else {
-            "text"
-        };
         connection
             .execute(
                 &format!(
                     "INSERT OR REPLACE INTO {fts_table}(rowid, search_text)
-                     SELECT id, {search_column}
-                     FROM {table}
+                     SELECT source.id, {search_text_expr}
+                     FROM {table} source
+                     LEFT JOIN {fts_table} existing_fts ON existing_fts.rowid = source.id
                      WHERE source_code = ?1 AND source_version = ?2
                        AND scope_type = ?3 AND scope_code = ?4
-                       AND status = 'ACTIVE'"
+                       AND {} = 'ACTIVE'",
+                    quote_identifier(status_column)?
                 ),
                 params![source_code, source_version, scope_type, scope_code],
             )
             .map_err(storage_error)?;
     }
     Ok(())
+}
+
+fn fulltext_rebuild_search_text_expr(plan: &SqliteRagCorpusPlan) -> Result<String, RagError> {
+    let mut candidates = Vec::new();
+    if plan.fulltext_columns.contains("search_text") {
+        candidates.push(format!("source.{}", quote_identifier("search_text")?));
+    }
+    candidates.push(format!("existing_fts.{}", quote_identifier("search_text")?));
+    if plan.fulltext_columns.contains("text") {
+        candidates.push(format!("source.{}", quote_identifier("text")?));
+    } else {
+        candidates.push("''".into());
+    }
+    Ok(format!("COALESCE({})", candidates.join(", ")))
 }
 
 pub(super) fn upsert_vector_index_for_code(

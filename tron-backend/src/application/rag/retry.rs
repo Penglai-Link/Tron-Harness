@@ -110,6 +110,7 @@ pub struct RagRetryStageResult {
 pub struct RagRetryTextUnit {
     pub text_unit_code: String,
     pub text: String,
+    pub index_text: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -245,7 +246,7 @@ where
                 .embed(RagEmbeddingCall {
                     workspace_code: request.workspace_code.clone(),
                     model_code: model.clone(),
-                    input: unit.text.clone(),
+                    input: unit.index_text.clone(),
                 })
                 .await
             {

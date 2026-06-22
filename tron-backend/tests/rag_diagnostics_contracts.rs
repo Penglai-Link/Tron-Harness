@@ -2,7 +2,7 @@ use std::{
     future::Future,
     path::PathBuf,
     pin::Pin,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -111,6 +111,61 @@ async fn retry_rebuilds_fulltext_and_vector_from_persisted_text_units() {
     assert_eq!(debug.text_units[0].fulltext_status, "INDEXED");
     assert_eq!(debug.text_units[0].embedding_status, "INDEXED");
     assert_eq!(debug.text_units[0].embedding_model_code, None);
+}
+
+#[tokio::test]
+async fn retry_rebuilds_fulltext_and_vector_from_persisted_search_text_when_available() {
+    let database_url = temp_database_path("rag-retry-search-text")
+        .to_string_lossy()
+        .to_string();
+    seed_retry_fixture(&database_url);
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    set_retry_text_unit_fts_search_text(
+        &database_url,
+        "tu-retry-1",
+        "Debug > Retry\nRetry can rebuild persisted text only.",
+    );
+    let runtime = FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25));
+
+    let result = RagRetryIndexService::new(repository, runtime.clone())
+        .retry_index(RagRetryIndexRequest {
+            workspace_code: "TRON_CORE".into(),
+            corpus_id: "project-doc".into(),
+            source_code: "doc-retry".into(),
+            source_version: "v1".into(),
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+            stages: vec!["fulltextIndex".into(), "vectorIndex".into()],
+            embedding_model_code: Some("fake-embedding".into()),
+            user_code: "USR-AUTH-0001".into(),
+            agent_code: "AGENT_CODEX".into(),
+        })
+        .await
+        .unwrap();
+
+    assert_eq!(result.status, "success");
+    assert_eq!(
+        runtime.embedding_inputs(),
+        vec!["Debug > Retry\nRetry can rebuild persisted text only.".to_string()]
+    );
+    let connection = open_prepared_connection(&database_url);
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT fts.search_text
+             FROM rag_project_doc_text_units tu
+             JOIN rag_project_doc_text_units_fts fts ON fts.rowid = tu.id
+             WHERE tu.text_unit_code = 'tu-retry-1'"
+        ),
+        "Debug > Retry\nRetry can rebuild persisted text only."
+    );
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT text FROM rag_project_doc_text_units WHERE text_unit_code = 'tu-retry-1'"
+        ),
+        "Retry can rebuild persisted text only."
+    );
 }
 
 #[tokio::test]
@@ -649,6 +704,7 @@ fn attr(event: &BusEvent, key: &str) -> Option<String> {
 #[derive(Clone)]
 struct FakeEmbeddingRuntime {
     result: Result<RagEmbeddingResult, String>,
+    inputs: Arc<Mutex<Vec<String>>>,
 }
 
 impl FakeEmbeddingRuntime {
@@ -658,22 +714,37 @@ impl FakeEmbeddingRuntime {
                 model_code: "workspace-default-embedding".into(),
                 embedding,
             }),
+            inputs: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
     fn failing(message: &str) -> Self {
         Self {
             result: Err(message.into()),
+            inputs: Arc::new(Mutex::new(Vec::new())),
         }
+    }
+
+    fn embedding_inputs(&self) -> Vec<String> {
+        self.inputs
+            .lock()
+            .expect("fake embedding inputs mutex poisoned")
+            .clone()
     }
 }
 
 impl RagEmbeddingRuntime for FakeEmbeddingRuntime {
     fn embed<'a>(
         &'a self,
-        _call: RagEmbeddingCall,
+        call: RagEmbeddingCall,
     ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
-        Box::pin(async move { self.result.clone() })
+        Box::pin(async move {
+            self.inputs
+                .lock()
+                .expect("fake embedding inputs mutex poisoned")
+                .push(call.input);
+            self.result.clone()
+        })
     }
 }
 
@@ -799,6 +870,23 @@ fn seed_retry_fixture(database_url: &str) {
                 'LEAF', 'Debug visible text.', 'Debug', 0, 3,
                 'hash', 'ACTIVE', '{}', 1, 1)",
             [],
+        )
+        .unwrap();
+}
+
+fn set_retry_text_unit_fts_search_text(
+    database_url: &str,
+    text_unit_code: &str,
+    search_text: &str,
+) {
+    let connection = open_prepared_connection(database_url);
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO rag_project_doc_text_units_fts(rowid, search_text)
+             SELECT id, ?1
+             FROM rag_project_doc_text_units
+             WHERE text_unit_code = ?2",
+            params![search_text, text_unit_code],
         )
         .unwrap();
 }
