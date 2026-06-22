@@ -29,6 +29,9 @@ const defaultRouteTypes: Array<RagRetrievalRouteType> = ["FULLTEXT", "VECTOR", "
 const defaultProfileStatuses: RagProfileStatus[] = ["Draft", "Ready", "Needs Review"];
 const defaultFilterOperators = ["eq", "in", "gt", "gte", "lt", "lte"];
 export const mineruParseStrategyId = "RAG_PARSE_MINERU_DOCUMENT";
+export const legacySplitTextStrategyId = "RAG_SPLIT_TEXT";
+export const splitMarkdownHeadingStrategyId = "RAG_SPLIT_MARKDOWN_HEADING_V1";
+export const splitPlainTextStrategyId = "RAG_SPLIT_PLAIN_TEXT_V1";
 const defaultMineruDocumentFormats = ["PDF", "DOCX"];
 const defaultDocumentReferenceMaxBytes = "52428800";
 const initialIngestArtifactKeys = new Set(["request.payload", "request.accessContext"]);
@@ -217,6 +220,13 @@ function applyMarkdownSplitDefaults(form: RagIngestProfileFormState, splitterTyp
   };
 }
 
+function splitterTypeForStrategy(strategyId: string, fallbackType: string) {
+  const normalizedStrategyId = strategyId.trim();
+  if (normalizedStrategyId === splitPlainTextStrategyId) return "plainText";
+  if (normalizedStrategyId === splitMarkdownHeadingStrategyId) return "markdownHeading";
+  return fallbackType;
+}
+
 export function applyIngestStageStrategyDefaults(
   form: RagIngestProfileFormState,
   stageId: RagIngestStageId,
@@ -277,7 +287,15 @@ export function applyIngestStageStrategyDefaults(
     return nextForm;
   }
 
-  if (stageId === "splitText" && normalizedStrategyId === "RAG_SPLIT_TEXT") {
+  if (stageId === "splitText" && normalizedStrategyId === splitPlainTextStrategyId) {
+    return applyMarkdownSplitDefaults(nextForm, "plainText");
+  }
+
+  if (stageId === "splitText" && normalizedStrategyId === splitMarkdownHeadingStrategyId) {
+    return applyMarkdownSplitDefaults(nextForm, "markdownHeading");
+  }
+
+  if (stageId === "splitText" && normalizedStrategyId === legacySplitTextStrategyId) {
     return applyMarkdownSplitDefaults(
       nextForm,
       profileUsesDocumentReference(nextForm) ? "markdownHeading" : "plainText",
@@ -441,9 +459,11 @@ export function buildIngestProfileFormState(existing?: IngestProfileRecord): Rag
     const parseDocumentConfig = existing.config.stages.parseDocument?.config;
     const parseDocumentStrategyId = existing.config.stages.parseDocument?.strategyId;
     const splitTextConfig = existing.config.stages.splitText?.config;
+    const splitTextStrategyId = existing.config.stages.splitText?.strategyId ?? "";
     const splitterConfig = splitTextConfig && typeof splitTextConfig === "object" && "splitter" in splitTextConfig
       ? splitTextConfig.splitter as Record<string, unknown>
       : undefined;
+    const storedSplitterType = typeof splitterConfig?.type === "string" ? splitterConfig.type : "plainText";
 
     return {
       description: existing.description,
@@ -467,7 +487,7 @@ export function buildIngestProfileFormState(existing?: IngestProfileRecord): Rag
       splitTextHeadingDepth: typeof splitterConfig?.headingDepth === "number" ? String(splitterConfig.headingDepth) : "6",
       splitTextMaxTokens: typeof splitterConfig?.maxTokens === "number" ? String(splitterConfig.maxTokens) : "800",
       splitTextOverlapTokens: typeof splitterConfig?.overlapTokens === "number" ? String(splitterConfig.overlapTokens) : "80",
-      splitTextType: typeof splitterConfig?.type === "string" ? splitterConfig.type : "plainText",
+      splitTextType: splitterTypeForStrategy(splitTextStrategyId, storedSplitterType),
       status: existing.status,
       supportedSourceTypesText: existing.config.sourceInputPolicy.supportedSourceTypes.join(", "),
     };
@@ -572,10 +592,11 @@ export function buildIngestProfileRecordFromForm(
       const headingDepth = parseOptionalInteger(form.splitTextHeadingDepth);
       const maxTokens = parseOptionalInteger(form.splitTextMaxTokens);
       const overlapTokens = parseOptionalInteger(form.splitTextOverlapTokens);
+      const splitterType = splitterTypeForStrategy(strategyId, form.splitTextType);
       accumulator[stageId] = {
         config: {
           splitter: {
-            ...(trimOrUndefined(form.splitTextType) ? { type: form.splitTextType.trim() } : {}),
+            ...(trimOrUndefined(splitterType) ? { type: splitterType.trim() } : {}),
             ...(maxTokens !== undefined ? { maxTokens } : {}),
             ...(overlapTokens !== undefined ? { overlapTokens } : {}),
             ...(headingDepth !== undefined ? { headingDepth } : {}),
@@ -848,11 +869,13 @@ export function validateIngestProfileForm(
   }
 
   if (enabledStages.some((stage) => stage.id === "splitText")) {
+    const splitTextStage = enabledStages.find((stage) => stage.id === "splitText");
     const maxTokens = parseOptionalInteger(form.splitTextMaxTokens);
     const overlapTokens = parseOptionalInteger(form.splitTextOverlapTokens);
     const headingDepth = parseOptionalInteger(form.splitTextHeadingDepth);
+    const effectiveSplitterType = splitterTypeForStrategy(splitTextStage?.strategyId ?? "", form.splitTextType);
 
-    if (!trimOrUndefined(form.splitTextType)) {
+    if (!trimOrUndefined(effectiveSplitterType)) {
       errors.splitTextType = "切分器类型不能为空。";
     }
     if (maxTokens === undefined || maxTokens <= 0) {
@@ -861,7 +884,7 @@ export function validateIngestProfileForm(
     if (overlapTokens === undefined || overlapTokens < 0) {
       errors.splitTextOverlapTokens = "重叠令牌数必须大于等于 0。";
     }
-    if (form.splitTextType.trim() === "markdownHeading" && (headingDepth === undefined || headingDepth < 1 || headingDepth > 6)) {
+    if (effectiveSplitterType.trim() === "markdownHeading" && (headingDepth === undefined || headingDepth < 1 || headingDepth > 6)) {
       errors.splitTextHeadingDepth = "标题深度必须在 1 到 6 之间。";
     }
   }

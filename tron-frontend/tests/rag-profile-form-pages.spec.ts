@@ -81,6 +81,37 @@ function responseBodies(requests: CapturedRequest[], pathname: string, method: s
     .filter((response): response is Record<string, unknown> => Boolean(response));
 }
 
+function pipelineNode(body: Record<string, unknown> | undefined, stageType: string) {
+  const pipeline = body?.pipeline as Record<string, unknown> | undefined;
+  const nodes = Array.isArray(pipeline?.nodes) ? pipeline.nodes as Array<Record<string, unknown>> : [];
+  return nodes.find((node) => node.stageType === stageType);
+}
+
+async function openAdvancedNodeControls(page: Page) {
+  await page.locator("summary").filter({ hasText: /Advanced Node Control|高级节点控制/ }).click();
+}
+
+const label = {
+  description: /Description|描述/,
+  ingestProfile: /Ingest Profile|写入配置/,
+  primaryCorpus: /Primary Corpus|主语料库/,
+  profileId: /Profile ID|配置标识/,
+  splitStrategy: /SPLIT_TEXT (strategy ID|策略标识)/,
+  supportedSourceTypes: /Supported Source Types|支持的来源类型/,
+  vectorStrategy: /VECTOR_INDEX (strategy ID|策略标识)/,
+};
+
+const buttonName = {
+  addIngestProfile: /Add Ingest Profile|新增写入配置/,
+  editProjectDocIngest: /Edit project-doc-ingest-v1|编辑 project-doc-ingest-v1/,
+  editSupportNotesIngest: /Edit support-notes-ingest-v1|编辑 support-notes-ingest-v1/,
+  enablePersistSource: /Enable PERSIST_SOURCE node|启用 持久化来源 节点/,
+  enablePreparePayload: /Enable PREPARE_PAYLOAD node|启用 准备载荷 节点/,
+  enableSplitText: /Enable SPLIT_TEXT node|启用 文本切分 节点/,
+  enableVectorIndex: /Enable VECTOR_INDEX node|启用 向量索引 节点/,
+  saveProfile: /Save Profile|保存配置/,
+};
+
 test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
@@ -112,52 +143,62 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await installRagManagementApiMock(page, requests);
 
   await page.goto(`${frontendBaseUrl}/rag?tab=profiles`);
-  await expect(page.getByRole("heading", { name: "RAG Management" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Ingest Profiles" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Retrieval Profiles" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /RAG Management|知识检索管理/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Profiles|配置档案/ })).toBeVisible();
 
-  await page.getByRole("button", { name: "Add Ingest Profile" }).click();
-  await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/new$/);
-  await expect(page.getByRole("heading", { name: "Create Ingest Profile" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Pipeline Nodes" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Pipeline Edges" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Stage Config" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Backend Payload Preview" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Verify Result" })).toBeVisible();
+  await page.getByRole("button", { name: buttonName.addIngestProfile }).click();
+  await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/new(\?.*)?$/);
+  await expect(page.getByRole("heading", { name: /Create Ingest Profile|新建写入配置/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Pipeline Flow|流水线流程/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Stage Config|阶段策略/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Stage Bindings" })).toHaveCount(0);
 
-  await page.getByLabel("Profile ID").fill("support-notes-ingest-v1");
-  await page.getByLabel("Primary Corpus").selectOption("project-doc");
-  await page.getByLabel("Description").fill("Ingest support notes and incident runbooks.");
-  await page.getByRole("button", { name: "Enable PREPARE_PAYLOAD node" }).click();
-  await page.getByRole("button", { name: "Enable SPLIT_TEXT node" }).click();
-  await page.getByRole("button", { name: "Enable PERSIST_SOURCE node" }).click();
-  await page.getByLabel("PREPARE_PAYLOAD strategy ID").selectOption("RAG_TEXT_CONTRACT_PAYLOAD_V1");
-  await page.getByLabel("SPLIT_TEXT strategy ID").selectOption("RAG_SPLIT_TEXT");
-  await page.getByLabel("PERSIST_SOURCE strategy ID").selectOption("RAG_PERSIST_SOURCE");
-  await page.getByLabel("Supported Source Types").fill("RUNBOOK, INCIDENT_NOTE");
-  await page.getByRole("button", { name: "Save Profile" }).click();
+  await page.getByLabel(label.profileId).fill("support-notes-ingest-v1");
+  await page.getByLabel(label.primaryCorpus).selectOption("project-doc");
+  await page.getByLabel(label.description).fill("Ingest support notes and incident runbooks.");
+  await openAdvancedNodeControls(page);
+  await page.getByRole("button", { name: buttonName.enablePreparePayload }).click();
+  await page.getByRole("button", { name: buttonName.enableSplitText }).click();
+  await page.getByRole("button", { name: buttonName.enablePersistSource }).click();
+  await page.getByLabel(/PREPARE_PAYLOAD (strategy ID|策略标识)/).selectOption("RAG_TEXT_CONTRACT_PAYLOAD_V1");
+  const splitStrategySelect = page.getByLabel(label.splitStrategy);
+  await expect(splitStrategySelect).toContainText("RAG_SPLIT_PLAIN_TEXT_V1");
+  await expect(splitStrategySelect).toContainText("RAG_SPLIT_MARKDOWN_HEADING_V1");
+  await expect(splitStrategySelect).toContainText("RAG_SPLIT_TEXT");
+  await splitStrategySelect.selectOption("RAG_SPLIT_MARKDOWN_HEADING_V1");
+  await expect(page.getByLabel(/Text split splitter type|文本切分切分器类型/)).toHaveValue("markdownHeading");
+  await expect(page.getByLabel(/Text split max tokens|文本切分最大令牌数/)).toHaveValue("800");
+  await expect(page.getByLabel(/Text split overlap tokens|文本切分重叠令牌数/)).toHaveValue("80");
+  await expect(page.getByLabel(/Text split heading depth|文本切分标题深度/)).toHaveValue("6");
+  await splitStrategySelect.selectOption("RAG_SPLIT_PLAIN_TEXT_V1");
+  await expect(page.getByLabel(/Text split splitter type|文本切分切分器类型/)).toHaveValue("plainText");
+  await page.getByLabel(/PERSIST_SOURCE (strategy ID|策略标识)/).selectOption("RAG_PERSIST_SOURCE");
+  await page.getByLabel(label.supportedSourceTypes).fill("RUNBOOK, INCIDENT_NOTE");
+  await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
-  await expect(page).toHaveURL(/\/rag\?tab=profiles$/);
-  await expect(notifications(page, "support-notes-ingest-v1 created")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Edit support-notes-ingest-v1" })).toBeVisible();
+  await expect(page).toHaveURL(/\/rag\?tab=profiles(&profileType=ingest)?$/);
+  await expect(notifications(page, /support-notes-ingest-v1 (created|已创建)/)).toBeVisible();
+  await expect(page.getByRole("button", { name: buttonName.editSupportNotesIngest })).toBeVisible();
 
-  await page.getByRole("button", { name: "Edit support-notes-ingest-v1" }).click();
-  await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/support-notes-ingest-v1\/edit$/);
-  await expect(page.getByLabel("Profile ID")).toBeDisabled();
-  await expect(page.getByLabel("Description")).toHaveValue("Ingest support notes and incident runbooks.");
-  await expect(page.getByRole("heading", { name: "Pipeline Nodes" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Pipeline Edges" })).toBeVisible();
+  await page.getByRole("button", { name: buttonName.editSupportNotesIngest }).click();
+  await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/support-notes-ingest-v1\/edit(\?.*)?$/);
+  await expect(page.getByLabel(label.profileId)).toBeDisabled();
+  await expect(page.getByLabel(label.description)).toHaveValue("Ingest support notes and incident runbooks.");
+  await expect(page.getByRole("heading", { name: /Pipeline Flow|流水线流程/ })).toBeVisible();
 
-  await page.getByLabel("Description").fill("Ingest support notes, incident runbooks, and QA handbooks.");
-  await page.getByRole("button", { name: "Enable VECTOR_INDEX node" }).click();
-  await page.getByLabel("VECTOR_INDEX strategy ID").selectOption("RAG_VECTOR_INDEX");
-  await page.getByRole("button", { name: "Save Profile" }).click();
+  await page.getByLabel(label.description).fill("Ingest support notes, incident runbooks, and QA handbooks.");
+  await openAdvancedNodeControls(page);
+  await page.getByRole("button", { name: buttonName.enableVectorIndex }).click();
+  await page.getByLabel(label.splitStrategy).selectOption("RAG_SPLIT_MARKDOWN_HEADING_V1");
+  await expect(page.getByLabel(/Text split splitter type|文本切分切分器类型/)).toHaveValue("markdownHeading");
+  await expect(page.getByLabel(/Text split heading depth|文本切分标题深度/)).toHaveValue("6");
+  await page.getByLabel(label.vectorStrategy).selectOption("RAG_VECTOR_INDEX");
+  await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
-  await expect(page).toHaveURL(/\/rag\?tab=profiles$/);
-  await expect(notifications(page, "support-notes-ingest-v1 saved")).toBeVisible();
-  await page.getByRole("tab", { name: "Workbench" }).click();
-  await expect(page.getByLabel("Ingest Profile")).toContainText("support-notes-ingest-v1");
+  await expect(page).toHaveURL(/\/rag\?tab=profiles(&profileType=ingest)?$/);
+  await expect(notifications(page, /support-notes-ingest-v1 (saved|已保存)/)).toBeVisible();
+  await page.getByRole("tab", { name: /Workbench|调试台/ }).click();
+  await expect(page.getByLabel(label.ingestProfile)).toContainText("support-notes-ingest-v1");
 
   expect(requests.some((request) => request.pathname === "/api/v1/rag/profiles" && request.method === "GET")).toBeTruthy();
   expect(requests.some((request) => request.pathname === "/api/v1/rag/profiles/catalog" && request.method === "GET")).toBeTruthy();
@@ -175,7 +216,7 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
         mode: "DAG",
         nodes: expect.arrayContaining([
           expect.objectContaining({ nodeId: "prepare-payload", stageType: "PREPARE_PAYLOAD", strategyId: "RAG_TEXT_CONTRACT_PAYLOAD_V1" }),
-          expect.objectContaining({ nodeId: "split-text", stageType: "SPLIT_TEXT", strategyId: "RAG_SPLIT_TEXT" }),
+          expect.objectContaining({ nodeId: "split-text", stageType: "SPLIT_TEXT", strategyId: "RAG_SPLIT_PLAIN_TEXT_V1" }),
           expect.objectContaining({ nodeId: "persist-source", stageType: "PERSIST_SOURCE", strategyId: "RAG_PERSIST_SOURCE" }),
         ]),
       }),
@@ -194,7 +235,7 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
       mode: "DAG",
       nodes: expect.arrayContaining([
         expect.objectContaining({ enabled: true, nodeId: "prepare-payload", stageType: "PREPARE_PAYLOAD", strategyId: "RAG_TEXT_CONTRACT_PAYLOAD_V1" }),
-        expect.objectContaining({ enabled: true, nodeId: "split-text", stageType: "SPLIT_TEXT", strategyId: "RAG_SPLIT_TEXT" }),
+        expect.objectContaining({ enabled: true, nodeId: "split-text", stageType: "SPLIT_TEXT", strategyId: "RAG_SPLIT_PLAIN_TEXT_V1" }),
         expect.objectContaining({ enabled: true, nodeId: "persist-source", stageType: "PERSIST_SOURCE", strategyId: "RAG_PERSIST_SOURCE" }),
       ]),
     }),
@@ -204,6 +245,16 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
       supportedSourceTypes: ["RUNBOOK", "INCIDENT_NOTE"],
     }),
   }));
+  expect(pipelineNode(createBody, "SPLIT_TEXT")).toEqual(expect.objectContaining({
+    config: expect.objectContaining({
+      splitter: expect.objectContaining({
+        maxTokens: 800,
+        overlapTokens: 80,
+        type: "plainText",
+      }),
+    }),
+    strategyId: "RAG_SPLIT_PLAIN_TEXT_V1",
+  }));
   expect(createBody).not.toHaveProperty("pipelineStages");
 
   const updateBodies = requestBodies(requests, "/api/v1/rag/profiles/support-notes-ingest-v1", "PUT");
@@ -212,13 +263,55 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
     description: "Ingest support notes, incident runbooks, and QA handbooks.",
     pipeline: expect.objectContaining({
       nodes: expect.arrayContaining([
+        expect.objectContaining({ enabled: true, nodeId: "split-text", stageType: "SPLIT_TEXT", strategyId: "RAG_SPLIT_MARKDOWN_HEADING_V1" }),
         expect.objectContaining({ enabled: true, nodeId: "vector-index", stageType: "VECTOR_INDEX", strategyId: "RAG_VECTOR_INDEX" }),
       ]),
     }),
     profileId: "support-notes-ingest-v1",
     status: "enabled",
   }));
+  expect(pipelineNode(updateBody, "SPLIT_TEXT")).toEqual(expect.objectContaining({
+    config: expect.objectContaining({
+      splitter: expect.objectContaining({
+        headingDepth: 6,
+        maxTokens: 800,
+        overlapTokens: 80,
+        type: "markdownHeading",
+      }),
+    }),
+    strategyId: "RAG_SPLIT_MARKDOWN_HEADING_V1",
+  }));
   expect(updateBody).not.toHaveProperty("pipelineStages");
+});
+
+test("preserves legacy split strategy when editing existing ingest profiles", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  await installRagManagementApiMock(page, requests);
+
+  await page.goto(`${frontendBaseUrl}/rag/profiles/ingest/project-doc-ingest-v1/edit`);
+  await expect(page.getByRole("heading", { name: /Edit Ingest Profile|编辑写入配置/ })).toBeVisible();
+  const splitStrategySelect = page.getByLabel(label.splitStrategy);
+  await expect(splitStrategySelect).toContainText("RAG_SPLIT_PLAIN_TEXT_V1");
+  await expect(splitStrategySelect).toContainText("RAG_SPLIT_MARKDOWN_HEADING_V1");
+  await expect(splitStrategySelect).toContainText("RAG_SPLIT_TEXT");
+  await expect(splitStrategySelect).toHaveValue("RAG_SPLIT_TEXT");
+  await expect(page.getByLabel(/Text split splitter type|文本切分切分器类型/)).toHaveValue("plainText");
+
+  await page.getByRole("button", { name: buttonName.saveProfile }).click();
+
+  await expect(page).toHaveURL(/\/rag\?tab=profiles(&profileType=ingest)?$/);
+  await expect(notifications(page, /project-doc-ingest-v1 (saved|已保存)/)).toBeVisible();
+
+  const updateBodies = requestBodies(requests, "/api/v1/rag/profiles/project-doc-ingest-v1", "PUT");
+  const updateBody = updateBodies.find((body) => body.profileId === "project-doc-ingest-v1");
+  expect(pipelineNode(updateBody, "SPLIT_TEXT")).toEqual(expect.objectContaining({
+    config: expect.objectContaining({
+      splitter: expect.objectContaining({
+        type: "plainText",
+      }),
+    }),
+    strategyId: "RAG_SPLIT_TEXT",
+  }));
 });
 
 test("creates and edits multi-corpus retrieval profiles through management APIs", async ({ page }) => {

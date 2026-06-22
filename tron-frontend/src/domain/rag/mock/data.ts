@@ -686,6 +686,16 @@ const ragMockStrategyRegistry: RagMockStrategyRegistry = {
     },
     {
       status: "Enabled",
+      strategyId: "RAG_SPLIT_PLAIN_TEXT_V1",
+      supportedStageIds: ["splitText"],
+    },
+    {
+      status: "Enabled",
+      strategyId: "RAG_SPLIT_MARKDOWN_HEADING_V1",
+      supportedStageIds: ["splitText"],
+    },
+    {
+      status: "Enabled",
       strategyId: "RAG_SPLIT_TEXT",
       supportedStageIds: ["splitText"],
     },
