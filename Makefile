@@ -10,6 +10,9 @@ APP_FRONTEND_ENV = VITE_TRON_API_BASE_URL= VITE_TRON_DATA_SOURCE=api VITE_TRON_A
 
 .PHONY: help
 help:
+	@echo "Common commands:"
+	@echo "  make clean      Run backend, frontend, and integrated app cleanup"
+	@echo ""
 	@echo "Frontend commands:"
 	@echo "  make fe-install   Install frontend dependencies"
 	@echo "  make fe-dev       Start the Vite dev server"
@@ -41,6 +44,9 @@ help:
 	@echo "                    Validate the memory dreaming skill"
 	@echo "  make skill-memory-spec-test"
 	@echo "                    Validate the memory spec skill"
+
+.PHONY: clean
+clean: be-clean fe-clean app-clean
 
 .PHONY: fe-install
 fe-install:
