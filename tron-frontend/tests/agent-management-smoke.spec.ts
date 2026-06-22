@@ -293,7 +293,11 @@ test("agent management works fully in mock mode without backend requests", async
   await expect(page.getByRole("heading", { name: "Platform Tools" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Tool Domains" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Tools", exact: true })).toBeVisible();
-  await expect(page.getByText("workspace.list", { exact: true })).toBeVisible();
+  await expect(page.getByText("workspace.page", { exact: true })).toBeVisible();
+  const toolRowsPerPage = page.getByLabel("Rows per page");
+  await expect(toolRowsPerPage).toHaveCount(2);
+  await expect(toolRowsPerPage.nth(0)).toHaveValue("15");
+  await expect(toolRowsPerPage.nth(1)).toHaveValue("15");
 
   expect(blockedRequests).toEqual([]);
 });

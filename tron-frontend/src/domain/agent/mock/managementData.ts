@@ -77,10 +77,10 @@ type ToolDomainSeed = {
 const toolDomainSeed: ToolDomainSeed[] = [
   {
     domainCode: "workspace",
-    description: "Workspace discovery, metadata lookup, and lifecycle actions for platform workspaces.",
-    hasMutationTools: true,
+    description: "Workspace discovery and metadata lookup for platform workspaces.",
+    hasMutationTools: false,
     name: "Workspace",
-    sampleTools: ["workspace.list", "workspace.get", "workspace.create"],
+    sampleTools: ["workspace.page", "workspace.get"],
   },
   {
     domainCode: "agent",
@@ -94,7 +94,7 @@ const toolDomainSeed: ToolDomainSeed[] = [
     description: "Read and inspect platform and workspace model catalogs.",
     hasMutationTools: true,
     name: "Model",
-    sampleTools: ["models.platform.list", "models.workspace.list", "models.bind.set_default"],
+    sampleTools: ["model.page", "model.create", "model.update"],
   },
 ];
 
@@ -108,11 +108,11 @@ type ToolSeed = {
 
 const toolSeed: ToolSeed[] = [
   {
-    description: "List readable workspaces and workspace metadata.",
+    description: "Page readable workspaces and workspace metadata.",
     domainCode: "workspace",
-    name: "List Workspaces",
+    name: "Page Workspaces",
     operationKind: "query",
-    toolCode: "workspace.list",
+    toolCode: "workspace.page",
   },
   {
     description: "Get workspace details and inherited policy summary.",
@@ -120,13 +120,6 @@ const toolSeed: ToolSeed[] = [
     name: "Get Workspace",
     operationKind: "query",
     toolCode: "workspace.get",
-  },
-  {
-    description: "Create a workspace with policy defaults and model bindings.",
-    domainCode: "workspace",
-    name: "Create Workspace",
-    operationKind: "command",
-    toolCode: "workspace.create",
   },
   {
     description: "Get a single internal or system agent profile.",
@@ -150,25 +143,25 @@ const toolSeed: ToolSeed[] = [
     toolCode: "agents.workspace.patch_policy",
   },
   {
-    description: "List all platform models with protocol and capability metadata.",
+    description: "Page effective models with protocol and capability metadata.",
     domainCode: "model",
-    name: "List Platform Models",
+    name: "Page Models",
     operationKind: "query",
-    toolCode: "models.platform.list",
+    toolCode: "model.page",
   },
   {
-    description: "List workspace model bindings with inheritance status.",
+    description: "Create a workspace-local model definition.",
     domainCode: "model",
-    name: "List Workspace Models",
-    operationKind: "query",
-    toolCode: "models.workspace.list",
-  },
-  {
-    description: "Set the default workspace model for a protocol-capability pair.",
-    domainCode: "model",
-    name: "Set Default Model",
+    name: "Create Model",
     operationKind: "command",
-    toolCode: "models.bind.set_default",
+    toolCode: "model.create",
+  },
+  {
+    description: "Update a workspace model definition.",
+    domainCode: "model",
+    name: "Update Model",
+    operationKind: "command",
+    toolCode: "model.update",
   },
 ];
 

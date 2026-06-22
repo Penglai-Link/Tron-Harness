@@ -1,218 +1,334 @@
+mod helpers;
+
 use serde_json::json;
 
-use crate::domain::agent::{ToolAvailabilityState, ToolOperationKind};
+use crate::domain::agent::ToolOperationKind;
 
 use super::{ToolCatalogDefinition, schema};
+use helpers::{
+    app_code_definition, app_mutation_schema, app_update_schema, definition, model_code_definition,
+    model_mutation_schema, page_properties, task_code_definition, task_mutation_schema,
+    variable_mutation_schema, workspace_code_schema, workspace_scoped_page_schema,
+};
 
 pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
     vec![
-        ToolCatalogDefinition {
-            tool_code: "workspace.list",
-            domain_code: "workspace",
-            name_i18n_key: "agent.toolCatalog.tools.workspace.list.name",
-            description_i18n_key: "agent.toolCatalog.tools.workspace.list.description",
-            operation_kind: ToolOperationKind::Query,
-            input_schema: schema(
-                "agent.toolCatalog.tools.workspace.list.description",
-                json!([{ "includeArchived": false, "search": "tron", "rootOnly": true }]),
-                json!({
-                    "type": "object",
-                    "properties": {
-                        "includeArchived": { "type": "boolean", "default": false, "x-i18n-description-key": "agent.toolCatalog.tools.workspace.list.params.includeArchived" },
-                        "search": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.workspace.list.params.search" },
-                        "rootOnly": { "type": "boolean", "x-i18n-description-key": "agent.toolCatalog.tools.workspace.list.params.rootOnly" }
-                    },
-                    "additionalProperties": false
-                }),
-            ),
-            module_owner: "workspace",
-            availability_state: ToolAvailabilityState::Available,
-            sample_result_summary_i18n_key: "agent.toolCatalog.tools.workspace.list.sampleResultSummary",
-        },
-        ToolCatalogDefinition {
-            tool_code: "workspace.get",
-            domain_code: "workspace",
-            name_i18n_key: "agent.toolCatalog.tools.workspace.get.name",
-            description_i18n_key: "agent.toolCatalog.tools.workspace.get.description",
-            operation_kind: ToolOperationKind::Query,
-            input_schema: schema(
-                "agent.toolCatalog.tools.workspace.get.description",
-                json!([{ "workspaceCode": "TRON_CORE" }]),
-                json!({
-                    "type": "object",
-                    "required": ["workspaceCode"],
-                    "properties": {
-                        "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.workspace.get.params.workspaceCode" }
-                    },
-                    "additionalProperties": false
-                }),
-            ),
-            module_owner: "workspace",
-            availability_state: ToolAvailabilityState::Available,
-            sample_result_summary_i18n_key: "agent.toolCatalog.tools.workspace.get.sampleResultSummary",
-        },
-        ToolCatalogDefinition {
-            tool_code: "app.list",
-            domain_code: "app",
-            name_i18n_key: "agent.toolCatalog.tools.app.list.name",
-            description_i18n_key: "agent.toolCatalog.tools.app.list.description",
-            operation_kind: ToolOperationKind::Query,
-            input_schema: schema(
-                "agent.toolCatalog.tools.app.list.description",
-                json!([{ "workspaceCode": "TRON_CORE", "search": "tron-web", "includeArchived": false }]),
-                json!({
-                    "type": "object",
-                    "properties": {
-                        "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.app.list.params.workspaceCode" },
-                        "search": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.app.list.params.search" },
-                        "includeArchived": { "type": "boolean", "default": false, "x-i18n-description-key": "agent.toolCatalog.tools.app.list.params.includeArchived" }
-                    },
-                    "additionalProperties": false
-                }),
-            ),
-            module_owner: "app",
-            availability_state: ToolAvailabilityState::Available,
-            sample_result_summary_i18n_key: "agent.toolCatalog.tools.app.list.sampleResultSummary",
-        },
-        ToolCatalogDefinition {
-            tool_code: "task.list",
-            domain_code: "task",
-            name_i18n_key: "agent.toolCatalog.tools.task.list.name",
-            description_i18n_key: "agent.toolCatalog.tools.task.list.description",
-            operation_kind: ToolOperationKind::Query,
-            input_schema: schema(
-                "agent.toolCatalog.tools.task.list.description",
-                json!([{ "workspaceCode": "TRON_CORE", "search": "agent", "status": "open" }]),
-                json!({
-                    "type": "object",
-                    "properties": {
-                        "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.list.params.workspaceCode" },
-                        "search": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.list.params.search" },
-                        "status": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.list.params.status" }
-                    },
-                    "additionalProperties": false
-                }),
-            ),
-            module_owner: "task",
-            availability_state: ToolAvailabilityState::Available,
-            sample_result_summary_i18n_key: "agent.toolCatalog.tools.task.list.sampleResultSummary",
-        },
-        ToolCatalogDefinition {
-            tool_code: "task.create",
-            domain_code: "task",
-            name_i18n_key: "agent.toolCatalog.tools.task.create.name",
-            description_i18n_key: "agent.toolCatalog.tools.task.create.description",
-            operation_kind: ToolOperationKind::Command,
-            input_schema: schema(
-                "agent.toolCatalog.tools.task.create.description",
-                json!([{ "workspaceCode": "TRON_CORE", "title": "Implement coding tools", "priority": "high", "taskType": "feature", "sourceType": "internal" }]),
-                json!({
-                    "type": "object",
-                    "required": ["title"],
-                    "properties": {
-                        "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.create.params.workspaceCode" },
-                        "title": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.create.params.title" },
-                        "description": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.create.params.description" },
-                        "priority": { "type": "string", "enum": ["low", "medium", "high"], "x-i18n-description-key": "agent.toolCatalog.tools.task.create.params.priority" },
-                        "taskType": { "type": "string", "enum": ["feature", "bug"], "x-i18n-description-key": "agent.toolCatalog.tools.task.create.params.taskType" },
-                        "sourceType": { "type": "string", "enum": ["internal", "github", "gitlab"], "x-i18n-description-key": "agent.toolCatalog.tools.task.create.params.sourceType" },
-                        "appCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.create.params.appCode" }
-                    },
-                    "additionalProperties": false
-                }),
-            ),
-            module_owner: "task",
-            availability_state: ToolAvailabilityState::Available,
-            sample_result_summary_i18n_key: "agent.toolCatalog.tools.task.create.sampleResultSummary",
-        },
-        ToolCatalogDefinition {
-            tool_code: "model.list",
-            domain_code: "model",
-            name_i18n_key: "agent.toolCatalog.tools.model.list.name",
-            description_i18n_key: "agent.toolCatalog.tools.model.list.description",
-            operation_kind: ToolOperationKind::Query,
-            input_schema: schema(
-                "agent.toolCatalog.tools.model.list.description",
-                json!([{ "workspaceCode": "TRON_CORE" }]),
-                json!({
-                    "type": "object",
-                    "properties": {
-                        "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.model.list.params.workspaceCode" }
-                    },
-                    "additionalProperties": false
-                }),
-            ),
-            module_owner: "model",
-            availability_state: ToolAvailabilityState::Available,
-            sample_result_summary_i18n_key: "agent.toolCatalog.tools.model.list.sampleResultSummary",
-        },
-        ToolCatalogDefinition {
-            tool_code: "skill.list",
-            domain_code: "skill",
-            name_i18n_key: "agent.toolCatalog.tools.skill.list.name",
-            description_i18n_key: "agent.toolCatalog.tools.skill.list.description",
-            operation_kind: ToolOperationKind::Query,
-            input_schema: schema(
-                "agent.toolCatalog.tools.skill.list.description",
-                json!([{ "workspaceCode": "TRON_CORE", "search": "eliteforge", "includeDisabled": false }]),
-                json!({
-                    "type": "object",
-                    "properties": {
-                        "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.skill.list.params.workspaceCode" },
-                        "search": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.skill.list.params.search" },
-                        "includeDisabled": { "type": "boolean", "default": false, "x-i18n-description-key": "agent.toolCatalog.tools.skill.list.params.includeDisabled" }
-                    },
-                    "additionalProperties": false
-                }),
-            ),
-            module_owner: "skill",
-            availability_state: ToolAvailabilityState::Available,
-            sample_result_summary_i18n_key: "agent.toolCatalog.tools.skill.list.sampleResultSummary",
-        },
-        ToolCatalogDefinition {
-            tool_code: "skill.view",
-            domain_code: "skill",
-            name_i18n_key: "agent.toolCatalog.tools.skill.view.name",
-            description_i18n_key: "agent.toolCatalog.tools.skill.view.description",
-            operation_kind: ToolOperationKind::Query,
-            input_schema: schema(
-                "agent.toolCatalog.tools.skill.view.description",
-                json!([{ "workspaceCode": "TRON_CORE", "skillName": "eliteforge-brainstorming" }]),
-                json!({
-                    "type": "object",
-                    "required": ["skillName"],
-                    "properties": {
-                        "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.skill.view.params.workspaceCode" },
-                        "skillName": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.skill.view.params.skillName" }
-                    },
-                    "additionalProperties": false
-                }),
-            ),
-            module_owner: "skill",
-            availability_state: ToolAvailabilityState::Available,
-            sample_result_summary_i18n_key: "agent.toolCatalog.tools.skill.view.sampleResultSummary",
-        },
-        ToolCatalogDefinition {
-            tool_code: "variable.list",
-            domain_code: "variable",
-            name_i18n_key: "agent.toolCatalog.tools.variable.list.name",
-            description_i18n_key: "agent.toolCatalog.tools.variable.list.description",
-            operation_kind: ToolOperationKind::Query,
-            input_schema: schema(
-                "agent.toolCatalog.tools.variable.list.description",
-                json!([{ "workspaceCode": "TRON_CORE", "search": "OPENAI" }]),
-                json!({
-                    "type": "object",
-                    "properties": {
-                        "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.variable.list.params.workspaceCode" },
-                        "search": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.variable.list.params.search" }
-                    },
-                    "additionalProperties": false
-                }),
-            ),
-            module_owner: "variable",
-            availability_state: ToolAvailabilityState::Available,
-            sample_result_summary_i18n_key: "agent.toolCatalog.tools.variable.list.sampleResultSummary",
-        },
+        workspace_page_definition(),
+        workspace_get_definition(),
+        app_page_definition(),
+        app_create_definition(),
+        app_update_definition(),
+        app_delete_definition(),
+        app_restore_definition(),
+        task_page_definition(),
+        task_create_definition(),
+        task_update_definition(),
+        task_delete_definition(),
+        task_restore_definition(),
+        model_page_definition(),
+        model_create_definition(),
+        model_update_definition(),
+        model_enable_definition(),
+        model_disable_definition(),
+        model_delete_definition(),
+        skill_page_definition(),
+        skill_view_definition(),
+        variable_page_definition(),
+        variable_create_definition(),
+        variable_update_definition(),
+        variable_delete_definition(),
     ]
+}
+
+fn workspace_page_definition() -> ToolCatalogDefinition {
+    definition(
+        "workspace.page",
+        "workspace",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.workspace.page.description",
+            json!([{ "current": 1, "size": 20, "includeArchived": false, "search": "tron", "rootOnly": true }]),
+            json!({
+                "type": "object",
+                "properties": page_properties(json!({
+                    "includeArchived": { "type": "boolean", "default": false, "x-i18n-description-key": "agent.toolCatalog.tools.workspace.page.params.includeArchived" },
+                    "search": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.workspace.page.params.search" },
+                    "rootOnly": { "type": "boolean", "default": true, "x-i18n-description-key": "agent.toolCatalog.tools.workspace.page.params.rootOnly" }
+                })),
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn workspace_get_definition() -> ToolCatalogDefinition {
+    definition(
+        "workspace.get",
+        "workspace",
+        ToolOperationKind::Query,
+        workspace_code_schema(
+            "agent.toolCatalog.tools.workspace.get.description",
+            json!([{ "workspaceCode": "TRON_CORE" }]),
+        ),
+    )
+}
+
+fn app_page_definition() -> ToolCatalogDefinition {
+    definition(
+        "app.page",
+        "app",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.app.page.description",
+            json!([{ "workspaceCode": "TRON_CORE", "current": 1, "size": 20, "search": "web", "includeArchived": false }]),
+            workspace_scoped_page_schema(json!({
+                "search": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.app.page.params.search" },
+                "includeArchived": { "type": "boolean", "default": false, "x-i18n-description-key": "agent.toolCatalog.tools.app.page.params.includeArchived" }
+            })),
+        ),
+    )
+}
+
+fn app_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "app.create",
+        "app",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.app.create.description",
+            json!([{ "workspaceCode": "TRON_CORE", "name": "tron-web", "localDirectory": "/repo/tron-web", "runtimeRole": "frontend" }]),
+            app_mutation_schema(true),
+        ),
+    )
+}
+
+fn app_update_definition() -> ToolCatalogDefinition {
+    definition(
+        "app.update",
+        "app",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.app.update.description",
+            json!([{ "workspaceCode": "TRON_CORE", "appCode": "APP-1", "name": "tron-web", "defaultBranch": "main" }]),
+            app_update_schema(),
+        ),
+    )
+}
+
+fn app_delete_definition() -> ToolCatalogDefinition {
+    app_code_definition("app.delete", ToolOperationKind::Command)
+}
+
+fn app_restore_definition() -> ToolCatalogDefinition {
+    app_code_definition("app.restore", ToolOperationKind::Command)
+}
+
+fn task_page_definition() -> ToolCatalogDefinition {
+    definition(
+        "task.page",
+        "task",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.task.page.description",
+            json!([{ "workspaceCode": "TRON_CORE", "current": 1, "size": 20, "search": "agent", "status": "open" }]),
+            workspace_scoped_page_schema(json!({
+                "search": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.page.params.search" },
+                "status": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.page.params.status" },
+                "priority": { "type": "string", "enum": ["low", "medium", "high"], "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.priority" },
+                "taskType": { "type": "string", "enum": ["feature", "bug"], "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.taskType" },
+                "sourceType": { "type": "string", "enum": ["internal", "github", "gitlab"], "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.sourceType" },
+                "assigneeUserCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.page.params.assigneeUserCode" },
+                "parentTaskCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.parentTaskCode" },
+                "includeArchived": { "type": "boolean", "default": false, "x-i18n-description-key": "agent.toolCatalog.common.params.includeArchived" }
+            })),
+        ),
+    )
+}
+
+fn task_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "task.create",
+        "task",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.task.create.description",
+            json!([{ "workspaceCode": "TRON_CORE", "title": "Implement platform tools", "priority": "high", "taskType": "feature", "sourceType": "internal" }]),
+            task_mutation_schema(true),
+        ),
+    )
+}
+
+fn task_update_definition() -> ToolCatalogDefinition {
+    definition(
+        "task.update",
+        "task",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.task.update.description",
+            json!([{ "workspaceCode": "TRON_CORE", "taskCode": "TSK-1", "title": "Updated title", "status": "in_progress", "progress": 40 }]),
+            task_mutation_schema(false),
+        ),
+    )
+}
+
+fn task_delete_definition() -> ToolCatalogDefinition {
+    task_code_definition("task.delete", ToolOperationKind::Command)
+}
+
+fn task_restore_definition() -> ToolCatalogDefinition {
+    task_code_definition("task.restore", ToolOperationKind::Command)
+}
+
+fn model_page_definition() -> ToolCatalogDefinition {
+    definition(
+        "model.page",
+        "model",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.model.page.description",
+            json!([{ "workspaceCode": "TRON_CORE", "current": 1, "size": 20, "search": "gpt", "modelType": "text", "enabled": true }]),
+            workspace_scoped_page_schema(json!({
+                "search": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.model.page.params.search" },
+                "modelType": { "type": "string", "enum": ["text", "embedding", "rerank", "image"], "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.modelType" },
+                "enabled": { "type": "boolean", "x-i18n-description-key": "agent.toolCatalog.common.params.enabled" }
+            })),
+        ),
+    )
+}
+
+fn model_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "model.create",
+        "model",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.model.create.description",
+            json!([{ "workspaceCode": "TRON_CORE", "displayName": "Qwen", "vendor": "Alibaba", "protocol": "openai_compatible", "modelType": "text", "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1", "apiKeyRef": "DASHSCOPE_API_KEY", "modelName": "qwen-plus" }]),
+            model_mutation_schema(true),
+        ),
+    )
+}
+
+fn model_update_definition() -> ToolCatalogDefinition {
+    definition(
+        "model.update",
+        "model",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.model.update.description",
+            json!([{ "workspaceCode": "TRON_CORE", "modelCode": "MDL-1", "displayName": "Qwen Plus", "enabled": true }]),
+            model_mutation_schema(false),
+        ),
+    )
+}
+
+fn model_enable_definition() -> ToolCatalogDefinition {
+    model_code_definition("model.enable", ToolOperationKind::Command)
+}
+
+fn model_disable_definition() -> ToolCatalogDefinition {
+    model_code_definition("model.disable", ToolOperationKind::Command)
+}
+
+fn model_delete_definition() -> ToolCatalogDefinition {
+    model_code_definition("model.delete", ToolOperationKind::Command)
+}
+
+fn skill_page_definition() -> ToolCatalogDefinition {
+    definition(
+        "skill.page",
+        "skill",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.skill.page.description",
+            json!([{ "workspaceCode": "TRON_CORE", "current": 1, "size": 20, "search": "eliteforge", "includeDisabled": false }]),
+            workspace_scoped_page_schema(json!({
+                "search": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.skill.page.params.search" },
+                "includeDisabled": { "type": "boolean", "default": false, "x-i18n-description-key": "agent.toolCatalog.tools.skill.page.params.includeDisabled" }
+            })),
+        ),
+    )
+}
+
+fn skill_view_definition() -> ToolCatalogDefinition {
+    definition(
+        "skill.view",
+        "skill",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.skill.view.description",
+            json!([{ "workspaceCode": "TRON_CORE", "skillName": "eliteforge-brainstorming" }]),
+            json!({
+                "type": "object",
+                "required": ["skillName"],
+                "properties": {
+                    "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.workspaceCode" },
+                    "skillName": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.skill.view.params.skillName" }
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn variable_page_definition() -> ToolCatalogDefinition {
+    definition(
+        "variable.page",
+        "variable",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.variable.page.description",
+            json!([{ "workspaceCode": "TRON_CORE", "current": 1, "size": 20, "search": "OPENAI" }]),
+            workspace_scoped_page_schema(json!({
+                "search": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.variable.page.params.search" }
+            })),
+        ),
+    )
+}
+
+fn variable_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "variable.create",
+        "variable",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.variable.create.description",
+            json!([{ "workspaceCode": "TRON_CORE", "key": "OPENAI_API_KEY", "value": "sk-...", "isSensitive": true }]),
+            variable_mutation_schema(true),
+        ),
+    )
+}
+
+fn variable_update_definition() -> ToolCatalogDefinition {
+    definition(
+        "variable.update",
+        "variable",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.variable.update.description",
+            json!([{ "workspaceCode": "TRON_CORE", "key": "OPENAI_API_KEY", "valueMode": "preserve", "description": "Updated description" }]),
+            variable_mutation_schema(false),
+        ),
+    )
+}
+
+fn variable_delete_definition() -> ToolCatalogDefinition {
+    definition(
+        "variable.delete",
+        "variable",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.variable.delete.description",
+            json!([{ "workspaceCode": "TRON_CORE", "key": "OPENAI_API_KEY" }]),
+            json!({
+                "type": "object",
+                "required": ["key"],
+                "properties": {
+                    "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.workspaceCode" },
+                    "key": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.variable.common.params.key" }
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
 }

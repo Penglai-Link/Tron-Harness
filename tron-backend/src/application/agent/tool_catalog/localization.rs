@@ -1,3 +1,4 @@
+mod business;
 mod coding;
 
 use serde_json::Value;
@@ -136,22 +137,6 @@ fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.domains.workspace.description" => {
             "Inspect workspace hierarchy and metadata."
         }
-        "agent.toolCatalog.tools.workspace.list.name" => "List workspaces",
-        "agent.toolCatalog.tools.workspace.list.description" => {
-            "List workspaces visible to the current actor."
-        }
-        "agent.toolCatalog.tools.workspace.list.sampleResultSummary" => {
-            "Returns workspace tree nodes."
-        }
-        "agent.toolCatalog.tools.workspace.list.params.includeArchived" => {
-            "Whether archived workspaces should be included. Defaults to false."
-        }
-        "agent.toolCatalog.tools.workspace.list.params.search" => {
-            "Optional search text matched against workspace labels and metadata."
-        }
-        "agent.toolCatalog.tools.workspace.list.params.rootOnly" => {
-            "Whether only root workspaces should be returned."
-        }
         "agent.toolCatalog.tools.workspace.get.name" => "Get workspace",
         "agent.toolCatalog.tools.workspace.get.description" => {
             "Read workspace metadata by workspace code."
@@ -252,28 +237,6 @@ fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.tools.memory.common.params.metadata" => {
             "Optional memory metadata object."
         }
-        "agent.toolCatalog.tools.app.list.name" => "List apps",
-        "agent.toolCatalog.tools.app.list.description" => {
-            "List apps in the current or specified workspace."
-        }
-        "agent.toolCatalog.tools.app.list.sampleResultSummary" => "Returns paged app records.",
-        "agent.toolCatalog.tools.app.list.params.workspaceCode" => {
-            "Optional workspace code. Uses the current workspace when omitted."
-        }
-        "agent.toolCatalog.tools.app.list.params.search" => "Optional app search text.",
-        "agent.toolCatalog.tools.app.list.params.includeArchived" => {
-            "Whether archived apps should be included. Defaults to false."
-        }
-        "agent.toolCatalog.tools.task.list.name" => "List tasks",
-        "agent.toolCatalog.tools.task.list.description" => {
-            "List tasks in the current or specified workspace."
-        }
-        "agent.toolCatalog.tools.task.list.sampleResultSummary" => "Returns paged task records.",
-        "agent.toolCatalog.tools.task.list.params.workspaceCode" => {
-            "Optional workspace code. Uses the current workspace when omitted."
-        }
-        "agent.toolCatalog.tools.task.list.params.search" => "Optional task search text.",
-        "agent.toolCatalog.tools.task.list.params.status" => "Optional task status filter.",
         "agent.toolCatalog.tools.task.create.name" => "Create task",
         "agent.toolCatalog.tools.task.create.description" => {
             "Create a new task in the current or specified workspace."
@@ -296,30 +259,6 @@ fn translate_en_us(key: &str) -> &'static str {
             "Source type. Allowed values: internal, github, gitlab."
         }
         "agent.toolCatalog.tools.task.create.params.appCode" => "Optional related app code.",
-        "agent.toolCatalog.tools.model.list.name" => "List models",
-        "agent.toolCatalog.tools.model.list.description" => {
-            "List effective model definitions for the current or specified workspace."
-        }
-        "agent.toolCatalog.tools.model.list.sampleResultSummary" => {
-            "Returns the effective workspace model catalog."
-        }
-        "agent.toolCatalog.tools.model.list.params.workspaceCode" => {
-            "Optional workspace code. Uses the current workspace when omitted."
-        }
-        "agent.toolCatalog.tools.skill.list.name" => "List skills",
-        "agent.toolCatalog.tools.skill.list.description" => {
-            "List workspace skill bindings and registry entries."
-        }
-        "agent.toolCatalog.tools.skill.list.sampleResultSummary" => {
-            "Returns workspace skill records."
-        }
-        "agent.toolCatalog.tools.skill.list.params.workspaceCode" => {
-            "Optional workspace code. Uses the current workspace when omitted."
-        }
-        "agent.toolCatalog.tools.skill.list.params.search" => "Optional skill search text.",
-        "agent.toolCatalog.tools.skill.list.params.includeDisabled" => {
-            "Whether disabled skills should be included. Defaults to false."
-        }
         "agent.toolCatalog.tools.skill.view.name" => "View skill",
         "agent.toolCatalog.tools.skill.view.description" => {
             "View one workspace skill's progressive-disclosure details, including SKILL.md content and files."
@@ -331,22 +270,13 @@ fn translate_en_us(key: &str) -> &'static str {
             "Optional workspace code. Uses the current workspace when omitted."
         }
         "agent.toolCatalog.tools.skill.view.params.skillName" => "Skill name to view.",
-        "agent.toolCatalog.tools.variable.list.name" => "List variables",
-        "agent.toolCatalog.tools.variable.list.description" => {
-            "List effective variables in the current or specified workspace."
-        }
-        "agent.toolCatalog.tools.variable.list.sampleResultSummary" => {
-            "Returns effective workspace variables."
-        }
-        "agent.toolCatalog.tools.variable.list.params.workspaceCode" => {
-            "Optional workspace code. Uses the current workspace when omitted."
-        }
-        "agent.toolCatalog.tools.variable.list.params.search" => "Optional variable search text.",
         "agent.toolCatalog.discovery.expand.description" => {
             "Expand one visible tool domain into concrete callable tools."
         }
         "agent.toolCatalog.discovery.expand.params.domainCode" => "Visible domain code to expand.",
-        _ => coding::translate_en_us(key).unwrap_or_else(key_leak_fallback),
+        _ => business::translate_en_us(key)
+            .or_else(|| coding::translate_en_us(key))
+            .unwrap_or_else(key_leak_fallback),
     }
 }
 
@@ -368,16 +298,6 @@ fn translate_zh_cn(key: &str) -> &'static str {
         "agent.toolCatalog.domains.variable.description" => "查看工作区生效变量。",
         "agent.toolCatalog.domains.workspace.name" => "工作区工具",
         "agent.toolCatalog.domains.workspace.description" => "查看工作区层级和元数据。",
-        "agent.toolCatalog.tools.workspace.list.name" => "列出工作区",
-        "agent.toolCatalog.tools.workspace.list.description" => "列出当前操作者可见的工作区。",
-        "agent.toolCatalog.tools.workspace.list.sampleResultSummary" => "返回工作区树节点列表。",
-        "agent.toolCatalog.tools.workspace.list.params.includeArchived" => {
-            "是否包含已归档工作区，默认 false。"
-        }
-        "agent.toolCatalog.tools.workspace.list.params.search" => {
-            "可选的搜索文本，用于匹配工作区名称和元数据。"
-        }
-        "agent.toolCatalog.tools.workspace.list.params.rootOnly" => "是否只返回根工作区。",
         "agent.toolCatalog.tools.workspace.get.name" => "获取工作区",
         "agent.toolCatalog.tools.workspace.get.description" => "根据工作区编码读取工作区元数据。",
         "agent.toolCatalog.tools.workspace.get.sampleResultSummary" => "返回单个工作区详情记录。",
@@ -444,24 +364,6 @@ fn translate_zh_cn(key: &str) -> &'static str {
             "审核状态；检索默认使用 APPROVED。"
         }
         "agent.toolCatalog.tools.memory.common.params.metadata" => "可选的记忆元数据对象。",
-        "agent.toolCatalog.tools.app.list.name" => "列出应用",
-        "agent.toolCatalog.tools.app.list.description" => "列出当前或指定工作区中的应用。",
-        "agent.toolCatalog.tools.app.list.sampleResultSummary" => "返回分页后的应用记录。",
-        "agent.toolCatalog.tools.app.list.params.workspaceCode" => {
-            "可选工作区编码；缺省时使用当前工作区。"
-        }
-        "agent.toolCatalog.tools.app.list.params.search" => "可选的应用搜索文本。",
-        "agent.toolCatalog.tools.app.list.params.includeArchived" => {
-            "是否包含已归档应用，默认 false。"
-        }
-        "agent.toolCatalog.tools.task.list.name" => "列出任务",
-        "agent.toolCatalog.tools.task.list.description" => "列出当前或指定工作区中的任务。",
-        "agent.toolCatalog.tools.task.list.sampleResultSummary" => "返回分页后的任务记录。",
-        "agent.toolCatalog.tools.task.list.params.workspaceCode" => {
-            "可选工作区编码；缺省时使用当前工作区。"
-        }
-        "agent.toolCatalog.tools.task.list.params.search" => "可选的任务搜索文本。",
-        "agent.toolCatalog.tools.task.list.params.status" => "可选的任务状态筛选值。",
         "agent.toolCatalog.tools.task.create.name" => "创建任务",
         "agent.toolCatalog.tools.task.create.description" => "在当前或指定工作区中创建任务。",
         "agent.toolCatalog.tools.task.create.sampleResultSummary" => "返回新创建任务的详情。",
@@ -478,24 +380,6 @@ fn translate_zh_cn(key: &str) -> &'static str {
             "来源类型，可选值：internal、github、gitlab。"
         }
         "agent.toolCatalog.tools.task.create.params.appCode" => "可选的关联应用编码。",
-        "agent.toolCatalog.tools.model.list.name" => "列出模型",
-        "agent.toolCatalog.tools.model.list.description" => {
-            "列出当前或指定工作区中生效的模型定义。"
-        }
-        "agent.toolCatalog.tools.model.list.sampleResultSummary" => "返回工作区生效模型目录。",
-        "agent.toolCatalog.tools.model.list.params.workspaceCode" => {
-            "可选工作区编码；缺省时使用当前工作区。"
-        }
-        "agent.toolCatalog.tools.skill.list.name" => "列出技能",
-        "agent.toolCatalog.tools.skill.list.description" => "列出工作区技能绑定和注册项。",
-        "agent.toolCatalog.tools.skill.list.sampleResultSummary" => "返回工作区技能记录。",
-        "agent.toolCatalog.tools.skill.list.params.workspaceCode" => {
-            "可选工作区编码；缺省时使用当前工作区。"
-        }
-        "agent.toolCatalog.tools.skill.list.params.search" => "可选的技能搜索文本。",
-        "agent.toolCatalog.tools.skill.list.params.includeDisabled" => {
-            "是否包含已禁用技能，默认 false。"
-        }
         "agent.toolCatalog.tools.skill.view.name" => "查看技能",
         "agent.toolCatalog.tools.skill.view.description" => {
             "查看一个工作区技能的渐进式披露详情，包括 SKILL.md 内容和文件列表。"
@@ -507,18 +391,13 @@ fn translate_zh_cn(key: &str) -> &'static str {
             "可选工作区编码；缺省时使用当前工作区。"
         }
         "agent.toolCatalog.tools.skill.view.params.skillName" => "要查看的技能名称。",
-        "agent.toolCatalog.tools.variable.list.name" => "列出变量",
-        "agent.toolCatalog.tools.variable.list.description" => "列出当前或指定工作区中的生效变量。",
-        "agent.toolCatalog.tools.variable.list.sampleResultSummary" => "返回工作区生效变量列表。",
-        "agent.toolCatalog.tools.variable.list.params.workspaceCode" => {
-            "可选工作区编码；缺省时使用当前工作区。"
-        }
-        "agent.toolCatalog.tools.variable.list.params.search" => "可选的变量搜索文本。",
         "agent.toolCatalog.discovery.expand.description" => {
             "展开一个可见工具领域，加载其中可直接调用的具体工具。"
         }
         "agent.toolCatalog.discovery.expand.params.domainCode" => "需要展开的可见领域编码。",
-        _ => coding::translate_zh_cn(key).unwrap_or_else(key_leak_fallback),
+        _ => business::translate_zh_cn(key)
+            .or_else(|| coding::translate_zh_cn(key))
+            .unwrap_or_else(key_leak_fallback),
     }
 }
 

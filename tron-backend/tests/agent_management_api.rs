@@ -778,7 +778,7 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
                     "role": "assistant",
                     "tool_calls": [{
                         "function": {
-                            "name": "workspace.list",
+                            "name": "workspace.page",
                             "arguments": "{}"
                         }
                     }]
@@ -881,13 +881,26 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
     assert!(
         second_tools
             .iter()
-            .any(|tool| tool["function"]["name"] == json!("workspace.list"))
+            .any(|tool| tool["function"]["name"] == json!("workspace.page"))
     );
     assert!(
         second_tools
             .iter()
             .any(|tool| tool["function"]["name"] == json!("workspace.get"))
     );
+    for removed_tool in [
+        "workspace.create",
+        "workspace.update",
+        "workspace.delete",
+        "workspace.restore",
+    ] {
+        assert!(
+            second_tools
+                .iter()
+                .all(|tool| tool["function"]["name"] != json!(removed_tool)),
+            "{removed_tool} should not be available from workspace domain discovery"
+        );
+    }
     let second_messages = recorded_requests[1]["messages"]
         .as_array()
         .expect("second request messages should be an array");
@@ -905,7 +918,7 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
         message["role"] == json!("user")
             && message["content"]
                 .as_str()
-                .is_some_and(|content| content.contains("workspace.list"))
+                .is_some_and(|content| content.contains("workspace.page"))
     }));
 }
 
@@ -1289,6 +1302,28 @@ async fn tool_catalog_read_apis_are_available() {
             .any(|row| row["toolCode"] == json!("fs.read_text"))
     );
 
+    let workspace_tools_response = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/tools?domainCode=workspace",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(workspace_tools_response.status(), StatusCode::OK);
+    let workspace_tools_body = response_json(workspace_tools_response).await;
+    let workspace_tool_codes = workspace_tools_body["data"]
+        .as_array()
+        .expect("workspace tools should be an array")
+        .iter()
+        .map(|row| row["toolCode"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        workspace_tool_codes,
+        vec![json!("workspace.page"), json!("workspace.get")]
+    );
+
     let tool_response = request_with_headers(
         &app,
         Method::GET,
@@ -1535,7 +1570,7 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
         Method::PUT,
         "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/tool-assignments",
         Some(json!({
-            "toolCodes": ["app.list", "workspace.list", "app.list"]
+            "toolCodes": ["app.page", "workspace.page", "app.page"]
         })),
         None,
         Some(&authorization),
@@ -1546,7 +1581,7 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
     assert_eq!(assigned["data"]["assignedToolCount"], json!(2));
     assert_eq!(
         assigned["data"]["selectedToolCodes"],
-        json!(["app.list", "workspace.list"])
+        json!(["app.page", "workspace.page"])
     );
 
     let mcp_assign_response = request_with_headers(
@@ -1645,7 +1680,7 @@ async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
                     "role": "assistant",
                     "tool_calls": [{
                         "function": {
-                            "name": "workspace.list",
+                            "name": "workspace.page",
                             "arguments": "{}"
                         }
                     }]
@@ -2066,4 +2101,324 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
                 .as_str()
                 .is_some_and(|content| content.contains("search.path") && content.contains("src"))
     }));
+}
+
+#[tokio::test]
+async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
+    let codex_command = temp_command_path("codex-platform-workspace-guard");
+    let opencode_command = temp_command_path("opencode-platform-workspace-guard");
+    write_fake_command(&codex_command);
+    write_fake_command(&opencode_command);
+
+    let app = app_with_config(test_config(&codex_command, &opencode_command));
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let created_app = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/apps/workspaces/TRON_CORE",
+        Some(json!({
+            "name": "Guarded Tool App",
+            "localDirectory": "/workspace/guarded-tool-app",
+            "runtimeRole": "Backend"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(created_app.status(), StatusCode::CREATED);
+    let created_app_body = response_json(created_app).await;
+    let app_code = created_app_body["data"]["appCode"]
+        .as_str()
+        .expect("created app should return appCode")
+        .to_string();
+
+    let created_task = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/tasks",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Guarded tool task",
+            "priority": "Medium",
+            "taskType": "Feature",
+            "sourceType": "Internal",
+            "appCodes": [app_code.clone()]
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(created_task.status(), StatusCode::CREATED);
+    let created_task_body = response_json(created_task).await;
+    let task_code = created_task_body["data"]["taskCode"]
+        .as_str()
+        .expect("created task should return taskCode")
+        .to_string();
+
+    let huge_current = usize::MAX;
+    let model_server = scripted_model_server(vec![
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "app.page",
+                                "arguments": serde_json::to_string(&json!({
+                                    "workspaceCode": "TRON_CORE",
+                                    "current": huge_current,
+                                    "size": 100
+                                })).expect("app.page arguments should serialize")
+                            }
+                        },
+                        {
+                            "function": {
+                                "name": "task.page",
+                                "arguments": serde_json::to_string(&json!({
+                                    "workspaceCode": "TRON_CORE",
+                                    "current": huge_current,
+                                    "size": 100
+                                })).expect("task.page arguments should serialize")
+                            }
+                        },
+                        {
+                            "function": {
+                                "name": "app.update",
+                                "arguments": serde_json::to_string(&json!({
+                                    "workspaceCode": "ENTERPRISE",
+                                    "appCode": app_code.clone(),
+                                    "name": "Cross Workspace Mutation"
+                                })).expect("app.update arguments should serialize")
+                            }
+                        },
+                        {
+                            "function": {
+                                "name": "task.delete",
+                                "arguments": serde_json::to_string(&json!({
+                                    "workspaceCode": "ENTERPRISE",
+                                    "taskCode": task_code.clone()
+                                })).expect("task.delete arguments should serialize")
+                            }
+                        }
+                    ]
+                }
+            }]
+        }),
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "workspace guard applied"
+                }
+            }]
+        }),
+    ])
+    .await;
+
+    let run_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/agents/runs",
+        Some(json!({
+            "prompt": "Try guarded platform mutations.",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "TEST_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": model_server.base_url,
+                "apiKey": "sk-test-api",
+                "modelName": "gpt-test"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(run_response.status(), StatusCode::OK);
+    let run_body = response_json(run_response).await;
+    assert_eq!(
+        run_body["data"]["finalOutput"],
+        json!("workspace guard applied")
+    );
+
+    let recorded_requests = model_server
+        .requests
+        .lock()
+        .expect("recorded scripted model request mutex poisoned")
+        .clone();
+    assert_eq!(recorded_requests.len(), 2);
+    let second_messages = recorded_requests[1]["messages"]
+        .as_array()
+        .expect("second request messages should be an array");
+    let tool_results = second_messages
+        .iter()
+        .filter(|message| message["role"] == json!("user"))
+        .filter_map(|message| message["content"].as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(tool_results.contains("tool:app.page"));
+    assert!(tool_results.contains("tool:task.page"));
+    assert!(tool_results.contains(&format!("\"current\":{huge_current}")));
+    assert!(tool_results.contains("\"records\":[]"));
+    assert!(tool_results.contains("tool:app.update"));
+    assert!(
+        tool_results
+            .contains("workspaceCode `ENTERPRISE` does not match app workspace `TRON_CORE`")
+    );
+    assert!(tool_results.contains("tool:task.delete"));
+    assert!(
+        tool_results
+            .contains("workspaceCode `ENTERPRISE` does not match task workspace `TRON_CORE`")
+    );
+
+    let app_detail = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/apps/{app_code}"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(app_detail.status(), StatusCode::OK);
+    let app_detail_body = response_json(app_detail).await;
+    assert_eq!(app_detail_body["data"]["name"], json!("Guarded Tool App"));
+
+    let task_detail = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/tasks/{task_code}"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(task_detail.status(), StatusCode::OK);
+    let task_detail_body = response_json(task_detail).await;
+    assert_eq!(task_detail_body["data"]["status"], json!("Open"));
+}
+
+#[tokio::test]
+async fn internal_agent_task_update_rejects_invalid_status_without_partial_update() {
+    let codex_command = temp_command_path("codex-task-update-atomic");
+    let opencode_command = temp_command_path("opencode-task-update-atomic");
+    write_fake_command(&codex_command);
+    write_fake_command(&opencode_command);
+
+    let app = app_with_config(test_config(&codex_command, &opencode_command));
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let created_task = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/tasks",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Atomic task update",
+            "priority": "Medium",
+            "taskType": "Feature",
+            "sourceType": "Internal"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(created_task.status(), StatusCode::CREATED);
+    let created_task_body = response_json(created_task).await;
+    let task_code = created_task_body["data"]["taskCode"]
+        .as_str()
+        .expect("created task should return taskCode")
+        .to_string();
+
+    let model_server = scripted_model_server(vec![
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "function": {
+                            "name": "task.update",
+                            "arguments": serde_json::to_string(&json!({
+                                "workspaceCode": "TRON_CORE",
+                                "taskCode": task_code.clone(),
+                                "title": "Should Not Persist",
+                                "status": "in_progress",
+                                "progress": 40
+                            })).expect("task.update arguments should serialize")
+                        }
+                    }]
+                }
+            }]
+        }),
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "task update rejected"
+                }
+            }]
+        }),
+    ])
+    .await;
+
+    let run_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/agents/runs",
+        Some(json!({
+            "prompt": "Try invalid status update.",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "TEST_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": model_server.base_url,
+                "apiKey": "sk-test-api",
+                "modelName": "gpt-test"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(run_response.status(), StatusCode::OK);
+
+    let recorded_requests = model_server
+        .requests
+        .lock()
+        .expect("recorded scripted model request mutex poisoned")
+        .clone();
+    assert_eq!(recorded_requests.len(), 2);
+    let second_messages = recorded_requests[1]["messages"]
+        .as_array()
+        .expect("second request messages should be an array");
+    let tool_results = second_messages
+        .iter()
+        .filter(|message| message["role"] == json!("user"))
+        .filter_map(|message| message["content"].as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(tool_results.contains("tool:task.update"));
+    assert!(tool_results.contains("task status does not match the inferred task role"));
+
+    let task_detail = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/tasks/{task_code}"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(task_detail.status(), StatusCode::OK);
+    let task_detail_body = response_json(task_detail).await;
+    assert_eq!(
+        task_detail_body["data"]["title"],
+        json!("Atomic task update")
+    );
+    assert_eq!(task_detail_body["data"]["status"], json!("Open"));
+    assert_eq!(task_detail_body["data"]["progress"], json!(0));
 }

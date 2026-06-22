@@ -136,12 +136,12 @@ export async function streamChatMessage(
     const secondReasoningContent = "Summarizing tool results before replying.";
     const firstReasoningEndOffset = 3 + firstReasoningContentEvents.length;
     const toolCallDefinitions = [
-      { name: "workspace.list", args: {}, result: "Listed workspaces" },
-      { name: "app.list", args: {}, result: "Listed apps" },
-      { name: "task.list", args: {}, result: "Listed tasks" },
-      { name: "model.list", args: {}, result: "Listed models" },
-      { name: "skill.list", args: {}, result: "Listed skills" },
-      { name: "variable.list", args: {}, result: "Listed variables" },
+      { name: "workspace.page", args: {}, result: "Listed workspaces" },
+      { name: "app.page", args: {}, result: "Listed apps" },
+      { name: "task.page", args: {}, result: "Listed tasks" },
+      { name: "model.page", args: {}, result: "Listed models" },
+      { name: "skill.page", args: {}, result: "Listed skills" },
+      { name: "variable.page", args: {}, result: "Listed variables" },
     ];
     const toolCallEvents: ChatAguiStreamEvent[] = toolCallDefinitions.flatMap((tool, index) => {
       const toolTimestamp = startedAt + firstReasoningEndOffset + 2 + index * 4;

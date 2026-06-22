@@ -214,7 +214,7 @@ fn request_builders_handle_tool_observations_per_protocol() {
     };
     let request = ModelRequest {
         messages: vec![AgentMessage::tool_with_call_id(
-            "tool:workspace.list\nresult:\n[]",
+            "tool:workspace.page\nresult:\n[]",
             "call-123",
             "[]",
         )],
@@ -228,7 +228,7 @@ fn request_builders_handle_tool_observations_per_protocol() {
     assert_eq!(chat["messages"][0]["role"], json!("user"));
     assert_eq!(
         chat["messages"][0]["content"],
-        json!("tool:workspace.list\nresult:\n[]")
+        json!("tool:workspace.page\nresult:\n[]")
     );
 
     let responses = responses_request(&config, &request);

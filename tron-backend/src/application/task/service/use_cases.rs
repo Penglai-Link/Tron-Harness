@@ -13,7 +13,7 @@ impl TaskService {
         let size = query.size.unwrap_or(20).clamp(1, 100);
         let records = self.filtered_task_items(&query)?;
         let total = records.len();
-        let start = (current - 1) * size;
+        let start = current.saturating_sub(1).saturating_mul(size);
         Ok(PagedTaskRecords {
             current,
             size,

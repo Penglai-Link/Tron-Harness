@@ -28,7 +28,7 @@ fn responses_request_uses_previous_response_id_and_response_items_for_stateful_c
                 AgentMessage::system("You are helpful."),
                 AgentMessage::user("hello"),
                 AgentMessage::tool_with_call_id(
-                    "tool:workspace.list\nresult:\n[]",
+                    "tool:workspace.page\nresult:\n[]",
                     "call-123",
                     "[]",
                 ),

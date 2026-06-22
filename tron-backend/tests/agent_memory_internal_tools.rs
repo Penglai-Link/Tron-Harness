@@ -346,7 +346,7 @@ async fn selected_tools_only_injects_selected_memory_tools() {
         &app,
         Method::PUT,
         "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/tool-assignments",
-        Some(json!({ "toolCodes": ["memory.search", "workspace.list"] })),
+        Some(json!({ "toolCodes": ["memory.search", "workspace.page"] })),
         None,
         Some(&authorization),
     )
@@ -364,7 +364,7 @@ async fn selected_tools_only_injects_selected_memory_tools() {
     );
     assert_eq!(
         assign_body["data"]["selectedToolCodes"],
-        json!(["memory.search", "workspace.list"])
+        json!(["memory.search", "workspace.page"])
     );
 
     let response = request_with_headers(
@@ -388,7 +388,7 @@ async fn selected_tools_only_injects_selected_memory_tools() {
     assert_eq!(requests.len(), 1);
     let tool_names = tool_names_in_request(&requests[0]);
     assert!(tool_names.contains(&"memory.search".to_string()));
-    assert!(tool_names.contains(&"workspace.list".to_string()));
+    assert!(tool_names.contains(&"workspace.page".to_string()));
     assert!(!tool_names.contains(&"memory.save".to_string()));
     assert!(!tool_names.contains(&"memory.delete".to_string()));
 }

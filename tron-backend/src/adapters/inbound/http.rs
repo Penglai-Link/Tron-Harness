@@ -4,6 +4,7 @@ pub mod apps;
 pub mod auth;
 pub mod automations;
 pub mod chats;
+pub mod dashboard;
 pub mod frontend;
 pub mod mcp;
 pub mod memory;

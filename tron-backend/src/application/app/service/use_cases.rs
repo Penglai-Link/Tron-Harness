@@ -16,7 +16,7 @@ impl AppService {
                 .then(left.app_code.cmp(&right.app_code))
         });
         let total = records.len();
-        let start = (current - 1) * size;
+        let start = current.saturating_sub(1).saturating_mul(size);
 
         Ok(PagedAppRecords {
             current,

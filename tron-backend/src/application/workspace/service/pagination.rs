@@ -17,7 +17,7 @@ pub(super) fn paginate_records<T: Clone + SearchableRecord>(
         .collect::<Vec<_>>();
     filtered.sort_by(|left, right| left.sort_key().cmp(&right.sort_key()));
     let total = filtered.len();
-    let start = ((current - 1) * size).min(total);
+    let start = current.saturating_sub(1).saturating_mul(size).min(total);
     let end = (start + size).min(total);
 
     PagedWorkspaceRecords {

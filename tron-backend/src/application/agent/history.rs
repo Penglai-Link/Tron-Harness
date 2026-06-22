@@ -56,7 +56,7 @@ impl AgentRunHistoryService {
                 .then(right.id.cmp(&left.id))
         });
         let total = records.len();
-        let start = (current - 1) * size;
+        let start = current.saturating_sub(1).saturating_mul(size);
         Ok(PagedAgentRunHistoryRecords {
             current,
             size,

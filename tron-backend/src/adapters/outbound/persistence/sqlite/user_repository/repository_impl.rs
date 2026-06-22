@@ -42,7 +42,7 @@ impl UserRepository for SqliteUserRepository {
 
         records.sort_by(|left, right| left.display_name.cmp(&right.display_name));
         let total = records.len();
-        let start = ((current - 1) * size).min(total);
+        let start = current.saturating_sub(1).saturating_mul(size).min(total);
         let end = (start + size).min(total);
 
         Ok(PagedUsers {

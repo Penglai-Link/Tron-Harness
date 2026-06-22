@@ -86,8 +86,8 @@ export function PlatformToolsPage() {
     });
   }, [debouncedToolSearch, selectedToolDomainCode, t, tools]);
 
-  const domainPagination = useTablePagination(visibleDomains, 3);
-  const toolPagination = useTablePagination(visibleTools, 4);
+  const domainPagination = useTablePagination(visibleDomains);
+  const toolPagination = useTablePagination(visibleTools);
 
   async function refreshTools() {
     setLoading(true);
@@ -138,7 +138,6 @@ export function PlatformToolsPage() {
           pagination={
             <TablePagination
               itemLabel={pageT("domains.itemLabel", "tool domains")}
-              pageSizeOptions={[3, 5, 10, 15]}
               {...domainPagination.paginationProps}
             />
           }
@@ -213,7 +212,6 @@ export function PlatformToolsPage() {
           pagination={
             <TablePagination
               itemLabel={pageT("tools.itemLabel", "tools")}
-              pageSizeOptions={[4, 5, 10, 15, 25, 50]}
               {...toolPagination.paginationProps}
             />
           }
