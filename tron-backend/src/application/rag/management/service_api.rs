@@ -214,7 +214,14 @@ where
                         "RAG_PARSE_MINERU_DOCUMENT".into(),
                     ],
                 ),
-                ("splitText".into(), vec!["RAG_SPLIT_TEXT".into()]),
+                (
+                    "splitText".into(),
+                    vec![
+                        "RAG_SPLIT_TEXT".into(),
+                        "RAG_SPLIT_PLAIN_TEXT_V1".into(),
+                        "RAG_SPLIT_MARKDOWN_HEADING_V1".into(),
+                    ],
+                ),
                 (
                     "extractTree".into(),
                     vec!["RAG_MARKDOWN_TREE_EXTRACT_V1".into()],

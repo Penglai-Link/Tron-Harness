@@ -678,6 +678,24 @@ async fn profile_management_list_detail_catalog_validate_and_save_runtime_readab
             }))
     );
 
+    let ingest_catalog = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/rag/profiles/catalog?profileType=INGEST",
+        None,
+    )
+    .await;
+    assert_eq!(ingest_catalog.status(), StatusCode::OK);
+    let ingest_catalog_body = response_json(ingest_catalog).await;
+    assert_eq!(
+        ingest_catalog_body["data"]["ingestStageStrategies"]["splitText"],
+        json!([
+            "RAG_SPLIT_TEXT",
+            "RAG_SPLIT_PLAIN_TEXT_V1",
+            "RAG_SPLIT_MARKDOWN_HEADING_V1"
+        ])
+    );
+
     let validate_filters = authenticated_request(
         &router,
         Method::POST,
@@ -878,6 +896,32 @@ async fn pipeline_catalog_and_profile_management_accept_new_dag_payload() {
                     && stage["strategies"].as_array().is_some_and(|strategies| {
                         strategies.iter().any(|strategy| {
                             strategy["strategyId"] == json!("RAG_TEXT_CONTRACT_PAYLOAD_V1")
+                        })
+                    })
+            }))
+    );
+    assert!(
+        catalog_body["data"]["stages"]
+            .as_array()
+            .is_some_and(|stages| stages.iter().any(|stage| {
+                stage["stageType"] == json!("SPLIT_TEXT")
+                    && stage["strategies"].as_array().is_some_and(|strategies| {
+                        strategies
+                            .iter()
+                            .map(|strategy| strategy["strategyId"].clone())
+                            .collect::<Vec<_>>()
+                            == vec![
+                                json!("RAG_SPLIT_TEXT"),
+                                json!("RAG_SPLIT_PLAIN_TEXT_V1"),
+                                json!("RAG_SPLIT_MARKDOWN_HEADING_V1"),
+                            ]
+                    })
+                    && stage["strategies"].as_array().is_some_and(|strategies| {
+                        strategies.iter().any(|strategy| {
+                            strategy["strategyId"] == json!("RAG_SPLIT_MARKDOWN_HEADING_V1")
+                                && strategy["configSchema"]["properties"]["splitter"]["properties"]
+                                    ["includeHeadingInIndexText"]["default"]
+                                    == json!(true)
                         })
                     })
             }))

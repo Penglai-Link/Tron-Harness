@@ -13,6 +13,8 @@ impl RagStrategyRegistry for DefaultRagStrategyRegistry {
                 "RAG_TEXT_CONTRACT_PAYLOAD_V1",
                 "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1",
                 "RAG_SPLIT_TEXT",
+                "RAG_SPLIT_PLAIN_TEXT_V1",
+                "RAG_SPLIT_MARKDOWN_HEADING_V1",
                 "RAG_FULLTEXT_INDEX",
                 "RAG_MARKDOWN_TREE_EXTRACT_V1",
                 "RAG_VECTOR_INDEX",

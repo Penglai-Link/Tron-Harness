@@ -25,6 +25,7 @@ pub(crate) struct PreparedIngestPayload {
 pub(crate) struct RagTextUnitDraft {
     pub(crate) text_unit_code: String,
     pub(crate) text: String,
+    pub(crate) index_text: String,
     pub(crate) heading_path: String,
     pub(crate) ordinal: usize,
     pub(crate) content_hash: String,
@@ -37,12 +38,12 @@ impl RagTextUnitDraft {
         embedding_model_code: &str,
         embedding_version: &str,
     ) -> RagTextUnitWrite {
-        let embedding_text_hash = stable_hash(&self.text);
+        let embedding_text_hash = stable_hash(&self.index_text);
         RagTextUnitWrite {
             text_unit_code: self.text_unit_code,
             unit_type: "LEAF".into(),
             token_count: token_count(&self.text),
-            search_text: self.text.clone(),
+            search_text: self.index_text,
             text: self.text,
             heading_path: self.heading_path,
             ordinal: self.ordinal,
@@ -64,7 +65,7 @@ impl RagTextUnitDraft {
             text_unit_code: self.text_unit_code,
             unit_type: "LEAF".into(),
             token_count: token_count(&self.text),
-            search_text: self.text.clone(),
+            search_text: self.index_text,
             text: self.text,
             heading_path: self.heading_path,
             ordinal: self.ordinal,
@@ -109,20 +110,20 @@ fn prepare_text_contract_payload(
     let title = payload_string(&request.payload, "title");
     let domain_fields = contract_domain_fields(&request.payload)?;
     let content_hash = stable_hash(&text);
-    let unit = RagTextUnitDraft {
-        text_unit_code: text_unit_code(&request.source.code, &request.source.version, 0),
-        text,
-        heading_path: title.clone().unwrap_or_default(),
-        ordinal: 0,
-        content_hash: content_hash.clone(),
-    };
+    let units = split_text_units(
+        &request.source.code,
+        &request.source.version,
+        title.as_deref(),
+        &text,
+        compiled,
+    )?;
     Ok(PreparedIngestPayload {
         title,
         content_hash,
         body_hash: None,
         metadata: contract_metadata(&request.payload)?,
         domain_fields,
-        units: vec![unit],
+        units,
     })
 }
 
@@ -160,10 +161,6 @@ fn prepare_document_ref_contract_payload(
         return Err(RagError::DocumentParseFailed);
     }
     let domain_fields = contract_domain_fields(&request.payload)?;
-    let sections = split_markdown_heading_units(&text, compiled.markdown_heading_depth);
-    if sections.is_empty() {
-        return Err(RagError::DocumentParseFailed);
-    }
     let mut metadata = contract_metadata(&request.payload)?;
     if let Value::Object(metadata) = &mut metadata {
         if compiled.record_resolver_info {
@@ -186,19 +183,16 @@ fn prepare_document_ref_contract_payload(
             );
         }
     }
-    let units = sections
-        .into_iter()
-        .enumerate()
-        .map(|(ordinal, (heading_path, section_text))| RagTextUnitDraft {
-            text_unit_code: text_unit_code(&request.source.code, &request.source.version, ordinal),
-            content_hash: stable_hash(&section_text),
-            text: section_text,
-            heading_path,
-            ordinal,
-        })
-        .collect();
+    let title = payload_string(&request.payload, "title");
+    let units = split_text_units(
+        &request.source.code,
+        &request.source.version,
+        title.as_deref(),
+        &text,
+        compiled,
+    )?;
     Ok(PreparedIngestPayload {
-        title: payload_string(&request.payload, "title"),
+        title,
         content_hash: stable_hash(&text),
         body_hash: Some(stable_hash(&text)),
         metadata,
@@ -267,6 +261,108 @@ fn validate_contract_source_type(
         Ok(())
     } else {
         Err(RagError::IngestRequestInvalid)
+    }
+}
+
+#[derive(Clone, Copy)]
+enum SplitTextStrategy {
+    Plain,
+    MarkdownHeading,
+}
+
+fn split_text_units(
+    source_code: &str,
+    source_version: &str,
+    title: Option<&str>,
+    text: &str,
+    compiled: &CompiledRagIngestProfile,
+) -> Result<Vec<RagTextUnitDraft>, RagError> {
+    match split_text_strategy(compiled)? {
+        SplitTextStrategy::Plain => Ok(vec![plain_text_unit(
+            source_code,
+            source_version,
+            title,
+            text,
+        )]),
+        SplitTextStrategy::MarkdownHeading => markdown_heading_text_units(
+            source_code,
+            source_version,
+            text,
+            compiled.markdown_heading_depth,
+            compiled.include_heading_in_index_text,
+        ),
+    }
+}
+
+fn split_text_strategy(compiled: &CompiledRagIngestProfile) -> Result<SplitTextStrategy, RagError> {
+    match compiled.split_strategy_id.as_str() {
+        "RAG_SPLIT_PLAIN_TEXT_V1" => Ok(SplitTextStrategy::Plain),
+        "RAG_SPLIT_MARKDOWN_HEADING_V1" => Ok(SplitTextStrategy::MarkdownHeading),
+        "RAG_SPLIT_TEXT"
+            if compiled.payload_strategy_id == "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1" =>
+        {
+            Ok(SplitTextStrategy::MarkdownHeading)
+        }
+        "RAG_SPLIT_TEXT" => Ok(SplitTextStrategy::Plain),
+        _ => Err(RagError::IngestProfileInvalid),
+    }
+}
+
+fn plain_text_unit(
+    source_code: &str,
+    source_version: &str,
+    title: Option<&str>,
+    text: &str,
+) -> RagTextUnitDraft {
+    let text = text.trim().to_string();
+    RagTextUnitDraft {
+        text_unit_code: text_unit_code(source_code, source_version, 0),
+        index_text: text.clone(),
+        content_hash: stable_hash(&text),
+        text,
+        heading_path: title.unwrap_or_default().to_string(),
+        ordinal: 0,
+    }
+}
+
+fn markdown_heading_text_units(
+    source_code: &str,
+    source_version: &str,
+    text: &str,
+    heading_depth: usize,
+    include_heading_in_index_text: bool,
+) -> Result<Vec<RagTextUnitDraft>, RagError> {
+    let sections = split_markdown_heading_units(text, heading_depth);
+    if sections.is_empty() {
+        return Err(RagError::DocumentParseFailed);
+    }
+    Ok(sections
+        .into_iter()
+        .enumerate()
+        .map(|(ordinal, (heading_path, section_text))| RagTextUnitDraft {
+            text_unit_code: text_unit_code(source_code, source_version, ordinal),
+            index_text: markdown_index_text(
+                &heading_path,
+                &section_text,
+                include_heading_in_index_text,
+            ),
+            content_hash: stable_hash(&section_text),
+            text: section_text,
+            heading_path,
+            ordinal,
+        })
+        .collect())
+}
+
+fn markdown_index_text(
+    heading_path: &str,
+    section_text: &str,
+    include_heading_in_index_text: bool,
+) -> String {
+    if include_heading_in_index_text && !heading_path.trim().is_empty() {
+        format!("{}\n{}", heading_path.trim(), section_text.trim())
+    } else {
+        section_text.trim().to_string()
     }
 }
 
@@ -440,6 +536,7 @@ mod tests {
             pipeline: None,
             stage_metadata: Default::default(),
             payload_strategy_id: "RAG_TEXT_CONTRACT_PAYLOAD_V1".into(),
+            split_strategy_id: "RAG_SPLIT_TEXT".into(),
             supported_source_types: vec!["SKILL".into()],
             source_resolver_strategy_id: None,
             document_parser_strategy_id: None,
@@ -447,6 +544,7 @@ mod tests {
             record_resolver_info: false,
             record_parser_info: false,
             markdown_heading_depth: 6,
+            include_heading_in_index_text: false,
             document_format: "MARKDOWN".into(),
             document_formats: vec!["MARKDOWN".into()],
             degrade_policy: "SKIP_VECTOR_WITH_WARNING".into(),

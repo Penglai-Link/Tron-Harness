@@ -72,7 +72,62 @@ fn strategy_config_schema(strategy_id: &str) -> Value {
                         "headingDepth": {
                             "type": "integer",
                             "minimum": 1,
+                            "maximum": 6,
                             "default": 6
+                        },
+                        "includeHeadingInIndexText": {
+                            "type": "boolean",
+                            "default": false
+                        }
+                    }
+                }
+            }
+        }),
+        "RAG_SPLIT_PLAIN_TEXT_V1" => json!({
+            "type": "object",
+            "properties": {
+                "splitter": {
+                    "type": "object",
+                    "properties": {
+                        "maxTokens": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 800
+                        },
+                        "overlapTokens": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 80
+                        }
+                    }
+                }
+            }
+        }),
+        "RAG_SPLIT_MARKDOWN_HEADING_V1" => json!({
+            "type": "object",
+            "properties": {
+                "splitter": {
+                    "type": "object",
+                    "properties": {
+                        "headingDepth": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 6,
+                            "default": 6
+                        },
+                        "includeHeadingInIndexText": {
+                            "type": "boolean",
+                            "default": true
+                        },
+                        "maxTokens": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "default": 800
+                        },
+                        "overlapTokens": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "default": 80
                         }
                     }
                 }
@@ -185,12 +240,26 @@ fn stage_definitions() -> Vec<StageDefinition> {
             parallel: false,
             default_join_policy: "ALL_SUCCESS",
             default_failure_policy: "FAIL_PIPELINE",
-            strategies: &[StrategyDefinition {
-                strategy_id: "RAG_SPLIT_TEXT",
-                display_name: "RAG Split Text",
-                required_capabilities: &["fulltext"],
-                required_storage_segments: &["textUnit"],
-            }],
+            strategies: &[
+                StrategyDefinition {
+                    strategy_id: "RAG_SPLIT_TEXT",
+                    display_name: "Legacy RAG Split Text",
+                    required_capabilities: &["fulltext"],
+                    required_storage_segments: &["textUnit"],
+                },
+                StrategyDefinition {
+                    strategy_id: "RAG_SPLIT_PLAIN_TEXT_V1",
+                    display_name: "Plain Text Split",
+                    required_capabilities: &["fulltext"],
+                    required_storage_segments: &["textUnit"],
+                },
+                StrategyDefinition {
+                    strategy_id: "RAG_SPLIT_MARKDOWN_HEADING_V1",
+                    display_name: "Markdown Heading Split",
+                    required_capabilities: &["fulltext"],
+                    required_storage_segments: &["textUnit"],
+                },
+            ],
             execution_stage_id: "splitText",
         },
         StageDefinition {

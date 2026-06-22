@@ -356,7 +356,7 @@ where
                 .embed(RagEmbeddingCall {
                     workspace_code: request.workspace_code.clone(),
                     model_code: compiled.embedding_model_code.clone(),
-                    input: unit.text.clone(),
+                    input: unit.index_text.clone(),
                 })
                 .await
             {

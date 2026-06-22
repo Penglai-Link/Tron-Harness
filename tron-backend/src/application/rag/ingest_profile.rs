@@ -21,6 +21,7 @@ pub struct CompiledRagIngestProfile {
     pub pipeline: Option<CompiledRagPipeline>,
     pub stage_metadata: BTreeMap<String, CompiledRagIngestStage>,
     pub payload_strategy_id: String,
+    pub split_strategy_id: String,
     pub supported_source_types: Vec<String>,
     pub source_resolver_strategy_id: Option<String>,
     pub document_parser_strategy_id: Option<String>,
@@ -28,6 +29,7 @@ pub struct CompiledRagIngestProfile {
     pub record_resolver_info: bool,
     pub record_parser_info: bool,
     pub markdown_heading_depth: usize,
+    pub include_heading_in_index_text: bool,
     pub document_format: String,
     pub document_formats: Vec<String>,
     pub degrade_policy: String,
@@ -131,6 +133,8 @@ where
     {
         return Err(RagError::IngestProfileInvalid);
     }
+    let split_strategy_id =
+        optional_stage_strategy_id(&stages, "splitText")?.ok_or(RagError::IngestProfileInvalid)?;
     let supported_source_types = supported_source_types(&profile.config)?;
     let source_resolver_strategy_id = optional_stage_strategy_id(&stages, "resolveSource")?;
     let document_parser_strategy_id = optional_stage_strategy_id(&stages, "parseDocument")?;
@@ -155,14 +159,14 @@ where
         .to_string();
     let source_resolver_max_bytes = source_resolver_max_bytes(&profile.config, &stages)?;
     let (record_resolver_info, record_parser_info) = metadata_policy_flags(&profile.config);
-    let markdown_heading_depth = if matches!(
-        payload_strategy_id.as_str(),
-        "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1"
-    ) {
-        markdown_heading_depth(&profile.config, &stages)?
-    } else {
-        DEFAULT_MARKDOWN_HEADING_DEPTH
-    };
+    let markdown_heading_depth =
+        if uses_markdown_heading_split(&payload_strategy_id, &split_strategy_id) {
+            markdown_heading_depth(&profile.config, &stages)?
+        } else {
+            DEFAULT_MARKDOWN_HEADING_DEPTH
+        };
+    let include_heading_in_index_text =
+        include_heading_in_index_text(&profile.config, &stages, &split_strategy_id);
     let document_formats = document_formats(
         &profile.config,
         &stages,
@@ -180,6 +184,7 @@ where
         pipeline: Some(compiled_pipeline),
         stage_metadata,
         payload_strategy_id,
+        split_strategy_id,
         supported_source_types,
         source_resolver_strategy_id,
         document_parser_strategy_id,
@@ -187,6 +192,7 @@ where
         record_resolver_info,
         record_parser_info,
         markdown_heading_depth,
+        include_heading_in_index_text,
         document_format,
         document_formats,
         degrade_policy: profile.degrade_policy.clone(),
@@ -375,6 +381,15 @@ fn source_resolver_max_bytes(
     usize::try_from(max_bytes).map_err(|_| RagError::IngestProfileInvalid)
 }
 
+fn uses_markdown_heading_split(payload_strategy_id: &str, split_strategy_id: &str) -> bool {
+    match split_strategy_id {
+        "RAG_SPLIT_MARKDOWN_HEADING_V1" => true,
+        "RAG_SPLIT_PLAIN_TEXT_V1" => false,
+        "RAG_SPLIT_TEXT" => payload_strategy_id == "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1",
+        _ => false,
+    }
+}
+
 fn markdown_heading_depth(
     config: &Value,
     stages: &serde_json::Map<String, Value>,
@@ -398,6 +413,26 @@ fn markdown_heading_depth(
         return Err(RagError::IngestProfileInvalid);
     }
     usize::try_from(depth).map_err(|_| RagError::IngestProfileInvalid)
+}
+
+fn include_heading_in_index_text(
+    config: &Value,
+    stages: &serde_json::Map<String, Value>,
+    split_strategy_id: &str,
+) -> bool {
+    stage_config(stages, "splitText")
+        .and_then(|config| config.get("splitter"))
+        .and_then(Value::as_object)
+        .and_then(|splitter| splitter.get("includeHeadingInIndexText"))
+        .and_then(Value::as_bool)
+        .or_else(|| {
+            config
+                .get("splitter")
+                .and_then(Value::as_object)
+                .and_then(|splitter| splitter.get("includeHeadingInIndexText"))
+                .and_then(Value::as_bool)
+        })
+        .unwrap_or(split_strategy_id == "RAG_SPLIT_MARKDOWN_HEADING_V1")
 }
 
 fn document_formats(

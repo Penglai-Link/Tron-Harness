@@ -312,6 +312,89 @@ async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_
 }
 
 #[tokio::test]
+async fn project_doc_markdown_split_enriches_index_and_embedding_text_without_rewriting_raw_text() {
+    let database_path = temp_database_path("rag-ingest-project-doc-markdown-index-text");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = CapturingIngestRepository::connect(&database_url);
+    let persisted_commands = repository.persisted_commands.clone();
+    set_project_doc_split_strategy(
+        &database_url,
+        "RAG_SPLIT_MARKDOWN_HEADING_V1",
+        json!({
+            "splitter": {
+                "headingDepth": 6,
+                "includeHeadingInIndexText": true
+            }
+        }),
+    );
+    let embeddings =
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)).with_document(project_doc_markdown());
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        embeddings.clone(),
+    );
+
+    let result = service.ingest(project_doc_request("v1")).await.unwrap();
+
+    assert_eq!(result.text_unit_count, 2);
+    let connection = Connection::open(&database_url).unwrap();
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT text FROM rag_project_doc_text_units WHERE ordinal = 1"
+        ),
+        "## Write Path\nPersist synchronously."
+    );
+    assert_eq!(
+        persisted_commands.lock().unwrap()[0].text_units[1].search_text,
+        "RAG MVP > Write Path\n## Write Path\nPersist synchronously."
+    );
+    assert_eq!(
+        embeddings.embedding_inputs()[1],
+        "RAG MVP > Write Path\n## Write Path\nPersist synchronously."
+    );
+}
+
+#[tokio::test]
+async fn project_doc_explicit_plain_split_keeps_parsed_markdown_as_one_text_unit() {
+    let database_path = temp_database_path("rag-ingest-project-doc-plain-split");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    set_project_doc_split_strategy(
+        &database_url,
+        "RAG_SPLIT_PLAIN_TEXT_V1",
+        json!({
+            "splitter": {
+                "maxTokens": 800,
+                "overlapTokens": 80
+            }
+        }),
+    );
+    let embeddings =
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)).with_document(project_doc_markdown());
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        embeddings.clone(),
+    );
+
+    let result = service.ingest(project_doc_request("v1")).await.unwrap();
+
+    assert_eq!(result.text_unit_count, 1);
+    assert_eq!(embeddings.call_count(), 1);
+    let connection = Connection::open(&database_url).unwrap();
+    assert_eq!(query_text_unit_headings(&connection), vec!["RAG MVP"]);
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT text FROM rag_project_doc_text_units WHERE ordinal = 0"
+        ),
+        project_doc_markdown()
+    );
+}
+
+#[tokio::test]
 async fn project_doc_pdf_mineru_ingest_uses_mineru_markdown_for_split() {
     let database_path = temp_database_path("rag-ingest-project-doc-mineru-pdf");
     let database_url = database_path.to_string_lossy().to_string();
@@ -803,6 +886,7 @@ struct FakeEmbeddingRuntime {
     calls: Arc<AtomicUsize>,
     mineru_calls: Arc<AtomicUsize>,
     last_model_code: Arc<Mutex<Option<String>>>,
+    embedding_inputs: Arc<Mutex<Vec<String>>>,
 }
 
 impl FakeEmbeddingRuntime {
@@ -817,6 +901,7 @@ impl FakeEmbeddingRuntime {
             calls: Arc::new(AtomicUsize::new(0)),
             mineru_calls: Arc::new(AtomicUsize::new(0)),
             last_model_code: Arc::new(Mutex::new(None)),
+            embedding_inputs: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -828,6 +913,7 @@ impl FakeEmbeddingRuntime {
             calls: Arc::new(AtomicUsize::new(0)),
             mineru_calls: Arc::new(AtomicUsize::new(0)),
             last_model_code: Arc::new(Mutex::new(None)),
+            embedding_inputs: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -866,6 +952,10 @@ impl FakeEmbeddingRuntime {
     fn last_model_code(&self) -> Option<String> {
         self.last_model_code.lock().unwrap().clone()
     }
+
+    fn embedding_inputs(&self) -> Vec<String> {
+        self.embedding_inputs.lock().unwrap().clone()
+    }
 }
 
 impl RagEmbeddingRuntime for FakeEmbeddingRuntime {
@@ -875,6 +965,7 @@ impl RagEmbeddingRuntime for FakeEmbeddingRuntime {
     ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
         Box::pin(async move {
             self.calls.fetch_add(1, Ordering::SeqCst);
+            self.embedding_inputs.lock().unwrap().push(call.input);
             *self.last_model_code.lock().unwrap() = call.model_code;
             self.result.lock().unwrap().clone()
         })
@@ -1069,6 +1160,23 @@ fn set_project_doc_heading_depth(database_url: &str, heading_depth: u64) {
     );
     let mut config = serde_json::from_str::<Value>(&config_json).unwrap();
     config["stages"]["splitText"]["config"]["splitter"]["headingDepth"] = json!(heading_depth);
+    connection
+        .execute(
+            "UPDATE rag_profiles SET config_json = ?1 WHERE profile_id = 'project-doc-ingest-v1'",
+            [config.to_string()],
+        )
+        .unwrap();
+}
+
+fn set_project_doc_split_strategy(database_url: &str, strategy_id: &str, stage_config: Value) {
+    let connection = Connection::open(database_url).unwrap();
+    let config_json = query_string(
+        &connection,
+        "SELECT config_json FROM rag_profiles WHERE profile_id = 'project-doc-ingest-v1'",
+    );
+    let mut config = serde_json::from_str::<Value>(&config_json).unwrap();
+    config["stages"]["splitText"]["strategyId"] = json!(strategy_id);
+    config["stages"]["splitText"]["config"] = stage_config;
     connection
         .execute(
             "UPDATE rag_profiles SET config_json = ?1 WHERE profile_id = 'project-doc-ingest-v1'",
