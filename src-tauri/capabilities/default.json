@@ -2,6 +2,9 @@
   "$schema": "https://schema.tauri.app/capabilities/2",
   "identifier": "default",
   "description": "Default Tron desktop capabilities",
-  "permissions": ["core:default"]
+  "windows": ["tron-main"],
+  "permissions": [
+    "core:default",
+    "allow-desktop-commands"
+  ]
 }
-

@@ -6,7 +6,9 @@ use std::process::{Child, Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::Duration as StdDuration;
 
+use reqwest::header::{CONTENT_SECURITY_POLICY, HeaderMap, HeaderValue, USER_AGENT, X_FRAME_OPTIONS};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
@@ -22,6 +24,7 @@ const TARGET_WINDOW_LABEL_PREFIX: &str = "tron-target-";
 const BACKEND_HEALTH_PATH: &str = "/api/v1/health";
 const MAX_PORT_PROBE: u16 = 80;
 const AUTO_PAGE_ID: &str = "__TRON_AUTO_PAGE_ID__";
+const EMBEDDING_CHECK_TIMEOUT_MS: u64 = 4500;
 static POPUP_WINDOW_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 const INJECTION_TEMPLATE: &str = include_str!("../injection/tron-desktop-injection.js");
@@ -57,6 +60,21 @@ struct OpenTargetPageInput {
     mode: Option<String>,
     #[serde(default)]
     page_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CheckTargetPageEmbeddingInput {
+    url: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CheckTargetPageEmbeddingOutput {
+    url: String,
+    embeddable: bool,
+    blocked: bool,
+    reason: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -97,6 +115,7 @@ const ALLOWED_INJECTION_EVENTS: &[&str] = &[
     "tron:dom-event",
     "tron:node-inspected",
     "tron:inspection-exited",
+    "tron:navigation-requested",
 ];
 
 fn now_millis() -> i64 {
@@ -134,6 +153,101 @@ fn normalize_target_url(input: &str) -> String {
 fn sanitize_url(raw: &str) -> String {
     let trimmed = raw.trim();
     normalize_target_url(trimmed)
+}
+
+fn open_url_in_system_browser(url: &str) -> Result<(), String> {
+    tauri_plugin_opener::open_url(url, None::<&str>)
+        .map_err(|error| format!("failed to open system browser: {error}"))
+}
+
+fn header_to_lowercase(value: &HeaderValue) -> String {
+    value
+        .to_str()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase()
+}
+
+fn x_frame_options_block_reason(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get_all(X_FRAME_OPTIONS)
+        .iter()
+        .map(header_to_lowercase)
+        .find_map(|value| {
+            if value == "deny" {
+                return Some("x-frame-options-deny".to_string());
+            }
+
+            if value.starts_with("sameorigin") {
+                return Some("x-frame-options-sameorigin".to_string());
+            }
+
+            None
+        })
+}
+
+fn frame_ancestors_directive(value: &str) -> Option<String> {
+    value
+        .split(';')
+        .map(str::trim)
+        .find(|directive| directive.to_ascii_lowercase().starts_with("frame-ancestors"))
+        .map(str::to_string)
+}
+
+fn content_security_policy_block_reason(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get_all(CONTENT_SECURITY_POLICY)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .find_map(|value| {
+            let directive = frame_ancestors_directive(value)?;
+            let normalized = directive.to_ascii_lowercase();
+            if normalized.contains("'none'") {
+                return Some("csp-frame-ancestors-none".to_string());
+            }
+
+            if normalized.contains("'self'") {
+                return Some("csp-frame-ancestors-self".to_string());
+            }
+
+            None
+        })
+}
+
+fn iframe_block_reason_from_headers(headers: &HeaderMap) -> Option<String> {
+    x_frame_options_block_reason(headers)
+        .or_else(|| content_security_policy_block_reason(headers))
+}
+
+async fn check_target_page_embedding_status(raw_url: &str) -> Result<CheckTargetPageEmbeddingOutput, String> {
+    let url = sanitize_url(raw_url);
+    if !is_http_url(&url) {
+        return Err("Only http/https URLs are allowed".to_string());
+    }
+
+    let client = Client::builder()
+        .redirect(reqwest::redirect::Policy::limited(5))
+        .timeout(StdDuration::from_millis(EMBEDDING_CHECK_TIMEOUT_MS))
+        .build()
+        .map_err(|error| format!("failed to create embedding check client: {error}"))?;
+
+    let response = client
+        .get(&url)
+        .header(USER_AGENT, "Mozilla/5.0 Tron Desktop")
+        .send()
+        .await
+        .map_err(|error| format!("embedding check request failed: {error}"))?;
+
+    let final_url = response.url().to_string();
+    let reason = iframe_block_reason_from_headers(response.headers());
+    let blocked = reason.is_some();
+
+    Ok(CheckTargetPageEmbeddingOutput {
+        url: final_url,
+        embeddable: !blocked,
+        blocked,
+        reason,
+    })
 }
 
 fn load_port() -> u16 {
@@ -355,20 +469,15 @@ fn build_injection_script(backend_host: &str, page_id: &str, injection_enabled: 
 
 fn create_popup_target_window(
     app: &AppHandle,
-    backend_url: &str,
-    injection_enabled: bool,
     url: Url,
     features: NewWindowFeatures,
 ) -> NewWindowResponse<Wry> {
-    let page_id = next_page_id();
     let label = next_popup_window_label();
     let title = url.as_str().to_string();
-    let script = build_injection_script(backend_url, &page_id, injection_enabled);
     let builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::External(url))
         .title(&title)
         .inner_size(1280.0, 860.0)
         .window_features(features)
-        .initialization_script_for_all_frames(&script)
         .resizable(true)
         .visible(true)
         .on_document_title_changed(|window, title| {
@@ -414,19 +523,9 @@ fn create_main_window(app: &tauri::App, state: &DesktopRuntimeState) -> Result<(
         .visible(true)
     };
 
-    let app_handle_for_popup = app.handle().clone();
-    let backend_url_for_popup = state.backend_url.clone();
     builder = builder
         .initialization_script_for_all_frames(&script)
-        .on_new_window(move |url, features| {
-            create_popup_target_window(
-                &app_handle_for_popup,
-                &backend_url_for_popup,
-                injection_enabled,
-                url,
-                features,
-            )
-        });
+        .on_new_window(|_, _| NewWindowResponse::Deny);
     builder
         .build()
         .map_err(|error| format!("failed to create main window: {error}"))?;
@@ -446,6 +545,17 @@ async fn open_target_window(
 
     let page_id = request.page_id.unwrap_or_else(next_page_id);
     let target_mode = request.mode.as_deref().unwrap_or("iframe");
+
+    if target_mode == "browser" {
+        open_url_in_system_browser(&raw_url)?;
+        return Ok(OpenTargetPageOutput {
+            page_id,
+            opened: true,
+            mode: "browser".to_string(),
+            reason: None,
+            backend_url: Some(state.backend_url.clone()),
+        });
+    }
 
     if target_mode != "window" {
         return Ok(OpenTargetPageOutput {
@@ -471,28 +581,18 @@ async fn open_target_window(
         });
     }
 
-    let injection_enabled = *state
-        .injection_enabled
-        .lock()
-        .await;
-    let script = build_injection_script(&state.backend_url, &page_id, injection_enabled);
-
     let target_url = Url::parse(&raw_url).map_err(|error| format!("invalid target URL: {error}"))?;
 
     let app_handle_for_popup = app.clone();
-    let backend_url_for_popup = state.backend_url.clone();
     let _window = WebviewWindowBuilder::new(
         app,
         &label,
         WebviewUrl::External(target_url),
     )
     .title(&format!("Tron Target {page_id}"))
-    .initialization_script_for_all_frames(&script)
     .on_new_window(move |url, features| {
         create_popup_target_window(
             &app_handle_for_popup,
-            &backend_url_for_popup,
-            injection_enabled,
             url,
             features,
         )
@@ -527,6 +627,11 @@ async fn desktop_backend_status(state: State<'_, DesktopRuntimeState>) -> Result
 #[tauri::command(rename = "openTargetPage")]
 async fn open_target_page(app: AppHandle, state: State<'_, DesktopRuntimeState>, request: OpenTargetPageInput) -> Result<OpenTargetPageOutput, String> {
     open_target_window(&app, &state, request).await
+}
+
+#[tauri::command(rename = "checkTargetPageEmbedding")]
+async fn check_target_page_embedding(request: CheckTargetPageEmbeddingInput) -> Result<CheckTargetPageEmbeddingOutput, String> {
+    check_target_page_embedding_status(&request.url).await
 }
 
 #[tauri::command(rename = "closeTargetPage")]
@@ -704,16 +809,51 @@ fn start_window_navigator(
 
 #[cfg(test)]
 mod tests {
-    use super::should_navigate_main_window_to_backend;
+    use reqwest::header::{HeaderMap, HeaderValue, CONTENT_SECURITY_POLICY, X_FRAME_OPTIONS};
+
+    use super::{iframe_block_reason_from_headers, should_navigate_main_window_to_backend};
 
     #[test]
     fn main_window_navigation_matches_tauri_runtime_mode() {
         assert_eq!(should_navigate_main_window_to_backend(), !tauri::is_dev());
     }
+
+    #[test]
+    fn iframe_block_reason_detects_x_frame_options_deny() {
+        let mut headers = HeaderMap::new();
+        headers.insert(X_FRAME_OPTIONS, HeaderValue::from_static("DENY"));
+
+        assert_eq!(
+            iframe_block_reason_from_headers(&headers).as_deref(),
+            Some("x-frame-options-deny")
+        );
+    }
+
+    #[test]
+    fn iframe_block_reason_detects_csp_frame_ancestors_none() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            CONTENT_SECURITY_POLICY,
+            HeaderValue::from_static("default-src 'self'; frame-ancestors 'none'"),
+        );
+
+        assert_eq!(
+            iframe_block_reason_from_headers(&headers).as_deref(),
+            Some("csp-frame-ancestors-none")
+        );
+    }
+
+    #[test]
+    fn iframe_block_reason_allows_unrestricted_headers() {
+        let headers = HeaderMap::new();
+
+        assert!(iframe_block_reason_from_headers(&headers).is_none());
+    }
 }
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let app_handle = app.handle().clone();
             let backend_port = resolve_backend_port(load_port())?;
@@ -733,6 +873,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             desktop_backend_status,
+            check_target_page_embedding,
             open_target_page,
             close_target_page,
             set_injection_enabled,

@@ -21,6 +21,14 @@
     return value.replace(/\s+/g, " ").trim().slice(0, maxLength);
   };
 
+  const clampUrl = (value) => {
+    if (typeof value !== "string") {
+      return "";
+    }
+
+    return value.trim().slice(0, 8192);
+  };
+
   const resolvePageId = () => {
     const configured = clampText(CONFIGURED_PAGE_ID, 96);
     if (configured && configured !== AUTO_PAGE_ID) {
@@ -57,7 +65,7 @@
           eventType,
           pageId: PAGE_ID,
           frameId,
-          frameUrl: clampText(window.location.href),
+          frameUrl: clampUrl(window.location.href),
           payload,
           timestamp: Date.now(),
         },
@@ -131,6 +139,84 @@
     element && (element.innerText || element.textContent || ""),
     MAX_TEXT_LENGTH,
   );
+
+  const resolveNavigationUrl = (value) => {
+    if (typeof value !== "string" || !value.trim()) {
+      return "";
+    }
+
+    try {
+      const url = new URL(value, window.location.href);
+      if (url.protocol === "http:" || url.protocol === "https:") {
+        return url.href;
+      }
+    } catch (_error) {}
+
+    return "";
+  };
+
+  const postNavigationRequest = (url, source) => {
+    safePost("tron:navigation-requested", {
+      source,
+      url,
+    }, { force: true });
+  };
+
+  const navigateInCurrentFrame = (url, source) => {
+    const targetUrl = resolveNavigationUrl(url);
+    if (!targetUrl) {
+      return false;
+    }
+
+    postNavigationRequest(targetUrl, source);
+    window.location.href = targetUrl;
+    return true;
+  };
+
+  const isBlankTarget = (target) => {
+    const normalized = String(target || "").trim().toLowerCase();
+    return normalized === "_blank";
+  };
+
+  const findAnchor = (target) => {
+    if (!target || target.nodeType !== Node.ELEMENT_NODE) {
+      return null;
+    }
+
+    return target.closest?.("a[href]") || null;
+  };
+
+  const onNavigationClick = (event) => {
+    if (injectionEnabled || event.defaultPrevented || isInspectorUi(event.target)) {
+      return;
+    }
+
+    const anchor = findAnchor(event.target);
+    if (!anchor || !isBlankTarget(anchor.getAttribute("target"))) {
+      return;
+    }
+
+    const url = resolveNavigationUrl(anchor.getAttribute("href"));
+    if (!url) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    navigateInCurrentFrame(url, "target-blank-link");
+  };
+
+  const originalWindowOpen = window.open?.bind(window);
+  window.open = (url, target, features) => {
+    const targetUrl = resolveNavigationUrl(url);
+    if (targetUrl && (!target || isBlankTarget(target))) {
+      navigateInCurrentFrame(targetUrl, "window-open");
+      return window;
+    }
+
+    return originalWindowOpen ? originalWindowOpen(url, target, features) : null;
+  };
 
   const collectAttributes = (element) => {
     const attributes = {};
@@ -1261,6 +1347,7 @@
     return;
   }
 
+  document.addEventListener("click", onNavigationClick, true);
   applyInspectorState();
 
   window.addEventListener(

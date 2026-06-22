@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { useRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { DesktopTargetMode } from "@/shared/desktop/DesktopBridge";
+
 import { TargetPageFrame, type TargetPageFrameHandle, type TargetPageFrameInspectionResult } from "./TargetPageFrame";
 
 const bridgeMethods = vi.hoisted(() => ({
@@ -15,11 +17,19 @@ const bridgeMethods = vi.hoisted(() => ({
     databasePath: "",
     graphPath: "",
   })),
+  checkTargetPageEmbedding: vi.fn(async (request: { url: string }) => ({
+    blocked: false,
+    embeddable: true,
+    reason: undefined as string | undefined,
+    url: request.url,
+  })),
   openTargetPage: vi.fn(async () => ({
     pageId: "page-1",
     opened: true,
-    mode: "window" as const,
+    mode: "window" as DesktopTargetMode,
+    reason: undefined as string | undefined,
   })),
+  isDesktop: vi.fn(() => false),
   setInjectionEnabled: vi.fn(async (enabled: boolean) => enabled),
 }));
 
@@ -30,7 +40,9 @@ vi.mock("@/shared/desktop/DesktopBridge", async () => {
     ...actual,
     DesktopBridge: class {
       emitInjectionEvent = bridgeMethods.emitInjectionEvent;
+      checkTargetPageEmbedding = bridgeMethods.checkTargetPageEmbedding;
       getBackendStatus = bridgeMethods.getBackendStatus;
+      isDesktop = bridgeMethods.isDesktop;
       openTargetPage = bridgeMethods.openTargetPage;
       setInjectionEnabled = bridgeMethods.setInjectionEnabled;
     },
@@ -48,6 +60,9 @@ function FrameHarness({
     <>
       <button type="button" onClick={() => frameRef.current?.open("https://example.com")}>
         open frame
+      </button>
+      <button type="button" onClick={() => frameRef.current?.open("https://www.baidu.com")}>
+        open baidu
       </button>
       <TargetPageFrame ref={frameRef} onInspectionConfirm={onInspectionConfirm} />
     </>
@@ -78,6 +93,12 @@ describe("TargetPageFrame", () => {
   afterEach(() => {
     cleanup();
     vi.clearAllMocks();
+    bridgeMethods.checkTargetPageEmbedding.mockImplementation(async (request: { url: string }) => ({
+      blocked: false,
+      embeddable: true,
+      reason: undefined,
+      url: request.url,
+    }));
   });
 
   it("opens from the public method and renders the browser shell around the iframe viewport", async () => {
@@ -95,13 +116,168 @@ describe("TargetPageFrame", () => {
     expect(getIframe().getAttribute("src")).toBe("https://example.com/");
   });
 
-  it("does not sandbox the target page so native link navigation can work", async () => {
+  it("sandboxes the target page without allowing popups from target blank links", async () => {
     render(<FrameHarness />);
 
     fireEvent.click(screen.getByRole("button", { name: "open frame" }));
 
     expect(await screen.findByTitle(/Tron target desktop-/)).toBeTruthy();
-    expect(getIframe().hasAttribute("sandbox")).toBe(false);
+    expect(getIframe().getAttribute("sandbox")).toContain("allow-scripts");
+    expect(getIframe().getAttribute("sandbox")).not.toContain("allow-popups");
+  });
+
+  it("keeps target blank navigation inside the iframe and updates the address history", async () => {
+    render(<FrameHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "open frame" }));
+    await screen.findByTitle(/Tron target desktop-/);
+
+    dispatchFrameMessage("tron:navigation-requested", {
+      source: "target-blank-link",
+      url: "https://example.org/docs",
+    });
+
+    await waitFor(() => {
+      expect(getIframe().getAttribute("src")).toBe("https://example.org/docs");
+    });
+    expect(screen.getByDisplayValue("example.org")).toBeTruthy();
+    expect(screen.getByLabelText("Go back")).toHaveProperty("disabled", false);
+    expect(bridgeMethods.checkTargetPageEmbedding).toHaveBeenCalledWith({
+      url: "https://example.org/docs",
+    });
+  });
+
+  it("preserves long target blank query parameters when navigating inside the iframe", async () => {
+    const longTargetUrl = `https://example.org/search?wd=${"baidu-".repeat(40)}&from=target_blank#result`;
+
+    render(<FrameHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "open frame" }));
+    await screen.findByTitle(/Tron target desktop-/);
+
+    dispatchFrameMessage("tron:navigation-requested", {
+      source: "target-blank-link",
+      url: longTargetUrl,
+    });
+
+    await waitFor(() => {
+      expect(getIframe().getAttribute("src")).toBe(longTargetUrl);
+    });
+    const addressInput = screen.getByLabelText("Target address");
+    expect(addressInput).toHaveProperty("value", "example.org");
+    fireEvent.focus(addressInput);
+    expect(addressInput).toHaveProperty("value", longTargetUrl);
+    expect(bridgeMethods.checkTargetPageEmbedding).toHaveBeenCalledWith({
+      url: longTargetUrl,
+    });
+  });
+
+  it("keeps hash route parameters when embedding precheck returns a URL without fragments", async () => {
+    const hashRouteUrl = "http://qbee.qingtui.cn/knowledge/#/share/shareLibrary?shareLibrary=1&objectId=814999419248685056&shareId=857288832535728128&shareChildren=2";
+    bridgeMethods.checkTargetPageEmbedding.mockImplementation(async (request: { url: string }) => {
+      if (request.url === hashRouteUrl) {
+        return {
+          blocked: false,
+          embeddable: true,
+          reason: undefined,
+          url: "http://qbee.qingtui.cn/knowledge/",
+        };
+      }
+
+      return {
+        blocked: false,
+        embeddable: true,
+        reason: undefined,
+        url: request.url,
+      };
+    });
+
+    render(<FrameHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "open frame" }));
+    await screen.findByTitle(/Tron target desktop-/);
+
+    dispatchFrameMessage("tron:navigation-requested", {
+      source: "target-blank-link",
+      url: hashRouteUrl,
+    });
+
+    await waitFor(() => {
+      expect(getIframe().getAttribute("src")).toBe(hashRouteUrl);
+    });
+    const addressInput = screen.getByLabelText("Target address");
+    expect(addressInput).toHaveProperty("value", "qbee.qingtui.cn");
+    fireEvent.focus(addressInput);
+    expect(addressInput).toHaveProperty("value", hashRouteUrl);
+  });
+
+  it("shows an unsupported-page prompt when the target response forbids iframe embedding", async () => {
+    bridgeMethods.checkTargetPageEmbedding.mockResolvedValueOnce({
+      blocked: true,
+      embeddable: false,
+      reason: "x-frame-options-deny",
+      url: "https://www.baidu.com/",
+    });
+
+    render(<FrameHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "open baidu" }));
+
+    expect(await screen.findByText("当前页面不支持在内置浏览器中打开")).toBeTruthy();
+    expect(screen.getByText("请使用系统浏览器打开该页面。")).toBeTruthy();
+    expect(screen.queryByTitle(/Tron target desktop-/)).toBeNull();
+    expect(bridgeMethods.checkTargetPageEmbedding).toHaveBeenCalledWith({
+      url: "https://www.baidu.com/",
+    });
+    expect(bridgeMethods.openTargetPage).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "使用系统浏览器打开" }));
+
+    await waitFor(() => {
+      expect(bridgeMethods.openTargetPage).toHaveBeenCalledWith(expect.objectContaining({
+        mode: "browser",
+        url: "https://www.baidu.com/",
+      }));
+    });
+  });
+
+  it("falls back to a browser tab for iframe-blocked pages when the desktop bridge is unavailable", async () => {
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    bridgeMethods.checkTargetPageEmbedding.mockResolvedValueOnce({
+      blocked: true,
+      embeddable: false,
+      reason: "x-frame-options-deny",
+      url: "https://www.baidu.com/",
+    });
+    bridgeMethods.openTargetPage.mockResolvedValueOnce({
+      pageId: "page-1",
+      opened: false,
+      mode: "browser",
+      reason: "running-in-browser",
+    });
+
+    render(<FrameHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "open baidu" }));
+    expect(await screen.findByText("当前页面不支持在内置浏览器中打开")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "使用系统浏览器打开" }));
+
+    await waitFor(() => {
+      expect(openSpy).toHaveBeenCalledWith("https://www.baidu.com/", "_blank");
+    });
+    expect(screen.queryByTitle(/Tron target desktop-/)).toBeNull();
+    openSpy.mockRestore();
+  });
+
+  it("tries the iframe when the target response does not explicitly forbid embedding", async () => {
+    render(<FrameHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "open baidu" }));
+
+    expect(await screen.findByTitle(/Tron target desktop-/)).toBeTruthy();
+    expect(getIframe().getAttribute("src")).toBe("https://www.baidu.com/");
+    expect(screen.queryByText("当前页面不支持在内置浏览器中打开")).toBeNull();
   });
 
   it("maintains address input internally and reloads the iframe after submit", async () => {

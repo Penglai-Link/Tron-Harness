@@ -9,7 +9,7 @@ import {
   type CSSProperties,
   type KeyboardEvent,
 } from "react";
-import { ArrowLeft, ArrowRight, Check, RefreshCw, ScanSearch } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, ExternalLink, MessageCirclePlus, RefreshCw } from "lucide-react";
 
 import {
   DesktopBridge,
@@ -42,6 +42,18 @@ function createPageId() {
   return `${DEFAULT_PAGE_ID_PREFIX}-${Date.now()}`;
 }
 
+function describeOpenError(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+
+  return "unknown error";
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -54,6 +66,28 @@ function readString(payload: Record<string, unknown> | null, key: string): strin
   const value = payload?.[key];
 
   return typeof value === "string" ? value : "";
+}
+
+function displayAddress(url: string): string {
+  try {
+    return new URL(url).host || url;
+  } catch {
+    return url;
+  }
+}
+
+function preserveUrlHash(originalUrl: string, resolvedUrl: string): string {
+  try {
+    const original = new URL(originalUrl);
+    const resolved = new URL(resolvedUrl || originalUrl);
+    if (!resolved.hash && original.hash) {
+      resolved.hash = original.hash;
+    }
+
+    return resolved.href;
+  } catch {
+    return resolvedUrl || originalUrl;
+  }
 }
 
 export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrameProps>(function TargetPageFrame({
@@ -78,9 +112,12 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
   const [historyIndex, setHistoryIndex] = useState(0);
   const [addressDraft, setAddressDraft] = useState("");
   const [addressEditing, setAddressEditing] = useState(false);
+  const [unsupportedPageActive, setUnsupportedPageActive] = useState(false);
   const fallbackDispatchedRef = useRef(false);
+  const embeddingCheckSequenceRef = useRef(0);
   const timeoutRef = useRef<number | null>(null);
   const activeUrl = historyEntries[historyIndex] ?? "";
+  const activeDisplayAddress = displayAddress(activeUrl);
 
   const clearTimeoutRef = useCallback(() => {
     if (timeoutRef.current !== null) {
@@ -89,25 +126,88 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     }
   }, []);
 
+  const openInSystemBrowser = useCallback((url: string, targetPageId = pageId) => {
+    void (async () => {
+      setErrorMessage("");
+
+      let result;
+      try {
+        result = await bridge.openTargetPage({
+          mode: "browser",
+          pageId: targetPageId,
+          url,
+        });
+      } catch (error) {
+        setErrorMessage(`系统浏览器打开失败：${describeOpenError(error)}`);
+        return;
+      }
+
+      if (result.opened) {
+        return;
+      }
+
+      if (result.reason === "running-in-browser") {
+        window.open(url, "_blank");
+        return;
+      }
+
+      setErrorMessage(`系统浏览器打开失败：${result.reason ?? "not available"}`);
+    })();
+  }, [bridge, pageId]);
+
   const dispatchBlocked = useCallback((reason: string) => {
     if (fallbackDispatchedRef.current) {
       return;
     }
 
     fallbackDispatchedRef.current = true;
-    setErrorMessage(`Target page likely blocked (${reason}), open with separate window.`);
-    void (async () => {
-      const result = await bridge.openTargetPage({
-        mode: "window",
-        pageId,
-        url: activeUrl,
-      });
+    setUnsupportedPageActive(true);
+    setFrameReady(false);
+    setFrameId("");
+    setErrorMessage(`Target page likely blocks iframe embedding (${reason}).`);
+  }, []);
 
-      if (!result.opened) {
-        setErrorMessage(`Fallback launch skipped: ${result.reason ?? "not available"}`);
+  const checkEmbeddingSupport = useCallback(async (url: string) => {
+    const result = await bridge.checkTargetPageEmbedding({ url });
+
+    return {
+      blocked: result.blocked,
+      reason: result.reason,
+      url: preserveUrlHash(url, result.url || url),
+    };
+  }, [bridge]);
+
+  const applyEmbeddingResult = useCallback((url: string, index: number) => {
+    const requestSequence = embeddingCheckSequenceRef.current + 1;
+    embeddingCheckSequenceRef.current = requestSequence;
+
+    void (async () => {
+      const result = await checkEmbeddingSupport(url);
+      if (requestSequence !== embeddingCheckSequenceRef.current) {
+        return;
       }
+
+      setHistoryEntries((current) => {
+        const next = [...current];
+        if (next[index] === url) {
+          next[index] = result.url;
+        }
+        return next;
+      });
+      setAddressDraft(displayAddress(result.url));
+      setAddressEditing(false);
+
+      if (result.blocked) {
+        setUnsupportedPageActive(true);
+        setErrorMessage(`Target page does not support iframe embedding (${result.reason ?? "response-policy"}).`);
+        return;
+      }
+
+      setUnsupportedPageActive(false);
+      setErrorMessage("");
+      setFrameVersion((current) => current + 1);
     })();
-  }, [activeUrl, bridge, pageId]);
+  }, [checkEmbeddingSupport]);
 
   const postInjectionToggle = useCallback(() => {
     frameRef.current?.contentWindow?.postMessage({
@@ -149,20 +249,22 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
       return;
     }
 
+    const nextPageId = createPageId();
     clearTimeoutRef();
     fallbackDispatchedRef.current = false;
-    setVisible(true);
-    setPageId(createPageId());
+    setPageId(nextPageId);
     setInjectionEnabled(false);
     setErrorMessage("");
     setFrameReady(false);
     setFrameId("");
-    setFrameVersion((current) => current + 1);
+    setVisible(true);
+    setUnsupportedPageActive(false);
     setHistoryEntries([normalized]);
     setHistoryIndex(0);
     setAddressDraft(normalized);
     setAddressEditing(false);
-  }, [clearTimeoutRef]);
+    applyEmbeddingResult(normalized, 0);
+  }, [applyEmbeddingResult, clearTimeoutRef]);
 
   useImperativeHandle(ref, () => ({
     open,
@@ -232,6 +334,37 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
         return;
       }
 
+      if (sanitized.eventType === "tron:navigation-requested") {
+        const requestedUrl = sanitizeUrlInput(readString(asRecord(sanitized.payload), "url"));
+        if (!requestedUrl.startsWith("http://") && !requestedUrl.startsWith("https://")) {
+          return;
+        }
+
+        if (activeUrl === requestedUrl) {
+          return;
+        }
+
+        const nextIndex = historyIndex + 1;
+        fallbackDispatchedRef.current = false;
+        setUnsupportedPageActive(false);
+        setErrorMessage("");
+        setFrameReady(false);
+        setFrameId("");
+        setHistoryEntries((current) => {
+          const currentUrl = current[historyIndex] ?? "";
+          if (currentUrl === requestedUrl) {
+            return current;
+          }
+
+          return [...current.slice(0, historyIndex + 1), requestedUrl];
+        });
+        setHistoryIndex(nextIndex);
+        setAddressDraft(displayAddress(requestedUrl));
+        setAddressEditing(false);
+        applyEmbeddingResult(requestedUrl, nextIndex);
+        return;
+      }
+
       if (sanitized.eventType === "tron:node-inspected") {
         const dom = asRecord(sanitized.payload) ?? {};
         void bridge.emitInjectionEvent(sanitized);
@@ -248,7 +381,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     return () => {
       window.removeEventListener("message", handler);
     };
-  }, [bridge, clearTimeoutRef, frameId, onInspectionConfirm, pageId]);
+  }, [activeUrl, applyEmbeddingResult, bridge, clearTimeoutRef, frameId, historyIndex, onInspectionConfirm, pageId]);
 
   const iframeStyle: CSSProperties = {
     height: "100%",
@@ -256,26 +389,19 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     border: "0",
   };
 
-  const activeHost = useMemo(() => {
-    try {
-      return new URL(activeUrl).host || activeUrl;
-    } catch {
-      return activeUrl;
-    }
-  }, [activeUrl]);
-
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex < historyEntries.length - 1;
 
   useEffect(() => {
     if (!addressEditing) {
-      setAddressDraft(activeHost);
+      setAddressDraft(activeDisplayAddress);
     }
-  }, [activeHost, addressEditing]);
+  }, [activeDisplayAddress, addressEditing]);
 
   const handleLoad = () => {
     clearTimeoutRef();
     postInjectionToggle();
+    window.setTimeout(postInjectionToggle, 0);
     if (!frameReady && injectionEnabled) {
       const timer = window.setTimeout(() => {
         if (!frameReady) {
@@ -300,8 +426,10 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     fallbackDispatchedRef.current = false;
     setFrameReady(false);
     setFrameId("");
-    setHistoryIndex((current) => Math.max(0, current - 1));
-    setFrameVersion((current) => current + 1);
+    const nextIndex = Math.max(0, historyIndex - 1);
+    setUnsupportedPageActive(false);
+    setHistoryIndex(nextIndex);
+    applyEmbeddingResult(historyEntries[nextIndex] ?? "", nextIndex);
   };
 
   const handleForward = () => {
@@ -313,8 +441,10 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     fallbackDispatchedRef.current = false;
     setFrameReady(false);
     setFrameId("");
-    setHistoryIndex((current) => Math.min(historyEntries.length - 1, current + 1));
-    setFrameVersion((current) => current + 1);
+    const nextIndex = Math.min(historyEntries.length - 1, historyIndex + 1);
+    setUnsupportedPageActive(false);
+    setHistoryIndex(nextIndex);
+    applyEmbeddingResult(historyEntries[nextIndex] ?? "", nextIndex);
   };
 
   const handleRefresh = () => {
@@ -322,7 +452,15 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     fallbackDispatchedRef.current = false;
     setFrameReady(false);
     setFrameId("");
+    if (unsupportedPageActive) {
+      return;
+    }
+
     setFrameVersion((current) => current + 1);
+  };
+
+  const handleOpenInSystemBrowser = () => {
+    openInSystemBrowser(activeUrl);
   };
 
   const handleInjectionToggle = () => {
@@ -341,11 +479,13 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     fallbackDispatchedRef.current = false;
     setFrameReady(false);
     setFrameId("");
+    setUnsupportedPageActive(false);
+    const nextIndex = historyIndex + 1;
     setHistoryEntries((current) => [...current.slice(0, historyIndex + 1), normalized]);
-    setHistoryIndex((current) => current + 1);
-    setFrameVersion((current) => current + 1);
-    setAddressDraft(new URL(normalized).host || normalized);
+    setHistoryIndex(nextIndex);
+    setAddressDraft(displayAddress(normalized));
     setAddressEditing(false);
+    applyEmbeddingResult(normalized, nextIndex);
   };
 
   const handleAddressFocus = () => {
@@ -361,7 +501,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     }
 
     if (event.key === "Escape") {
-      setAddressDraft(activeHost);
+      setAddressDraft(activeDisplayAddress);
       setAddressEditing(false);
     }
   };
@@ -438,23 +578,44 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
             type="button"
             onClick={handleInjectionToggle}
           >
-            <ScanSearch className="size-[18px]" />
+            <MessageCirclePlus className="size-[18px]" />
           </button>
         </div>
       </div>
-      <iframe
-        key={`${pageId}-${frameVersion}-${historyIndex}`}
-        data-frame-key={`${frameVersion}`}
-        ref={frameRef}
-        onLoad={handleLoad}
-        onError={handleError}
-        name={pageId}
-        src={activeUrl}
-        style={iframeStyle}
-        referrerPolicy="no-referrer"
-        title={`Tron target ${pageId}`}
-        className="block min-h-[560px] bg-[var(--color-elevated-surface-strong)]"
-      />
+      {unsupportedPageActive ? (
+        <div className="flex min-h-[560px] items-center justify-center bg-[var(--color-elevated-surface-strong)] text-[var(--color-on-surface-variant)]">
+          <div className="flex max-w-[420px] flex-col items-center gap-4 text-center">
+            <ExternalLink className="size-8" />
+            <div className="space-y-1">
+              <p className="text-sm text-[var(--color-on-surface)]">当前页面不支持在内置浏览器中打开</p>
+              <p className="text-xs">请使用系统浏览器打开该页面。</p>
+            </div>
+            <button
+              className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--color-outline-variant)] px-4 text-sm text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-elevated-surface)]"
+              type="button"
+              onClick={handleOpenInSystemBrowser}
+            >
+              <ExternalLink className="size-4" />
+              使用系统浏览器打开
+            </button>
+          </div>
+        </div>
+      ) : (
+        <iframe
+          key={`${pageId}-${frameVersion}-${historyIndex}`}
+          data-frame-key={`${frameVersion}`}
+          ref={frameRef}
+          onLoad={handleLoad}
+          onError={handleError}
+          name={pageId}
+          src={activeUrl}
+          style={iframeStyle}
+          referrerPolicy="no-referrer"
+          sandbox="allow-forms allow-modals allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
+          title={`Tron target ${pageId}`}
+          className="block min-h-[560px] bg-[var(--color-elevated-surface-strong)]"
+        />
+      )}
     </section>
   );
 });

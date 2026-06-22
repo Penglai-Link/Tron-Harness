@@ -1,10 +1,11 @@
 const DESKTOP_BACKEND_STATUS_COMMAND = "desktopBackendStatus";
+const CHECK_TARGET_PAGE_EMBEDDING_COMMAND = "checkTargetPageEmbedding";
 const OPEN_TARGET_PAGE_COMMAND = "openTargetPage";
 const CLOSE_TARGET_PAGE_COMMAND = "closeTargetPage";
 const SET_INJECTION_ENABLED_COMMAND = "setInjectionEnabled";
 const INJECTION_EVENT_COMMAND = "desktopInjectionEvent";
 
-export type DesktopTargetMode = "iframe" | "window";
+export type DesktopTargetMode = "browser" | "iframe" | "window";
 
 export interface DesktopBackendStatus {
   backendUrl: string;
@@ -29,6 +30,17 @@ export interface OpenTargetPageResponse {
   backendUrl?: string;
 }
 
+export interface CheckTargetPageEmbeddingRequest {
+  url: string;
+}
+
+export interface CheckTargetPageEmbeddingResponse {
+  url: string;
+  embeddable: boolean;
+  blocked: boolean;
+  reason?: string;
+}
+
 export interface CloseTargetPageRequest {
   pageId: string;
 }
@@ -44,7 +56,7 @@ export interface DesktopInjectionEvent {
   };
 }
 
-export type DesktopInjectionEventType = "tron:frame-ready" | "tron:dom-event" | "tron:node-inspected" | "tron:inspection-exited";
+export type DesktopInjectionEventType = "tron:frame-ready" | "tron:dom-event" | "tron:node-inspected" | "tron:inspection-exited" | "tron:navigation-requested";
 
 export interface DesktopInjectionEventRequest {
   eventType: DesktopInjectionEventType;
@@ -58,6 +70,9 @@ export interface DesktopInjectionEventRequest {
 type InvokeCommand<T> = (command: string, payload: Record<string, unknown>) => Promise<T>;
 
 type WindowWithTauri = Window & {
+  __TAURI_INTERNALS__?: {
+    invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
+  };
   __TAURI__?: {
     core?: {
       invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
@@ -71,14 +86,23 @@ const ALLOWED_INJECTION_EVENTS = new Set<DesktopInjectionEventType>([
   "tron:dom-event",
   "tron:node-inspected",
   "tron:inspection-exited",
+  "tron:navigation-requested",
 ]);
+const MAX_URL_LENGTH = 8192;
+const URL_PAYLOAD_KEYS = new Set(["frameUrl", "href", "location", "url"]);
 
 function resolveInvoke(): InvokeCommand<unknown> | null {
   if (typeof window === "undefined") {
     return null;
   }
 
-  const host = (window as unknown as WindowWithTauri).__TAURI__;
+  const tauriWindow = window as unknown as WindowWithTauri;
+  const internalInvoke = tauriWindow.__TAURI_INTERNALS__?.invoke;
+  if (typeof internalInvoke === "function") {
+    return (command, payload) => internalInvoke(command, payload);
+  }
+
+  const host = tauriWindow.__TAURI__;
 
   if (!host) {
     return null;
@@ -104,6 +128,14 @@ function sanitizeString(value: unknown): string {
   return value.trim().slice(0, 160);
 }
 
+function sanitizeUrlString(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value.trim().slice(0, MAX_URL_LENGTH);
+}
+
 function sanitizePayloadString(key: string, value: string): string {
   const trimmed = value.trim();
   if (
@@ -111,6 +143,10 @@ function sanitizePayloadString(key: string, value: string): string {
     && (trimmed.startsWith("data:image/svg+xml") || trimmed.startsWith("data:image/png"))
   ) {
     return trimmed.slice(0, 3_000_000);
+  }
+
+  if (URL_PAYLOAD_KEYS.has(key)) {
+    return trimmed.slice(0, MAX_URL_LENGTH);
   }
 
   return trimmed.slice(0, 160);
@@ -174,6 +210,18 @@ function sanitizePayload(payload: unknown, depth = 0): Record<string, unknown> |
 
 function normalizeTauriResponse<T>(value: unknown, fallback: T): T {
   return (value as T) ?? fallback;
+}
+
+function describeInvokeError(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+
+  return "desktop-command-failed";
 }
 
 export function isDesktopHost(): boolean {
@@ -261,7 +309,18 @@ export class DesktopBridge {
       pageId,
       url: sanitizeUrlInput(request.url),
     };
-    const response = await this.invoke(OPEN_TARGET_PAGE_COMMAND, payload);
+    let response: unknown;
+    try {
+      response = await this.invoke(OPEN_TARGET_PAGE_COMMAND, { request: payload });
+    } catch (error) {
+      return {
+        pageId,
+        opened: false,
+        mode: payload.mode,
+        reason: describeInvokeError(error),
+      };
+    }
+
     const responseData = response as {
       pageId?: string;
       opened?: boolean;
@@ -283,13 +342,59 @@ export class DesktopBridge {
     };
   }
 
+  public async checkTargetPageEmbedding(
+    request: CheckTargetPageEmbeddingRequest,
+  ): Promise<CheckTargetPageEmbeddingResponse> {
+    const url = sanitizeUrlInput(request.url);
+
+    if (!this.invoke) {
+      return {
+        url,
+        embeddable: true,
+        blocked: false,
+        reason: "running-in-browser",
+      };
+    }
+
+    try {
+      const response = await this.invoke(CHECK_TARGET_PAGE_EMBEDDING_COMMAND, {
+        request: {
+          url,
+        },
+      });
+      const payload = response as {
+        url?: unknown;
+        embeddable?: unknown;
+        blocked?: unknown;
+        reason?: unknown;
+      };
+      const blocked = Boolean(payload.blocked);
+
+      return {
+        url: sanitizePayloadString("url", String(payload.url ?? url)) || url,
+        embeddable: Boolean(payload.embeddable ?? !blocked),
+        blocked,
+        reason: typeof payload.reason === "string" ? payload.reason : undefined,
+      };
+    } catch (error) {
+      return {
+        url,
+        embeddable: true,
+        blocked: false,
+        reason: describeInvokeError(error),
+      };
+    }
+  }
+
   public async closeTargetPage(request: CloseTargetPageRequest): Promise<boolean> {
     if (!this.invoke) {
       return false;
     }
 
     const response = await this.invoke(CLOSE_TARGET_PAGE_COMMAND, {
-      pageId: sanitizeString(request.pageId),
+      request: {
+        pageId: sanitizeString(request.pageId),
+      },
     });
     if (typeof response === "boolean") {
       return response;
@@ -306,7 +411,9 @@ export class DesktopBridge {
     }
 
     const response = await this.invoke(SET_INJECTION_ENABLED_COMMAND, {
-      enabled: Boolean(enabled),
+      request: {
+        enabled: Boolean(enabled),
+      },
     });
     if (typeof response === "boolean") {
       return response;
@@ -327,7 +434,11 @@ export class DesktopBridge {
       return;
     }
 
-    await this.invoke(INJECTION_EVENT_COMMAND, { event: sanitized } as Record<string, unknown>);
+    await this.invoke(INJECTION_EVENT_COMMAND, {
+      request: {
+        event: sanitized,
+      },
+    } as Record<string, unknown>);
   }
 }
 
@@ -352,14 +463,14 @@ export function sanitizeInjectionEventPayload(raw: unknown): DesktopInjectionEve
     eventType: data.eventType,
     frameId,
     pageId,
-    frameUrl: sanitizeString(data.frameUrl),
+    frameUrl: sanitizeUrlString(data.frameUrl),
     payload: sanitizePayload(data.payload),
     timestamp: Number(data.timestamp ?? Date.now()),
   };
 }
 
 export function sanitizeUrlInput(value: string): string {
-  const normalized = sanitizeString(value);
+  const normalized = sanitizeUrlString(value);
   if (!normalized) {
     return "";
   }
