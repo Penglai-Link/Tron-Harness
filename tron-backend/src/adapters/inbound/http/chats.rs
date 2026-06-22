@@ -3,3 +3,4 @@ pub mod handler;
 pub(crate) mod protocol_replay;
 pub mod routes;
 pub(crate) mod stream_live;
+pub(crate) mod stream_task;

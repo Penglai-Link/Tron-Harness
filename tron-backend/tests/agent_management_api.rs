@@ -910,6 +910,165 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
 }
 
 #[tokio::test]
+async fn internal_agent_skill_view_loads_progressive_skill_detail() {
+    let codex_command = temp_command_path("codex-skill-view");
+    let opencode_command = temp_command_path("opencode-skill-view");
+    write_fake_command(&codex_command);
+    write_fake_command(&opencode_command);
+
+    let registry_root = temp_command_path("skill-view-registry");
+    let skill_dir = registry_root
+        .join(".agents")
+        .join("skills")
+        .join("progressive-reviewer");
+    std::fs::create_dir_all(skill_dir.join("references"))
+        .expect("test skill references directory should be created");
+    std::fs::write(
+        skill_dir.join("SKILL.md"),
+        "---\n\
+name: progressive-reviewer\n\
+description: Review progressive disclosure tool details.\n\
+metadata:\n\
+  version: 1.0.0\n\
+---\n\
+\n\
+# Progressive Reviewer\n\
+\n\
+Progressive disclosure instructions loaded.\n",
+    )
+    .expect("test skill markdown should be written");
+    std::fs::write(
+        skill_dir.join("references").join("checklist.md"),
+        "Confirm the selected skill details are loaded only after skill.view.\n",
+    )
+    .expect("test skill reference should be written");
+
+    let model_server = scripted_model_server(vec![
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [{
+                        "function": {
+                            "name": "skill.view",
+                            "arguments": "{\"skillName\":\"progressive-reviewer\"}"
+                        }
+                    }]
+                }
+            }]
+        }),
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "skill detail loaded"
+                }
+            }]
+        }),
+    ])
+    .await;
+    let mut config = test_config(&codex_command, &opencode_command);
+    config.skills_registry_root = registry_root.display().to_string();
+    let app = app_with_config(config);
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let tool_response = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/tools/skill.view",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(tool_response.status(), StatusCode::OK);
+    let tool_body = response_json(tool_response).await;
+    assert_eq!(tool_body["data"]["toolCode"], json!("skill.view"));
+    assert_eq!(
+        tool_body["data"]["inputSchema"]["required"],
+        json!(["skillName"])
+    );
+
+    let rescan_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/skills/registry/rescan",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(rescan_response.status(), StatusCode::OK);
+
+    let bind_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/skills/workspaces/TRON_CORE/bindings",
+        Some(json!({
+            "skillName": "progressive-reviewer",
+            "enabled": true
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(bind_response.status(), StatusCode::OK);
+
+    let run_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/agents/runs",
+        Some(json!({
+            "prompt": "Load the selected skill details.",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "TEST_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": model_server.base_url,
+                "apiKey": "sk-test-api",
+                "modelName": "gpt-test"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(run_response.status(), StatusCode::OK);
+    let run_body = response_json(run_response).await;
+    assert_eq!(
+        run_body["data"]["finalOutput"],
+        json!("skill detail loaded")
+    );
+
+    let recorded_requests = model_server
+        .requests
+        .lock()
+        .expect("recorded scripted model request mutex poisoned")
+        .clone();
+    assert_eq!(recorded_requests.len(), 2);
+    let first_tools = recorded_requests[0]["tools"]
+        .as_array()
+        .expect("first request tools should be an array");
+    assert!(
+        first_tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == json!("skill.view"))
+    );
+    let second_messages = recorded_requests[1]["messages"]
+        .as_array()
+        .expect("second request messages should be an array");
+    assert!(second_messages.iter().any(|message| {
+        message["role"] == json!("user")
+            && message["content"].as_str().is_some_and(|content| {
+                content.contains("skill.view")
+                    && content.contains("Progressive disclosure instructions loaded.")
+                    && content.contains("references/checklist.md")
+            })
+    }));
+}
+
+#[tokio::test]
 async fn internal_agent_domain_discovery_uses_request_locale_for_discovery_schema() {
     let codex_command = temp_command_path("codex-domain-discovery-zh");
     let opencode_command = temp_command_path("opencode-domain-discovery-zh");

@@ -47,6 +47,9 @@ pub(super) fn platform_business_tools(
         Arc::new(SkillListTool {
             skills: skills.clone(),
         }),
+        Arc::new(SkillViewTool {
+            skills: skills.clone(),
+        }),
         Arc::new(VariableListTool {
             variables: variables.clone(),
         }),
@@ -332,6 +335,44 @@ impl Tool for SkillListTool {
         if !input.include_disabled.unwrap_or(false) {
             output.retain(|item| item.enabled);
         }
+        json_observation(self.name(), &output)
+    }
+}
+
+#[derive(Clone)]
+struct SkillViewTool {
+    skills: SkillRegistryService,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SkillViewInput {
+    workspace_code: Option<String>,
+    skill_name: String,
+}
+
+impl Tool for SkillViewTool {
+    fn name(&self) -> &str {
+        "skill.view"
+    }
+
+    fn exec(
+        &self,
+        request: ToolRequest,
+        context: &AgentRunContext,
+    ) -> Result<ToolExecutionResult, ToolError> {
+        let input: SkillViewInput = parse_tool_input(request.input)?;
+        let workspace_code = resolve_workspace_code(&input.workspace_code, context)?;
+        let skill_name = input.skill_name.trim();
+        if skill_name.is_empty() {
+            return Err(ToolError::ExecutionFailed(
+                "skillName is required".to_string(),
+            ));
+        }
+        let output = self
+            .skills
+            .get_workspace_skill(workspace_code.as_str(), skill_name)
+            .map_err(service_tool_error)?;
         json_observation(self.name(), &output)
     }
 }

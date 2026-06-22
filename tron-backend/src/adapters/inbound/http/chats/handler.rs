@@ -27,6 +27,7 @@ use axum::{
 use super::error_mapper::{chat_error_response, chat_send_error_response};
 use super::protocol_replay::record_protocol_event;
 use super::stream_live::{SystemAgentLiveEventBuilder, SystemAgentLiveReplayRecorder};
+use super::stream_task::{ChatStreamForwardingGate, ChatStreamLifecycleGuard};
 mod shared;
 use shared::{ChatSsePayload, ChatStreamCompletion};
 pub(crate) use shared::{
@@ -224,14 +225,19 @@ pub async fn stream_message(
         state.runtime_http_client.clone(),
     );
     let live_replay_recorder_for_sink = live_replay_recorder.clone();
+    let forwarding_gate = ChatStreamForwardingGate::new();
+    let forwarding_gate_for_sink = forwarding_gate.clone();
     let sink = Arc::new(move |event: ModelStreamEvent| {
+        if !forwarding_gate_for_sink.is_open() {
+            return;
+        }
         live_replay_recorder_for_sink.ingest(event.clone());
         let _ = model_event_sender.send(event);
     });
 
     let replay_service_for_task = agui_stream.clone();
     let live_replay_recorder_for_task = live_replay_recorder.clone();
-    AuthHolder::spawn(async move {
+    let run_task = AuthHolder::spawn(async move {
         let result = chats
             .send_message_stream(
                 &session_code_for_task,
@@ -266,6 +272,13 @@ pub async fn stream_message(
     let stream_run_code = run_code.clone();
     let stream_service = agui_stream.clone();
     let stream = async_stream::stream! {
+        let mut lifecycle_guard = ChatStreamLifecycleGuard::new(
+            run_task,
+            forwarding_gate,
+            stream_service.clone(),
+            stream_key.clone(),
+            stream_run_code.clone(),
+        );
         let mut seen = BTreeSet::<String>::new();
         let mut completion: Option<ChatSsePayload> = None;
         let mut drain_ticks = 0u16;
@@ -348,12 +361,12 @@ pub async fn stream_message(
                 if drain_ticks < CHAT_STREAM_DRAIN_AFTER_COMPLETION_TICKS {
                     continue;
                 }
-                yield Ok::<Event, Infallible>(done.event());
+                let done_event = done.event();
+                lifecycle_guard.complete();
+                yield Ok::<Event, Infallible>(done_event);
                 break;
             }
         }
-
-        let _ = stream_service.deactivate(&stream_key);
     };
 
     Sse::new(stream)

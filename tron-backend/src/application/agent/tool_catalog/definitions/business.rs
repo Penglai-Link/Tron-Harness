@@ -170,6 +170,29 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
             sample_result_summary_i18n_key: "agent.toolCatalog.tools.skill.list.sampleResultSummary",
         },
         ToolCatalogDefinition {
+            tool_code: "skill.view",
+            domain_code: "skill",
+            name_i18n_key: "agent.toolCatalog.tools.skill.view.name",
+            description_i18n_key: "agent.toolCatalog.tools.skill.view.description",
+            operation_kind: ToolOperationKind::Query,
+            input_schema: schema(
+                "agent.toolCatalog.tools.skill.view.description",
+                json!([{ "workspaceCode": "TRON_CORE", "skillName": "eliteforge-brainstorming" }]),
+                json!({
+                    "type": "object",
+                    "required": ["skillName"],
+                    "properties": {
+                        "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.skill.view.params.workspaceCode" },
+                        "skillName": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.skill.view.params.skillName" }
+                    },
+                    "additionalProperties": false
+                }),
+            ),
+            module_owner: "skill",
+            availability_state: ToolAvailabilityState::Available,
+            sample_result_summary_i18n_key: "agent.toolCatalog.tools.skill.view.sampleResultSummary",
+        },
+        ToolCatalogDefinition {
             tool_code: "variable.list",
             domain_code: "variable",
             name_i18n_key: "agent.toolCatalog.tools.variable.list.name",

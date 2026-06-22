@@ -86,8 +86,8 @@ export function PlatformToolsPage() {
     });
   }, [debouncedToolSearch, selectedToolDomainCode, t, tools]);
 
-  const domainPagination = useTablePagination(visibleDomains);
-  const toolPagination = useTablePagination(visibleTools);
+  const domainPagination = useTablePagination(visibleDomains, 3);
+  const toolPagination = useTablePagination(visibleTools, 4);
 
   async function refreshTools() {
     setLoading(true);
@@ -134,7 +134,14 @@ export function PlatformToolsPage() {
         <DataTable<ToolCatalogDomainRecord>
           rowKey={(row) => row.domainCode}
           rows={domainPagination.visibleItems}
-          pagination={<TablePagination itemLabel={pageT("domains.itemLabel", "tool domains")} {...domainPagination.paginationProps} />}
+          tableClassName="[&_td]:py-2 [&_th]:py-2"
+          pagination={
+            <TablePagination
+              itemLabel={pageT("domains.itemLabel", "tool domains")}
+              pageSizeOptions={[3, 5, 10, 15]}
+              {...domainPagination.paginationProps}
+            />
+          }
           toolbar={
             <SearchField
               ariaLabel={pageT("domains.searchAria", "Search tool domains")}
@@ -202,7 +209,14 @@ export function PlatformToolsPage() {
         <DataTable<PlatformToolRecord>
           rowKey={(row) => row.toolCode}
           rows={toolPagination.visibleItems}
-          pagination={<TablePagination itemLabel={pageT("tools.itemLabel", "tools")} {...toolPagination.paginationProps} />}
+          tableClassName="[&_td]:py-2 [&_th]:py-2"
+          pagination={
+            <TablePagination
+              itemLabel={pageT("tools.itemLabel", "tools")}
+              pageSizeOptions={[4, 5, 10, 15, 25, 50]}
+              {...toolPagination.paginationProps}
+            />
+          }
           toolbar={
             <div className="flex w-full flex-wrap gap-3">
               <SearchField

@@ -320,6 +320,17 @@ fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.tools.skill.list.params.includeDisabled" => {
             "Whether disabled skills should be included. Defaults to false."
         }
+        "agent.toolCatalog.tools.skill.view.name" => "View skill",
+        "agent.toolCatalog.tools.skill.view.description" => {
+            "View one workspace skill's progressive-disclosure details, including SKILL.md content and files."
+        }
+        "agent.toolCatalog.tools.skill.view.sampleResultSummary" => {
+            "Returns one workspace skill detail with skillMarkdown and files."
+        }
+        "agent.toolCatalog.tools.skill.view.params.workspaceCode" => {
+            "Optional workspace code. Uses the current workspace when omitted."
+        }
+        "agent.toolCatalog.tools.skill.view.params.skillName" => "Skill name to view.",
         "agent.toolCatalog.tools.variable.list.name" => "List variables",
         "agent.toolCatalog.tools.variable.list.description" => {
             "List effective variables in the current or specified workspace."
@@ -485,6 +496,17 @@ fn translate_zh_cn(key: &str) -> &'static str {
         "agent.toolCatalog.tools.skill.list.params.includeDisabled" => {
             "是否包含已禁用技能，默认 false。"
         }
+        "agent.toolCatalog.tools.skill.view.name" => "查看技能",
+        "agent.toolCatalog.tools.skill.view.description" => {
+            "查看一个工作区技能的渐进式披露详情，包括 SKILL.md 内容和文件列表。"
+        }
+        "agent.toolCatalog.tools.skill.view.sampleResultSummary" => {
+            "返回单个工作区技能详情，包含 skillMarkdown 和 files。"
+        }
+        "agent.toolCatalog.tools.skill.view.params.workspaceCode" => {
+            "可选工作区编码；缺省时使用当前工作区。"
+        }
+        "agent.toolCatalog.tools.skill.view.params.skillName" => "要查看的技能名称。",
         "agent.toolCatalog.tools.variable.list.name" => "列出变量",
         "agent.toolCatalog.tools.variable.list.description" => "列出当前或指定工作区中的生效变量。",
         "agent.toolCatalog.tools.variable.list.sampleResultSummary" => "返回工作区生效变量列表。",

@@ -804,6 +804,40 @@ function isStructuredWorkEvent(event: ChatAguiStreamEvent) {
   return type.startsWith("REASONING") || type.startsWith("TOOL_CALL") || type === "ACTIVITY_DELTA";
 }
 
+function terminalRunSummary(event: TranscriptAguiEvent) {
+  const type = aguiEventType(event).toUpperCase();
+  if (type !== "RUN_ERROR") return "";
+  if ("message" in event && typeof event.message === "string" && event.message.trim()) return event.message.trim();
+  if ("code" in event && typeof event.code === "string" && event.code.trim()) return event.code.trim();
+  return "Run stopped.";
+}
+
+function closeRunWorkCards(
+  reasoningCards: Map<string, ReasoningWorkCard>,
+  activeCardIdsByRun: Map<string, string>,
+  toolCards: Map<string, ToolWorkCard>,
+  event: TranscriptAguiEvent,
+) {
+  const runCode = aguiEventRunCode(event);
+  if (!runCode) return;
+  const endMillis = aguiEventMillis(event) ?? Date.now();
+  const summary = terminalRunSummary(event);
+  Array.from(reasoningCards.values())
+    .filter((card) => card.runCode === runCode && !card.ended)
+    .forEach((card) => {
+      card.ended = true;
+      card.endMillis = endMillis;
+      if (summary && !card.content.trim()) card.content = summary;
+    });
+  Array.from(toolCards.values())
+    .filter((card) => card.runCode === runCode && !card.ended)
+    .forEach((card) => {
+      card.ended = true;
+      if (summary && !card.result.trim()) card.result = summary;
+    });
+  activeCardIdsByRun.delete(runCode);
+}
+
 function activityLines(event: TranscriptAguiEvent) {
   const delta = "delta" in event ? event.delta : undefined;
   if (typeof delta === "string") return delta.trim() ? [delta] : [];
@@ -1017,6 +1051,10 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
     if (type === "TOOL_CALL_END") {
       const card = ensureToolCard(toolCards, reasoningCards, latestReasoningCardIdsByRun, event);
       if (card) card.ended = true;
+      return;
+    }
+    if (type === "RUN_ERROR" || type === "RUN_FINISHED") {
+      closeRunWorkCards(reasoningCards, activeReasoningCardIdsByRun, toolCards, event);
     }
   });
 
@@ -1175,6 +1213,20 @@ function chatSendErrorToastMessage(message: string) {
 function isAbortError(error: unknown) {
   if (error instanceof DOMException && error.name === "AbortError") return true;
   return error instanceof Error && error.name === "AbortError";
+}
+
+function stoppedAguiEvents(sessionCode: string, runCodes: Iterable<string>): ChatAguiStreamEvent[] {
+  const stoppedAt = Date.now();
+  return Array.from(runCodes)
+    .filter((runCode) => runCode && runCode !== "stream")
+    .map((runCode, index) => ({
+      type: "RUN_ERROR",
+      threadId: sessionCode,
+      runId: runCode,
+      code: "CHAT_STREAM_STOPPED",
+      message: "Stopped.",
+      timestamp: stoppedAt + index,
+    }));
 }
 
 function iconButtonClass(active = false) {
@@ -3071,6 +3123,13 @@ export function ChatManagementPage() {
     } catch (error) {
       const stopped = streamAbortRequestedRef.current || isAbortError(error);
       if (stopped) {
+        const terminalEvents = stoppedAguiEvents(sendingSessionCode, currentLiveAguiRunCodesRef.current);
+        if (terminalEvents.length) {
+          setLiveAguiEventsBySessionCode((current) => ({
+            ...current,
+            [sendingSessionCode]: mergeTranscriptAguiEvents(current[sendingSessionCode] ?? [], terminalEvents),
+          }));
+        }
         if (activeSessionCodeRef.current === sendingSessionCode) {
           setVisibleMessages((current) => current.filter((item) => (
             item.messageCode !== optimisticAssistantCode || Boolean(item.content.trim())
