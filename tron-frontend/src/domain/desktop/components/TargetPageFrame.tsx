@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type FocusEvent,
   type KeyboardEvent,
 } from "react";
 import { ArrowLeft, ArrowRight, Check, ExternalLink, MessageCirclePlus, RefreshCw } from "lucide-react";
@@ -95,6 +96,9 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
 }, ref) {
   const bridge = useMemo(() => new DesktopBridge(), []);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const addressFormRef = useRef<HTMLFormElement | null>(null);
+  const addressInputRef = useRef<HTMLInputElement | null>(null);
+  const addressSubmitPendingRef = useRef(false);
   const [visible, setVisible] = useState(false);
   const [pageId, setPageId] = useState(createPageId);
   const [injectionEnabled, setInjectionEnabled] = useState(false);
@@ -453,6 +457,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     fallbackDispatchedRef.current = false;
     setFrameReady(false);
     setFrameId("");
+    setInjectionEnabled(false);
     if (unsupportedPageActive) {
       return;
     }
@@ -468,11 +473,16 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     setInjectionEnabled((current) => !current);
   };
 
-  const loadTargetAddress = () => {
-    const normalized = sanitizeUrlInput(addressDraft);
+  const blurAddressInput = () => {
+    addressInputRef.current?.blur();
+  };
+
+  const loadTargetAddress = (rawAddress = addressDraft) => {
+    const normalized = sanitizeUrlInput(rawAddress);
     if (!normalized.startsWith("http://") && !normalized.startsWith("https://")) {
       setAddressDraft(activeUrl);
       setAddressEditing(false);
+      blurAddressInput();
       return;
     }
 
@@ -480,12 +490,14 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     fallbackDispatchedRef.current = false;
     setFrameReady(false);
     setFrameId("");
+    setInjectionEnabled(false);
     setUnsupportedPageActive(false);
     const nextIndex = historyIndex + 1;
     setHistoryEntries((current) => [...current.slice(0, historyIndex + 1), normalized]);
     setHistoryIndex(nextIndex);
     setAddressDraft(displayAddress(normalized));
     setAddressEditing(false);
+    blurAddressInput();
     applyEmbeddingResult(normalized, nextIndex);
   };
 
@@ -494,10 +506,30 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     setAddressEditing(true);
   };
 
+  const handleAddressBlur = (event: FocusEvent<HTMLFormElement>) => {
+    if (addressSubmitPendingRef.current) {
+      return;
+    }
+
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && addressFormRef.current?.contains(nextTarget)) {
+      return;
+    }
+
+    window.setTimeout(() => {
+      if (addressFormRef.current?.contains(document.activeElement)) {
+        return;
+      }
+
+      setAddressDraft(activeDisplayAddress);
+      setAddressEditing(false);
+    }, 0);
+  };
+
   const handleAddressKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      loadTargetAddress();
+      loadTargetAddress(event.currentTarget.value);
       return;
     }
 
@@ -513,7 +545,6 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
 
   return (
     <section className="overflow-hidden">
-      {errorMessage ? <p className="mb-2 text-sm text-[var(--color-error)]">{errorMessage}</p> : null}
       <div className="flex h-14 items-center justify-between border-b border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface-strong)] px-4">
         <div className="flex items-center gap-5 text-[var(--color-on-surface-variant)]">
           <button
@@ -544,14 +575,21 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
           </button>
         </div>
         <form
-          className={`${addressEditing ? 'border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface-strong)]' : 'justify-center'} flex h-9 min-w-[220px] max-w-[420px] flex-1 items-center gap-2 rounded-full px-4 text-sm text-[var(--color-on-surface)] md:flex-none`}
+          ref={addressFormRef}
+          className={`${addressEditing ? 'border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface-strong)]' : 'justify-center'} flex h-9 min-w-[220px] mx-2 w-1/2 flex-1 items-center gap-2 rounded-full px-4 text-sm text-[var(--color-on-surface)] md:flex-none`}
           onSubmit={(event) => {
             event.preventDefault();
-            loadTargetAddress();
+            const formData = new FormData(event.currentTarget);
+            const submittedAddress = formData.get("targetAddress");
+            addressSubmitPendingRef.current = false;
+            loadTargetAddress(typeof submittedAddress === "string" ? submittedAddress : addressDraft);
           }}
+          onBlur={handleAddressBlur}
         >
           <input
             aria-label="Target address"
+            ref={addressInputRef}
+            name="targetAddress"
             className={`${addressEditing ? 'text-left' : ''} min-w-0 flex-1 bg-transparent text-center text-sm text-[var(--color-on-surface)] outline-none placeholder:text-[var(--color-on-surface-variant)]`}
             spellCheck={false}
             value={addressValue}
@@ -564,22 +602,28 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
               aria-label="Load target address"
               className="inline-flex shrink-0 items-center justify-center text-[var(--color-on-surface-variant)] transition-colors hover:text-[var(--color-on-surface)]"
               type="submit"
+              onPointerDown={() => {
+                addressSubmitPendingRef.current = true;
+                window.setTimeout(() => {
+                  addressSubmitPendingRef.current = false;
+                }, 0);
+              }}
             >
               <Check className="size-[16px]" />
             </button>
           ) : null}
         </form>
-        <div className="flex items-center text-[var(--color-on-surface-variant)]">
+        <div className="flex items-center text-[var(--color-on-surface-variant)] text-sm">
           <button
             aria-label={injectionEnabled ? "Disable inspection" : "Enable inspection"}
             aria-pressed={injectionEnabled}
-            className={`inline-flex items-center justify-center transition-colors hover:text-[var(--color-on-surface)] ${
+            className={`inline-flex items-center justify-center transition-colors hover:text-[var(--color-on-surface)] gap-1 ${
               injectionEnabled ? "text-[var(--color-on-surface)]" : "text-[var(--color-on-surface-variant)]"
             }`}
             type="button"
             onClick={handleInjectionToggle}
           >
-            <MessageCirclePlus className="size-[18px]" />
+            <MessageCirclePlus className="size-[18px]" /> {injectionEnabled && "正在注释"}
           </button>
         </div>
       </div>

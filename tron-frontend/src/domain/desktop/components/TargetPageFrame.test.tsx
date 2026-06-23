@@ -209,6 +209,12 @@ describe("TargetPageFrame", () => {
     expect(addressInput).toHaveProperty("value", "qbee.qingtui.cn");
     fireEvent.focus(addressInput);
     expect(addressInput).toHaveProperty("value", hashRouteUrl);
+    fireEvent.blur(addressInput, { relatedTarget: null });
+    await waitFor(() => {
+      expect(addressInput).toHaveProperty("value", "qbee.qingtui.cn");
+    });
+    fireEvent.focus(addressInput);
+    expect(addressInput).toHaveProperty("value", hashRouteUrl);
     fireEvent.keyDown(addressInput, { key: "Escape" });
     expect(addressInput).toHaveProperty("value", "qbee.qingtui.cn");
   });
@@ -298,6 +304,45 @@ describe("TargetPageFrame", () => {
     expect(getIframe().getAttribute("src")).toBe("https://example.org/docs");
     expect(screen.queryByLabelText("Load target address")).toBeNull();
     expect(screen.getByDisplayValue("example.org")).toBeTruthy();
+    expect(document.activeElement).not.toBe(addressInput);
+  });
+
+  it("loads the edited address on Enter and exits address editing mode", async () => {
+    render(<FrameHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "open frame" }));
+
+    const addressInput = await screen.findByLabelText("Target address");
+    fireEvent.focus(addressInput);
+    fireEvent.change(addressInput, { target: { value: "https://example.net/page" } });
+    fireEvent.keyDown(addressInput, { key: "Enter" });
+
+    expect(getIframe().getAttribute("src")).toBe("https://example.net/page");
+    expect(screen.queryByLabelText("Load target address")).toBeNull();
+    expect(screen.getByDisplayValue("example.net")).toBeTruthy();
+    expect(document.activeElement).not.toBe(addressInput);
+  });
+
+  it("turns inspection off after applying a new target address", async () => {
+    render(<FrameHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "open frame" }));
+    const addressInput = await screen.findByLabelText("Target address");
+    fireEvent.click(screen.getByLabelText("Enable inspection"));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Disable inspection")).toBeTruthy();
+    });
+
+    fireEvent.focus(addressInput);
+    fireEvent.change(addressInput, { target: { value: "https://example.org/docs" } });
+    fireEvent.click(screen.getByLabelText("Load target address"));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Enable inspection")).toBeTruthy();
+    });
+    expect(getIframe().getAttribute("src")).toBe("https://example.org/docs");
+    expect(bridgeMethods.setInjectionEnabled).toHaveBeenLastCalledWith(false);
   });
 
   it("refreshes the iframe and toggles inspection from the toolbar action", async () => {
@@ -317,6 +362,28 @@ describe("TargetPageFrame", () => {
       expect(bridgeMethods.setInjectionEnabled).toHaveBeenLastCalledWith(true);
     });
     expect(screen.getByLabelText("Disable inspection")).toBeTruthy();
+  });
+
+  it("turns inspection off when refreshing the iframe", async () => {
+    render(<FrameHarness />);
+
+    fireEvent.click(screen.getByRole("button", { name: "open frame" }));
+
+    const iframe = await screen.findByTitle(/Tron target desktop-/);
+    const initialKey = iframe.getAttribute("data-frame-key");
+
+    fireEvent.click(screen.getByLabelText("Enable inspection"));
+    await waitFor(() => {
+      expect(screen.getByLabelText("Disable inspection")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByLabelText("Refresh frame"));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Enable inspection")).toBeTruthy();
+    });
+    expect(getIframe().getAttribute("data-frame-key")).not.toBe(initialKey);
+    expect(bridgeMethods.setInjectionEnabled).toHaveBeenLastCalledWith(false);
   });
 
   it("turns inspection off when the injected frame reports an Escape exit", async () => {
