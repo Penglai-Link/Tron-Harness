@@ -112,3 +112,13 @@ pub async fn list_execution_records(
         Err(error) => automation_error_response(error),
     }
 }
+
+pub async fn delete_execution_record(
+    State(automations): State<AutomationService>,
+    Path((automation_code, execution_code)): Path<(String, String)>,
+) -> Response {
+    match automations.delete_execution_record(&automation_code, &execution_code) {
+        Ok(record) => Json(ApiResponse::success(record)).into_response(),
+        Err(error) => automation_error_response(error),
+    }
+}

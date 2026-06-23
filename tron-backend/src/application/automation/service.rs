@@ -85,6 +85,12 @@ pub trait AutomationRepository: Send {
         session_code: Option<String>,
         finished_at: &str,
     ) -> Result<(), AutomationError>;
+    fn delete_execution_record(
+        &mut self,
+        automation_code: &str,
+        execution_code: &str,
+        deleted_at: &str,
+    ) -> Result<AutomationExecutionRecord, AutomationError>;
 }
 
 pub trait AutomationExecutionRunner: Send + Sync {

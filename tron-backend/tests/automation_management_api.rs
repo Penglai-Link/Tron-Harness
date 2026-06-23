@@ -365,12 +365,9 @@ async fn manual_execution_persists_history_and_rolls_up_latest_result() {
         Duration::from_secs(3),
     )
     .await;
-    assert!(
-        record
-            .summary
-            .as_deref()
-            .unwrap_or_default()
-            .contains("Agent main-agent completed automation execution")
+    assert_eq!(
+        record.summary.as_deref(),
+        Some("automation reply: Capture a manual execution record.")
     );
     wait_for_model_requests(&server, 1, Duration::from_secs(3)).await;
     let groups = state
@@ -383,6 +380,39 @@ async fn manual_execution_persists_history_and_rolls_up_latest_result() {
         group.source_type == tron_backend::domain::chat::ChatSessionSourceType::Automation
             && group.source_code.as_deref() == Some(automation_code.as_str())
     }));
+
+    let deleted = authenticated_request(
+        &router,
+        Method::DELETE,
+        &format!("/api/v1/automations/{automation_code}/executions/{execution_code}"),
+        None,
+    )
+    .await;
+    assert_eq!(deleted.status(), StatusCode::OK);
+    let deleted_json = response_json(deleted).await;
+    assert_eq!(deleted_json["data"]["executionCode"], execution_code);
+
+    let executions_after_delete = authenticated_request(
+        &router,
+        Method::GET,
+        &format!("/api/v1/automations/{automation_code}/executions"),
+        None,
+    )
+    .await;
+    assert_eq!(executions_after_delete.status(), StatusCode::OK);
+    let execution_after_delete_json = response_json(executions_after_delete).await;
+    assert_eq!(execution_after_delete_json["data"]["total"], 0);
+
+    let detail_after_delete = authenticated_request(
+        &router,
+        Method::GET,
+        &format!("/api/v1/automations/{automation_code}"),
+        None,
+    )
+    .await;
+    assert_eq!(detail_after_delete.status(), StatusCode::OK);
+    let detail_after_delete_json = response_json(detail_after_delete).await;
+    assert!(detail_after_delete_json["data"]["lastExecutionCode"].is_null());
 }
 
 #[tokio::test]

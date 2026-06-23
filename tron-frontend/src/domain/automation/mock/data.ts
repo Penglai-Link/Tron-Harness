@@ -418,7 +418,7 @@ export function executeMockAutomation(automationCode: string) {
 
   const timestamp = timestampNow();
   const executionCode = `AEX-${734600000000000000 + nextExecutionId++}`;
-  const summary = "Prompt dispatch recorded for the automation.";
+  const summary = `Automation agent final reply for ${current.name}.`;
   const record: AutomationExecutionListItem = {
     automationCode,
     createdAt: timestamp,
@@ -460,6 +460,38 @@ export function listAutomationExecutions(
     .sort((left, right) => right.startedAt.localeCompare(left.startedAt));
 
   return paginate(records, current, size);
+}
+
+export function deleteMockAutomationExecution(
+  automationCode: string,
+  executionCode: string,
+) {
+  const deleted = executionRecords.find((record) => (
+    record.automationCode === automationCode && record.executionCode === executionCode
+  ));
+  if (!deleted) {
+    throw new Error("automation execution was not found");
+  }
+
+  executionRecords = executionRecords.filter((record) => (
+    record.automationCode !== automationCode || record.executionCode !== executionCode
+  ));
+  const latest = executionRecords
+    .filter((record) => record.automationCode === automationCode)
+    .sort((left, right) => right.startedAt.localeCompare(left.startedAt))[0] ?? null;
+  automations = automations.map((automation) => automation.automationCode !== automationCode
+    ? automation
+    : {
+      ...automation,
+      lastExecutionCode: latest?.executionCode ?? null,
+      lastExecutionStatus: latest?.status ?? null,
+      lastExecutionSummary: latest?.summary ?? null,
+      lastFinishedAt: latest?.finishedAt ?? null,
+      lastStartedAt: latest?.startedAt ?? null,
+      updatedAt: timestampNow(),
+    });
+
+  return deleted;
 }
 
 function emptyPage<T>(): AutomationPage<T> {

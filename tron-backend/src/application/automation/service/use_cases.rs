@@ -277,6 +277,27 @@ impl AutomationService {
         })
     }
 
+    pub fn delete_execution_record(
+        &self,
+        automation_code: &str,
+        execution_code: &str,
+    ) -> Result<AutomationExecutionListItem, AutomationError> {
+        let _automation = self.get_automation_record(automation_code)?;
+        let deleted_at = current_timestamp();
+        let record = self
+            .repository
+            .lock()
+            .expect("automation repository mutex poisoned")
+            .delete_execution_record(automation_code, execution_code, &deleted_at)?;
+        publish_automation_execution_event(
+            self.event_bus.clone(),
+            "automation.execution.deleted",
+            "Deleted automation execution",
+            &record,
+        );
+        Ok(to_execution_list_item(record))
+    }
+
     pub fn scheduler_snapshot(&self) -> Vec<String> {
         self.runtime.snapshot()
     }

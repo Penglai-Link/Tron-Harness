@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 
 use chrono::{DateTime, TimeZone, Utc};
-use rusqlite::{Connection, Row, Transaction, TransactionBehavior, params};
+use rusqlite::{Connection, OptionalExtension, Row, Transaction, TransactionBehavior, params};
 
 use crate::{
     application::automation::AutomationRepository,
@@ -281,6 +281,90 @@ impl AutomationRepository for SqliteAutomationRepository {
         .map_err(storage_error)?;
         tx.commit().map_err(storage_error)?;
         Ok(())
+    }
+
+    fn delete_execution_record(
+        &mut self,
+        automation_code: &str,
+        execution_code: &str,
+        deleted_at: &str,
+    ) -> Result<AutomationExecutionRecord, AutomationError> {
+        let tx = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(storage_error)?;
+        let deleted = tx
+            .query_row(
+                "SELECT id, execution_code, automation_code, workspace_code, session_code, trigger_source, status, summary, scheduled_at, started_at, finished_at, created_at
+                 FROM automation_execution_records
+                 WHERE automation_code = ?1 AND execution_code = ?2",
+                params![automation_code, execution_code],
+                row_to_execution_record,
+            )
+            .optional()
+            .map_err(storage_error)?
+            .ok_or(AutomationError::NotFound)?;
+
+        tx.execute(
+            "DELETE FROM automation_execution_records WHERE automation_code = ?1 AND execution_code = ?2",
+            params![automation_code, execution_code],
+        )
+        .map_err(storage_error)?;
+
+        let latest = tx
+            .query_row(
+                "SELECT id, execution_code, automation_code, workspace_code, session_code, trigger_source, status, summary, scheduled_at, started_at, finished_at, created_at
+                 FROM automation_execution_records
+                 WHERE automation_code = ?1
+                 ORDER BY started_at DESC, id DESC
+                 LIMIT 1",
+                params![automation_code],
+                row_to_execution_record,
+            )
+            .optional()
+            .map_err(storage_error)?;
+
+        match latest {
+            Some(record) => {
+                tx.execute(
+                    "UPDATE automations
+                     SET last_execution_status = ?2,
+                         last_execution_code = ?3,
+                         last_execution_summary = ?4,
+                         last_started_at = ?5,
+                         last_finished_at = ?6,
+                         updated_at = ?7
+                     WHERE automation_code = ?1",
+                    params![
+                        automation_code,
+                        automation_execution_status_to_storage(record.status),
+                        record.execution_code,
+                        record.summary,
+                        timestamp_to_millis(&record.started_at),
+                        record.finished_at.as_deref().map(timestamp_to_millis),
+                        timestamp_to_millis(deleted_at),
+                    ],
+                )
+                .map_err(storage_error)?;
+            }
+            None => {
+                tx.execute(
+                    "UPDATE automations
+                     SET last_execution_status = NULL,
+                         last_execution_code = NULL,
+                         last_execution_summary = NULL,
+                         last_started_at = NULL,
+                         last_finished_at = NULL,
+                         updated_at = ?2
+                     WHERE automation_code = ?1",
+                    params![automation_code, timestamp_to_millis(deleted_at)],
+                )
+                .map_err(storage_error)?;
+            }
+        }
+
+        tx.commit().map_err(storage_error)?;
+        Ok(deleted)
     }
 }
 

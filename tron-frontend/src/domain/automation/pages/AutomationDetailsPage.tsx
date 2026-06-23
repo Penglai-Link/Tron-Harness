@@ -5,25 +5,30 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import {
-  Link,
+  useNavigate,
   useSearchParams,
 } from "react-router";
 import {
   Archive,
   Edit3,
+  ExternalLink,
   Maximize2,
+  MoreHorizontal,
   Pause,
   Play,
   RefreshCcw,
   Save,
   StepForward,
+  Trash2,
   X,
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
+  ConfirmDialog,
   DataTable,
   DetailField,
   Field,
@@ -37,11 +42,13 @@ import {
   TextInput,
   useToast,
   useConsoleShellConfig,
+  useDismissibleLayer,
   useLocaleText,
 } from "@/shared";
 
 import {
   archiveAutomation,
+  deleteAutomationExecution,
   executeAutomation,
   restoreAutomation,
   updateAutomation,
@@ -56,6 +63,7 @@ import {
 } from "@/domain/automation/hooks";
 import {
   archiveMockAutomation,
+  deleteMockAutomationExecution,
   executeMockAutomation,
   restoreMockAutomation,
   updateMockAutomation,
@@ -87,6 +95,13 @@ interface AutomationSubtask {
   status: string;
   taskCode: string;
   title: string;
+}
+
+interface ExecutionRowMenuState {
+  executionCode: string;
+  left: number;
+  top: number;
+  triggerElement: HTMLElement;
 }
 
 function formatTimestamp(value?: string | null) {
@@ -153,8 +168,17 @@ function executionPageBounds(page: number, pageSize: number, total: number, visi
   };
 }
 
+function chatSessionDetailHref(sessionCode: string) {
+  const params = new URLSearchParams({
+    sessionCode,
+    sourceTab: "automation",
+  });
+  return `/chats?${params.toString()}`;
+}
+
 export function AutomationDetailsPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const pt = useLocaleText();
   const automationCode = searchParams.get("automationCode") ?? "";
   const { automation, refresh, setAutomation } = useAutomationDetail(automationCode);
@@ -183,6 +207,9 @@ export function AutomationDetailsPage() {
   const [statusBusy, setStatusBusy] = useState(false);
   const [executionBusy, setExecutionBusy] = useState(false);
   const [archiveBusy, setArchiveBusy] = useState(false);
+  const [executionRowBusyKey, setExecutionRowBusyKey] = useState("");
+  const [openExecutionRowMenu, setOpenExecutionRowMenu] = useState<ExecutionRowMenuState | null>(null);
+  const [deleteTargetExecution, setDeleteTargetExecution] = useState<AutomationExecutionListItem | null>(null);
   const [promptFullscreenOpen, setPromptFullscreenOpen] = useState(false);
   const [agentOptions, setAgentOptions] = useState<AutomationAgentOption[]>([mainAutomationAgentOption]);
   const [workspaceModelOptions, setWorkspaceModelOptions] = useState<Awaited<ReturnType<typeof fetchWorkspaceSelectOptions>>>([]);
@@ -190,6 +217,7 @@ export function AutomationDetailsPage() {
   const [selectedModelOptionCode, setSelectedModelOptionCode] = useState(optionCodeForAutomationModel(automation.agentCode, automation.modelCode));
   const [executionOptionsLoading, setExecutionOptionsLoading] = useState(false);
   const automationRef = useRef(automation);
+  const executionRowMenuRef = useRef<HTMLDivElement | null>(null);
   automationRef.current = automation;
   const archived = automation.status === "Archived" || Boolean(automation.archivedAt);
   const selectedAgent = useMemo(() => {
@@ -319,6 +347,17 @@ export function AutomationDetailsPage() {
     setExecutionCurrent(1);
   }, [automationCode]);
 
+  useEffect(() => {
+    setOpenExecutionRowMenu(null);
+  }, [automationCode, executionCurrent, executionSize]);
+
+  useDismissibleLayer({
+    onDismiss: () => setOpenExecutionRowMenu(null),
+    open: openExecutionRowMenu !== null,
+    popupRef: executionRowMenuRef,
+    triggerElement: openExecutionRowMenu?.triggerElement,
+  });
+
   const detailDirty = name !== automation.name
     || description !== (automation.description ?? "")
     || cronExpression !== automation.cronExpression
@@ -334,6 +373,9 @@ export function AutomationDetailsPage() {
   );
   const subtasks = useMemo(() => resolveSubtasks(automation), [automation]);
   const executionInitialLoading = executionsLoading && executionPageState.total === 0;
+  const openExecutionMenuRow = openExecutionRowMenu
+    ? executionPageRecords.find((item) => item.executionCode === openExecutionRowMenu.executionCode) ?? null
+    : null;
   const rightPanel = useMemo(() => (
     <InspectorPanel title="Automation Details">
       <div className="space-y-5">
@@ -508,6 +550,74 @@ export function AutomationDetailsPage() {
     }
   }
 
+  function handleRefreshExecutions() {
+    refreshExecutions();
+    toast.success(pt("Execution history refreshed"));
+  }
+
+  function toggleExecutionRowMenu(row: AutomationExecutionListItem, trigger: HTMLButtonElement) {
+    if (executionRowBusyKey === `delete:${row.executionCode}`) return;
+    if (openExecutionRowMenu?.executionCode === row.executionCode) {
+      setOpenExecutionRowMenu(null);
+      return;
+    }
+
+    const menuWidth = 184;
+    const menuHeight = 112;
+    const rect = trigger.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(12, rect.right - menuWidth),
+      window.innerWidth - menuWidth - 12,
+    );
+    const top = Math.min(
+      Math.max(12, rect.bottom + 8),
+      window.innerHeight - menuHeight - 12,
+    );
+
+    setOpenExecutionRowMenu({
+      executionCode: row.executionCode,
+      left,
+      top,
+      triggerElement: trigger,
+    });
+  }
+
+  function handleOpenExecutionSession(row: AutomationExecutionListItem) {
+    if (!row.sessionCode) return;
+    setOpenExecutionRowMenu(null);
+    navigate(chatSessionDetailHref(row.sessionCode));
+  }
+
+  function requestDeleteExecution(row: AutomationExecutionListItem) {
+    setOpenExecutionRowMenu(null);
+    setDeleteTargetExecution(row);
+  }
+
+  async function confirmDeleteExecution() {
+    const target = deleteTargetExecution;
+    if (!target || executionRowBusyKey) return;
+    const busyKey = `delete:${target.executionCode}`;
+    setExecutionRowBusyKey(busyKey);
+
+    try {
+      const deleted = dataSource === "api"
+        ? await deleteAutomationExecution(target.automationCode, target.executionCode)
+        : deleteMockAutomationExecution(target.automationCode, target.executionCode);
+      setDeleteTargetExecution(null);
+      await refresh();
+      if (executionPageRecords.length === 1 && executionCurrent > 1) {
+        setExecutionCurrent((current) => Math.max(1, current - 1));
+      } else {
+        refreshExecutions();
+      }
+      toast.success(pt("Execution {{code}} deleted", { code: deleted.executionCode }));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : pt("Execution could not be deleted"));
+    } finally {
+      setExecutionRowBusyKey("");
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -676,10 +786,21 @@ export function AutomationDetailsPage() {
           </div>
         </SurfaceCard>
         <SurfaceCard>
-          <div className="mb-4">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-semibold text-[var(--color-on-surface)]">Execution instances</h2>
             </div>
+            <Button
+              aria-busy={executionsLoading}
+              disabled={executionsLoading}
+              size="sm"
+              type="button"
+              variant="secondary"
+              onClick={handleRefreshExecutions}
+            >
+              <RefreshCcw className={executionsLoading ? "animate-spin" : undefined} size={14} aria-hidden="true" />
+              {pt("Refresh executions")}
+            </Button>
           </div>
           {executionInitialLoading ? (
             <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)]">
@@ -698,6 +819,7 @@ export function AutomationDetailsPage() {
                 emptyState="No execution history has been recorded yet."
                 rowKey={(row) => row.executionCode}
                 rows={executionPageRecords}
+                tableClassName="min-w-[980px]"
               pagination={(
                 <TablePagination
                   endItem={executionBounds.end}
@@ -722,16 +844,9 @@ export function AutomationDetailsPage() {
                     <div className="space-y-1">
                       <p className="font-mono text-[13px] text-[var(--color-on-surface)]">{row.executionCode}</p>
                       <p className="text-xs text-[var(--color-on-surface-variant)]">{formatTimestamp(row.createdAt)}</p>
-                      {row.sessionCode ? (
-                        <Link
-                          className="inline-flex text-xs font-medium text-[var(--color-primary)] hover:underline"
-                          to={`/chats?sessionCode=${encodeURIComponent(row.sessionCode)}`}
-                        >
-                          {pt("Open session")}
-                        </Link>
-                      ) : (
-                        <p className="text-xs text-[var(--color-on-surface-variant)]">{pt("No linked session")}</p>
-                      )}
+                      <p className="text-xs text-[var(--color-on-surface-variant)]">
+                        {row.sessionCode ?? pt("No linked session")}
+                      </p>
                     </div>
                   ),
                 },
@@ -767,16 +882,96 @@ export function AutomationDetailsPage() {
                   header: "Summary",
                   id: "summary",
                   render: (row) => (
-                    <span className="max-w-[28rem] whitespace-pre-wrap text-sm text-[var(--color-on-surface-variant)]">
+                    <span
+                      className="line-clamp-4 max-w-[28rem] whitespace-pre-wrap text-sm leading-5 text-[var(--color-on-surface-variant)]"
+                      title={row.summary ?? undefined}
+                    >
                       {row.summary ?? "No summary"}
                     </span>
                   ),
+                },
+                {
+                  header: "",
+                  id: "actions",
+                  align: "right",
+                  render: (row) => {
+                    const menuOpen = openExecutionRowMenu?.executionCode === row.executionCode;
+                    const busy = executionRowBusyKey === `delete:${row.executionCode}`;
+
+                    return (
+                      <Button
+                        aria-expanded={menuOpen}
+                        aria-haspopup="menu"
+                        aria-label={pt("Open actions for {{code}}", { code: row.executionCode })}
+                        disabled={busy}
+                        size="icon"
+                        type="button"
+                        variant="ghost"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          toggleExecutionRowMenu(row, event.currentTarget);
+                        }}
+                      >
+                        <MoreHorizontal size={16} aria-hidden="true" />
+                      </Button>
+                    );
+                  },
                 },
               ]}
             />
           )}
         </SurfaceCard>
       </div>
+      {openExecutionRowMenu && openExecutionMenuRow
+        ? createPortal(
+          <div
+            ref={executionRowMenuRef}
+            style={{ left: openExecutionRowMenu.left, top: openExecutionRowMenu.top }}
+            className="fixed z-[80] w-48 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-2 text-left text-sm shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
+            role="menu"
+            aria-label={pt("Actions for {{code}}", { code: openExecutionMenuRow.executionCode })}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={!openExecutionMenuRow.sessionCode}
+              onClick={() => handleOpenExecutionSession(openExecutionMenuRow)}
+            >
+              <ExternalLink size={14} aria-hidden="true" />
+              {pt("Open session")}
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[var(--color-error)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={executionRowBusyKey === `delete:${openExecutionMenuRow.executionCode}`}
+              onClick={() => requestDeleteExecution(openExecutionMenuRow)}
+            >
+              <Trash2 size={14} aria-hidden="true" />
+              {pt("Delete")}
+            </button>
+          </div>,
+          document.body,
+        )
+        : null}
+      <ConfirmDialog
+        ariaLabel={pt("Delete execution")}
+        cancelText={pt("Cancel")}
+        confirmText={executionRowBusyKey ? pt("Deleting...") : pt("Delete")}
+        description={deleteTargetExecution
+          ? pt("This will remove execution {{code}} from the history table.", { code: deleteTargetExecution.executionCode })
+          : undefined}
+        open={Boolean(deleteTargetExecution)}
+        pending={Boolean(executionRowBusyKey)}
+        title={pt("Delete execution")}
+        onCancel={() => {
+          if (!executionRowBusyKey) setDeleteTargetExecution(null);
+        }}
+        onConfirm={() => {
+          void confirmDeleteExecution();
+        }}
+      />
       {promptFullscreenOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
           <div

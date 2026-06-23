@@ -219,14 +219,19 @@ async fn run_automation_with_main_agent(
         .await
         .map_err(|error| format!("Main agent automation run failed: {error:?}"))?;
     let session_code = session.session_code.clone();
+    let final_reply = result.run.final_output.trim();
     Ok(AutomationRunResult {
         session_code: session_code.clone(),
-        summary: format!(
-            "Agent {} completed automation execution {} in session {} with run {}.",
-            resolved_runtime.agent_code,
-            execution.execution_code,
-            session_code,
-            result.run.run_code
-        ),
+        summary: if final_reply.is_empty() {
+            format!(
+                "Agent {} completed automation execution {} in session {} with run {}.",
+                resolved_runtime.agent_code,
+                execution.execution_code,
+                session_code,
+                result.run.run_code
+            )
+        } else {
+            final_reply.to_string()
+        },
     })
 }

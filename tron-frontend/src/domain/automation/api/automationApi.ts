@@ -16,6 +16,7 @@ import type {
 export const automationApiEndpoints = {
   archiveAutomation: "POST /api/v1/automations/{automationCode}/archive",
   createAutomation: "POST /api/v1/automations",
+  deleteAutomationExecution: "DELETE /api/v1/automations/{automationCode}/executions/{executionCode}",
   executeAutomation: "POST /api/v1/automations/{automationCode}/execute",
   getAutomationDetail: "GET /api/v1/automations/{automationCode}",
   getAutomationOptions: "GET /api/v1/automations/options",
@@ -130,5 +131,15 @@ export function fetchAutomationExecutionPage(
       queryParams: automationQueryParams(query),
       signal,
     },
+  );
+}
+
+export function deleteAutomationExecution(
+  automationCode: string,
+  executionCode: string,
+) {
+  return requestApi<AutomationExecutionListItem>(
+    automationApiEndpoints.deleteAutomationExecution,
+    { pathParams: { automationCode, executionCode } },
   );
 }
