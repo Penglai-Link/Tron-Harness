@@ -2,10 +2,18 @@ const DESKTOP_BACKEND_STATUS_COMMAND = "desktopBackendStatus";
 const CHECK_TARGET_PAGE_EMBEDDING_COMMAND = "checkTargetPageEmbedding";
 const OPEN_TARGET_PAGE_COMMAND = "openTargetPage";
 const CLOSE_TARGET_PAGE_COMMAND = "closeTargetPage";
+const RESIZE_TARGET_PAGE_VIEW_COMMAND = "resizeTargetPageView";
 const SET_INJECTION_ENABLED_COMMAND = "setInjectionEnabled";
 const INJECTION_EVENT_COMMAND = "desktopInjectionEvent";
 
-export type DesktopTargetMode = "browser" | "iframe" | "window";
+export type DesktopTargetMode = "browser" | "iframe" | "view" | "window";
+
+export interface DesktopTargetBounds {
+  height: number;
+  width: number;
+  x: number;
+  y: number;
+}
 
 export interface DesktopBackendStatus {
   backendUrl: string;
@@ -20,6 +28,7 @@ export interface OpenTargetPageRequest {
   url: string;
   mode?: DesktopTargetMode;
   pageId?: string;
+  bounds?: DesktopTargetBounds;
 }
 
 export interface OpenTargetPageResponse {
@@ -43,6 +52,11 @@ export interface CheckTargetPageEmbeddingResponse {
 
 export interface CloseTargetPageRequest {
   pageId: string;
+}
+
+export interface ResizeTargetPageViewRequest {
+  pageId: string;
+  bounds: DesktopTargetBounds;
 }
 
 export interface DesktopInjectionEvent {
@@ -70,6 +84,9 @@ export interface DesktopInjectionEventRequest {
 type InvokeCommand<T> = (command: string, payload: Record<string, unknown>) => Promise<T>;
 
 type WindowWithTauri = Window & {
+  tronDesktop?: {
+    invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
+  };
   __TAURI_INTERNALS__?: {
     invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
   };
@@ -89,6 +106,7 @@ const ALLOWED_INJECTION_EVENTS = new Set<DesktopInjectionEventType>([
   "tron:navigation-requested",
 ]);
 const MAX_URL_LENGTH = 8192;
+const MAX_IMAGE_DATA_URL_LENGTH = 80_000_000;
 const URL_PAYLOAD_KEYS = new Set(["frameUrl", "href", "location", "url"]);
 
 function resolveInvoke(): InvokeCommand<unknown> | null {
@@ -96,13 +114,18 @@ function resolveInvoke(): InvokeCommand<unknown> | null {
     return null;
   }
 
-  const tauriWindow = window as unknown as WindowWithTauri;
-  const internalInvoke = tauriWindow.__TAURI_INTERNALS__?.invoke;
+  const desktopWindow = window as unknown as WindowWithTauri;
+  const electronInvoke = desktopWindow.tronDesktop?.invoke;
+  if (typeof electronInvoke === "function") {
+    return (command, payload) => electronInvoke(command, payload);
+  }
+
+  const internalInvoke = desktopWindow.__TAURI_INTERNALS__?.invoke;
   if (typeof internalInvoke === "function") {
     return (command, payload) => internalInvoke(command, payload);
   }
 
-  const host = tauriWindow.__TAURI__;
+  const host = desktopWindow.__TAURI__;
 
   if (!host) {
     return null;
@@ -142,7 +165,7 @@ function sanitizePayloadString(key: string, value: string): string {
     key === "dataUrl"
     && (trimmed.startsWith("data:image/svg+xml") || trimmed.startsWith("data:image/png"))
   ) {
-    return trimmed.slice(0, 3_000_000);
+    return trimmed.slice(0, MAX_IMAGE_DATA_URL_LENGTH);
   }
 
   if (URL_PAYLOAD_KEYS.has(key)) {
@@ -304,11 +327,19 @@ export class DesktopBridge {
       };
     }
 
-    const payload = {
+    const payload: {
+      bounds?: DesktopTargetBounds;
+      mode: DesktopTargetMode;
+      pageId: string;
+      url: string;
+    } = {
       mode: request.mode ?? "iframe",
       pageId,
       url: sanitizeUrlInput(request.url),
     };
+    if (request.bounds) {
+      payload.bounds = sanitizeBounds(request.bounds);
+    }
     let response: unknown;
     try {
       response = await this.invoke(OPEN_TARGET_PAGE_COMMAND, { request: payload });
@@ -405,6 +436,26 @@ export class DesktopBridge {
     return Boolean(normalizeTauriResponse(payload.closed, false));
   }
 
+  public async resizeTargetPageView(request: ResizeTargetPageViewRequest): Promise<boolean> {
+    if (!this.invoke) {
+      return false;
+    }
+
+    const response = await this.invoke(RESIZE_TARGET_PAGE_VIEW_COMMAND, {
+      request: {
+        bounds: sanitizeBounds(request.bounds),
+        pageId: sanitizeString(request.pageId),
+      },
+    });
+    if (typeof response === "boolean") {
+      return response;
+    }
+
+    const payload = response as { resized?: boolean };
+
+    return Boolean(normalizeTauriResponse(payload.resized, false));
+  }
+
   public async setInjectionEnabled(enabled: boolean): Promise<boolean> {
     if (!this.invoke) {
       return enabled;
@@ -488,4 +539,13 @@ export function sanitizeUrlInput(value: string): string {
   } catch {
     return normalized;
   }
+}
+
+function sanitizeBounds(bounds: DesktopTargetBounds): DesktopTargetBounds {
+  return {
+    height: Math.max(0, Math.round(Number(bounds.height) || 0)),
+    width: Math.max(0, Math.round(Number(bounds.width) || 0)),
+    x: Math.round(Number(bounds.x) || 0),
+    y: Math.round(Number(bounds.y) || 0),
+  };
 }

@@ -109,14 +109,12 @@ export function TargetPagePage() {
             </div>
             {annotationImage ? (
               <figure className="overflow-hidden rounded-md border border-[var(--color-outline-variant)] bg-white">
-                <div
-                  aria-label="Annotated DOM selection"
-                  className="mx-auto block max-h-[360px] w-full bg-contain bg-center bg-no-repeat"
-                  role="img"
-                  style={{
-                    aspectRatio: `${annotationImage.width} / ${annotationImage.height}`,
-                    backgroundImage: `url("${annotationImage.dataUrl}")`,
-                  }}
+                <img
+                  alt="Annotated DOM selection"
+                  className="mx-auto block max-h-[360px] h-auto w-full object-contain"
+                  height={annotationImage.height}
+                  src={annotationImage.dataUrl}
+                  width={annotationImage.width}
                 />
               </figure>
             ) : null}

@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DesktopBridge, sanitizeInjectionEventPayload } from "./DesktopBridge";
 
 type WindowWithTauriInternals = Window & {
+  tronDesktop?: {
+    invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
+  };
   __TAURI_INTERNALS__?: {
     invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
   };
@@ -11,8 +14,45 @@ type WindowWithTauriInternals = Window & {
 
 describe("DesktopBridge", () => {
   afterEach(() => {
+    delete (window as unknown as WindowWithTauriInternals).tronDesktop;
     delete (window as unknown as WindowWithTauriInternals).__TAURI_INTERNALS__;
     vi.restoreAllMocks();
+  });
+
+  it("prefers the Electron desktop bridge when both Electron and Tauri globals exist", async () => {
+    const electronInvoke = vi.fn(async () => ({
+      mode: "window",
+      opened: true,
+      pageId: "electron-page",
+    }));
+    const tauriInvoke = vi.fn(async () => ({
+      mode: "browser",
+      opened: true,
+      pageId: "tauri-page",
+    }));
+    (window as unknown as WindowWithTauriInternals).tronDesktop = { invoke: electronInvoke };
+    (window as unknown as WindowWithTauriInternals).__TAURI_INTERNALS__ = { invoke: tauriInvoke };
+
+    const bridge = new DesktopBridge();
+    const response = await bridge.openTargetPage({
+      mode: "window",
+      pageId: "electron-page",
+      url: "https://example.com",
+    });
+
+    expect(response).toMatchObject({
+      mode: "window",
+      opened: true,
+      pageId: "electron-page",
+    });
+    expect(electronInvoke).toHaveBeenCalledWith("openTargetPage", {
+      request: {
+        mode: "window",
+        pageId: "electron-page",
+        url: "https://example.com/",
+      },
+    });
+    expect(tauriInvoke).not.toHaveBeenCalled();
   });
 
   it("uses Tauri v2 internal invoke when the global Tauri object is not exposed", async () => {
@@ -134,6 +174,35 @@ describe("DesktopBridge", () => {
     });
   });
 
+  it("passes negative WebContentsView bounds through for scroll clipping", async () => {
+    const invoke = vi.fn(async () => ({ resized: true }));
+    (window as unknown as WindowWithTauriInternals).tronDesktop = { invoke };
+
+    const bridge = new DesktopBridge();
+    const response = await bridge.resizeTargetPageView({
+      bounds: {
+        height: 560,
+        width: 1000,
+        x: 24,
+        y: -120,
+      },
+      pageId: "page-1",
+    });
+
+    expect(response).toBe(true);
+    expect(invoke).toHaveBeenCalledWith("resizeTargetPageView", {
+      request: {
+        bounds: {
+          height: 560,
+          width: 1000,
+          x: 24,
+          y: -120,
+        },
+        pageId: "page-1",
+      },
+    });
+  });
+
   it("keeps structured DOM data for node inspection events", () => {
     const event = sanitizeInjectionEventPayload({
       eventType: "tron:node-inspected",
@@ -221,7 +290,7 @@ describe("DesktopBridge", () => {
   });
 
   it("keeps annotation image data URLs for node inspection events", () => {
-    const dataUrl = `data:image/png;base64,${"x".repeat(400)}`;
+    const dataUrl = `data:image/png;base64,${"x".repeat(4_000_000)}`;
     const event = sanitizeInjectionEventPayload({
       eventType: "tron:node-inspected",
       frameId: "frame-1",
@@ -247,5 +316,6 @@ describe("DesktopBridge", () => {
         width: 220,
       },
     });
+    expect((event?.payload?.annotationImage as { dataUrl?: string })?.dataUrl).toHaveLength(dataUrl.length);
   });
 });

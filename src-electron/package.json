@@ -1,0 +1,53 @@
+{
+  "name": "tron-desktop-electron",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main/index.cjs",
+  "scripts": {
+    "dev": "electron .",
+    "build": "electron-builder --dir",
+    "package": "electron-builder",
+    "test": "node --test tests/*.test.cjs"
+  },
+  "devDependencies": {
+    "electron": "^38.4.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.tron.desktop",
+    "productName": "Tron",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main/**/*",
+      "preload/**/*",
+      "injection/**/*",
+      "resources/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "."
+      }
+    ],
+    "mac": {
+      "target": [
+        "dir"
+      ],
+      "identity": null,
+      "icon": "../src-tauri/icons/icon.icns"
+    },
+    "win": {
+      "target": [
+        "dir"
+      ]
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ]
+    }
+  }
+}

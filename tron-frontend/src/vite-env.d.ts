@@ -8,6 +8,9 @@ interface ImportMetaEnv {
 }
 
 interface Window {
+  tronDesktop?: {
+    invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
+  };
   __TAURI__?: {
     core?: {
       invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;

@@ -19,6 +19,7 @@ import {
   type DesktopBackendStatus,
   type DesktopInjectionEvent,
   type DesktopInjectionEventRequest,
+  type DesktopTargetBounds,
 } from "@/shared/desktop/DesktopBridge";
 
 export interface TargetPageFrameHandle {
@@ -96,6 +97,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
 }, ref) {
   const bridge = useMemo(() => new DesktopBridge(), []);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const targetViewportRef = useRef<HTMLDivElement | null>(null);
   const addressFormRef = useRef<HTMLFormElement | null>(null);
   const addressInputRef = useRef<HTMLInputElement | null>(null);
   const addressSubmitPendingRef = useRef(false);
@@ -122,6 +124,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
   const timeoutRef = useRef<number | null>(null);
   const activeUrl = historyEntries[historyIndex] ?? "";
   const activeDisplayAddress = displayAddress(activeUrl);
+  const isDesktopHost = bridge.isDesktop();
 
   const clearTimeoutRef = useCallback(() => {
     if (timeoutRef.current !== null) {
@@ -181,11 +184,72 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     };
   }, [bridge]);
 
-  const applyEmbeddingResult = useCallback((url: string, index: number) => {
+  const readTargetViewportBounds = useCallback((): DesktopTargetBounds | undefined => {
+    const viewport = targetViewportRef.current;
+    if (!viewport) {
+      return undefined;
+    }
+
+    const rect = viewport.getBoundingClientRect();
+    const visibleWidth = Math.min(rect.right, window.innerWidth) - Math.max(rect.left, 0);
+    const visibleHeight = Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0);
+    if (visibleWidth <= 0 || visibleHeight <= 0) {
+      return {
+        height: 0,
+        width: 0,
+        x: 0,
+        y: 0,
+      };
+    }
+
+    return {
+      height: Math.max(0, Math.round(rect.height)),
+      width: Math.max(0, Math.round(rect.width)),
+      x: Math.round(rect.left),
+      y: Math.round(rect.top),
+    };
+  }, []);
+
+  const syncTargetViewBounds = useCallback(() => {
+    if (!isDesktopHost || !visible || unsupportedPageActive || !pageId) {
+      return;
+    }
+
+    const bounds = readTargetViewportBounds();
+    if (!bounds) {
+      return;
+    }
+
+    void bridge.resizeTargetPageView({
+      bounds,
+      pageId,
+    });
+  }, [bridge, isDesktopHost, pageId, readTargetViewportBounds, unsupportedPageActive, visible]);
+
+  const applyEmbeddingResult = useCallback((url: string, index: number, targetPageId = pageId) => {
     const requestSequence = embeddingCheckSequenceRef.current + 1;
     embeddingCheckSequenceRef.current = requestSequence;
 
     void (async () => {
+      if (bridge.isDesktop()) {
+        const result = await bridge.openTargetPage({
+          bounds: readTargetViewportBounds(),
+          mode: "view",
+          pageId: targetPageId,
+          url,
+        });
+        if (requestSequence !== embeddingCheckSequenceRef.current) {
+          return;
+        }
+
+        setAddressDraft(displayAddress(url));
+        setAddressEditing(false);
+        setUnsupportedPageActive(!result.opened);
+        setErrorMessage(result.opened ? "" : `Target page could not open in desktop window (${result.reason ?? "desktop-window-unavailable"}).`);
+        window.requestAnimationFrame(syncTargetViewBounds);
+        return;
+      }
+
       const result = await checkEmbeddingSupport(url);
       if (requestSequence !== embeddingCheckSequenceRef.current) {
         return;
@@ -211,7 +275,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
       setErrorMessage("");
       setFrameVersion((current) => current + 1);
     })();
-  }, [checkEmbeddingSupport]);
+  }, [bridge, checkEmbeddingSupport, pageId, readTargetViewportBounds, syncTargetViewBounds]);
 
   const postInjectionToggle = useCallback(() => {
     frameRef.current?.contentWindow?.postMessage({
@@ -254,6 +318,9 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     }
 
     const nextPageId = createPageId();
+    if (isDesktopHost && visible) {
+      void bridge.closeTargetPage({ pageId });
+    }
     clearTimeoutRef();
     fallbackDispatchedRef.current = false;
     setPageId(nextPageId);
@@ -267,8 +334,8 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
     setHistoryIndex(0);
     setAddressDraft(normalized);
     setAddressEditing(false);
-    applyEmbeddingResult(normalized, 0);
-  }, [applyEmbeddingResult, clearTimeoutRef]);
+    applyEmbeddingResult(normalized, 0, nextPageId);
+  }, [applyEmbeddingResult, bridge, clearTimeoutRef, isDesktopHost, pageId, visible]);
 
   useImperativeHandle(ref, () => ({
     open,
@@ -277,6 +344,51 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
   useEffect(() => {
     postInjectionToggle();
   }, [postInjectionToggle]);
+
+  useEffect(() => {
+    if (!isDesktopHost || !visible) {
+      return undefined;
+    }
+
+    const currentPageId = pageId;
+
+    return () => {
+      void bridge.closeTargetPage({ pageId: currentPageId });
+    };
+  }, [bridge, isDesktopHost, pageId, visible]);
+
+  useEffect(() => {
+    if (!isDesktopHost || !visible) {
+      return undefined;
+    }
+
+    let animationFrame = 0;
+    const scheduleSync = () => {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      animationFrame = window.requestAnimationFrame(syncTargetViewBounds);
+    };
+
+    const observer = new ResizeObserver(scheduleSync);
+    const viewport = targetViewportRef.current;
+    if (viewport) {
+      observer.observe(viewport);
+    }
+
+    scheduleSync();
+    window.addEventListener("resize", scheduleSync);
+    window.addEventListener("scroll", scheduleSync, true);
+
+    return () => {
+      if (animationFrame) {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      observer.disconnect();
+      window.removeEventListener("resize", scheduleSync);
+      window.removeEventListener("scroll", scheduleSync, true);
+    };
+  }, [isDesktopHost, syncTargetViewBounds, visible]);
 
   useEffect(() => {
     if (injectionEnabled) {
@@ -398,6 +510,10 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
   const addressValue = addressEditing ? addressDraft : activeDisplayAddress;
 
   useEffect(() => {
+    if (document.activeElement === addressInputRef.current) {
+      return;
+    }
+
     if (!addressEditing) {
       setAddressDraft(activeDisplayAddress);
     }
@@ -462,6 +578,11 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
       return;
     }
 
+    if (isDesktopHost) {
+      applyEmbeddingResult(activeUrl, historyIndex, pageId);
+      return;
+    }
+
     setFrameVersion((current) => current + 1);
   };
 
@@ -502,6 +623,9 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
   };
 
   const handleAddressFocus = () => {
+    if (addressInputRef.current) {
+      addressInputRef.current.value = activeUrl;
+    }
     setAddressDraft(activeUrl);
     setAddressEditing(true);
   };
@@ -542,6 +666,8 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
   if (!visible || !activeUrl) {
     return null;
   }
+
+  const renderEmbeddedFrame = !isDesktopHost;
 
   return (
     <section className="overflow-hidden">
@@ -645,7 +771,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
             </button>
           </div>
         </div>
-      ) : (
+      ) : renderEmbeddedFrame ? (
         <iframe
           key={`${pageId}-${frameVersion}-${historyIndex}`}
           data-frame-key={`${frameVersion}`}
@@ -660,6 +786,16 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
           title={`Tron target ${pageId}`}
           className="block min-h-[560px] bg-[var(--color-elevated-surface-strong)]"
         />
+      ) : (
+        <div
+          ref={targetViewportRef}
+          aria-label={`Tron target ${pageId}`}
+          className="block min-h-[560px] bg-[var(--color-elevated-surface-strong)]"
+        >
+          <div className="flex min-h-[560px] items-center justify-center text-[var(--color-on-surface-variant)]">
+            <p className="text-sm text-[var(--color-on-surface)]">目标页面正在当前窗口中加载</p>
+          </div>
+        </div>
       )}
     </section>
   );

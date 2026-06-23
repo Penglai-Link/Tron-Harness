@@ -47,7 +47,7 @@ help:
 	@echo "  make app-clean    Remove standalone and integrated frontend build artifacts"
 	@echo "Desktop commands:"
 	@echo "  make desktop-build     Build desktop package artifacts and sidecar binary"
-	@echo "  make desktop-dev       Build desktop dependencies and run Tauri dev mode"
+	@echo "  make desktop-dev       Build desktop dependencies and run Electron dev mode"
 	@echo "  make desktop-clean     Remove desktop build artifacts"
 	@echo ""
 	@echo "Skill commands:"
@@ -160,24 +160,25 @@ app-clean: fe-clean
 
 .PHONY: desktop-build
 desktop-build: desktop-clean app-build
-	rm -rf $(TAURI_DIR)/frontend
-	mkdir -p $(TAURI_DIR)/frontend
-	cp -R $(BACKEND_FRONTEND_DIR)/. $(TAURI_DIR)/frontend/
-	mkdir -p $(TAURI_DIR)/binaries
+	rm -rf $(ELECTRON_DIR)/resources/frontend
+	mkdir -p $(ELECTRON_DIR)/resources/frontend
+	cp -R $(BACKEND_FRONTEND_DIR)/. $(ELECTRON_DIR)/resources/frontend/
+	mkdir -p $(ELECTRON_DIR)/resources/binaries
 	cargo build --manifest-path $(BACKEND_MANIFEST) --release
-	cp tron-backend/target/release/tron-backend $(TAURI_DIR)/binaries/tron-backend || true
-	cp tron-backend/target/release/tron-backend.exe $(TAURI_DIR)/binaries/tron-backend.exe || true
-	@if [ -f $(TAURI_DIR)/tauri.conf.json ]; then cd $(TAURI_DIR) && $(TAURI_NPM) run -s tauri build; fi
+	cp tron-backend/target/release/tron-backend $(ELECTRON_DIR)/resources/binaries/tron-backend || true
+	cp tron-backend/target/release/tron-backend.exe $(ELECTRON_DIR)/resources/binaries/tron-backend.exe || true
+	cd $(ELECTRON_DIR) && $(ELECTRON_NPM) install
+	cd $(ELECTRON_DIR) && $(ELECTRON_NPM) run -s build
 
 .PHONY: desktop-dev
-desktop-dev: desktop-clean desktop-build
-	cd $(TAURI_DIR) && $(TAURI_NPM) run -s tauri dev
+desktop-dev: desktop-build
+	cd $(ELECTRON_DIR) && TRON_ELECTRON_DEVTOOLS=1 TRON_ELECTRON_TARGET_DEVTOOLS=1 $(ELECTRON_NPM) run -s dev
 
 .PHONY: desktop-clean
 desktop-clean:
-	rm -rf $(TAURI_DIR)/target
-	rm -rf $(TAURI_DIR)/frontend
-	rm -rf $(TAURI_DIR)/binaries
+	rm -rf $(ELECTRON_DIR)/dist
+	rm -rf $(ELECTRON_DIR)/resources/frontend
+	rm -rf $(ELECTRON_DIR)/resources/binaries
 
 .PHONY: skill-memory-dreaming-test
 skill-memory-dreaming-test:

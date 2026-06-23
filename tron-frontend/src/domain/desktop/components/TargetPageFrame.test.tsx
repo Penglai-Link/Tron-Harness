@@ -26,10 +26,12 @@ const bridgeMethods = vi.hoisted(() => ({
   openTargetPage: vi.fn(async () => ({
     pageId: "page-1",
     opened: true,
-    mode: "window" as DesktopTargetMode,
+    mode: "view" as DesktopTargetMode,
     reason: undefined as string | undefined,
   })),
+  closeTargetPage: vi.fn(async () => true),
   isDesktop: vi.fn(() => false),
+  resizeTargetPageView: vi.fn(async () => true),
   setInjectionEnabled: vi.fn(async (enabled: boolean) => enabled),
 }));
 
@@ -41,9 +43,11 @@ vi.mock("@/shared/desktop/DesktopBridge", async () => {
     DesktopBridge: class {
       emitInjectionEvent = bridgeMethods.emitInjectionEvent;
       checkTargetPageEmbedding = bridgeMethods.checkTargetPageEmbedding;
+      closeTargetPage = bridgeMethods.closeTargetPage;
       getBackendStatus = bridgeMethods.getBackendStatus;
       isDesktop = bridgeMethods.isDesktop;
       openTargetPage = bridgeMethods.openTargetPage;
+      resizeTargetPageView = bridgeMethods.resizeTargetPageView;
       setInjectionEnabled = bridgeMethods.setInjectionEnabled;
     },
   };
@@ -99,6 +103,7 @@ describe("TargetPageFrame", () => {
       reason: undefined,
       url: request.url,
     }));
+    bridgeMethods.isDesktop.mockReturnValue(false);
   });
 
   it("opens from the public method and renders the browser shell around the iframe viewport", async () => {
@@ -438,5 +443,62 @@ describe("TargetPageFrame", () => {
     expect(bridgeMethods.emitInjectionEvent).toHaveBeenCalledWith(expect.objectContaining({
       eventType: "tron:node-inspected",
     }));
+  });
+
+  it("opens target pages in a desktop WebContentsView and syncs native bounds", async () => {
+    bridgeMethods.isDesktop.mockReturnValue(true);
+    const originalResizeObserver = globalThis.ResizeObserver;
+    const originalRequestAnimationFrame = window.requestAnimationFrame;
+    const originalCancelAnimationFrame = window.cancelAnimationFrame;
+    class TestResizeObserver {
+      observe = vi.fn();
+      disconnect = vi.fn();
+    }
+    globalThis.ResizeObserver = TestResizeObserver as unknown as typeof ResizeObserver;
+    window.requestAnimationFrame = ((callback: FrameRequestCallback) => {
+      callback(0);
+      return 1;
+    }) as typeof window.requestAnimationFrame;
+    window.cancelAnimationFrame = vi.fn() as unknown as typeof window.cancelAnimationFrame;
+
+    try {
+      render(<FrameHarness />);
+
+      fireEvent.click(screen.getByRole("button", { name: "open frame" }));
+
+      const placeholder = await screen.findByLabelText(/Tron target desktop-/);
+      placeholder.getBoundingClientRect = () => ({
+        bottom: 620,
+        height: 560,
+        left: 24,
+        right: 1024,
+        top: 60,
+        width: 1000,
+        x: 24,
+        y: 60,
+        toJSON: () => ({}),
+      });
+      window.dispatchEvent(new Event("resize"));
+
+      await waitFor(() => {
+        expect(bridgeMethods.openTargetPage).toHaveBeenCalledWith(expect.objectContaining({
+          mode: "view",
+          url: "https://example.com/",
+        }));
+      });
+      expect(screen.queryByTitle(/Tron target desktop-/)).toBeNull();
+      expect(bridgeMethods.resizeTargetPageView).toHaveBeenCalledWith(expect.objectContaining({
+        bounds: expect.objectContaining({
+          height: 560,
+          width: 1000,
+          x: 24,
+          y: 60,
+        }),
+      }));
+    } finally {
+      globalThis.ResizeObserver = originalResizeObserver;
+      window.requestAnimationFrame = originalRequestAnimationFrame;
+      window.cancelAnimationFrame = originalCancelAnimationFrame;
+    }
   });
 });

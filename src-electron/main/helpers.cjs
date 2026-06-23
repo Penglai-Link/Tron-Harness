@@ -1,0 +1,226 @@
+const fs = require("node:fs");
+const http = require("node:http");
+const net = require("node:net");
+const os = require("node:os");
+const path = require("node:path");
+
+const HOST = "127.0.0.1";
+const SIDE_CAR_BASELINE_PORT = 8080;
+const MAX_PORT_PROBE = 80;
+const BACKEND_HEALTH_PATH = "/api/v1/health";
+
+function isHttpUrl(input) {
+  try {
+    const url = new URL(input);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch (_error) {
+    return false;
+  }
+}
+
+function normalizeTargetUrl(input) {
+  if (isHttpUrl(input)) {
+    return input;
+  }
+
+  if (!input) {
+    return "";
+  }
+
+  return `https://${input}`;
+}
+
+function sanitizeUrl(raw) {
+  return normalizeTargetUrl(String(raw || "").trim());
+}
+
+function loadPort() {
+  const parsed = Number.parseInt(process.env.TRON_BACKEND_PORT || "", 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : SIDE_CAR_BASELINE_PORT;
+}
+
+function canBindPort(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once("error", () => resolve(false));
+    server.once("listening", () => {
+      server.close(() => resolve(true));
+    });
+    server.listen(port, HOST);
+  });
+}
+
+async function findFreePort(start) {
+  const base = start > 0 ? start : SIDE_CAR_BASELINE_PORT;
+  for (let offset = 0; offset < MAX_PORT_PROBE; offset += 1) {
+    const candidate = base + offset;
+    if (await canBindPort(candidate)) {
+      return candidate;
+    }
+  }
+
+  throw new Error(`no free port found in ${base}..${base + MAX_PORT_PROBE}`);
+}
+
+function requestHealth(url) {
+  return new Promise((resolve) => {
+    const request = http.get(`${url}${BACKEND_HEALTH_PATH}`, (response) => {
+      response.resume();
+      resolve(response.statusCode >= 200 && response.statusCode < 300);
+    });
+    request.setTimeout(1200, () => {
+      request.destroy();
+      resolve(false);
+    });
+    request.once("error", () => resolve(false));
+  });
+}
+
+async function waitBackendReady(url, attempts = 120, intervalMs = 150) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (await requestHealth(url)) {
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  return false;
+}
+
+function resolveDesktopDataDir() {
+  return path.join(os.homedir(), ".tron");
+}
+
+function resolveTronDatabasePath(appDataDir) {
+  const legacyPath = path.join(appDataDir, "tron.sqlite");
+  if (fs.existsSync(legacyPath)) {
+    return legacyPath;
+  }
+
+  return path.join(appDataDir, "tron.sqlite3");
+}
+
+function resolveResourcesDir(app) {
+  if (app?.isPackaged) {
+    return process.resourcesPath;
+  }
+
+  return path.resolve(__dirname, "..", "resources");
+}
+
+function resolveFrontendDistDir(resourcesDir) {
+  const candidate = path.join(resourcesDir, "frontend");
+  const nested = path.join(candidate, "frontend");
+
+  if (fs.existsSync(path.join(candidate, "index.html"))) {
+    return candidate;
+  }
+
+  if (fs.existsSync(path.join(nested, "index.html"))) {
+    return nested;
+  }
+
+  return candidate;
+}
+
+function resolveSidecarPath(resourcesDir) {
+  const binaryName = process.platform === "win32" ? "tron-backend.exe" : "tron-backend";
+  const candidate = path.join(resourcesDir, "binaries", binaryName);
+  if (fs.existsSync(candidate)) {
+    return candidate;
+  }
+
+  throw new Error("tron-backend sidecar binary was not found in app resources");
+}
+
+function iframeBlockReasonFromHeaders(headers) {
+  const xFrameOptions = readHeaderValues(headers, "x-frame-options")
+    .map((value) => value.trim().toLowerCase());
+  for (const value of xFrameOptions) {
+    if (value === "deny") {
+      return "x-frame-options-deny";
+    }
+    if (value.startsWith("sameorigin")) {
+      return "x-frame-options-sameorigin";
+    }
+  }
+
+  const cspValues = readHeaderValues(headers, "content-security-policy");
+  for (const value of cspValues) {
+    const directive = value
+      .split(";")
+      .map((item) => item.trim())
+      .find((item) => item.toLowerCase().startsWith("frame-ancestors"));
+    const normalized = String(directive || "").toLowerCase();
+    if (normalized.includes("'none'")) {
+      return "csp-frame-ancestors-none";
+    }
+    if (normalized.includes("'self'")) {
+      return "csp-frame-ancestors-self";
+    }
+  }
+
+  return null;
+}
+
+function readHeaderValues(headers, name) {
+  const raw = headers?.[name] ?? headers?.[name.toLowerCase()];
+  if (Array.isArray(raw)) {
+    return raw.map(String);
+  }
+  if (typeof raw === "string") {
+    return [raw];
+  }
+  return [];
+}
+
+async function checkTargetPageEmbeddingStatus(rawUrl) {
+  const targetUrl = sanitizeUrl(rawUrl);
+  if (!isHttpUrl(targetUrl)) {
+    throw new Error("Only http/https URLs are allowed");
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4500);
+  try {
+    const response = await fetch(targetUrl, {
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "user-agent": "Mozilla/5.0 Tron Desktop"
+      }
+    });
+    const headers = {};
+    response.headers.forEach((value, key) => {
+      headers[key.toLowerCase()] = value;
+    });
+    const reason = iframeBlockReasonFromHeaders(headers);
+
+    return {
+      url: response.url || targetUrl,
+      embeddable: !reason,
+      blocked: Boolean(reason),
+      reason: reason || undefined
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+module.exports = {
+  BACKEND_HEALTH_PATH,
+  HOST,
+  SIDE_CAR_BASELINE_PORT,
+  checkTargetPageEmbeddingStatus,
+  findFreePort,
+  iframeBlockReasonFromHeaders,
+  isHttpUrl,
+  loadPort,
+  resolveDesktopDataDir,
+  resolveFrontendDistDir,
+  resolveResourcesDir,
+  resolveSidecarPath,
+  resolveTronDatabasePath,
+  sanitizeUrl,
+  waitBackendReady
+};
