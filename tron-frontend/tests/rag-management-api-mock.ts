@@ -17,7 +17,7 @@ type RagStorageTargetApi =
       backend: "GRAPH";
       codeStrategy?: string;
       id: string;
-      layout: "GRAPH_SINGLE_NODE";
+      layout: "GRAPH_SINGLE_NODE" | "GRAPH_TREE";
       namespace?: string;
       nodeLabel?: string;
     }
@@ -29,7 +29,7 @@ type RagStorageTargetApi =
     };
 
 type RagStorageBindingApi = {
-  bindings: Partial<Record<"diagnostics" | "source" | "textUnit" | "fulltext" | "vector", string>>;
+  bindings: Partial<Record<"diagnostics" | "source" | "textUnit" | "fulltext" | "vector" | "tree", string>>;
   mode: "TARGETED";
   targets: RagStorageTargetApi[];
 };
@@ -39,6 +39,7 @@ type RagCorpusDetailApi = {
     fulltext: boolean;
     graph: boolean;
     reserved: boolean;
+    tree: boolean;
     vector: boolean;
   };
   corpusId: string;
@@ -214,12 +215,12 @@ function makeSqliteTarget(id: string, table: string): RagStorageTargetApi {
   };
 }
 
-function makeGraphTarget(id: string, namespace: string, nodeLabel: string): RagStorageTargetApi {
+function makeGraphTarget(id: string, namespace: string, nodeLabel: string, layout: "GRAPH_SINGLE_NODE" | "GRAPH_TREE" = "GRAPH_SINGLE_NODE"): RagStorageTargetApi {
   return {
     backend: "GRAPH",
     codeStrategy: "CORPUS_SOURCE_VERSION_SCOPE_HASH",
     id,
-    layout: "GRAPH_SINGLE_NODE",
+    layout,
     namespace,
     nodeLabel,
   };
@@ -235,7 +236,7 @@ function formatStorageTarget(target: RagStorageTargetApi | undefined) {
 
 function formatStorageSummary(binding: RagStorageBindingApi) {
   const targetMap = new Map(binding.targets.map((target) => [target.id, target]));
-  return ["source", "textUnit", "fulltext", "vector"]
+  return ["source", "textUnit", "fulltext", "vector", "tree"]
     .map((segmentKey) => {
       const targetId = segmentKey === "fulltext"
         ? (binding.bindings.fulltext ?? binding.bindings.textUnit)
@@ -250,6 +251,7 @@ function createProjectDocCorpus(): RagCorpusDetailApi {
     bindings: {
       diagnostics: "project-doc-diagnostics",
       source: "source-store",
+      tree: "tree-store",
       textUnit: "content-store",
       vector: "content-store",
     },
@@ -257,6 +259,7 @@ function createProjectDocCorpus(): RagCorpusDetailApi {
     targets: [
       makeSqliteTarget("source-store", "rag_project_doc_sources"),
       makeSqliteTarget("content-store", "rag_project_doc_text_units"),
+      makeSqliteTarget("tree-store", "rag_project_doc_tree_nodes"),
       makeSqliteTarget("project-doc-diagnostics", "rag_project_doc_diagnostics"),
     ],
   };
@@ -266,6 +269,7 @@ function createProjectDocCorpus(): RagCorpusDetailApi {
       fulltext: true,
       graph: false,
       reserved: false,
+      tree: true,
       vector: true,
     },
     corpusId: "project-doc",
@@ -322,6 +326,7 @@ function createMemoryCardCorpus(): RagCorpusDetailApi {
       diagnostics: "memory-card-diagnostics",
       fulltext: "content-store",
       source: "content-store",
+      tree: "content-store",
       textUnit: "content-store",
       vector: "content-store",
     },
@@ -337,6 +342,7 @@ function createMemoryCardCorpus(): RagCorpusDetailApi {
       fulltext: true,
       graph: false,
       reserved: false,
+      tree: true,
       vector: true,
     },
     corpusId: "memory-card",
@@ -397,23 +403,33 @@ function createSeedProfileCatalog(corpora: RagCatalogCorpusApi[]): RagProfileCat
       "resolveSource",
       "parseDocument",
       "splitText",
+      "extractTree",
+      "summarizeTree",
       "fulltextIndex",
       "vectorIndex",
+      "treeFulltextIndex",
+      "treeVectorIndex",
+      "persistTree",
       "persistSource",
     ],
     ingestStageStrategies: {
+      extractTree: ["RAG_EXTRACT_TREE"],
       fulltextIndex: ["RAG_FULLTEXT_INDEX"],
       parseDocument: ["RAG_PARSE_MARKDOWN_DOCUMENT"],
+      persistTree: ["RAG_PERSIST_TREE"],
       persistSource: ["RAG_PERSIST_SOURCE"],
       preparePayload: ["RAG_TEXT_CONTRACT_PAYLOAD_V1", "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1"],
       resolveSource: ["PROJECT_DOC_RESOLVE_SOURCE"],
       splitText: ["RAG_SPLIT_PLAIN_TEXT_V1", "RAG_SPLIT_MARKDOWN_HEADING_V1", "RAG_SPLIT_TEXT"],
+      summarizeTree: ["RAG_SUMMARIZE_TREE_V1"],
+      treeFulltextIndex: ["RAG_TREE_FULLTEXT_INDEX_V1"],
+      treeVectorIndex: ["RAG_TREE_VECTOR_INDEX_V1"],
       validateSource: ["RAG_VALIDATE_SOURCE"],
       vectorIndex: ["RAG_VECTOR_INDEX"],
     },
     retrievalRouteTypes: corpora.map((corpus) => ({
       corpusId: corpus.corpusId,
-      routeTypes: ["FULLTEXT", "VECTOR", "STRUCTURED_FILTER"],
+      routeTypes: ["FULLTEXT", "VECTOR", "TREE_FULLTEXT", "TREE_VECTOR", "STRUCTURED_FILTER"],
     })),
     retrievalStrategies: corpora.flatMap((corpus) => [
       {
@@ -425,6 +441,16 @@ function createSeedProfileCatalog(corpora: RagCatalogCorpusApi[]): RagProfileCat
         corpusId: corpus.corpusId,
         routeType: "VECTOR",
         strategyIds: ["VECTOR_SQLITE_VEC0_COSINE_V1"],
+      },
+      {
+        corpusId: corpus.corpusId,
+        routeType: "TREE_FULLTEXT",
+        strategyIds: ["TREE_FULLTEXT_V1"],
+      },
+      {
+        corpusId: corpus.corpusId,
+        routeType: "TREE_VECTOR",
+        strategyIds: ["TREE_VECTOR_V1"],
       },
       {
         corpusId: corpus.corpusId,
@@ -480,8 +506,13 @@ function createSeedPipelineCatalog(profileType: "INGEST" | "RETRIEVAL"): RagPipe
           createStrategy("RAG_SPLIT_MARKDOWN_HEADING_V1", { splitter: { type: "object" } }),
           createStrategy("RAG_SPLIT_TEXT", { splitter: { type: "object" } }),
         ]),
+        stage("EXTRACT_TREE", ["textUnits.generated"], ["tree.extracted"], [createStrategy("RAG_EXTRACT_TREE")]),
+        stage("SUMMARIZE_TREE", ["tree.extracted"], ["tree.summarized"], [createStrategy("RAG_SUMMARIZE_TREE_V1")]),
         stage("FULLTEXT_INDEX", ["textUnits.generated"], ["index.fulltext"], [createStrategy("RAG_FULLTEXT_INDEX")]),
         stage("VECTOR_INDEX", ["textUnits.generated"], ["index.vector"], [createStrategy("RAG_VECTOR_INDEX")]),
+        stage("TREE_FULLTEXT_INDEX", ["tree.summarized"], ["index.treeFulltext"], [createStrategy("RAG_TREE_FULLTEXT_INDEX_V1")]),
+        stage("TREE_VECTOR_INDEX", ["tree.summarized"], ["index.treeVector"], [createStrategy("RAG_TREE_VECTOR_INDEX_V1")]),
+        stage("PERSIST_TREE", ["tree.summarized"], ["tree.persisted"], [createStrategy("RAG_PERSIST_TREE")]),
         stage("PERSIST_SOURCE", ["textUnits.generated"], ["source.persisted"], [createStrategy("RAG_PERSIST_SOURCE")]),
       ],
     };
@@ -506,6 +537,8 @@ function createSeedPipelineCatalog(profileType: "INGEST" | "RETRIEVAL"): RagPipe
     stages: [
       retrievalStage("FULLTEXT", ["hits.fulltext"], ["FULLTEXT_SQLITE_FTS5_SIMPLE_V1", "FULLTEXT_GRAPH_SINGLE_NODE_V1"]),
       retrievalStage("VECTOR", ["hits.vector"], ["VECTOR_SQLITE_VEC0_COSINE_V1", "VECTOR_GRAPH_SINGLE_NODE_V1"]),
+      retrievalStage("TREE_FULLTEXT", ["hits.treeFulltext"], ["TREE_FULLTEXT_V1"]),
+      retrievalStage("TREE_VECTOR", ["hits.treeVector"], ["TREE_VECTOR_V1"]),
       retrievalStage("GRAPH", ["hits.graph"], ["FULLTEXT_GRAPH_SINGLE_NODE_V1", "VECTOR_GRAPH_SINGLE_NODE_V1"]),
       retrievalStage("STRUCTURED_FILTER", ["filters.structured"], ["STRUCTURED_FILTER_SQLITE_V1"]),
     ],
@@ -644,12 +677,17 @@ function readRoutes(value: unknown): RagRouteApi[] {
 }
 
 const ingestStageTypesById: Record<string, string> = {
+  extractTree: "EXTRACT_TREE",
   fulltextIndex: "FULLTEXT_INDEX",
   parseDocument: "PARSE_DOCUMENT",
+  persistTree: "PERSIST_TREE",
   persistSource: "PERSIST_SOURCE",
   preparePayload: "PREPARE_PAYLOAD",
   resolveSource: "RESOLVE_SOURCE",
   splitText: "SPLIT_TEXT",
+  summarizeTree: "SUMMARIZE_TREE",
+  treeFulltextIndex: "TREE_FULLTEXT_INDEX",
+  treeVectorIndex: "TREE_VECTOR_INDEX",
   validateSource: "VALIDATE_SOURCE",
   vectorIndex: "VECTOR_INDEX",
 };
@@ -784,6 +822,7 @@ function readStorageBinding(value: unknown): RagStorageBindingApi {
       fulltext: readString(value.bindings.fulltext),
       source: readString(value.bindings.source),
       textUnit: readString(value.bindings.textUnit),
+      tree: readString(value.bindings.tree),
       vector: readString(value.bindings.vector),
     },
     mode: "TARGETED",
@@ -795,7 +834,7 @@ function readStorageBinding(value: unknown): RagStorageBindingApi {
               backend: "GRAPH" as const,
               codeStrategy: readString(target.codeStrategy) || undefined,
               id: readString(target.id),
-              layout: "GRAPH_SINGLE_NODE" as const,
+              layout: readString(target.layout) === "GRAPH_TREE" ? "GRAPH_TREE" as const : "GRAPH_SINGLE_NODE" as const,
               namespace: readString(target.namespace) || undefined,
               nodeLabel: readString(target.nodeLabel) || undefined,
             }
@@ -819,7 +858,7 @@ function buildRuntimeProjection(binding: RagStorageBindingApi, compatible: boole
 
 function collectBoundStorageTargets(binding: RagStorageBindingApi) {
   const targetMap = new Map(binding.targets.map((target) => [target.id, target]));
-  return ["source", "textUnit", "fulltext", "vector"]
+  return ["source", "textUnit", "fulltext", "vector", "tree"]
     .map((segmentKey) => targetMap.get(binding.bindings[segmentKey as keyof typeof binding.bindings] ?? ""))
     .filter((target): target is RagStorageTargetApi => Boolean(target));
 }
@@ -876,12 +915,14 @@ function upsertCorpus(payload: unknown, state: RagManagementState, runtimeProjec
           fulltext: Boolean(record.capabilities.fulltext),
           graph: Boolean(record.capabilities.graph),
           reserved: Boolean(record.capabilities.reserved),
+          tree: Boolean(record.capabilities.tree),
           vector: Boolean(record.capabilities.vector),
         }
       : {
           fulltext: true,
           graph: false,
           reserved: false,
+          tree: true,
           vector: true,
         },
     corpusId,
@@ -973,13 +1014,15 @@ function validateProfilePayload(
   const routes = readRoutes(record.routes);
   const pipeline = readPipeline(record.pipeline) ?? pipelineFromLegacyRoutes(routes);
   const enabledNodes = pipeline.nodes.filter((node) => node.enabled !== false);
+  const routeStageTypes = new Set(["FULLTEXT", "VECTOR", "TREE_FULLTEXT", "TREE_VECTOR", "GRAPH", "STRUCTURED_FILTER", "ROUTE_SEARCH"]);
+  const routeNodes = enabledNodes.filter((node) => routeStageTypes.has(node.stageType));
   if (enabledNodes.length === 0) {
     errors.push({ field: "pipeline", message: "At least one pipeline node must be enabled." });
   }
-  if (primaryCorpusId && !enabledNodes.some((node) => isRecord(node.config) && readString(node.config.corpusId) === primaryCorpusId)) {
+  if (primaryCorpusId && !routeNodes.some((node) => isRecord(node.config) && readString(node.config.corpusId) === primaryCorpusId)) {
     errors.push({ field: "pipeline", message: "Primary corpus must appear in at least one enabled node." });
   }
-  enabledNodes.forEach((node, index) => {
+  routeNodes.forEach((node, index) => {
     const config = isRecord(node.config) ? node.config : {};
     if (!readString(config.corpusId).trim()) {
       errors.push({ field: `pipeline.nodes[${index}].config.corpusId`, message: "Node corpus is required." });
@@ -1008,7 +1051,7 @@ function validateProfilePayload(
   }
 
   const graphExpansionPolicy = readString(record.graphExpansionPolicy);
-  if (graphExpansionPolicy && !enabledNodes.some((node) => node.stageType === "GRAPH")) {
+  if (graphExpansionPolicy && !routeNodes.some((node) => node.stageType === "GRAPH")) {
     errors.push({ field: "graphExpansionPolicy", message: "Graph expansion requires at least one enabled GRAPH route." });
   }
 
@@ -1208,7 +1251,13 @@ export async function installRagManagementApiMock(page: Page, requests: Captured
           {
             corpusId: "project-doc",
             documentCode: "rag-storage-runtime-workbench",
-            metadata: { scopeCode: "TRON_CORE" },
+            metadata: {
+              matchedBy: "TREE_VECTOR",
+              scopeCode: "TRON_CORE",
+              treeNodeCode: "tree-runtime-workbench",
+              treeNodeTitle: "Runtime Workbench Summary",
+              treeScore: 0.88,
+            },
             repoCode: "tron",
             score: 0.91,
             sourceCode: "docs/features/rag-storage-runtime-workbench",

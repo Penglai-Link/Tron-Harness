@@ -2,8 +2,8 @@ export type RagTab = "corpora" | "profiles" | "workbench" | "data" | "diagnostic
 export type DataView = "sources" | "textUnits" | "warnings" | "traces";
 export type BadgeTone = "neutral" | "accent" | "success" | "warning" | "error";
 export type RagStorageBackend = "SQLITE" | "GRAPH";
-export type RagStorageTargetLayout = "TABLE" | "GRAPH_SINGLE_NODE";
-export type RagStorageSegmentKey = "source" | "textUnit" | "fulltext" | "vector" | "diagnostics";
+export type RagStorageTargetLayout = "TABLE" | "GRAPH_SINGLE_NODE" | "GRAPH_TREE";
+export type RagStorageSegmentKey = "source" | "textUnit" | "fulltext" | "vector" | "tree" | "diagnostics";
 export type RagCorpusStatusCode = "enabled" | "reserved" | "disabled";
 export type RagFilterFieldType = "string" | "integer" | "boolean";
 
@@ -11,6 +11,7 @@ export interface RagCorpusCapabilities {
   fulltext: boolean;
   graph: boolean;
   reserved: boolean;
+  tree: boolean;
   vector: boolean;
 }
 
@@ -36,7 +37,7 @@ export interface RagSqliteStorageTargetBinding {
 export interface RagGraphStorageTargetBinding {
   backend: "GRAPH";
   codeStrategy?: string;
-  layout: "GRAPH_SINGLE_NODE";
+  layout: "GRAPH_SINGLE_NODE" | "GRAPH_TREE";
   namespace?: string;
   nodeLabel?: string;
 }
@@ -95,11 +96,14 @@ export type RagIngestStageId =
   | "parseDocument"
   | "splitText"
   | "extractTree"
+  | "summarizeTree"
   | "fulltextIndex"
   | "vectorIndex"
+  | "treeFulltextIndex"
+  | "treeVectorIndex"
   | "persistTree"
   | "persistSource";
-export type RagRetrievalRouteType = "FULLTEXT" | "VECTOR" | "GRAPH" | "STRUCTURED_FILTER";
+export type RagRetrievalRouteType = "FULLTEXT" | "VECTOR" | "TREE_FULLTEXT" | "TREE_VECTOR" | "GRAPH" | "STRUCTURED_FILTER";
 
 export interface RagPipelineNode {
   config?: Record<string, unknown>;
@@ -309,14 +313,15 @@ export const dataViews = [
   { label: "检索追踪", value: "traces" },
 ] as const;
 
-export const pipelineStages = ["source", "parse", "normalize", "split", "persist", "fulltextIndex", "vectorIndex"] as const;
+export const pipelineStages = ["source", "parse", "normalize", "split", "extractTree", "summarizeTree", "persist", "fulltextIndex", "vectorIndex", "treeFulltextIndex", "treeVectorIndex"] as const;
 
-const storageSegmentOrder: RagStorageSegmentKey[] = ["source", "textUnit", "fulltext", "vector", "diagnostics"];
+const storageSegmentOrder: RagStorageSegmentKey[] = ["source", "textUnit", "fulltext", "vector", "tree", "diagnostics"];
 const storageSegmentLabels: Record<RagStorageSegmentKey, string> = {
   diagnostics: "诊断",
   fulltext: "全文",
   source: "来源",
   textUnit: "文本单元",
+  tree: "摘要树",
   vector: "向量",
 };
 

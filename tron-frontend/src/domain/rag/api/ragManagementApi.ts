@@ -356,6 +356,7 @@ function normalizeCorpusCapabilities(value: RagCorpusSummaryApi["capabilities"])
     fulltext: Boolean(record.fulltext),
     graph: Boolean(record.graph),
     reserved: Boolean(record.reserved),
+    tree: Boolean(record.tree),
     vector: Boolean(record.vector),
   };
 }
@@ -556,6 +557,8 @@ export function mapRagCorpusSummaryToRecord(payload: RagCorpusSummaryApi): Corpu
     strategies: [
       capabilities.fulltext ? "FULLTEXT" : "",
       capabilities.vector ? "VECTOR" : "",
+      capabilities.tree ? "TREE_FULLTEXT" : "",
+      capabilities.tree ? "TREE_VECTOR" : "",
       capabilities.graph ? "GRAPH" : "",
     ].filter(Boolean),
     textUnits: 0,

@@ -100,6 +100,59 @@ test.afterAll(async () => {
   await new Promise((resolveProcess) => frontendProcess?.once("exit", resolveProcess));
 });
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("tron.locale", "en-US"));
+});
+
+test("summary tree corpus form submits tree segment and graph tree payload", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  await installRagManagementApiMock(page, requests);
+
+  await page.goto(`${frontendBaseUrl}/rag/corpora/new`);
+  await expect(page.getByRole("heading", { name: /Create Corpus|新建语料库/ })).toBeVisible();
+
+  await page.getByLabel(/Corpus code|语料库编码/).fill("support-tree");
+  await page.getByLabel(/Corpus name|语料库名称/).fill("Support Tree");
+  await expect(page.getByLabel(/Storage target 4 table|存储目标 4 表名/)).toHaveValue("rag_support_tree_tree_nodes");
+  await expect(page.getByLabel(/Tree target|摘要树目标/)).toHaveValue("tree-store");
+
+  await page.getByRole("button", { name: /Add Storage Target|添加存储目标/ }).click();
+  await page.getByLabel(/Storage target 5 backend|存储目标 5 后端/).selectOption("GRAPH");
+  await page.getByLabel(/Storage target 5 graph namespace|存储目标 5 图命名空间/).fill("rag_support_tree_tree");
+  await page.getByLabel(/Storage target 5 node label|存储目标 5 节点标签/).fill("RagTreeNode");
+  await page.getByLabel(/Graph enabled|启用图能力/).check();
+  await page.getByLabel(/Tree target|摘要树目标/).selectOption("target-5");
+  await page.getByRole("button", { name: /^Save$|^保存$/ }).click();
+
+  await expect(page).toHaveURL(/\/rag$/);
+
+  const createBodies = requestBodies(requests, "/api/v1/rag/corpora", "POST")
+    .filter((body) => body.corpusId === "support-tree");
+  expect(createBodies).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      capabilities: expect.objectContaining({ graph: true, tree: true }),
+      corpusId: "support-tree",
+      storageBinding: expect.objectContaining({
+        bindings: expect.objectContaining({
+          source: "source-store",
+          tree: "target-5",
+          textUnit: "text-unit-store",
+          vector: "vector-store",
+        }),
+        targets: expect.arrayContaining([
+          expect.objectContaining({
+            backend: "GRAPH",
+            id: "target-5",
+            layout: "GRAPH_TREE",
+            namespace: "rag_support_tree_tree",
+            nodeLabel: "RagTreeNode",
+          }),
+        ]),
+      }),
+    }),
+  ]));
+});
+
 test("loads corpora from management APIs and persists create/edit through verify plus save requests", async ({ page }) => {
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
@@ -197,11 +250,11 @@ test("allows mixed graph and sqlite segment bindings", async ({ page }) => {
   await page.getByLabel("Corpus code").fill("support-mixed");
   await page.getByLabel("Corpus name").fill("Support Mixed");
   await page.getByRole("button", { name: "Add Storage Target" }).click();
-  await page.getByLabel("Storage target 4 backend").selectOption("GRAPH");
-  await page.getByLabel("Storage target 4 graph namespace").fill("rag_doc");
-  await page.getByLabel("Storage target 4 node label").fill("RagDocUnit");
+  await page.getByLabel("Storage target 5 backend").selectOption("GRAPH");
+  await page.getByLabel("Storage target 5 graph namespace").fill("rag_support_mixed_tree");
+  await page.getByLabel("Storage target 5 node label").fill("RagTreeNode");
   await page.getByLabel("Graph enabled").check();
-  await page.getByLabel("Vector target").selectOption("target-4");
+  await page.getByLabel("Tree target").selectOption("target-5");
   await page.getByRole("button", { name: "Save" }).click();
 
   await expect(page).toHaveURL(/\/rag$/);
@@ -220,9 +273,19 @@ test("allows mixed graph and sqlite segment bindings", async ({ page }) => {
       storageBinding: expect.objectContaining({
         bindings: expect.objectContaining({
           source: "source-store",
+          tree: "target-5",
           textUnit: "text-unit-store",
-          vector: "target-4",
+          vector: "vector-store",
         }),
+        targets: expect.arrayContaining([
+          expect.objectContaining({
+            backend: "GRAPH",
+            id: "target-5",
+            layout: "GRAPH_TREE",
+            namespace: "rag_support_mixed_tree",
+            nodeLabel: "RagTreeNode",
+          }),
+        ]),
       }),
     }),
   ]));

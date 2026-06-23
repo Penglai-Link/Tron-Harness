@@ -18,14 +18,17 @@ const defaultIngestStageOrder: RagIngestStageId[] = [
   "resolveSource",
   "parseDocument",
   "splitText",
+  "extractTree",
+  "summarizeTree",
   "fulltextIndex",
   "vectorIndex",
-  "extractTree",
+  "treeFulltextIndex",
+  "treeVectorIndex",
   "persistTree",
   "persistSource",
 ];
 
-const defaultRouteTypes: Array<RagRetrievalRouteType> = ["FULLTEXT", "VECTOR", "GRAPH", "STRUCTURED_FILTER"];
+const defaultRouteTypes: Array<RagRetrievalRouteType> = ["FULLTEXT", "VECTOR", "TREE_FULLTEXT", "TREE_VECTOR", "GRAPH", "STRUCTURED_FILTER"];
 const defaultProfileStatuses: RagProfileStatus[] = ["Draft", "Ready", "Needs Review"];
 const defaultFilterOperators = ["eq", "in", "gt", "gte", "lt", "lte"];
 export const mineruParseStrategyId = "RAG_PARSE_MINERU_DOCUMENT";
@@ -38,12 +41,15 @@ const initialIngestArtifactKeys = new Set(["request.payload", "request.accessCon
 const ingestStageTypesById: Record<RagIngestStageId, string> = {
   fulltextIndex: "FULLTEXT_INDEX",
   extractTree: "EXTRACT_TREE",
+  summarizeTree: "SUMMARIZE_TREE",
   parseDocument: "PARSE_DOCUMENT",
   persistTree: "PERSIST_TREE",
   persistSource: "PERSIST_SOURCE",
   preparePayload: "PREPARE_PAYLOAD",
   resolveSource: "RESOLVE_SOURCE",
   splitText: "SPLIT_TEXT",
+  treeFulltextIndex: "TREE_FULLTEXT_INDEX",
+  treeVectorIndex: "TREE_VECTOR_INDEX",
   validateSource: "VALIDATE_SOURCE",
   vectorIndex: "VECTOR_INDEX",
 };
@@ -382,6 +388,7 @@ function sanitizeNodeIdPart(value: string) {
   return value
     .trim()
     .toLowerCase()
+    .replace(/_/g, "-")
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
@@ -437,6 +444,8 @@ export function createRetrievalRouteFormRow(index = 0): RagRetrievalRouteFormRow
 function inferRetrievalRouteType(strategyId: string): RagRetrievalRouteType {
   const normalized = strategyId.trim().toUpperCase();
   if (normalized.includes("STRUCTURED_FILTER")) return "STRUCTURED_FILTER";
+  if (normalized.includes("TREE_FULLTEXT")) return "TREE_FULLTEXT";
+  if (normalized.includes("TREE_VECTOR")) return "TREE_VECTOR";
   if (normalized.includes("VECTOR")) return "VECTOR";
   if (normalized.includes("FULLTEXT")) return "FULLTEXT";
   if (normalized.includes("GRAPH")) return "GRAPH";
@@ -836,6 +845,12 @@ export function validateIngestProfileForm(
       errors.pipeline = "parseDocument 需要 resolveSource。";
     } else if (enabledStageIds.has("extractTree") && !enabledStageIds.has("splitText")) {
       errors.pipeline = "extractTree 需要 splitText。";
+    } else if (enabledStageIds.has("summarizeTree") && !enabledStageIds.has("extractTree")) {
+      errors.pipeline = "summarizeTree 需要 extractTree。";
+    } else if (enabledStageIds.has("treeFulltextIndex") && !enabledStageIds.has("summarizeTree")) {
+      errors.pipeline = "treeFulltextIndex 需要 summarizeTree。";
+    } else if (enabledStageIds.has("treeVectorIndex") && !enabledStageIds.has("summarizeTree")) {
+      errors.pipeline = "treeVectorIndex 需要 summarizeTree。";
     } else if (enabledStageIds.has("persistTree") && !enabledStageIds.has("extractTree")) {
       errors.pipeline = "persistTree 需要 extractTree。";
     }

@@ -111,7 +111,10 @@ test.afterAll(async () => {
 });
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript((key) => window.localStorage.removeItem(key), mockStorageKey);
+  await page.addInitScript((key) => {
+    window.localStorage.setItem("tron.locale", "en-US");
+    window.localStorage.removeItem(key);
+  }, mockStorageKey);
 });
 
 test("creates target-first mixed-media corpus config and derives the registry summary", async ({ page }) => {
@@ -139,10 +142,12 @@ test("creates target-first mixed-media corpus config and derives the registry su
   await expect(page.getByLabel("Storage target 1 table")).toHaveValue("rag_support_notes_sources");
   await expect(page.getByLabel("Storage target 2 table")).toHaveValue("rag_support_notes_text_units");
   await expect(page.getByLabel("Storage target 3 table")).toHaveValue("rag_support_notes_vectors");
+  await expect(page.getByLabel("Storage target 4 table")).toHaveValue("rag_support_notes_tree_nodes");
   await expect(page.getByLabel("Source target")).toHaveValue("source-store");
   await expect(page.getByLabel("Text Unit target")).toHaveValue("text-unit-store");
   await expect(page.getByLabel("Fulltext target")).toHaveValue("text-unit-store");
   await expect(page.getByLabel("Vector target")).toHaveValue("vector-store");
+  await expect(page.getByLabel("Tree target")).toHaveValue("tree-store");
   await page.getByLabel("Fulltext target").selectOption("vector-store");
   await expect(page.getByLabel("Graph enabled")).toBeDisabled();
   await page.getByLabel("Storage target 3 backend").selectOption("GRAPH");
@@ -182,6 +187,7 @@ test("creates target-first mixed-media corpus config and derives the registry su
             fulltext: "vector-store",
             source: "source-store",
             textUnit: "text-unit-store",
+            tree: "tree-store",
             vector: "vector-store",
           }),
           targets: expect.arrayContaining([
@@ -203,6 +209,12 @@ test("creates target-first mixed-media corpus config and derives the registry su
               layout: "GRAPH_SINGLE_NODE",
               namespace: "rag_doc",
               nodeLabel: "RagDocUnit",
+            }),
+            expect.objectContaining({
+              backend: "SQLITE",
+              id: "tree-store",
+              layout: "TABLE",
+              table: "rag_support_notes_tree_nodes",
             }),
             expect.objectContaining({
               backend: "SQLITE",
@@ -252,9 +264,9 @@ test("requires a non-diagnostics graph binding when graph enabled is checked", a
   await expect(page.getByLabel("Graph enabled")).toBeDisabled();
 
   await page.getByRole("button", { name: "Add Storage Target" }).click();
-  await page.getByLabel("Storage target 4 backend").selectOption("GRAPH");
-  await page.getByLabel("Storage target 4 graph namespace").fill("rag_doc");
-  await page.getByLabel("Storage target 4 node label").fill("RagDocUnit");
+  await page.getByLabel("Storage target 5 backend").selectOption("GRAPH");
+  await page.getByLabel("Storage target 5 graph namespace").fill("rag_doc");
+  await page.getByLabel("Storage target 5 node label").fill("RagDocUnit");
   await expect(page.getByLabel("Graph enabled")).toBeEnabled();
 
   await page.getByLabel("Graph enabled").check();
@@ -264,15 +276,15 @@ test("requires a non-diagnostics graph binding when graph enabled is checked", a
   await expect(page.getByText(graphClosureError)).toBeVisible();
   await expect(page).toHaveURL(/\/rag\/corpora\/new$/);
 
-  await page.getByLabel("Vector target").selectOption("target-4");
+  await page.getByLabel("Vector target").selectOption("target-5");
   await expect(page.getByText(graphClosureError)).toHaveCount(0);
 
-  await page.getByLabel("Storage target 4 backend").selectOption("SQLITE");
+  await page.getByLabel("Storage target 5 backend").selectOption("SQLITE");
   await expect(page.getByLabel("Graph enabled")).toBeDisabled();
   await expect(page.getByLabel("Graph enabled")).not.toBeChecked();
 });
 
-test("starts with three default storage targets and can add more", async ({ page }) => {
+test("starts with four default storage targets and can add more", async ({ page }) => {
   await openCreatePage(page);
 
   const addTargetButton = page.getByRole("button", { name: "Add Storage Target" });
@@ -280,12 +292,13 @@ test("starts with three default storage targets and can add more", async ({ page
   await expect(page.getByLabel("Storage target 1 table")).toBeVisible();
   await expect(page.getByLabel("Storage target 2 table")).toBeVisible();
   await expect(page.getByLabel("Storage target 3 table")).toBeVisible();
+  await expect(page.getByLabel("Storage target 4 table")).toBeVisible();
   await expect(page.getByLabel("Storage target 1 id")).toHaveCount(0);
   await page.getByRole("button", { name: "Add Storage Target" }).click();
 
-  await expect(page.getByLabel("Storage target 4 table")).toBeVisible();
+  await expect(page.getByLabel("Storage target 5 table")).toBeVisible();
   await expect(addTargetButton).toBeEnabled();
-  await expect(page.getByLabel("Storage target 4 id")).toHaveCount(0);
+  await expect(page.getByLabel("Storage target 5 id")).toHaveCount(0);
 });
 
 test("keeps at least one storage target and shows physical target names in segment bindings", async ({ page }) => {
@@ -295,9 +308,11 @@ test("keeps at least one storage target and shows physical target names in segme
   await expect(page.locator('select[aria-label="Source target"] option:checked')).toHaveText("rag_test_sources");
   await expect(page.locator('select[aria-label="Text Unit target"] option:checked')).toHaveText("rag_test_text_units");
   await expect(page.locator('select[aria-label="Vector target"] option:checked')).toHaveText("rag_test_vectors");
+  await expect(page.locator('select[aria-label="Tree target"] option:checked')).toHaveText("rag_test_tree_nodes");
   const sourceTargetOptionTexts = await page.locator('select[aria-label="Source target"] option').allTextContents();
   expect(sourceTargetOptionTexts.join(" ")).not.toContain("Storage Target");
 
+  await page.getByRole("button", { name: "Remove storage target 4" }).click();
   await page.getByRole("button", { name: "Remove storage target 3" }).click();
   await page.getByRole("button", { name: "Remove storage target 2" }).click();
 

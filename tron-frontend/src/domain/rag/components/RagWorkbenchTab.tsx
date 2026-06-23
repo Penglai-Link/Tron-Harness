@@ -356,6 +356,20 @@ function formatFieldValue(value: unknown) {
   return JSON.stringify(value);
 }
 
+function treeHitMetadataRows(metadata: Record<string, unknown> | undefined) {
+  if (!metadata) return [];
+  const rows = [
+    { label: "matchedBy", value: metadata.matchedBy },
+    { label: "treeNodeCode", value: metadata.treeNodeCode },
+    { label: "treeNodeTitle", value: metadata.treeNodeTitle },
+    {
+      label: "treeScore",
+      value: typeof metadata.treeScore === "number" ? formatScore(metadata.treeScore) : metadata.treeScore,
+    },
+  ];
+  return rows.filter((row) => row.value !== undefined && row.value !== null && String(row.value).trim());
+}
+
 function formatArtifactKeys(keys: string[] | undefined) {
   return keys && keys.length > 0 ? keys.join(", ") : "无";
 }
@@ -1091,6 +1105,7 @@ export function RagWorkbenchTab({
               const returnedFields = selectedReturnFields
                 .map((field) => [field, hit[field]] as const)
                 .filter(([, value]) => value !== undefined && value !== null);
+              const treeMetadataRows = treeHitMetadataRows(hit.metadata);
               return (
                 <article
                   className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm"
@@ -1115,6 +1130,16 @@ export function RagWorkbenchTab({
                         <div key={field}>
                           <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{field}</dt>
                           <dd className="mt-1 break-all text-[var(--color-on-surface)]">{formatFieldValue(value)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  ) : null}
+                  {treeMetadataRows.length > 0 ? (
+                    <dl className="mt-3 grid gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 sm:grid-cols-2">
+                      {treeMetadataRows.map((row) => (
+                        <div key={row.label}>
+                          <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{row.label}</dt>
+                          <dd className="mt-1 break-all text-[var(--color-on-surface)]">{formatFieldValue(row.value)}</dd>
                         </div>
                       ))}
                     </dl>

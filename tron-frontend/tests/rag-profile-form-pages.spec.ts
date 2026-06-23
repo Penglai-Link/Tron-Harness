@@ -98,7 +98,7 @@ const label = {
   profileId: /Profile ID|配置标识/,
   splitStrategy: /SPLIT_TEXT (strategy ID|策略标识)/,
   supportedSourceTypes: /Supported Source Types|支持的来源类型/,
-  vectorStrategy: /VECTOR_INDEX (strategy ID|策略标识)/,
+  vectorStrategy: /(^|[^_])VECTOR_INDEX (strategy ID|策略标识)$/,
 };
 
 const buttonName = {
@@ -108,6 +108,11 @@ const buttonName = {
   enablePersistSource: /Enable PERSIST_SOURCE node|启用 持久化来源 节点/,
   enablePreparePayload: /Enable PREPARE_PAYLOAD node|启用 准备载荷 节点/,
   enableSplitText: /Enable SPLIT_TEXT node|启用 文本切分 节点/,
+  enableExtractTree: /Enable EXTRACT_TREE node|启用 提取结构树 节点/,
+  enablePersistTree: /Enable PERSIST_TREE node|启用 持久化结构树 节点/,
+  enableSummarizeTree: /Enable SUMMARIZE_TREE node|启用 摘要结构树 节点/,
+  enableTreeFulltextIndex: /Enable TREE_FULLTEXT_INDEX node|启用 结构树全文索引 节点/,
+  enableTreeVectorIndex: /Enable TREE_VECTOR_INDEX node|启用 结构树向量索引 节点/,
   enableVectorIndex: /Enable VECTOR_INDEX node|启用 向量索引 节点/,
   saveProfile: /Save Profile|保存配置/,
 };
@@ -138,6 +143,10 @@ test.afterAll(async () => {
   await new Promise((resolveProcess) => frontendProcess?.once("exit", resolveProcess));
 });
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("tron.locale", "en-US"));
+});
+
 test("creates and edits ingest profiles through management APIs", async ({ page }) => {
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
@@ -159,6 +168,11 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await openAdvancedNodeControls(page);
   await page.getByRole("button", { name: buttonName.enablePreparePayload }).click();
   await page.getByRole("button", { name: buttonName.enableSplitText }).click();
+  await page.getByRole("button", { name: buttonName.enableExtractTree }).click();
+  await page.getByRole("button", { name: buttonName.enableSummarizeTree }).click();
+  await page.getByRole("button", { name: buttonName.enableTreeFulltextIndex }).click();
+  await page.getByRole("button", { name: buttonName.enableTreeVectorIndex }).click();
+  await page.getByRole("button", { name: buttonName.enablePersistTree }).click();
   await page.getByRole("button", { name: buttonName.enablePersistSource }).click();
   await page.getByLabel(/PREPARE_PAYLOAD (strategy ID|策略标识)/).selectOption("RAG_TEXT_CONTRACT_PAYLOAD_V1");
   const splitStrategySelect = page.getByLabel(label.splitStrategy);
@@ -172,6 +186,11 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await expect(page.getByLabel(/Text split heading depth|文本切分标题深度/)).toHaveValue("6");
   await splitStrategySelect.selectOption("RAG_SPLIT_PLAIN_TEXT_V1");
   await expect(page.getByLabel(/Text split splitter type|文本切分切分器类型/)).toHaveValue("plainText");
+  await page.getByLabel(/EXTRACT_TREE (strategy ID|策略标识)/).selectOption("RAG_EXTRACT_TREE");
+  await page.getByLabel(/SUMMARIZE_TREE (strategy ID|策略标识)/).selectOption("RAG_SUMMARIZE_TREE_V1");
+  await page.getByLabel(/TREE_FULLTEXT_INDEX (strategy ID|策略标识)/).selectOption("RAG_TREE_FULLTEXT_INDEX_V1");
+  await page.getByLabel(/TREE_VECTOR_INDEX (strategy ID|策略标识)/).selectOption("RAG_TREE_VECTOR_INDEX_V1");
+  await page.getByLabel(/PERSIST_TREE (strategy ID|策略标识)/).selectOption("RAG_PERSIST_TREE");
   await page.getByLabel(/PERSIST_SOURCE (strategy ID|策略标识)/).selectOption("RAG_PERSIST_SOURCE");
   await page.getByLabel(label.supportedSourceTypes).fill("RUNBOOK, INCIDENT_NOTE");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
@@ -217,6 +236,11 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
         nodes: expect.arrayContaining([
           expect.objectContaining({ nodeId: "prepare-payload", stageType: "PREPARE_PAYLOAD", strategyId: "RAG_TEXT_CONTRACT_PAYLOAD_V1" }),
           expect.objectContaining({ nodeId: "split-text", stageType: "SPLIT_TEXT", strategyId: "RAG_SPLIT_PLAIN_TEXT_V1" }),
+          expect.objectContaining({ nodeId: "extract-tree", stageType: "EXTRACT_TREE", strategyId: "RAG_EXTRACT_TREE" }),
+          expect.objectContaining({ nodeId: "summarize-tree", stageType: "SUMMARIZE_TREE", strategyId: "RAG_SUMMARIZE_TREE_V1" }),
+          expect.objectContaining({ nodeId: "tree-fulltext-index", stageType: "TREE_FULLTEXT_INDEX", strategyId: "RAG_TREE_FULLTEXT_INDEX_V1" }),
+          expect.objectContaining({ nodeId: "tree-vector-index", stageType: "TREE_VECTOR_INDEX", strategyId: "RAG_TREE_VECTOR_INDEX_V1" }),
+          expect.objectContaining({ nodeId: "persist-tree", stageType: "PERSIST_TREE", strategyId: "RAG_PERSIST_TREE" }),
           expect.objectContaining({ nodeId: "persist-source", stageType: "PERSIST_SOURCE", strategyId: "RAG_PERSIST_SOURCE" }),
         ]),
       }),
@@ -236,6 +260,10 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
       nodes: expect.arrayContaining([
         expect.objectContaining({ enabled: true, nodeId: "prepare-payload", stageType: "PREPARE_PAYLOAD", strategyId: "RAG_TEXT_CONTRACT_PAYLOAD_V1" }),
         expect.objectContaining({ enabled: true, nodeId: "split-text", stageType: "SPLIT_TEXT", strategyId: "RAG_SPLIT_PLAIN_TEXT_V1" }),
+        expect.objectContaining({ enabled: true, nodeId: "summarize-tree", stageType: "SUMMARIZE_TREE", strategyId: "RAG_SUMMARIZE_TREE_V1" }),
+        expect.objectContaining({ enabled: true, nodeId: "tree-fulltext-index", stageType: "TREE_FULLTEXT_INDEX", strategyId: "RAG_TREE_FULLTEXT_INDEX_V1" }),
+        expect.objectContaining({ enabled: true, nodeId: "tree-vector-index", stageType: "TREE_VECTOR_INDEX", strategyId: "RAG_TREE_VECTOR_INDEX_V1" }),
+        expect.objectContaining({ enabled: true, nodeId: "persist-tree", stageType: "PERSIST_TREE", strategyId: "RAG_PERSIST_TREE" }),
         expect.objectContaining({ enabled: true, nodeId: "persist-source", stageType: "PERSIST_SOURCE", strategyId: "RAG_PERSIST_SOURCE" }),
       ]),
     }),
@@ -314,6 +342,71 @@ test("preserves legacy split strategy when editing existing ingest profiles", as
   }));
 });
 
+test("workbench displays summary tree hit metadata", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  await installRagManagementApiMock(page, requests);
+
+  await page.goto(`${frontendBaseUrl}/rag?tab=workbench`);
+  await expect(page.getByRole("heading", { name: /RAG Management|知识检索管理/ })).toBeVisible();
+  await page.getByRole("tab", { name: /Retrieval Test|检索测试/ }).click();
+  await page.getByRole("textbox", { name: /^(Query|查询)$/ }).fill("How does summary tree retrieval surface metadata?");
+  await page.getByRole("button", { name: /Run Search|执行检索/ }).click();
+
+  await expect(page.getByText("TREE_VECTOR")).toBeVisible();
+  await expect(page.getByText("tree-runtime-workbench")).toBeVisible();
+  await expect(page.getByText("Runtime Workbench Summary")).toBeVisible();
+  await expect(page.getByText("0.880")).toBeVisible();
+
+  const searchBodies = requestBodies(requests, "/api/v1/rag/search", "POST");
+  expect(searchBodies).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      query: "How does summary tree retrieval surface metadata?",
+    }),
+  ]));
+});
+
+test("retrieval profile keeps summary tree route types", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  await installRagManagementApiMock(page, requests);
+
+  await page.goto(`${frontendBaseUrl}/rag/profiles/retrieval/new`);
+  await expect(page.getByRole("heading", { name: /Create Retrieval Profile|新建检索配置/ })).toBeVisible();
+
+  await page.getByLabel(/Profile ID|配置标识/).fill("project-doc-tree-related-v1");
+  await page.getByLabel(/Primary Corpus|主语料库/).selectOption("project-doc");
+  await page.getByLabel(/Description|描述/).fill("Search project documentation summary tree nodes.");
+  await page.getByLabel(/Route 1 Corpus|路由 1 语料库/).selectOption("project-doc");
+  await page.getByLabel(/Route 1 Retrieval Strategy|路由 1 检索策略/).selectOption("TREE_FULLTEXT_V1");
+  await page.getByRole("button", { name: /Add Route|添加路由/ }).click();
+  await page.getByLabel(/Route 2 Corpus|路由 2 语料库/).selectOption("project-doc");
+  await page.getByLabel(/Route 2 Retrieval Strategy|路由 2 检索策略/).selectOption("TREE_VECTOR_V1");
+  await page.getByRole("button", { name: /Save Profile|保存配置/ }).click();
+
+  await expect(page).toHaveURL(/\/rag\?tab=profiles/);
+
+  const createBodies = requestBodies(requests, "/api/v1/rag/profiles", "POST")
+    .filter((body) => body.profileId === "project-doc-tree-related-v1");
+  expect(createBodies).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      pipeline: expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({
+            config: expect.objectContaining({ corpusId: "project-doc", routeType: "TREE_FULLTEXT" }),
+            stageType: "ROUTE_SEARCH",
+            strategyId: "TREE_FULLTEXT_V1",
+          }),
+          expect.objectContaining({
+            config: expect.objectContaining({ corpusId: "project-doc", routeType: "TREE_VECTOR" }),
+            stageType: "ROUTE_SEARCH",
+            strategyId: "TREE_VECTOR_V1",
+          }),
+        ]),
+      }),
+      profileType: "RETRIEVAL",
+    }),
+  ]));
+});
+
 test("creates and edits multi-corpus retrieval profiles through management APIs", async ({ page }) => {
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
@@ -342,6 +435,14 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
   await page.getByLabel("Node 2 corpus").selectOption("project-doc");
   await page.getByLabel("Node 2 stage type").selectOption("VECTOR");
   await page.getByLabel("Node 2 strategy ID").selectOption("VECTOR_SQLITE_VEC0_COSINE_V1");
+  await page.getByRole("button", { name: "Add Pipeline Node" }).click();
+  await page.getByLabel("Node 3 corpus").selectOption("project-doc");
+  await page.getByLabel("Node 3 stage type").selectOption("TREE_FULLTEXT");
+  await page.getByLabel("Node 3 strategy ID").selectOption("TREE_FULLTEXT_V1");
+  await page.getByRole("button", { name: "Add Pipeline Node" }).click();
+  await page.getByLabel("Node 4 corpus").selectOption("project-doc");
+  await page.getByLabel("Node 4 stage type").selectOption("TREE_VECTOR");
+  await page.getByLabel("Node 4 strategy ID").selectOption("TREE_VECTOR_V1");
   await page.getByRole("button", { name: "Add Filter" }).click();
   await page.getByLabel("Filter 1 field").selectOption("scopeCode");
   await page.getByLabel("Filter 1 operator").selectOption("eq");
@@ -377,6 +478,8 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
         nodes: expect.arrayContaining([
           expect.objectContaining({ config: expect.objectContaining({ corpusId: "memory-card" }), nodeId: "memory-card-fulltext-1", stageType: "FULLTEXT", strategyId: "FULLTEXT_SQLITE_FTS5_SIMPLE_V1" }),
           expect.objectContaining({ config: expect.objectContaining({ corpusId: "project-doc" }), nodeId: "project-doc-vector-2", stageType: "VECTOR", strategyId: "VECTOR_SQLITE_VEC0_COSINE_V1" }),
+          expect.objectContaining({ config: expect.objectContaining({ corpusId: "project-doc", routeType: "TREE_FULLTEXT" }), nodeId: "project-doc-tree-fulltext-3", stageType: "TREE_FULLTEXT", strategyId: "TREE_FULLTEXT_V1" }),
+          expect.objectContaining({ config: expect.objectContaining({ corpusId: "project-doc", routeType: "TREE_VECTOR" }), nodeId: "project-doc-tree-vector-4", stageType: "TREE_VECTOR", strategyId: "TREE_VECTOR_V1" }),
         ]),
       }),
       primaryCorpusId: "memory-card",
@@ -395,6 +498,8 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
     pipeline: expect.objectContaining({
       edges: expect.arrayContaining([
         expect.objectContaining({ from: "memory-card-fulltext-1", to: "project-doc-vector-2" }),
+        expect.objectContaining({ from: "project-doc-vector-2", to: "project-doc-tree-fulltext-3" }),
+        expect.objectContaining({ from: "project-doc-tree-fulltext-3", to: "project-doc-tree-vector-4" }),
       ]),
       mode: "DAG",
     }),
@@ -484,6 +589,10 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
   await expect(page.getByText("Search returned 1 hit.").first()).toBeVisible();
   await expect(page.getByText("trace-workbench-001")).toBeVisible();
   await expect(page.getByText("RAG Storage Runtime Workbench").first()).toBeVisible();
+  await expect(page.getByText("TREE_VECTOR")).toBeVisible();
+  await expect(page.getByText("tree-runtime-workbench")).toBeVisible();
+  await expect(page.getByText("Runtime Workbench Summary")).toBeVisible();
+  await expect(page.getByText("0.880")).toBeVisible();
   await expect(page.getByText("rag-storage-runtime-workbench", { exact: true })).toBeVisible();
   await expect(page.getByText("tron", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("RAG workbench can execute retrieval through the backend API.")).toBeVisible();

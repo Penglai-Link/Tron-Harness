@@ -157,7 +157,7 @@ function appendImplicitDiagnosticsTarget(
   corpus: CorpusRecord,
   sourceTargetId: string,
   targets: RagStorageTargetBinding[],
-  bindings: Partial<Record<"source" | "textUnit" | "fulltext" | "vector" | "diagnostics", string>>,
+  bindings: Partial<Record<"source" | "textUnit" | "fulltext" | "vector" | "tree" | "diagnostics", string>>,
 ): RagStorageBinding {
   const sourceTarget = targets.find((target) => target.id === sourceTargetId);
   if (!sourceTarget) {
@@ -203,10 +203,12 @@ function defaultStorageBinding(corpus: CorpusRecord): RagStorageBinding {
     return appendImplicitDiagnosticsTarget(corpus, "source-store", [
       { backend: "SQLITE", id: "source-store", layout: "TABLE", table: "rag_project_doc_sources" },
       { backend: "SQLITE", id: "content-store", layout: "TABLE", table: "rag_project_doc_text_units" },
+      { backend: "SQLITE", id: "tree-store", layout: "TABLE", table: "rag_project_doc_tree_nodes" },
     ], {
       fulltext: "content-store",
       source: "source-store",
       textUnit: "content-store",
+      tree: "tree-store",
       vector: "content-store",
     });
   }
@@ -217,6 +219,7 @@ function defaultStorageBinding(corpus: CorpusRecord): RagStorageBinding {
       fulltext: "content-store",
       source: "content-store",
       textUnit: "content-store",
+      tree: "content-store",
       vector: "content-store",
     });
   }
@@ -227,6 +230,7 @@ function defaultStorageBinding(corpus: CorpusRecord): RagStorageBinding {
       fulltext: "content-store",
       source: "content-store",
       textUnit: "content-store",
+      tree: "content-store",
       vector: "content-store",
     });
   }
@@ -244,6 +248,7 @@ function defaultStorageBinding(corpus: CorpusRecord): RagStorageBinding {
       fulltext: "graph-store",
       source: "graph-store",
       textUnit: "graph-store",
+      tree: "graph-store",
       vector: "graph-store",
     });
   }
@@ -261,6 +266,7 @@ function defaultStorageBinding(corpus: CorpusRecord): RagStorageBinding {
       fulltext: "graph-store",
       source: "graph-store",
       textUnit: "graph-store",
+      tree: "graph-store",
       vector: "graph-store",
     })
     : appendImplicitDiagnosticsTarget(corpus, "source-store", [
@@ -280,6 +286,7 @@ function defaultStorageBinding(corpus: CorpusRecord): RagStorageBinding {
       fulltext: "content-store",
       source: "source-store",
       textUnit: "content-store",
+      tree: "content-store",
       vector: "content-store",
     });
 }
@@ -513,6 +520,7 @@ export function buildDefaultRagCorpusConfig(corpus: CorpusRecord): RagCorpusConf
       fulltext: corpus.strategies.includes("FULLTEXT"),
       graph: corpus.strategies.some((strategy) => strategy.includes("GRAPH")),
       reserved: corpus.status === "Reserved",
+      tree: corpus.status !== "Reserved" || corpus.strategies.some((strategy) => strategy.includes("TREE") || strategy.includes("SUMMARY_TREE")),
       vector: corpus.strategies.some((strategy) => strategy.includes("VECTOR")),
     },
     corpusId: corpus.code,
@@ -529,6 +537,10 @@ function strategiesFromConfig(corpus: CorpusRecord, config: RagCorpusConfig) {
   const strategies = new Set(corpus.strategies);
   if (config.capabilities.fulltext) strategies.add("FULLTEXT");
   if (config.capabilities.vector) strategies.add("VECTOR");
+  if (config.capabilities.tree) {
+    strategies.add("TREE_FULLTEXT");
+    strategies.add("TREE_VECTOR");
+  }
   if (config.capabilities.graph) strategies.add("GRAPH");
   return Array.from(strategies);
 }
@@ -701,6 +713,16 @@ const ragMockStrategyRegistry: RagMockStrategyRegistry = {
     },
     {
       status: "Enabled",
+      strategyId: "RAG_EXTRACT_TREE",
+      supportedStageIds: ["extractTree"],
+    },
+    {
+      status: "Enabled",
+      strategyId: "RAG_SUMMARIZE_TREE_V1",
+      supportedStageIds: ["summarizeTree"],
+    },
+    {
+      status: "Enabled",
       strategyId: "RAG_FULLTEXT_INDEX",
       supportedStageIds: ["fulltextIndex"],
     },
@@ -708,6 +730,21 @@ const ragMockStrategyRegistry: RagMockStrategyRegistry = {
       status: "Enabled",
       strategyId: "RAG_VECTOR_INDEX",
       supportedStageIds: ["vectorIndex"],
+    },
+    {
+      status: "Enabled",
+      strategyId: "RAG_TREE_FULLTEXT_INDEX_V1",
+      supportedStageIds: ["treeFulltextIndex"],
+    },
+    {
+      status: "Enabled",
+      strategyId: "RAG_TREE_VECTOR_INDEX_V1",
+      supportedStageIds: ["treeVectorIndex"],
+    },
+    {
+      status: "Enabled",
+      strategyId: "RAG_PERSIST_TREE",
+      supportedStageIds: ["persistTree"],
     },
     {
       status: "Enabled",
@@ -757,6 +794,18 @@ const ragMockStrategyRegistry: RagMockStrategyRegistry = {
       routeKinds: ["VECTOR"],
       status: "Enabled",
       strategyId: "VECTOR_SQLITE_VEC0_COSINE_V1",
+    },
+    {
+      backends: ["SQLITE"],
+      routeKinds: ["TREE_FULLTEXT"],
+      status: "Enabled",
+      strategyId: "TREE_FULLTEXT_V1",
+    },
+    {
+      backends: ["SQLITE"],
+      routeKinds: ["TREE_VECTOR"],
+      status: "Enabled",
+      strategyId: "TREE_VECTOR_V1",
     },
     {
       backends: ["GRAPH"],
@@ -852,8 +901,13 @@ const defaultIngestStageOrder: RagIngestStageId[] = [
   "resolveSource",
   "parseDocument",
   "splitText",
+  "extractTree",
+  "summarizeTree",
   "fulltextIndex",
   "vectorIndex",
+  "treeFulltextIndex",
+  "treeVectorIndex",
+  "persistTree",
   "persistSource",
 ];
 
@@ -1009,9 +1063,10 @@ function buildSeedRetrievalProfile(
 
 const seedProfiles: ProfileRecord[] = [
   buildSeedIngestProfile({
-    config: buildIngestConfig(["validateSource", "preparePayload", "resolveSource", "parseDocument", "splitText", "fulltextIndex", "vectorIndex", "persistSource"], {
+    config: buildIngestConfig(["validateSource", "preparePayload", "resolveSource", "parseDocument", "splitText", "extractTree", "summarizeTree", "fulltextIndex", "vectorIndex", "treeFulltextIndex", "treeVectorIndex", "persistTree", "persistSource"], {
       sourceInputPolicy: { supportedSourceTypes: ["PROJECT_DOC_REF"] },
       stageBindings: {
+        extractTree: { strategyId: "RAG_EXTRACT_TREE" },
         fulltextIndex: { strategyId: "RAG_FULLTEXT_INDEX" },
         parseDocument: {
           strategyId: "RAG_PARSE_MARKDOWN_DOCUMENT",
@@ -1021,6 +1076,7 @@ const seedProfiles: ProfileRecord[] = [
           },
         },
         persistSource: { strategyId: "RAG_PERSIST_SOURCE" },
+        persistTree: { strategyId: "RAG_PERSIST_TREE" },
         preparePayload: { strategyId: "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1" },
         resolveSource: {
           strategyId: "PROJECT_DOC_RESOLVE_SOURCE",
@@ -1040,6 +1096,9 @@ const seedProfiles: ProfileRecord[] = [
             },
           },
         },
+        summarizeTree: { strategyId: "RAG_SUMMARIZE_TREE_V1" },
+        treeFulltextIndex: { strategyId: "RAG_TREE_FULLTEXT_INDEX_V1" },
+        treeVectorIndex: { strategyId: "RAG_TREE_VECTOR_INDEX_V1" },
         validateSource: { strategyId: "RAG_VALIDATE_SOURCE" },
         vectorIndex: { strategyId: "RAG_VECTOR_INDEX" },
       },
@@ -1362,12 +1421,15 @@ type LegacyRetrievalProfileRecord = Omit<RetrievalProfileRecord, "config"> & {
 const legacyStageIdMap: Partial<Record<string, RagIngestStageId>> = {
   fulltextIndex: "fulltextIndex",
   extractTree: "extractTree",
+  summarizeTree: "summarizeTree",
   parse: "parseDocument",
   persistTree: "persistTree",
   persistSource: "persistSource",
   preparePayload: "preparePayload",
   resolveSource: "resolveSource",
   split: "splitText",
+  treeFulltextIndex: "treeFulltextIndex",
+  treeVectorIndex: "treeVectorIndex",
   validateSource: "validateSource",
   vectorIndex: "vectorIndex",
 };
@@ -1394,11 +1456,14 @@ function normalizeStoredIngestProfile(value: unknown): IngestProfileRecord | und
       extractTree: "RAG_MARKDOWN_TREE_EXTRACT_V1",
       fulltextIndex: "RAG_FULLTEXT_INDEX",
       parseDocument: "RAG_PARSE_MARKDOWN_DOCUMENT",
-      persistTree: "RAG_PERSIST_TREE_GRAPH_V1",
+      persistTree: "RAG_PERSIST_TREE",
       persistSource: "RAG_PERSIST_SOURCE",
       preparePayload: legacyConfig.payloadStrategy?.trim() || "RAG_TEXT_CONTRACT_PAYLOAD_V1",
       resolveSource: "PROJECT_DOC_RESOLVE_SOURCE",
+      summarizeTree: "RAG_SUMMARIZE_TREE_V1",
       splitText: legacyConfig.primaryStrategy?.trim() || "RAG_SPLIT_TEXT",
+      treeFulltextIndex: "RAG_TREE_FULLTEXT_INDEX_V1",
+      treeVectorIndex: "RAG_TREE_VECTOR_INDEX_V1",
       validateSource: "RAG_VALIDATE_SOURCE",
       vectorIndex: "RAG_VECTOR_INDEX",
     } satisfies Record<RagIngestStageId, string>)[stageId];

@@ -286,6 +286,11 @@ const pipelineStageDisplayNames: Record<string, string> = {
   RESOLVE_SOURCE: "解析来源",
   ROUTE_SEARCH: "路由检索",
   SPLIT_TEXT: "文本切分",
+  SUMMARIZE_TREE: "摘要结构树",
+  TREE_FULLTEXT: "结构树全文召回",
+  TREE_FULLTEXT_INDEX: "结构树全文索引",
+  TREE_VECTOR: "结构树向量召回",
+  TREE_VECTOR_INDEX: "结构树向量索引",
   VALIDATE_SOURCE: "校验来源",
   VECTOR_INDEX: "向量索引",
 };
@@ -331,6 +336,7 @@ function capabilityLabel(capability: string) {
   const labels: Record<string, string> = {
     fulltext: "全文",
     graph: "图",
+    tree: "摘要树",
     vector: "向量",
   };
   return labels[capability.trim().toLowerCase()] ?? capability;
