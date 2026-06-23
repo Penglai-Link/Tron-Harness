@@ -52,8 +52,11 @@
   let selectedElement = null;
   let hoverOverlay = null;
   let inputPanel = null;
+  let interactionBlocker = null;
   let scrollResumeTimer = null;
   let scrollingWithoutSelection = false;
+  let lockedScrollPosition = null;
+  let restoringLockedScroll = false;
   let lastPointerPosition = null;
 
   const safePost = (eventType, payload, options = {}) => {
@@ -669,13 +672,59 @@
     }
   };
 
+  const ensureInteractionBlocker = () => {
+    if (interactionBlocker) {
+      return interactionBlocker;
+    }
+
+    interactionBlocker = document.createElement("div");
+    interactionBlocker.setAttribute(UI_ATTR, "true");
+    Object.assign(interactionBlocker.style, {
+      position: "fixed",
+      inset: "0",
+      display: "block",
+      background: "transparent",
+      cursor: "crosshair",
+      pointerEvents: "auto",
+      zIndex: "2147483645",
+    });
+    document.documentElement.appendChild(interactionBlocker);
+    return interactionBlocker;
+  };
+
+  const removeInteractionBlocker = () => {
+    if (interactionBlocker) {
+      interactionBlocker.remove();
+      interactionBlocker = null;
+    }
+  };
+
+  const readInspectableElementFromPoint = (x, y) => {
+    const blocker = interactionBlocker;
+    const previousPointerEvents = blocker?.style.pointerEvents || "";
+    if (blocker) {
+      blocker.style.pointerEvents = "none";
+    }
+
+    const element = document.elementFromPoint(x, y);
+    if (blocker) {
+      blocker.style.pointerEvents = previousPointerEvents;
+    }
+
+    if (!element || isInspectorUi(element)) {
+      return null;
+    }
+
+    return element;
+  };
+
   const refreshHoverAtLastPointer = () => {
     if (!injectionEnabled || selectedElement || !lastPointerPosition) {
       return;
     }
 
-    const element = document.elementFromPoint(lastPointerPosition.x, lastPointerPosition.y);
-    if (!element || isInspectorUi(element)) {
+    const element = readInspectableElementFromPoint(lastPointerPosition.x, lastPointerPosition.y);
+    if (!element) {
       removeOverlay();
       return;
     }
@@ -691,8 +740,41 @@
     }
   };
 
+  const lockRemarkScroll = () => {
+    lockedScrollPosition = {
+      x: window.scrollX || 0,
+      y: window.scrollY || 0,
+    };
+  };
+
+  const unlockRemarkScroll = () => {
+    lockedScrollPosition = null;
+    restoringLockedScroll = false;
+  };
+
+  const enforceRemarkScrollLock = () => {
+    if (!lockedScrollPosition || restoringLockedScroll) {
+      return;
+    }
+
+    if (window.scrollX === lockedScrollPosition.x && window.scrollY === lockedScrollPosition.y) {
+      return;
+    }
+
+    restoringLockedScroll = true;
+    window.scrollTo(lockedScrollPosition.x, lockedScrollPosition.y);
+    window.requestAnimationFrame(() => {
+      restoringLockedScroll = false;
+    });
+  };
+
   const pauseHoverDuringScroll = () => {
-    if (!injectionEnabled || selectedElement) {
+    if (!injectionEnabled) {
+      return;
+    }
+
+    if (selectedElement) {
+      enforceRemarkScrollLock();
       return;
     }
 
@@ -717,6 +799,7 @@
 
   const clearSelection = () => {
     selectedElement = null;
+    unlockRemarkScroll();
     removeInputPanel();
     removeOverlay();
   };
@@ -1503,9 +1586,9 @@
       return;
     }
 
-    const element = document.elementFromPoint(event.clientX, event.clientY);
+    const element = readInspectableElementFromPoint(event.clientX, event.clientY);
 
-    if (!element || isInspectorUi(element)) {
+    if (!element) {
       return;
     }
 
@@ -1517,7 +1600,7 @@
       return;
     }
 
-    if (isInspectorUi(event.target)) {
+    if (inputPanel?.contains(event.target)) {
       return;
     }
 
@@ -1525,18 +1608,33 @@
     event.stopPropagation();
     event.stopImmediatePropagation();
 
-    const element = document.elementFromPoint(event.clientX, event.clientY);
+    if (selectedElement) {
+      return;
+    }
+
+    const element = readInspectableElementFromPoint(event.clientX, event.clientY);
     if (!element) {
       return;
     }
 
     selectedElement = element;
+    lockRemarkScroll();
     updateOverlay(element);
     showInputPanel(element);
   };
 
   const onClick = (event) => {
-    if (!injectionEnabled || isInspectorUi(event.target)) {
+    if (!injectionEnabled || inputPanel?.contains(event.target)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+  };
+
+  const onBlockedPageInteraction = (event) => {
+    if (!injectionEnabled || !selectedElement) {
       return;
     }
 
@@ -1546,7 +1644,16 @@
   };
 
   const onKeyDown = (event) => {
-    if (!injectionEnabled || event.key !== "Escape") {
+    if (!injectionEnabled) {
+      return;
+    }
+
+    if (event.key !== "Escape") {
+      if (selectedElement && !inputPanel?.contains(event.target)) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+      }
       return;
     }
 
@@ -1565,9 +1672,13 @@
   };
 
   const enableInspector = () => {
+    ensureInteractionBlocker();
     document.addEventListener("pointermove", onPointerMove, true);
     document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("click", onClick, true);
+    window.addEventListener("wheel", onBlockedPageInteraction, { capture: true, passive: false });
+    window.addEventListener("touchmove", onBlockedPageInteraction, { capture: true, passive: false });
+    window.addEventListener("touchstart", onBlockedPageInteraction, { capture: true, passive: false });
     window.addEventListener("scroll", pauseHoverDuringScroll, true);
     window.addEventListener("keydown", onKeyDown, true);
   };
@@ -1576,9 +1687,14 @@
     clearScrollPause();
     lastPointerPosition = null;
     clearSelection();
+    removeInteractionBlocker();
+    removeInteractionBlocker();
     document.removeEventListener("pointermove", onPointerMove, true);
     document.removeEventListener("pointerdown", onPointerDown, true);
     document.removeEventListener("click", onClick, true);
+    window.removeEventListener("wheel", onBlockedPageInteraction, { capture: true });
+    window.removeEventListener("touchmove", onBlockedPageInteraction, { capture: true });
+    window.removeEventListener("touchstart", onBlockedPageInteraction, { capture: true });
     window.removeEventListener("scroll", pauseHoverDuringScroll, true);
     window.removeEventListener("keydown", onKeyDown, true);
   };

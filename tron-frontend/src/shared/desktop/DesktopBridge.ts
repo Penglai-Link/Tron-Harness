@@ -83,17 +83,8 @@ export interface DesktopInjectionEventRequest {
 
 type InvokeCommand<T> = (command: string, payload: Record<string, unknown>) => Promise<T>;
 
-type WindowWithTauri = Window & {
+type WindowWithElectronDesktop = Window & {
   tronDesktop?: {
-    invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
-  };
-  __TAURI_INTERNALS__?: {
-    invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
-  };
-  __TAURI__?: {
-    core?: {
-      invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
-    };
     invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
   };
 };
@@ -114,30 +105,10 @@ function resolveInvoke(): InvokeCommand<unknown> | null {
     return null;
   }
 
-  const desktopWindow = window as unknown as WindowWithTauri;
+  const desktopWindow = window as unknown as WindowWithElectronDesktop;
   const electronInvoke = desktopWindow.tronDesktop?.invoke;
   if (typeof electronInvoke === "function") {
     return (command, payload) => electronInvoke(command, payload);
-  }
-
-  const internalInvoke = desktopWindow.__TAURI_INTERNALS__?.invoke;
-  if (typeof internalInvoke === "function") {
-    return (command, payload) => internalInvoke(command, payload);
-  }
-
-  const host = desktopWindow.__TAURI__;
-
-  if (!host) {
-    return null;
-  }
-
-  if (typeof host === "object" && host !== null) {
-    const invoke = (host as { core?: { invoke?: InvokeCommand<unknown> } }).core?.invoke
-      ?? (host as { invoke?: InvokeCommand<unknown> }).invoke;
-
-    if (typeof invoke === "function") {
-      return (command, payload) => invoke(command, payload);
-    }
   }
 
   return null;
@@ -231,7 +202,7 @@ function sanitizePayload(payload: unknown, depth = 0): Record<string, unknown> |
   return Object.keys(output).length > 0 ? output : undefined;
 }
 
-function normalizeTauriResponse<T>(value: unknown, fallback: T): T {
+function normalizeCommandResponse<T>(value: unknown, fallback: T): T {
   return (value as T) ?? fallback;
 }
 
@@ -433,7 +404,7 @@ export class DesktopBridge {
 
     const payload = response as { closed?: boolean };
 
-    return Boolean(normalizeTauriResponse(payload.closed, false));
+    return Boolean(normalizeCommandResponse(payload.closed, false));
   }
 
   public async resizeTargetPageView(request: ResizeTargetPageViewRequest): Promise<boolean> {
@@ -453,7 +424,7 @@ export class DesktopBridge {
 
     const payload = response as { resized?: boolean };
 
-    return Boolean(normalizeTauriResponse(payload.resized, false));
+    return Boolean(normalizeCommandResponse(payload.resized, false));
   }
 
   public async setInjectionEnabled(enabled: boolean): Promise<boolean> {
@@ -472,7 +443,7 @@ export class DesktopBridge {
 
     const payload = response as { enabled?: boolean };
 
-    return Boolean(normalizeTauriResponse(payload.enabled, enabled));
+    return Boolean(normalizeCommandResponse(payload.enabled, enabled));
   }
 
   public async emitInjectionEvent(event: DesktopInjectionEventRequest): Promise<void> {
