@@ -59,6 +59,7 @@ export const shell = {
   settings: {
     back: "Back",
     groups: {
+      administration: "Administration",
       foundation: "Foundation",
       integration: "Integrations",
       platform: "Platform Capabilities",
@@ -66,14 +67,18 @@ export const shell = {
     },
     items: {
       agents: "Agents",
+      auditLogs: "Audit Logs",
       general: "General",
       mcpServers: "MCP Servers",
       memoryDomains: "Memory Domains",
       models: "Models",
       openapi: "OpenAPI",
+      roles: "Roles",
       tools: "Tools",
       skillCenter: "Skill Center",
+      users: "Users",
       variables: "Variables",
+      workspaceAdmin: "Workspace",
     },
     navigation: "Configuration",
     title: "Settings",

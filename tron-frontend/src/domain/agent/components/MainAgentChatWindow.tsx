@@ -66,6 +66,11 @@ function writePersistedMainAgentSession(
   );
 }
 
+function isMissingPersistedSessionError(message: string, title?: string) {
+  return title === "Chat load failed"
+    && message.trim().toLowerCase() === "chat session was not found";
+}
+
 export function MainAgentChatWindow({
   currentUserDisplayName,
   floatingSubtitle = "Workspace Coordinator",
@@ -140,8 +145,13 @@ export function MainAgentChatWindow({
   }), [workspaceCode]);
 
   const handleError = useCallback((message: string, title?: string) => {
+    if (persistedSession && isMissingPersistedSessionError(message, title)) {
+      setPersistedSession(null);
+      writePersistedMainAgentSession(sessionStorageKey, null);
+      return;
+    }
     toast.error(message, { title: title ?? "Main Agent failed" });
-  }, [toast]);
+  }, [persistedSession, sessionStorageKey, toast]);
 
   const handleInfo = useCallback((message: string, title?: string) => {
     toast.info(message, { title });

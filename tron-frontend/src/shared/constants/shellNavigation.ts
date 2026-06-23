@@ -4,20 +4,16 @@ import {
   Bot,
   BookOpenText,
   Database,
-  FileClock,
   FolderGit2,
   Gauge,
   KeyRound,
   LayoutDashboard,
-  LockKeyhole,
   MessageSquareText,
   Network,
   ListTodo,
   ScrollText,
   Search,
-  Settings2,
   Sparkles,
-  UsersRound,
   Wrench,
 } from "lucide-react";
 
@@ -58,17 +54,6 @@ export const tronNavigation: TronNavSection[] = [
       { label: "Resources", href: "/resources", icon: Archive, translationKey: "shell:nav.items.resources" },
       { label: "Variables", href: "/variables", icon: KeyRound, translationKey: "shell:nav.items.variables" },
       { label: "Observability", href: "/observability", icon: Gauge, translationKey: "shell:nav.items.observability" },
-    ],
-  },
-  {
-    label: "Administration",
-    requiredRoleCodes: ["ADMIN"],
-    translationKey: "shell:nav.sections.administration",
-    items: [
-      { label: "Users", href: "/admin/users", icon: UsersRound, translationKey: "shell:nav.items.users" },
-      { label: "Roles", href: "/admin/roles", icon: LockKeyhole, translationKey: "shell:nav.items.roles" },
-      { label: "Audit Logs", href: "/admin/audit-logs", icon: FileClock, translationKey: "shell:nav.items.auditLogs" },
-      { label: "Workspace", href: "/admin/workspace", icon: Settings2, translationKey: "shell:nav.items.workspaceAdmin" },
     ],
   },
 ];

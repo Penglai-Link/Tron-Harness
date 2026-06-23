@@ -561,8 +561,7 @@ export function TronShell({
   function renderWorkspaceSwitcherContent() {
     return (
       <>
-        <p className="font-medium">{t("shell:workspace.selectorTitle")}</p>
-        <div className="mt-2">
+        <div>
           {workspaceSwitcherLoading ? <p className="mb-2 text-[12px] text-[var(--color-on-surface-variant)]">{t("shell:workspace.refreshing")}</p> : null}
           {workspaceTree.length ? (
             <div className="max-h-[min(60vh,24rem)] space-y-1 overflow-y-auto pr-1" role="tree" aria-label={t("shell:workspace.selectorTitle")}>

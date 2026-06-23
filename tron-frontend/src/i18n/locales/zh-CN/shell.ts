@@ -59,6 +59,7 @@ export const shell = {
   settings: {
     back: "返回",
     groups: {
+      administration: "管理",
       foundation: "基础配置",
       integration: "集成接入",
       platform: "平台能力",
@@ -66,14 +67,18 @@ export const shell = {
     },
     items: {
       agents: "智能体",
+      auditLogs: "审计日志",
       general: "通用",
       mcpServers: "MCP 服务",
       memoryDomains: "记忆领域",
       models: "模型",
       openapi: "OpenAPI",
+      roles: "角色",
       tools: "工具",
       skillCenter: "技能中心",
+      users: "用户",
       variables: "变量",
+      workspaceAdmin: "工作区",
     },
     navigation: "配置",
     title: "设置",

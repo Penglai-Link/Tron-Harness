@@ -31,6 +31,7 @@ interface SettingsNavGroup {
   groupKey: string;
   items: readonly SettingsNavItem[];
   label: string;
+  requiredRoleCodes?: readonly string[];
   translationKey: string;
 }
 
@@ -38,6 +39,7 @@ interface SettingsShellProps {
   activeItem: string;
   children: ReactNode;
   items: readonly SettingsNavGroup[];
+  roleCodes?: readonly string[];
 }
 
 const settingsReturnToStorageKey = "tron.settings.returnTo";
@@ -57,17 +59,31 @@ function resolveReturnTo(state: unknown) {
   return "/dashboard";
 }
 
-export function SettingsShell({ activeItem, children, items }: SettingsShellProps) {
+export function SettingsShell({ activeItem, children, items, roleCodes }: SettingsShellProps) {
   const { t } = useTranslation(["common", "shell"]);
   const location = useLocation();
   const returnTo = resolveReturnTo(location.state);
-  const flatItems = useMemo(() => items.flatMap((group) => group.items), [items]);
+  const visibleItems = useMemo(
+    () => items.filter((group) => {
+      if (!group.requiredRoleCodes?.length) {
+        return true;
+      }
+
+      if (!roleCodes) {
+        return true;
+      }
+
+      return group.requiredRoleCodes.some((roleCode) => roleCodes.includes(roleCode));
+    }),
+    [items, roleCodes],
+  );
+  const flatItems = useMemo(() => visibleItems.flatMap((group) => group.items), [visibleItems]);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => (
-    Object.fromEntries(items.map((group) => [group.groupKey, false]))
+    Object.fromEntries(visibleItems.map((group) => [group.groupKey, false]))
   ));
   const activeGroupKey = useMemo(
-    () => items.find((group) => group.items.some((item) => item.label === activeItem))?.groupKey ?? null,
-    [activeItem, items],
+    () => visibleItems.find((group) => group.items.some((item) => item.label === activeItem))?.groupKey ?? null,
+    [activeItem, visibleItems],
   );
 
   useEffect(() => {
@@ -139,7 +155,7 @@ export function SettingsShell({ activeItem, children, items }: SettingsShellProp
             })}
           </nav>
           <div className="mt-3 hidden space-y-4 lg:block">
-            {items.map((group) => {
+            {visibleItems.map((group) => {
               const expanded = !collapsedGroups[group.groupKey];
               const isActiveGroup = group.groupKey === activeGroupKey;
               const GroupChevron = expanded ? ChevronDown : ChevronRight;

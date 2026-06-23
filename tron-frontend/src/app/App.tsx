@@ -234,7 +234,7 @@ function AppRoutePage() {
     };
     if (route.layout === "settings") {
       return (
-        <SettingsShell activeItem={route.settingsNav ?? route.title} items={settingsNavigation}>
+        <SettingsShell activeItem={route.settingsNav ?? route.title} items={settingsNavigation} roleCodes={session?.user.roleCodes}>
           <SuspendedRoute>
             <Component key={routeRenderKey} />
           </SuspendedRoute>
