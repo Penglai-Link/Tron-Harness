@@ -17,6 +17,9 @@ impl RagStrategyRegistry for DefaultRagStrategyRegistry {
                 "RAG_SPLIT_MARKDOWN_HEADING_V1",
                 "RAG_FULLTEXT_INDEX",
                 "RAG_MARKDOWN_TREE_EXTRACT_V1",
+                "RAG_TREE_EXTRACTIVE_SUMMARY_V1",
+                "RAG_TREE_FULLTEXT_INDEX",
+                "RAG_TREE_VECTOR_INDEX",
                 "RAG_VECTOR_INDEX",
                 "RAG_PERSIST_TREE_GRAPH_V1",
                 "RAG_PERSIST_SOURCE",
@@ -52,6 +55,8 @@ impl RagStrategyRegistry for DefaultRagStrategyRegistry {
                 "FULLTEXT_GRAPH_SINGLE_NODE_V1",
                 "VECTOR_GRAPH_SINGLE_NODE_V1",
                 "STRUCTURED_FILTER_SQLITE_V1",
+                "TREE_FULLTEXT_V1",
+                "TREE_VECTOR_V1",
             ],
         )
     }

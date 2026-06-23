@@ -49,6 +49,28 @@ fn vector_unique_key(
     )
 }
 
+fn tree_unique_key(
+    repository: &SqliteRagRepository,
+    table_name: &str,
+    columns: &BTreeSet<String>,
+) -> Result<Vec<String>, RagError> {
+    ensure_required_columns(columns, &["tree_node_code"])?;
+    preferred_unique_key(
+        repository,
+        table_name,
+        &[
+            vec!["tree_node_code".to_string()],
+            vec![
+                "source_code".to_string(),
+                "source_version".to_string(),
+                "scope_type".to_string(),
+                "scope_code".to_string(),
+                "path_key".to_string(),
+            ],
+        ],
+    )
+}
+
 fn preferred_unique_key(
     repository: &SqliteRagRepository,
     table_name: &str,

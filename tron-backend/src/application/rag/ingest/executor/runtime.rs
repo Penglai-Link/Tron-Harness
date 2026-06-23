@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::hash::{Hash, Hasher};
 
 use serde_json::{Value, json};
 
@@ -6,7 +7,7 @@ use crate::domain::rag::RagError;
 
 use super::{
     RagEmbeddingCall, RagEmbeddingRuntime, RagIngestRepository, RagIngestRequest, RagIngestService,
-    RagIngestWarning, RagPersistIngestCommand, publish_ingest_stage_event,
+    RagIngestWarning, RagPersistIngestCommand, RagTreeNodeWrite, publish_ingest_stage_event,
 };
 use crate::application::rag::{
     CompiledRagIngestProfile, CompiledRagPipelineNode, RagArtifactStore, RagConfigRepository,
@@ -14,9 +15,11 @@ use crate::application::rag::{
     RagStageExecutionResult, RagStageOutcome, RagStrategyRegistry,
     ingest_artifact::{
         ARTIFACT_FULLTEXT_INDEX_RESULT, ARTIFACT_PARSED_DOCUMENT, ARTIFACT_PERSIST_RESULT,
-        ARTIFACT_RESOLVED_DOCUMENT, ARTIFACT_TEXT_UNIT_BATCH, ARTIFACT_TREE_GRAPH,
-        ARTIFACT_TREE_PERSIST_RESULT, ARTIFACT_VALIDATED_SOURCE, ARTIFACT_VECTOR_INDEX_RESULT,
-        ArtifactBundle, RagArtifactPayload, RagPersistResultArtifact, RagVectorIndexArtifact,
+        ARTIFACT_RESOLVED_DOCUMENT, ARTIFACT_TEXT_UNIT_BATCH, ARTIFACT_TREE_FULLTEXT_INDEX_RESULT,
+        ARTIFACT_TREE_GRAPH, ARTIFACT_TREE_PERSIST_RESULT, ARTIFACT_TREE_SUMMARY_RESULT,
+        ARTIFACT_TREE_VECTOR_INDEX_RESULT, ARTIFACT_VALIDATED_SOURCE, ARTIFACT_VECTOR_INDEX_RESULT,
+        ArtifactBundle, RagArtifactPayload, RagPersistResultArtifact, RagTreeIndexArtifact,
+        RagVectorIndexArtifact,
     },
     ingest_payload::{PreparedIngestPayload, prepare_payload},
 };
@@ -130,6 +133,25 @@ where
             IngestStageKind::SplitText => {
                 self.execute_split_text_stage(request, compiled, bundle)?;
                 store.put_json("textUnits.generated", json!({"nodeId": node.node_id}));
+                let prepared = bundle.prepared_payload()?;
+                store.put_json(
+                    "tree.hints",
+                    json!(
+                        prepared
+                            .tree_hints
+                            .iter()
+                            .map(|hint| json!({
+                                "treeNodeCode": hint.tree_node_code,
+                                "parentNodeCode": hint.parent_node_code,
+                                "pathKey": hint.path_key,
+                                "level": hint.level,
+                                "ordinal": hint.ordinal,
+                                "title": hint.title,
+                                "coveredTextUnitCodes": hint.covered_text_unit_codes
+                            }))
+                            .collect::<Vec<_>>()
+                    ),
+                );
             }
             IngestStageKind::FulltextIndex => {
                 self.execute_fulltext_index_stage(request, bundle)?;
@@ -142,6 +164,19 @@ where
             }
             IngestStageKind::ExtractTree => {
                 self.execute_extract_tree_stage(request, bundle, store)?;
+            }
+            IngestStageKind::SummarizeTree => {
+                self.execute_summarize_tree_stage(request, bundle, store)?;
+                store.put_json("tree.summarized", json!({"nodeId": node.node_id}));
+            }
+            IngestStageKind::TreeFulltextIndex => {
+                self.execute_tree_fulltext_index_stage(request, bundle)?;
+                store.put_json("index.treeFulltext", json!({"nodeId": node.node_id}));
+            }
+            IngestStageKind::TreeVectorIndex => {
+                self.execute_tree_vector_index_stage(request, compiled, bundle)
+                    .await?;
+                store.put_json("index.treeVector", json!({"nodeId": node.node_id}));
             }
             IngestStageKind::PersistTree => {
                 self.execute_persist_tree_stage(request, bundle, store)?;
@@ -416,61 +451,6 @@ where
         Ok(())
     }
 
-    fn execute_extract_tree_stage(
-        &self,
-        request: &RagIngestRequest,
-        bundle: &mut ArtifactBundle,
-        store: &mut RagArtifactStore,
-    ) -> Result<(), RagError> {
-        let prepared = bundle.prepared_payload()?.clone();
-        let graph = build_tree_graph_artifact(request, &prepared);
-        bundle.append(
-            request,
-            ARTIFACT_TREE_GRAPH,
-            RagArtifactPayload::TreeGraph(graph.clone()),
-            json!({
-                "nodeCount": graph.get("nodes").and_then(Value::as_array).map_or(0, Vec::len)
-            }),
-        );
-        store.put_json("tree.extracted", graph.clone());
-        store.put_json("graph.related", graph);
-        publish_ingest_stage_event(
-            &self.event_bus,
-            "extractTree",
-            BusOutcome::Completed,
-            prepared.units.len(),
-            request,
-        );
-        Ok(())
-    }
-
-    fn execute_persist_tree_stage(
-        &self,
-        request: &RagIngestRequest,
-        bundle: &mut ArtifactBundle,
-        store: &mut RagArtifactStore,
-    ) -> Result<(), RagError> {
-        let related_graph = store.get_cloned::<Value>("graph.related")?;
-        bundle.append(
-            request,
-            ARTIFACT_TREE_PERSIST_RESULT,
-            RagArtifactPayload::TreePersistResult(related_graph.clone()),
-            json!({
-                "sourceCode": request.source.code,
-                "sourceVersion": request.source.version
-            }),
-        );
-        store.put_json("tree.persisted", related_graph);
-        publish_ingest_stage_event(
-            &self.event_bus,
-            "persistTree",
-            BusOutcome::Completed,
-            1,
-            request,
-        );
-        Ok(())
-    }
-
     fn execute_persist_source_stage(
         &self,
         request: &RagIngestRequest,
@@ -480,6 +460,7 @@ where
     ) -> Result<(), RagError> {
         let prepared = bundle.prepared_payload()?.clone();
         let vector_result = bundle.vector_result()?.clone();
+        let tree_result = bundle.tree_persist_result().ok().cloned();
         let source_status = if vector_result.fatal_error.is_some() {
             "FAILED"
         } else {
@@ -500,10 +481,14 @@ where
             metadata: prepared.metadata,
             domain_fields: prepared.domain_fields,
             related_graph: store
-                .get_optional_cloned::<Value>("tree.persisted")?
+                .get_optional_cloned::<Value>("graph.related")?
                 .or_else(|| request.payload.get("relatedGraph").cloned()),
             graph_write_policy: compiled.graph_write_policy.clone(),
             text_units: vector_result.text_units,
+            tree_nodes: tree_result
+                .as_ref()
+                .map(|result| result.tree_nodes.clone())
+                .unwrap_or_default(),
             warnings: vector_result.warnings.clone(),
             workspace_code: request.workspace_code.clone(),
             user_code: request.access_context.user_code.clone(),
@@ -548,6 +533,9 @@ enum IngestStageKind {
     FulltextIndex,
     VectorIndex,
     ExtractTree,
+    SummarizeTree,
+    TreeFulltextIndex,
+    TreeVectorIndex,
     PersistTree,
     PersistSource,
 }

@@ -190,7 +190,7 @@ pub(super) fn optional_graph_target_for_segment(
 }
 
 fn default_graph_target(corpus: &RagCorpusRecord) -> Result<GraphRuntimeTarget, RagError> {
-    for segment in ["textUnit", "fulltext", "vector", "source"] {
+    for segment in ["textUnit", "fulltext", "vector", "tree", "source"] {
         if let Some(target) = optional_graph_target_for_segment(corpus, segment)? {
             return Ok(target);
         }

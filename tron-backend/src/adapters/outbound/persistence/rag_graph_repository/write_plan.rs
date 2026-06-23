@@ -18,7 +18,7 @@ pub(super) struct RagStorageWriteOperation {
 impl RagStorageWritePlan {
     pub(super) fn compile(corpus: &RagCorpusRecord) -> Result<Self, RagError> {
         let mut by_target = BTreeMap::<String, RagStorageWriteOperation>::new();
-        for segment in ["source", "textUnit", "fulltext", "vector"] {
+        for segment in ["source", "textUnit", "fulltext", "vector", "tree"] {
             let Some((target_id, target)) = resolve_segment_target(corpus, segment)? else {
                 continue;
             };

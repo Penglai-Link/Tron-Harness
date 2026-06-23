@@ -1,144 +1,4 @@
-fn strategy_config_schema(strategy_id: &str) -> Value {
-    match strategy_id {
-        "PROJECT_DOC_RESOLVE_SOURCE" => json!({
-            "type": "object",
-            "properties": {
-                "allowedUriSchemes": {
-                    "type": "array",
-                    "items": { "type": "string" },
-                    "default": ["file", "http", "https"]
-                },
-                "maxBytes": {
-                    "type": "integer",
-                    "minimum": 1,
-                    "default": 1048576
-                }
-            }
-        }),
-        "RAG_PARSE_MARKDOWN_DOCUMENT" => json!({
-            "type": "object",
-            "properties": {
-                "format": {
-                    "type": "string",
-                    "enum": ["MARKDOWN"],
-                    "default": "MARKDOWN"
-                },
-                "unsupportedFormatPolicy": {
-                    "type": "string",
-                    "enum": ["FAIL_FAST", "SKIP"],
-                    "default": "FAIL_FAST"
-                }
-            }
-        }),
-        "RAG_PARSE_MINERU_DOCUMENT" => json!({
-            "type": "object",
-            "properties": {
-                "supportedFormats": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "enum": ["PDF", "DOCX"]
-                    },
-                    "default": ["PDF", "DOCX"]
-                },
-                "unsupportedFormatPolicy": {
-                    "type": "string",
-                    "enum": ["FAIL_FAST", "SKIP"],
-                    "default": "FAIL_FAST"
-                }
-            }
-        }),
-        "RAG_SPLIT_TEXT" => json!({
-            "type": "object",
-            "properties": {
-                "splitter": {
-                    "type": "object",
-                    "properties": {
-                        "type": {
-                            "type": "string",
-                            "enum": ["plainText", "markdownHeading"],
-                            "default": "plainText"
-                        },
-                        "maxTokens": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "default": 800
-                        },
-                        "overlapTokens": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "default": 80
-                        },
-                        "headingDepth": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 6,
-                            "default": 6
-                        },
-                        "includeHeadingInIndexText": {
-                            "type": "boolean",
-                            "default": false
-                        }
-                    }
-                }
-            }
-        }),
-        "RAG_SPLIT_PLAIN_TEXT_V1" => json!({
-            "type": "object",
-            "properties": {
-                "splitter": {
-                    "type": "object",
-                    "properties": {
-                        "maxTokens": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "default": 800
-                        },
-                        "overlapTokens": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "default": 80
-                        }
-                    }
-                }
-            }
-        }),
-        "RAG_SPLIT_MARKDOWN_HEADING_V1" => json!({
-            "type": "object",
-            "properties": {
-                "splitter": {
-                    "type": "object",
-                    "properties": {
-                        "headingDepth": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "maximum": 6,
-                            "default": 6
-                        },
-                        "includeHeadingInIndexText": {
-                            "type": "boolean",
-                            "default": true
-                        },
-                        "maxTokens": {
-                            "type": "integer",
-                            "minimum": 1,
-                            "default": 800
-                        },
-                        "overlapTokens": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "default": 80
-                        }
-                    }
-                }
-            }
-        }),
-        _ => json!({
-            "type": "object",
-            "additionalProperties": false
-        }),
-    }
-}
+include!("stage_catalog_schemas.rs");
 
 fn stage_definitions() -> Vec<StageDefinition> {
     vec![
@@ -235,7 +95,7 @@ fn stage_definitions() -> Vec<StageDefinition> {
             display_name: "Split Text",
             profile_types: &[RagProfileType::Ingest],
             input_artifact_keys: &["payload.prepared"],
-            output_artifact_keys: &["textUnits.generated"],
+            output_artifact_keys: &["textUnits.generated", "tree.hints"],
             repeatable: false,
             parallel: false,
             default_join_policy: "ALL_SUCCESS",
@@ -293,10 +153,46 @@ fn stage_definitions() -> Vec<StageDefinition> {
             strategies: &[StrategyDefinition {
                 strategy_id: "RAG_MARKDOWN_TREE_EXTRACT_V1",
                 display_name: "Markdown Tree Extract",
-                required_capabilities: &["graph"],
-                required_storage_segments: &["textUnit"],
+                required_capabilities: &[],
+                required_storage_segments: &["textUnit", "tree"],
             }],
             execution_stage_id: "extractTree",
+        },
+        StageDefinition {
+            stage_type: "SUMMARIZE_TREE",
+            display_name: "Summarize Tree",
+            profile_types: &[RagProfileType::Ingest],
+            input_artifact_keys: &["tree.extracted"],
+            output_artifact_keys: &["tree.summarized"],
+            repeatable: false,
+            parallel: false,
+            default_join_policy: "ALL_SUCCESS",
+            default_failure_policy: "FAIL_PIPELINE",
+            strategies: &[StrategyDefinition {
+                strategy_id: "RAG_TREE_EXTRACTIVE_SUMMARY_V1",
+                display_name: "Extractive Summary Tree",
+                required_capabilities: &[],
+                required_storage_segments: &["tree"],
+            }],
+            execution_stage_id: "summarizeTree",
+        },
+        StageDefinition {
+            stage_type: "TREE_FULLTEXT_INDEX",
+            display_name: "Tree Fulltext Index",
+            profile_types: &[RagProfileType::Ingest],
+            input_artifact_keys: &["tree.summarized"],
+            output_artifact_keys: &["index.treeFulltext"],
+            repeatable: false,
+            parallel: true,
+            default_join_policy: "ALL_SUCCESS",
+            default_failure_policy: "CONTINUE_WITH_WARNING",
+            strategies: &[StrategyDefinition {
+                strategy_id: "RAG_TREE_FULLTEXT_INDEX",
+                display_name: "Tree Fulltext Index",
+                required_capabilities: &["fulltext"],
+                required_storage_segments: &["tree"],
+            }],
+            execution_stage_id: "treeFulltextIndex",
         },
         StageDefinition {
             stage_type: "VECTOR_INDEX",
@@ -317,10 +213,28 @@ fn stage_definitions() -> Vec<StageDefinition> {
             execution_stage_id: "vectorIndex",
         },
         StageDefinition {
+            stage_type: "TREE_VECTOR_INDEX",
+            display_name: "Tree Vector Index",
+            profile_types: &[RagProfileType::Ingest],
+            input_artifact_keys: &["index.treeFulltext"],
+            output_artifact_keys: &["index.treeVector"],
+            repeatable: false,
+            parallel: true,
+            default_join_policy: "ALL_SUCCESS",
+            default_failure_policy: "CONTINUE_WITH_WARNING",
+            strategies: &[StrategyDefinition {
+                strategy_id: "RAG_TREE_VECTOR_INDEX",
+                display_name: "Tree Vector Index",
+                required_capabilities: &["vector"],
+                required_storage_segments: &["tree"],
+            }],
+            execution_stage_id: "treeVectorIndex",
+        },
+        StageDefinition {
             stage_type: "PERSIST_TREE",
             display_name: "Persist Tree",
             profile_types: &[RagProfileType::Ingest],
-            input_artifact_keys: &["graph.related"],
+            input_artifact_keys: &["index.treeVector"],
             output_artifact_keys: &["tree.persisted"],
             repeatable: false,
             parallel: false,
@@ -328,9 +242,9 @@ fn stage_definitions() -> Vec<StageDefinition> {
             default_failure_policy: "FAIL_PIPELINE",
             strategies: &[StrategyDefinition {
                 strategy_id: "RAG_PERSIST_TREE_GRAPH_V1",
-                display_name: "Persist Tree Graph",
-                required_capabilities: &["graph"],
-                required_storage_segments: &["source"],
+                display_name: "Persist Tree",
+                required_capabilities: &[],
+                required_storage_segments: &["tree"],
             }],
             execution_stage_id: "persistTree",
         },
@@ -440,6 +354,18 @@ fn stage_definitions() -> Vec<StageDefinition> {
                     display_name: "SQLite Structured Filter",
                     required_capabilities: &["fulltext"],
                     required_storage_segments: &["textUnit"],
+                },
+                StrategyDefinition {
+                    strategy_id: "TREE_FULLTEXT_V1",
+                    display_name: "Tree Fulltext",
+                    required_capabilities: &["fulltext"],
+                    required_storage_segments: &["tree", "textUnit"],
+                },
+                StrategyDefinition {
+                    strategy_id: "TREE_VECTOR_V1",
+                    display_name: "Tree Vector",
+                    required_capabilities: &["vector"],
+                    required_storage_segments: &["tree", "textUnit"],
                 },
             ],
             execution_stage_id: "routeSearch",

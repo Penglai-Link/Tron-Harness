@@ -4,7 +4,7 @@ use crate::domain::rag::RagError;
 
 use super::{
     RagIngestRequest, RagIngestScope, RagIngestWarning, RagResolvedDocument, RagTextUnitWrite,
-    ingest_payload::PreparedIngestPayload,
+    RagTreeNodeWrite, ingest_payload::PreparedIngestPayload,
 };
 
 pub(crate) const ARTIFACT_RAW_SOURCE: &str = "RAW_SOURCE";
@@ -15,6 +15,9 @@ pub(crate) const ARTIFACT_TEXT_UNIT_BATCH: &str = "TEXT_UNIT_BATCH";
 pub(crate) const ARTIFACT_FULLTEXT_INDEX_RESULT: &str = "FULLTEXT_INDEX_RESULT";
 pub(crate) const ARTIFACT_VECTOR_INDEX_RESULT: &str = "VECTOR_INDEX_RESULT";
 pub(crate) const ARTIFACT_TREE_GRAPH: &str = "TREE_GRAPH";
+pub(crate) const ARTIFACT_TREE_SUMMARY_RESULT: &str = "TREE_SUMMARY_RESULT";
+pub(crate) const ARTIFACT_TREE_FULLTEXT_INDEX_RESULT: &str = "TREE_FULLTEXT_INDEX_RESULT";
+pub(crate) const ARTIFACT_TREE_VECTOR_INDEX_RESULT: &str = "TREE_VECTOR_INDEX_RESULT";
 pub(crate) const ARTIFACT_TREE_PERSIST_RESULT: &str = "TREE_PERSIST_RESULT";
 pub(crate) const ARTIFACT_PERSIST_RESULT: &str = "PERSIST_RESULT";
 
@@ -103,6 +106,34 @@ impl ArtifactBundle {
         }
     }
 
+    pub(crate) fn tree_vector_result(&self) -> Result<&RagTreeIndexArtifact, RagError> {
+        match &self.require(ARTIFACT_TREE_VECTOR_INDEX_RESULT)?.payload {
+            RagArtifactPayload::TreeVectorIndexResult(result) => Ok(result),
+            _ => Err(RagError::IngestStageFailed),
+        }
+    }
+
+    pub(crate) fn tree_summary_result(&self) -> Result<&RagTreeIndexArtifact, RagError> {
+        match &self.require(ARTIFACT_TREE_SUMMARY_RESULT)?.payload {
+            RagArtifactPayload::TreeSummaryResult(result) => Ok(result),
+            _ => Err(RagError::IngestStageFailed),
+        }
+    }
+
+    pub(crate) fn tree_fulltext_result(&self) -> Result<&RagTreeIndexArtifact, RagError> {
+        match &self.require(ARTIFACT_TREE_FULLTEXT_INDEX_RESULT)?.payload {
+            RagArtifactPayload::TreeFulltextIndexResult(result) => Ok(result),
+            _ => Err(RagError::IngestStageFailed),
+        }
+    }
+
+    pub(crate) fn tree_persist_result(&self) -> Result<&RagTreeIndexArtifact, RagError> {
+        match &self.require(ARTIFACT_TREE_PERSIST_RESULT)?.payload {
+            RagArtifactPayload::TreePersistResult(result) => Ok(result),
+            _ => Err(RagError::IngestStageFailed),
+        }
+    }
+
     pub(crate) fn persist_result(&self) -> Result<&RagPersistResultArtifact, RagError> {
         match &self.require(ARTIFACT_PERSIST_RESULT)?.payload {
             RagArtifactPayload::PersistResult(result) => Ok(result),
@@ -144,13 +175,24 @@ pub(crate) enum RagArtifactPayload {
     FulltextIndexResult { text_unit_count: usize },
     VectorIndexResult(RagVectorIndexArtifact),
     TreeGraph(Value),
-    TreePersistResult(Value),
+    TreeSummaryResult(RagTreeIndexArtifact),
+    TreeFulltextIndexResult(RagTreeIndexArtifact),
+    TreeVectorIndexResult(RagTreeIndexArtifact),
+    TreePersistResult(RagTreeIndexArtifact),
     PersistResult(RagPersistResultArtifact),
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct RagVectorIndexArtifact {
     pub(crate) text_units: Vec<RagTextUnitWrite>,
+    pub(crate) embedding_status: String,
+    pub(crate) warnings: Vec<RagIngestWarning>,
+    pub(crate) fatal_error: Option<RagError>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RagTreeIndexArtifact {
+    pub(crate) tree_nodes: Vec<RagTreeNodeWrite>,
     pub(crate) embedding_status: String,
     pub(crate) warnings: Vec<RagIngestWarning>,
     pub(crate) fatal_error: Option<RagError>,

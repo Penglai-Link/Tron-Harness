@@ -61,8 +61,10 @@ pub struct RagCandidateHitResponse {
     pub score: f64,
     pub text: String,
     pub metadata: Value,
-    #[serde(flatten)]
+    #[serde(skip_serializing_if = "Map::is_empty")]
     pub fields: Map<String, Value>,
+    #[serde(flatten)]
+    pub flattened_fields: Map<String, Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -102,6 +104,8 @@ impl From<RagSearchResult> for RagSearchResponse {
 
 impl From<CandidateHit> for RagCandidateHitResponse {
     fn from(hit: CandidateHit) -> Self {
+        let mut flattened_fields = hit.fields.clone();
+        flattened_fields.remove("fields");
         Self {
             corpus_id: hit.corpus_id,
             source_code: hit.source_code,
@@ -111,6 +115,7 @@ impl From<CandidateHit> for RagCandidateHitResponse {
             text: hit.text,
             metadata: hit.metadata,
             fields: hit.fields,
+            flattened_fields,
         }
     }
 }

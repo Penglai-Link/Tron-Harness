@@ -5,17 +5,21 @@ use rusqlite::{Transaction, params};
 use crate::{
     application::rag::{
         RagConfigRepository, RagIngestRepository, RagPersistIngestCommand, RagTextUnitWrite,
+        RagTreeNodeWrite,
     },
     domain::rag::{RagCorpusRecord, RagError},
 };
 
 use super::{
     SqliteRagRepository,
-    indexes::{delete_text_unit_indexes_for_source, sync_text_unit_indexes_for_units},
+    indexes::{
+        decode_embedding, delete_text_unit_indexes_for_source, fts_table_name,
+        sync_text_unit_indexes_for_units, table_exists, vec_table_name,
+    },
     ingest_values::{
         execute_upsert, json_string, now_millis, push_available_domain_values, push_domain_values,
-        push_dynamic_text, push_embedded_source_values, push_integer, push_optional_text,
-        push_text, validate_domain_field_targets,
+        push_dynamic_text, push_embedded_source_values, push_integer, push_optional_blob,
+        push_optional_text, push_text, validate_domain_field_targets,
     },
     sql_plan::{SqliteRagCorpusPlan, compile_sql_corpus_plan, quote_identifier},
     storage_error,
@@ -126,6 +130,7 @@ impl RagIngestRepository for SqliteRagRepository {
         persist_fulltext_units(&tx, &plan, &command)?;
         persist_vector_units(&tx, &plan, &command)?;
         sync_text_unit_indexes_for_units(&tx, &plan, &command.text_units)?;
+        persist_tree_nodes(&tx, &plan, &command)?;
         persist_warnings(&tx, &plan, &command)?;
         tx.commit().map_err(storage_error)
     }
@@ -505,4 +510,3 @@ fn persist_vector_units(
     }
     Ok(())
 }
-

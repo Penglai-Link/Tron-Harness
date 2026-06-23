@@ -49,7 +49,7 @@ async fn memory_text_contract_ingest_writes_business_text_unit_and_sidecar_index
             .stage_results
             .iter()
             .any(|stage| stage.stage_type == "SPLIT_TEXT"
-                && stage.output_artifact_keys == vec!["textUnits.generated"])
+                && stage.output_artifact_keys == vec!["textUnits.generated", "tree.hints"])
     );
     assert!(
         result
@@ -188,6 +188,9 @@ async fn pipeline_extracts_and_persists_tree_graph_without_request_related_graph
             "extract-tree",
             "fulltext-index",
             "vector-index",
+            "summarize-tree",
+            "tree-fulltext-index",
+            "tree-vector-index",
             "persist-tree",
             "persist-source"
         ]
@@ -203,7 +206,7 @@ async fn pipeline_extracts_and_persists_tree_graph_without_request_related_graph
     assert!(
         result.stage_results.iter().any(|stage| {
             stage.node_id == "persist-tree"
-                && stage.input_artifact_keys == vec!["graph.related"]
+                && stage.input_artifact_keys == vec!["index.treeVector"]
                 && stage.output_artifact_keys == vec!["tree.persisted"]
         }),
         "PERSIST_TREE should report consuming the extracted graph artifact"
@@ -220,6 +223,68 @@ async fn pipeline_extracts_and_persists_tree_graph_without_request_related_graph
             .as_array()
             .is_some_and(|nodes| nodes.iter().any(|node| node["kind"] == json!("TEXT_UNIT"))),
         "generated related graph should include text unit nodes"
+    );
+    let tree_nodes = &commands.first().unwrap().tree_nodes;
+    assert!(
+        tree_nodes.iter().any(|node| node.parent_node_code == "0"
+            && node.covered_text_unit_codes == vec!["memory-rag-rule:v1:0"]),
+        "splitText should provide tree hints that summarize into a root node"
+    );
+}
+
+#[tokio::test]
+async fn sqlite_tree_segment_creates_indexes_and_ingest_persists_summary_rows() {
+    let database_path = temp_database_path("rag-ingest-summary-tree");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    set_memory_card_tree_table(&database_url, "rag_memory_tree_nodes");
+    insert_tree_pipeline_ingest_profile(&database_url, "memory-card-tree-pipeline-v1");
+    let embeddings = FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75));
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        embeddings.clone(),
+    );
+    let mut request = memory_request("v1");
+    request.ingest_profile_id = "memory-card-tree-pipeline-v1".into();
+
+    let result = service.ingest(request).await.unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(embeddings.call_count(), 3);
+    let connection = Connection::open(&database_url).unwrap();
+    let columns = table_columns(&connection, "rag_memory_tree_nodes");
+    for required in [
+        "tree_node_code",
+        "parent_node_code",
+        "summary_text",
+        "summary_embedding",
+        "covered_text_unit_codes",
+    ] {
+        assert!(columns.iter().any(|column| column == required));
+    }
+    assert!(table_exists(&connection, "rag_memory_tree_nodes_fts"));
+    assert!(table_exists(&connection, "rag_memory_tree_nodes_vec_d4096"));
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT parent_node_code FROM rag_memory_tree_nodes ORDER BY ordinal LIMIT 1"
+        ),
+        "0"
+    );
+    assert!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_memory_tree_nodes WHERE summary_text LIKE '%Always cite source titles%'"
+        ) >= 1
+    );
+    assert_eq!(
+        serde_json::from_str::<Value>(&query_string(
+            &connection,
+            "SELECT covered_text_unit_codes FROM rag_memory_tree_nodes ORDER BY ordinal LIMIT 1"
+        ))
+        .unwrap(),
+        json!(["memory-rag-rule:v1:0"])
     );
 }
 
@@ -1242,6 +1307,33 @@ fn set_project_doc_segment_table(
         .unwrap();
 }
 
+fn set_memory_card_tree_table(database_url: &str, table_name: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let binding_json = query_string(
+        &connection,
+        "SELECT storage_binding_json FROM rag_corpora WHERE corpus_id = 'memory-card'",
+    );
+    let mut binding = serde_json::from_str::<Value>(&binding_json).unwrap();
+    binding["bindings"]["tree"] = json!("memory-card-tree-store");
+    binding["targets"]
+        .as_array_mut()
+        .expect("storage targets should be an array")
+        .push(json!({
+            "id": "memory-card-tree-store",
+            "backend": "SQLITE",
+            "layout": "TABLE",
+            "table": table_name
+        }));
+    connection
+        .execute(
+            "UPDATE rag_corpora
+             SET storage_binding_json = ?1
+             WHERE corpus_id = 'memory-card'",
+            params![binding.to_string()],
+        )
+        .unwrap();
+}
+
 fn open_prepared_connection(database_url: &str) -> Connection {
     let connection = Connection::open(database_url).unwrap();
     default_sqlite_extension_context()
@@ -1495,6 +1587,16 @@ fn insert_tree_pipeline_ingest_profile(database_url: &str, profile_id: &str) {
                     "strategyId": "RAG_MARKDOWN_TREE_EXTRACT_V1"
                 },
                 {
+                    "nodeId": "summarize-tree",
+                    "stageType": "SUMMARIZE_TREE",
+                    "strategyId": "RAG_TREE_EXTRACTIVE_SUMMARY_V1"
+                },
+                {
+                    "nodeId": "tree-fulltext-index",
+                    "stageType": "TREE_FULLTEXT_INDEX",
+                    "strategyId": "RAG_TREE_FULLTEXT_INDEX"
+                },
+                {
                     "nodeId": "fulltext-index",
                     "stageType": "FULLTEXT_INDEX",
                     "strategyId": "RAG_FULLTEXT_INDEX"
@@ -1503,6 +1605,11 @@ fn insert_tree_pipeline_ingest_profile(database_url: &str, profile_id: &str) {
                     "nodeId": "vector-index",
                     "stageType": "VECTOR_INDEX",
                     "strategyId": "RAG_VECTOR_INDEX"
+                },
+                {
+                    "nodeId": "tree-vector-index",
+                    "stageType": "TREE_VECTOR_INDEX",
+                    "strategyId": "RAG_TREE_VECTOR_INDEX"
                 },
                 {
                     "nodeId": "persist-tree",
@@ -1521,7 +1628,10 @@ fn insert_tree_pipeline_ingest_profile(database_url: &str, profile_id: &str) {
                 { "from": "split-text", "to": "extract-tree" },
                 { "from": "split-text", "to": "fulltext-index" },
                 { "from": "split-text", "to": "vector-index" },
-                { "from": "extract-tree", "to": "persist-tree" },
+                { "from": "extract-tree", "to": "summarize-tree" },
+                { "from": "summarize-tree", "to": "tree-fulltext-index" },
+                { "from": "tree-fulltext-index", "to": "tree-vector-index" },
+                { "from": "tree-vector-index", "to": "persist-tree" },
                 { "from": "fulltext-index", "to": "persist-source" },
                 { "from": "vector-index", "to": "persist-source" },
                 { "from": "persist-tree", "to": "persist-source" }

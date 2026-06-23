@@ -35,7 +35,7 @@ pub use facade::RagService;
 pub use ingest::{
     RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime, RagIngestAccessContext,
     RagIngestRepository, RagIngestRequest, RagIngestResult, RagIngestScope, RagIngestService,
-    RagIngestSource, RagIngestWarning, RagPersistIngestCommand, RagTextUnitWrite,
+    RagIngestSource, RagIngestWarning, RagPersistIngestCommand, RagTextUnitWrite, RagTreeNodeWrite,
     validate_direct_scope,
 };
 pub use ingest_profile::{

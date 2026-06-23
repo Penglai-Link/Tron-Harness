@@ -3,3 +3,4 @@ mod terms;
 
 include!("search/split/query_repository.rs");
 include!("search/split/row_projection.rs");
+include!("search/split/tree_query.rs");

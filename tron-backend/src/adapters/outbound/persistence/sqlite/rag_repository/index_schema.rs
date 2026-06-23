@@ -18,6 +18,9 @@ use super::{
     storage_error,
 };
 
+mod tree_schema;
+use tree_schema::ensure_tree_storage_table;
+
 pub(super) fn apply_extension_index_migration(
     repository: &SqliteRagRepository,
 ) -> Result<(), RagError> {
@@ -67,6 +70,11 @@ pub(super) fn ensure_runtime_storage_for_corpus(
         ensure_vector_storage_table(&repository.connection, vector_table, corpus)?;
         ensure_vector_tables(&repository.connection, vector_table)?;
     }
+    if let Some(tree_table) = binding.sqlite_table_for_segment("tree") {
+        ensure_tree_storage_table(&repository.connection, tree_table)?;
+        ensure_fts_table(&repository.connection, tree_table)?;
+        ensure_vector_tables(&repository.connection, tree_table)?;
+    }
     if let Some(diagnostics_table) = binding.diagnostics_table() {
         ensure_diagnostics_storage_table(&repository.connection, diagnostics_table)?;
     }
@@ -74,14 +82,21 @@ pub(super) fn ensure_runtime_storage_for_corpus(
 }
 
 fn has_sqlite_runtime_table(corpus: &RagCorpusRecord) -> bool {
-    ["source", "textUnit", "fulltext", "vector", "diagnostics"]
-        .into_iter()
-        .any(|segment| {
-            corpus
-                .storage_binding
-                .sqlite_table_for_segment(segment)
-                .is_some()
-        })
+    [
+        "source",
+        "textUnit",
+        "fulltext",
+        "vector",
+        "tree",
+        "diagnostics",
+    ]
+    .into_iter()
+    .any(|segment| {
+        corpus
+            .storage_binding
+            .sqlite_table_for_segment(segment)
+            .is_some()
+    })
 }
 
 fn drop_retired_extension_tables(connection: &Connection) -> Result<(), RagError> {
@@ -138,10 +153,17 @@ fn rebuild_table_indexes(connection: &Connection, table_name: &str) -> Result<()
             .execute(&format!("DELETE FROM {fts_table}"), [])
             .map_err(storage_error)?;
         let source_table = quote_identifier(table_name)?;
-        let search_column = if table_has_column(connection, table_name, "search_text")? {
+        let search_column = if table_has_column(connection, table_name, "summary_text")? {
+            "summary_text"
+        } else if table_has_column(connection, table_name, "search_text")? {
             "search_text"
         } else {
             "text"
+        };
+        let status_column = if table_has_column(connection, table_name, "status")? {
+            "status"
+        } else {
+            "text_unit_status"
         };
         connection
             .execute(
@@ -149,7 +171,7 @@ fn rebuild_table_indexes(connection: &Connection, table_name: &str) -> Result<()
                     "INSERT INTO {fts_table}(rowid, search_text)
                      SELECT id, {search_column}
                      FROM {source_table}
-                     WHERE status = 'ACTIVE'"
+                     WHERE {status_column} = 'ACTIVE'"
                 ),
                 [],
             )
@@ -373,7 +395,14 @@ fn dynamic_columns_sql(columns: &BTreeSet<String>) -> String {
         .map(|column| {
             let column_type = if matches!(
                 column.as_str(),
-                "ordinal" | "token_count" | "created_at" | "updated_at"
+                "ordinal"
+                    | "token_count"
+                    | "created_at"
+                    | "updated_at"
+                    | "level"
+                    | "summary_token_count"
+                    | "summary_embedding_dimension"
+                    | "covered_text_unit_count"
             ) {
                 "INTEGER NOT NULL DEFAULT 0"
             } else if column == "text" {

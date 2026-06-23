@@ -470,6 +470,37 @@ async fn corpus_management_fulltext_graph_binding_satisfies_graph_closure() {
 }
 
 #[tokio::test]
+async fn corpus_management_tree_graph_layout_is_valid_for_tree_segment() {
+    let database_url = temp_database_path("rag-management-tree-graph-layout")
+        .to_string_lossy()
+        .to_string();
+    let router = app_with_database(&database_url);
+
+    let verify = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/corpora/verify",
+        Some(team_playbook_tree_graph_request()),
+    )
+    .await;
+    assert_eq!(verify.status(), StatusCode::OK);
+    let verify_body = response_json(verify).await;
+
+    assert_eq!(verify_body["data"]["valid"], json!(true));
+    assert_eq!(
+        target_by_id(
+            &verify_body["data"]["runtimeProjection"]["storageBinding"],
+            "playbook-tree-graph"
+        )["layout"],
+        json!("GRAPH_TREE")
+    );
+    assert_eq!(
+        verify_body["data"]["runtimeProjection"]["storageBinding"]["bindings"]["tree"],
+        json!("playbook-tree-graph")
+    );
+}
+
+#[tokio::test]
 async fn corpus_management_saves_segmented_graph_targets_for_runtime() {
     let database_url = temp_database_path("rag-management-segmented-graph-runtime")
         .to_string_lossy()
@@ -1087,6 +1118,138 @@ async fn profile_management_saved_ingest_profile_is_loaded_by_ingest_api() {
     );
 }
 
+#[tokio::test]
+async fn ui_driven_tree_corpus_profiles_ingest_and_search_api_flow() {
+    let database_url = temp_database_path("rag-ui-tree-e2e")
+        .to_string_lossy()
+        .to_string();
+    let router = app_with_database(&database_url);
+
+    let corpus = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/corpora",
+        Some(ui_tree_corpus_request()),
+    )
+    .await;
+    assert_eq!(corpus.status(), StatusCode::CREATED);
+    let corpus_body = response_json(corpus).await;
+    assert_eq!(
+        corpus_body["data"]["runtimeProjection"]["storageBinding"]["bindings"]["tree"],
+        json!("ui-tree-store")
+    );
+
+    let ingest_profile = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/profiles",
+        Some(ui_tree_ingest_profile_request("ui-tree-ingest-v1")),
+    )
+    .await;
+    assert_eq!(ingest_profile.status(), StatusCode::CREATED);
+    let ingest_profile_body = response_json(ingest_profile).await;
+    assert!(
+        ingest_profile_body["data"]["pipeline"]["nodes"]
+            .as_array()
+            .is_some_and(|nodes| nodes.iter().any(|node| {
+                node["stageType"] == json!("TREE_VECTOR_INDEX")
+                    && node["strategyId"] == json!("RAG_TREE_VECTOR_INDEX")
+            }))
+    );
+
+    let retrieval_profile = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/profiles",
+        Some(ui_tree_retrieval_profile_request("ui-tree-search-v1")),
+    )
+    .await;
+    let retrieval_profile_status = retrieval_profile.status();
+    let retrieval_profile_body = response_json(retrieval_profile).await;
+    assert_eq!(
+        retrieval_profile_status,
+        StatusCode::CREATED,
+        "{retrieval_profile_body}"
+    );
+    assert!(
+        retrieval_profile_body["data"]["routes"]
+            .as_array()
+            .is_some_and(|routes| routes.iter().any(|route| {
+                route["routeType"] == json!("TREE_VECTOR")
+                    && route["strategyId"] == json!("TREE_VECTOR_V1")
+            }))
+    );
+
+    let ingest = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/ingest",
+        Some(json!({
+            "corpusId": "ui-tree-memory",
+            "ingestProfileId": "ui-tree-ingest-v1",
+            "accessContext": {
+                "userCode": "USR-AUTH-0001",
+                "agentCode": "AGENT_CODEX",
+                "workspaceCode": "TRON_CORE"
+            },
+            "targetScope": {
+                "scopeType": "SPACE",
+                "scopeCode": "TRON_CORE"
+            },
+            "payload": {
+                "source": {
+                    "code": "ui-tree-source",
+                    "version": "v1",
+                    "type": "MEMORY_CARD"
+                },
+                "title": "UI Tree Runtime",
+                "text": "UI tree summaries should make retrieval find this source from a summary node."
+            }
+        })),
+    )
+    .await;
+    let ingest_status = ingest.status();
+    let ingest_body = response_json(ingest).await;
+    assert_eq!(ingest_status, StatusCode::OK, "{ingest_body}");
+    assert_eq!(ingest_body["data"]["profileId"], json!("ui-tree-ingest-v1"));
+
+    let search = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/search",
+        Some(json!({
+            "profileId": "ui-tree-search-v1",
+            "query": "tree summaries retrieval",
+            "accessContext": {
+                "userCode": "USR-AUTH-0001",
+                "agentCode": "AGENT_CODEX",
+                "workspaceCode": "TRON_CORE"
+            },
+            "filters": {},
+            "limit": 3,
+            "tokenBudget": 100,
+            "context": { "strategy": "RESULT_LIST" }
+        })),
+    )
+    .await;
+    let search_status = search.status();
+    let search_body = response_json(search).await;
+    assert_eq!(search_status, StatusCode::OK, "{search_body}");
+    assert_eq!(search_body["data"]["profileId"], json!("ui-tree-search-v1"));
+    assert_eq!(
+        search_body["data"]["hits"][0]["fields"]["matchedBy"],
+        json!("TREE_FULLTEXT_V1")
+    );
+
+    let connection = Connection::open(&database_url).expect("database should open");
+    let tree_rows: i64 = connection
+        .query_row("SELECT COUNT(*) FROM rag_ui_tree_nodes", [], |row| {
+            row.get(0)
+        })
+        .expect("tree rows should be queryable");
+    assert!(tree_rows >= 1);
+}
+
 fn app_with_database(database_url: &str) -> axum::Router {
     app_with_config(AppConfig {
         database_url: database_url.into(),
@@ -1256,6 +1419,24 @@ fn team_playbook_fulltext_graph_request() -> Value {
         "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
     });
     payload["storageBinding"]["bindings"]["fulltext"] = json!("playbook-fulltext-graph");
+    payload
+}
+
+fn team_playbook_tree_graph_request() -> Value {
+    let mut payload = team_playbook_sqlite_with_fulltext_request();
+    payload["capabilities"]["graph"] = json!(true);
+    payload["storageBinding"]["targets"]
+        .as_array_mut()
+        .expect("targets should be an array")
+        .push(json!({
+            "id": "playbook-tree-graph",
+            "backend": "GRAPH",
+            "layout": "GRAPH_TREE",
+            "namespace": "rag_team_playbook_tree",
+            "nodeLabel": "TeamPlaybookTreeNode",
+            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+        }));
+    payload["storageBinding"]["bindings"]["tree"] = json!("playbook-tree-graph");
     payload
 }
 
@@ -1590,6 +1771,211 @@ fn ingest_profile_pipeline_request(profile_id: &str) -> Value {
             ]
         },
         "embeddingVersion": "v1",
+        "degradePolicy": "SKIP_VECTOR_ON_UNAVAILABLE"
+    })
+}
+
+fn ui_tree_corpus_request() -> Value {
+    json!({
+        "corpusId": "ui-tree-memory",
+        "displayName": "UI Tree Memory",
+        "description": "UI-created corpus with summary tree storage.",
+        "status": "enabled",
+        "capabilities": {
+            "fulltext": true,
+            "vector": true,
+            "graph": false,
+            "reserved": false
+        },
+        "filterSchema": { "fields": {} },
+        "fieldMapping": {
+            "source": {
+                "sourceCode": "source_code",
+                "sourceVersion": "source_version",
+                "sourceType": "source_type",
+                "scopeType": "scope_type",
+                "scopeCode": "scope_code",
+                "status": "status",
+                "title": "title",
+                "metadata": "metadata"
+            },
+            "textUnit": {
+                "sourceCode": "source_code",
+                "sourceVersion": "source_version",
+                "scopeType": "scope_type",
+                "scopeCode": "scope_code",
+                "text": "text"
+            }
+        },
+        "storageBinding": {
+            "mode": "TARGETED",
+            "targets": [
+                {
+                    "id": "ui-source-store",
+                    "backend": "SQLITE",
+                    "layout": "TABLE",
+                    "table": "rag_ui_sources"
+                },
+                {
+                    "id": "ui-text-store",
+                    "backend": "SQLITE",
+                    "layout": "TABLE",
+                    "table": "rag_ui_text_units"
+                },
+                {
+                    "id": "ui-vector-store",
+                    "backend": "SQLITE",
+                    "layout": "TABLE",
+                    "table": "rag_ui_vectors"
+                },
+                {
+                    "id": "ui-tree-store",
+                    "backend": "SQLITE",
+                    "layout": "TABLE",
+                    "table": "rag_ui_tree_nodes"
+                },
+                {
+                    "id": "ui-diagnostics-store",
+                    "backend": "SQLITE",
+                    "layout": "TABLE",
+                    "table": "rag_diagnostics"
+                }
+            ],
+            "bindings": {
+                "source": "ui-source-store",
+                "textUnit": "ui-text-store",
+                "vector": "ui-vector-store",
+                "tree": "ui-tree-store",
+                "diagnostics": "ui-diagnostics-store"
+            }
+        }
+    })
+}
+
+fn ui_tree_ingest_profile_request(profile_id: &str) -> Value {
+    let mut payload = ingest_profile_pipeline_request(profile_id);
+    payload["primaryCorpusId"] = json!("ui-tree-memory");
+    payload["corpusIds"] = json!(["ui-tree-memory"]);
+    payload["sourceInputPolicy"] = json!({
+        "supportedSourceTypes": ["MEMORY_CARD"]
+    });
+    let nodes = payload["pipeline"]["nodes"]
+        .as_array_mut()
+        .expect("pipeline nodes should be an array");
+    nodes.insert(
+        3,
+        json!({
+            "nodeId": "extract-tree",
+            "stageType": "EXTRACT_TREE",
+            "strategyId": "RAG_MARKDOWN_TREE_EXTRACT_V1",
+            "enabled": true,
+            "joinPolicy": "ALL_SUCCESS",
+            "failurePolicy": "FAIL_PIPELINE",
+            "config": {}
+        }),
+    );
+    nodes.insert(
+        6,
+        json!({
+            "nodeId": "summarize-tree",
+            "stageType": "SUMMARIZE_TREE",
+            "strategyId": "RAG_TREE_EXTRACTIVE_SUMMARY_V1",
+            "enabled": true,
+            "joinPolicy": "ALL_SUCCESS",
+            "failurePolicy": "FAIL_PIPELINE",
+            "config": {}
+        }),
+    );
+    nodes.insert(
+        7,
+        json!({
+            "nodeId": "tree-fulltext",
+            "stageType": "TREE_FULLTEXT_INDEX",
+            "strategyId": "RAG_TREE_FULLTEXT_INDEX",
+            "enabled": true,
+            "joinPolicy": "ALL_SUCCESS",
+            "failurePolicy": "CONTINUE_WITH_WARNING",
+            "config": {}
+        }),
+    );
+    nodes.insert(
+        8,
+        json!({
+            "nodeId": "tree-vector",
+            "stageType": "TREE_VECTOR_INDEX",
+            "strategyId": "RAG_TREE_VECTOR_INDEX",
+            "enabled": true,
+            "joinPolicy": "ALL_SUCCESS",
+            "failurePolicy": "CONTINUE_WITH_WARNING",
+            "config": {}
+        }),
+    );
+    nodes.insert(
+        9,
+        json!({
+            "nodeId": "persist-tree",
+            "stageType": "PERSIST_TREE",
+            "strategyId": "RAG_PERSIST_TREE_GRAPH_V1",
+            "enabled": true,
+            "joinPolicy": "ALL_SUCCESS",
+            "failurePolicy": "FAIL_PIPELINE",
+            "config": {}
+        }),
+    );
+    payload["pipeline"]["edges"] = json!([
+        { "from": "validate", "to": "prepare" },
+        { "from": "prepare", "to": "split" },
+        { "from": "split", "to": "extract-tree" },
+        { "from": "extract-tree", "to": "summarize-tree" },
+        { "from": "summarize-tree", "to": "tree-fulltext" },
+        { "from": "tree-fulltext", "to": "tree-vector" },
+        { "from": "tree-vector", "to": "persist-tree" },
+        { "from": "split", "to": "fulltext" },
+        { "from": "split", "to": "vector" },
+        { "from": "fulltext", "to": "persist" },
+        { "from": "vector", "to": "persist" },
+        { "from": "persist-tree", "to": "persist" }
+    ]);
+    payload
+}
+
+fn ui_tree_retrieval_profile_request(profile_id: &str) -> Value {
+    json!({
+        "profileId": profile_id,
+        "profileType": "RETRIEVAL",
+        "status": "enabled",
+        "description": "UI tree retrieval profile",
+        "primaryCorpusId": "ui-tree-memory",
+        "corpusIds": ["ui-tree-memory"],
+        "requiredSourceVersion": "v1",
+        "routes": [
+            {
+                "routeId": "ui-tree-fulltext",
+                "corpusId": "ui-tree-memory",
+                "enabled": true,
+                "routeType": "TREE_FULLTEXT",
+                "strategyId": "TREE_FULLTEXT_V1",
+                "topK": 5,
+                "weight": 1.0
+            },
+            {
+                "routeId": "ui-tree-vector",
+                "corpusId": "ui-tree-memory",
+                "enabled": true,
+                "routeType": "TREE_VECTOR",
+                "strategyId": "TREE_VECTOR_V1",
+                "topK": 5,
+                "weight": 0.8
+            }
+        ],
+        "filters": [],
+        "fusionPolicy": "RRF",
+        "dedupPolicy": "TEXT_UNIT",
+        "topicPolicy": "NONE",
+        "graphExpansionPolicy": "",
+        "contextStrategies": ["RESULT_LIST"],
+        "rerankEnabled": false,
+        "rerankModelCode": "",
         "degradePolicy": "SKIP_VECTOR_ON_UNAVAILABLE"
     })
 }

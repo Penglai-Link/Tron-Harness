@@ -13,15 +13,18 @@ pub(crate) struct SqliteRagCorpusPlan {
     pub text_unit_sqlite: bool,
     pub fulltext_sqlite: bool,
     pub vector_sqlite: bool,
+    pub tree_sqlite: bool,
     pub source_table: Option<String>,
     pub text_unit_table: String,
     pub fulltext_table: Option<String>,
     pub vector_table: Option<String>,
+    pub tree_table: Option<String>,
     pub diagnostics_table: Option<String>,
     pub source_columns: BTreeSet<String>,
     pub text_unit_columns: BTreeSet<String>,
     pub fulltext_columns: BTreeSet<String>,
     pub vector_columns: BTreeSet<String>,
+    pub tree_columns: BTreeSet<String>,
     pub field_mapping: BTreeMap<String, String>,
     pub source_field_mapping: BTreeMap<String, String>,
     pub text_unit_field_mapping: BTreeMap<String, String>,
@@ -39,9 +42,11 @@ pub(crate) struct SqliteRagCorpusPlan {
     pub text_unit_updated_at_column: Option<String>,
     pub fulltext_updated_at_column: Option<String>,
     pub vector_updated_at_column: Option<String>,
+    pub tree_updated_at_column: Option<String>,
     pub text_unit_unique_key: Vec<String>,
     pub fulltext_unique_key: Vec<String>,
     pub vector_unique_key: Vec<String>,
+    pub tree_unique_key: Vec<String>,
 }
 
 impl SqliteRagCorpusPlan {
@@ -69,6 +74,10 @@ impl SqliteRagCorpusPlan {
         self.text_unit_sqlite
     }
 
+    pub(crate) fn has_sqlite_tree(&self) -> bool {
+        self.tree_sqlite && self.tree_table.is_some()
+    }
+
     pub(crate) fn stores_fulltext_carrier_rows(&self) -> bool {
         self.fulltext_sqlite && (!self.text_unit_sqlite || self.fulltext_table.is_some())
     }
@@ -93,6 +102,12 @@ impl SqliteRagCorpusPlan {
         self.fulltext_table
             .as_deref()
             .unwrap_or(self.text_unit_table.as_str())
+    }
+
+    pub(crate) fn tree_storage_table(&self) -> Result<&str, RagError> {
+        self.tree_table
+            .as_deref()
+            .ok_or(RagError::StorageBindingInvalid)
     }
 }
 
@@ -153,6 +168,10 @@ pub(crate) fn compile_sql_corpus_plan(
     let configured_vector_table = binding
         .sqlite_table_for_segment("vector")
         .map(ToOwned::to_owned);
+    let tree_sqlite = binding.sqlite_table_for_segment("tree").is_some();
+    let configured_tree_table = binding
+        .sqlite_table_for_segment("tree")
+        .map(ToOwned::to_owned);
     let text_unit_sqlite = configured_text_unit_table.is_some();
     let text_unit_table = configured_text_unit_table
         .clone()
@@ -173,6 +192,9 @@ pub(crate) fn compile_sql_corpus_plan(
     if let Some(table) = &vector_table {
         validate_identifier(table)?;
     }
+    if let Some(table) = &configured_tree_table {
+        validate_identifier(table)?;
+    }
     if let Some(table) = binding.diagnostics_table() {
         validate_identifier(table)?;
     }
@@ -189,6 +211,10 @@ pub(crate) fn compile_sql_corpus_plan(
     let vector_columns = match &vector_table {
         Some(table) => repository.table_columns(table)?,
         None => text_unit_columns.clone(),
+    };
+    let tree_columns = match &configured_tree_table {
+        Some(table) => repository.table_columns(table)?,
+        None => BTreeSet::new(),
     };
     let source_columns = if source_table.is_some() {
         physical_source_columns
@@ -225,6 +251,29 @@ pub(crate) fn compile_sql_corpus_plan(
             ],
         )?;
     }
+    if configured_tree_table.is_some() {
+        ensure_required_columns(
+            &tree_columns,
+            &[
+                "tree_node_code",
+                "parent_node_code",
+                "source_code",
+                "source_version",
+                "scope_type",
+                "scope_code",
+                "path_key",
+                "level",
+                "ordinal",
+                "title",
+                "summary_text",
+                "summary_fulltext_status",
+                "summary_embedding_status",
+                "covered_text_unit_codes",
+                "status",
+                "updated_at",
+            ],
+        )?;
+    }
     let filter_columns = compile_filter_columns(
         corpus,
         source_table.is_some(),
@@ -248,11 +297,16 @@ pub(crate) fn compile_sql_corpus_plan(
             .unwrap_or(text_unit_table.as_str()),
         &fulltext_columns,
     )?;
-    let vector_unique_key = vector_unique_key(
+    let vector_unique_columns = vector_unique_key(
         repository,
         vector_table.as_deref().unwrap_or(text_unit_table.as_str()),
         &vector_columns,
     )?;
+    let tree_unique_key = if let Some(table) = configured_tree_table.as_deref() {
+        tree_unique_key(repository, table, &tree_columns)?
+    } else {
+        Vec::new()
+    };
 
     Ok(SqliteRagCorpusPlan {
         corpus_id: corpus.corpus_id.clone(),
@@ -260,10 +314,12 @@ pub(crate) fn compile_sql_corpus_plan(
         text_unit_sqlite,
         fulltext_sqlite,
         vector_sqlite,
+        tree_sqlite,
         source_table,
         text_unit_table,
         fulltext_table,
         vector_table,
+        tree_table: configured_tree_table,
         diagnostics_table: binding.diagnostics_table().map(ToOwned::to_owned),
         source_status_column: source_status_column.ok_or(RagError::StorageBindingInvalid)?,
         text_unit_status_column: first_existing(
@@ -302,9 +358,11 @@ pub(crate) fn compile_sql_corpus_plan(
         ),
         fulltext_updated_at_column: first_existing(&fulltext_columns, &["updated_at"]),
         vector_updated_at_column: first_existing(&vector_columns, &["updated_at"]),
+        tree_updated_at_column: first_existing(&tree_columns, &["updated_at"]),
         text_unit_unique_key,
         fulltext_unique_key,
-        vector_unique_key,
+        vector_unique_key: vector_unique_columns,
+        tree_unique_key,
         field_mapping: corpus.field_mapping.clone(),
         source_field_mapping: corpus.source_field_mapping.clone(),
         text_unit_field_mapping: corpus.text_unit_field_mapping.clone(),
@@ -312,6 +370,7 @@ pub(crate) fn compile_sql_corpus_plan(
         text_unit_columns,
         fulltext_columns,
         vector_columns,
+        tree_columns,
         filter_columns,
         return_field_columns,
     })
@@ -509,4 +568,3 @@ fn ensure_required_columns(columns: &BTreeSet<String>, required: &[&str]) -> Res
         Err(RagError::StorageBindingInvalid)
     }
 }
-

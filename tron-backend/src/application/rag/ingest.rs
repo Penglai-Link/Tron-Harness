@@ -52,6 +52,7 @@ pub struct RagPersistIngestCommand {
     pub related_graph: Option<Value>,
     pub graph_write_policy: Value,
     pub text_units: Vec<RagTextUnitWrite>,
+    pub tree_nodes: Vec<RagTreeNodeWrite>,
     pub warnings: Vec<RagIngestWarning>,
     pub workspace_code: String,
     pub user_code: String,
@@ -77,6 +78,34 @@ pub struct RagTextUnitWrite {
     pub embedding: Option<Vec<u8>>,
     pub embedding_status: String,
     pub metadata: Value,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RagTreeNodeWrite {
+    pub tree_node_code: String,
+    pub parent_node_code: String,
+    pub source_code: String,
+    pub source_version: String,
+    pub scope_type: String,
+    pub scope_code: String,
+    pub path_key: String,
+    pub level: i64,
+    pub ordinal: i64,
+    pub title: String,
+    pub summary_text: String,
+    pub summary_token_count: i64,
+    pub summary_content_hash: String,
+    pub summary_fulltext_status: String,
+    pub summary_embedding_status: String,
+    pub summary_embedding_model_code: Option<String>,
+    pub summary_embedding_version: Option<String>,
+    pub summary_embedding_text_hash: Option<String>,
+    pub summary_embedding_dimension: Option<i64>,
+    pub summary_embedding: Option<Vec<u8>>,
+    pub covered_text_unit_codes: Vec<String>,
+    pub covered_text_unit_count: i64,
+    pub metadata: Value,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

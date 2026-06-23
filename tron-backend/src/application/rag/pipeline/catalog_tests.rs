@@ -101,8 +101,16 @@ mod tests {
             .iter()
             .find(|stage| stage.stage_type == "PERSIST_TREE")
             .expect("ingest catalog should expose PERSIST_TREE");
-        assert_eq!(persist_tree.input_artifact_keys, vec!["graph.related"]);
+        assert_eq!(persist_tree.input_artifact_keys, vec!["index.treeVector"]);
         assert_eq!(persist_tree.output_artifact_keys, vec!["tree.persisted"]);
+
+        let summarize_tree = ingest
+            .stages
+            .iter()
+            .find(|stage| stage.stage_type == "SUMMARIZE_TREE")
+            .expect("ingest catalog should expose SUMMARIZE_TREE");
+        assert_eq!(summarize_tree.input_artifact_keys, vec!["tree.extracted"]);
+        assert_eq!(summarize_tree.output_artifact_keys, vec!["tree.summarized"]);
 
         let retrieval = pipeline_catalog(RagProfileType::Retrieval);
         let question_generalization = retrieval
@@ -138,7 +146,7 @@ mod tests {
                 .find(|node| node.stage_type == "PERSIST_TREE")
                 .expect("persist tree node should compile")
                 .input_artifact_keys,
-            vec!["graph.related"]
+            vec!["index.treeVector"]
         );
 
         let compiled_retrieval =
@@ -467,6 +475,42 @@ mod tests {
         pipeline.nodes.insert(
             6,
             RagPipelineNodeInput {
+                node_id: "summarize-tree".into(),
+                stage_type: "SUMMARIZE_TREE".into(),
+                strategy_id: "RAG_TREE_EXTRACTIVE_SUMMARY_V1".into(),
+                enabled: true,
+                join_policy: None,
+                failure_policy: None,
+                config: Some(json!({})),
+            },
+        );
+        pipeline.nodes.insert(
+            7,
+            RagPipelineNodeInput {
+                node_id: "tree-fulltext".into(),
+                stage_type: "TREE_FULLTEXT_INDEX".into(),
+                strategy_id: "RAG_TREE_FULLTEXT_INDEX".into(),
+                enabled: true,
+                join_policy: None,
+                failure_policy: None,
+                config: Some(json!({})),
+            },
+        );
+        pipeline.nodes.insert(
+            8,
+            RagPipelineNodeInput {
+                node_id: "tree-vector".into(),
+                stage_type: "TREE_VECTOR_INDEX".into(),
+                strategy_id: "RAG_TREE_VECTOR_INDEX".into(),
+                enabled: true,
+                join_policy: None,
+                failure_policy: None,
+                config: Some(json!({})),
+            },
+        );
+        pipeline.nodes.insert(
+            9,
+            RagPipelineNodeInput {
                 node_id: "persist-tree".into(),
                 stage_type: "PERSIST_TREE".into(),
                 strategy_id: "RAG_PERSIST_TREE_GRAPH_V1".into(),
@@ -483,6 +527,18 @@ mod tests {
             },
             RagPipelineEdgeInput {
                 from: "extract-tree".into(),
+                to: "summarize-tree".into(),
+            },
+            RagPipelineEdgeInput {
+                from: "summarize-tree".into(),
+                to: "tree-fulltext".into(),
+            },
+            RagPipelineEdgeInput {
+                from: "tree-fulltext".into(),
+                to: "tree-vector".into(),
+            },
+            RagPipelineEdgeInput {
+                from: "tree-vector".into(),
                 to: "persist-tree".into(),
             },
             RagPipelineEdgeInput {
@@ -493,87 +549,5 @@ mod tests {
         pipeline
     }
 
-    fn retrieval_phase3_pipeline() -> RagPipelineInput {
-        RagPipelineInput {
-            mode: "DAG".into(),
-            nodes: vec![
-                RagPipelineNodeInput {
-                    node_id: "generalize-question".into(),
-                    stage_type: "QUESTION_GENERALIZATION".into(),
-                    strategy_id: "RAG_QUESTION_GENERALIZATION_SIMPLE_V1".into(),
-                    enabled: true,
-                    join_policy: None,
-                    failure_policy: None,
-                    config: Some(json!({})),
-                },
-                RagPipelineNodeInput {
-                    node_id: "rewrite-query".into(),
-                    stage_type: "QUERY_REWRITE".into(),
-                    strategy_id: "RAG_QUERY_REWRITE_TEMPLATE_V1".into(),
-                    enabled: true,
-                    join_policy: None,
-                    failure_policy: None,
-                    config: Some(json!({})),
-                },
-                RagPipelineNodeInput {
-                    node_id: "fulltext-route".into(),
-                    stage_type: "ROUTE_SEARCH".into(),
-                    strategy_id: "FULLTEXT_SQLITE_FTS5_SIMPLE_V1".into(),
-                    enabled: true,
-                    join_policy: None,
-                    failure_policy: None,
-                    config: Some(json!({})),
-                },
-                RagPipelineNodeInput {
-                    node_id: "fuse-results".into(),
-                    stage_type: "FUSE_RESULTS".into(),
-                    strategy_id: "SUM_SCORE".into(),
-                    enabled: true,
-                    join_policy: None,
-                    failure_policy: None,
-                    config: Some(json!({})),
-                },
-                RagPipelineNodeInput {
-                    node_id: "dedup-results".into(),
-                    stage_type: "DEDUP_RESULTS".into(),
-                    strategy_id: "TEXT_UNIT".into(),
-                    enabled: true,
-                    join_policy: None,
-                    failure_policy: None,
-                    config: Some(json!({})),
-                },
-                RagPipelineNodeInput {
-                    node_id: "build-context".into(),
-                    stage_type: "BUILD_CONTEXT".into(),
-                    strategy_id: "RESULT_LIST".into(),
-                    enabled: true,
-                    join_policy: None,
-                    failure_policy: None,
-                    config: Some(json!({})),
-                },
-            ],
-            edges: vec![
-                RagPipelineEdgeInput {
-                    from: "generalize-question".into(),
-                    to: "rewrite-query".into(),
-                },
-                RagPipelineEdgeInput {
-                    from: "rewrite-query".into(),
-                    to: "fulltext-route".into(),
-                },
-                RagPipelineEdgeInput {
-                    from: "fulltext-route".into(),
-                    to: "fuse-results".into(),
-                },
-                RagPipelineEdgeInput {
-                    from: "fuse-results".into(),
-                    to: "dedup-results".into(),
-                },
-                RagPipelineEdgeInput {
-                    from: "dedup-results".into(),
-                    to: "build-context".into(),
-                },
-            ],
-        }
-    }
+    include!("catalog_test_fixtures.rs");
 }

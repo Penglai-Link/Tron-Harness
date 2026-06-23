@@ -270,13 +270,19 @@ fn validate_storage_binding(
                 }
             }
             RagStorageBackend::Graph => {
-                if target.layout != "GRAPH_SINGLE_NODE"
+                let tree_target = binding
+                    .bindings
+                    .iter()
+                    .any(|(segment, target_id)| segment == "tree" && target_id == &target.id);
+                let layout_supported = target.layout == "GRAPH_SINGLE_NODE"
+                    || (tree_target && target.layout == "GRAPH_TREE");
+                if !layout_supported
                     || target.namespace.as_deref().is_none_or(str::is_empty)
                     || target.node_label.as_deref().is_none_or(str::is_empty)
                 {
                     errors.push(validation_issue(
                         "RAG_STORAGE_TOPOLOGY_UNSUPPORTED",
-                        "GRAPH targets must provide GRAPH_SINGLE_NODE layout, namespace, and nodeLabel.",
+                        "GRAPH targets must provide GRAPH_SINGLE_NODE layout, namespace, and nodeLabel; tree targets may use GRAPH_TREE.",
                         Some("storageBinding"),
                     ));
                 }
@@ -448,6 +454,12 @@ fn retrieval_strategy_ids_for_corpus(
             RagStorageBackend::Sqlite => Some(vec!["VECTOR_SQLITE_VEC0_COSINE_V1".into()]),
             RagStorageBackend::Graph => Some(vec!["VECTOR_GRAPH_SINGLE_NODE_V1".into()]),
         },
+        "TREE_FULLTEXT" if capabilities.fulltext && has_sqlite_tree_storage(corpus) => {
+            Some(vec!["TREE_FULLTEXT_V1".into()])
+        }
+        "TREE_VECTOR" if capabilities.vector && has_sqlite_tree_storage(corpus) => {
+            Some(vec!["TREE_VECTOR_V1".into()])
+        }
         "STRUCTURED_FILTER" if has_sqlite_text_unit_storage(corpus) => {
             Some(vec!["STRUCTURED_FILTER_SQLITE_V1".into()])
         }
@@ -484,6 +496,13 @@ fn has_sqlite_text_unit_storage(corpus: &RagCorpusRecord) -> bool {
     )
 }
 
+fn has_sqlite_tree_storage(corpus: &RagCorpusRecord) -> bool {
+    matches!(
+        segment_target_backend(&corpus.storage_binding, "tree"),
+        Some(RagStorageBackend::Sqlite)
+    )
+}
+
 fn legacy_graph_strategy_ids_for_corpus(corpus: &RagCorpusRecord) -> Option<Vec<String>> {
     let capabilities = capabilities_from_value(&corpus.capabilities);
     let mut strategy_ids = Vec::new();
@@ -516,4 +535,3 @@ fn route_strategy_matches_corpus_storage(
             .any(|strategy_id| strategy_id == &route.strategy_id)
     })
 }
-

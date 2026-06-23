@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     hash::{Hash, Hasher},
 };
 
@@ -19,6 +19,7 @@ pub(crate) struct PreparedIngestPayload {
     pub(crate) metadata: Value,
     pub(crate) domain_fields: BTreeMap<String, Value>,
     pub(crate) units: Vec<RagTextUnitDraft>,
+    pub(crate) tree_hints: Vec<RagTreeHintDraft>,
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +30,17 @@ pub(crate) struct RagTextUnitDraft {
     pub(crate) heading_path: String,
     pub(crate) ordinal: usize,
     pub(crate) content_hash: String,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RagTreeHintDraft {
+    pub(crate) tree_node_code: String,
+    pub(crate) parent_node_code: String,
+    pub(crate) path_key: String,
+    pub(crate) level: i64,
+    pub(crate) ordinal: i64,
+    pub(crate) title: String,
+    pub(crate) covered_text_unit_codes: Vec<String>,
 }
 
 impl RagTextUnitDraft {
@@ -110,7 +122,7 @@ fn prepare_text_contract_payload(
     let title = payload_string(&request.payload, "title");
     let domain_fields = contract_domain_fields(&request.payload)?;
     let content_hash = stable_hash(&text);
-    let units = split_text_units(
+    let split = split_text_payload(
         &request.source.code,
         &request.source.version,
         title.as_deref(),
@@ -123,7 +135,8 @@ fn prepare_text_contract_payload(
         body_hash: None,
         metadata: contract_metadata(&request.payload)?,
         domain_fields,
-        units,
+        units: split.units,
+        tree_hints: split.tree_hints,
     })
 }
 
@@ -184,7 +197,7 @@ fn prepare_document_ref_contract_payload(
         }
     }
     let title = payload_string(&request.payload, "title");
-    let units = split_text_units(
+    let split = split_text_payload(
         &request.source.code,
         &request.source.version,
         title.as_deref(),
@@ -197,7 +210,8 @@ fn prepare_document_ref_contract_payload(
         body_hash: Some(stable_hash(&text)),
         metadata,
         domain_fields,
-        units,
+        units: split.units,
+        tree_hints: split.tree_hints,
     })
 }
 
@@ -270,28 +284,30 @@ enum SplitTextStrategy {
     MarkdownHeading,
 }
 
-fn split_text_units(
+struct SplitTextPayload {
+    units: Vec<RagTextUnitDraft>,
+    tree_hints: Vec<RagTreeHintDraft>,
+}
+
+fn split_text_payload(
     source_code: &str,
     source_version: &str,
     title: Option<&str>,
     text: &str,
     compiled: &CompiledRagIngestProfile,
-) -> Result<Vec<RagTextUnitDraft>, RagError> {
-    match split_text_strategy(compiled)? {
-        SplitTextStrategy::Plain => Ok(vec![plain_text_unit(
-            source_code,
-            source_version,
-            title,
-            text,
-        )]),
+) -> Result<SplitTextPayload, RagError> {
+    let units = match split_text_strategy(compiled)? {
+        SplitTextStrategy::Plain => vec![plain_text_unit(source_code, source_version, title, text)],
         SplitTextStrategy::MarkdownHeading => markdown_heading_text_units(
             source_code,
             source_version,
             text,
             compiled.markdown_heading_depth,
             compiled.include_heading_in_index_text,
-        ),
-    }
+        )?,
+    };
+    let tree_hints = tree_hints_from_units(source_code, source_version, title, &units);
+    Ok(SplitTextPayload { units, tree_hints })
 }
 
 fn split_text_strategy(compiled: &CompiledRagIngestProfile) -> Result<SplitTextStrategy, RagError> {
@@ -431,6 +447,89 @@ fn text_unit_code(source_code: &str, source_version: &str, ordinal: usize) -> St
     format!("{source_code}:{source_version}:{ordinal}")
 }
 
+fn tree_hints_from_units(
+    source_code: &str,
+    source_version: &str,
+    title: Option<&str>,
+    units: &[RagTextUnitDraft],
+) -> Vec<RagTreeHintDraft> {
+    let all_codes = units
+        .iter()
+        .map(|unit| unit.text_unit_code.clone())
+        .collect::<Vec<_>>();
+    let root_title = title
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(source_code)
+        .to_string();
+    let mut hints = vec![RagTreeHintDraft {
+        tree_node_code: tree_node_code(source_code, source_version, "root"),
+        parent_node_code: "0".into(),
+        path_key: "/".into(),
+        level: 0,
+        ordinal: 0,
+        title: root_title,
+        covered_text_unit_codes: all_codes,
+    }];
+    let mut seen_paths = BTreeSet::new();
+    let mut ordinal = 1_i64;
+    for unit in units {
+        let parts = split_heading_parts(&unit.heading_path);
+        for index in 0..parts.len() {
+            let path_key = parts[..=index].join("/");
+            if !seen_paths.insert(path_key.clone()) {
+                continue;
+            }
+            let covered_text_unit_codes = units
+                .iter()
+                .filter(|candidate| heading_covers(&candidate.heading_path, &parts[..=index]))
+                .map(|candidate| candidate.text_unit_code.clone())
+                .collect::<Vec<_>>();
+            let parent_node_code = if index == 0 {
+                tree_node_code(source_code, source_version, "root")
+            } else {
+                tree_node_code(source_code, source_version, &parts[..index].join("/"))
+            };
+            hints.push(RagTreeHintDraft {
+                tree_node_code: tree_node_code(source_code, source_version, &path_key),
+                parent_node_code,
+                path_key,
+                level: (index + 1) as i64,
+                ordinal,
+                title: parts[index].clone(),
+                covered_text_unit_codes,
+            });
+            ordinal += 1;
+        }
+    }
+    hints
+}
+
+fn split_heading_parts(heading_path: &str) -> Vec<String> {
+    heading_path
+        .split('>')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn heading_covers(heading_path: &str, prefix: &[String]) -> bool {
+    let parts = split_heading_parts(heading_path);
+    parts.len() >= prefix.len()
+        && parts
+            .iter()
+            .zip(prefix.iter())
+            .all(|(part, expected)| part == expected)
+}
+
+fn tree_node_code(source_code: &str, source_version: &str, path_key: &str) -> String {
+    format!(
+        "{source_code}:{source_version}:tree:{}",
+        stable_hash(path_key)
+    )
+}
+
 fn token_count(text: &str) -> i64 {
     text.split_whitespace().count() as i64
 }
@@ -442,118 +541,7 @@ fn stable_hash(value: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::application::rag::{RagIngestAccessContext, RagIngestScope, RagIngestSource};
-
-    #[test]
-    fn prepares_text_contract_payload_from_text_and_domain_fields() {
-        let request = skill_request(json!({
-            "source": {
-                "code": "skill:workspace-alpha:reviewer",
-                "version": "v1",
-                "type": "SKILL"
-            },
-            "title": "reviewer",
-            "text": "Skill: reviewer\nDescription: Reviews code changes before release.",
-            "metadata": {
-                "source": "registry"
-            },
-            "domainFields": {
-                "skillName": "reviewer",
-                "skillDescription": "Reviews code changes before release."
-            }
-        }));
-        let bundle = ArtifactBundle::from_request(&request);
-
-        let prepared = prepare_payload(&request, &skill_profile(), &bundle).unwrap();
-
-        assert_eq!(prepared.title.as_deref(), Some("reviewer"));
-        assert_eq!(
-            prepared.domain_fields.get("skillName"),
-            Some(&json!("reviewer"))
-        );
-        assert_eq!(
-            prepared.domain_fields.get("skillDescription"),
-            Some(&json!("Reviews code changes before release."))
-        );
-        assert_eq!(prepared.units.len(), 1);
-        assert_eq!(prepared.units[0].heading_path, "reviewer");
-        assert_eq!(
-            prepared.units[0].text,
-            "Skill: reviewer\nDescription: Reviews code changes before release."
-        );
-    }
-
-    #[test]
-    fn rejects_text_contract_payload_without_text() {
-        let request = skill_request(json!({
-            "source": {
-                "code": "skill:workspace-alpha:reviewer",
-                "version": "v1",
-                "type": "SKILL"
-            },
-            "title": "reviewer",
-            "domainFields": {
-                "skillName": "reviewer"
-            }
-        }));
-        let bundle = ArtifactBundle::from_request(&request);
-
-        let error = prepare_payload(&request, &skill_profile(), &bundle).unwrap_err();
-
-        assert_eq!(error, RagError::IngestRequestInvalid);
-    }
-
-    fn skill_request(payload: Value) -> RagIngestRequest {
-        RagIngestRequest {
-            corpus_id: "skill".into(),
-            ingest_profile_id: "skill-ingest-v1".into(),
-            workspace_code: "workspace-alpha".into(),
-            access_context: RagIngestAccessContext {
-                user_code: "user-alpha".into(),
-                agent_code: "agent-alpha".into(),
-                workspace_code: "workspace-alpha".into(),
-            },
-            target_scope: RagIngestScope {
-                scope_type: "SPACE".into(),
-                scope_code: "workspace-alpha".into(),
-            },
-            source: RagIngestSource {
-                code: "skill:workspace-alpha:reviewer".into(),
-                version: "v1".into(),
-                source_type: "SKILL".into(),
-            },
-            payload,
-        }
-    }
-
-    fn skill_profile() -> CompiledRagIngestProfile {
-        CompiledRagIngestProfile {
-            profile_id: "skill-ingest-v1".into(),
-            corpus_id: "skill".into(),
-            stage_order: vec![],
-            pipeline: None,
-            stage_metadata: Default::default(),
-            payload_strategy_id: "RAG_TEXT_CONTRACT_PAYLOAD_V1".into(),
-            split_strategy_id: "RAG_SPLIT_TEXT".into(),
-            supported_source_types: vec!["SKILL".into()],
-            source_resolver_strategy_id: None,
-            document_parser_strategy_id: None,
-            source_resolver_max_bytes: 1024,
-            record_resolver_info: false,
-            record_parser_info: false,
-            markdown_heading_depth: 6,
-            include_heading_in_index_text: false,
-            document_format: "MARKDOWN".into(),
-            document_formats: vec!["MARKDOWN".into()],
-            degrade_policy: "SKIP_VECTOR_WITH_WARNING".into(),
-            embedding_model_code: None,
-            embedding_version: "v1".into(),
-            graph_write_policy: serde_json::Value::Null,
-        }
-    }
-}
+include!("ingest_payload_tests.rs");
 
 fn encode_embedding(values: &[f32]) -> Vec<u8> {
     values

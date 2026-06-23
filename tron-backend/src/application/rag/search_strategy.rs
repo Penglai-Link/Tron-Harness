@@ -77,6 +77,14 @@ pub(super) fn retriever_strategy(strategy_id: &str) -> Result<RetrieverStrategy,
             kind: RetrieverKind::StructuredFilter,
             storage_retriever: "STRUCTURED_FILTER_SQLITE_V1",
         }),
+        "TREE_FULLTEXT_V1" => Ok(RetrieverStrategy {
+            kind: RetrieverKind::Fulltext,
+            storage_retriever: "TREE_FULLTEXT_V1",
+        }),
+        "TREE_VECTOR_V1" => Ok(RetrieverStrategy {
+            kind: RetrieverKind::Vector,
+            storage_retriever: "TREE_VECTOR_V1",
+        }),
         _ => Err(RagError::SearchRouteUnavailable),
     }
 }

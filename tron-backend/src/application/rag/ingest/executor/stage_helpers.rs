@@ -8,6 +8,9 @@ fn ingest_stage_registry() -> BTreeMap<&'static str, IngestStageKind> {
         ("fulltextIndex", IngestStageKind::FulltextIndex),
         ("vectorIndex", IngestStageKind::VectorIndex),
         ("extractTree", IngestStageKind::ExtractTree),
+        ("summarizeTree", IngestStageKind::SummarizeTree),
+        ("treeFulltextIndex", IngestStageKind::TreeFulltextIndex),
+        ("treeVectorIndex", IngestStageKind::TreeVectorIndex),
         ("persistTree", IngestStageKind::PersistTree),
         ("persistSource", IngestStageKind::PersistSource),
     ])
@@ -58,6 +61,85 @@ fn build_tree_graph_artifact(
         "nodes": nodes,
         "edges": edges
     })
+}
+
+fn summarize_tree_node(
+    request: &RagIngestRequest,
+    prepared: &PreparedIngestPayload,
+    hint: &crate::application::rag::ingest_payload::RagTreeHintDraft,
+) -> RagTreeNodeWrite {
+    let covered_text = prepared
+        .units
+        .iter()
+        .filter(|unit| hint.covered_text_unit_codes.contains(&unit.text_unit_code))
+        .map(|unit| unit.text.trim())
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let summary_text = extractive_summary(&hint.title, &covered_text);
+    RagTreeNodeWrite {
+        tree_node_code: hint.tree_node_code.clone(),
+        parent_node_code: hint.parent_node_code.clone(),
+        source_code: request.source.code.clone(),
+        source_version: request.source.version.clone(),
+        scope_type: request.target_scope.scope_type.clone(),
+        scope_code: request.target_scope.scope_code.clone(),
+        path_key: hint.path_key.clone(),
+        level: hint.level,
+        ordinal: hint.ordinal,
+        title: hint.title.clone(),
+        summary_token_count: token_count(&summary_text),
+        summary_content_hash: stable_hash(&summary_text),
+        summary_text,
+        summary_fulltext_status: "PENDING".into(),
+        summary_embedding_status: "PENDING".into(),
+        summary_embedding_model_code: None,
+        summary_embedding_version: None,
+        summary_embedding_text_hash: None,
+        summary_embedding_dimension: None,
+        summary_embedding: None,
+        covered_text_unit_count: hint.covered_text_unit_codes.len() as i64,
+        covered_text_unit_codes: hint.covered_text_unit_codes.clone(),
+        metadata: json!({ "summaryStrategy": "EXTRACTIVE_DETERMINISTIC_V1" }),
+        status: "ACTIVE".into(),
+    }
+}
+
+fn extractive_summary(title: &str, text: &str) -> String {
+    let body = text
+        .split(['\n', '.'])
+        .map(str::trim)
+        .find(|part| !part.is_empty())
+        .unwrap_or(text.trim());
+    let mut summary = title.trim().to_string();
+    if !body.is_empty() {
+        if !summary.is_empty() {
+            summary.push_str(": ");
+        }
+        summary.push_str(body);
+    }
+    if summary.chars().count() > 512 {
+        summary.chars().take(512).collect()
+    } else {
+        summary
+    }
+}
+
+fn stable_hash(value: &str) -> String {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    value.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
+fn token_count(text: &str) -> i64 {
+    text.split_whitespace().count() as i64
+}
+
+fn encode_embedding(values: &[f32]) -> Vec<u8> {
+    values
+        .iter()
+        .flat_map(|value| value.to_le_bytes())
+        .collect::<Vec<_>>()
 }
 
 fn validate_project_doc_ref_request(request: &RagIngestRequest) -> Result<(), RagError> {

@@ -84,6 +84,12 @@ fn search_route(
     query: &RagRouteSearchQuery,
 ) -> Result<Vec<RagSearchRow>, RagError> {
     let retriever = sqlite_retriever_strategy(&query.retriever)?;
+    if matches!(
+        retriever.kind,
+        SqliteRetrieverKind::TreeFulltext | SqliteRetrieverKind::TreeVector
+    ) {
+        return search_tree_route(repository, plan, query, retriever);
+    }
     validate_retriever_available(repository, plan, query, retriever)?;
     let select = select_projection(plan, query, retriever)?;
     let from_sql = from_sql(plan, query, retriever)?;
@@ -255,6 +261,9 @@ fn from_sql(
             }
         }
         SqliteRetrieverKind::StructuredFilter => format!("FROM {text_table} tu"),
+        SqliteRetrieverKind::TreeFulltext | SqliteRetrieverKind::TreeVector => {
+            return Err(RagError::SearchRouteUnavailable);
+        }
     };
     if let Some(source_table) = plan.source_table.as_deref() {
         let source_table = quote_identifier(source_table)?;
@@ -367,6 +376,40 @@ fn validate_retriever_available(
                 Err(RagError::SearchRouteUnavailable)
             }
         }
+        SqliteRetrieverKind::TreeFulltext => {
+            if !plan.has_sqlite_tree() {
+                return Err(RagError::SearchRouteUnavailable);
+            }
+            if sqlite_fts5_available(&repository.connection)
+                && table_exists(
+                    &repository.connection,
+                    &fts_table_name(plan.tree_storage_table()?),
+                )?
+            {
+                Ok(())
+            } else {
+                Err(RagError::SearchRouteUnavailable)
+            }
+        }
+        SqliteRetrieverKind::TreeVector => {
+            if !plan.has_sqlite_tree() {
+                return Err(RagError::SearchRouteUnavailable);
+            }
+            let dimension = query_embedding_dimension(query)?;
+            if !supported_vector_dimensions().contains(&dimension) {
+                return Err(RagError::SearchRouteUnavailable);
+            }
+            if sqlite_vec_available(&repository.connection)
+                && table_exists(
+                    &repository.connection,
+                    &vec_table_name(plan.tree_storage_table()?, dimension),
+                )?
+            {
+                Ok(())
+            } else {
+                Err(RagError::SearchRouteUnavailable)
+            }
+        }
         SqliteRetrieverKind::StructuredFilter => Ok(()),
     }
 }
@@ -435,7 +478,9 @@ fn where_sql(
         SqliteRetrieverKind::VectorCosine | SqliteRetrieverKind::VectorVec0 => {
             query_embedding_dimension(query)?;
         }
-        SqliteRetrieverKind::StructuredFilter => {}
+        SqliteRetrieverKind::StructuredFilter
+        | SqliteRetrieverKind::TreeFulltext
+        | SqliteRetrieverKind::TreeVector => {}
     }
 
     if !query.scopes.is_empty() {
@@ -465,6 +510,8 @@ enum SqliteRetrieverKind {
     VectorCosine,
     VectorVec0,
     StructuredFilter,
+    TreeFulltext,
+    TreeVector,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -488,6 +535,12 @@ fn sqlite_retriever_strategy(strategy_id: &str) -> Result<SqliteRetrieverStrateg
         }),
         "STRUCTURED_FILTER_SQLITE_V1" => Ok(SqliteRetrieverStrategy {
             kind: SqliteRetrieverKind::StructuredFilter,
+        }),
+        "TREE_FULLTEXT_V1" => Ok(SqliteRetrieverStrategy {
+            kind: SqliteRetrieverKind::TreeFulltext,
+        }),
+        "TREE_VECTOR_V1" => Ok(SqliteRetrieverStrategy {
+            kind: SqliteRetrieverKind::TreeVector,
         }),
         _ => Err(RagError::SearchRouteUnavailable),
     }

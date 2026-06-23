@@ -121,6 +121,10 @@ fn dedup_strings(values: &[String]) -> Vec<String> {
 fn infer_route_type(strategy_id: &str) -> &'static str {
     if strategy_id.contains("STRUCTURED_FILTER") {
         "STRUCTURED_FILTER"
+    } else if strategy_id == "TREE_FULLTEXT_V1" {
+        "TREE_FULLTEXT"
+    } else if strategy_id == "TREE_VECTOR_V1" {
+        "TREE_VECTOR"
     } else if strategy_id.contains("VECTOR") {
         "VECTOR"
     } else if strategy_id.contains("FULLTEXT") {
@@ -149,6 +153,8 @@ where
     match route_type {
         "FULLTEXT" => strategy_id.contains("FULLTEXT"),
         "VECTOR" => strategy_id.contains("VECTOR"),
+        "TREE_FULLTEXT" => strategy_id == "TREE_FULLTEXT_V1",
+        "TREE_VECTOR" => strategy_id == "TREE_VECTOR_V1",
         "GRAPH" => strategy_id.contains("GRAPH"),
         "STRUCTURED_FILTER" => strategy_id.contains("STRUCTURED_FILTER"),
         _ => false,
