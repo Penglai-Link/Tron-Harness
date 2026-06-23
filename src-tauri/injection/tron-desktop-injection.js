@@ -578,8 +578,8 @@
       minHeight: "46px",
       display: "flex",
       alignItems: "center",
-      gap: "8px",
-      padding: "6px 8px 6px 12px",
+      gap: "10px",
+      padding: "10px",
       boxSizing: "border-box",
     });
     setImportantStyles(topRow, {
@@ -630,9 +630,6 @@
       flex: "1 1 auto",
       height: "34px",
       border: "0",
-      borderLeft: "1px solid #d1d5db",
-      borderRadius: "0",
-      padding: "0 10px",
       outline: "none",
       color: "#111827",
       background: "#fff",
@@ -696,7 +693,6 @@
     advancedBody.setAttribute(UI_ATTR, "true");
     Object.assign(advancedBody.style, {
       display: "none",
-      borderTop: "1px solid #e5e7eb",
       background: "#ffffff",
     });
     setImportantStyles(advancedBody, {
@@ -712,7 +708,7 @@
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      padding: "0 16px",
+      padding: "0 10px",
       borderBottom: "1px solid #e5e7eb",
       background: "#f4f4f5",
       boxSizing: "border-box",
@@ -729,27 +725,17 @@
     const elementTag = document.createElement("div");
     elementTag.setAttribute(UI_ATTR, "true");
     elementTag.textContent = element.tagName.toLowerCase();
-
-    const dragDots = document.createElement("div");
-    dragDots.setAttribute(UI_ATTR, "true");
-    dragDots.setAttribute("aria-hidden", "true");
-    dragDots.textContent = "⋮⋮";
-    Object.assign(dragDots.style, {
-      color: "#9ca3af",
-      fontSize: "16px",
-      letterSpacing: "-8px",
-      transform: "rotate(90deg)",
-    });
-
-    elementBar.append(elementTag, dragDots);
+    elementBar.append(elementTag);
 
     const advancedForm = document.createElement("div");
     advancedForm.setAttribute(UI_ATTR, "true");
     Object.assign(advancedForm.style, {
       display: "grid",
-      gap: "8px",
-      padding: "10px 16px 14px",
+      gap: "10px",
+      padding: "10px",
       boxSizing: "border-box",
+      height: "300px",
+      overflow: "auto"
     });
     setImportantStyles(advancedForm, {
       "background": "#ffffff",
@@ -767,8 +753,8 @@
         width: "100%",
         height: "34px",
         border: "1px solid #d1d5db",
-        borderRadius: "12px",
-        padding: options.compact ? "0 10px" : "0 12px",
+        borderRadius: "10px",
+        padding: "0 10px",
         outline: "none",
         boxShadow: "inset 0 0 0 1px #f3f4f6",
         boxSizing: "border-box",
@@ -798,7 +784,6 @@
         minHeight: "36px",
         color: "#676b70",
         fontSize: "14px",
-        fontWeight: "600",
       });
 
       const text = document.createElement("span");
@@ -868,10 +853,10 @@
         height: "34px",
         display: "flex",
         alignItems: "center",
-        gap: "8px",
+        gap: "10px",
         border: "1px solid #d1d5db",
-        borderRadius: "12px",
-        padding: "0 8px",
+        borderRadius: "10px",
+        padding: "0 10px",
         boxShadow: "inset 0 0 0 1px #f3f4f6",
         boxSizing: "border-box",
         background: "#ffffff",
@@ -891,7 +876,7 @@
         height: "24px",
         flex: "0 0 auto",
         border: "0",
-        borderRadius: "8px",
+        borderRadius: "10px",
         padding: "0",
         background: "#fff",
         boxSizing: "border-box",
@@ -1199,7 +1184,7 @@
 
     const setAdvancedVisible = (visible) => {
       advancedBody.style.display = visible ? "block" : "none";
-      panel.style.borderRadius = visible ? "28px" : "999px";
+      panel.style.borderRadius = visible ? "20px" : "999px";
       topRow.style.borderBottom = visible ? "1px solid #e5e7eb" : "0";
       toggleButton.style.background = visible ? "#f3f4f6" : "#fff";
       toggleButton.style.color = visible ? "#111827" : "#8b8b8b";
