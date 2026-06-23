@@ -244,6 +244,7 @@ async fn main_agent_default_all_platform_tools_injects_memory_tools() {
     assert!(tool_names.contains(&"memory.search".to_string()));
     assert!(tool_names.contains(&"memory.save".to_string()));
     assert!(tool_names.contains(&"memory.delete".to_string()));
+    assert!(tool_names.contains(&"automation.create".to_string()));
 }
 
 #[tokio::test]
@@ -1512,13 +1513,51 @@ struct ParsedObservation {
 }
 
 fn memory_observations_in_request(request: &Value) -> Vec<ParsedObservation> {
-    request["messages"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|message| message["content"].as_str())
-        .filter_map(parse_memory_observation)
-        .collect()
+    let mut tool_names_by_call_id = Map::new();
+    let mut observations = Vec::new();
+    for message in request["messages"].as_array().into_iter().flatten() {
+        if message["role"] == json!("assistant") {
+            for tool_call in message["tool_calls"].as_array().into_iter().flatten() {
+                if let (Some(call_id), Some(tool_name)) = (
+                    tool_call["id"].as_str(),
+                    tool_call["function"]["name"].as_str(),
+                ) {
+                    tool_names_by_call_id.insert(call_id.to_string(), json!(tool_name));
+                }
+            }
+            continue;
+        }
+
+        if message["role"] == json!("tool") {
+            let Some(call_id) = message["tool_call_id"].as_str() else {
+                continue;
+            };
+            let Some(tool_name) = tool_names_by_call_id
+                .get(call_id)
+                .and_then(Value::as_str)
+                .filter(|tool_name| tool_name.starts_with("memory."))
+            else {
+                continue;
+            };
+            let output = message["content"]
+                .as_str()
+                .and_then(|content| serde_json::from_str(content).ok())
+                .unwrap_or_else(|| panic!("{tool_name} tool observation should be valid JSON"));
+            observations.push(ParsedObservation {
+                tool_name: tool_name.to_string(),
+                output,
+            });
+            continue;
+        }
+
+        if let Some(observation) = message["content"]
+            .as_str()
+            .and_then(parse_memory_observation)
+        {
+            observations.push(observation);
+        }
+    }
+    observations
 }
 
 fn parse_memory_observation(content: &str) -> Option<ParsedObservation> {

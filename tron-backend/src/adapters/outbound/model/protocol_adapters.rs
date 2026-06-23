@@ -1,6 +1,8 @@
 mod chat_completions;
 #[cfg(test)]
 mod chat_completions_tests;
+#[cfg(test)]
+mod chat_tool_observation_tests;
 mod content;
 mod embeddings;
 mod registry;

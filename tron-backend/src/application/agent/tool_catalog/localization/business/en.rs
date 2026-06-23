@@ -440,4 +440,116 @@ pub(super) const EN_US: &[(&str, &str)] = &[
         "agent.toolCatalog.tools.variable.delete.sampleResultSummary",
         "Returns the variable delete result.",
     ),
+    (
+        "agent.toolCatalog.tools.automation.page.name",
+        "Page automations",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.page.description",
+        "Page scheduled automations in the current or specified workspace.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.page.sampleResultSummary",
+        "Returns paged automation records.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.page.params.search",
+        "Optional automation search text.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.get.name",
+        "Get automation",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.get.description",
+        "Read one automation detail by automation code.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.get.sampleResultSummary",
+        "Returns one automation detail record.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.create.name",
+        "Create automation",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.create.description",
+        "Create an in-platform scheduled task or automation in the current or specified workspace. Use for every-N-minutes/hours/days jobs, cron schedules, reminders, and monitors.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.create.sampleResultSummary",
+        "Returns the created automation detail.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.update.name",
+        "Update automation",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.update.description",
+        "Update an in-platform scheduled task or automation, including metadata, prompt, schedule, execution agent/model, or status.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.update.sampleResultSummary",
+        "Returns the updated automation detail.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.delete.name",
+        "Delete automation",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.delete.description",
+        "Soft-delete an automation by archiving it.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.delete.sampleResultSummary",
+        "Returns the automation archive result.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.restore.name",
+        "Restore automation",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.restore.description",
+        "Restore an archived automation.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.restore.sampleResultSummary",
+        "Returns the automation restore result.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.execute.name",
+        "Execute automation",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.execute.description",
+        "Run an automation immediately and record a manual execution.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.execute.sampleResultSummary",
+        "Returns the automation detail with the latest execution rollup.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.common.params.automationCode",
+        "Automation code.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.common.params.agentCode",
+        "Agent code used to execute the automation. Defaults to main-agent.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.common.params.modelCode",
+        "Model code for main-agent, or system model id for a selected system agent.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.common.params.prompt",
+        "Prompt to run when the automation executes.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.common.params.cronExpression",
+        "Cron expression. For example, every 2 minutes can be */2 * * * *. Five-field values are normalized to UTC seconds precision.",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.common.params.status",
+        "Automation status. Allowed values: active, paused, archived.",
+    ),
 ];

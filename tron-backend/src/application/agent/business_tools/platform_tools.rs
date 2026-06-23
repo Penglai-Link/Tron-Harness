@@ -1,4 +1,5 @@
 mod app;
+mod automation;
 mod common;
 mod model;
 mod skill;
@@ -10,8 +11,9 @@ use std::sync::Arc;
 
 use crate::{
     application::{
-        app::AppService, model::ModelService, skill::SkillRegistryService, task::TaskService,
-        variable::VariableService, workspace::WorkspaceService,
+        app::AppService, automation::AutomationService, model::ModelService,
+        skill::SkillRegistryService, task::TaskService, variable::VariableService,
+        workspace::WorkspaceService,
     },
     domain::agent::Tool,
 };
@@ -19,6 +21,7 @@ use crate::{
 pub(super) fn platform_business_tools(
     workspaces: WorkspaceService,
     apps: AppService,
+    automations: AutomationService,
     tasks: TaskService,
     models: ModelService,
     skills: SkillRegistryService,
@@ -27,6 +30,7 @@ pub(super) fn platform_business_tools(
     let mut tools: Vec<Arc<dyn Tool>> = Vec::new();
     tools.extend(workspace::tools(workspaces));
     tools.extend(app::tools(apps));
+    tools.extend(automation::tools(automations));
     tools.extend(task::tools(tasks));
     tools.extend(model::tools(models));
     tools.extend(skill::tools(skills));

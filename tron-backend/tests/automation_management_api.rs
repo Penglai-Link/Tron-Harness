@@ -1,17 +1,105 @@
 mod common;
 
-use std::path::PathBuf;
-
-use axum::http::{Method, StatusCode};
-use serde_json::{Value, json};
-use tron_backend::{
-    app::AppState,
-    application::automation::{CreateAutomationCommand, UpdateAutomationStatusCommand},
-    config::AppConfig,
-    domain::automation::{AutomationListQuery, AutomationStatus},
+use std::{
+    collections::HashSet,
+    path::PathBuf,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+    time::Duration,
 };
 
-use common::{app_with_config, authenticated_request, prepared_config, response_json};
+use axum::{
+    Json, Router,
+    http::{Method, StatusCode},
+    response::{IntoResponse, Response},
+    routing::post,
+};
+use serde_json::{Value, json};
+use tokio::{
+    net::TcpListener,
+    task::JoinHandle,
+    time::{Instant, sleep},
+};
+use tron_backend::{
+    app::AppState,
+    application::{
+        agent::{BusinessToolCatalog, tool_record_to_effective_tool},
+        automation::{AutomationService, CreateAutomationCommand, UpdateAutomationStatusCommand},
+    },
+    config::AppConfig,
+    domain::{
+        agent::{
+            AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig, AgentModelProtocol,
+            AgentRunContext, AgentRunLimits, EffectiveSkill, EffectiveTool, EffectiveVariable,
+            ToolRequest,
+        },
+        automation::{
+            AutomationExecutionListItem, AutomationExecutionListQuery, AutomationExecutionStatus,
+            AutomationListQuery, AutomationStatus, AutomationTriggerSource,
+        },
+    },
+};
+
+use common::{
+    app_with_config, authenticated_bearer_token, authenticated_request, prepared_config,
+    request_with_headers, response_json,
+};
+
+struct RecordingAgentModelServer {
+    base_url: String,
+    request_count: Arc<AtomicUsize>,
+    _task: JoinHandle<()>,
+}
+
+async fn recording_agent_model_server() -> RecordingAgentModelServer {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("agent mock server should bind");
+    let address = listener
+        .local_addr()
+        .expect("agent mock server should expose address");
+    let request_count = Arc::new(AtomicUsize::new(0));
+    let app = Router::new()
+        .route("/v1/chat/completions", post(agent_chat_completion))
+        .with_state(request_count.clone());
+    let task = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("agent mock server should stay available");
+    });
+    RecordingAgentModelServer {
+        base_url: format!("http://{address}/v1"),
+        request_count,
+        _task: task,
+    }
+}
+
+async fn agent_chat_completion(
+    axum::extract::State(request_count): axum::extract::State<Arc<AtomicUsize>>,
+    Json(payload): Json<Value>,
+) -> Response {
+    request_count.fetch_add(1, Ordering::SeqCst);
+    let prompt = payload["messages"]
+        .as_array()
+        .and_then(|messages| {
+            messages
+                .iter()
+                .rev()
+                .find_map(|message| message["content"].as_str())
+        })
+        .unwrap_or_default();
+    Json(json!({
+        "choices": [{
+            "message": {
+                "role": "assistant",
+                "content": format!("automation reply: {prompt}")
+            }
+        }]
+    }))
+    .into_response()
+}
 
 #[tokio::test]
 async fn automation_options_and_empty_workspace_list() {
@@ -56,6 +144,8 @@ async fn automation_list_stays_workspace_scoped_and_hides_archived_by_default() 
             workspace_code: "TRON_CORE".into(),
             name: "Daily summary".into(),
             description: Some("workspace scoped".into()),
+            agent_code: Some("main-agent".into()),
+            model_code: None,
             prompt: "Summarize the active workspace state.".into(),
             cron_expression: "0 9 * * *".into(),
             status: Some(AutomationStatus::Active),
@@ -66,6 +156,8 @@ async fn automation_list_stays_workspace_scoped_and_hides_archived_by_default() 
             workspace_code: "TRON_CORE".into(),
             name: "Paused digest".into(),
             description: Some("paused record".into()),
+            agent_code: Some("main-agent".into()),
+            model_code: None,
             prompt: "Draft the paused digest.".into(),
             cron_expression: "0 10 * * *".into(),
             status: Some(AutomationStatus::Paused),
@@ -76,6 +168,8 @@ async fn automation_list_stays_workspace_scoped_and_hides_archived_by_default() 
             workspace_code: "TRON_CORE".into(),
             name: "Archive me".into(),
             description: Some("archived record".into()),
+            agent_code: Some("main-agent".into()),
+            model_code: None,
             prompt: "Archive this automation.".into(),
             cron_expression: "0 11 * * *".into(),
             status: Some(AutomationStatus::Paused),
@@ -89,6 +183,8 @@ async fn automation_list_stays_workspace_scoped_and_hides_archived_by_default() 
             workspace_code: "PLATFORM".into(),
             name: "Platform digest".into(),
             description: Some("other workspace".into()),
+            agent_code: Some("main-agent".into()),
+            model_code: None,
             prompt: "Summarize another workspace.".into(),
             cron_expression: "0 12 * * *".into(),
             status: Some(AutomationStatus::Active),
@@ -194,6 +290,8 @@ async fn create_automation_validates_workspace_prompt_and_cron_and_defaults_to_p
             "workspaceCode": "TRON_CORE",
             "name": "Ship automation loop",
             "description": "Long prompt workflow",
+            "agentCode": "main-agent",
+            "modelCode": "MODEL-1",
             "prompt": "Write a detailed release digest for the workspace with context, risks, and next actions.",
             "cronExpression": "*/15 * * * *",
         })),
@@ -202,13 +300,20 @@ async fn create_automation_validates_workspace_prompt_and_cron_and_defaults_to_p
     assert_eq!(created.status(), StatusCode::CREATED);
     let body = response_json(created).await;
     assert_eq!(body["data"]["status"], "Paused");
+    assert_eq!(body["data"]["agentCode"], "main-agent");
+    assert_eq!(body["data"]["modelCode"], "MODEL-1");
     assert_eq!(body["data"]["schedulerExpression"], "0 */15 * * * *");
     assert_eq!(body["data"]["workspaceCode"], "TRON_CORE");
 }
 
 #[tokio::test]
 async fn manual_execution_persists_history_and_rolls_up_latest_result() {
-    let router = automation_app("manual-execution");
+    let server = recording_agent_model_server().await;
+    let database_path = database_path("manual-execution");
+    let config = prepared_config(config_for_path(database_path));
+    seed_default_text_model(config.clone(), &server.base_url).await;
+    let state = AppState::new(config.clone()).expect("app state should build");
+    let router = app_with_config(config);
     let created = create_automation(
         &router,
         "TRON_CORE",
@@ -232,11 +337,7 @@ async fn manual_execution_persists_history_and_rolls_up_latest_result() {
     .await;
     assert_eq!(executed.status(), StatusCode::OK);
     let executed_json = response_json(executed).await;
-    assert_eq!(executed_json["data"]["lastExecutionStatus"], "Success");
-    assert_eq!(
-        executed_json["data"]["lastExecutionSummary"],
-        "Prompt dispatch recorded for the automation."
-    );
+    assert_eq!(executed_json["data"]["lastExecutionStatus"], "Running");
 
     let executions = authenticated_request(
         &router,
@@ -248,11 +349,261 @@ async fn manual_execution_persists_history_and_rolls_up_latest_result() {
     assert_eq!(executions.status(), StatusCode::OK);
     let execution_json = response_json(executions).await;
     assert_eq!(execution_json["data"]["total"], 1);
+    let execution_code = execution_json["data"]["records"][0]["executionCode"]
+        .as_str()
+        .expect("execution code should be returned")
+        .to_string();
     assert_eq!(
         execution_json["data"]["records"][0]["triggerSource"],
         "Manual"
     );
-    assert_eq!(execution_json["data"]["records"][0]["status"], "Success");
+    let record = wait_for_final_execution_status(
+        &state.automations,
+        &automation_code,
+        &execution_code,
+        AutomationExecutionStatus::Success,
+        Duration::from_secs(3),
+    )
+    .await;
+    assert!(
+        record
+            .summary
+            .as_deref()
+            .unwrap_or_default()
+            .contains("Agent main-agent completed automation execution")
+    );
+    wait_for_model_requests(&server, 1, Duration::from_secs(3)).await;
+    let groups = state
+        .chats
+        .list_session_groups(tron_backend::application::chat::ChatSessionQuery {
+            workspace_code: Some("TRON_CORE".into()),
+        })
+        .expect("chat groups should list");
+    assert!(groups.iter().any(|group| {
+        group.source_type == tron_backend::domain::chat::ChatSessionSourceType::Automation
+            && group.source_code.as_deref() == Some(automation_code.as_str())
+    }));
+}
+
+#[tokio::test]
+async fn internal_agent_automation_tools_are_cataloged_and_executable() {
+    let server = recording_agent_model_server().await;
+    let database_path = database_path("internal-tools");
+    let config = prepared_config(config_for_path(database_path));
+    let text_model_code = seed_default_text_model(config.clone(), &server.base_url).await;
+    let state = AppState::new(config).expect("app state should build");
+    let automation_tools = BusinessToolCatalog::list_tools(Some("automation"), None, "en-US");
+    let automation_tool_codes = automation_tools
+        .iter()
+        .map(|tool| tool.tool_code.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        automation_tool_codes,
+        vec![
+            "automation.page",
+            "automation.get",
+            "automation.create",
+            "automation.update",
+            "automation.delete",
+            "automation.restore",
+            "automation.execute",
+        ]
+    );
+    let context = automation_tool_context(
+        automation_tools
+            .into_iter()
+            .map(tool_record_to_effective_tool)
+            .collect(),
+    );
+
+    let created = execute_tool_json(
+        &state,
+        &context,
+        "automation.create",
+        json!({
+            "workspaceCode": "TRON_CORE",
+            "name": "Agent-created automation",
+            "description": "created through internal tool",
+            "agentCode": "main-agent",
+            "prompt": "Summarize the workspace.",
+            "modelCode": text_model_code.clone(),
+            "cronExpression": "0 8 * * *",
+            "status": "paused",
+        }),
+    );
+    let automation_code = created["automationCode"]
+        .as_str()
+        .expect("created automation should expose automationCode")
+        .to_string();
+
+    let fetched = execute_tool_json(
+        &state,
+        &context,
+        "automation.get",
+        json!({ "workspaceCode": "TRON_CORE", "automationCode": automation_code.clone() }),
+    );
+    assert_eq!(fetched["status"], json!("Paused"));
+    assert_eq!(fetched["agentCode"], json!("main-agent"));
+    assert_eq!(fetched["modelCode"], json!(text_model_code.clone()));
+
+    let updated = execute_tool_json(
+        &state,
+        &context,
+        "automation.update",
+        json!({
+            "workspaceCode": "TRON_CORE",
+            "automationCode": automation_code.clone(),
+            "name": "Agent-updated automation",
+            "agentCode": "main-agent",
+            "modelCode": text_model_code.clone(),
+            "status": "paused",
+        }),
+    );
+    assert_eq!(updated["name"], json!("Agent-updated automation"));
+
+    let listed = execute_tool_json(
+        &state,
+        &context,
+        "automation.page",
+        json!({ "workspaceCode": "TRON_CORE", "search": "Agent-updated" }),
+    );
+    assert_eq!(listed["total"], json!(1));
+
+    let executed = execute_tool_json(
+        &state,
+        &context,
+        "automation.execute",
+        json!({ "workspaceCode": "TRON_CORE", "automationCode": automation_code.clone() }),
+    );
+    assert_eq!(executed["lastExecutionStatus"], json!("Running"));
+    let execution_code = executed["lastExecutionCode"]
+        .as_str()
+        .expect("execute should return lastExecutionCode")
+        .to_string();
+    wait_for_final_execution_status(
+        &state.automations,
+        &automation_code,
+        &execution_code,
+        AutomationExecutionStatus::Success,
+        Duration::from_secs(3),
+    )
+    .await;
+
+    let deleted = execute_tool_json(
+        &state,
+        &context,
+        "automation.delete",
+        json!({ "workspaceCode": "TRON_CORE", "automationCode": automation_code.clone() }),
+    );
+    assert_eq!(deleted["status"], json!("Archived"));
+
+    let restored = execute_tool_json(
+        &state,
+        &context,
+        "automation.restore",
+        json!({ "workspaceCode": "TRON_CORE", "automationCode": automation_code }),
+    );
+    assert_eq!(restored["status"], json!("Paused"));
+}
+
+#[tokio::test]
+async fn active_automation_scheduler_persists_real_tick() {
+    let server = recording_agent_model_server().await;
+    let database_path = database_path("scheduler-real-tick");
+    let config = prepared_config(config_for_path(database_path));
+    seed_default_text_model(config.clone(), &server.base_url).await;
+    let state = AppState::new(config).expect("app state should build");
+    let service = state.automations.clone();
+    let automation = service
+        .create_automation(CreateAutomationCommand {
+            workspace_code: "TRON_CORE".into(),
+            name: "Real scheduler tick".into(),
+            description: Some("active every second".into()),
+            agent_code: Some("main-agent".into()),
+            model_code: None,
+            prompt: "Record a scheduler tick.".into(),
+            cron_expression: "*/1 * * * * *".into(),
+            status: Some(AutomationStatus::Active),
+        })
+        .expect("active automation should be created");
+
+    let records = wait_for_scheduler_records(
+        &service,
+        &automation.automation_code,
+        1,
+        Duration::from_secs(3),
+    )
+    .await;
+
+    assert_eq!(
+        records[0].trigger_source,
+        AutomationTriggerSource::Scheduler
+    );
+    let record = wait_for_final_execution_status(
+        &service,
+        &automation.automation_code,
+        &records[0].execution_code,
+        AutomationExecutionStatus::Success,
+        Duration::from_secs(3),
+    )
+    .await;
+    assert_eq!(record.status, AutomationExecutionStatus::Success);
+    assert!(
+        records[0].scheduled_at.is_some(),
+        "scheduler execution should persist its planned tick"
+    );
+    wait_for_model_requests(&server, 1, Duration::from_secs(3)).await;
+}
+
+#[tokio::test]
+async fn scheduler_ticks_are_claimed_once_across_multiple_instances() {
+    let server = recording_agent_model_server().await;
+    let database_path = database_path("scheduler-multi-instance");
+    let config = prepared_config(config_for_path(database_path));
+    seed_default_text_model(config.clone(), &server.base_url).await;
+    let first_state = AppState::new(config.clone()).expect("first app state should build");
+    let service = first_state.automations.clone();
+    let automation = service
+        .create_automation(CreateAutomationCommand {
+            workspace_code: "TRON_CORE".into(),
+            name: "Multi instance scheduler".into(),
+            description: Some("active every second".into()),
+            agent_code: Some("main-agent".into()),
+            model_code: None,
+            prompt: "Record only one execution per scheduler tick.".into(),
+            cron_expression: "*/1 * * * * *".into(),
+            status: Some(AutomationStatus::Active),
+        })
+        .expect("active automation should be created");
+    let second_state = AppState::new(config).expect("second app state should build");
+
+    let records = wait_for_scheduler_records(
+        &service,
+        &automation.automation_code,
+        2,
+        Duration::from_secs(4),
+    )
+    .await;
+    let scheduler_ticks = records
+        .iter()
+        .filter(|record| record.trigger_source == AutomationTriggerSource::Scheduler)
+        .filter_map(|record| record.scheduled_at.clone())
+        .collect::<Vec<_>>();
+    let unique_ticks = scheduler_ticks.iter().cloned().collect::<HashSet<_>>();
+
+    assert_eq!(
+        scheduler_ticks.len(),
+        unique_ticks.len(),
+        "each planned scheduler tick should be claimed by only one backend instance"
+    );
+    wait_for_model_requests(&server, unique_ticks.len(), Duration::from_secs(3)).await;
+    assert_eq!(
+        server.request_count.load(Ordering::SeqCst),
+        unique_ticks.len(),
+        "each claimed scheduler tick should dispatch main-agent exactly once"
+    );
+    drop(second_state);
+    drop(first_state);
 }
 
 #[tokio::test]
@@ -267,6 +618,8 @@ async fn lifecycle_and_bootstrap_scheduler_only_track_active_automations() {
             workspace_code: "TRON_CORE".into(),
             name: "Active cadence".into(),
             description: Some("active".into()),
+            agent_code: Some("main-agent".into()),
+            model_code: None,
             prompt: "Keep the active schedule.".into(),
             cron_expression: "0 1 * * *".into(),
             status: Some(AutomationStatus::Active),
@@ -277,6 +630,8 @@ async fn lifecycle_and_bootstrap_scheduler_only_track_active_automations() {
             workspace_code: "TRON_CORE".into(),
             name: "Paused cadence".into(),
             description: Some("paused".into()),
+            agent_code: Some("main-agent".into()),
+            model_code: None,
             prompt: "Keep the paused schedule.".into(),
             cron_expression: "0 2 * * *".into(),
             status: Some(AutomationStatus::Paused),
@@ -320,6 +675,201 @@ async fn lifecycle_and_bootstrap_scheduler_only_track_active_automations() {
 
     let rebooted = AppState::new(config).expect("app state should reboot");
     assert!(rebooted.automations.scheduler_snapshot().is_empty());
+}
+
+async fn wait_for_scheduler_records(
+    service: &AutomationService,
+    automation_code: &str,
+    minimum: usize,
+    timeout: Duration,
+) -> Vec<AutomationExecutionListItem> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let records = service
+            .list_execution_records(
+                automation_code,
+                AutomationExecutionListQuery {
+                    current: Some(1),
+                    size: Some(20),
+                },
+            )
+            .expect("execution records should list")
+            .records;
+        let scheduler_records = records
+            .iter()
+            .filter(|record| record.trigger_source == AutomationTriggerSource::Scheduler)
+            .count();
+        if scheduler_records >= minimum {
+            return records;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for {minimum} scheduler records; saw {scheduler_records}"
+        );
+        sleep(Duration::from_millis(100)).await;
+    }
+}
+
+async fn wait_for_final_execution_status(
+    service: &AutomationService,
+    automation_code: &str,
+    execution_code: &str,
+    expected_status: AutomationExecutionStatus,
+    timeout: Duration,
+) -> AutomationExecutionListItem {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let records = service
+            .list_execution_records(
+                automation_code,
+                AutomationExecutionListQuery {
+                    current: Some(1),
+                    size: Some(20),
+                },
+            )
+            .expect("execution records should list")
+            .records;
+        if let Some(record) = records
+            .into_iter()
+            .find(|record| record.execution_code == execution_code)
+            && record.status == expected_status
+        {
+            return record;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for execution {execution_code} to reach {expected_status:?}"
+        );
+        sleep(Duration::from_millis(100)).await;
+    }
+}
+
+async fn wait_for_model_requests(
+    server: &RecordingAgentModelServer,
+    minimum: usize,
+    timeout: Duration,
+) {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let count = server.request_count.load(Ordering::SeqCst);
+        if count >= minimum {
+            return;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "timed out waiting for {minimum} model requests; saw {count}"
+        );
+        sleep(Duration::from_millis(100)).await;
+    }
+}
+
+async fn seed_default_text_model(config: AppConfig, base_url: &str) -> String {
+    let router = app_with_config(config);
+    let token = authenticated_bearer_token(&router).await;
+    let authorization = format!("Bearer {token}");
+    let response = request_with_headers(
+        &router,
+        Method::POST,
+        "/api/v1/admin/platform/models",
+        Some(json!({
+            "displayName": "Automation Default",
+            "vendor": "OpenAI",
+            "protocol": "OPENAI_COMPATIBLE",
+            "modelType": "TEXT",
+            "modelCapabilities": ["TEXT_GENERATION"],
+            "baseUrl": base_url,
+            "apiPath": "/chat/completions",
+            "apiKeyRef": "sk-automation-api",
+            "modelName": "gpt-automation",
+            "enabled": true,
+            "description": "Automation model",
+            "thinkingEnabled": false,
+            "structuredOutputEnabled": false,
+            "temperature": 0.2,
+            "maxTokens": 1024,
+            "topP": 1.0,
+            "maxRetries": 0
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::CREATED);
+    response_json(response).await["data"]["modelCode"]
+        .as_str()
+        .expect("seeded model should expose modelCode")
+        .to_string()
+}
+
+fn execute_tool_json(
+    state: &AppState,
+    context: &AgentRunContext,
+    tool_name: &str,
+    input: Value,
+) -> Value {
+    let result = state
+        .agent_tool_registry
+        .execute_allowed(
+            ToolRequest {
+                tool_name: tool_name.to_string(),
+                input,
+            },
+            context,
+        )
+        .expect("tool should execute");
+    serde_json::from_str(&result.observation.output).expect("tool output should be JSON")
+}
+
+fn automation_tool_context(tools: Vec<EffectiveTool>) -> AgentRunContext {
+    AgentRunContext {
+        conversation_code: Some("CONV-AUTOMATION-TOOLS".into()),
+        run_code: "RUN-AUTOMATION-TOOLS".into(),
+        workspace_code: "TRON_CORE".into(),
+        user_code: Some("USR-1".into()),
+        locale: "en-US".into(),
+        request_id: Some("REQ-AUTOMATION-TOOLS".into()),
+        stream_key: Some("STREAM-AUTOMATION-TOOLS".into()),
+        agent_kind: AgentKind::React,
+        system_agent_session_id: None,
+        model: AgentModelConfig {
+            model_code: "MODEL-1".into(),
+            protocol: AgentModelProtocol::ChatCompletions,
+            base_url: "http://127.0.0.1:1/v1".into(),
+            api_path: None,
+            api_key: "sk-test".into(),
+            model_name: "gpt-test".into(),
+            thinking_enabled: false,
+            responses_stateful_enabled: false,
+            temperature: Some(0.2),
+            max_tokens: Some(128),
+            context_window_tokens: Some(8_192),
+            top_p: Some(1.0),
+            max_retries: Some(0),
+        },
+        variables: vec![EffectiveVariable {
+            key: "REGION".into(),
+            value: "us".into(),
+            source: "LOCAL".into(),
+            sensitive: false,
+        }],
+        skills: vec![EffectiveSkill {
+            skill_name: "automation-manager".into(),
+            description: "Manage automations".into(),
+            instruction: None,
+            tool_names: tools.iter().map(|tool| tool.tool_name.clone()).collect(),
+        }],
+        tools,
+        tool_exposure: Default::default(),
+        execution_scope: AgentExecutionScope::default(),
+        limits: AgentRunLimits {
+            max_steps: 10,
+            max_tool_calls: 10,
+            max_parallel_tool_calls: 4,
+        },
+        messages: vec![AgentMessage::user("manage automations")],
+        observations: Vec::new(),
+        started_at: "2026-06-22T00:00:00Z".into(),
+    }
 }
 
 fn automation_app(test_name: &str) -> axum::Router {

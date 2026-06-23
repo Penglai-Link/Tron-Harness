@@ -196,48 +196,6 @@ fn request_builders_default_parallel_tool_calls_to_true_when_tools_are_present()
 }
 
 #[test]
-fn request_builders_handle_tool_observations_per_protocol() {
-    let config = AgentModelConfig {
-        model_code: "MODEL-1".into(),
-        protocol: AgentModelProtocol::ChatCompletions,
-        base_url: "https://provider.test/v1".into(),
-        api_path: None,
-        api_key: "sk-test".into(),
-        model_name: "gpt-test".into(),
-        thinking_enabled: false,
-        responses_stateful_enabled: false,
-        temperature: None,
-        max_tokens: None,
-        context_window_tokens: None,
-        top_p: None,
-        max_retries: None,
-    };
-    let request = ModelRequest {
-        messages: vec![AgentMessage::tool_with_call_id(
-            "tool:workspace.page\nresult:\n[]",
-            "call-123",
-            "[]",
-        )],
-        tools: vec![],
-        system_agent_session_id: None,
-        response_input_items: None,
-        previous_response_id: None,
-    };
-
-    let chat = chat_completions_request(&config, &request);
-    assert_eq!(chat["messages"][0]["role"], json!("user"));
-    assert_eq!(
-        chat["messages"][0]["content"],
-        json!("tool:workspace.page\nresult:\n[]")
-    );
-
-    let responses = responses_request(&config, &request);
-    assert_eq!(responses["input"][0]["type"], json!("function_call_output"));
-    assert_eq!(responses["input"][0]["call_id"], json!("call-123"));
-    assert_eq!(responses["input"][0]["output"], json!("[]"));
-}
-
-#[test]
 fn responses_request_uses_string_input_for_single_user_prompt() {
     let config = AgentModelConfig {
         model_code: "MODEL-1".into(),

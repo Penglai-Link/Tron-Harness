@@ -1273,6 +1273,11 @@ async fn tool_catalog_read_apis_are_available() {
             .iter()
             .any(|row| row["domainCode"] == json!("workspace"))
     );
+    assert!(
+        domains
+            .iter()
+            .any(|row| row["domainCode"] == json!("automation"))
+    );
     assert!(domains.iter().any(|row| row["domainCode"] == json!("task")));
     assert!(domains.iter().any(|row| row["domainCode"] == json!("bash")));
     assert!(domains.iter().any(|row| row["domainCode"] == json!("fs")));

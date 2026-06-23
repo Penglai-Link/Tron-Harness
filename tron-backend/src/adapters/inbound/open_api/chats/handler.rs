@@ -89,6 +89,8 @@ pub async fn create_session(
             title: request.title,
             app_code: request.app_code,
             task_code: request.task_code,
+            source_type: None,
+            source_code: None,
             agent_code: request.agent_code,
         },
         Some(auth.user().user_code.clone()),

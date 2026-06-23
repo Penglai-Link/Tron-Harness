@@ -9,6 +9,8 @@ export interface ChatSession {
   userCode?: string | null;
   appCode?: string | null;
   taskCode?: string | null;
+  sourceType?: "Manual" | "Task" | "Automation" | string;
+  sourceCode?: string | null;
   agentCode?: string | null;
   systemAgentSessionId?: string | null;
   title: string;
@@ -22,6 +24,8 @@ export interface ChatSession {
 export interface ChatSessionGroup {
   taskCode?: string | null;
   taskTitle: string;
+  sourceType?: "Manual" | "Task" | "Automation" | string;
+  sourceCode?: string | null;
   sessions: ChatSession[];
 }
 

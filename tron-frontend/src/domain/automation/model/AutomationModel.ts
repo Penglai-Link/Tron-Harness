@@ -17,6 +17,7 @@ export interface AutomationOptions {
 }
 
 export interface AutomationListItem {
+  agentCode: string;
   archivedAt: string | null;
   automationCode: string;
   cronExpression: string;
@@ -26,6 +27,7 @@ export interface AutomationListItem {
   lastExecutionSummary: string | null;
   lastFinishedAt: string | null;
   lastStartedAt: string | null;
+  modelCode: string | null;
   name: string;
   nextRunAt: string | null;
   status: AutomationStatus;
@@ -35,6 +37,7 @@ export interface AutomationListItem {
 }
 
 export interface AutomationDetailData {
+  agentCode: string;
   archivedAt: string | null;
   automationCode: string;
   createdAt: string;
@@ -46,6 +49,7 @@ export interface AutomationDetailData {
   lastExecutionSummary: string | null;
   lastFinishedAt: string | null;
   lastStartedAt: string | null;
+  modelCode: string | null;
   name: string;
   nextRunAt: string | null;
   previousStatus: AutomationStatus | null;
@@ -63,6 +67,7 @@ export interface AutomationExecutionListItem {
   executionCode: string;
   finishedAt: string | null;
   scheduledAt: string | null;
+  sessionCode: string | null;
   startedAt: string;
   status: AutomationExecutionStatus;
   summary: string | null;
@@ -78,8 +83,10 @@ export interface AutomationPage<T> {
 }
 
 export interface CreateAutomationPayload {
+  agentCode?: string;
   cronExpression: string;
   description?: string | null;
+  modelCode?: string | null;
   name: string;
   prompt: string;
   status?: AutomationOperationalStatus;
@@ -87,8 +94,10 @@ export interface CreateAutomationPayload {
 }
 
 export interface UpdateAutomationPayload {
+  agentCode?: string;
   cronExpression?: string;
   description?: string | null;
+  modelCode?: string | null;
   name?: string;
   prompt?: string;
 }

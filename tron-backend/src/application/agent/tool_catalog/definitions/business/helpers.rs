@@ -60,6 +60,51 @@ fn tool_key(tool_code: &'static str, suffix: &'static str) -> &'static str {
         ("app.restore", "sampleResultSummary") => {
             "agent.toolCatalog.tools.app.restore.sampleResultSummary"
         }
+        ("automation.page", "name") => "agent.toolCatalog.tools.automation.page.name",
+        ("automation.page", "description") => "agent.toolCatalog.tools.automation.page.description",
+        ("automation.page", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.automation.page.sampleResultSummary"
+        }
+        ("automation.get", "name") => "agent.toolCatalog.tools.automation.get.name",
+        ("automation.get", "description") => "agent.toolCatalog.tools.automation.get.description",
+        ("automation.get", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.automation.get.sampleResultSummary"
+        }
+        ("automation.create", "name") => "agent.toolCatalog.tools.automation.create.name",
+        ("automation.create", "description") => {
+            "agent.toolCatalog.tools.automation.create.description"
+        }
+        ("automation.create", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.automation.create.sampleResultSummary"
+        }
+        ("automation.update", "name") => "agent.toolCatalog.tools.automation.update.name",
+        ("automation.update", "description") => {
+            "agent.toolCatalog.tools.automation.update.description"
+        }
+        ("automation.update", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.automation.update.sampleResultSummary"
+        }
+        ("automation.delete", "name") => "agent.toolCatalog.tools.automation.delete.name",
+        ("automation.delete", "description") => {
+            "agent.toolCatalog.tools.automation.delete.description"
+        }
+        ("automation.delete", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.automation.delete.sampleResultSummary"
+        }
+        ("automation.restore", "name") => "agent.toolCatalog.tools.automation.restore.name",
+        ("automation.restore", "description") => {
+            "agent.toolCatalog.tools.automation.restore.description"
+        }
+        ("automation.restore", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.automation.restore.sampleResultSummary"
+        }
+        ("automation.execute", "name") => "agent.toolCatalog.tools.automation.execute.name",
+        ("automation.execute", "description") => {
+            "agent.toolCatalog.tools.automation.execute.description"
+        }
+        ("automation.execute", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.automation.execute.sampleResultSummary"
+        }
         ("task.page", "name") => "agent.toolCatalog.tools.task.page.name",
         ("task.page", "description") => "agent.toolCatalog.tools.task.page.description",
         ("task.page", "sampleResultSummary") => {

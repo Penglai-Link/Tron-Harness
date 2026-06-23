@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import { useNavigate } from "react-router";
@@ -24,7 +25,19 @@ import { createAutomation } from "@/domain/automation/api";
 import { editableAutomationStatuses } from "@/domain/automation/constants";
 import { createMockAutomation } from "@/domain/automation/mock/data";
 import type { AutomationOperationalStatus } from "@/domain/automation/model";
+import { fetchWorkspaceSystemAgents } from "@/domain/agent/api/agentManagementApi";
+import { listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
+import { fetchWorkspaceSelectOptions } from "@/domain/model/api/modelApi";
+import { getWorkspaceSelectOptions } from "@/domain/model/mock/data";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+
+import {
+  automationModelCodeFromOption,
+  automationModelOptionsForAgent,
+  availableAutomationAgents,
+  mainAutomationAgentOption,
+  type AutomationAgentOption,
+} from "./automationExecutionOptions";
 
 export function CreateAutomationPage() {
   const navigate = useNavigate();
@@ -40,6 +53,76 @@ export function CreateAutomationPage() {
   const [prompt, setPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [promptFullscreenOpen, setPromptFullscreenOpen] = useState(false);
+  const [agentOptions, setAgentOptions] = useState<AutomationAgentOption[]>([mainAutomationAgentOption]);
+  const [workspaceModelOptions, setWorkspaceModelOptions] = useState<Awaited<ReturnType<typeof fetchWorkspaceSelectOptions>>>([]);
+  const [selectedAgentCode, setSelectedAgentCode] = useState(mainAutomationAgentOption.agentCode);
+  const [selectedModelOptionCode, setSelectedModelOptionCode] = useState("");
+  const [executionOptionsLoading, setExecutionOptionsLoading] = useState(false);
+
+  const selectedAgent = useMemo(
+    () => agentOptions.find((agent) => agent.agentCode === selectedAgentCode) ?? mainAutomationAgentOption,
+    [agentOptions, selectedAgentCode],
+  );
+  const modelOptions = useMemo(
+    () => automationModelOptionsForAgent(workspaceModelOptions, selectedAgent),
+    [selectedAgent, workspaceModelOptions],
+  );
+  const selectedModelCode = useMemo(
+    () => automationModelCodeFromOption(modelOptions, selectedModelOptionCode),
+    [modelOptions, selectedModelOptionCode],
+  );
+
+  useEffect(() => {
+    if (agentOptions.some((agent) => agent.agentCode === selectedAgentCode)) return;
+    setSelectedAgentCode(mainAutomationAgentOption.agentCode);
+  }, [agentOptions, selectedAgentCode]);
+
+  useEffect(() => {
+    if (!modelOptions.length) {
+      if (selectedModelOptionCode) setSelectedModelOptionCode("");
+      return;
+    }
+    if (modelOptions.some((option) => option.optionCode === selectedModelOptionCode)) return;
+    setSelectedModelOptionCode(modelOptions[0].optionCode);
+  }, [modelOptions, selectedModelOptionCode]);
+
+  useEffect(() => {
+    if (!activeWorkspaceCode) {
+      setAgentOptions([mainAutomationAgentOption]);
+      setWorkspaceModelOptions([]);
+      setSelectedAgentCode(mainAutomationAgentOption.agentCode);
+      setSelectedModelOptionCode("");
+      return;
+    }
+
+    const controller = new AbortController();
+    setExecutionOptionsLoading(true);
+
+    const agentsPromise = dataSource === "api"
+      ? fetchWorkspaceSystemAgents(activeWorkspaceCode, controller.signal)
+      : Promise.resolve(listWorkspaceSystemAgentsMock(activeWorkspaceCode));
+    const modelsPromise = dataSource === "api"
+      ? fetchWorkspaceSelectOptions(activeWorkspaceCode, controller.signal)
+      : Promise.resolve(getWorkspaceSelectOptions(activeWorkspaceCode));
+
+    Promise.all([agentsPromise, modelsPromise])
+      .then(([systemAgents, workspaceModels]) => {
+        if (controller.signal.aborted) return;
+        setAgentOptions(availableAutomationAgents(systemAgents));
+        setWorkspaceModelOptions(workspaceModels);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setAgentOptions([mainAutomationAgentOption]);
+        setWorkspaceModelOptions([]);
+        toast.error(error instanceof Error ? error.message : "Execution options could not be loaded");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setExecutionOptionsLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [activeWorkspaceCode, dataSource, toast]);
 
   useEffect(() => {
     if (!promptFullscreenOpen) return;
@@ -72,6 +155,8 @@ export function CreateAutomationPage() {
         ? await createAutomation({
           cronExpression,
           description,
+          agentCode: selectedAgentCode,
+          modelCode: selectedModelCode,
           name,
           prompt,
           status,
@@ -80,6 +165,8 @@ export function CreateAutomationPage() {
         : createMockAutomation({
           cronExpression,
           description,
+          agentCode: selectedAgentCode,
+          modelCode: selectedModelCode,
           name,
           prompt,
           status,
@@ -102,7 +189,7 @@ export function CreateAutomationPage() {
         actions={
           <>
             <Button variant="secondary" onClick={() => navigate("/automations")}>Cancel</Button>
-            <Button disabled={submitting || !activeWorkspaceCode || !name.trim() || !prompt.trim()} aria-busy={submitting} onClick={submitAutomation}>
+            <Button disabled={submitting || !activeWorkspaceCode || !name.trim() || !prompt.trim() || !selectedModelOptionCode} aria-busy={submitting} onClick={submitAutomation}>
               <Save size={15} aria-hidden="true" />
               {submitting ? "Saving..." : "Save"}
             </Button>
@@ -126,6 +213,43 @@ export function CreateAutomationPage() {
           <Field label="Description">
             <TextArea aria-label="Automation description" className="min-h-24" placeholder="Summarize the business intent, constraints, or expected operator-facing output." value={description} onChange={(event) => setDescription(event.target.value)} />
           </Field>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Execution agent">
+              <SelectInput
+                aria-label="Automation execution agent"
+                disabled={executionOptionsLoading || !activeWorkspaceCode}
+                value={selectedAgentCode}
+                onChange={(event) => {
+                  setSelectedAgentCode(event.target.value);
+                  setSelectedModelOptionCode("");
+                }}
+              >
+                {agentOptions.map((agent) => (
+                  <option key={agent.agentCode} value={agent.agentCode}>
+                    {agent.name} ({agent.agentCode})
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+            <Field label="Execution model">
+              <SelectInput
+                aria-label="Automation execution model"
+                disabled={executionOptionsLoading || !activeWorkspaceCode || !modelOptions.length}
+                value={selectedModelOptionCode}
+                onChange={(event) => setSelectedModelOptionCode(event.target.value)}
+              >
+                {modelOptions.length ? modelOptions.map((model) => (
+                  <option key={model.optionCode} value={model.optionCode}>
+                    {model.label}
+                  </option>
+                )) : (
+                  <option value="">
+                    {executionOptionsLoading ? "Loading models..." : "No executable models"}
+                  </option>
+                )}
+              </SelectInput>
+            </Field>
+          </div>
           <Field label="Cron expression">
             <TextInput aria-label="Cron expression" className="font-mono" placeholder="*/15 * * * *" value={cronExpression} onChange={(event) => setCronExpression(event.target.value)} />
           </Field>

@@ -1,8 +1,8 @@
 use serde_json::{Value, json};
 
 use crate::domain::agent::{
-    AgentMessage, AgentModelProtocol, AgentRunContext, ModelRequest, ModelResponse,
-    ModelStreamEventKind, ToolObservation,
+    AgentMessage, AgentMessageToolCall, AgentModelProtocol, AgentRunContext, ModelRequest,
+    ModelResponse, ModelStreamEventKind, ToolObservation,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,7 +101,28 @@ impl ChatTranscriptState {
         }
     }
 
-    pub fn apply_model_response(&mut self, _response: &ModelResponse) {}
+    pub fn apply_model_response(&mut self, response: &ModelResponse) {
+        let ModelResponse::ToolCalls { calls, .. } = response else {
+            return;
+        };
+        if calls.is_empty() || calls.iter().any(|call| call.call_id.is_none()) {
+            return;
+        }
+        self.messages.push(AgentMessage::assistant_tool_calls(
+            calls
+                .iter()
+                .map(|call| AgentMessageToolCall {
+                    call_id: call
+                        .call_id
+                        .as_ref()
+                        .expect("call id checked above")
+                        .clone(),
+                    tool_name: call.tool_name.clone(),
+                    input: call.input.clone(),
+                })
+                .collect(),
+        ));
+    }
 
     pub fn record_tool_observation(
         &mut self,
@@ -237,7 +258,7 @@ mod tests {
     use crate::domain::agent::{
         AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig, AgentModelProtocol,
         AgentRunContext, AgentRunLimits, AgentToolExposureState, EffectiveSkill, EffectiveTool,
-        EffectiveVariable, ModelResponse, ToolObservation,
+        EffectiveVariable, ModelResponse, ToolCall, ToolObservation,
     };
 
     use super::{ResponsesItemState, TurnStateAdapter, TurnStateKind};
@@ -338,5 +359,44 @@ mod tests {
         assert_eq!(items[0]["type"], json!("function_call_output"));
         assert_eq!(items[0]["call_id"], json!("call-1"));
         assert_eq!(items[0]["output"], json!("found"));
+    }
+
+    #[test]
+    fn chat_state_preserves_provider_tool_call_envelope_before_observation() {
+        let mut context = responses_context();
+        context.model.protocol = AgentModelProtocol::ChatCompletions;
+        context.model.responses_stateful_enabled = false;
+        let mut state = TurnStateAdapter::new(
+            context.model.protocol,
+            context.messages.clone(),
+            context.model.responses_stateful_enabled,
+        );
+
+        state.apply_model_response(&ModelResponse::tool_calls_with_usage(
+            vec![ToolCall {
+                call_id: Some("call-1".into()),
+                tool_name: "lookup".into(),
+                input: json!({"query": "status"}),
+            }],
+            None,
+        ));
+        let message = state.record_tool_observation(
+            &ToolObservation {
+                tool_name: "lookup".into(),
+                output: "found".into(),
+            },
+            Some("call-1".into()),
+        );
+        assert_eq!(message.tool_call_id.as_deref(), Some("call-1"));
+
+        let request = state.build_request(&context);
+        assert_eq!(request.messages.len(), 4);
+        assert_eq!(
+            request.messages[2].tool_calls.as_ref().unwrap()[0].call_id,
+            "call-1"
+        );
+        assert_eq!(request.messages[3].role, "tool");
+        assert_eq!(request.messages[3].tool_call_id.as_deref(), Some("call-1"));
+        assert_eq!(request.messages[3].tool_output.as_deref(), Some("found"));
     }
 }

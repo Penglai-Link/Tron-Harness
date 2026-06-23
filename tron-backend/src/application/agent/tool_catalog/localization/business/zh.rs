@@ -419,4 +419,113 @@ pub(super) const ZH_CN: &[(&str, &str)] = &[
         "agent.toolCatalog.tools.variable.delete.sampleResultSummary",
         "返回变量删除结果。",
     ),
+    (
+        "agent.toolCatalog.tools.automation.page.name",
+        "分页查询自动化",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.page.description",
+        "分页查询当前或指定工作区中的定时自动化。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.page.sampleResultSummary",
+        "返回分页后的自动化记录。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.page.params.search",
+        "可选的自动化搜索文本。",
+    ),
+    ("agent.toolCatalog.tools.automation.get.name", "获取自动化"),
+    (
+        "agent.toolCatalog.tools.automation.get.description",
+        "根据自动化编码读取单条自动化详情。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.get.sampleResultSummary",
+        "返回单条自动化详情记录。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.create.name",
+        "创建自动化",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.create.description",
+        "在当前或指定工作区中创建平台内定时任务/定时自动化；适用于每 N 分钟/小时/天执行、cron 调度、提醒、监控等请求。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.create.sampleResultSummary",
+        "返回新建自动化详情。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.update.name",
+        "修改自动化",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.update.description",
+        "修改平台内定时任务/自动化的元数据、提示词、计划、执行 agent/model 或状态。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.update.sampleResultSummary",
+        "返回修改后的自动化详情。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.delete.name",
+        "删除自动化",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.delete.description",
+        "通过归档软删除自动化。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.delete.sampleResultSummary",
+        "返回自动化归档结果。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.restore.name",
+        "恢复自动化",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.restore.description",
+        "恢复已归档自动化。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.restore.sampleResultSummary",
+        "返回自动化恢复结果。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.execute.name",
+        "执行自动化",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.execute.description",
+        "立即运行自动化并记录一次手动执行。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.execute.sampleResultSummary",
+        "返回带最新执行汇总的自动化详情。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.common.params.automationCode",
+        "自动化编码。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.common.params.agentCode",
+        "执行该自动化的 Agent 编码，默认 main-agent。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.common.params.modelCode",
+        "main-agent 使用模型编码；选择 system agent 时使用该 agent 的系统模型 ID。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.common.params.prompt",
+        "自动化执行时使用的提示词。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.common.params.cronExpression",
+        "Cron 表达式；例如每 2 分钟可用 */2 * * * *。五段表达式会规范化为 UTC 秒级精度。",
+    ),
+    (
+        "agent.toolCatalog.tools.automation.common.params.status",
+        "自动化状态，可选值：active、paused、archived。",
+    ),
 ];

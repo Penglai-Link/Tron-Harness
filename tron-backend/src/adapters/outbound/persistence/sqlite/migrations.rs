@@ -69,6 +69,8 @@ pub(super) const CHAT_SESSION_SYSTEM_AGENT_SESSION_ID_MIGRATION: &str = include_
 pub(super) const CONVERSATION_RUNTIME_SESSIONS_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260530_0025_create_conversation_runtime_sessions.sql"
 );
+pub(super) const CHAT_SESSION_SOURCE_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260623_0030_add_chat_session_source.sql");
 pub(super) const AGENT_RUNTIME_EVENT_REPLAY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260530_0026_create_agent_runtime_event_replay.sql");
 pub(super) const CHAT_MESSAGE_TOKEN_USAGE_MIGRATION: &str =

@@ -7,6 +7,7 @@ pub(super) fn to_execution_list_item(
         execution_code: record.execution_code,
         automation_code: record.automation_code,
         workspace_code: record.workspace_code,
+        session_code: record.session_code,
         trigger_source: record.trigger_source,
         status: record.status,
         summary: record.summary,
@@ -20,10 +21,12 @@ pub(super) fn to_execution_list_item(
 pub(super) fn record_execution(
     repository: Arc<Mutex<Box<dyn AutomationRepository>>>,
     event_bus: EventBusHandle,
+    execution_runner: Arc<Mutex<Option<Arc<dyn AutomationExecutionRunner>>>>,
     automation_code: &str,
     trigger_source: AutomationTriggerSource,
-) -> Result<AutomationExecutionRecord, AutomationError> {
-    let mut automation = {
+    scheduled_at: Option<String>,
+) -> Result<Option<AutomationExecutionRecord>, AutomationError> {
+    let automation = {
         let mut repository = repository
             .lock()
             .expect("automation repository mutex poisoned");
@@ -41,14 +44,14 @@ pub(super) fn record_execution(
     let now = current_timestamp();
     let execution_status = match (trigger_source, automation.status) {
         (AutomationTriggerSource::Scheduler, AutomationStatus::Active) => {
-            AutomationExecutionStatus::Success
+            AutomationExecutionStatus::Running
         }
         (AutomationTriggerSource::Scheduler, _) => AutomationExecutionStatus::Skipped,
-        (AutomationTriggerSource::Manual, _) => AutomationExecutionStatus::Success,
+        (AutomationTriggerSource::Manual, _) => AutomationExecutionStatus::Running,
     };
     let summary = Some(match execution_status {
-        AutomationExecutionStatus::Success => {
-            "Prompt dispatch recorded for the automation.".to_string()
+        AutomationExecutionStatus::Running => {
+            "Main agent execution started for the automation.".to_string()
         }
         AutomationExecutionStatus::Skipped => {
             "Scheduler tick skipped because the automation is not Active.".to_string()
@@ -58,49 +61,59 @@ pub(super) fn record_execution(
             automation_execution_status_to_storage(execution_status)
         ),
     });
-    let next_id = repository
-        .lock()
-        .expect("automation repository mutex poisoned")
-        .next_id()?;
-    let record = AutomationExecutionRecord {
-        id: SnowflakeId::new(next_id),
-        execution_code: format!("AEX-{next_id}"),
+    let draft = AutomationExecutionDraft {
         automation_code: automation.automation_code.clone(),
         workspace_code: automation.workspace_code.clone(),
+        session_code: None,
         trigger_source,
         status: execution_status,
-        summary: summary.clone(),
-        scheduled_at: (trigger_source == AutomationTriggerSource::Scheduler).then(|| now.clone()),
+        summary,
+        scheduled_at: if trigger_source == AutomationTriggerSource::Scheduler {
+            Some(scheduled_at.unwrap_or_else(|| now.clone()))
+        } else {
+            None
+        },
         started_at: now.clone(),
-        finished_at: Some(now.clone()),
+        finished_at: if execution_status == AutomationExecutionStatus::Skipped {
+            Some(now.clone())
+        } else {
+            None
+        },
         created_at: now.clone(),
     };
-    automation.last_execution_status = Some(execution_status);
-    automation.last_execution_code = Some(record.execution_code.clone());
-    automation.last_execution_summary = summary;
-    automation.last_started_at = Some(record.started_at.clone());
-    automation.last_finished_at = record.finished_at.clone();
-    automation.updated_at = now;
-    {
-        let mut repository = repository
-            .lock()
-            .expect("automation repository mutex poisoned");
-        repository.create_execution_record(&record)?;
-        repository.update_automation(&automation)?;
-    }
+    let Some(record) = repository
+        .lock()
+        .expect("automation repository mutex poisoned")
+        .record_execution(&automation, &draft)?
+    else {
+        return Ok(None);
+    };
     publish_automation_execution_event(
         event_bus,
         "automation.execution_recorded",
         "Recorded automation execution",
         &record,
     );
-    Ok(record)
+    if record.status == AutomationExecutionStatus::Running {
+        let runner = execution_runner
+            .lock()
+            .expect("automation execution runner mutex poisoned")
+            .clone();
+        if let Some(runner) = runner {
+            runner.dispatch(automation, record.clone());
+        }
+    }
+    Ok(Some(record))
 }
 
 pub(super) fn normalized_required(value: Option<String>) -> Option<String> {
     value
         .map(|item| item.trim().to_string())
         .filter(|item| !item.is_empty())
+}
+
+pub(super) fn normalized_agent_code(value: Option<String>) -> String {
+    normalized_required(value).unwrap_or_else(|| DEFAULT_AUTOMATION_AGENT_CODE.to_string())
 }
 
 pub(super) fn optional_trimmed(value: Option<String>) -> Option<String> {

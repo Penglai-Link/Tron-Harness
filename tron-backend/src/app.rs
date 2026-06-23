@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex, OnceLock};
 
+mod automation_runner;
 mod routing;
 mod startup;
 
@@ -26,8 +27,8 @@ use crate::{
         },
     },
     application::agent::{
-        AgentAguiReplayStore, AgentManagementService, AgentRunHistoryService, ModelClient,
-        register_default_agent_tools,
+        AgentAguiReplayStore, AgentInvocationService, AgentManagementService,
+        AgentRunHistoryService, ModelClient, register_default_agent_tools,
     },
     application::app::AppService,
     application::automation::AutomationService,
@@ -58,6 +59,7 @@ use crate::{
 
 pub use self::startup::{AppBootstrapError, AppReadiness, AppReadinessStatus};
 use self::{
+    automation_runner::MainAgentAutomationRunner,
     routing::{build_open_api_routes, build_protected_routes},
     startup::{build_graph_core, build_graph_services, build_rag_service},
 };
@@ -249,9 +251,6 @@ impl AppState {
         }
         let automations =
             build_automation_service(&config.database_url, workspaces.clone(), event_bus.clone());
-        automations
-            .bootstrap_scheduler()
-            .expect("automation scheduler should initialize");
         let models = if config.database_url == ":memory:" {
             GLOBAL_MODEL_SERVICE
                 .get_or_init(|| build_model_service(":memory:", workspaces.clone()))
@@ -297,6 +296,7 @@ impl AppState {
             agent_tool_registry.as_ref(),
             workspaces.clone(),
             apps.clone(),
+            automations.clone(),
             tasks.clone(),
             models.clone(),
             skills.clone(),
@@ -327,6 +327,28 @@ impl AppState {
         } else {
             build_chat_service(&config.database_url)
         };
+        automations.set_execution_runner(Arc::new(MainAgentAutomationRunner::new(
+            automations.clone(),
+            chats.clone(),
+            agent_management.clone(),
+            models.clone(),
+            AgentInvocationService::new(
+                workspaces.clone(),
+                apps.clone(),
+                variables.clone(),
+                skills.clone(),
+                agent_management.clone(),
+                agent_runs.clone(),
+                mcp.clone(),
+                event_bus.clone(),
+                agent_model_client.clone(),
+                agent_tool_registry.clone(),
+                runtime_http_client.clone(),
+            ),
+        )));
+        automations
+            .bootstrap_scheduler()
+            .expect("automation scheduler should initialize");
         let readiness = AppReadiness::validated_ready();
 
         Ok(Self {

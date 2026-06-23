@@ -16,7 +16,7 @@ use crate::{
     domain::agent::{AgentModelConfig, ModelTokenUsage},
     domain::chat::{
         ChatError, ChatMessage, ChatMessageChannel, ChatMessageRole, ChatSession, ChatSessionGroup,
-        ChatSessionStatus,
+        ChatSessionSourceType, ChatSessionStatus,
     },
     shared::{
         id::{SnowflakeIdProvider, SnowflakedSnowflakeIdProvider},
@@ -66,13 +66,21 @@ impl ChatService {
             .map_err(|_| ChatError::StorageFailure)?
             .value();
         let now = current_timestamp();
+        let task_code = normalized_optional(command.task_code);
+        let source_type = command.source_type.unwrap_or(if task_code.is_some() {
+            ChatSessionSourceType::Task
+        } else {
+            ChatSessionSourceType::Manual
+        });
         let session = ChatSession {
             id,
             session_code: format!("SESSION-{id}"),
             workspace_code,
             user_code,
             app_code: normalized_optional(command.app_code),
-            task_code: normalized_optional(command.task_code),
+            task_code,
+            source_type,
+            source_code: normalized_optional(command.source_code),
             agent_code: normalized_optional(command.agent_code),
             system_agent_session_id: None,
             title: normalized_optional(command.title).unwrap_or_else(|| "New chat".into()),
@@ -100,12 +108,26 @@ impl ChatService {
 
         let mut grouped = BTreeMap::<String, ChatSessionGroup>::new();
         for session in sessions {
-            let task_title = session.task_code.clone().unwrap_or_else(|| "Chat".into());
+            let task_title = match session.source_type {
+                ChatSessionSourceType::Automation => "Automation".into(),
+                ChatSessionSourceType::Task => {
+                    session.task_code.clone().unwrap_or_else(|| "Task".into())
+                }
+                ChatSessionSourceType::Manual => "Chat".into(),
+            };
+            let group_key = format!(
+                "{:?}:{}:{}",
+                session.source_type,
+                session.source_code.as_deref().unwrap_or(""),
+                session.task_code.as_deref().unwrap_or("")
+            );
             let group = grouped
-                .entry(task_title.clone())
+                .entry(group_key)
                 .or_insert_with(|| ChatSessionGroup {
                     task_code: session.task_code.clone(),
                     task_title,
+                    source_type: session.source_type,
+                    source_code: session.source_code.clone(),
                     sessions: Vec::new(),
                 });
             group.sessions.push(session);

@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS automations (
     workspace_code TEXT NOT NULL,
     name TEXT NOT NULL,
     description TEXT NULL,
+    agent_code TEXT NOT NULL DEFAULT 'main-agent',
+    model_code TEXT NULL,
     prompt_text TEXT NOT NULL,
     cron_expression TEXT NOT NULL,
     scheduler_expression TEXT NOT NULL,
@@ -25,6 +27,7 @@ CREATE TABLE IF NOT EXISTS automation_execution_records (
     execution_code TEXT NOT NULL UNIQUE,
     automation_code TEXT NOT NULL REFERENCES automations(automation_code),
     workspace_code TEXT NOT NULL,
+    session_code TEXT NULL,
     trigger_source TEXT NOT NULL CHECK (trigger_source IN ('Scheduler', 'Manual')),
     status TEXT NOT NULL CHECK (status IN ('Pending', 'Running', 'Success', 'Failed', 'Canceled', 'Skipped')),
     summary TEXT NULL,
@@ -38,3 +41,15 @@ CREATE INDEX IF NOT EXISTS idx_automations_workspace_status ON automations(works
 CREATE INDEX IF NOT EXISTS idx_automations_workspace_updated ON automations(workspace_code, updated_at);
 CREATE INDEX IF NOT EXISTS idx_automation_executions_automation_started ON automation_execution_records(automation_code, started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_automation_executions_workspace_started ON automation_execution_records(workspace_code, started_at DESC);
+DELETE FROM automation_execution_records
+WHERE trigger_source = 'Scheduler'
+  AND scheduled_at IS NOT NULL
+  AND id NOT IN (
+    SELECT MIN(id)
+    FROM automation_execution_records
+    WHERE trigger_source = 'Scheduler'
+      AND scheduled_at IS NOT NULL
+    GROUP BY automation_code, trigger_source, scheduled_at
+  );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_automation_scheduler_tick ON automation_execution_records(automation_code, trigger_source, scheduled_at)
+WHERE trigger_source = 'Scheduler' AND scheduled_at IS NOT NULL;

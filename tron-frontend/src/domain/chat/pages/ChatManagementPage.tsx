@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useSearchParams } from "react-router";
 import {
   ArrowDown,
   Bot,
@@ -194,11 +195,29 @@ function orderSessionGroups(groups: ChatSessionGroup[]) {
   });
 }
 
+function sessionGroupKey(group: ChatSessionGroup) {
+  return [
+    group.sourceType ?? "Manual",
+    group.sourceCode ?? "",
+    group.taskCode ?? "",
+    group.taskTitle,
+  ].join(":");
+}
+
+function sessionGroupKeyForSession(session: ChatSession) {
+  return [
+    session.sourceType ?? "Manual",
+    session.sourceCode ?? "",
+    session.taskCode ?? "",
+    session.taskCode ? session.taskCode : "Chat",
+  ].join(":");
+}
+
 function insertSession(groups: ChatSessionGroup[], session: ChatSession): ChatSessionGroup[] {
-  const groupKey = session.taskCode ?? "unassigned";
+  const groupKey = sessionGroupKeyForSession(session);
   let inserted = false;
   const nextGroups = groups.map((group) => {
-    const currentKey = group.taskCode ?? "unassigned";
+    const currentKey = sessionGroupKey(group);
     if (currentKey !== groupKey) return group;
     inserted = true;
     return {
@@ -212,6 +231,8 @@ function insertSession(groups: ChatSessionGroup[], session: ChatSession): ChatSe
   return orderSessionGroups([
     {
       taskCode: session.taskCode,
+      sourceCode: session.sourceCode,
+      sourceType: session.sourceType,
       taskTitle: session.taskCode ?? "Chat",
       sessions: [session],
     },
@@ -1845,7 +1866,7 @@ function SessionSidebar({
           </div>
           <div className="h-[calc(100%-3.5rem)] overflow-y-auto px-3 py-4">
             {groups.map((group) => {
-              const groupKey = group.taskCode ?? "unassigned";
+              const groupKey = sessionGroupKey(group);
               const closed = closedGroups.has(groupKey);
               return (
                 <section className="mb-4" key={groupKey}>
@@ -2466,6 +2487,8 @@ function AguiRunWorkRail({
 }
 
 export function ChatManagementPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedSessionCode = searchParams.get("sessionCode")?.trim() ?? "";
   const toast = useToast();
   const { session: authSession } = useAuthSession();
   const { preferences: aguiDebugPreferences } = useAguiDebugPreferences();
@@ -2560,6 +2583,12 @@ export function ChatManagementPage() {
   useEffect(() => {
     setSessionGroups(orderSessionGroups(groups));
   }, [groups]);
+
+  useEffect(() => {
+    if (!requestedSessionCode) return;
+    if (!findSession(sessionGroups, requestedSessionCode)) return;
+    setActiveSessionCode(requestedSessionCode);
+  }, [requestedSessionCode, sessionGroups]);
 
   useEffect(() => {
     let active = true;
@@ -2907,6 +2936,12 @@ export function ChatManagementPage() {
 
   function handleSessionSelect(sessionCode: string) {
     setActiveSessionCode(sessionCode);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      if (sessionCode) next.set("sessionCode", sessionCode);
+      else next.delete("sessionCode");
+      return next;
+    }, { replace: true });
     setUnseenSessionCodes((current) => {
       if (!current.has(sessionCode)) return current;
       const next = new Set(current);

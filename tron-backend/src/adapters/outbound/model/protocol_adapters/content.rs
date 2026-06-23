@@ -3,6 +3,38 @@ use serde_json::{Value, json};
 use crate::domain::agent::AgentMessage;
 
 pub(super) fn chat_message_json(message: &AgentMessage) -> Value {
+    if message.role == "assistant"
+        && let Some(tool_calls) = &message.tool_calls
+    {
+        return json!({
+            "role": "assistant",
+            "content": Value::Null,
+            "tool_calls": tool_calls
+                .iter()
+                .map(|tool_call| json!({
+                    "id": tool_call.call_id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_call.tool_name,
+                        "arguments": serde_json::to_string(&tool_call.input)
+                            .unwrap_or_else(|_| "{}".into()),
+                    }
+                }))
+                .collect::<Vec<_>>(),
+        });
+    }
+    if message.role == "tool"
+        && let Some(tool_call_id) = &message.tool_call_id
+    {
+        return json!({
+            "role": "tool",
+            "tool_call_id": tool_call_id,
+            "content": message
+                .tool_output
+                .as_deref()
+                .unwrap_or(message.content.as_str()),
+        });
+    }
     json!({
         "role": provider_role(message),
         "content": message.content,
@@ -25,9 +57,9 @@ pub(super) fn responses_instructions_text(messages: &[AgentMessage]) -> Option<S
 
 fn provider_role(message: &AgentMessage) -> &str {
     match message.role.as_str() {
-        // Internal tool observations are serialized as plain user text because
-        // provider chat APIs may reject `tool` messages unless they include a
-        // provider-specific tool-call envelope and correlation id.
+        // Tool observations without provider call ids cannot be serialized as
+        // native Chat Completions tool results, so keep the legacy plain-text
+        // fallback for older function_call-style responses.
         "tool" => "user",
         other => other,
     }

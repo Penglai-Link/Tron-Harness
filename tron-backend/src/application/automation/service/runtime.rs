@@ -2,15 +2,13 @@ use super::*;
 
 #[derive(Clone)]
 pub(super) struct AutomationRuntime {
-    registered_codes: Arc<Mutex<BTreeSet<String>>>,
-    scheduler: Arc<Mutex<Scheduler<Utc>>>,
+    jobs: Arc<Mutex<BTreeMap<String, JoinHandle<()>>>>,
 }
 
 impl AutomationRuntime {
     pub(super) fn new() -> Self {
         Self {
-            registered_codes: Arc::new(Mutex::new(BTreeSet::new())),
-            scheduler: Arc::new(Mutex::new(Scheduler::utc())),
+            jobs: Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
 
@@ -20,55 +18,83 @@ impl AutomationRuntime {
         scheduler_expression: &str,
         repository: Arc<Mutex<Box<dyn AutomationRepository>>>,
         event_bus: EventBusHandle,
+        execution_runner: Arc<Mutex<Option<Arc<dyn AutomationExecutionRunner>>>>,
     ) -> Result<(), AutomationError> {
         self.unregister(automation_code);
-        let code_for_name = automation_code.to_string();
-        let code_for_run = code_for_name.clone();
-        let job = Job::named(
-            &code_for_name,
-            scheduler_expression.to_string(),
-            move || {
-                let repository = repository.clone();
-                let event_bus = event_bus.clone();
-                let automation_code = code_for_run.clone();
-                async move {
-                    let _ = record_execution(
-                        repository,
-                        event_bus,
-                        &automation_code,
-                        AutomationTriggerSource::Scheduler,
-                    );
-                }
-            },
-        );
-        self.scheduler
-            .lock()
-            .expect("automation scheduler mutex poisoned")
-            .add(job);
-        self.registered_codes
+        let schedule =
+            Schedule::from_str(scheduler_expression).map_err(|_| AutomationError::InvalidCron)?;
+        let automation_code = automation_code.to_string();
+        let job_code = automation_code.clone();
+        let handle = tokio::spawn(async move {
+            run_scheduled_automation(job_code, schedule, repository, event_bus, execution_runner)
+                .await;
+        });
+        self.jobs
             .lock()
             .expect("automation scheduler registry mutex poisoned")
-            .insert(code_for_name);
+            .insert(automation_code, handle);
         Ok(())
     }
 
     pub(super) fn unregister(&self, automation_code: &str) {
-        self.scheduler
-            .lock()
-            .expect("automation scheduler mutex poisoned")
-            .cancel_by_name(automation_code);
-        self.registered_codes
+        if let Some(handle) = self
+            .jobs
             .lock()
             .expect("automation scheduler registry mutex poisoned")
-            .remove(automation_code);
+            .remove(automation_code)
+        {
+            handle.abort();
+        }
     }
 
     pub(super) fn snapshot(&self) -> Vec<String> {
-        self.registered_codes
+        self.jobs
+            .lock()
+            .expect("automation scheduler registry mutex poisoned")
+            .keys()
+            .cloned()
+            .collect()
+    }
+}
+
+impl Drop for AutomationRuntime {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.jobs) != 1 {
+            return;
+        }
+        for (_, handle) in self
+            .jobs
             .lock()
             .expect("automation scheduler registry mutex poisoned")
             .iter()
-            .cloned()
-            .collect()
+        {
+            handle.abort();
+        }
+    }
+}
+
+async fn run_scheduled_automation(
+    automation_code: String,
+    schedule: Schedule,
+    repository: Arc<Mutex<Box<dyn AutomationRepository>>>,
+    event_bus: EventBusHandle,
+    execution_runner: Arc<Mutex<Option<Arc<dyn AutomationExecutionRunner>>>>,
+) {
+    loop {
+        let Some(scheduled_at) = schedule.upcoming(Utc).next() else {
+            return;
+        };
+        let delay = (scheduled_at - Utc::now())
+            .to_std()
+            .unwrap_or(Duration::ZERO);
+        tokio::time::sleep(delay).await;
+        let _ = record_execution(
+            repository.clone(),
+            event_bus.clone(),
+            execution_runner.clone(),
+            &automation_code,
+            AutomationTriggerSource::Scheduler,
+            Some(format_timestamp(scheduled_at)),
+        );
     }
 }

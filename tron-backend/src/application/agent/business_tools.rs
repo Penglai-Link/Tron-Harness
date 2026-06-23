@@ -7,6 +7,7 @@ use crate::domain::agent::{EffectiveTool, Tool, ToolError, ToolRegistry};
 use crate::{
     application::{
         app::AppService,
+        automation::AutomationService,
         memory::MemoryService,
         model::ModelService,
         rag::{
@@ -42,6 +43,7 @@ pub fn register_default_agent_tools<R, S, E>(
     registry: &ToolRegistry,
     workspaces: WorkspaceService,
     apps: AppService,
+    automations: AutomationService,
     tasks: TaskService,
     models: ModelService,
     skills: SkillRegistryService,
@@ -60,8 +62,15 @@ where
     S: RagStrategyRegistry + Send + Sync + 'static,
     E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime + Send + Sync + 'static,
 {
-    let mut tools: Vec<std::sync::Arc<dyn Tool>> =
-        platform_tools::platform_business_tools(workspaces, apps, tasks, models, skills, variables);
+    let mut tools: Vec<std::sync::Arc<dyn Tool>> = platform_tools::platform_business_tools(
+        workspaces,
+        apps,
+        automations,
+        tasks,
+        models,
+        skills,
+        variables,
+    );
     tools.extend(coding_tools::coding_domain_tools());
     tools.extend(memory_tools::memory_business_tools(memory));
     tools.push(discovery::discovery_tool());

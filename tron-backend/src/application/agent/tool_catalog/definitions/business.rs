@@ -20,6 +20,13 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         app_update_definition(),
         app_delete_definition(),
         app_restore_definition(),
+        automation_page_definition(),
+        automation_get_definition(),
+        automation_create_definition(),
+        automation_update_definition(),
+        automation_delete_definition(),
+        automation_restore_definition(),
+        automation_execute_definition(),
         task_page_definition(),
         task_create_definition(),
         task_update_definition(),
@@ -121,6 +128,129 @@ fn app_delete_definition() -> ToolCatalogDefinition {
 
 fn app_restore_definition() -> ToolCatalogDefinition {
     app_code_definition("app.restore", ToolOperationKind::Command)
+}
+
+fn automation_page_definition() -> ToolCatalogDefinition {
+    definition(
+        "automation.page",
+        "automation",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.automation.page.description",
+            json!([{ "workspaceCode": "TRON_CORE", "current": 1, "size": 20, "search": "digest", "status": "active", "includeArchived": false }]),
+            workspace_scoped_page_schema(json!({
+                "search": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.automation.page.params.search" },
+                "status": { "type": "string", "enum": ["active", "paused", "archived"], "x-i18n-description-key": "agent.toolCatalog.tools.automation.common.params.status" },
+                "includeArchived": { "type": "boolean", "default": false, "x-i18n-description-key": "agent.toolCatalog.common.params.includeArchived" }
+            })),
+        ),
+    )
+}
+
+fn automation_get_definition() -> ToolCatalogDefinition {
+    automation_code_definition("automation.get", ToolOperationKind::Query)
+}
+
+fn automation_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "automation.create",
+        "automation",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.automation.create.description",
+            json!([{ "workspaceCode": "TRON_CORE", "name": "Daily digest", "agentCode": "main-agent", "modelCode": "MODEL-1", "prompt": "Summarize workspace progress.", "cronExpression": "0 9 * * *", "status": "paused" }]),
+            automation_mutation_schema(true),
+        ),
+    )
+}
+
+fn automation_update_definition() -> ToolCatalogDefinition {
+    definition(
+        "automation.update",
+        "automation",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.automation.update.description",
+            json!([{ "workspaceCode": "TRON_CORE", "automationCode": "AUT-1", "name": "Daily release digest", "agentCode": "main-agent", "modelCode": "MODEL-1", "status": "active" }]),
+            automation_mutation_schema(false),
+        ),
+    )
+}
+
+fn automation_delete_definition() -> ToolCatalogDefinition {
+    automation_code_definition("automation.delete", ToolOperationKind::Command)
+}
+
+fn automation_restore_definition() -> ToolCatalogDefinition {
+    automation_code_definition("automation.restore", ToolOperationKind::Command)
+}
+
+fn automation_execute_definition() -> ToolCatalogDefinition {
+    automation_code_definition("automation.execute", ToolOperationKind::Command)
+}
+
+fn automation_code_definition(
+    tool_code: &'static str,
+    operation_kind: ToolOperationKind,
+) -> ToolCatalogDefinition {
+    definition(
+        tool_code,
+        "automation",
+        operation_kind,
+        schema(
+            match tool_code {
+                "automation.get" => "agent.toolCatalog.tools.automation.get.description",
+                "automation.delete" => "agent.toolCatalog.tools.automation.delete.description",
+                "automation.restore" => "agent.toolCatalog.tools.automation.restore.description",
+                "automation.execute" => "agent.toolCatalog.tools.automation.execute.description",
+                _ => "agent.toolCatalog.tools.automation.get.description",
+            },
+            json!([{ "workspaceCode": "TRON_CORE", "automationCode": "AUT-1" }]),
+            json!({
+                "type": "object",
+                "required": ["automationCode"],
+                "properties": {
+                    "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.workspaceCode" },
+                    "automationCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.automation.common.params.automationCode" }
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn automation_mutation_schema(create: bool) -> serde_json::Value {
+    let required = if create {
+        json!(["name", "prompt", "cronExpression"])
+    } else {
+        json!(["automationCode"])
+    };
+    let mut value = json!({
+        "type": "object",
+        "required": required,
+        "properties": {
+            "workspaceCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.workspaceCode" },
+            "name": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.name" },
+            "description": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.description" },
+            "agentCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.automation.common.params.agentCode" },
+            "modelCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.automation.common.params.modelCode" },
+            "prompt": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.automation.common.params.prompt" },
+            "cronExpression": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.automation.common.params.cronExpression" },
+            "status": { "type": "string", "enum": ["active", "paused", "archived"], "x-i18n-description-key": "agent.toolCatalog.tools.automation.common.params.status" }
+        },
+        "additionalProperties": false
+    });
+    if !create {
+        if let serde_json::Value::Object(map) = &mut value {
+            if let Some(serde_json::Value::Object(properties)) = map.get_mut("properties") {
+                properties.insert(
+                    "automationCode".to_string(),
+                    json!({ "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.automation.common.params.automationCode" }),
+                );
+            }
+        }
+    }
+    value
 }
 
 fn task_page_definition() -> ToolCatalogDefinition {

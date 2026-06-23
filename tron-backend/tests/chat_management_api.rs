@@ -207,6 +207,8 @@ fn chat_session_code_uses_shared_snowflake_id_provider() {
                 agent_code: Some("main-agent".into()),
                 app_code: None,
                 task_code: None,
+                source_type: None,
+                source_code: None,
                 title: Some("Snowflake chat".into()),
                 workspace_code: Some("TRON_CORE".into()),
             },

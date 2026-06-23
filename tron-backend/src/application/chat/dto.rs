@@ -4,7 +4,7 @@ use crate::{
     application::agent::AgentInvocationResult,
     domain::{
         agent::{AgentRunLimits, EffectiveTool},
-        chat::{ChatMessage, ChatSession},
+        chat::{ChatMessage, ChatSession, ChatSessionSourceType},
     },
 };
 
@@ -21,6 +21,8 @@ pub struct CreateChatSessionCommand {
     pub title: Option<String>,
     pub app_code: Option<String>,
     pub task_code: Option<String>,
+    pub source_type: Option<ChatSessionSourceType>,
+    pub source_code: Option<String>,
     pub agent_code: Option<String>,
 }
 

@@ -19,6 +19,7 @@ const NOW = "2026-05-19T12:00:00Z";
 const EMPTY_PAGE_SIZE = 15;
 
 interface AutomationSeed {
+  agentCode: string;
   archivedAt: string | null;
   automationCode: string;
   createdAt: string;
@@ -30,6 +31,7 @@ interface AutomationSeed {
   lastExecutionSummary: string | null;
   lastFinishedAt: string | null;
   lastStartedAt: string | null;
+  modelCode: string | null;
   name: string;
   previousStatus: AutomationStatus | null;
   prompt: string;
@@ -52,6 +54,7 @@ let nextExecutionId = 4;
 
 let automations: AutomationSeed[] = [
   {
+    agentCode: "main-agent",
     archivedAt: null,
     automationCode: "AUT-734600000000000001",
     createdAt: "2026-05-19T06:00:00Z",
@@ -63,6 +66,7 @@ let automations: AutomationSeed[] = [
     lastExecutionSummary: "Prompt dispatch recorded for the automation.",
     lastFinishedAt: "2026-05-19T09:00:08Z",
     lastStartedAt: "2026-05-19T09:00:02Z",
+    modelCode: "MODEL-734600000000000007",
     name: "Daily workspace release digest",
     previousStatus: null,
     prompt: "Write a detailed workspace release digest with risks, decisions, and next actions.",
@@ -73,6 +77,7 @@ let automations: AutomationSeed[] = [
     workspaceCode: "TRON_CORE",
   },
   {
+    agentCode: "main-agent",
     archivedAt: null,
     automationCode: "AUT-734600000000000002",
     createdAt: "2026-05-19T07:00:00Z",
@@ -84,6 +89,7 @@ let automations: AutomationSeed[] = [
     lastExecutionSummary: "Scheduler tick skipped because the automation is not Active.",
     lastFinishedAt: "2026-05-19T08:30:04Z",
     lastStartedAt: "2026-05-19T08:30:03Z",
+    modelCode: "MODEL-734600000000000007",
     name: "Prompt queue readiness check",
     previousStatus: null,
     prompt: "Inspect the workspace backlog and list queues that are not ready for prompt generation.",
@@ -94,6 +100,7 @@ let automations: AutomationSeed[] = [
     workspaceCode: "TRON_CORE",
   },
   {
+    agentCode: "main-agent",
     archivedAt: "2026-05-19T05:15:00Z",
     automationCode: "AUT-734600000000000003",
     createdAt: "2026-05-18T22:00:00Z",
@@ -105,6 +112,7 @@ let automations: AutomationSeed[] = [
     lastExecutionSummary: "Execution recorded with status Failed.",
     lastFinishedAt: "2026-05-19T05:00:12Z",
     lastStartedAt: "2026-05-19T05:00:05Z",
+    modelCode: "MODEL-734600000000000007",
     name: "Archived governance audit",
     previousStatus: "Paused",
     prompt: "Run the legacy governance audit against archived compliance artifacts.",
@@ -115,6 +123,7 @@ let automations: AutomationSeed[] = [
     workspaceCode: "TRON_CORE",
   },
   {
+    agentCode: "main-agent",
     archivedAt: null,
     automationCode: "AUT-734600000000000004",
     createdAt: "2026-05-19T07:15:00Z",
@@ -126,6 +135,7 @@ let automations: AutomationSeed[] = [
     lastExecutionSummary: null,
     lastFinishedAt: null,
     lastStartedAt: null,
+    modelCode: "MODEL-734600000000000001",
     name: "Platform noon brief",
     previousStatus: null,
     prompt: "Summarize platform delivery health and blockers for the noon handoff.",
@@ -144,6 +154,7 @@ let executionRecords: AutomationExecutionListItem[] = [
     executionCode: "AEX-734600000000000001",
     finishedAt: "2026-05-19T09:00:08Z",
     scheduledAt: "2026-05-19T09:00:00Z",
+    sessionCode: "SESSION-734600000000000001",
     startedAt: "2026-05-19T09:00:02Z",
     status: "Success",
     summary: "Prompt dispatch recorded for the automation.",
@@ -156,6 +167,7 @@ let executionRecords: AutomationExecutionListItem[] = [
     executionCode: "AEX-734600000000000002",
     finishedAt: "2026-05-19T08:30:04Z",
     scheduledAt: "2026-05-19T08:30:00Z",
+    sessionCode: null,
     startedAt: "2026-05-19T08:30:03Z",
     status: "Skipped",
     summary: "Scheduler tick skipped because the automation is not Active.",
@@ -168,6 +180,7 @@ let executionRecords: AutomationExecutionListItem[] = [
     executionCode: "AEX-734600000000000003",
     finishedAt: "2026-05-19T05:00:12Z",
     scheduledAt: "2026-05-19T05:00:00Z",
+    sessionCode: null,
     startedAt: "2026-05-19T05:00:05Z",
     status: "Failed",
     summary: "Execution recorded with status Failed.",
@@ -227,6 +240,8 @@ export function createMockAutomation(payload: CreateAutomationPayload) {
   const cronExpression = requiredText(payload.cronExpression, "automation cron expression is invalid");
   const schedulerExpression = normalizedSchedulerExpression(cronExpression);
   const status = payload.status ?? automationOptions.defaultStatus;
+  const agentCode = optionalText(payload.agentCode) ?? "main-agent";
+  const modelCode = optionalText(payload.modelCode);
 
   if (status === "Archived") {
     throw new Error("automation status is invalid");
@@ -236,6 +251,7 @@ export function createMockAutomation(payload: CreateAutomationPayload) {
   const automationCode = `AUT-${id}`;
   const timestamp = timestampNow();
   const record: AutomationSeed = {
+    agentCode,
     archivedAt: null,
     automationCode,
     createdAt: timestamp,
@@ -247,6 +263,7 @@ export function createMockAutomation(payload: CreateAutomationPayload) {
     lastExecutionSummary: null,
     lastFinishedAt: null,
     lastStartedAt: null,
+    modelCode,
     name,
     previousStatus: null,
     prompt,
@@ -285,13 +302,21 @@ export function updateMockAutomation(
   const nextSchedulerExpression = payload.cronExpression === undefined
     ? current.schedulerExpression
     : normalizedSchedulerExpression(nextCronExpression);
+  const nextAgentCode = payload.agentCode === undefined
+    ? current.agentCode
+    : (optionalText(payload.agentCode) ?? "main-agent");
+  const nextModelCode = payload.modelCode === undefined
+    ? current.modelCode
+    : optionalText(payload.modelCode);
 
   automations = automations.map((automation) => automation.automationCode !== automationCode
     ? automation
     : {
       ...automation,
+      agentCode: nextAgentCode,
       cronExpression: nextCronExpression,
       description: nextDescription,
+      modelCode: nextModelCode,
       name: nextName,
       prompt: nextPrompt,
       schedulerExpression: nextSchedulerExpression,
@@ -400,6 +425,7 @@ export function executeMockAutomation(automationCode: string) {
     executionCode,
     finishedAt: timestamp,
     scheduledAt: null,
+    sessionCode: `SESSION-${executionCode.slice(4)}`,
     startedAt: timestamp,
     status: "Success",
     summary,
@@ -469,6 +495,7 @@ function requireAutomation(automationCode: string) {
 
 function toListItem(automation: AutomationSeed): AutomationListItem {
   return {
+    agentCode: automation.agentCode,
     archivedAt: automation.archivedAt,
     automationCode: automation.automationCode,
     cronExpression: automation.cronExpression,
@@ -478,6 +505,7 @@ function toListItem(automation: AutomationSeed): AutomationListItem {
     lastExecutionSummary: automation.lastExecutionSummary,
     lastFinishedAt: automation.lastFinishedAt,
     lastStartedAt: automation.lastStartedAt,
+    modelCode: automation.modelCode,
     name: automation.name,
     nextRunAt: nextRunAt(automation.schedulerExpression, automation.status),
     status: automation.status,
@@ -490,6 +518,7 @@ function toListItem(automation: AutomationSeed): AutomationListItem {
 function toDetail(automation?: AutomationSeed): AutomationDetailData {
   if (!automation) {
     return {
+      agentCode: "main-agent",
       archivedAt: null,
       automationCode: "",
       createdAt: NOW,
@@ -501,6 +530,7 @@ function toDetail(automation?: AutomationSeed): AutomationDetailData {
       lastExecutionSummary: null,
       lastFinishedAt: null,
       lastStartedAt: null,
+      modelCode: null,
       name: "",
       nextRunAt: null,
       previousStatus: null,

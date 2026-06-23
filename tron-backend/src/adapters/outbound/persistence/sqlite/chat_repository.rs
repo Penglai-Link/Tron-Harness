@@ -5,15 +5,16 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 use crate::{
     application::chat::ChatRepository,
     domain::chat::{
-        ChatError, ChatMessage, ChatMessageChannel, ChatMessageRole, ChatSession, ChatSessionStatus,
+        ChatError, ChatMessage, ChatMessageChannel, ChatMessageRole, ChatSession,
+        ChatSessionSourceType, ChatSessionStatus,
     },
     shared::time::{timestamp_from_millis, timestamp_to_millis},
 };
 
 use super::migrations::{
     CHAT_MANAGEMENT_MIGRATION, CHAT_MESSAGE_TOKEN_USAGE_MIGRATION,
-    CHAT_SESSION_AGENT_CODE_MIGRATION, CHAT_SESSION_SYSTEM_AGENT_SESSION_ID_MIGRATION,
-    CONVERSATION_RUNTIME_SESSIONS_MIGRATION,
+    CHAT_SESSION_AGENT_CODE_MIGRATION, CHAT_SESSION_SOURCE_MIGRATION,
+    CHAT_SESSION_SYSTEM_AGENT_SESSION_ID_MIGRATION, CONVERSATION_RUNTIME_SESSIONS_MIGRATION,
 };
 
 pub struct SqliteChatRepository {
@@ -67,6 +68,12 @@ impl SqliteChatRepository {
                 .execute_batch(CONVERSATION_RUNTIME_SESSIONS_MIGRATION)
                 .map_err(storage_error)?;
         }
+        if !column_exists(&repository.connection, "chat_sessions", "source_type")? {
+            repository
+                .connection
+                .execute_batch(CHAT_SESSION_SOURCE_MIGRATION)
+                .map_err(storage_error)?;
+        }
         Ok(repository)
     }
 }
@@ -75,8 +82,8 @@ impl ChatRepository for SqliteChatRepository {
     fn create_session(&mut self, session: &ChatSession) -> Result<(), ChatError> {
         self.connection
             .execute(
-                "INSERT INTO chat_sessions (id, session_code, workspace_code, user_code, app_code, task_code, agent_code, system_agent_session_id, title, status, last_run_code, last_run_status, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                "INSERT INTO chat_sessions (id, session_code, workspace_code, user_code, app_code, task_code, source_type, source_code, agent_code, system_agent_session_id, title, status, last_run_code, last_run_status, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
                 params![
                     session.id,
                     session.session_code,
@@ -84,6 +91,8 @@ impl ChatRepository for SqliteChatRepository {
                     session.user_code,
                     session.app_code,
                     session.task_code,
+                    session_source_type_to_storage(session.source_type),
+                    session.source_code,
                     session.agent_code,
                     session.system_agent_session_id,
                     session.title,
@@ -123,7 +132,7 @@ impl ChatRepository for SqliteChatRepository {
             .connection
             .prepare(
                 "SELECT id, session_code, workspace_code, user_code, app_code, task_code, agent_code, title, status, last_run_code, last_run_status, created_at, updated_at
-                        , system_agent_session_id
+                        , system_agent_session_id, source_type, source_code
                  FROM chat_sessions
                  ORDER BY updated_at DESC, id DESC",
             )
@@ -139,7 +148,7 @@ impl ChatRepository for SqliteChatRepository {
         self.connection
             .query_row(
                 "SELECT id, session_code, workspace_code, user_code, app_code, task_code, agent_code, title, status, last_run_code, last_run_status, created_at, updated_at
-                        , system_agent_session_id
+                        , system_agent_session_id, source_type, source_code
                  FROM chat_sessions
                  WHERE session_code = ?1",
                 [session_code],
@@ -337,6 +346,7 @@ impl ChatRepository for SqliteChatRepository {
 
 fn row_to_session(row: &Row<'_>) -> rusqlite::Result<ChatSession> {
     let status: String = row.get(8)?;
+    let source_type: String = row.get(14)?;
     Ok(ChatSession {
         id: row.get(0)?,
         session_code: row.get(1)?,
@@ -344,6 +354,8 @@ fn row_to_session(row: &Row<'_>) -> rusqlite::Result<ChatSession> {
         user_code: row.get(3)?,
         app_code: row.get(4)?,
         task_code: row.get(5)?,
+        source_type: session_source_type_from_storage(&source_type).map_err(chat_mapping_error)?,
+        source_code: row.get(15)?,
         agent_code: row.get(6)?,
         system_agent_session_id: row.get(13)?,
         title: row.get(7)?,
@@ -422,6 +434,23 @@ fn session_status_from_storage(value: &str) -> Result<ChatSessionStatus, ChatErr
     match value {
         "ACTIVE" => Ok(ChatSessionStatus::Active),
         "ARCHIVED" => Ok(ChatSessionStatus::Archived),
+        _ => Err(ChatError::StorageFailure),
+    }
+}
+
+fn session_source_type_to_storage(source_type: ChatSessionSourceType) -> &'static str {
+    match source_type {
+        ChatSessionSourceType::Manual => "MANUAL",
+        ChatSessionSourceType::Task => "TASK",
+        ChatSessionSourceType::Automation => "AUTOMATION",
+    }
+}
+
+fn session_source_type_from_storage(value: &str) -> Result<ChatSessionSourceType, ChatError> {
+    match value {
+        "MANUAL" => Ok(ChatSessionSourceType::Manual),
+        "TASK" => Ok(ChatSessionSourceType::Task),
+        "AUTOMATION" => Ok(ChatSessionSourceType::Automation),
         _ => Err(ChatError::StorageFailure),
     }
 }

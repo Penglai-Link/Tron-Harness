@@ -29,6 +29,11 @@ pub(super) struct ToolCatalogDefinition {
 pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
     vec![
         ToolDomainDefinition {
+            domain_code: "automation",
+            name_i18n_key: "agent.toolCatalog.domains.automation.name",
+            description_i18n_key: "agent.toolCatalog.domains.automation.description",
+        },
+        ToolDomainDefinition {
             domain_code: "app",
             name_i18n_key: "agent.toolCatalog.domains.app.name",
             description_i18n_key: "agent.toolCatalog.domains.app.description",

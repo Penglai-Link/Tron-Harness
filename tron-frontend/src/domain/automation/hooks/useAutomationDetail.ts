@@ -11,6 +11,7 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 function emptyAutomationDetail(automationCode: string): AutomationDetailData {
   return {
+    agentCode: "main-agent",
     archivedAt: null,
     automationCode,
     createdAt: "",
@@ -22,6 +23,7 @@ function emptyAutomationDetail(automationCode: string): AutomationDetailData {
     lastExecutionSummary: null,
     lastFinishedAt: null,
     lastStartedAt: null,
+    modelCode: null,
     name: "",
     nextRunAt: null,
     previousStatus: null,

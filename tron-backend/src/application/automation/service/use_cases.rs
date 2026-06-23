@@ -12,6 +12,7 @@ impl AutomationService {
                 &automation.scheduler_expression,
                 self.repository.clone(),
                 self.event_bus.clone(),
+                self.execution_runner.clone(),
             )?;
         }
         Ok(())
@@ -49,6 +50,8 @@ impl AutomationService {
             .ok_or(AutomationError::WorkspaceRequired)?;
         self.ensure_active_workspace(&workspace_code)?;
         let name = normalized_required(Some(command.name)).ok_or(AutomationError::NameRequired)?;
+        let agent_code = normalized_agent_code(command.agent_code);
+        let model_code = optional_trimmed(command.model_code);
         let prompt =
             normalized_required(Some(command.prompt)).ok_or(AutomationError::PromptRequired)?;
         let description = optional_trimmed(command.description);
@@ -72,6 +75,8 @@ impl AutomationService {
             workspace_code,
             name,
             description,
+            agent_code,
+            model_code,
             prompt_text: prompt,
             cron_expression,
             scheduler_expression,
@@ -97,6 +102,7 @@ impl AutomationService {
                 &automation.scheduler_expression,
                 self.repository.clone(),
                 self.event_bus.clone(),
+                self.execution_runner.clone(),
             )?;
         }
         let detail = self.get_automation(&automation_code)?;
@@ -126,6 +132,12 @@ impl AutomationService {
         }
         if let Some(description) = command.description {
             automation.description = description.and_then(|value| optional_trimmed(Some(value)));
+        }
+        if command.agent_code.is_some() {
+            automation.agent_code = normalized_agent_code(command.agent_code);
+        }
+        if let Some(model_code) = command.model_code {
+            automation.model_code = model_code.and_then(|value| optional_trimmed(Some(value)));
         }
         if let Some(prompt) = command.prompt {
             automation.prompt_text =
@@ -229,7 +241,7 @@ impl AutomationService {
     }
 
     pub fn execute_now(&self, automation_code: &str) -> Result<AutomationDetail, AutomationError> {
-        self.execute_internal(automation_code, AutomationTriggerSource::Manual)?;
+        self.execute_internal(automation_code, AutomationTriggerSource::Manual, None)?;
         let detail = self.get_automation(automation_code)?;
         self.publish_automation_detail_event(
             "automation.executed",

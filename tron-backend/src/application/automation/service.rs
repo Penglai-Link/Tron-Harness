@@ -1,22 +1,23 @@
 use std::{
-    collections::BTreeSet,
+    collections::BTreeMap,
     str::FromStr,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 
 use chrono::{SecondsFormat, Utc};
 use cron::Schedule;
-use tokio_cron::{Job, Scheduler};
+use tokio::task::JoinHandle;
 
 use crate::{
     application::workspace::WorkspaceService,
     domain::{
         automation::{
-            Automation, AutomationDetail, AutomationError, AutomationExecutionListItem,
-            AutomationExecutionListQuery, AutomationExecutionRecord, AutomationExecutionStatus,
-            AutomationLifecycleResult, AutomationListItem, AutomationListQuery, AutomationOptions,
-            AutomationStatus, AutomationTriggerSource, PagedAutomationRecords,
-            automation_execution_status_to_storage, automation_options,
+            Automation, AutomationDetail, AutomationError, AutomationExecutionDraft,
+            AutomationExecutionListItem, AutomationExecutionListQuery, AutomationExecutionRecord,
+            AutomationExecutionStatus, AutomationLifecycleResult, AutomationListItem,
+            AutomationListQuery, AutomationOptions, AutomationStatus, AutomationTriggerSource,
+            PagedAutomationRecords, automation_execution_status_to_storage, automation_options,
         },
         workspace::{WorkspaceError, WorkspaceStatus},
     },
@@ -32,11 +33,15 @@ mod use_cases;
 
 use self::{projection::*, runtime::AutomationRuntime};
 
+pub const DEFAULT_AUTOMATION_AGENT_CODE: &str = "main-agent";
+
 #[derive(Debug, Clone)]
 pub struct CreateAutomationCommand {
     pub workspace_code: String,
     pub name: String,
     pub description: Option<String>,
+    pub agent_code: Option<String>,
+    pub model_code: Option<String>,
     pub prompt: String,
     pub cron_expression: String,
     pub status: Option<AutomationStatus>,
@@ -46,6 +51,8 @@ pub struct CreateAutomationCommand {
 pub struct UpdateAutomationCommand {
     pub name: Option<String>,
     pub description: Option<Option<String>>,
+    pub agent_code: Option<String>,
+    pub model_code: Option<Option<String>>,
     pub prompt: Option<String>,
     pub cron_expression: Option<String>,
 }
@@ -64,10 +71,24 @@ pub trait AutomationRepository: Send {
         &mut self,
         automation_code: &str,
     ) -> Result<Vec<AutomationExecutionRecord>, AutomationError>;
-    fn create_execution_record(
+    fn record_execution(
         &mut self,
-        record: &AutomationExecutionRecord,
+        automation: &Automation,
+        draft: &AutomationExecutionDraft,
+    ) -> Result<Option<AutomationExecutionRecord>, AutomationError>;
+    fn complete_execution_record(
+        &mut self,
+        automation_code: &str,
+        execution_code: &str,
+        status: AutomationExecutionStatus,
+        summary: Option<String>,
+        session_code: Option<String>,
+        finished_at: &str,
     ) -> Result<(), AutomationError>;
+}
+
+pub trait AutomationExecutionRunner: Send + Sync {
+    fn dispatch(&self, automation: Automation, execution: AutomationExecutionRecord);
 }
 
 #[derive(Clone)]
@@ -76,6 +97,7 @@ pub struct AutomationService {
     runtime: AutomationRuntime,
     workspaces: WorkspaceService,
     event_bus: EventBusHandle,
+    execution_runner: Arc<Mutex<Option<Arc<dyn AutomationExecutionRunner>>>>,
 }
 
 impl AutomationService {
@@ -96,20 +118,53 @@ impl AutomationService {
             runtime: AutomationRuntime::new(),
             workspaces,
             event_bus,
+            execution_runner: Arc::new(Mutex::new(None)),
         }
+    }
+
+    pub fn set_execution_runner(&self, runner: Arc<dyn AutomationExecutionRunner>) {
+        *self
+            .execution_runner
+            .lock()
+            .expect("automation execution runner mutex poisoned") = Some(runner);
     }
 
     fn execute_internal(
         &self,
         automation_code: &str,
         trigger_source: AutomationTriggerSource,
-    ) -> Result<AutomationExecutionRecord, AutomationError> {
+        scheduled_at: Option<String>,
+    ) -> Result<Option<AutomationExecutionRecord>, AutomationError> {
         record_execution(
             self.repository.clone(),
             self.event_bus.clone(),
+            self.execution_runner.clone(),
             automation_code,
             trigger_source,
+            scheduled_at,
         )
+    }
+
+    pub fn complete_execution(
+        &self,
+        automation_code: &str,
+        execution_code: &str,
+        status: AutomationExecutionStatus,
+        summary: Option<String>,
+        session_code: Option<String>,
+    ) -> Result<(), AutomationError> {
+        let finished_at = current_timestamp();
+        self.repository
+            .lock()
+            .expect("automation repository mutex poisoned")
+            .complete_execution_record(
+                automation_code,
+                execution_code,
+                status,
+                summary,
+                session_code,
+                &finished_at,
+            )
     }
 
     fn sync_runtime(&self, automation: &Automation) -> Result<(), AutomationError> {
@@ -119,6 +174,7 @@ impl AutomationService {
                 &automation.scheduler_expression,
                 self.repository.clone(),
                 self.event_bus.clone(),
+                self.execution_runner.clone(),
             )?;
         } else {
             self.runtime.unregister(&automation.automation_code);
@@ -168,6 +224,8 @@ impl AutomationService {
                 workspace_code: automation.workspace_code,
                 name: automation.name,
                 description: automation.description,
+                agent_code: automation.agent_code,
+                model_code: automation.model_code,
                 cron_expression: automation.cron_expression,
                 timezone: automation.timezone,
                 status: automation.status,
@@ -195,6 +253,8 @@ impl AutomationService {
             workspace_code: automation.workspace_code,
             name: automation.name,
             description: automation.description,
+            agent_code: automation.agent_code,
+            model_code: automation.model_code,
             prompt: automation.prompt_text,
             cron_expression: automation.cron_expression,
             scheduler_expression: automation.scheduler_expression.clone(),

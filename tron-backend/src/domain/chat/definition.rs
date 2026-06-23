@@ -26,6 +26,14 @@ pub enum ChatMessageChannel {
     TaskAgent,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ChatSessionSourceType {
+    Manual,
+    Task,
+    Automation,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatSession {
@@ -35,6 +43,8 @@ pub struct ChatSession {
     pub user_code: Option<String>,
     pub app_code: Option<String>,
     pub task_code: Option<String>,
+    pub source_type: ChatSessionSourceType,
+    pub source_code: Option<String>,
     pub agent_code: Option<String>,
     pub system_agent_session_id: Option<String>,
     pub title: String,
@@ -67,6 +77,8 @@ pub struct ChatMessage {
 pub struct ChatSessionGroup {
     pub task_code: Option<String>,
     pub task_title: String,
+    pub source_type: ChatSessionSourceType,
+    pub source_code: Option<String>,
     pub sessions: Vec<ChatSession>,
 }
 

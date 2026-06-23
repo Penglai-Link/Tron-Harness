@@ -6,6 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  Link,
   useSearchParams,
 } from "react-router";
 import {
@@ -29,12 +30,14 @@ import {
   InspectorPanel,
   MarkdownContent,
   PageHeader,
+  SelectInput,
   SurfaceCard,
   TablePagination,
   TextArea,
   TextInput,
   useToast,
   useConsoleShellConfig,
+  useLocaleText,
 } from "@/shared";
 
 import {
@@ -63,7 +66,21 @@ import type {
   AutomationDetailData,
   AutomationOperationalStatus,
 } from "@/domain/automation/model";
+import { fetchWorkspaceSystemAgents } from "@/domain/agent/api/agentManagementApi";
+import { listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
+import { fetchWorkspaceSelectOptions } from "@/domain/model/api/modelApi";
+import { getWorkspaceSelectOptions } from "@/domain/model/mock/data";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+
+import {
+  automationModelCodeFromOption,
+  automationModelOptionsForAgent,
+  availableAutomationAgents,
+  mainAutomationAgentOption,
+  optionCodeForAutomationModel,
+  type AutomationAgentOption,
+  type AutomationModelOption,
+} from "./automationExecutionOptions";
 
 interface AutomationSubtask {
   progress: number;
@@ -138,6 +155,7 @@ function executionPageBounds(page: number, pageSize: number, total: number, visi
 
 export function AutomationDetailsPage() {
   const [searchParams] = useSearchParams();
+  const pt = useLocaleText();
   const automationCode = searchParams.get("automationCode") ?? "";
   const { automation, refresh, setAutomation } = useAutomationDetail(automationCode);
   const [executionCurrent, setExecutionCurrent] = useState(1);
@@ -166,18 +184,119 @@ export function AutomationDetailsPage() {
   const [executionBusy, setExecutionBusy] = useState(false);
   const [archiveBusy, setArchiveBusy] = useState(false);
   const [promptFullscreenOpen, setPromptFullscreenOpen] = useState(false);
+  const [agentOptions, setAgentOptions] = useState<AutomationAgentOption[]>([mainAutomationAgentOption]);
+  const [workspaceModelOptions, setWorkspaceModelOptions] = useState<Awaited<ReturnType<typeof fetchWorkspaceSelectOptions>>>([]);
+  const [selectedAgentCode, setSelectedAgentCode] = useState(automation.agentCode || mainAutomationAgentOption.agentCode);
+  const [selectedModelOptionCode, setSelectedModelOptionCode] = useState(optionCodeForAutomationModel(automation.agentCode, automation.modelCode));
+  const [executionOptionsLoading, setExecutionOptionsLoading] = useState(false);
   const automationRef = useRef(automation);
   automationRef.current = automation;
   const archived = automation.status === "Archived" || Boolean(automation.archivedAt);
+  const selectedAgent = useMemo(() => {
+    const matchedAgent = agentOptions.find((agent) => agent.agentCode === selectedAgentCode);
+    if (matchedAgent) return matchedAgent;
+    if (!selectedAgentCode || selectedAgentCode === mainAutomationAgentOption.agentCode) {
+      return mainAutomationAgentOption;
+    }
+    return {
+      agentCode: selectedAgentCode,
+      description: "Configured automation agent.",
+      models: [],
+      name: selectedAgentCode,
+    };
+  }, [agentOptions, selectedAgentCode]);
+  const visibleAgentOptions = useMemo(() => {
+    if (agentOptions.some((agent) => agent.agentCode === selectedAgent.agentCode)) {
+      return agentOptions;
+    }
+    return [selectedAgent, ...agentOptions];
+  }, [agentOptions, selectedAgent]);
+  const modelOptions = useMemo(
+    () => automationModelOptionsForAgent(workspaceModelOptions, selectedAgent),
+    [selectedAgent, workspaceModelOptions],
+  );
+  const visibleModelOptions = useMemo<AutomationModelOption[]>(() => {
+    if (!selectedModelOptionCode || modelOptions.some((option) => option.optionCode === selectedModelOptionCode)) {
+      return modelOptions;
+    }
+    if (!automation.modelCode) return modelOptions;
+    return [
+      {
+        label: automation.modelCode,
+        modelCode: automation.modelCode,
+        optionCode: selectedModelOptionCode,
+      },
+      ...modelOptions,
+    ];
+  }, [automation.modelCode, modelOptions, selectedModelOptionCode]);
+  const selectedModelCode = useMemo(
+    () => automationModelCodeFromOption(visibleModelOptions, selectedModelOptionCode),
+    [selectedModelOptionCode, visibleModelOptions],
+  );
 
   useEffect(() => {
     setName(automation.name);
     setDescription(automation.description ?? "");
     setCronExpression(automation.cronExpression);
     setPrompt(automation.prompt);
+    setSelectedAgentCode(automation.agentCode || mainAutomationAgentOption.agentCode);
+    setSelectedModelOptionCode(optionCodeForAutomationModel(automation.agentCode, automation.modelCode));
     setEditing(false);
     setPromptFullscreenOpen(false);
   }, [automation]);
+
+  useEffect(() => {
+    if (visibleAgentOptions.some((agent) => agent.agentCode === selectedAgentCode)) return;
+    setSelectedAgentCode(mainAutomationAgentOption.agentCode);
+  }, [selectedAgentCode, visibleAgentOptions]);
+
+  useEffect(() => {
+    if (!visibleModelOptions.length) {
+      if (selectedModelOptionCode && selectedModelCode !== automation.modelCode) {
+        setSelectedModelOptionCode("");
+      }
+      return;
+    }
+    if (visibleModelOptions.some((option) => option.optionCode === selectedModelOptionCode)) return;
+    setSelectedModelOptionCode(visibleModelOptions[0].optionCode);
+  }, [automation.modelCode, selectedModelCode, selectedModelOptionCode, visibleModelOptions]);
+
+  useEffect(() => {
+    const workspaceCode = automation.workspaceCode.trim();
+    if (!workspaceCode) {
+      setAgentOptions([mainAutomationAgentOption]);
+      setWorkspaceModelOptions([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    setExecutionOptionsLoading(true);
+
+    const agentsPromise = dataSource === "api"
+      ? fetchWorkspaceSystemAgents(workspaceCode, controller.signal)
+      : Promise.resolve(listWorkspaceSystemAgentsMock(workspaceCode));
+    const modelsPromise = dataSource === "api"
+      ? fetchWorkspaceSelectOptions(workspaceCode, controller.signal)
+      : Promise.resolve(getWorkspaceSelectOptions(workspaceCode));
+
+    Promise.all([agentsPromise, modelsPromise])
+      .then(([systemAgents, workspaceModels]) => {
+        if (controller.signal.aborted) return;
+        setAgentOptions(availableAutomationAgents(systemAgents));
+        setWorkspaceModelOptions(workspaceModels);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        setAgentOptions([mainAutomationAgentOption]);
+        setWorkspaceModelOptions([]);
+        toast.error(error instanceof Error ? error.message : "Execution options could not be loaded");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setExecutionOptionsLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [automation.workspaceCode, dataSource, toast]);
 
   useEffect(() => {
     if (!promptFullscreenOpen) return;
@@ -203,7 +322,9 @@ export function AutomationDetailsPage() {
   const detailDirty = name !== automation.name
     || description !== (automation.description ?? "")
     || cronExpression !== automation.cronExpression
-    || prompt !== automation.prompt;
+    || prompt !== automation.prompt
+    || selectedAgentCode !== (automation.agentCode || mainAutomationAgentOption.agentCode)
+    || selectedModelCode !== automation.modelCode;
   const executionPageCount = Math.max(1, Math.ceil(executionPageState.total / executionPageState.size));
   const executionBounds = executionPageBounds(
     executionPageState.current,
@@ -231,6 +352,8 @@ export function AutomationDetailsPage() {
         <div className="space-y-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Metadata</p>
           <DetailField label="Automation code" value={<ReadValue>{automation.automationCode}</ReadValue>} />
+          <DetailField label="Agent" value={<ReadValue>{automation.agentCode}</ReadValue>} />
+          <DetailField label="Model" value={<ReadValue>{automation.modelCode}</ReadValue>} />
           <DetailField label="Timezone" value={<ReadValue>{automation.timezone}</ReadValue>} />
           <DetailField label="Created" value={formatTimestamp(automation.createdAt)} />
           <DetailField label="Updated" value={formatTimestamp(automation.updatedAt)} />
@@ -268,18 +391,26 @@ export function AutomationDetailsPage() {
     setDescription(automation.description ?? "");
     setCronExpression(automation.cronExpression);
     setPrompt(automation.prompt);
+    setSelectedAgentCode(automation.agentCode || mainAutomationAgentOption.agentCode);
+    setSelectedModelOptionCode(optionCodeForAutomationModel(automation.agentCode, automation.modelCode));
     setPromptFullscreenOpen(false);
     setEditing(false);
   }
 
   async function saveDetail() {
     if (saving || archived || !detailDirty) return;
+    if (!selectedModelOptionCode) {
+      toast.error(pt("Select an execution model before saving"));
+      return;
+    }
     setSaving(true);
 
     try {
       const payload = {
+        agentCode: selectedAgentCode,
         cronExpression,
         description,
+        modelCode: selectedModelCode,
         name,
         prompt,
       };
@@ -289,9 +420,9 @@ export function AutomationDetailsPage() {
       setAutomation(updated);
       setEditing(false);
       setPromptFullscreenOpen(false);
-      toast.success(`Automation ${updated.automationCode} saved`);
+      toast.success(pt("Automation {{code}} saved", { code: updated.automationCode }));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Automation could not be saved");
+      toast.error(error instanceof Error ? error.message : pt("Automation could not be saved"));
     } finally {
       setSaving(false);
     }
@@ -306,9 +437,9 @@ export function AutomationDetailsPage() {
         ? await updateAutomationStatus(automation.automationCode, { status })
         : updateMockAutomationStatus(automation.automationCode, { status });
       setAutomation(updated);
-      toast.success(`Automation ${updated.automationCode} ${status === "Active" ? "activated" : "paused"}`);
+      toast.success(pt("Automation {{code}} {{status}}", { code: updated.automationCode, status: status === "Active" ? pt("activated") : pt("paused") }));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Automation status could not be updated");
+      toast.error(error instanceof Error ? error.message : pt("Automation status could not be updated"));
     } finally {
       setStatusBusy(false);
     }
@@ -328,9 +459,9 @@ export function AutomationDetailsPage() {
         previousStatus: lifecycle.previousStatus,
         status: lifecycle.status,
       });
-      toast.success(`Automation ${lifecycle.automationCode} archived`);
+      toast.success(pt("Automation {{code}} archived", { code: lifecycle.automationCode }));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Automation could not be archived");
+      toast.error(error instanceof Error ? error.message : pt("Automation could not be archived"));
     } finally {
       setArchiveBusy(false);
     }
@@ -351,9 +482,9 @@ export function AutomationDetailsPage() {
         previousStatus: lifecycle.previousStatus,
         status: lifecycle.status,
       });
-      toast.success(`Automation ${lifecycle.automationCode} restored to ${lifecycle.status}`);
+      toast.success(pt("Automation {{code}} restored to {{status}}", { code: lifecycle.automationCode, status: pt(lifecycle.status) }));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Automation could not be restored");
+      toast.error(error instanceof Error ? error.message : pt("Automation could not be restored"));
     } finally {
       setArchiveBusy(false);
     }
@@ -369,9 +500,9 @@ export function AutomationDetailsPage() {
         : executeMockAutomation(automation.automationCode);
       setAutomation(updated);
       refreshExecutions();
-      toast.success(`Manual execution recorded for ${updated.automationCode}`);
+      toast.success(pt("Manual execution recorded for {{code}}", { code: updated.automationCode }));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Automation execution could not be recorded");
+      toast.error(error instanceof Error ? error.message : pt("Automation execution could not be recorded"));
     } finally {
       setExecutionBusy(false);
     }
@@ -381,10 +512,10 @@ export function AutomationDetailsPage() {
     <>
       <PageHeader
         breadcrumbs={[
-          { label: "Automations", href: "/automations" },
-          { label: automation.automationCode || "Detail" },
+          { label: pt("Automations"), href: "/automations" },
+          { label: automation.automationCode || pt("Detail") },
         ]}
-        title={automation.name || "Automation Detail"}
+        title={automation.name || pt("Automation Detail")}
         actions={(
           <>
             <div className="inline-flex items-center rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-1">
@@ -397,7 +528,7 @@ export function AutomationDetailsPage() {
                 }}
               >
                 <Play size={14} aria-hidden="true" />
-                激活
+                {pt("Activate")}
               </Button>
               <Button
                 size="sm"
@@ -408,45 +539,45 @@ export function AutomationDetailsPage() {
                 }}
               >
                 <Pause size={14} aria-hidden="true" />
-                暂停
+                {pt("Pause")}
               </Button>
             </div>
             <Button variant="secondary" onClick={() => {
               refresh();
               refreshExecutions();
-              toast.success("Automation detail refreshed");
+              toast.success(pt("Automation detail refreshed"));
             }}
             >
               <RefreshCcw size={15} aria-hidden="true" />
-              Refresh
+              {pt("Refresh")}
             </Button>
             <Button disabled={executionBusy || archived} variant="secondary" onClick={handleExecute}>
               <Play size={15} aria-hidden="true" />
-              {executionBusy ? "Running..." : "Run Now"}
+              {executionBusy ? pt("Running...") : pt("Run Now")}
             </Button>
             {archived ? (
               <Button disabled={archiveBusy} variant="secondary" onClick={handleRestore}>
                 <StepForward size={15} aria-hidden="true" />
-                {archiveBusy ? "Restoring..." : "Restore"}
+                {archiveBusy ? pt("Restoring...") : pt("Restore")}
               </Button>
             ) : (
               <Button disabled={archiveBusy} variant="secondary" onClick={handleArchive}>
                 <Archive size={15} aria-hidden="true" />
-                {archiveBusy ? "Archiving..." : "Archive"}
+                {archiveBusy ? pt("Archiving...") : pt("Archive")}
               </Button>
             )}
             {editing ? (
               <>
-                <Button variant="secondary" onClick={resetDraft}>Cancel</Button>
-                <Button disabled={!detailDirty || saving || archived} aria-busy={saving} onClick={() => void saveDetail()}>
+                <Button variant="secondary" onClick={resetDraft}>{pt("Cancel")}</Button>
+                <Button disabled={!detailDirty || saving || archived || !selectedModelOptionCode} aria-busy={saving} onClick={() => void saveDetail()}>
                   <Save size={15} aria-hidden="true" />
-                  {saving ? "Saving..." : "Save"}
+                  {saving ? pt("Saving...") : pt("Save")}
                 </Button>
               </>
             ) : (
               <Button disabled={archived} variant="secondary" onClick={() => setEditing(true)}>
                 <Edit3 size={15} aria-hidden="true" />
-                Edit
+                {pt("Edit")}
               </Button>
             )}
           </>
@@ -465,6 +596,41 @@ export function AutomationDetailsPage() {
             </Field>
             <Field label="Workspace">
               <TextInput aria-label="Workspace code" disabled value={automation.workspaceCode} />
+            </Field>
+            <Field label="Execution agent">
+              <SelectInput
+                aria-label="Automation execution agent"
+                disabled={!editing || archived || executionOptionsLoading}
+                value={selectedAgentCode}
+                onChange={(event) => {
+                  setSelectedAgentCode(event.target.value);
+                  setSelectedModelOptionCode("");
+                }}
+              >
+                {visibleAgentOptions.map((agent) => (
+                  <option key={agent.agentCode} value={agent.agentCode}>
+                    {agent.name} ({agent.agentCode})
+                  </option>
+                ))}
+              </SelectInput>
+            </Field>
+            <Field label="Execution model">
+              <SelectInput
+                aria-label="Automation execution model"
+                disabled={!editing || archived || executionOptionsLoading || !visibleModelOptions.length}
+                value={selectedModelOptionCode}
+                onChange={(event) => setSelectedModelOptionCode(event.target.value)}
+              >
+                {visibleModelOptions.length ? visibleModelOptions.map((model) => (
+                  <option key={model.optionCode} value={model.optionCode}>
+                    {model.label}
+                  </option>
+                )) : (
+                  <option value="">
+                    {executionOptionsLoading ? "Loading models..." : "No executable models"}
+                  </option>
+                )}
+              </SelectInput>
             </Field>
             <Field label="Cron expression">
               <TextInput aria-label="Cron expression" className="font-mono" disabled={!editing || archived} value={cronExpression} onChange={(event) => setCronExpression(event.target.value)} />
@@ -556,6 +722,16 @@ export function AutomationDetailsPage() {
                     <div className="space-y-1">
                       <p className="font-mono text-[13px] text-[var(--color-on-surface)]">{row.executionCode}</p>
                       <p className="text-xs text-[var(--color-on-surface-variant)]">{formatTimestamp(row.createdAt)}</p>
+                      {row.sessionCode ? (
+                        <Link
+                          className="inline-flex text-xs font-medium text-[var(--color-primary)] hover:underline"
+                          to={`/chats?sessionCode=${encodeURIComponent(row.sessionCode)}`}
+                        >
+                          {pt("Open session")}
+                        </Link>
+                      ) : (
+                        <p className="text-xs text-[var(--color-on-surface-variant)]">{pt("No linked session")}</p>
+                      )}
                     </div>
                   ),
                 },

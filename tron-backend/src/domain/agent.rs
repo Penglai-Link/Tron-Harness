@@ -32,7 +32,7 @@ pub use management::{
     WorkspaceInternalAgentMcpServerAssignment, WorkspaceInternalAgentPolicy,
     WorkspaceInternalAgentToolAssignment, WorkspaceSystemAgentPolicy,
 };
-pub use message::AgentMessage;
+pub use message::{AgentMessage, AgentMessageToolCall};
 pub use model_config::AgentModelConfig;
 pub(crate) use model_exchange::responses_input_item_json;
 pub use model_exchange::{

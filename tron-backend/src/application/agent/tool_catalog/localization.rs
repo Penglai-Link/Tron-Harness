@@ -111,6 +111,10 @@ pub(crate) fn translate(locale: SupportedLocale, key: &str) -> &'static str {
 
 fn translate_en_us(key: &str) -> &'static str {
     match key {
+        "agent.toolCatalog.domains.automation.name" => "Automation Tools",
+        "agent.toolCatalog.domains.automation.description" => {
+            "Manage scheduled automations and manual runs."
+        }
         "agent.toolCatalog.domains.app.name" => "App Tools",
         "agent.toolCatalog.domains.app.description" => {
             "Browse workspace apps and execution targets."
@@ -282,6 +286,8 @@ fn translate_en_us(key: &str) -> &'static str {
 
 fn translate_zh_cn(key: &str) -> &'static str {
     match key {
+        "agent.toolCatalog.domains.automation.name" => "自动化工具",
+        "agent.toolCatalog.domains.automation.description" => "管理定时自动化和手动执行。",
         "agent.toolCatalog.domains.app.name" => "应用工具",
         "agent.toolCatalog.domains.app.description" => "查看工作区应用和执行目标。",
         "agent.toolCatalog.domains.memory.name" => "记忆工具",
