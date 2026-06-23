@@ -391,6 +391,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
 
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex < historyEntries.length - 1;
+  const addressValue = addressEditing ? addressDraft : activeDisplayAddress;
 
   useEffect(() => {
     if (!addressEditing) {
@@ -553,7 +554,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
             aria-label="Target address"
             className={`${addressEditing ? 'text-left' : ''} min-w-0 flex-1 bg-transparent text-center text-sm text-[var(--color-on-surface)] outline-none placeholder:text-[var(--color-on-surface-variant)]`}
             spellCheck={false}
-            value={addressDraft}
+            value={addressValue}
             onChange={(event) => setAddressDraft(event.target.value)}
             onFocus={handleAddressFocus}
             onKeyDown={handleAddressKeyDown}

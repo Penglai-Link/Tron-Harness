@@ -209,6 +209,8 @@ describe("TargetPageFrame", () => {
     expect(addressInput).toHaveProperty("value", "qbee.qingtui.cn");
     fireEvent.focus(addressInput);
     expect(addressInput).toHaveProperty("value", hashRouteUrl);
+    fireEvent.keyDown(addressInput, { key: "Escape" });
+    expect(addressInput).toHaveProperty("value", "qbee.qingtui.cn");
   });
 
   it("shows an unsupported-page prompt when the target response forbids iframe embedding", async () => {
