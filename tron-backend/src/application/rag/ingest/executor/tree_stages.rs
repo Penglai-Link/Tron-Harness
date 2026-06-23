@@ -152,6 +152,7 @@ where
         } else {
             BusOutcome::Completed
         };
+        let fatal_error = result.fatal_error.clone();
         bundle.append(
             request,
             ARTIFACT_TREE_VECTOR_INDEX_RESULT,
@@ -165,6 +166,9 @@ where
             count,
             request,
         );
+        if let Some(error) = fatal_error {
+            return Err(error);
+        }
         Ok(())
     }
 

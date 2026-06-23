@@ -718,7 +718,7 @@ const ragMockStrategyRegistry: RagMockStrategyRegistry = {
     },
     {
       status: "Enabled",
-      strategyId: "RAG_SUMMARIZE_TREE_V1",
+      strategyId: "RAG_TREE_EXTRACTIVE_SUMMARY_V1",
       supportedStageIds: ["summarizeTree"],
     },
     {
@@ -733,12 +733,12 @@ const ragMockStrategyRegistry: RagMockStrategyRegistry = {
     },
     {
       status: "Enabled",
-      strategyId: "RAG_TREE_FULLTEXT_INDEX_V1",
+      strategyId: "RAG_TREE_FULLTEXT_INDEX",
       supportedStageIds: ["treeFulltextIndex"],
     },
     {
       status: "Enabled",
-      strategyId: "RAG_TREE_VECTOR_INDEX_V1",
+      strategyId: "RAG_TREE_VECTOR_INDEX",
       supportedStageIds: ["treeVectorIndex"],
     },
     {
@@ -1096,9 +1096,9 @@ const seedProfiles: ProfileRecord[] = [
             },
           },
         },
-        summarizeTree: { strategyId: "RAG_SUMMARIZE_TREE_V1" },
-        treeFulltextIndex: { strategyId: "RAG_TREE_FULLTEXT_INDEX_V1" },
-        treeVectorIndex: { strategyId: "RAG_TREE_VECTOR_INDEX_V1" },
+        summarizeTree: { strategyId: "RAG_TREE_EXTRACTIVE_SUMMARY_V1" },
+        treeFulltextIndex: { strategyId: "RAG_TREE_FULLTEXT_INDEX" },
+        treeVectorIndex: { strategyId: "RAG_TREE_VECTOR_INDEX" },
         validateSource: { strategyId: "RAG_VALIDATE_SOURCE" },
         vectorIndex: { strategyId: "RAG_VECTOR_INDEX" },
       },
@@ -1460,10 +1460,10 @@ function normalizeStoredIngestProfile(value: unknown): IngestProfileRecord | und
       persistSource: "RAG_PERSIST_SOURCE",
       preparePayload: legacyConfig.payloadStrategy?.trim() || "RAG_TEXT_CONTRACT_PAYLOAD_V1",
       resolveSource: "PROJECT_DOC_RESOLVE_SOURCE",
-      summarizeTree: "RAG_SUMMARIZE_TREE_V1",
+      summarizeTree: "RAG_TREE_EXTRACTIVE_SUMMARY_V1",
       splitText: legacyConfig.primaryStrategy?.trim() || "RAG_SPLIT_TEXT",
-      treeFulltextIndex: "RAG_TREE_FULLTEXT_INDEX_V1",
-      treeVectorIndex: "RAG_TREE_VECTOR_INDEX_V1",
+      treeFulltextIndex: "RAG_TREE_FULLTEXT_INDEX",
+      treeVectorIndex: "RAG_TREE_VECTOR_INDEX",
       validateSource: "RAG_VALIDATE_SOURCE",
       vectorIndex: "RAG_VECTOR_INDEX",
     } satisfies Record<RagIngestStageId, string>)[stageId];

@@ -1134,9 +1134,34 @@ async fn ui_driven_tree_corpus_profiles_ingest_and_search_api_flow() {
     .await;
     assert_eq!(corpus.status(), StatusCode::CREATED);
     let corpus_body = response_json(corpus).await;
+    assert_eq!(corpus_body["data"]["capabilities"]["tree"], json!(true));
     assert_eq!(
         corpus_body["data"]["runtimeProjection"]["storageBinding"]["bindings"]["tree"],
         json!("ui-tree-store")
+    );
+
+    let detail = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/rag/corpora/ui-tree-memory",
+        None,
+    )
+    .await;
+    let detail_body = response_json(detail).await;
+    assert_eq!(detail_body["data"]["capabilities"]["tree"], json!(true));
+
+    let list = authenticated_request(&router, Method::GET, "/api/v1/rag/corpora", None).await;
+    let list_body = response_json(list).await;
+    let records = list_body["data"]
+        .as_array()
+        .or_else(|| list_body["data"]["records"].as_array())
+        .expect("corpus list should return records");
+    assert!(
+        records
+            .iter()
+            .any(|record| record["corpusId"] == json!("ui-tree-memory")
+                && record["capabilities"]["tree"] == json!(true)),
+        "{list_body}"
     );
 
     let ingest_profile = authenticated_request(
@@ -1307,6 +1332,7 @@ fn team_playbook_sqlite_request() -> Value {
         "capabilities": {
             "fulltext": true,
             "vector": true,
+            "tree": true,
             "graph": false,
             "reserved": false
         },
@@ -1784,6 +1810,7 @@ fn ui_tree_corpus_request() -> Value {
         "capabilities": {
             "fulltext": true,
             "vector": true,
+            "tree": true,
             "graph": false,
             "reserved": false
         },

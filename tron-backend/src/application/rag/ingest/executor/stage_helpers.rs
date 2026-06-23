@@ -20,39 +20,45 @@ fn build_tree_graph_artifact(
     request: &RagIngestRequest,
     prepared: &PreparedIngestPayload,
 ) -> Value {
-    let source_node_id = format!("source:{}", request.source.code);
+    let source_node_ref = format!("source:{}", request.source.code);
     let mut nodes = vec![json!({
-        "id": source_node_id,
+        "ref": source_node_ref,
         "kind": "SOURCE",
+        "label": "RAG_SOURCE",
+        "code": request.source.code,
         "sourceCode": request.source.code,
         "sourceVersion": request.source.version,
         "sourceType": request.source.source_type,
         "title": prepared.title
     })];
     let mut edges = Vec::new();
-    let mut previous_text_unit_id: Option<String> = None;
+    let mut previous_text_unit_ref: Option<String> = None;
     for unit in &prepared.units {
-        let text_unit_id = format!("text-unit:{}", unit.text_unit_code);
+        let text_unit_ref = format!("text-unit:{}", unit.text_unit_code);
         nodes.push(json!({
-            "id": text_unit_id,
+            "ref": text_unit_ref,
             "kind": "TEXT_UNIT",
+            "label": "RAG_TEXT_UNIT",
+            "code": unit.text_unit_code,
+            "title": unit.text_unit_code,
+            "text": unit.text,
             "textUnitCode": unit.text_unit_code,
             "headingPath": unit.heading_path,
             "ordinal": unit.ordinal
         }));
         edges.push(json!({
-            "from": source_node_id,
-            "to": text_unit_id,
+            "from": source_node_ref,
+            "to": text_unit_ref,
             "relationship": "CONTAINS"
         }));
-        if let Some(previous) = previous_text_unit_id {
+        if let Some(previous) = previous_text_unit_ref {
             edges.push(json!({
                 "from": previous,
-                "to": text_unit_id,
+                "to": text_unit_ref,
                 "relationship": "NEXT"
             }));
         }
-        previous_text_unit_id = Some(text_unit_id);
+        previous_text_unit_ref = Some(text_unit_ref);
     }
     json!({
         "schemaVersion": "tree-graph-v1",

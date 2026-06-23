@@ -250,6 +250,7 @@ export interface RagSearchRequestApi {
 export interface RagSearchHitApi {
   [field: string]: unknown;
   corpusId?: string;
+  fields?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   score?: number;
   sourceCode?: string;

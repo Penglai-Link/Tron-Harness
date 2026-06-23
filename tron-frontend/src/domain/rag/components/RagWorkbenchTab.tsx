@@ -28,6 +28,7 @@ import {
   runRagIngest,
   runRagSearch,
   type RagIngestResponseApi,
+  type RagSearchHitApi,
   type RagSearchResponseApi,
 } from "@/domain/rag/api/ragManagementApi";
 import { useRagProfileDetail } from "@/domain/rag/hooks/useRagProfileDetail";
@@ -356,15 +357,20 @@ function formatFieldValue(value: unknown) {
   return JSON.stringify(value);
 }
 
-function treeHitMetadataRows(metadata: Record<string, unknown> | undefined) {
-  if (!metadata) return [];
+function treeHitMetadataRows(hit: RagSearchHitApi) {
+  const fields = isRecord(hit.fields) ? hit.fields : {};
+  const metadata = isRecord(hit.metadata) ? hit.metadata : {};
+  const treeValue = (field: "matchedBy" | "treeNodeCode" | "treeNodeTitle" | "treeScore") => (
+    fields[field] ?? hit[field] ?? metadata[field]
+  );
+  const treeScore = treeValue("treeScore");
   const rows = [
-    { label: "matchedBy", value: metadata.matchedBy },
-    { label: "treeNodeCode", value: metadata.treeNodeCode },
-    { label: "treeNodeTitle", value: metadata.treeNodeTitle },
+    { label: "matchedBy", value: treeValue("matchedBy") },
+    { label: "treeNodeCode", value: treeValue("treeNodeCode") },
+    { label: "treeNodeTitle", value: treeValue("treeNodeTitle") },
     {
       label: "treeScore",
-      value: typeof metadata.treeScore === "number" ? formatScore(metadata.treeScore) : metadata.treeScore,
+      value: typeof treeScore === "number" ? formatScore(treeScore) : treeScore,
     },
   ];
   return rows.filter((row) => row.value !== undefined && row.value !== null && String(row.value).trim());
@@ -1105,7 +1111,7 @@ export function RagWorkbenchTab({
               const returnedFields = selectedReturnFields
                 .map((field) => [field, hit[field]] as const)
                 .filter(([, value]) => value !== undefined && value !== null);
-              const treeMetadataRows = treeHitMetadataRows(hit.metadata);
+              const treeMetadataRows = treeHitMetadataRows(hit);
               return (
                 <article
                   className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm"

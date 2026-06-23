@@ -67,11 +67,6 @@ export function RagDiagnosticsTab({ onNotice }: { onNotice: (notice: string) => 
             <SelectInput defaultValue="vectorIndex">
               <option value="fulltextIndex">全文索引</option>
               <option value="vectorIndex">向量索引</option>
-              <option value="extractTree">提取结构树</option>
-              <option value="summarizeTree">摘要结构树</option>
-              <option value="treeFulltextIndex">结构树全文索引</option>
-              <option value="treeVectorIndex">结构树向量索引</option>
-              <option value="persistTree">持久化结构树</option>
             </SelectInput>
           </Field>
           <Field label="原因">

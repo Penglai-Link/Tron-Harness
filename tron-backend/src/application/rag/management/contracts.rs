@@ -116,6 +116,8 @@ pub struct RagMetadataGroup {
 pub struct RagCorpusCapabilitiesPayload {
     pub fulltext: bool,
     pub vector: bool,
+    #[serde(default)]
+    pub tree: bool,
     pub graph: bool,
     pub reserved: bool,
 }
@@ -481,4 +483,3 @@ pub struct RagManagementService<R, S> {
     repository: R,
     strategy_registry: S,
 }
-

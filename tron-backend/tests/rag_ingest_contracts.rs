@@ -221,8 +221,23 @@ async fn pipeline_extracts_and_persists_tree_graph_without_request_related_graph
     assert!(
         related_graph["nodes"]
             .as_array()
-            .is_some_and(|nodes| nodes.iter().any(|node| node["kind"] == json!("TEXT_UNIT"))),
-        "generated related graph should include text unit nodes"
+            .is_some_and(
+                |nodes| nodes.iter().any(|node| node["kind"] == json!("TEXT_UNIT")
+                    && node["ref"] == json!("text-unit:memory-rag-rule:v1:0")
+                    && node["code"] == json!("memory-rag-rule:v1:0")
+                    && node["label"] == json!("RAG_TEXT_UNIT"))
+            ),
+        "generated related graph should include graph-writer-compatible text unit nodes"
+    );
+    assert!(
+        related_graph["edges"]
+            .as_array()
+            .is_some_and(|edges| edges
+                .iter()
+                .any(|edge| edge["from"] == json!("source:memory-rag-rule")
+                    && edge["to"] == json!("text-unit:memory-rag-rule:v1:0")
+                    && edge["relationship"] == json!("CONTAINS"))),
+        "generated related graph edges should reference node refs"
     );
     let tree_nodes = &commands.first().unwrap().tree_nodes;
     assert!(
@@ -230,6 +245,38 @@ async fn pipeline_extracts_and_persists_tree_graph_without_request_related_graph
             && node.covered_text_unit_codes == vec!["memory-rag-rule:v1:0"]),
         "splitText should provide tree hints that summarize into a root node"
     );
+}
+
+#[tokio::test]
+async fn tree_vector_embedding_failure_fails_fast_source() {
+    let database_path = temp_database_path("rag-ingest-tree-vector-fail-fast");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    set_memory_card_tree_table(&database_url, "rag_memory_tree_nodes");
+    insert_tree_pipeline_ingest_profile(&database_url, "memory-card-tree-fail-fast-v1");
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75))
+            .fail_after_successes(1, "fake tree vector unavailable"),
+    );
+    let mut request = memory_request("v1");
+    request.ingest_profile_id = "memory-card-tree-fail-fast-v1".into();
+
+    let error = service.ingest(request).await.unwrap_err();
+
+    assert_eq!(error, RagError::EmbeddingFailed);
+    let connection = Connection::open(&database_url).unwrap();
+    assert_eq!(
+        query_i64(&connection, "SELECT COUNT(*) FROM rag_memory_text_units"),
+        0
+    );
+    if table_exists(&connection, "rag_memory_tree_nodes") {
+        assert_eq!(
+            query_i64(&connection, "SELECT COUNT(*) FROM rag_memory_tree_nodes"),
+            0
+        );
+    }
 }
 
 #[tokio::test]
@@ -952,6 +999,8 @@ struct FakeEmbeddingRuntime {
     mineru_calls: Arc<AtomicUsize>,
     last_model_code: Arc<Mutex<Option<String>>>,
     embedding_inputs: Arc<Mutex<Vec<String>>>,
+    fail_after_successes: Option<usize>,
+    fail_after_message: String,
 }
 
 impl FakeEmbeddingRuntime {
@@ -967,6 +1016,8 @@ impl FakeEmbeddingRuntime {
             mineru_calls: Arc::new(AtomicUsize::new(0)),
             last_model_code: Arc::new(Mutex::new(None)),
             embedding_inputs: Arc::new(Mutex::new(Vec::new())),
+            fail_after_successes: None,
+            fail_after_message: String::new(),
         }
     }
 
@@ -979,7 +1030,15 @@ impl FakeEmbeddingRuntime {
             mineru_calls: Arc::new(AtomicUsize::new(0)),
             last_model_code: Arc::new(Mutex::new(None)),
             embedding_inputs: Arc::new(Mutex::new(Vec::new())),
+            fail_after_successes: None,
+            fail_after_message: String::new(),
         }
+    }
+
+    fn fail_after_successes(mut self, success_count: usize, message: &str) -> Self {
+        self.fail_after_successes = Some(success_count);
+        self.fail_after_message = message.to_string();
+        self
     }
 
     fn with_document(self, content_text: &str) -> Self {
@@ -1029,9 +1088,15 @@ impl RagEmbeddingRuntime for FakeEmbeddingRuntime {
         call: RagEmbeddingCall,
     ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
         Box::pin(async move {
-            self.calls.fetch_add(1, Ordering::SeqCst);
+            let call_index = self.calls.fetch_add(1, Ordering::SeqCst);
             self.embedding_inputs.lock().unwrap().push(call.input);
             *self.last_model_code.lock().unwrap() = call.model_code;
+            if self
+                .fail_after_successes
+                .is_some_and(|success_count| call_index >= success_count)
+            {
+                return Err(self.fail_after_message.clone());
+            }
             self.result.lock().unwrap().clone()
         })
     }

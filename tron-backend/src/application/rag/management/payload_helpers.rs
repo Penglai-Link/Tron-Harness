@@ -8,6 +8,7 @@ fn capabilities_from_value(value: &Value) -> RagCorpusCapabilitiesPayload {
             .get("vector")
             .and_then(Value::as_bool)
             .unwrap_or(false),
+        tree: value.get("tree").and_then(Value::as_bool).unwrap_or(false),
         graph: value.get("graph").and_then(Value::as_bool).unwrap_or(false),
         reserved: value
             .get("reserved")
@@ -36,6 +37,7 @@ fn capabilities_value(
     json!({
         "fulltext": capabilities.fulltext,
         "vector": capabilities.vector,
+        "tree": capabilities.tree,
         "graph": capabilities.graph,
         "reserved": capabilities.reserved,
         "metadataGroups": metadata_groups,
