@@ -545,7 +545,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
 
   return (
     <section className="overflow-hidden">
-      <div className="flex h-14 items-center justify-between border-b border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface-strong)] px-4">
+      <div className="flex h-14 items-center justify-between bg-[var(--color-elevated-surface-strong)] px-4">
         <div className="flex items-center gap-5 text-[var(--color-on-surface-variant)]">
           <button
             aria-label="Go back"

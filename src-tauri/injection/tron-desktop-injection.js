@@ -228,7 +228,7 @@
     return attributes;
   };
 
-  const copyComputedStyles = (source, target) => {
+  const copyComputedStyles = (source, target, options = {}) => {
     if (!source || !target || source.nodeType !== Node.ELEMENT_NODE || target.nodeType !== Node.ELEMENT_NODE) {
       return;
     }
@@ -239,19 +239,21 @@
       inlineStyle += property + ":" + style.getPropertyValue(property) + ";";
     }
     inlineStyle += "box-sizing:" + style.boxSizing + ";";
-    inlineStyle += "margin:0;";
+    if (options.resetMargin) {
+      inlineStyle += "margin:0;";
+    }
     target.setAttribute("style", inlineStyle);
 
     const sourceChildren = Array.from(source.children || []);
     const targetChildren = Array.from(target.children || []);
     sourceChildren.forEach((child, index) => {
-      copyComputedStyles(child, targetChildren[index]);
+      copyComputedStyles(child, targetChildren[index], options);
     });
   };
 
   const serializeNodePreview = (element, width, height) => {
     const clone = element.cloneNode(true);
-    copyComputedStyles(element, clone);
+    copyComputedStyles(element, clone, { resetMargin: true });
     clone.removeAttribute(UI_ATTR);
     clone.querySelectorAll?.("[" + UI_ATTR + "]").forEach((node) => node.remove());
 
@@ -268,6 +270,134 @@
     wrapper.appendChild(clone);
 
     return new XMLSerializer().serializeToString(wrapper);
+  };
+
+  const getElementPath = (root, target) => {
+    const path = [];
+    let current = target;
+
+    while (current && current !== root) {
+      const parent = current.parentElement;
+      if (!parent) {
+        return [];
+      }
+
+      path.unshift(Array.from(parent.children).indexOf(current));
+      current = parent;
+    }
+
+    return current === root ? path : [];
+  };
+
+  const findElementByPath = (root, path) => {
+    let current = root;
+
+    for (const index of path) {
+      current = current?.children?.[index] || null;
+      if (!current) {
+        return null;
+      }
+    }
+
+    return current;
+  };
+
+  const annotateClonedSelection = (contextClone, selectedPath) => {
+    const selectedClone = findElementByPath(contextClone, selectedPath);
+    if (!selectedClone || selectedClone.nodeType !== Node.ELEMENT_NODE) {
+      return;
+    }
+
+    const selectedStyle = window.getComputedStyle(selectedClone);
+    if (selectedStyle.position === "static") {
+      selectedClone.style.setProperty("position", "relative", "important");
+    }
+    if (selectedStyle.display === "inline") {
+      selectedClone.style.setProperty("display", "inline-block", "important");
+    }
+    selectedClone.style.setProperty("outline", "3px solid #2563eb", "important");
+    selectedClone.style.setProperty("outline-offset", "-3px", "important");
+    selectedClone.style.setProperty("z-index", "1", "important");
+  };
+
+  const createMarkerOverlay = (markerNumber, left, top) => {
+    const marker = document.createElement("span");
+    marker.setAttribute("aria-hidden", "true");
+    marker.textContent = String(markerNumber);
+    Object.assign(marker.style, {
+      position: "absolute",
+      left: left + "px",
+      top: top + "px",
+      width: "36px",
+      height: "36px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: "999px",
+      background: "#1677ff",
+      color: "#ffffff",
+      font: "700 20px system-ui, sans-serif",
+      lineHeight: "36px",
+      textAlign: "center",
+      boxSizing: "border-box",
+      zIndex: "2",
+      pointerEvents: "none",
+    });
+    marker.style.setProperty("background", "#1677ff", "important");
+    marker.style.setProperty("color", "#ffffff", "important");
+    marker.style.setProperty("font", "700 20px system-ui, sans-serif", "important");
+    marker.style.setProperty("line-height", "36px", "important");
+    return marker;
+  };
+
+  const serializeContextPreview = (
+    element,
+    selectedElement,
+    contextWidth,
+    contextHeight,
+    cropLeft,
+    cropTop,
+    cropWidth,
+    cropHeight,
+    cropPaddingTop,
+    cropPaddingBottom,
+    selectedX,
+    selectedY,
+    markerNumber,
+  ) => {
+    const clone = element.cloneNode(true);
+    copyComputedStyles(element, clone);
+    clone.removeAttribute(UI_ATTR);
+    clone.querySelectorAll?.("[" + UI_ATTR + "]").forEach((node) => node.remove());
+    annotateClonedSelection(clone, getElementPath(element, selectedElement));
+
+    const viewport = document.createElement("div");
+    viewport.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+    Object.assign(viewport.style, {
+      width: cropWidth + "px",
+      height: cropHeight + cropPaddingTop + cropPaddingBottom + "px",
+      overflow: "hidden",
+      display: "block",
+      position: "relative",
+      boxSizing: "border-box",
+      background: "#ffffff",
+    });
+
+    const stage = document.createElement("div");
+    Object.assign(stage.style, {
+      width: contextWidth + "px",
+      height: contextHeight + "px",
+      overflow: "visible",
+      display: "block",
+      boxSizing: "border-box",
+      transform: "translate(" + (-cropLeft) + "px, " + (cropPaddingTop - cropTop) + "px)",
+      transformOrigin: "0 0",
+    });
+    stage.appendChild(clone);
+    viewport.appendChild(stage);
+    viewport.appendChild(createMarkerOverlay(markerNumber, selectedX, cropPaddingTop + selectedY - 20));
+
+    return new XMLSerializer().serializeToString(viewport);
   };
 
   const loadImage = (source) => new Promise((resolve, reject) => {
@@ -299,19 +429,73 @@
     }
   };
 
+  const clampNumber = (value, min, max) => Math.max(min, Math.min(value, max));
+
+  const findAnnotationContextElement = (element) => {
+    const selectedRect = element.getBoundingClientRect();
+    const selectedArea = Math.max(1, selectedRect.width * selectedRect.height);
+    const selectedText = summarizeText(element);
+    let current = element.parentElement;
+    let fallback = element;
+    let depth = 0;
+
+    while (current && current !== document.documentElement && depth < 6) {
+      const rect = current.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        fallback = current;
+        const currentText = summarizeText(current);
+        const onlyWrapsSelection = currentText && currentText === selectedText;
+        const hasHorizontalContext = rect.width >= selectedRect.width + 120;
+        const hasVerticalContext = rect.height >= selectedRect.height + 90;
+        const hasAreaContext = rect.width * rect.height >= selectedArea * 2.2;
+        if (!onlyWrapsSelection && (hasHorizontalContext || hasVerticalContext || hasAreaContext)) {
+          return current;
+        }
+      }
+
+      current = current.parentElement;
+      depth += 1;
+    }
+
+    return fallback;
+  };
+
   const createAnnotationImage = async (element, markerNumber) => {
     const rect = element.getBoundingClientRect();
+    const contextElement = findAnnotationContextElement(element);
+    const contextRect = contextElement.getBoundingClientRect();
     const computedStyle = window.getComputedStyle(element);
     const sourceText = summarizeText(element) || element.tagName.toLowerCase();
-    const targetWidth = Math.max(1, Math.round(rect.width || element.scrollWidth || 120));
-    const targetHeight = Math.max(1, Math.round(rect.height || element.scrollHeight || 40));
-    const imageWidth = Math.max(220, Math.round(targetWidth + 96));
-    const imageHeight = Math.max(110, Math.round(targetHeight + 88));
-    const targetX = 46;
-    const targetY = 42;
+    const contextWidth = Math.max(1, Math.round(contextRect.width || rect.width || element.scrollWidth || 120));
+    const contextHeight = Math.max(1, Math.round(contextRect.height || rect.height || element.scrollHeight || 40));
+    const selectedWidth = Math.max(1, Math.round(rect.width || element.scrollWidth || 120));
+    const selectedHeight = Math.max(1, Math.round(rect.height || element.scrollHeight || 40));
+    const cropWidth = Math.max(260, Math.min(980, contextWidth, Math.max(520, selectedWidth + 360)));
+    const cropHeight = Math.max(260, Math.min(680, contextHeight, Math.max(360, selectedHeight + 320)));
+    const cropPaddingTop = 56;
+    const cropPaddingBottom = 32;
+    const selectedOffsetX = rect.left - contextRect.left;
+    const selectedOffsetY = rect.top - contextRect.top;
+    const cropLeft = clampNumber(
+      selectedOffsetX - (cropWidth - selectedWidth) / 2,
+      0,
+      Math.max(0, contextWidth - cropWidth),
+    );
+    const aboveContextTarget = Math.max(150, (cropHeight - selectedHeight) * 0.62);
+    const cropTop = clampNumber(
+      selectedOffsetY - aboveContextTarget,
+      0,
+      Math.max(0, contextHeight - cropHeight),
+    );
+    const selectedX = selectedOffsetX - cropLeft;
+    const selectedY = selectedOffsetY - cropTop;
+    const imageWidth = Math.max(260, Math.round(cropWidth + 72));
+    const imageHeight = Math.max(160, Math.round(cropHeight + cropPaddingTop + cropPaddingBottom + 72));
+    const targetX = 36;
+    const targetY = 36;
     const markerRadius = 18;
-    const markerX = targetX + Math.min(targetWidth - 10, 28);
-    const markerY = targetY + 2;
+    const markerX = targetX + selectedX + markerRadius;
+    const markerY = targetY + selectedY - markerRadius;
     const fontSize = Math.max(14, Math.min(24, Number.parseFloat(computedStyle.fontSize) || 16));
     const textColor = computedStyle.color || "#111827";
     const scale = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
@@ -333,10 +517,25 @@
     context.scale(scale, scale);
     context.fillStyle = "#ffffff";
     context.fillRect(0, 0, imageWidth, imageHeight);
+    let previewRendered = false;
     try {
-      const previewHtml = serializeNodePreview(element, targetWidth, targetHeight);
+      const previewHtml = serializeContextPreview(
+        contextElement,
+        element,
+        contextWidth,
+        contextHeight,
+        cropLeft,
+        cropTop,
+        cropWidth,
+        cropHeight,
+        cropPaddingTop,
+        cropPaddingBottom,
+        selectedX,
+        selectedY,
+        markerNumber,
+      );
       const previewSvg = [
-        `<svg xmlns="http://www.w3.org/2000/svg" width="${targetWidth}" height="${targetHeight}">`,
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${cropWidth}" height="${cropHeight + cropPaddingTop + cropPaddingBottom}">`,
         `<foreignObject width="100%" height="100%">`,
         previewHtml,
         `</foreignObject>`,
@@ -344,35 +543,43 @@
       ].join("");
       const previewUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(previewSvg);
       const previewImage = await loadImage(previewUrl);
-      context.drawImage(previewImage, targetX, targetY, targetWidth, targetHeight);
+      context.drawImage(previewImage, targetX, targetY, cropWidth, cropHeight + cropPaddingTop + cropPaddingBottom);
+      previewRendered = true;
     } catch (_error) {
       context.fillStyle = "#ffffff";
-      context.fillRect(targetX, targetY, targetWidth, targetHeight);
+      context.fillRect(targetX, targetY, cropWidth, cropHeight + cropPaddingTop + cropPaddingBottom);
       context.fillStyle = textColor;
       context.font = `${fontSize}px ${computedStyle.fontFamily || "system-ui, sans-serif"}`;
       context.textBaseline = "top";
       drawWrappedFallbackText(
         context,
         sourceText,
-        targetX + 8,
-        targetY + 8,
-        Math.max(40, targetWidth - 16),
+        targetX + selectedX + 8,
+        targetY + cropPaddingTop + selectedY + 8,
+        Math.max(40, selectedWidth - 16),
         Math.max(fontSize + 4, Number.parseFloat(computedStyle.lineHeight) || fontSize * 1.35),
       );
     }
-    context.strokeStyle = "#2563eb";
-    context.lineWidth = 3;
-    context.strokeRect(targetX + 1.5, targetY + 1.5, targetWidth - 3, targetHeight - 3);
+    if (!previewRendered) {
+      context.strokeStyle = "#2563eb";
+      context.lineWidth = 3;
+      context.strokeRect(
+        targetX + selectedX + 1.5,
+        targetY + cropPaddingTop + selectedY + 1.5,
+        selectedWidth - 3,
+        selectedHeight - 3,
+      );
 
-    context.beginPath();
-    context.fillStyle = "#1677ff";
-    context.arc(markerX, markerY, markerRadius, 0, Math.PI * 2);
-    context.fill();
-    context.fillStyle = "#ffffff";
-    context.font = "700 20px system-ui, sans-serif";
-    context.textAlign = "center";
-    context.textBaseline = "middle";
-    context.fillText(String(markerNumber), markerX, markerY + 1);
+      context.beginPath();
+      context.fillStyle = "#1677ff";
+      context.arc(markerX, markerY + cropPaddingTop, markerRadius, 0, Math.PI * 2);
+      context.fill();
+      context.fillStyle = "#ffffff";
+      context.font = "700 20px system-ui, sans-serif";
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(String(markerNumber), markerX, markerY + cropPaddingTop + 1);
+    }
 
     return {
       dataUrl: canvas.toDataURL("image/png"),
