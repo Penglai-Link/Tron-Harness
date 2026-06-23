@@ -52,6 +52,9 @@
   let selectedElement = null;
   let hoverOverlay = null;
   let inputPanel = null;
+  let scrollResumeTimer = null;
+  let scrollingWithoutSelection = false;
+  let lastPointerPosition = null;
 
   const safePost = (eventType, payload, options = {}) => {
     if (!injectionEnabled && !options.force) {
@@ -664,6 +667,45 @@
       hoverOverlay.remove();
       hoverOverlay = null;
     }
+  };
+
+  const refreshHoverAtLastPointer = () => {
+    if (!injectionEnabled || selectedElement || !lastPointerPosition) {
+      return;
+    }
+
+    const element = document.elementFromPoint(lastPointerPosition.x, lastPointerPosition.y);
+    if (!element || isInspectorUi(element)) {
+      removeOverlay();
+      return;
+    }
+
+    updateOverlay(element);
+  };
+
+  const clearScrollPause = () => {
+    scrollingWithoutSelection = false;
+    if (scrollResumeTimer !== null) {
+      window.clearTimeout(scrollResumeTimer);
+      scrollResumeTimer = null;
+    }
+  };
+
+  const pauseHoverDuringScroll = () => {
+    if (!injectionEnabled || selectedElement) {
+      return;
+    }
+
+    scrollingWithoutSelection = true;
+    removeOverlay();
+    if (scrollResumeTimer !== null) {
+      window.clearTimeout(scrollResumeTimer);
+    }
+    scrollResumeTimer = window.setTimeout(() => {
+      scrollingWithoutSelection = false;
+      scrollResumeTimer = null;
+      refreshHoverAtLastPointer();
+    }, 140);
   };
 
   const removeInputPanel = () => {
@@ -1452,7 +1494,12 @@
   };
 
   const onPointerMove = (event) => {
-    if (!injectionEnabled || selectedElement) {
+    lastPointerPosition = {
+      x: event.clientX,
+      y: event.clientY,
+    };
+
+    if (!injectionEnabled || selectedElement || scrollingWithoutSelection) {
       return;
     }
 
@@ -1466,7 +1513,7 @@
   };
 
   const onPointerDown = (event) => {
-    if (!injectionEnabled) {
+    if (!injectionEnabled || scrollingWithoutSelection) {
       return;
     }
 
@@ -1521,14 +1568,18 @@
     document.addEventListener("pointermove", onPointerMove, true);
     document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("click", onClick, true);
+    window.addEventListener("scroll", pauseHoverDuringScroll, true);
     window.addEventListener("keydown", onKeyDown, true);
   };
 
   const disableInspector = () => {
+    clearScrollPause();
+    lastPointerPosition = null;
     clearSelection();
     document.removeEventListener("pointermove", onPointerMove, true);
     document.removeEventListener("pointerdown", onPointerDown, true);
     document.removeEventListener("click", onClick, true);
+    window.removeEventListener("scroll", pauseHoverDuringScroll, true);
     window.removeEventListener("keydown", onKeyDown, true);
   };
 
