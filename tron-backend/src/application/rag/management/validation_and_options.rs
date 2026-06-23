@@ -414,6 +414,12 @@ fn retrieval_route_types_for_corpus(corpus: &RagCorpusRecord) -> Vec<String> {
     if retrieval_strategy_ids_for_corpus(corpus, "VECTOR").is_some() {
         route_types.push("VECTOR".into());
     }
+    if retrieval_strategy_ids_for_corpus(corpus, "TREE_FULLTEXT").is_some() {
+        route_types.push("TREE_FULLTEXT".into());
+    }
+    if retrieval_strategy_ids_for_corpus(corpus, "TREE_VECTOR").is_some() {
+        route_types.push("TREE_VECTOR".into());
+    }
     if retrieval_strategy_ids_for_corpus(corpus, "STRUCTURED_FILTER").is_some() {
         route_types.push("STRUCTURED_FILTER".into());
     }

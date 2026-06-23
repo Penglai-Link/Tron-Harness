@@ -1164,6 +1164,48 @@ async fn ui_driven_tree_corpus_profiles_ingest_and_search_api_flow() {
         "{list_body}"
     );
 
+    let profile_catalog = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/rag/profiles/catalog?profileType=RETRIEVAL",
+        None,
+    )
+    .await;
+    assert_eq!(profile_catalog.status(), StatusCode::OK);
+    let profile_catalog_body = response_json(profile_catalog).await;
+    assert!(
+        profile_catalog_body["data"]["retrievalRouteTypes"]
+            .as_array()
+            .is_some_and(|rows| rows.iter().any(|row| {
+                row["corpusId"] == json!("ui-tree-memory")
+                    && row["routeTypes"].as_array().is_some_and(|route_types| {
+                        route_types.contains(&json!("TREE_FULLTEXT"))
+                            && route_types.contains(&json!("TREE_VECTOR"))
+                    })
+            })),
+        "{profile_catalog_body}"
+    );
+    assert!(
+        profile_catalog_body["data"]["retrievalStrategies"]
+            .as_array()
+            .is_some_and(|rows| rows.iter().any(|row| {
+                row["corpusId"] == json!("ui-tree-memory")
+                    && row["routeType"] == json!("TREE_FULLTEXT")
+                    && row["strategyIds"] == json!(["TREE_FULLTEXT_V1"])
+            })),
+        "{profile_catalog_body}"
+    );
+    assert!(
+        profile_catalog_body["data"]["retrievalStrategies"]
+            .as_array()
+            .is_some_and(|rows| rows.iter().any(|row| {
+                row["corpusId"] == json!("ui-tree-memory")
+                    && row["routeType"] == json!("TREE_VECTOR")
+                    && row["strategyIds"] == json!(["TREE_VECTOR_V1"])
+            })),
+        "{profile_catalog_body}"
+    );
+
     let ingest_profile = authenticated_request(
         &router,
         Method::POST,
