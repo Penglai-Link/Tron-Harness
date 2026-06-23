@@ -45,6 +45,12 @@ pub struct LlmRuntimeRerankHit {
 }
 
 pub trait LlmRuntimeModelResolver: Send + Sync {
+    fn text_runtime_model_config(
+        &self,
+        workspace_code: &str,
+        model_code: Option<&str>,
+    ) -> Result<Option<RuntimeModelConfig>, ModelError>;
+
     fn embedding_runtime_model_config(
         &self,
         workspace_code: &str,
@@ -59,6 +65,12 @@ pub trait LlmRuntimeModelResolver: Send + Sync {
 }
 
 pub trait LlmRuntimeClient: Send + Sync {
+    fn generate<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        prompt: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>>;
+
     fn embed<'a>(
         &'a self,
         config: &'a RuntimeModelConfig,

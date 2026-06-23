@@ -63,7 +63,7 @@ pub struct ModelCommand {
     pub allow_inheritance: Option<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeModelConfig {
     pub model_code: String,
     pub protocol: ModelProtocol,
@@ -72,6 +72,12 @@ pub struct RuntimeModelConfig {
     pub api_path: Option<String>,
     pub api_key: String,
     pub model_name: String,
+    pub thinking_enabled: bool,
+    pub responses_stateful_enabled: bool,
+    pub temperature: Option<f64>,
+    pub max_tokens: Option<u32>,
+    pub context_window_tokens: Option<u32>,
+    pub top_p: Option<f64>,
     pub max_retries: Option<u32>,
 }
 

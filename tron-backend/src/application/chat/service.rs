@@ -12,6 +12,7 @@ use crate::{
             ChatRepository, ChatSendResult, ChatSessionQuery, CreateChatSessionCommand,
             SendChatMessageCommand, UpdateChatSessionCommand,
         },
+        llm::{LlmRuntimeService, LlmTextGenerationCallCommand},
     },
     domain::agent::{AgentModelConfig, ModelTokenUsage},
     domain::chat::{
@@ -28,6 +29,8 @@ const MAIN_AGENT_CODE: &str = "main-agent";
 const MAIN_RUNTIME_ADAPTER_KEY: &str = "REACT";
 const CODEX_RUNTIME_ADAPTER_KEY: &str = "CODEX_EXEC";
 const OPENCODE_RUNTIME_ADAPTER_KEY: &str = "OPENCODE_RUN";
+const DEFAULT_MANUAL_SESSION_TITLE: &str = "New chat";
+const MAX_GENERATED_TITLE_CHARS: usize = 64;
 
 #[derive(Clone)]
 pub struct ChatService {
@@ -83,7 +86,8 @@ impl ChatService {
             source_code: normalized_optional(command.source_code),
             agent_code: normalized_optional(command.agent_code),
             system_agent_session_id: None,
-            title: normalized_optional(command.title).unwrap_or_else(|| "New chat".into()),
+            title: normalized_optional(command.title)
+                .unwrap_or_else(|| DEFAULT_MANUAL_SESSION_TITLE.into()),
             status: ChatSessionStatus::Active,
             last_run_code: None,
             last_run_status: None,
@@ -179,6 +183,7 @@ impl ChatService {
         resolved_model: AgentModelConfig,
         user_code: Option<String>,
         locale: Option<String>,
+        llm_runtime: Option<LlmRuntimeService>,
         agent: AgentInvocationService,
     ) -> Result<ChatSendResult, ChatSendError> {
         self.send_message_inner(
@@ -187,6 +192,7 @@ impl ChatService {
             resolved_model,
             user_code,
             locale,
+            llm_runtime,
             agent,
             None,
         )
@@ -200,6 +206,7 @@ impl ChatService {
         resolved_model: AgentModelConfig,
         user_code: Option<String>,
         locale: Option<String>,
+        llm_runtime: Option<LlmRuntimeService>,
         agent: AgentInvocationService,
         sink: ModelStreamSink,
     ) -> Result<ChatSendResult, ChatSendError> {
@@ -209,6 +216,7 @@ impl ChatService {
             resolved_model,
             user_code,
             locale,
+            llm_runtime,
             agent,
             Some(sink),
         )
@@ -222,6 +230,7 @@ impl ChatService {
         resolved_model: AgentModelConfig,
         user_code: Option<String>,
         locale: Option<String>,
+        llm_runtime: Option<LlmRuntimeService>,
         agent: AgentInvocationService,
         sink: Option<ModelStreamSink>,
     ) -> Result<ChatSendResult, ChatSendError> {
@@ -231,6 +240,7 @@ impl ChatService {
             .repository()
             .get_session(session_code)
             .map_err(ChatSendError::Chat)?;
+        let should_generate_title = should_generate_manual_session_title(&session);
         let workspace_code = session.workspace_code.clone();
         let channel = if command
             .task_code
@@ -264,8 +274,8 @@ impl ChatService {
         )?;
         let invocation = AgentInvocationCommand {
             run_code: command.run_code,
-            prompt: Some(content),
-            workspace_code: Some(workspace_code),
+            prompt: Some(content.clone()),
+            workspace_code: Some(workspace_code.clone()),
             conversation_code: Some(session.session_code.clone()),
             agent_code: Some(effective_agent_code.clone()),
             system_agent_session_id: mapped_runtime_session_id
@@ -285,6 +295,7 @@ impl ChatService {
             agent.invoke(invocation, user_code, locale).await
         }
         .map_err(ChatSendError::Agent)?;
+        let final_output = run.final_output.clone();
         let assistant_message = self.create_message(
             session_code,
             Some(run.run_code.clone()),
@@ -317,6 +328,16 @@ impl ChatService {
                 &updated_at,
             )
             .map_err(ChatSendError::Chat)?;
+        if should_generate_title && let Some(llm_runtime) = llm_runtime {
+            self.try_generate_manual_session_title(
+                session_code,
+                &workspace_code,
+                &content,
+                &final_output,
+                llm_runtime,
+            )
+            .await;
+        }
         let updated_session = self
             .repository()
             .get_session(session_code)
@@ -369,6 +390,34 @@ impl ChatService {
             .lock()
             .expect("chat repository mutex poisoned")
     }
+
+    async fn try_generate_manual_session_title(
+        &self,
+        session_code: &str,
+        workspace_code: &str,
+        user_message: &str,
+        assistant_message: &str,
+        llm_runtime: LlmRuntimeService,
+    ) {
+        let prompt = manual_session_title_prompt(user_message, assistant_message);
+        let result = llm_runtime
+            .text_generation_call(LlmTextGenerationCallCommand {
+                workspace_code: workspace_code.to_string(),
+                model_code: None,
+                prompt,
+            })
+            .await;
+        let Ok(result) = result else {
+            return;
+        };
+        let Some(title) = normalize_generated_session_title(&result.output) else {
+            return;
+        };
+        let updated_at = current_timestamp();
+        let _ = self
+            .repository()
+            .update_session_title(session_code, &title, &updated_at);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -387,10 +436,111 @@ fn normalized_required(value: Option<String>) -> Option<String> {
     normalized_optional(value)
 }
 
+fn should_generate_manual_session_title(session: &ChatSession) -> bool {
+    session.source_type == ChatSessionSourceType::Manual
+        && session.task_code.is_none()
+        && session
+            .title
+            .trim()
+            .eq_ignore_ascii_case(DEFAULT_MANUAL_SESSION_TITLE)
+}
+
+fn manual_session_title_prompt(user_message: &str, assistant_message: &str) -> String {
+    format!(
+        "Generate a concise chat title from the first exchange.\n\
+        Rules:\n\
+        - Return only the title.\n\
+        - Use 3 to 8 words.\n\
+        - No quotes, punctuation-only decorations, markdown, or prefixes.\n\
+        - Preserve product names and technical terms.\n\n\
+        User message:\n{user_message}\n\n\
+        Assistant response:\n{assistant_message}"
+    )
+}
+
+fn normalize_generated_session_title(value: &str) -> Option<String> {
+    let first_line = value.lines().map(str::trim).find(|line| !line.is_empty())?;
+    let mut title = first_line
+        .trim_matches(|character: char| {
+            character == '"'
+                || character == '\''
+                || character == '`'
+                || character == '*'
+                || character == '#'
+                || character == '-'
+                || character == ':'
+                || character.is_whitespace()
+        })
+        .trim()
+        .to_string();
+    for prefix in ["Title:", "title:", "Chat title:", "chat title:"] {
+        if let Some(stripped) = title.strip_prefix(prefix) {
+            title = stripped.trim().to_string();
+            break;
+        }
+    }
+    title = title
+        .chars()
+        .filter(|character| !character.is_control())
+        .collect::<String>()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if title.is_empty() || title.eq_ignore_ascii_case(DEFAULT_MANUAL_SESSION_TITLE) {
+        return None;
+    }
+    if title.chars().count() > MAX_GENERATED_TITLE_CHARS {
+        title = title.chars().take(MAX_GENERATED_TITLE_CHARS).collect();
+        title = title.trim().to_string();
+    }
+    (!title.is_empty()).then_some(title)
+}
+
 fn runtime_adapter_key_for_agent(agent_code: &str) -> &'static str {
     match agent_code.trim().to_ascii_lowercase().as_str() {
         "codex" => CODEX_RUNTIME_ADAPTER_KEY,
         "opencode" => OPENCODE_RUNTIME_ADAPTER_KEY,
         _ => MAIN_RUNTIME_ADAPTER_KEY,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn manual_new_chat_session(last_run_code: Option<String>) -> ChatSession {
+        ChatSession {
+            id: 1,
+            session_code: "SESSION-1".into(),
+            workspace_code: "TRON_CORE".into(),
+            app_code: None,
+            task_code: None,
+            source_type: ChatSessionSourceType::Manual,
+            source_code: None,
+            title: DEFAULT_MANUAL_SESSION_TITLE.into(),
+            status: ChatSessionStatus::Active,
+            agent_code: Some(MAIN_AGENT_CODE.into()),
+            last_run_code,
+            last_run_status: None,
+            system_agent_session_id: None,
+            user_code: Some("user".into()),
+            created_at: "1".into(),
+            updated_at: "1".into(),
+        }
+    }
+
+    #[test]
+    fn manual_new_chat_title_generation_retries_after_first_run() {
+        let session = manual_new_chat_session(Some("RUN-1".into()));
+
+        assert!(should_generate_manual_session_title(&session));
+    }
+
+    #[test]
+    fn renamed_manual_chat_does_not_generate_title_again() {
+        let mut session = manual_new_chat_session(Some("RUN-1".into()));
+        session.title = "Existing title".into();
+
+        assert!(!should_generate_manual_session_title(&session));
     }
 }

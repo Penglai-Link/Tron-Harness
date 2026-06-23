@@ -7,6 +7,7 @@ import {
 } from "react";
 import { useSearchParams } from "react-router";
 import {
+  AlarmClock,
   ArrowDown,
   Bot,
   BrainCircuit,
@@ -21,6 +22,7 @@ import {
   GitBranch,
   Hammer,
   LoaderCircle,
+  ListTodo,
   MessageSquareText,
   Pencil,
   Plus,
@@ -29,6 +31,7 @@ import {
   Terminal,
   UserRound,
   Wrench,
+  type LucideIcon,
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
@@ -159,6 +162,67 @@ function sessionAgentIconTone(agentCode: string | null | undefined) {
   return "text-[var(--color-on-surface-variant)]";
 }
 
+type ChatSessionSourceTab = "chat" | "automation" | "task";
+
+const chatSessionSourceTabs: { id: ChatSessionSourceTab; icon: LucideIcon; label: string }[] = [
+  { id: "chat", icon: MessageSquareText, label: "Chat sessions" },
+  { id: "automation", icon: AlarmClock, label: "Automation sessions" },
+  { id: "task", icon: ListTodo, label: "Task sessions" },
+];
+const chatSessionSourceTabStorageKey = "tron.chat.activeSourceTab";
+
+function normalizedSessionSource(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function parseChatSessionSourceTab(value: string | null | undefined): ChatSessionSourceTab | undefined {
+  const source = normalizedSessionSource(value);
+  if (source === "chat" || source === "automation" || source === "task") return source;
+  return undefined;
+}
+
+function readStoredChatSessionSourceTab(): ChatSessionSourceTab | undefined {
+  if (typeof window === "undefined") return undefined;
+  return parseChatSessionSourceTab(window.sessionStorage.getItem(chatSessionSourceTabStorageKey));
+}
+
+function writeStoredChatSessionSourceTab(sourceTab: ChatSessionSourceTab) {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.setItem(chatSessionSourceTabStorageKey, sourceTab);
+}
+
+function sourceTabFromValues(
+  sourceType: string | null | undefined,
+  sourceCode: string | null | undefined,
+  taskCode: string | null | undefined,
+  groupTitle?: string,
+): ChatSessionSourceTab {
+  const source = normalizedSessionSource(sourceType);
+  if (source === "task") return "task";
+  if (source === "automation") return "automation";
+  if (taskCode?.trim()) return "task";
+
+  const code = normalizedSessionSource(sourceCode);
+  const title = normalizedSessionSource(groupTitle);
+  if (code.startsWith("automation") || title === "automation" || title.startsWith("automation:")) return "automation";
+  return "chat";
+}
+
+function sourceTabForGroup(group: ChatSessionGroup): ChatSessionSourceTab {
+  const firstSession = group.sessions[0];
+  return sourceTabFromValues(
+    group.sourceType ?? firstSession?.sourceType,
+    group.sourceCode ?? firstSession?.sourceCode,
+    group.taskCode ?? firstSession?.taskCode,
+    group.taskTitle,
+  );
+}
+
+function sourceTabForSessionCode(groups: ChatSessionGroup[], sessionCode: string): ChatSessionSourceTab | undefined {
+  const group = groups.find((item) => item.sessions.some((session) => session.sessionCode === sessionCode));
+  return group ? sourceTabForGroup(group) : undefined;
+}
+
 async function copyPlainText(value: string) {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(value);
@@ -179,6 +243,12 @@ async function copyPlainText(value: string) {
 
 function firstSession(groups: ChatSessionGroup[]) {
   return groups.flatMap((group) => group.sessions)[0];
+}
+
+function firstSessionForSourceTab(groups: ChatSessionGroup[], sourceTab: ChatSessionSourceTab) {
+  return groups
+    .filter((group) => sourceTabForGroup(group) === sourceTab)
+    .flatMap((group) => group.sessions)[0];
 }
 
 function findSession(groups: ChatSessionGroup[], sessionCode: string) {
@@ -1696,6 +1766,7 @@ function ChatAgentSelector({
 
 function SessionSidebar({
   activeSessionCode,
+  activeSourceTab,
   collapsed,
   creatingSession,
   groups,
@@ -1705,11 +1776,13 @@ function SessionSidebar({
   onDeleteSession,
   onRenameSession,
   onSessionSelect,
+  onSourceTabSelect,
   runningSessionCode,
   sessionActionPendingCode,
   unseenSessionCodes,
 }: {
   activeSessionCode: string;
+  activeSourceTab: ChatSessionSourceTab;
   collapsed: boolean;
   creatingSession: boolean;
   groups: ChatSessionGroup[];
@@ -1718,7 +1791,8 @@ function SessionSidebar({
   onCreateSession: () => void;
   onDeleteSession: (session: ChatSession) => void;
   onRenameSession: (session: ChatSession, title: string) => Promise<void>;
-  onSessionSelect: (sessionCode: string) => void;
+  onSessionSelect: (sessionCode: string, sourceTab?: ChatSessionSourceTab) => void;
+  onSourceTabSelect: (sourceTab: ChatSessionSourceTab) => void;
   runningSessionCode: string;
   sessionActionPendingCode: string;
   unseenSessionCodes: Set<string>;
@@ -1781,13 +1855,102 @@ function SessionSidebar({
     await onRenameSession(session, title);
     cancelInlineRename();
   }
+
   const collapsedSessions = groups.flatMap((group) => group.sessions);
+  const activeGroups = useMemo(
+    () => groups.filter((group) => sourceTabForGroup(group) === activeSourceTab),
+    [activeSourceTab, groups],
+  );
+  const activeFlatSessions = useMemo(
+    () => activeGroups.flatMap((group) => group.sessions),
+    [activeGroups],
+  );
+  const sourceTabsBySessionCode = useMemo(() => {
+    const items = new Map<string, ChatSessionSourceTab>();
+    groups.forEach((group) => {
+      const sourceTab = sourceTabForGroup(group);
+      group.sessions.forEach((session) => {
+        items.set(session.sessionCode, sourceTab);
+      });
+    });
+    return items;
+  }, [groups]);
 
   useEffect(() => () => clearCollapsedTooltipTimer(), []);
 
   useEffect(() => {
     if (!collapsed) hideCollapsedTooltip();
   }, [collapsed]);
+
+  function renderSessionRow(session: ChatSession) {
+    const editing = editingSessionCode === session.sessionCode;
+    const pending = sessionActionPendingCode === session.sessionCode;
+    const sourceTab = sourceTabsBySessionCode.get(session.sessionCode) ?? activeSourceTab;
+
+    return (
+      <div
+        className={cn(
+          "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md px-3 py-2 text-left transition",
+          activeSessionCode === session.sessionCode
+            ? "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]"
+            : "text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]",
+        )}
+        key={session.sessionCode}
+      >
+        {editing ? (
+          <input
+            autoFocus
+            aria-label={`Rename ${session.title}`}
+            className="h-8 min-w-0 rounded-md border border-[var(--color-focus-ring)] bg-white px-2 text-sm font-medium text-[var(--color-on-surface)] outline-none"
+            disabled={pending}
+            value={renameDraft}
+            onBlur={() => {
+              if (!pending) void submitInlineRename(session);
+            }}
+            onChange={(event) => setRenameDraft(event.target.value)}
+            onClick={(event) => event.stopPropagation()}
+            onFocus={(event) => event.currentTarget.select()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void submitInlineRename(session);
+              }
+              if (event.key === "Escape") {
+                event.preventDefault();
+                cancelInlineRename();
+              }
+            }}
+          />
+        ) : (
+          <button className="min-w-0 text-left" type="button" onClick={() => onSessionSelect(session.sessionCode, sourceTab)}>
+            <span className="block truncate text-sm font-medium">{session.title}</span>
+            <span className="mt-1 flex items-center gap-1.5 text-xs text-[var(--color-on-surface-variant)]">
+              <span
+                className={cn(
+                  "inline-flex h-4 items-center rounded border px-1 font-mono text-[10px] leading-none",
+                  sessionAgentTagTone(session.agentCode),
+                )}
+              >
+                {sessionAgentTagLabel(session.agentCode)}
+              </span>
+              <span>{formatTime(session.updatedAt)}</span>
+            </span>
+          </button>
+        )}
+        <SessionRunIndicator
+          running={runningSessionCode === session.sessionCode}
+          unseen={unseenSessionCodes.has(session.sessionCode)}
+        />
+        <SessionActionMenu
+          disabled={pending}
+          session={session}
+          onArchive={onArchiveSession}
+          onDelete={onDeleteSession}
+          onRename={startInlineRename}
+        />
+      </div>
+    );
+  }
 
   return (
     <aside
@@ -1819,7 +1982,7 @@ function SessionSidebar({
                 key={session.sessionCode}
                 type="button"
                 aria-label={`Open ${session.title}`}
-                onClick={() => onSessionSelect(session.sessionCode)}
+                onClick={() => onSessionSelect(session.sessionCode, sourceTabsBySessionCode.get(session.sessionCode))}
                 onMouseEnter={(event) => showCollapsedTooltip(event.currentTarget, session)}
                 onMouseLeave={hideCollapsedTooltip}
                 onFocus={(event) => showCollapsedTooltip(event.currentTarget, session)}
@@ -1865,7 +2028,42 @@ function SessionSidebar({
             </div>
           </div>
           <div className="h-[calc(100%-3.5rem)] overflow-y-auto px-3 py-4">
-            {groups.map((group) => {
+            <div className="mb-4 grid grid-cols-3 gap-1 rounded-md bg-[var(--color-surface-container)] p-1" role="tablist" aria-label="Session source">
+              {chatSessionSourceTabs.map((tab) => {
+                const TabIcon = tab.icon;
+                return (
+                  <button
+                    className={cn(
+                      "flex h-9 min-w-0 items-center justify-center rounded px-2 text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)]",
+                      activeSourceTab === tab.id
+                        ? "bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-[0_1px_4px_rgba(15,23,42,0.08)]"
+                        : "hover:bg-[var(--color-hover-surface)]",
+                    )}
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-label={tab.label}
+                    aria-selected={activeSourceTab === tab.id}
+                    title={tab.label}
+                    onClick={() => onSourceTabSelect(tab.id)}
+                  >
+                    <TabIcon size={17} strokeWidth={2.2} />
+                    <span className="sr-only">{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {activeSourceTab !== "task" ? (
+              <div className="space-y-1">
+                {activeFlatSessions.length > 0 ? (
+                  activeFlatSessions.map((session) => renderSessionRow(session))
+                ) : (
+                  <p className="px-2 py-6 text-center text-xs text-[var(--color-on-surface-variant)]">
+                    No sessions in this tab.
+                  </p>
+                )}
+              </div>
+            ) : activeGroups.map((group) => {
               const groupKey = sessionGroupKey(group);
               const closed = closedGroups.has(groupKey);
               return (
@@ -1887,79 +2085,17 @@ function SessionSidebar({
                   </button>
                   {!closed ? (
                     <div className="space-y-1">
-                      {group.sessions.map((session) => {
-                        const editing = editingSessionCode === session.sessionCode;
-                        const pending = sessionActionPendingCode === session.sessionCode;
-
-                        return (
-                          <div
-                            className={cn(
-                              "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md px-3 py-2 text-left transition",
-                              activeSessionCode === session.sessionCode
-                                ? "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]"
-                                : "text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]",
-                            )}
-                            key={session.sessionCode}
-                          >
-                            {editing ? (
-                              <input
-                                autoFocus
-                                aria-label={`Rename ${session.title}`}
-                                className="h-8 min-w-0 rounded-md border border-[var(--color-focus-ring)] bg-white px-2 text-sm font-medium text-[var(--color-on-surface)] outline-none"
-                                disabled={pending}
-                                value={renameDraft}
-                                onBlur={() => {
-                                  if (!pending) void submitInlineRename(session);
-                                }}
-                                onChange={(event) => setRenameDraft(event.target.value)}
-                                onClick={(event) => event.stopPropagation()}
-                                onFocus={(event) => event.currentTarget.select()}
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter") {
-                                    event.preventDefault();
-                                    void submitInlineRename(session);
-                                  }
-                                  if (event.key === "Escape") {
-                                    event.preventDefault();
-                                    cancelInlineRename();
-                                  }
-                                }}
-                              />
-                            ) : (
-                              <button className="min-w-0 text-left" type="button" onClick={() => onSessionSelect(session.sessionCode)}>
-                                <span className="block truncate text-sm font-medium">{session.title}</span>
-                                <span className="mt-1 flex items-center gap-1.5 text-xs text-[var(--color-on-surface-variant)]">
-                                  <span
-                                    className={cn(
-                                      "inline-flex h-4 items-center rounded border px-1 font-mono text-[10px] leading-none",
-                                      sessionAgentTagTone(session.agentCode),
-                                    )}
-                                  >
-                                    {sessionAgentTagLabel(session.agentCode)}
-                                  </span>
-                                  <span>{formatTime(session.updatedAt)}</span>
-                                </span>
-                              </button>
-                            )}
-                            <SessionRunIndicator
-                              running={runningSessionCode === session.sessionCode}
-                              unseen={unseenSessionCodes.has(session.sessionCode)}
-                            />
-                            <SessionActionMenu
-                              disabled={pending}
-                              session={session}
-                              onArchive={onArchiveSession}
-                              onDelete={onDeleteSession}
-                              onRename={startInlineRename}
-                            />
-                          </div>
-                        );
-                      })}
+                      {group.sessions.map((session) => renderSessionRow(session))}
                     </div>
                   ) : null}
                 </section>
               );
             })}
+            {activeSourceTab === "task" && activeGroups.length === 0 ? (
+              <p className="px-2 py-6 text-center text-xs text-[var(--color-on-surface-variant)]">
+                No sessions in this tab.
+              </p>
+            ) : null}
           </div>
         </>
       )}
@@ -2489,6 +2625,7 @@ function AguiRunWorkRail({
 export function ChatManagementPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedSessionCode = searchParams.get("sessionCode")?.trim() ?? "";
+  const requestedSourceTab = parseChatSessionSourceTab(searchParams.get("sourceTab"));
   const toast = useToast();
   const { session: authSession } = useAuthSession();
   const { preferences: aguiDebugPreferences } = useAguiDebugPreferences();
@@ -2500,9 +2637,17 @@ export function ChatManagementPage() {
   const groups = useChatSessionGroupList(activeWorkspaceCode, activeChatDataRefreshKey);
   const [sessionGroups, setSessionGroups] = useState<ChatSessionGroup[]>([]);
   const [activeSessionCode, setActiveSessionCode] = useState("");
+  const [activeSourceTab, setActiveSourceTab] = useState<ChatSessionSourceTab>(() => (
+    requestedSourceTab ?? readStoredChatSessionSourceTab() ?? "chat"
+  ));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [composer, setComposer] = useState("");
-  const activeSession = findSession(sessionGroups, activeSessionCode) ?? firstSession(sessionGroups);
+  const selectedSession = activeSessionCode ? findSession(sessionGroups, activeSessionCode) : undefined;
+  const activeSession = selectedSession ?? (
+    !requestedSessionCode && !requestedSourceTab && !activeSessionCode
+      ? firstSession(sessionGroups)
+      : undefined
+  );
   const messages = useChatMessageListBySession(activeSession?.sessionCode ?? "", activeChatDataRefreshKey);
   const aguiEvents = useChatAguiEvents(activeSession?.sessionCode ?? "");
   const aguiProtocolEvents = useChatAguiProtocolEvents(activeSession?.sessionCode ?? "", activeChatReplayRefreshKey);
@@ -2530,6 +2675,7 @@ export function ChatManagementPage() {
   const modelSelectionSessionRef = useRef("");
   const streamAbortControllerRef = useRef<AbortController | null>(null);
   const streamAbortRequestedRef = useRef(false);
+  const requestedSessionCodeSyncedRef = useRef("");
   const autoStickToBottomRef = useRef(true);
   const messageScrollRef = useRef<HTMLElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
@@ -2572,6 +2718,11 @@ export function ChatManagementPage() {
     });
   }
 
+  function selectSourceTab(sourceTab: ChatSessionSourceTab) {
+    setActiveSourceTab(sourceTab);
+    writeStoredChatSessionSourceTab(sourceTab);
+  }
+
   function handleTranscriptScroll() {
     const element = messageScrollRef.current;
     if (!element) return;
@@ -2585,10 +2736,53 @@ export function ChatManagementPage() {
   }, [groups]);
 
   useEffect(() => {
-    if (!requestedSessionCode) return;
+    if (!requestedSessionCode) {
+      requestedSessionCodeSyncedRef.current = "";
+      return;
+    }
+    if (requestedSessionCodeSyncedRef.current === requestedSessionCode && activeSessionCode === requestedSessionCode) return;
     if (!findSession(sessionGroups, requestedSessionCode)) return;
     setActiveSessionCode(requestedSessionCode);
-  }, [requestedSessionCode, sessionGroups]);
+    const sourceTab = sourceTabForSessionCode(sessionGroups, requestedSessionCode);
+    if (sourceTab) selectSourceTab(sourceTab);
+    requestedSessionCodeSyncedRef.current = requestedSessionCode;
+  }, [activeSessionCode, requestedSessionCode, sessionGroups]);
+
+  useEffect(() => {
+    if (!requestedSourceTab) return;
+    selectSourceTab(requestedSourceTab);
+    if (!sessionGroups.length) return;
+
+    const requestedSessionSourceTab = requestedSessionCode
+      ? sourceTabForSessionCode(sessionGroups, requestedSessionCode)
+      : undefined;
+    if (requestedSessionCode && requestedSessionSourceTab === requestedSourceTab) return;
+
+    const nextSession = firstSessionForSourceTab(sessionGroups, requestedSourceTab);
+    if (nextSession) {
+      if (activeSessionCodeRef.current !== nextSession.sessionCode) setVisibleMessages([]);
+      activeSessionCodeRef.current = nextSession.sessionCode;
+      setActiveSessionCode(nextSession.sessionCode);
+      setSearchParams((current) => {
+        const next = new URLSearchParams(current);
+        next.set("sessionCode", nextSession.sessionCode);
+        next.set("sourceTab", requestedSourceTab);
+        return next;
+      }, { replace: true });
+      return;
+    }
+
+    if (!requestedSessionCode && !activeSessionCodeRef.current) return;
+    activeSessionCodeRef.current = "";
+    setActiveSessionCode("");
+    setVisibleMessages([]);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("sessionCode");
+      next.set("sourceTab", requestedSourceTab);
+      return next;
+    }, { replace: true });
+  }, [requestedSessionCode, requestedSourceTab, sessionGroups, setSearchParams]);
 
   useEffect(() => {
     let active = true;
@@ -2733,10 +2927,14 @@ export function ChatManagementPage() {
   }, [sessionModelSelections]);
 
   useEffect(() => {
-    if (!activeSessionCode && activeSession) {
-      setActiveSessionCode(activeSession.sessionCode);
+    if (requestedSessionCode || requestedSourceTab || activeSessionCode) return;
+    const defaultSession = firstSession(sessionGroups);
+    if (defaultSession) {
+      setActiveSessionCode(defaultSession.sessionCode);
+      const sourceTab = sourceTabForSessionCode(sessionGroups, defaultSession.sessionCode);
+      if (sourceTab) selectSourceTab(sourceTab);
     }
-  }, [activeSession, activeSessionCode]);
+  }, [activeSessionCode, requestedSessionCode, requestedSourceTab, sessionGroups]);
 
   useEffect(() => {
     activeSessionCodeRef.current = activeSessionCode;
@@ -2934,12 +3132,21 @@ export function ChatManagementPage() {
     else handleTranscriptScroll();
   }, [transcriptAguiEvents, visibleMessages]);
 
-  function handleSessionSelect(sessionCode: string) {
+  function handleSessionSelect(sessionCode: string, sourceTab?: ChatSessionSourceTab) {
+    if (sessionCode !== activeSessionCode) setVisibleMessages([]);
+    activeSessionCodeRef.current = sessionCode;
     setActiveSessionCode(sessionCode);
+    const nextSourceTab = sourceTab ?? sourceTabForSessionCode(sessionGroups, sessionCode);
+    if (nextSourceTab) selectSourceTab(nextSourceTab);
     setSearchParams((current) => {
       const next = new URLSearchParams(current);
-      if (sessionCode) next.set("sessionCode", sessionCode);
-      else next.delete("sessionCode");
+      if (sessionCode) {
+        next.set("sessionCode", sessionCode);
+        if (nextSourceTab) next.set("sourceTab", nextSourceTab);
+      } else {
+        next.delete("sessionCode");
+        next.delete("sourceTab");
+      }
       return next;
     }, { replace: true });
     setUnseenSessionCodes((current) => {
@@ -2948,6 +3155,24 @@ export function ChatManagementPage() {
       next.delete(sessionCode);
       return next;
     });
+  }
+
+  function handleSourceTabSelect(sourceTab: ChatSessionSourceTab) {
+    selectSourceTab(sourceTab);
+    const nextSession = firstSessionForSourceTab(sessionGroups, sourceTab);
+    if (nextSession) {
+      handleSessionSelect(nextSession.sessionCode, sourceTab);
+      return;
+    }
+    activeSessionCodeRef.current = "";
+    setActiveSessionCode("");
+    setVisibleMessages([]);
+    setSearchParams((current) => {
+      const next = new URLSearchParams(current);
+      next.delete("sessionCode");
+      next.set("sourceTab", sourceTab);
+      return next;
+    }, { replace: true });
   }
 
   function handleAgentSelect(agentCode: string) {
@@ -3328,7 +3553,8 @@ export function ChatManagementPage() {
   return (
     <div className="relative z-0 flex h-full min-h-0 min-w-0 overflow-hidden overscroll-none bg-white">
       <SessionSidebar
-        activeSessionCode={activeSession?.sessionCode ?? ""}
+        activeSessionCode={activeSessionCode}
+        activeSourceTab={activeSourceTab}
         collapsed={sidebarCollapsed}
         creatingSession={creatingSession}
         groups={sessionGroups}
@@ -3341,6 +3567,7 @@ export function ChatManagementPage() {
         onDeleteSession={setDeleteTargetSession}
         onRenameSession={handleSidebarRenameSession}
         onSessionSelect={handleSessionSelect}
+        onSourceTabSelect={handleSourceTabSelect}
       />
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center justify-between px-5 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">

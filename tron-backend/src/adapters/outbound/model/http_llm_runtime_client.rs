@@ -7,8 +7,13 @@ use crate::{
         llm::{LlmRuntimeClient, LlmRuntimeRerankHit},
         model::RuntimeModelConfig,
     },
-    domain::model::{ModelProtocol, ModelType},
+    domain::{
+        agent::{AgentMessage, AgentModelConfig, AgentModelProtocol, ModelRequest, ModelResponse},
+        model::{ModelProtocol, ModelType},
+    },
 };
+
+use super::protocol_adapters::adapter_for_protocol;
 
 #[derive(Debug, Clone, Default)]
 pub struct HttpLlmRuntimeClient {
@@ -22,6 +27,14 @@ impl HttpLlmRuntimeClient {
 }
 
 impl LlmRuntimeClient for HttpLlmRuntimeClient {
+    fn generate<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        prompt: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+        Box::pin(async move { self.generate_inner(config, prompt).await })
+    }
+
     fn embed<'a>(
         &'a self,
         config: &'a RuntimeModelConfig,
@@ -42,6 +55,41 @@ impl LlmRuntimeClient for HttpLlmRuntimeClient {
 }
 
 impl HttpLlmRuntimeClient {
+    async fn generate_inner(
+        &self,
+        config: &RuntimeModelConfig,
+        prompt: &str,
+    ) -> Result<String, String> {
+        if config.model_type != ModelType::Text {
+            return Err(format!(
+                "text generation call requires TEXT modelType, got {:?}",
+                config.model_type
+            ));
+        }
+        let model_config = runtime_to_agent_model_config(config)?;
+        let adapter = adapter_for_protocol(model_config.protocol)
+            .ok_or_else(|| "model protocol was unsupported".to_string())?;
+        let path = config.api_path.as_deref().unwrap_or(adapter.default_path());
+        let url = endpoint_url(config, path)?;
+        let request = ModelRequest {
+            messages: vec![AgentMessage::user(prompt)],
+            tools: Vec::new(),
+            system_agent_session_id: None,
+            response_input_items: None,
+            previous_response_id: None,
+        };
+        let body = adapter.request_body(&model_config, &request)?;
+        let response_body = self
+            .post_json_with_retry(config, url.as_str(), &body)
+            .await?;
+        match adapter.parse_response(&response_body)? {
+            ModelResponse::FinalOutput { output, .. } => Ok(output),
+            ModelResponse::ToolCalls { .. } => {
+                Err("text generation response unexpectedly requested tool calls".into())
+            }
+        }
+    }
+
     async fn embed_inner(
         &self,
         config: &RuntimeModelConfig,
@@ -224,6 +272,34 @@ fn endpoint_url(config: &RuntimeModelConfig, path: &str) -> Result<String, Strin
         return Err("model baseUrl and apiPath are required".into());
     }
     Ok(format!("{base}/{path}"))
+}
+
+fn runtime_to_agent_model_config(config: &RuntimeModelConfig) -> Result<AgentModelConfig, String> {
+    let protocol = match (config.protocol, config.model_type) {
+        (ModelProtocol::OpenAiCompatible, ModelType::Text) => AgentModelProtocol::ChatCompletions,
+        (ModelProtocol::Responses, ModelType::Text) => AgentModelProtocol::Responses,
+        _ => {
+            return Err(format!(
+                "text generation call requires text-capable protocol/modelType, got {:?}/{:?}",
+                config.protocol, config.model_type
+            ));
+        }
+    };
+    Ok(AgentModelConfig {
+        model_code: config.model_code.clone(),
+        protocol,
+        base_url: config.base_url.clone(),
+        api_path: config.api_path.clone(),
+        api_key: config.api_key.clone(),
+        model_name: config.model_name.clone(),
+        thinking_enabled: config.thinking_enabled,
+        responses_stateful_enabled: config.responses_stateful_enabled,
+        temperature: config.temperature,
+        max_tokens: config.max_tokens,
+        context_window_tokens: config.context_window_tokens,
+        top_p: config.top_p,
+        max_retries: config.max_retries,
+    })
 }
 
 #[cfg(test)]

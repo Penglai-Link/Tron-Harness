@@ -213,6 +213,7 @@ async fn run_automation_with_main_agent(
             model,
             None,
             Some(AUTOMATION_LOCALE.to_string()),
+            None,
             agent,
         )
         .await

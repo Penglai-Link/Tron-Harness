@@ -160,6 +160,7 @@ pub async fn send_message(
             resolved_model,
             Some(auth.user().user_code.clone()),
             Some(auth.locale.clone()),
+            Some(state.llm_runtime.clone()),
             agent_service,
         )
         .await
@@ -237,6 +238,7 @@ pub async fn stream_message(
 
     let replay_service_for_task = agui_stream.clone();
     let live_replay_recorder_for_task = live_replay_recorder.clone();
+    let llm_runtime = state.llm_runtime.clone();
     let run_task = AuthHolder::spawn(async move {
         let result = chats
             .send_message_stream(
@@ -245,6 +247,7 @@ pub async fn stream_message(
                 resolved_model,
                 user_code,
                 Some(auth.locale.clone()),
+                Some(llm_runtime),
                 agent_service,
                 sink,
             )

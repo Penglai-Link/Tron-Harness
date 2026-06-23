@@ -313,6 +313,7 @@ fn map_embedding_error(error: LlmRuntimeError) -> GraphError {
         | LlmRuntimeError::ProviderFailed(_)
         | LlmRuntimeError::InvalidProviderResponse(_)
         | LlmRuntimeError::InvalidChunkStrategy(_)
+        | LlmRuntimeError::TextModelUnavailable
         | LlmRuntimeError::RerankModelUnavailable => GraphError::EmbeddingProviderFailure,
     }
 }

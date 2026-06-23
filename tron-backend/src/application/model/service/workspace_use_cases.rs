@@ -46,6 +46,14 @@ impl ModelService {
         self.resolve_text_agent_model_config(workspace_code, model_code)
     }
 
+    pub fn text_runtime_model_config(
+        &self,
+        workspace_code: &str,
+        model_code: Option<&str>,
+    ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        self.resolve_runtime_model_config(workspace_code, model_code, ModelType::Text)
+    }
+
     pub fn embedding_runtime_model_config(
         &self,
         workspace_code: &str,

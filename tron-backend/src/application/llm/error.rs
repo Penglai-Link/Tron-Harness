@@ -6,6 +6,7 @@ pub enum LlmRuntimeError {
     InputRequired,
     QueryRequired,
     DocumentsRequired,
+    TextModelUnavailable,
     EmbeddingModelUnavailable,
     RerankModelUnavailable,
     ModelResolutionFailed(String),
@@ -39,6 +40,8 @@ impl fmt::Display for LlmRuntimeError {
             Self::InputRequired => formatter.write_str("input is required"),
             Self::QueryRequired => formatter.write_str("query is required"),
             Self::DocumentsRequired => formatter.write_str("documents is required"),
+            Self::TextModelUnavailable => formatter
+                .write_str("text model is unavailable, or no default text model is configured"),
             Self::EmbeddingModelUnavailable => formatter.write_str(
                 "embedding model is unavailable, or no default embedding model is configured",
             ),
