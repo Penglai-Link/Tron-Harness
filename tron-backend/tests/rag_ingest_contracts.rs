@@ -14,15 +14,20 @@ use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 use tron_backend::{
     adapters::outbound::persistence::sqlite::SqliteRagRepository,
+    application::llm::{
+        LlmRuntimeClient, LlmRuntimeModelResolver, LlmRuntimeRerankHit, LlmRuntimeService,
+    },
+    application::model::RuntimeModelConfig,
     application::rag::{
-        DefaultRagStrategyRegistry, RagConfigRepository, RagDocumentParseCall,
+        DefaultRagRuntime, DefaultRagStrategyRegistry, RagConfigRepository, RagDocumentParseCall,
         RagDocumentSourceCall, RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult,
         RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRepository, RagIngestRequest,
         RagIngestScope, RagIngestService, RagIngestSource, RagPersistIngestCommand,
-        RagResolvedDocument, RagStrategyRegistry, RagTextUnitWrite, RagTreeNodeWrite,
+        RagResolvedDocument, RagService, RagStrategyRegistry, RagTextUnitWrite, RagTreeNodeWrite,
         RagTreeSummaryCall, RagTreeSummaryResult, RagTreeSummaryRuntime, StrategyRegistration,
         StrategyRegistrationStatus, compile_ingest_profile,
     },
+    domain::model::{ModelError, ModelProtocol, ModelType},
     domain::rag::{RagError, RagProfileRecord, RagProfileType, RagStatus},
     shared::sqlite_extensions::default_sqlite_extension_context,
 };
@@ -432,6 +437,51 @@ async fn llm_summary_tree_empty_response_fails_fast_without_partial_tree_persist
     assert_eq!(
         query_i64(&connection, "SELECT COUNT(*) FROM rag_memory_text_units"),
         0
+    );
+}
+
+#[tokio::test]
+async fn rag_service_ingest_auto_wires_default_runtime_llm_summary() {
+    let database_path = temp_database_path("rag-ingest-default-runtime-llm-summary");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = CapturingIngestRepository::connect(&database_url);
+    insert_llm_summary_tree_ingest_profile(
+        &database_url,
+        "memory-card-default-runtime-llm-summary-v1",
+        Some(json!({ "modelCode": "summary-model-alpha" })),
+    );
+    let persisted_commands = repository.persisted_commands.clone();
+    let client = FakeLlmClient::new()
+        .with_generations(["leaf summary", "parent summary", "root summary"])
+        .with_embeddings((0..8).map(|_| embedding_4096(0.25, 0.75)));
+    let runtime = DefaultRagRuntime::new(
+        LlmRuntimeService::new(Arc::new(FakeLlmModelResolver), Arc::new(client.clone())),
+        std::env::temp_dir(),
+    );
+    let service = RagService::new(repository, DefaultRagStrategyRegistry::default(), runtime);
+    let mut request = memory_markdown_tree_request("v1");
+    request.ingest_profile_id = "memory-card-default-runtime-llm-summary-v1".into();
+
+    let result = service.ingest(request).await.unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(client.generate_inputs().len(), 3);
+    assert!(
+        client.generate_inputs()[0].contains("## Write Path\nPersist synchronously."),
+        "default runtime should call LLM text generation for tree leaf summaries"
+    );
+    let commands = persisted_commands.lock().unwrap();
+    let root = commands
+        .first()
+        .expect("source should persist")
+        .tree_nodes
+        .iter()
+        .find(|node| node.parent_node_code == "0")
+        .expect("root summary node should persist");
+    assert_eq!(root.summary_text, "root summary");
+    assert_eq!(
+        root.metadata["summaryModelCode"],
+        json!("summary-model-alpha")
     );
 }
 
@@ -1429,6 +1479,32 @@ fn ingest_executor_uses_generic_pipeline_dispatch_instead_of_fixed_stage_match()
     );
 }
 
+#[test]
+fn summarize_tree_executor_consumes_tree_extracted_artifact_contract() {
+    let tree_stage_source = include_str!("../src/application/rag/ingest/executor/tree_stages.rs");
+
+    assert!(
+        tree_stage_source.contains("store.get::<Value>(\"tree.extracted\")"),
+        "summarizeTree should consume the catalog-declared tree.extracted artifact"
+    );
+    assert!(
+        tree_stage_source.contains("tree_extracted_nodes"),
+        "summarizeTree should build summary inputs from extracted tree nodes"
+    );
+    assert!(
+        tree_stage_source.contains("tree_parent_child_edges"),
+        "summarizeTree should preserve extracted tree parent-child edges"
+    );
+    assert!(
+        !tree_stage_source.contains("prepared.tree_hints.iter().collect::<Vec<_>>()"),
+        "summarizeTree must not rebuild LLM summary ordering directly from prepared tree hints"
+    );
+    assert!(
+        !tree_stage_source.contains("tree_children_by_parent(prepared)"),
+        "summarizeTree must not infer child edges from prepared tree hints"
+    );
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SummaryCall {
     model_code: Option<String>,
@@ -1624,6 +1700,165 @@ impl RagDocumentSourceRuntime for FakeEmbeddingRuntime {
             document.document_uri = call.document_uri;
             Ok(document)
         })
+    }
+}
+
+#[derive(Clone)]
+struct FakeLlmModelResolver;
+
+impl LlmRuntimeModelResolver for FakeLlmModelResolver {
+    fn text_runtime_model_config(
+        &self,
+        _workspace_code: &str,
+        model_code: Option<&str>,
+    ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        Ok(Some(llm_text_config(
+            model_code.unwrap_or("workspace-default-summary"),
+        )))
+    }
+
+    fn embedding_runtime_model_config(
+        &self,
+        _workspace_code: &str,
+        model_code: Option<&str>,
+    ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        Ok(Some(llm_embedding_config(
+            model_code.unwrap_or("workspace-default-embedding"),
+        )))
+    }
+
+    fn rerank_runtime_model_config(
+        &self,
+        _workspace_code: &str,
+        _model_code: Option<&str>,
+    ) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        Ok(None)
+    }
+}
+
+#[derive(Clone)]
+struct FakeLlmClient {
+    generations: Arc<Mutex<VecDeque<Result<String, String>>>>,
+    embeddings: Arc<Mutex<VecDeque<Result<Vec<f32>, String>>>>,
+    generate_inputs: Arc<Mutex<Vec<String>>>,
+}
+
+impl FakeLlmClient {
+    fn new() -> Self {
+        Self {
+            generations: Arc::new(Mutex::new(VecDeque::new())),
+            embeddings: Arc::new(Mutex::new(VecDeque::new())),
+            generate_inputs: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    fn with_generations<I, S>(self, outputs: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.generations
+            .lock()
+            .unwrap()
+            .extend(outputs.into_iter().map(|output| Ok(output.into())));
+        self
+    }
+
+    fn with_embeddings<I>(self, embeddings: I) -> Self
+    where
+        I: IntoIterator<Item = Vec<f32>>,
+    {
+        self.embeddings
+            .lock()
+            .unwrap()
+            .extend(embeddings.into_iter().map(Ok));
+        self
+    }
+
+    fn generate_inputs(&self) -> Vec<String> {
+        self.generate_inputs.lock().unwrap().clone()
+    }
+}
+
+impl LlmRuntimeClient for FakeLlmClient {
+    fn generate<'a>(
+        &'a self,
+        _config: &'a RuntimeModelConfig,
+        prompt: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+        Box::pin(async move {
+            self.generate_inputs
+                .lock()
+                .unwrap()
+                .push(prompt.to_string());
+            self.generations
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| Err("missing fake text generation response".into()))
+        })
+    }
+
+    fn embed<'a>(
+        &'a self,
+        _config: &'a RuntimeModelConfig,
+        _input: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
+        Box::pin(async move {
+            self.embeddings
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| Err("missing fake embedding response".into()))
+        })
+    }
+
+    fn rerank<'a>(
+        &'a self,
+        _config: &'a RuntimeModelConfig,
+        _query: &'a str,
+        _documents: &'a [String],
+        _top_n: Option<usize>,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<LlmRuntimeRerankHit>, String>> + Send + 'a>> {
+        Box::pin(async move { Ok(Vec::new()) })
+    }
+}
+
+fn llm_text_config(model_code: &str) -> RuntimeModelConfig {
+    RuntimeModelConfig {
+        model_code: model_code.into(),
+        protocol: ModelProtocol::OpenAiCompatible,
+        model_type: ModelType::Text,
+        base_url: "https://provider.test/v1".into(),
+        api_path: None,
+        api_key: "sk-test".into(),
+        model_name: "summary-test".into(),
+        thinking_enabled: false,
+        responses_stateful_enabled: false,
+        temperature: None,
+        max_tokens: None,
+        context_window_tokens: None,
+        top_p: None,
+        max_retries: Some(0),
+    }
+}
+
+fn llm_embedding_config(model_code: &str) -> RuntimeModelConfig {
+    RuntimeModelConfig {
+        model_code: model_code.into(),
+        protocol: ModelProtocol::OpenAiCompatible,
+        model_type: ModelType::Embedding,
+        base_url: "https://provider.test/v1".into(),
+        api_path: None,
+        api_key: "sk-test".into(),
+        model_name: "embed-test".into(),
+        thinking_enabled: false,
+        responses_stateful_enabled: false,
+        temperature: None,
+        max_tokens: None,
+        context_window_tokens: None,
+        top_p: None,
+        max_retries: Some(0),
     }
 }
 
@@ -2509,6 +2744,7 @@ fn insert_summary_tree_only_ingest_profile(database_url: &str, profile_id: &str)
 
 struct CapturingIngestRepository {
     inner: SqliteRagRepository,
+    database_url: String,
     persisted_commands: Arc<Mutex<Vec<RagPersistIngestCommand>>>,
 }
 
@@ -2516,7 +2752,18 @@ impl CapturingIngestRepository {
     fn connect(database_url: &str) -> Self {
         Self {
             inner: SqliteRagRepository::connect(database_url).unwrap(),
+            database_url: database_url.into(),
             persisted_commands: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+}
+
+impl Clone for CapturingIngestRepository {
+    fn clone(&self) -> Self {
+        Self {
+            inner: SqliteRagRepository::connect(&self.database_url).unwrap(),
+            database_url: self.database_url.clone(),
+            persisted_commands: self.persisted_commands.clone(),
         }
     }
 }

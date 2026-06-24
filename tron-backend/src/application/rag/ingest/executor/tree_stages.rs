@@ -38,17 +38,25 @@ where
         request: &RagIngestRequest,
         node: &CompiledRagPipelineNode,
         bundle: &mut ArtifactBundle,
-        _store: &mut RagArtifactStore,
+        store: &mut RagArtifactStore,
     ) -> Result<(), RagError> {
         let prepared = bundle.prepared_payload()?.clone();
+        let tree_extracted = store.get::<Value>("tree.extracted")?.clone();
+        let extracted_nodes = tree_extracted_nodes(&tree_extracted)?;
+        let children_by_parent = tree_parent_child_edges(&tree_extracted, &extracted_nodes)?;
         let tree_nodes = match node.strategy_id.as_str() {
-            "RAG_TREE_EXTRACTIVE_SUMMARY_V1" => prepared
-                .tree_hints
+            "RAG_TREE_EXTRACTIVE_SUMMARY_V1" => extracted_nodes
                 .iter()
-                .map(|hint| summarize_tree_node(request, &prepared, hint))
+                .map(|tree_node| extractive_summary_tree_node(request, &prepared, tree_node))
                 .collect::<Vec<_>>(),
             "RAG_TREE_LLM_SUMMARY_V1" => {
-                self.execute_llm_summarize_tree(request, node, &prepared)
+                self.execute_llm_summarize_tree(
+                    request,
+                    node,
+                    &prepared,
+                    &extracted_nodes,
+                    &children_by_parent,
+                )
                     .await?
             }
             _ => return Err(RagError::IngestProfileInvalid),
@@ -80,21 +88,22 @@ where
         request: &RagIngestRequest,
         node: &CompiledRagPipelineNode,
         prepared: &PreparedIngestPayload,
+        tree_nodes: &[TreeExtractedNode],
+        children_by_parent: &BTreeMap<String, Vec<&TreeExtractedNode>>,
     ) -> Result<Vec<RagTreeNodeWrite>, RagError> {
         let model_code = llm_summary_model_code(node)?;
-        let children_by_parent = tree_children_by_parent(prepared);
         let mut summaries: BTreeMap<String, String> = BTreeMap::new();
         let mut tree_nodes_by_code: BTreeMap<String, RagTreeNodeWrite> = BTreeMap::new();
-        let mut ordered_hints = prepared.tree_hints.iter().collect::<Vec<_>>();
-        ordered_hints.sort_by(|left, right| {
+        let mut ordered_nodes = tree_nodes.iter().collect::<Vec<_>>();
+        ordered_nodes.sort_by(|left, right| {
             right
                 .level
                 .cmp(&left.level)
                 .then_with(|| left.ordinal.cmp(&right.ordinal))
         });
-        for hint in ordered_hints {
+        for tree_node in ordered_nodes {
             let child_summaries = children_by_parent
-                .get(&hint.tree_node_code)
+                .get(&tree_node.tree_node_code)
                 .into_iter()
                 .flat_map(|children| children.iter())
                 .filter_map(|child| {
@@ -103,8 +112,9 @@ where
                         .map(|summary| (child.title.as_str(), summary.as_str()))
                 })
                 .collect::<Vec<_>>();
-            let direct_text_units = direct_text_units(prepared, hint, &children_by_parent);
-            let prompt = llm_tree_summary_prompt(&hint.title, &child_summaries, &direct_text_units);
+            let direct_text_units = direct_text_units(prepared, tree_node, children_by_parent);
+            let prompt =
+                llm_tree_summary_prompt(&tree_node.title, &child_summaries, &direct_text_units);
             let result = self
                 .tree_summary_runtime
                 .as_ref()
@@ -123,17 +133,16 @@ where
             let tree_node = llm_summary_tree_node(
                 request,
                 prepared,
-                hint,
+                tree_node,
                 summary_text.clone(),
                 result.model_code,
             );
-            summaries.insert(hint.tree_node_code.clone(), summary_text);
-            tree_nodes_by_code.insert(hint.tree_node_code.clone(), tree_node);
+            summaries.insert(tree_node.tree_node_code.clone(), summary_text);
+            tree_nodes_by_code.insert(tree_node.tree_node_code.clone(), tree_node);
         }
-        Ok(prepared
-            .tree_hints
+        Ok(tree_nodes
             .iter()
-            .filter_map(|hint| tree_nodes_by_code.remove(&hint.tree_node_code))
+            .filter_map(|tree_node| tree_nodes_by_code.remove(&tree_node.tree_node_code))
             .collect())
     }
 
@@ -304,33 +313,127 @@ fn llm_summary_model_code(node: &CompiledRagPipelineNode) -> Result<String, RagE
         .ok_or(RagError::IngestProfileInvalid)
 }
 
-fn tree_children_by_parent<'a>(
-    prepared: &'a PreparedIngestPayload,
-) -> BTreeMap<String, Vec<&'a RagTreeHintDraft>> {
-    let mut children_by_parent: BTreeMap<String, Vec<&RagTreeHintDraft>> = BTreeMap::new();
-    for hint in prepared
-        .tree_hints
+#[derive(Debug, Clone)]
+struct TreeExtractedNode {
+    tree_node_code: String,
+    parent_node_code: String,
+    path_key: String,
+    level: i64,
+    ordinal: i64,
+    title: String,
+    covered_text_unit_codes: Vec<String>,
+}
+
+fn tree_extracted_nodes(tree_extracted: &Value) -> Result<Vec<TreeExtractedNode>, RagError> {
+    tree_extracted
+        .get("nodes")
+        .and_then(Value::as_array)
+        .ok_or(RagError::IngestStageFailed)?
         .iter()
-        .filter(|hint| hint.parent_node_code != "0")
+        .map(tree_extracted_node)
+        .collect()
+}
+
+fn tree_extracted_node(node: &Value) -> Result<TreeExtractedNode, RagError> {
+    Ok(TreeExtractedNode {
+        tree_node_code: required_string(node, "treeNodeCode")?,
+        parent_node_code: required_string(node, "parentNodeCode")?,
+        path_key: required_string(node, "pathKey")?,
+        level: required_i64(node, "level")?,
+        ordinal: required_i64(node, "ordinal")?,
+        title: required_string(node, "title")?,
+        covered_text_unit_codes: required_string_array(node, "coveredTextUnitCodes")?,
+    })
+}
+
+fn tree_parent_child_edges<'a>(
+    tree_extracted: &Value,
+    tree_nodes: &'a [TreeExtractedNode],
+) -> Result<BTreeMap<String, Vec<&'a TreeExtractedNode>>, RagError> {
+    let mut nodes_by_code = BTreeMap::new();
+    for tree_node in tree_nodes {
+        if nodes_by_code
+            .insert(tree_node.tree_node_code.as_str(), tree_node)
+            .is_some()
+        {
+            return Err(RagError::IngestStageFailed);
+        }
+    }
+
+    let mut children_by_parent: BTreeMap<String, Vec<&TreeExtractedNode>> = BTreeMap::new();
+    let mut linked_child_codes = BTreeSet::new();
+    for edge in tree_extracted
+        .get("edges")
+        .and_then(Value::as_array)
+        .ok_or(RagError::IngestStageFailed)?
     {
+        if required_string(edge, "relationship")? != "PARENT_OF" {
+            continue;
+        }
+        let parent_code = required_string(edge, "from")?;
+        let child_code = required_string(edge, "to")?;
+        let child = *nodes_by_code
+            .get(child_code.as_str())
+            .ok_or(RagError::IngestStageFailed)?;
+        if child.parent_node_code != parent_code {
+            return Err(RagError::IngestStageFailed);
+        }
         children_by_parent
-            .entry(hint.parent_node_code.clone())
+            .entry(parent_code)
             .or_default()
-            .push(hint);
+            .push(child);
+        linked_child_codes.insert(child_code);
+    }
+    for tree_node in tree_nodes
+        .iter()
+        .filter(|tree_node| tree_node.parent_node_code != "0")
+    {
+        if !linked_child_codes.contains(&tree_node.tree_node_code) {
+            return Err(RagError::IngestStageFailed);
+        }
     }
     for children in children_by_parent.values_mut() {
-        children.sort_by_key(|hint| hint.ordinal);
+        children.sort_by_key(|tree_node| tree_node.ordinal);
     }
-    children_by_parent
+    Ok(children_by_parent)
+}
+
+fn required_string(value: &Value, field: &str) -> Result<String, RagError> {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .ok_or(RagError::IngestStageFailed)
+}
+
+fn required_i64(value: &Value, field: &str) -> Result<i64, RagError> {
+    value
+        .get(field)
+        .and_then(Value::as_i64)
+        .ok_or(RagError::IngestStageFailed)
+}
+
+fn required_string_array(value: &Value, field: &str) -> Result<Vec<String>, RagError> {
+    value
+        .get(field)
+        .and_then(Value::as_array)
+        .ok_or(RagError::IngestStageFailed)?
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .map(ToOwned::to_owned)
+                .ok_or(RagError::IngestStageFailed)
+        })
+        .collect()
 }
 
 fn direct_text_units(
     prepared: &PreparedIngestPayload,
-    hint: &RagTreeHintDraft,
-    children_by_parent: &BTreeMap<String, Vec<&RagTreeHintDraft>>,
+    tree_node: &TreeExtractedNode,
+    children_by_parent: &BTreeMap<String, Vec<&TreeExtractedNode>>,
 ) -> Vec<String> {
     let child_covered_codes = children_by_parent
-        .get(&hint.tree_node_code)
+        .get(&tree_node.tree_node_code)
         .into_iter()
         .flat_map(|children| children.iter())
         .flat_map(|child| child.covered_text_unit_codes.iter().cloned())
@@ -338,7 +441,11 @@ fn direct_text_units(
     prepared
         .units
         .iter()
-        .filter(|unit| hint.covered_text_unit_codes.contains(&unit.text_unit_code))
+        .filter(|unit| {
+            tree_node
+                .covered_text_unit_codes
+                .contains(&unit.text_unit_code)
+        })
         .filter(|unit| !child_covered_codes.contains(&unit.text_unit_code))
         .map(|unit| unit.text.trim().to_string())
         .filter(|text| !text.is_empty())
@@ -381,27 +488,78 @@ fn llm_tree_summary_prompt(
 fn llm_summary_tree_node(
     request: &RagIngestRequest,
     prepared: &PreparedIngestPayload,
-    hint: &RagTreeHintDraft,
+    tree_node: &TreeExtractedNode,
     summary_text: String,
     model_code: String,
+) -> RagTreeNodeWrite {
+    summary_tree_node_write(
+        request,
+        prepared,
+        tree_node,
+        summary_text,
+        json!({
+            "summaryStrategy": "RAG_TREE_LLM_SUMMARY_V1",
+            "summaryModelCode": model_code,
+            "summaryStatus": "SUMMARIZED"
+        }),
+    )
+}
+
+fn extractive_summary_tree_node(
+    request: &RagIngestRequest,
+    prepared: &PreparedIngestPayload,
+    tree_node: &TreeExtractedNode,
+) -> RagTreeNodeWrite {
+    let covered_text = prepared
+        .units
+        .iter()
+        .filter(|unit| {
+            tree_node
+                .covered_text_unit_codes
+                .contains(&unit.text_unit_code)
+        })
+        .map(|unit| unit.text.trim())
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let summary_text = extractive_summary(&tree_node.title, &covered_text);
+    summary_tree_node_write(
+        request,
+        prepared,
+        tree_node,
+        summary_text,
+        json!({ "summaryStrategy": "EXTRACTIVE_DETERMINISTIC_V1" }),
+    )
+}
+
+fn summary_tree_node_write(
+    request: &RagIngestRequest,
+    prepared: &PreparedIngestPayload,
+    tree_node: &TreeExtractedNode,
+    summary_text: String,
+    metadata: Value,
 ) -> RagTreeNodeWrite {
     let covered_ordinals = prepared
         .units
         .iter()
-        .filter(|unit| hint.covered_text_unit_codes.contains(&unit.text_unit_code))
-        .map(|unit: &RagTextUnitDraft| unit.ordinal as i64)
+        .filter(|unit| {
+            tree_node
+                .covered_text_unit_codes
+                .contains(&unit.text_unit_code)
+        })
+        .map(|unit| unit.ordinal as i64)
         .collect::<Vec<_>>();
     RagTreeNodeWrite {
-        tree_node_code: hint.tree_node_code.clone(),
-        parent_node_code: hint.parent_node_code.clone(),
+        tree_node_code: tree_node.tree_node_code.clone(),
+        parent_node_code: tree_node.parent_node_code.clone(),
         source_code: request.source.code.clone(),
         source_version: request.source.version.clone(),
         scope_type: request.target_scope.scope_type.clone(),
         scope_code: request.target_scope.scope_code.clone(),
-        path_key: hint.path_key.clone(),
-        level: hint.level,
-        ordinal: hint.ordinal,
-        title: hint.title.clone(),
+        path_key: tree_node.path_key.clone(),
+        level: tree_node.level,
+        ordinal: tree_node.ordinal,
+        title: tree_node.title.clone(),
         summary_token_count: token_count(&summary_text),
         summary_content_hash: stable_hash(&summary_text),
         summary_text,
@@ -412,15 +570,11 @@ fn llm_summary_tree_node(
         summary_embedding_text_hash: None,
         summary_embedding_dimension: None,
         summary_embedding: None,
-        covered_text_unit_count: hint.covered_text_unit_codes.len() as i64,
-        covered_text_unit_codes: hint.covered_text_unit_codes.clone(),
+        covered_text_unit_count: tree_node.covered_text_unit_codes.len() as i64,
+        covered_text_unit_codes: tree_node.covered_text_unit_codes.clone(),
         child_start_ordinal: covered_ordinals.iter().min().copied().unwrap_or(0),
         child_end_ordinal: covered_ordinals.iter().max().copied().unwrap_or(0),
-        metadata: json!({
-            "summaryStrategy": "RAG_TREE_LLM_SUMMARY_V1",
-            "summaryModelCode": model_code,
-            "summaryStatus": "SUMMARIZED"
-        }),
+        metadata,
         status: "ACTIVE".into(),
     }
 }

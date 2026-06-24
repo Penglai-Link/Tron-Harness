@@ -185,56 +185,6 @@ fn tree_structure_kind(prepared: &PreparedIngestPayload) -> &'static str {
     }
 }
 
-fn summarize_tree_node(
-    request: &RagIngestRequest,
-    prepared: &PreparedIngestPayload,
-    hint: &crate::application::rag::ingest_payload::RagTreeHintDraft,
-) -> RagTreeNodeWrite {
-    let covered_text = prepared
-        .units
-        .iter()
-        .filter(|unit| hint.covered_text_unit_codes.contains(&unit.text_unit_code))
-        .map(|unit| unit.text.trim())
-        .filter(|text| !text.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n\n");
-    let covered_ordinals = prepared
-        .units
-        .iter()
-        .filter(|unit| hint.covered_text_unit_codes.contains(&unit.text_unit_code))
-        .map(|unit| unit.ordinal as i64)
-        .collect::<Vec<_>>();
-    let summary_text = extractive_summary(&hint.title, &covered_text);
-    RagTreeNodeWrite {
-        tree_node_code: hint.tree_node_code.clone(),
-        parent_node_code: hint.parent_node_code.clone(),
-        source_code: request.source.code.clone(),
-        source_version: request.source.version.clone(),
-        scope_type: request.target_scope.scope_type.clone(),
-        scope_code: request.target_scope.scope_code.clone(),
-        path_key: hint.path_key.clone(),
-        level: hint.level,
-        ordinal: hint.ordinal,
-        title: hint.title.clone(),
-        summary_token_count: token_count(&summary_text),
-        summary_content_hash: stable_hash(&summary_text),
-        summary_text,
-        summary_fulltext_status: "PENDING".into(),
-        summary_embedding_status: "PENDING".into(),
-        summary_embedding_model_code: None,
-        summary_embedding_version: None,
-        summary_embedding_text_hash: None,
-        summary_embedding_dimension: None,
-        summary_embedding: None,
-        covered_text_unit_count: hint.covered_text_unit_codes.len() as i64,
-        covered_text_unit_codes: hint.covered_text_unit_codes.clone(),
-        child_start_ordinal: covered_ordinals.iter().min().copied().unwrap_or(0),
-        child_end_ordinal: covered_ordinals.iter().max().copied().unwrap_or(0),
-        metadata: json!({ "summaryStrategy": "EXTRACTIVE_DETERMINISTIC_V1" }),
-        status: "ACTIVE".into(),
-    }
-}
-
 fn extractive_summary(title: &str, text: &str) -> String {
     let body = text
         .split(['\n', '.'])

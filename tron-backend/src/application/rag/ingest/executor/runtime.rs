@@ -22,7 +22,7 @@ use crate::application::rag::{
         ArtifactBundle, RagArtifactPayload, RagPersistResultArtifact, RagTreeIndexArtifact,
         RagVectorIndexArtifact,
     },
-    ingest_payload::{PreparedIngestPayload, RagTextUnitDraft, RagTreeHintDraft, prepare_payload},
+    ingest_payload::{PreparedIngestPayload, prepare_payload},
 };
 use crate::shared::event_bus::BusOutcome;
 
