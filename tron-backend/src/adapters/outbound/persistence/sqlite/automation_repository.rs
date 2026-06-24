@@ -163,14 +163,20 @@ impl AutomationRepository for SqliteAutomationRepository {
         &mut self,
         automation_code: &str,
     ) -> Result<Vec<AutomationExecutionRecord>, AutomationError> {
-        let mut statement = self.connection.prepare(
-            "SELECT id, execution_code, automation_code, workspace_code, session_code, trigger_source, status, summary, scheduled_at, started_at, finished_at, created_at FROM automation_execution_records WHERE automation_code = ?1 ORDER BY started_at DESC, id DESC"
-        ).map_err(storage_error)?;
-        statement
-            .query_map([automation_code], row_to_execution_record)
-            .map_err(storage_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage_error)
+        let records = {
+            let mut statement = self.connection.prepare(
+                "SELECT id, execution_code, automation_code, workspace_code, session_code, trigger_source, status, summary, scheduled_at, started_at, finished_at, created_at FROM automation_execution_records WHERE automation_code = ?1 ORDER BY started_at DESC, id DESC"
+            ).map_err(storage_error)?;
+            statement
+                .query_map([automation_code], row_to_execution_record)
+                .map_err(storage_error)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(storage_error)?
+        };
+        records
+            .into_iter()
+            .map(|record| hydrate_execution_summary(&self.connection, record))
+            .collect()
     }
 
     fn record_execution(
@@ -240,6 +246,12 @@ impl AutomationRepository for SqliteAutomationRepository {
         session_code: Option<String>,
         finished_at: &str,
     ) -> Result<(), AutomationError> {
+        let effective_summary = match session_code.as_deref() {
+            Some(session_code) => {
+                latest_assistant_reply_for_session(&self.connection, session_code)?.or(summary)
+            }
+            None => summary,
+        };
         let tx = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -253,8 +265,8 @@ impl AutomationRepository for SqliteAutomationRepository {
                     automation_code,
                     execution_code,
                     automation_execution_status_to_storage(status),
-                    summary,
-                    session_code,
+                    effective_summary.as_deref(),
+                    session_code.as_deref(),
                     timestamp_to_millis(finished_at),
                 ],
             )
@@ -274,7 +286,7 @@ impl AutomationRepository for SqliteAutomationRepository {
                 automation_code,
                 execution_code,
                 automation_execution_status_to_storage(status),
-                summary,
+                effective_summary.as_deref(),
                 timestamp_to_millis(finished_at),
             ],
         )
@@ -463,6 +475,18 @@ fn column_exists(
     Ok(columns.iter().any(|value| value == column_name))
 }
 
+fn table_exists(connection: &Connection, table_name: &str) -> Result<bool, AutomationError> {
+    connection
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1",
+            [table_name],
+            |_| Ok(true),
+        )
+        .optional()
+        .map(|value| value.unwrap_or(false))
+        .map_err(storage_error)
+}
+
 fn row_to_execution_record(row: &Row<'_>) -> rusqlite::Result<AutomationExecutionRecord> {
     let trigger_source: String = row.get(5)?;
     let status: String = row.get(6)?;
@@ -482,6 +506,56 @@ fn row_to_execution_record(row: &Row<'_>) -> rusqlite::Result<AutomationExecutio
         finished_at: row.get::<_, Option<i64>>(10)?.map(timestamp_from_millis),
         created_at: timestamp_from_millis(row.get(11)?),
     })
+}
+
+fn hydrate_execution_summary(
+    connection: &Connection,
+    mut record: AutomationExecutionRecord,
+) -> Result<AutomationExecutionRecord, AutomationError> {
+    if let Some(session_code) = record.session_code.as_deref()
+        && let Some(reply) = latest_assistant_reply_for_session(connection, session_code)?
+    {
+        record.summary = Some(reply);
+    }
+    Ok(record)
+}
+
+fn latest_assistant_reply_for_session(
+    connection: &Connection,
+    session_code: &str,
+) -> Result<Option<String>, AutomationError> {
+    if session_code.trim().is_empty() {
+        return Ok(None);
+    }
+    if !chat_message_schema_available(connection)? {
+        return Ok(None);
+    }
+    let reply = connection
+        .query_row(
+            "SELECT content
+             FROM chat_messages
+             WHERE session_code = ?1
+               AND lower(role) = 'assistant'
+               AND trim(content) <> ''
+             ORDER BY created_at DESC, id DESC
+             LIMIT 1",
+            [session_code],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(storage_error)?;
+    Ok(reply
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty()))
+}
+
+fn chat_message_schema_available(connection: &Connection) -> Result<bool, AutomationError> {
+    Ok(table_exists(connection, "chat_messages")?
+        && column_exists(connection, "chat_messages", "session_code")?
+        && column_exists(connection, "chat_messages", "role")?
+        && column_exists(connection, "chat_messages", "content")?
+        && column_exists(connection, "chat_messages", "created_at")?
+        && column_exists(connection, "chat_messages", "id")?)
 }
 
 fn backfill_execution_session_codes(connection: &Connection) -> Result<(), AutomationError> {

@@ -81,6 +81,10 @@ function StatisticCard({
   );
 }
 
+function automationDescriptionText(row: AutomationListItem, fallback: string) {
+  return row.description?.trim() || fallback;
+}
+
 interface RowMenuState {
   automationCode: string;
   left: number;
@@ -272,6 +276,7 @@ export function AutomationsPage() {
         onRowClick={(row) => navigate(`/automations/detail?automationCode=${encodeURIComponent(row.automationCode)}`)}
         rows={page.records}
         rowKey={(row) => row.automationCode}
+        tableClassName="min-w-[960px] table-fixed"
         toolbar={
           <>
             <SearchField
@@ -314,26 +319,42 @@ export function AutomationsPage() {
           {
             header: pt("Automation"),
             id: "name",
+            width: "17%",
             render: (row) => (
-              <div className="space-y-1">
-                <p className="font-medium text-[var(--color-on-surface)]">{row.name}</p>
-                <p className="max-w-[28rem] text-sm leading-6 text-[var(--color-on-surface-variant)]">{row.description ?? pt("No description")}</p>
-              </div>
+              <p className="min-w-0 truncate font-medium text-[var(--color-on-surface)]" title={row.name}>{row.name}</p>
             ),
           },
           {
+            cellClassName: "min-w-0",
+            header: pt("Description"),
+            id: "description",
+            width: "20%",
+            render: (row) => {
+              const description = automationDescriptionText(row, pt("No description"));
+
+              return (
+                <p className="min-w-0 truncate text-sm leading-6 text-[var(--color-on-surface-variant)]" title={description}>
+                  {description}
+                </p>
+              );
+            },
+          },
+          {
+            cellClassName: "min-w-0",
             header: pt("Schedule"),
             id: "schedule",
+            width: "20%",
             render: (row) => (
-              <div className="space-y-1">
-                <p className="font-mono text-[13px] text-[var(--color-on-surface)]">{row.cronExpression}</p>
-                <p className="text-sm text-[var(--color-on-surface-variant)]">{pt("Next: {{value}}", { value: formatTimestamp(row.nextRunAt, "Not scheduled") })}</p>
+              <div className="min-w-0 space-y-1">
+                <p className="truncate font-mono text-[13px] text-[var(--color-on-surface)]" title={row.cronExpression}>{row.cronExpression}</p>
+                <p className="truncate text-sm text-[var(--color-on-surface-variant)]" title={pt("Next: {{value}}", { value: formatTimestamp(row.nextRunAt, "Not scheduled") })}>{pt("Next: {{value}}", { value: formatTimestamp(row.nextRunAt, "Not scheduled") })}</p>
               </div>
             ),
           },
           {
             header: pt("Latest result"),
             id: "latest",
+            width: "15%",
             render: (row) => (
               <div>
                 {row.lastExecutionStatus ? (
@@ -349,6 +370,7 @@ export function AutomationsPage() {
           {
             header: pt("Status"),
             id: "status",
+            width: "12%",
             render: (row) => (
               <Badge tone={getAutomationStatusTone(row.status)}>{pt(row.status)}</Badge>
             ),
@@ -356,6 +378,7 @@ export function AutomationsPage() {
           {
             header: pt("Updated"),
             id: "updated",
+            width: "12%",
             render: (row) => (
               <span className="text-sm text-[var(--color-on-surface-variant)]">{formatTimestamp(row.updatedAt)}</span>
             ),
@@ -364,6 +387,7 @@ export function AutomationsPage() {
             align: "right",
             header: pt("Actions"),
             id: "actions",
+            width: "4%",
             render: (row) => {
               const isMenuOpen = openRowMenu?.automationCode === row.automationCode;
               const isBusy = rowBusyKey.includes(`:${row.automationCode}`);

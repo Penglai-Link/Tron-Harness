@@ -16,6 +16,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::post,
 };
+use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 use tokio::{
     net::TcpListener,
@@ -23,10 +24,14 @@ use tokio::{
     time::{Instant, sleep},
 };
 use tron_backend::{
+    adapters::outbound::persistence::{SqliteAutomationRepository, SqliteChatRepository},
     app::AppState,
     application::{
         agent::{BusinessToolCatalog, tool_record_to_effective_tool},
-        automation::{AutomationService, CreateAutomationCommand, UpdateAutomationStatusCommand},
+        automation::{
+            AutomationRepository, AutomationService, CreateAutomationCommand,
+            UpdateAutomationStatusCommand,
+        },
     },
     config::AppConfig,
     domain::{
@@ -36,10 +41,12 @@ use tron_backend::{
             ToolRequest,
         },
         automation::{
-            AutomationExecutionListItem, AutomationExecutionListQuery, AutomationExecutionStatus,
-            AutomationListQuery, AutomationStatus, AutomationTriggerSource,
+            Automation, AutomationExecutionDraft, AutomationExecutionListItem,
+            AutomationExecutionListQuery, AutomationExecutionStatus, AutomationListQuery,
+            AutomationStatus, AutomationTriggerSource,
         },
     },
+    shared::id::SnowflakeId,
 };
 
 use common::{
@@ -413,6 +420,105 @@ async fn manual_execution_persists_history_and_rolls_up_latest_result() {
     assert_eq!(detail_after_delete.status(), StatusCode::OK);
     let detail_after_delete_json = response_json(detail_after_delete).await;
     assert!(detail_after_delete_json["data"]["lastExecutionCode"].is_null());
+}
+
+#[test]
+fn automation_execution_summary_uses_session_final_assistant_reply() {
+    let database_path = database_path("execution-summary-session-reply");
+    let config = prepared_config(config_for_path(database_path));
+    let database_url = config.database_url.clone();
+    let chat_repository =
+        SqliteChatRepository::connect(&database_url).expect("chat schema should initialize");
+    drop(chat_repository);
+
+    let mut repository =
+        SqliteAutomationRepository::connect(&database_url).expect("automation repo should connect");
+    let now = "2026-06-24T12:00:00Z".to_string();
+    let automation = Automation {
+        id: SnowflakeId::new(734_600_000_000_200_001),
+        automation_code: "AUT-SUMMARY-FINAL-REPLY".into(),
+        workspace_code: "TRON_CORE".into(),
+        name: "Final reply summary".into(),
+        description: None,
+        agent_code: "main-agent".into(),
+        model_code: None,
+        prompt_text: "Return the final answer.".into(),
+        cron_expression: "0 8 * * *".into(),
+        scheduler_expression: "0 0 8 * * * *".into(),
+        timezone: "UTC".into(),
+        status: AutomationStatus::Paused,
+        previous_status: None,
+        last_execution_status: None,
+        last_execution_code: None,
+        last_execution_summary: None,
+        last_started_at: None,
+        last_finished_at: None,
+        created_at: now.clone(),
+        updated_at: now.clone(),
+        archived_at: None,
+    };
+    repository
+        .create_automation(&automation)
+        .expect("automation should be inserted");
+
+    let session_code = "SESSION-SUMMARY-FINAL-REPLY";
+    let fallback_summary = format!(
+        "Agent main-agent completed automation execution AEX-placeholder in session {session_code}."
+    );
+    let record = repository
+        .record_execution(
+            &automation,
+            &AutomationExecutionDraft {
+                automation_code: automation.automation_code.clone(),
+                workspace_code: automation.workspace_code.clone(),
+                session_code: Some(session_code.into()),
+                trigger_source: AutomationTriggerSource::Manual,
+                status: AutomationExecutionStatus::Running,
+                summary: Some(fallback_summary.clone()),
+                scheduled_at: None,
+                started_at: now.clone(),
+                finished_at: None,
+                created_at: now.clone(),
+            },
+        )
+        .expect("execution should record")
+        .expect("execution should insert");
+
+    insert_chat_assistant_message(
+        &database_url,
+        session_code,
+        "MSG-SUMMARY-FINAL",
+        "Chat session final reply.",
+    );
+
+    repository
+        .complete_execution_record(
+            &automation.automation_code,
+            &record.execution_code,
+            AutomationExecutionStatus::Success,
+            Some(fallback_summary),
+            Some(session_code.into()),
+            "2026-06-24T12:01:00Z",
+        )
+        .expect("execution should complete");
+
+    let records = repository
+        .list_execution_records(&automation.automation_code)
+        .expect("execution records should list");
+    assert_eq!(
+        records[0].summary.as_deref(),
+        Some("Chat session final reply.")
+    );
+    let automation = repository
+        .list_automations()
+        .expect("automations should list")
+        .into_iter()
+        .find(|item| item.automation_code == "AUT-SUMMARY-FINAL-REPLY")
+        .expect("automation should exist");
+    assert_eq!(
+        automation.last_execution_summary.as_deref(),
+        Some("Chat session final reply.")
+    );
 }
 
 #[tokio::test]
@@ -920,6 +1026,23 @@ fn database_path(test_name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join("automation-management")
         .join(format!("{test_name}.sqlite"))
+}
+
+fn insert_chat_assistant_message(
+    database_url: &str,
+    session_code: &str,
+    message_code: &str,
+    content: &str,
+) {
+    let connection = Connection::open(database_url).expect("test db should open");
+    connection
+        .execute(
+            "INSERT INTO chat_messages
+             (id, message_code, session_code, run_code, role, channel, actor, content, created_at)
+             VALUES (910000000200000000, ?1, ?2, 'RUN-SUMMARY-FINAL', 'ASSISTANT', 'MAIN_AGENT', 'main-agent', ?3, 1000)",
+            params![message_code, session_code, content],
+        )
+        .expect("chat assistant message should insert");
 }
 
 async fn create_automation(
