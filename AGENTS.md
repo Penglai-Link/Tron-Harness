@@ -39,3 +39,5 @@ Pagable response body format:
 
 ## What's more
 If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
+
+<!-- 2026-06-24: During browser testing, clicking "New session" could briefly leave the URL sessionCode ahead of the header/active chat session; verify route and active-session synchronization before relying on the URL alone. -->

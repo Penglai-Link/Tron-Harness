@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import {
   aguiEventMillis,
+  aguiEventRunCode,
   aguiEventType,
   buildAguiUserWorkCards,
   buildTranscriptPresentation,
@@ -207,6 +208,19 @@ function terminalAguiEvent(events: ChatAguiStreamEvent[]) {
       return events[index];
   }
   return null;
+}
+
+function latestAguiRunCode(events: ChatAguiStreamEvent[]) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const runCode = aguiEventRunCode(events[index]);
+    if (runCode) return runCode;
+  }
+  return "";
+}
+
+interface TerminalWorkSummary {
+  duration: string;
+  runCode: string;
 }
 
 function hasToolParameterPayload(value: unknown) {
@@ -540,16 +554,42 @@ function AguiRunWorkRail({
 }) {
   const userCards = useMemo(() => buildAguiUserWorkCards(events), [events]);
   const terminalEvent = useMemo(() => terminalAguiEvent(events), [events]);
-  const [expanded, setExpanded] = useState(() => !terminalEvent);
+  const terminalSummary = useMemo<TerminalWorkSummary | null>(() => {
+    if (!terminalEvent) return null;
+    return {
+      duration: aguiWorkDuration(events),
+      runCode: aguiEventRunCode(terminalEvent),
+    };
+  }, [events, terminalEvent]);
+  const currentRunCode = useMemo(() => latestAguiRunCode(events), [events]);
+  const latestTerminalSummaryRef = useRef<TerminalWorkSummary | null>(terminalSummary);
+  if (terminalSummary?.runCode) latestTerminalSummaryRef.current = terminalSummary;
+  const displayedTerminalSummary = terminalSummary
+    ?? (latestTerminalSummaryRef.current?.runCode === currentRunCode
+      ? latestTerminalSummaryRef.current
+      : null);
+  const collapsedTerminalRunCodeRef = useRef(displayedTerminalSummary?.runCode ?? "");
+  const [expanded, setExpanded] = useState(() => !displayedTerminalSummary);
 
   useEffect(() => {
-    setExpanded(!terminalEvent);
-  }, [terminalEvent]);
+    if (!currentRunCode) return;
+    if (displayedTerminalSummary?.runCode) {
+      if (collapsedTerminalRunCodeRef.current === displayedTerminalSummary.runCode)
+        return;
+      collapsedTerminalRunCodeRef.current = displayedTerminalSummary.runCode;
+      setExpanded(false);
+      return;
+    }
+    if (collapsedTerminalRunCodeRef.current === currentRunCode) return;
+    collapsedTerminalRunCodeRef.current = "";
+    setExpanded(true);
+  }, [currentRunCode, displayedTerminalSummary?.runCode]);
 
-  if (!userCards.length && !debugEvents.length) return null;
+  if (!displayedTerminalSummary && !userCards.length && !debugEvents.length)
+    return null;
   return (
     <section className="tron-chat__rail" aria-label="AG-UI run work">
-      {terminalEvent ? (
+      {displayedTerminalSummary ? (
         <button
           className="tron-chat__rail-summary"
           type="button"
@@ -557,15 +597,15 @@ function AguiRunWorkRail({
           onClick={() => setExpanded((value) => !value)}
         >
           <span className="tron-chat__rail-summary-label">
-            <span>{`Worked for ${aguiWorkDuration(events)}`}</span>
+            <span>{`Worked for ${displayedTerminalSummary.duration}`}</span>
           </span>
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
       ) : null}
-      {!terminalEvent || expanded ? (
+      {expanded ? (
         <div
           className="tron-chat__rail-stack"
-          style={{ marginTop: terminalEvent ? 8 : 0 }}
+          style={{ marginTop: displayedTerminalSummary ? 8 : 0 }}
         >
           {userCards.length ? (
             <section
