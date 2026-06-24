@@ -76,6 +76,7 @@ impl SqliteTaskRepository {
                 .execute("ALTER TABLE tasks ADD COLUMN model_code TEXT NULL", [])
                 .map_err(storage_error)?;
         }
+        repository.migrate_priority_extra_high_constraint_if_needed()?;
         Ok(repository)
     }
 
@@ -108,6 +109,119 @@ impl SqliteTaskRepository {
                 .map_err(storage_error)?;
         }
         Ok(())
+    }
+
+    fn migrate_priority_extra_high_constraint_if_needed(&mut self) -> Result<(), TaskError> {
+        let create_sql: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tasks'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(storage_error)?;
+        if create_sql
+            .as_deref()
+            .is_some_and(task_priority_constraint_excludes_extra_high)
+        {
+            self.rebuild_tasks_table_with_current_priority_constraint()?;
+        }
+        Ok(())
+    }
+
+    fn rebuild_tasks_table_with_current_priority_constraint(&mut self) -> Result<(), TaskError> {
+        let foreign_keys_enabled: i64 = self
+            .connection
+            .query_row("PRAGMA foreign_keys", [], |row| row.get(0))
+            .map_err(storage_error)?;
+        self.connection
+            .execute_batch("PRAGMA foreign_keys = OFF;")
+            .map_err(storage_error)?;
+        let result = self.rebuild_tasks_table_with_foreign_keys_disabled();
+        if foreign_keys_enabled == 1 {
+            self.connection
+                .execute_batch("PRAGMA foreign_keys = ON;")
+                .map_err(storage_error)?;
+        }
+        result
+    }
+
+    fn rebuild_tasks_table_with_foreign_keys_disabled(&mut self) -> Result<(), TaskError> {
+        let tx = self.connection.transaction().map_err(storage_error)?;
+        tx.execute_batch(
+            "
+            CREATE TABLE tasks_rebuild (
+                id INTEGER PRIMARY KEY,
+                task_code TEXT NOT NULL UNIQUE,
+                workspace_code TEXT NOT NULL,
+                parent_task_code TEXT NULL REFERENCES tasks(task_code),
+                title TEXT NOT NULL,
+                description TEXT NULL,
+                execution_result TEXT NULL,
+                status TEXT NOT NULL CHECK (status IN ('Open', 'Designing', 'Red', 'Green', 'Regressioning', 'Review', 'InProgress', 'Reopen', 'Completed', 'Archived')),
+                previous_status TEXT NULL CHECK (previous_status IS NULL OR previous_status IN ('Open', 'Designing', 'Red', 'Green', 'Regressioning', 'Review', 'InProgress', 'Reopen', 'Completed')),
+                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Extra High')),
+                task_type TEXT NOT NULL CHECK (task_type IN ('Feature', 'Bug')),
+                source_type TEXT NOT NULL CHECK (source_type IN ('Internal', 'GitHub', 'GitLab')),
+                source_url TEXT NULL,
+                agent_code TEXT NOT NULL DEFAULT 'main-agent',
+                model_code TEXT NULL,
+                progress_value INTEGER NOT NULL DEFAULT 0 CHECK (progress_value >= 0 AND progress_value <= 100),
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                archived_at INTEGER NULL
+            );
+            INSERT INTO tasks_rebuild (
+                id,
+                task_code,
+                workspace_code,
+                parent_task_code,
+                title,
+                description,
+                execution_result,
+                status,
+                previous_status,
+                priority,
+                task_type,
+                source_type,
+                source_url,
+                agent_code,
+                model_code,
+                progress_value,
+                created_at,
+                updated_at,
+                archived_at
+            )
+            SELECT
+                id,
+                task_code,
+                workspace_code,
+                parent_task_code,
+                title,
+                description,
+                execution_result,
+                status,
+                previous_status,
+                priority,
+                task_type,
+                source_type,
+                source_url,
+                agent_code,
+                model_code,
+                progress_value,
+                created_at,
+                updated_at,
+                archived_at
+            FROM tasks;
+            DROP TABLE tasks;
+            ALTER TABLE tasks_rebuild RENAME TO tasks;
+            CREATE INDEX IF NOT EXISTS idx_tasks_workspace_status ON tasks(workspace_code, status);
+            CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_code ON tasks(parent_task_code);
+            ",
+        )
+        .map_err(storage_error)?;
+        tx.commit().map_err(storage_error)
     }
 
     fn list_code_links(
@@ -316,6 +430,10 @@ fn uses_legacy_task_schema_definition(create_sql: &str) -> bool {
     ["Backlog", "Todo", "Testing", "BugFix", "Refactor"]
         .iter()
         .any(|needle| create_sql.contains(needle))
+}
+
+fn task_priority_constraint_excludes_extra_high(create_sql: &str) -> bool {
+    create_sql.contains("priority TEXT NOT NULL CHECK") && !create_sql.contains("Extra High")
 }
 
 fn column_exists(

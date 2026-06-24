@@ -34,6 +34,10 @@ async fn task_options_and_default_kanban_exclude_archived_tasks_and_seed_data() 
     );
     assert_eq!(options_json["data"]["taskTypes"], json!(["Feature", "Bug"]));
     assert_eq!(
+        options_json["data"]["priorities"],
+        json!(["Low", "Medium", "High", "Extra High"])
+    );
+    assert_eq!(
         options_json["data"]["statusRules"],
         json!({
             "featureRoot": ["Open", "Designing", "Red", "Green", "Regressioning", "Review", "Completed", "Archived"],
@@ -616,6 +620,45 @@ async fn task_repository_migrates_completed_description_to_execution_result() {
         )
         .expect("migrated task should exist");
     assert_eq!(migrated, (None, Some("Legacy execution markdown".into())));
+}
+
+#[tokio::test]
+async fn task_repository_migrates_priority_constraint_for_extra_high() {
+    let database_path = database_path("priority-extra-high-migration");
+    seed_current_task_schema_without_execution_result(&database_path);
+    let router = task_app_with_database_path(database_path.clone(), false);
+
+    let response = authenticated_request(
+        &router,
+        Method::PATCH,
+        "/api/v1/tasks/TSK-CURRENT-0001",
+        Some(json!({ "priority": "Extra High" })),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(response).await["data"]["priority"],
+        "Extra High"
+    );
+
+    let connection = Connection::open(&database_path).expect("task database should open");
+    let stored_priority: String = connection
+        .query_row(
+            "SELECT priority FROM tasks WHERE task_code = 'TSK-CURRENT-0001'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("updated task should exist");
+    assert_eq!(stored_priority, "Extra High");
+
+    let create_sql: String = connection
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tasks'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("tasks definition should exist");
+    assert!(create_sql.contains("'Extra High'"));
 }
 
 #[tokio::test]

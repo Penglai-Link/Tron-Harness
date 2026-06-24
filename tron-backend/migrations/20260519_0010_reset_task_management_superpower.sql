@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     execution_result TEXT NULL,
     status TEXT NOT NULL CHECK (status IN ('Open', 'Designing', 'Red', 'Green', 'Regressioning', 'Review', 'InProgress', 'Reopen', 'Completed', 'Archived')),
     previous_status TEXT NULL CHECK (previous_status IS NULL OR previous_status IN ('Open', 'Designing', 'Red', 'Green', 'Regressioning', 'Review', 'InProgress', 'Reopen', 'Completed')),
-    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High')),
+    priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High', 'Extra High')),
     task_type TEXT NOT NULL CHECK (task_type IN ('Feature', 'Bug')),
     source_type TEXT NOT NULL CHECK (source_type IN ('Internal', 'GitHub', 'GitLab')),
     source_url TEXT NULL,
