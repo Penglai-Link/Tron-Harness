@@ -796,13 +796,13 @@ const ragMockStrategyRegistry: RagMockStrategyRegistry = {
       strategyId: "VECTOR_SQLITE_VEC0_COSINE_V1",
     },
     {
-      backends: ["SQLITE"],
+      backends: ["SQLITE", "GRAPH"],
       routeKinds: ["TREE_FULLTEXT"],
       status: "Enabled",
       strategyId: "TREE_FULLTEXT_V1",
     },
     {
-      backends: ["SQLITE"],
+      backends: ["SQLITE", "GRAPH"],
       routeKinds: ["TREE_VECTOR"],
       status: "Enabled",
       strategyId: "TREE_VECTOR_V1",
@@ -834,6 +834,20 @@ function inferCorpusStorageBackend(corpusCode: string, corpusOptions: CorpusReco
   return corpus.storageBinding.startsWith("graph.") ? "GRAPH" : "SQLITE";
 }
 
+function hasMockTreeCapability(corpusCode: string, corpusOptions: CorpusRecord[]) {
+  const corpus = corpusOptions.find((candidate) => candidate.code === corpusCode);
+  if (!corpus) return false;
+  if (corpus.config?.capabilities.tree || corpus.config?.storageBinding.bindings.tree) return true;
+  return corpus.strategies.some((strategy) => {
+    const normalized = strategy.toUpperCase();
+    return normalized.includes("TREE") || normalized.includes("SUMMARY_TREE");
+  });
+}
+
+function isTreeRetrievalRouteType(routeType: RagRetrievalRouteType | "") {
+  return routeType === "TREE_FULLTEXT" || routeType === "TREE_VECTOR";
+}
+
 export function getRagMockStrategyRegistry(): RagMockStrategyRegistry {
   return ragMockStrategyRegistry;
 }
@@ -848,8 +862,16 @@ export function listRagMockIngestStageStrategies(stageId: RagIngestStageId, corp
 
 export function listRagMockRetrievalRouteTypes(corpusCode: string, corpusOptions: CorpusRecord[]) {
   const backend = inferCorpusStorageBackend(corpusCode, corpusOptions);
-  if (!backend) return ["FULLTEXT", "VECTOR", "GRAPH", "STRUCTURED_FILTER"] satisfies RagRetrievalRouteType[];
-  if (backend === "GRAPH") return ["GRAPH"] satisfies RagRetrievalRouteType[];
+  if (!backend) return ["FULLTEXT", "VECTOR", "TREE_FULLTEXT", "TREE_VECTOR", "GRAPH", "STRUCTURED_FILTER"] satisfies RagRetrievalRouteType[];
+  if (backend === "GRAPH") {
+    return Array.from(new Set(
+      ragMockStrategyRegistry.retrievalStrategies
+        .filter((strategy) => strategy.status === "Enabled")
+        .filter((strategy) => strategy.backends.includes(backend))
+        .flatMap((strategy) => strategy.routeKinds)
+        .filter((routeType) => routeType === "GRAPH" || hasMockTreeCapability(corpusCode, corpusOptions) && isTreeRetrievalRouteType(routeType)),
+    )) as RagRetrievalRouteType[];
+  }
 
   return Array.from(new Set(
     ragMockStrategyRegistry.retrievalStrategies
@@ -873,7 +895,8 @@ export function listRagMockRetrievalStrategies(
     .filter((strategy) => strategy.status === "Enabled")
     .filter((strategy) => strategy.backends.includes(backend))
     .filter((strategy) => backend === "GRAPH"
-      ? routeType === "GRAPH" && strategy.routeKinds.includes("GRAPH")
+      ? (routeType === "GRAPH" && strategy.routeKinds.includes("GRAPH"))
+        || (isTreeRetrievalRouteType(routeType) && hasMockTreeCapability(corpusCode, corpusOptions) && strategy.routeKinds.includes(routeType))
       : routeType !== "GRAPH" && strategy.routeKinds.includes(routeType))
     .map((strategy) => strategy.strategyId);
 }

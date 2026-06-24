@@ -390,6 +390,70 @@ function createMemoryCardCorpus(): RagCorpusDetailApi {
   };
 }
 
+function createSupportTreeGraphCorpus(): RagCorpusDetailApi {
+  const storageBinding: RagStorageBindingApi = {
+    bindings: {
+      diagnostics: "support-tree-diagnostics",
+      source: "tree-graph-store",
+      tree: "tree-graph-store",
+      textUnit: "tree-graph-store",
+    },
+    mode: "TARGETED",
+    targets: [
+      makeGraphTarget("tree-graph-store", "rag_support_tree", "RagSupportTreeNode", "GRAPH_TREE"),
+      makeGraphTarget("support-tree-diagnostics", "rag_support_tree", "RagSupportTreeDiagnostics"),
+    ],
+  };
+
+  return {
+    capabilities: {
+      fulltext: false,
+      graph: true,
+      reserved: false,
+      tree: true,
+      vector: false,
+    },
+    corpusId: "support-tree-graph",
+    description: "Support knowledge summary tree backed by graph storage.",
+    displayName: "Support Graph Tree",
+    fieldMapping: {
+      source: {
+        scopeCode: "scopeCode",
+        scopeType: "scopeType",
+        sourceCode: "sourceCode",
+        sourceType: "sourceType",
+        sourceVersion: "sourceVersion",
+        status: "status",
+        title: "title",
+      },
+      textUnit: {
+        scopeCode: "scopeCode",
+        scopeType: "scopeType",
+        sourceCode: "sourceCode",
+        sourceVersion: "sourceVersion",
+        text: "text",
+      },
+    },
+    filterSchema: {
+      fields: {
+        scopeCode: { column: "scopeCode", operators: ["eq", "in"], type: "string" },
+        scopeType: { column: "scopeType", operators: ["eq", "in"], type: "string" },
+      },
+    },
+    ingestProfileId: "",
+    metadataGroups: [{ groupId: "tree", labels: ["scopeCode", "scopeType"] }],
+    retrievalProfileId: "",
+    runtimeProjection: {
+      compatible: true,
+      issues: [],
+      storageBinding,
+    },
+    status: "enabled",
+    storageBinding,
+    storageSummary: formatStorageSummary(storageBinding),
+  };
+}
+
 function createSeedProfileCatalog(corpora: RagCatalogCorpusApi[]): RagProfileCatalogApi {
   return {
     contextStrategies: ["RESULT_LIST", "TOKEN_BUDGET_PACK", "MEMORY_CONTEXT_PACK", "DOC_QA_CONTEXT_PACK"],
@@ -429,35 +493,54 @@ function createSeedProfileCatalog(corpora: RagCatalogCorpusApi[]): RagProfileCat
     },
     retrievalRouteTypes: corpora.map((corpus) => ({
       corpusId: corpus.corpusId,
-      routeTypes: ["FULLTEXT", "VECTOR", "TREE_FULLTEXT", "TREE_VECTOR", "STRUCTURED_FILTER"],
+      routeTypes: corpus.corpusId === "support-tree-graph"
+        ? ["TREE_FULLTEXT", "TREE_VECTOR"]
+        : ["FULLTEXT", "VECTOR", "TREE_FULLTEXT", "TREE_VECTOR", "STRUCTURED_FILTER"],
     })),
-    retrievalStrategies: corpora.flatMap((corpus) => [
-      {
-        corpusId: corpus.corpusId,
-        routeType: "FULLTEXT",
-        strategyIds: ["FULLTEXT_SQLITE_FTS5_SIMPLE_V1"],
-      },
-      {
-        corpusId: corpus.corpusId,
-        routeType: "VECTOR",
-        strategyIds: ["VECTOR_SQLITE_VEC0_COSINE_V1"],
-      },
-      {
-        corpusId: corpus.corpusId,
-        routeType: "TREE_FULLTEXT",
-        strategyIds: ["TREE_FULLTEXT_V1"],
-      },
-      {
-        corpusId: corpus.corpusId,
-        routeType: "TREE_VECTOR",
-        strategyIds: ["TREE_VECTOR_V1"],
-      },
-      {
-        corpusId: corpus.corpusId,
-        routeType: "STRUCTURED_FILTER",
-        strategyIds: ["STRUCTURED_FILTER_SQLITE_V1"],
-      },
-    ]),
+    retrievalStrategies: corpora.flatMap((corpus) => {
+      if (corpus.corpusId === "support-tree-graph") {
+        return [
+          {
+            corpusId: corpus.corpusId,
+            routeType: "TREE_FULLTEXT",
+            strategyIds: ["TREE_FULLTEXT_V1"],
+          },
+          {
+            corpusId: corpus.corpusId,
+            routeType: "TREE_VECTOR",
+            strategyIds: ["TREE_VECTOR_V1"],
+          },
+        ];
+      }
+
+      return [
+        {
+          corpusId: corpus.corpusId,
+          routeType: "FULLTEXT",
+          strategyIds: ["FULLTEXT_SQLITE_FTS5_SIMPLE_V1"],
+        },
+        {
+          corpusId: corpus.corpusId,
+          routeType: "VECTOR",
+          strategyIds: ["VECTOR_SQLITE_VEC0_COSINE_V1"],
+        },
+        {
+          corpusId: corpus.corpusId,
+          routeType: "TREE_FULLTEXT",
+          strategyIds: ["TREE_FULLTEXT_V1"],
+        },
+        {
+          corpusId: corpus.corpusId,
+          routeType: "TREE_VECTOR",
+          strategyIds: ["TREE_VECTOR_V1"],
+        },
+        {
+          corpusId: corpus.corpusId,
+          routeType: "STRUCTURED_FILTER",
+          strategyIds: ["STRUCTURED_FILTER_SQLITE_V1"],
+        },
+      ];
+    }),
     topicPolicyTypes: ["NONE", "EMBEDDING_MMR_V1"],
   };
 }
@@ -593,7 +676,7 @@ function createProjectDocRetrievalProfile(): RagProfileDetailApi {
 
 function createSeedState(): RagManagementState {
   const corpora = new Map<string, RagCorpusDetailApi>();
-  [createProjectDocCorpus(), createMemoryCardCorpus()].forEach((corpus) => {
+  [createProjectDocCorpus(), createMemoryCardCorpus(), createSupportTreeGraphCorpus()].forEach((corpus) => {
     corpora.set(corpus.corpusId, corpus);
   });
   const catalogCorpora = Array.from(corpora.values()).map((corpus) => ({

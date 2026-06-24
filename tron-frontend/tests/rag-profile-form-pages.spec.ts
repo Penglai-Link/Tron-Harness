@@ -407,6 +407,50 @@ test("retrieval profile keeps summary tree route types", async ({ page }) => {
   ]));
 });
 
+test("API catalog exposes summary tree strategies for graph tree corpora", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  await installRagManagementApiMock(page, requests);
+
+  await page.goto(`${frontendBaseUrl}/rag/profiles/retrieval/new`);
+  await expect(page.getByRole("heading", { name: /Create Retrieval Profile|新建检索配置/ })).toBeVisible();
+
+  await page.getByLabel(/Profile ID|配置标识/).fill("support-tree-graph-related-v1");
+  await page.getByLabel(/Primary Corpus|主语料库/).selectOption("support-tree-graph");
+  await page.getByLabel(/Description|描述/).fill("Search support summary tree graph nodes.");
+  await page.getByLabel(/Route 1 Corpus|路由 1 语料库/).selectOption("support-tree-graph");
+  await expect(page.getByLabel(/Route 1 Retrieval Strategy|路由 1 检索策略/)).toContainText("TREE_FULLTEXT_V1");
+  await page.getByLabel(/Route 1 Retrieval Strategy|路由 1 检索策略/).selectOption("TREE_FULLTEXT_V1");
+  await page.getByRole("button", { name: /Add Route|添加路由/ }).click();
+  await page.getByLabel(/Route 2 Corpus|路由 2 语料库/).selectOption("support-tree-graph");
+  await expect(page.getByLabel(/Route 2 Retrieval Strategy|路由 2 检索策略/)).toContainText("TREE_VECTOR_V1");
+  await page.getByLabel(/Route 2 Retrieval Strategy|路由 2 检索策略/).selectOption("TREE_VECTOR_V1");
+  await page.getByRole("button", { name: /Save Profile|保存配置/ }).click();
+
+  await expect(page).toHaveURL(/\/rag\?tab=profiles&profileType=retrieval$/);
+
+  const createBodies = requestBodies(requests, "/api/v1/rag/profiles", "POST")
+    .filter((body) => body.profileId === "support-tree-graph-related-v1");
+  expect(createBodies).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      pipeline: expect.objectContaining({
+        nodes: expect.arrayContaining([
+          expect.objectContaining({
+            config: expect.objectContaining({ corpusId: "support-tree-graph", routeType: "TREE_FULLTEXT" }),
+            stageType: "ROUTE_SEARCH",
+            strategyId: "TREE_FULLTEXT_V1",
+          }),
+          expect.objectContaining({
+            config: expect.objectContaining({ corpusId: "support-tree-graph", routeType: "TREE_VECTOR" }),
+            stageType: "ROUTE_SEARCH",
+            strategyId: "TREE_VECTOR_V1",
+          }),
+        ]),
+      }),
+      profileType: "RETRIEVAL",
+    }),
+  ]));
+});
+
 test("creates and edits multi-corpus retrieval profiles through management APIs", async ({ page }) => {
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);

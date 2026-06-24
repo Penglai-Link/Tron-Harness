@@ -148,11 +148,26 @@ function hasGraphBackedCorpus(corpusCode: string, corpusOptions: CorpusRecord[])
   return inferCorpusStorageBackends(corpusCode, corpusOptions).has("GRAPH");
 }
 
+function hasTreeCapableCorpus(corpusCode: string, corpusOptions: CorpusRecord[]) {
+  const corpus = corpusOptions.find((candidate) => candidate.code === corpusCode);
+  if (!corpus) return false;
+  if (corpus.config?.capabilities.tree || corpus.config?.storageBinding.bindings.tree) return true;
+  return corpus.strategies.some((strategy) => {
+    const normalized = strategy.toUpperCase();
+    return normalized.includes("TREE") || normalized.includes("SUMMARY_TREE");
+  });
+}
+
 function inferStrategyBackend(strategyId: string): CorpusStorageBackend | undefined {
   const normalized = strategyId.toUpperCase();
   if (normalized.includes("GRAPH")) return "GRAPH";
   if (normalized.includes("SQLITE")) return "SQLITE";
   return undefined;
+}
+
+function isTreeRetrievalStrategy(strategyId: string) {
+  const normalized = strategyId.toUpperCase();
+  return normalized.includes("TREE_FULLTEXT") || normalized.includes("TREE_VECTOR");
 }
 
 function isGraphRetrievalStrategy(strategyId: string) {
@@ -171,21 +186,31 @@ function isRetrievalRouteStrategy(strategyId: string) {
     || normalized.includes("STRUCTURED_FILTER");
 }
 
+function listRouteStrategyOptions(strategyIds: string[]) {
+  return Array.from(new Set(strategyIds.map((strategyId) => strategyId.trim()).filter(Boolean)))
+    .filter(isRetrievalRouteStrategy);
+}
+
 function filterRouteStrategyOptions(
   corpusCode: string,
   corpusOptions: CorpusRecord[],
   strategyIds: string[],
 ) {
   if (!corpusCode) return [];
+  const supportsTree = hasTreeCapableCorpus(corpusCode, corpusOptions);
   const backends = inferCorpusStorageBackends(corpusCode, corpusOptions);
-  return Array.from(new Set(strategyIds.map((strategyId) => strategyId.trim()).filter(Boolean)))
-    .filter(isRetrievalRouteStrategy)
+  return listRouteStrategyOptions(strategyIds)
     .filter((strategyId) => {
+      if (isTreeRetrievalStrategy(strategyId)) return supportsTree;
       const strategyBackend = inferStrategyBackend(strategyId);
       if (strategyBackend === "GRAPH") return backends.has("GRAPH");
       if (strategyBackend === "SQLITE") return backends.has("SQLITE");
       return backends.has("SQLITE");
     });
+}
+
+function listCatalogRouteStrategyOptions(corpusCode: string, strategyIds: string[]) {
+  return corpusCode ? listRouteStrategyOptions(strategyIds) : [];
 }
 
 function listFallbackRouteStrategies(corpusCode: string, corpusOptions: CorpusRecord[]) {
@@ -1624,10 +1649,19 @@ export function RagRetrievalProfileFormPage() {
     () => Object.fromEntries(
       form.routes.map((route) => {
         const fallbackStrategies = listFallbackRouteStrategies(route.corpusId, corpusOptions);
-        const catalogStrategiesByType = catalog?.routeStrategiesByCorpus[route.corpusId] ?? {};
+        const catalogStrategiesByCorpus = catalog?.routeStrategiesByCorpus ?? {};
+        const hasCatalogStrategiesForCorpus = isApiMode
+          && Boolean(route.corpusId)
+          && Object.prototype.hasOwnProperty.call(catalogStrategiesByCorpus, route.corpusId);
+        const catalogStrategiesByType = catalogStrategiesByCorpus[route.corpusId] ?? {};
         const pipelineStrategies = strategyOptionsForStage(findPipelineStageDefinition(pipelineCatalog, "ROUTE_SEARCH"));
         const catalogStrategies = Object.values(catalogStrategiesByType).flat();
         const corpusStrategies = corpusOptions.find((corpus) => corpus.code === route.corpusId)?.strategies ?? [];
+
+        if (hasCatalogStrategiesForCorpus) {
+          return [route.formId, listCatalogRouteStrategyOptions(route.corpusId, catalogStrategies)];
+        }
+
         const candidateStrategies = isApiMode
           ? [...pipelineStrategies, ...catalogStrategies, ...corpusStrategies]
           : [...fallbackStrategies, ...corpusStrategies];
