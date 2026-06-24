@@ -82,6 +82,8 @@ fn parse_codex_stdout_line(
                         .and_then(to_u32)
                         .unwrap_or(0),
                 ),
+            cached_input_tokens: None,
+            reasoning_tokens: None,
         });
     }
     if value
@@ -178,6 +180,8 @@ fn parse_opencode_stdout_line(
             input_tokens,
             output_tokens,
             total_tokens,
+            cached_input_tokens: None,
+            reasoning_tokens: None,
         });
     }
     events

@@ -9,6 +9,7 @@ import { useSearchParams } from "react-router";
 import {
   AlarmClock,
   ArrowDown,
+  Archive,
   Bot,
   BrainCircuit,
   CheckCircle2,
@@ -21,11 +22,12 @@ import {
   Ellipsis,
   GitBranch,
   Hammer,
-  LoaderCircle,
   ListTodo,
+  LoaderCircle,
   MessageSquareText,
   Pencil,
   Plus,
+  RefreshCw,
   Send,
   Square,
   Terminal,
@@ -35,7 +37,6 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
 import {
   ConfirmDialog,
   MarkdownContent,
@@ -51,12 +52,22 @@ import {
   deleteChatSession,
   streamChatMessage,
   updateChatSession,
+  cancelChatSessionGoal,
+  clearChatSessionGoal,
   useChatAguiEvents,
   useChatAguiProtocolEvents,
+  pauseChatSessionGoal,
+  resumeChatSessionGoal,
+  createChatCompaction,
+  setChatSessionGoal,
+  useChatLatestCompactionState,
   useChatMessageListBySession,
+  useChatSessionGoalState,
+  useChatSessionTodosState,
   useChatSessionGroupList,
 } from "@/domain/chat/hooks";
 import { useAuthSession } from "@/domain/auth";
+import { useTranslation } from "react-i18next";
 import { fetchWorkspaceSystemAgents } from "@/domain/agent/api";
 import { listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
 import type { SystemAgentModelRecord, WorkspaceSystemAgentRecord } from "@/domain/agent/model";
@@ -78,8 +89,14 @@ import type {
   ChatAguiEvent,
   ChatAguiStreamEvent,
   ChatMessage,
+  ChatSessionCompaction,
+  ChatSessionGoalView,
   ChatSession,
   ChatSessionGroup,
+  ChatSessionTodo,
+  ChatTokenEstimateSnapshot,
+  ChatTokenUsage,
+  ChatUsageAuditSnapshot,
   SendChatMessageInput,
 } from "@/domain/chat/model";
 
@@ -373,6 +390,84 @@ function tokenFieldFromMetadata(value: string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function normalizeUsageEstimate(parsed: Partial<ChatTokenEstimateSnapshot> | null | undefined): ChatTokenEstimateSnapshot | null {
+  if (typeof parsed?.estimatedInputTokens !== "number") return null;
+  if (typeof parsed.messageTokenEstimate !== "number") return null;
+  if (typeof parsed.toolSchemaTokenEstimate !== "number") return null;
+  return {
+    checkpointCode: parsed.checkpointCode ?? null,
+    contextWindowLimit: tokenField(parsed.contextWindowLimit),
+    effectiveInputBudget: tokenField(parsed.effectiveInputBudget),
+    estimatedInputTokens: parsed.estimatedInputTokens,
+    messageCount: tokenField(parsed.messageCount) ?? 0,
+    messageTokenEstimate: parsed.messageTokenEstimate,
+    modelCode: parsed.modelCode ?? "",
+    modelName: parsed.modelName ?? "",
+    modelProtocol: parsed.modelProtocol ?? "",
+    outputTokenReserve: tokenField(parsed.outputTokenReserve),
+    overBudget: Boolean(parsed.overBudget),
+    partCount: tokenField(parsed.partCount) ?? 0,
+    protocolOverheadReserve: tokenField(parsed.protocolOverheadReserve),
+    rebased: Boolean(parsed.rebased),
+    safetyMarginTokens: tokenField(parsed.safetyMarginTokens),
+    toolSchemaTokenEstimate: parsed.toolSchemaTokenEstimate,
+    usageConfidence: parsed.usageConfidence ?? "estimated",
+    usageSource: parsed.usageSource ?? "local_estimate",
+  };
+}
+
+function normalizeTokenUsage(parsed: Partial<ChatTokenUsage> | null | undefined): ChatTokenUsage | null {
+  if (typeof parsed?.inputTokens !== "number") return null;
+  if (typeof parsed.outputTokens !== "number") return null;
+  if (typeof parsed.totalTokens !== "number") return null;
+  return {
+    cachedInputTokens: tokenField(parsed.cachedInputTokens),
+    inputTokens: parsed.inputTokens,
+    outputTokens: parsed.outputTokens,
+    reasoningTokens: tokenField(parsed.reasoningTokens),
+    totalTokens: parsed.totalTokens,
+  };
+}
+
+function parsedUsageEstimate(value: string | null | undefined): ChatTokenEstimateSnapshot | null {
+  if (!value) return null;
+  try {
+    return normalizeUsageEstimate(JSON.parse(value) as Partial<ChatTokenEstimateSnapshot>);
+  } catch {
+    return null;
+  }
+}
+
+function parsedUsageAudit(value: string | null | undefined): ChatUsageAuditSnapshot | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<ChatUsageAuditSnapshot>;
+    const requestEstimate = normalizeUsageEstimate(parsed.requestEstimate);
+    if (!requestEstimate) return null;
+    return {
+      calibrationFactor: typeof parsed.calibrationFactor === "number" ? parsed.calibrationFactor : null,
+      cumulativeRunUsage: normalizeTokenUsage(parsed.cumulativeRunUsage),
+      inputTokenDelta: typeof parsed.inputTokenDelta === "number" ? parsed.inputTokenDelta : null,
+      inputTokenRatio: typeof parsed.inputTokenRatio === "number" ? parsed.inputTokenRatio : null,
+      providerUsage: normalizeTokenUsage(parsed.providerUsage),
+      requestEstimate,
+      responseId: parsed.responseId ?? null,
+      usageConfidence: parsed.usageConfidence ?? "unavailable",
+      usageSource: parsed.usageSource ?? "unavailable",
+    };
+  } catch {
+    return null;
+  }
+}
+
+function latestUsageEstimateFromEvents(events: ChatAguiEvent[]) {
+  return parsedUsageEstimate(latestEventValue(events, "usage_estimate_json"));
+}
+
+function latestUsageAuditFromEvents(events: ChatAguiEvent[]) {
+  return parsedUsageAudit(latestEventValue(events, "usage_audit_json"));
+}
+
 function chatTokenUsage(messages: ChatMessage[]) {
   const assistantMessages = messages.filter((message) => message.role === "ASSISTANT");
   let hasUsage = assistantMessages.length === 0;
@@ -423,6 +518,7 @@ function lastTurnTokenUsage(messages: ChatMessage[]) {
 function contextWindowLimit(
   model: ModelRecord | null | undefined,
   selectedModel: ChatModelOption | null | undefined,
+  requestEstimate: ChatTokenEstimateSnapshot | null | undefined,
   events: ChatAguiEvent[],
 ) {
   const metadataWindow = tokenFieldFromMetadata(
@@ -431,7 +527,7 @@ function contextWindowLimit(
     ?? contextValue(latestEventValue(events, "contextWindowLimit"))
     ?? contextValue(latestEventValue(events, "context_window_limit")),
   );
-  return model?.contextWindowTokens ?? selectedModel?.contextWindowTokens ?? metadataWindow ?? null;
+  return requestEstimate?.contextWindowLimit ?? model?.contextWindowTokens ?? selectedModel?.contextWindowTokens ?? metadataWindow ?? null;
 }
 
 function formatContextUsagePercent(usedTokens: number | null, windowTokens: number | null) {
@@ -446,6 +542,12 @@ function formatContextWindowValue(windowTokens: number | null, usedTokens: numbe
   const windowLabel = formatTokenCount(windowTokens);
   const usageLabel = formatContextUsagePercent(usedTokens, windowTokens);
   return usageLabel ? `${windowLabel} · ${usageLabel}` : windowLabel;
+}
+
+function formatEstimateStatus(estimate: ChatTokenEstimateSnapshot | null) {
+  if (!estimate) return "unavailable";
+  if (estimate.overBudget) return "over budget";
+  return estimate.rebased ? "rebased" : "prepared";
 }
 
 function insertNewlineAtCursor(textarea: HTMLTextAreaElement) {
@@ -1201,6 +1303,12 @@ interface ChatModelOption {
   source: "main-agent" | "system-agent";
 }
 
+interface QueryStatus {
+  loading?: boolean;
+  error?: Error | null;
+  retry?: () => void;
+}
+
 interface ChatAgentOption {
   agentCode: string;
   description: string;
@@ -1327,6 +1435,48 @@ function iconButtonClass(active = false) {
   );
 }
 
+function smallActionButtonClass() {
+  return "inline-flex min-h-8 items-center rounded-md border border-[var(--color-outline-variant)] px-2.5 text-xs font-medium text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50";
+}
+
+function QueryStatusLine({
+  errorText,
+  loadingText,
+  retryText,
+  status,
+}: {
+  errorText: string;
+  loadingText: string;
+  retryText: string;
+  status?: QueryStatus;
+}) {
+  if (status?.loading) {
+    return (
+      <p className="inline-flex items-center gap-1.5 text-xs text-[var(--color-on-surface-variant)]">
+        <LoaderCircle className="animate-spin" size={13} />
+        <span>{loadingText}</span>
+      </p>
+    );
+  }
+  if (status?.error) {
+    return (
+      <div className="space-y-2 text-xs text-[var(--color-error)]">
+        <div className="flex items-start gap-1.5">
+          <CircleAlert className="mt-0.5 shrink-0" size={13} />
+          <span>{errorText}</span>
+        </div>
+        {status.retry ? (
+          <button className={smallActionButtonClass()} type="button" onClick={status.retry}>
+            <RefreshCw size={13} />
+            <span className="ml-1.5">{retryText}</span>
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+  return null;
+}
+
 function SessionActionMenu({
   disabled,
   onArchive,
@@ -1422,17 +1572,51 @@ function SessionRunIndicator({
 
 function RightContextSidebar({
   events,
+  goal,
+  goalBusy,
+  goalStatus,
+  latestCompaction,
+  latestCompactionStatus,
+  latestRequestEstimate,
+  latestUsageAudit,
   messages,
   model,
+  onCancelGoal,
+  onCreateCompaction,
+  onClearGoal,
+  onPauseGoal,
+  onResumeGoal,
+  onSetGoal,
+  compactionBusy,
   selectedModel,
   session,
+  todos,
+  todosStatus,
 }: {
   events: ChatAguiEvent[];
+  goal?: ChatSessionGoalView | null;
+  goalBusy?: boolean;
+  goalStatus?: QueryStatus;
+  latestCompaction?: ChatSessionCompaction | null;
+  latestCompactionStatus?: QueryStatus;
+  latestRequestEstimate?: ChatTokenEstimateSnapshot | null;
+  latestUsageAudit?: ChatUsageAuditSnapshot | null;
   messages: ChatMessage[];
   model?: ModelRecord | null;
+  onCancelGoal?: () => void;
+  onCreateCompaction?: () => void;
+  onClearGoal?: () => void;
+  onPauseGoal?: () => void;
+  onResumeGoal?: () => void;
+  onSetGoal?: (objective: string) => Promise<void> | void;
+  compactionBusy?: boolean;
   selectedModel?: ChatModelOption | null;
   session?: ChatSession;
+  todos?: ChatSessionTodo[];
+  todosStatus?: QueryStatus;
 }) {
+  const { t } = useTranslation("pages");
+  const [goalDraft, setGoalDraft] = useState("");
   const skills = usedSkills(events);
   const appCode = contextValue(session?.appCode) ?? contextValue(latestEventValue(events, "appCode"));
   const taskCode = contextValue(session?.taskCode) ?? contextValue(latestEventValue(events, "taskCode"));
@@ -1449,8 +1633,11 @@ function RightContextSidebar({
   );
   const usage = chatTokenUsage(messages);
   const lastTurnUsage = lastTurnTokenUsage(messages);
-  const usedTokens = usage.total;
-  const windowTokens = contextWindowLimit(model, selectedModel, events);
+  const requestEstimate = latestRequestEstimate ?? latestUsageEstimateFromEvents(events);
+  const usageAudit = latestUsageAudit ?? latestUsageAuditFromEvents(events);
+  const latestProviderUsage = usageAudit?.providerUsage ?? null;
+  const usedTokens = requestEstimate?.estimatedInputTokens ?? null;
+  const windowTokens = contextWindowLimit(model, selectedModel, requestEstimate, events);
   const isSystemAgentSession = Boolean(
     session?.agentCode && !isMainChatAgent(session.agentCode),
   );
@@ -1460,18 +1647,199 @@ function RightContextSidebar({
     sessionId: systemAgentSessionId,
     worktreePath,
   }) : null;
+  const activeCriteria = goal?.criteria.filter((criterion) => criterion.status === "ACTIVE") ?? [];
+
+  async function handleSubmitGoal() {
+    const objective = goalDraft.trim();
+    if (!objective || !onSetGoal) return;
+    await onSetGoal(objective);
+    setGoalDraft("");
+  }
 
   return (
     <section className="space-y-4">
       <h2 className="text-xl font-semibold">Run Context</h2>
       <div className="space-y-5 text-sm">
-        <ContextBlock title="Context Window">
+        <ContextBlock title="Last Request Context">
           <ContextRow label="model" value={modelLabel} />
           <ContextRow label="window" value={formatContextWindowValue(windowTokens, usedTokens)} />
+          <ContextRow label="estimated" value={formatTokenCount(requestEstimate?.estimatedInputTokens)} />
+          <ContextRow label="messages" value={formatTokenCount(requestEstimate?.messageTokenEstimate)} />
+          <ContextRow label="tools" value={formatTokenCount(requestEstimate?.toolSchemaTokenEstimate)} />
+          <ContextRow label="budget" value={formatTokenCount(requestEstimate?.effectiveInputBudget)} />
+          <ContextRow label="state" value={formatEstimateStatus(requestEstimate)} />
+        </ContextBlock>
+        <ContextBlock title="Provider Usage">
           <ContextRow label="last turn" value={<TokenUsageCompare lastTurn={lastTurnUsage} sessionTotal={usage} />} />
-          <ContextRow label="used" value={formatTokenCount(usedTokens)} />
+          <ContextRow label="cached input" value={formatTokenCount(latestProviderUsage?.cachedInputTokens)} />
+          <ContextRow label="reasoning" value={formatTokenCount(latestProviderUsage?.reasoningTokens)} />
+          <ContextRow label="session spend" value={formatTokenCount(usage.total)} />
           <ContextRow label="input" value={formatTokenCount(usage.input)} />
           <ContextRow label="output" value={formatTokenCount(usage.output)} />
+        </ContextBlock>
+        <ContextBlock title={t("chat.shortTermMemory.workingState")}>
+          <div className="mb-3 space-y-2 border-b border-[var(--color-outline-variant)] pb-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-[var(--color-on-surface-variant)]">
+                {t("chat.shortTermMemory.goal")}
+              </span>
+              {goal ? <Badge tone="neutral">{goal.goal.status}</Badge> : null}
+            </div>
+            {goalStatus?.loading || goalStatus?.error ? (
+              <QueryStatusLine
+                errorText={t("chat.shortTermMemory.loadFailed")}
+                loadingText={t("chat.shortTermMemory.loadingGoal")}
+                retryText={t("chat.shortTermMemory.retry")}
+                status={goalStatus}
+              />
+            ) : goal ? (
+              <div className="space-y-2">
+                <p className="break-words text-sm text-[var(--color-on-surface)]">
+                  {goal.goal.objectiveMarkdown}
+                </p>
+                {activeCriteria.length ? (
+                  <ul className="space-y-1 text-xs text-[var(--color-on-surface-variant)]">
+                    {activeCriteria.map((criterion) => (
+                      <li key={criterion.criterionCode} className="break-words">
+                        {criterion.text}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--color-on-surface-variant)]">
+                {t("chat.shortTermMemory.noGoal")}
+              </p>
+            )}
+          </div>
+          {todosStatus?.loading || todosStatus?.error ? (
+            <QueryStatusLine
+              errorText={t("chat.shortTermMemory.loadFailed")}
+              loadingText={t("chat.shortTermMemory.loadingTodos")}
+              retryText={t("chat.shortTermMemory.retry")}
+              status={todosStatus}
+            />
+          ) : todos?.length ? (
+            <div className="space-y-2">
+              {todos.map((todo) => (
+                <div key={todo.todoCode} className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-2">
+                  <ListTodo className="mt-0.5 text-[var(--color-on-surface-variant)]" size={14} />
+                  <div className="min-w-0 space-y-1">
+                    <div className="break-words text-[var(--color-on-surface)]">{todo.content}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge tone="neutral">{todo.status}</Badge>
+                      <Badge tone="neutral">{todo.priority}</Badge>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-[var(--color-on-surface-variant)]">
+              {t("chat.shortTermMemory.emptyTodos")}
+            </p>
+          )}
+        </ContextBlock>
+        <ContextBlock title={t("chat.shortTermMemory.goalControls")}>
+          {goalStatus?.loading || goalStatus?.error ? (
+            <QueryStatusLine
+              errorText={t("chat.shortTermMemory.loadFailed")}
+              loadingText={t("chat.shortTermMemory.loadingGoal")}
+              retryText={t("chat.shortTermMemory.retry")}
+              status={goalStatus}
+            />
+          ) : goal ? (
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                className={smallActionButtonClass()}
+                disabled={goalBusy || goal.goal.status === "PAUSED"}
+                type="button"
+                onClick={onPauseGoal}
+              >
+                {t("chat.shortTermMemory.pauseGoal")}
+              </button>
+              <button
+                className={smallActionButtonClass()}
+                disabled={goalBusy || goal.goal.status === "ACTIVE"}
+                type="button"
+                onClick={onResumeGoal}
+              >
+                {t("chat.shortTermMemory.resumeGoal")}
+              </button>
+              <button
+                className={smallActionButtonClass()}
+                disabled={goalBusy}
+                type="button"
+                onClick={onCancelGoal}
+              >
+                {t("chat.shortTermMemory.cancelGoal")}
+              </button>
+              <button
+                className={smallActionButtonClass()}
+                disabled={goalBusy}
+                type="button"
+                onClick={onClearGoal}
+              >
+                {t("chat.shortTermMemory.clearGoal")}
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <textarea
+                className="min-h-20 w-full resize-y rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-2 py-1.5 text-sm text-[var(--color-on-surface)] outline-none transition focus:border-[var(--color-primary)]"
+                disabled={!session || goalBusy}
+                placeholder={t("chat.shortTermMemory.goalPlaceholder")}
+                value={goalDraft}
+                onChange={(event) => setGoalDraft(event.target.value)}
+              />
+              <button
+                className={smallActionButtonClass()}
+                disabled={!session || goalBusy || !goalDraft.trim()}
+                type="button"
+                onClick={handleSubmitGoal}
+              >
+                {goalBusy ? t("chat.shortTermMemory.savingGoal") : t("chat.shortTermMemory.setGoal")}
+              </button>
+            </div>
+          )}
+        </ContextBlock>
+        <ContextBlock title={t("chat.shortTermMemory.checkpoint")}>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-xs text-[var(--color-on-surface-variant)]">
+              {latestCompactionStatus?.loading
+                ? t("chat.shortTermMemory.loadingCheckpoint")
+                : latestCompactionStatus?.error
+                  ? t("chat.shortTermMemory.loadFailed")
+                  : latestCompaction
+                ? t("chat.shortTermMemory.checkpointReady")
+                : t("chat.shortTermMemory.noCheckpoint")}
+            </span>
+            <button
+              aria-label={t("chat.shortTermMemory.createCheckpoint")}
+              className={iconButtonClass()}
+              disabled={!session || compactionBusy}
+              title={t("chat.shortTermMemory.createCheckpoint")}
+              type="button"
+              onClick={onCreateCompaction}
+            >
+              {compactionBusy ? <LoaderCircle className="animate-spin" size={15} /> : <Archive size={15} />}
+            </button>
+          </div>
+          {latestCompactionStatus?.error ? (
+            <QueryStatusLine
+              errorText={t("chat.shortTermMemory.loadFailed")}
+              loadingText={t("chat.shortTermMemory.loadingCheckpoint")}
+              retryText={t("chat.shortTermMemory.retry")}
+              status={latestCompactionStatus}
+            />
+          ) : latestCompaction ? (
+            <div className="space-y-1.5">
+              <ContextRow label={t("chat.shortTermMemory.rows.checkpoint")} value={latestCompaction.checkpointMessageCode} />
+              <ContextRow label={t("chat.shortTermMemory.rows.source")} value={`${latestCompaction.sourceStartSeq}-${latestCompaction.sourceEndSeq}`} />
+              <ContextRow label={t("chat.shortTermMemory.rows.created")} value={formatTime(latestCompaction.createdAt)} />
+            </div>
+          ) : null}
         </ContextBlock>
         {(appCode || taskCode) ? (
           <ContextBlock title="App / Task">
@@ -2627,6 +2995,7 @@ export function ChatManagementPage() {
   const requestedSessionCode = searchParams.get("sessionCode")?.trim() ?? "";
   const requestedSourceTab = parseChatSessionSourceTab(searchParams.get("sourceTab"));
   const toast = useToast();
+  const { t } = useTranslation("pages");
   const { session: authSession } = useAuthSession();
   const { preferences: aguiDebugPreferences } = useAguiDebugPreferences();
   const { preferences: aguiWorkReplayPreferences } = useAguiWorkReplayPreferences();
@@ -2634,6 +3003,7 @@ export function ChatManagementPage() {
   const activeWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
   const [activeChatDataRefreshKey, setActiveChatDataRefreshKey] = useState(0);
   const [activeChatReplayRefreshKey, setActiveChatReplayRefreshKey] = useState(0);
+  const [shortTermMemoryRefreshKey, setShortTermMemoryRefreshKey] = useState(0);
   const groups = useChatSessionGroupList(activeWorkspaceCode, activeChatDataRefreshKey);
   const [sessionGroups, setSessionGroups] = useState<ChatSessionGroup[]>([]);
   const [activeSessionCode, setActiveSessionCode] = useState("");
@@ -2649,11 +3019,19 @@ export function ChatManagementPage() {
       : undefined
   );
   const messages = useChatMessageListBySession(activeSession?.sessionCode ?? "", activeChatDataRefreshKey);
+  const shortTermMemoryTodosState = useChatSessionTodosState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
+  const latestCompactionState = useChatLatestCompactionState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
+  const activeGoalState = useChatSessionGoalState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
+  const shortTermMemoryTodos = shortTermMemoryTodosState.data;
+  const latestCompaction = latestCompactionState.data;
+  const activeGoal = activeGoalState.data;
   const aguiEvents = useChatAguiEvents(activeSession?.sessionCode ?? "");
   const aguiProtocolEvents = useChatAguiProtocolEvents(activeSession?.sessionCode ?? "", activeChatReplayRefreshKey);
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
   const [liveAguiEventsBySessionCode, setLiveAguiEventsBySessionCode] = useState<Record<string, ChatAguiStreamEvent[]>>({});
   const [liveAguiAnchorMessageCodesBySessionCode, setLiveAguiAnchorMessageCodesBySessionCode] = useState<Record<string, Record<string, string>>>({});
+  const [latestRequestEstimatesBySessionCode, setLatestRequestEstimatesBySessionCode] = useState<Record<string, ChatTokenEstimateSnapshot>>({});
+  const [latestUsageAuditsBySessionCode, setLatestUsageAuditsBySessionCode] = useState<Record<string, ChatUsageAuditSnapshot>>({});
   const [sending, setSending] = useState(false);
   const [creatingSession, setCreatingSession] = useState(false);
   const [chatModels, setChatModels] = useState<ModelRecord[]>([]);
@@ -2667,6 +3045,8 @@ export function ChatManagementPage() {
   const [titleDraft, setTitleDraft] = useState("");
   const [renamingSession, setRenamingSession] = useState(false);
   const [runningSessionCode, setRunningSessionCode] = useState("");
+  const [compactingSessionCode, setCompactingSessionCode] = useState("");
+  const [goalActionSessionCode, setGoalActionSessionCode] = useState("");
   const [sessionActionPendingCode, setSessionActionPendingCode] = useState("");
   const [deleteTargetSession, setDeleteTargetSession] = useState<ChatSession | null>(null);
   const [unseenSessionCodes, setUnseenSessionCodes] = useState<Set<string>>(() => new Set());
@@ -3059,13 +3439,46 @@ export function ChatManagementPage() {
     return (
       <RightContextSidebar
         events={aguiEvents}
+        goal={activeGoal}
+        goalBusy={Boolean(activeSession?.sessionCode && goalActionSessionCode === activeSession.sessionCode)}
+        goalStatus={activeGoalState}
+        latestCompaction={latestCompaction}
+        latestCompactionStatus={latestCompactionState}
+        latestRequestEstimate={activeSession ? latestRequestEstimatesBySessionCode[activeSession.sessionCode] ?? null : null}
+        latestUsageAudit={activeSession ? latestUsageAuditsBySessionCode[activeSession.sessionCode] ?? null : null}
         messages={visibleMessages}
         model={selectedMainAgentModel}
+        onCancelGoal={handleCancelGoal}
+        compactionBusy={Boolean(activeSession?.sessionCode && compactingSessionCode === activeSession.sessionCode)}
+        onCreateCompaction={handleCreateCompaction}
+        onClearGoal={handleClearGoal}
+        onPauseGoal={handlePauseGoal}
+        onResumeGoal={handleResumeGoal}
+        onSetGoal={handleSetGoal}
         selectedModel={selectedModel}
         session={activeSession}
+        todos={shortTermMemoryTodos}
+        todosStatus={shortTermMemoryTodosState}
       />
     );
-  }, [activeSession, aguiEvents, hasActiveSession, selectedMainAgentModel, selectedModel, visibleMessages]);
+  }, [
+    activeSession,
+    activeGoalState,
+    activeGoal,
+    aguiEvents,
+    compactingSessionCode,
+    goalActionSessionCode,
+    hasActiveSession,
+    latestCompactionState,
+    latestCompaction,
+    latestRequestEstimatesBySessionCode,
+    latestUsageAuditsBySessionCode,
+    selectedMainAgentModel,
+    selectedModel,
+    shortTermMemoryTodosState,
+    shortTermMemoryTodos,
+    visibleMessages,
+  ]);
   const transcriptDebugOptions = useMemo(() => ({
     debugEventTypes: resolveAguiDebugEventTypes(aguiDebugPreferences),
     recentTurnLimit: aguiWorkReplayPreferences.recentTurnLimit,
@@ -3349,6 +3762,30 @@ export function ChatManagementPage() {
         abortController.signal,
       );
       setSessionGroups((current) => replaceSession(current, result.session));
+      setLatestRequestEstimatesBySessionCode((current) => {
+        if (result.run.latestRequestEstimate) {
+          return {
+            ...current,
+            [result.session.sessionCode]: result.run.latestRequestEstimate,
+          };
+        }
+        if (!(result.session.sessionCode in current)) return current;
+        const next = { ...current };
+        delete next[result.session.sessionCode];
+        return next;
+      });
+      setLatestUsageAuditsBySessionCode((current) => {
+        if (result.run.latestUsageAudit) {
+          return {
+            ...current,
+            [result.session.sessionCode]: result.run.latestUsageAudit,
+          };
+        }
+        if (!(result.session.sessionCode in current)) return current;
+        const next = { ...current };
+        delete next[result.session.sessionCode];
+        return next;
+      });
       const resultUserMessage = result.messages.find((message) => message.role === "USER") ?? null;
       const persistedUserCode = resultUserMessage?.messageCode ?? optimisticUserCode;
       const runCodes = Array.from(currentLiveAguiRunCodesRef.current);
@@ -3374,6 +3811,7 @@ export function ChatManagementPage() {
           ...result.messages,
         ]);
       }
+      setShortTermMemoryRefreshKey((current) => current + 1);
       setUnseenSessionCodes((current) => {
         const next = new Set(current);
         if (activeSessionCodeRef.current === result.session.sessionCode) next.delete(result.session.sessionCode);
@@ -3416,6 +3854,104 @@ export function ChatManagementPage() {
       }
       streamAbortRequestedRef.current = false;
     }
+  }
+
+  async function handleCreateCompaction() {
+    if (!activeSession || compactingSessionCode) return;
+    const sessionCode = activeSession.sessionCode;
+    setCompactingSessionCode(sessionCode);
+    try {
+      await createChatCompaction({
+        sessionCode,
+        reason: "manual",
+      });
+      setShortTermMemoryRefreshKey((current) => current + 1);
+      toast.success(t("chat.shortTermMemory.messages.created"), {
+        title: t("chat.shortTermMemory.messages.createdTitle"),
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("chat.shortTermMemory.messages.failed"), {
+        title: t("chat.shortTermMemory.messages.failedTitle"),
+      });
+    } finally {
+      setCompactingSessionCode("");
+    }
+  }
+
+  async function runGoalAction(action: () => Promise<unknown>, successMessage: string) {
+    if (!activeSession || goalActionSessionCode) return;
+    const sessionCode = activeSession.sessionCode;
+    setGoalActionSessionCode(sessionCode);
+    try {
+      await action();
+      setShortTermMemoryRefreshKey((current) => current + 1);
+      toast.success(successMessage, {
+        title: t("chat.shortTermMemory.messages.goalUpdatedTitle"),
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("chat.shortTermMemory.messages.goalFailed"), {
+        title: t("chat.shortTermMemory.messages.goalFailedTitle"),
+      });
+    } finally {
+      setGoalActionSessionCode("");
+    }
+  }
+
+  async function handleSetGoal(objective: string) {
+    if (!activeSession) return;
+    await runGoalAction(
+      () => setChatSessionGoal({
+        sessionCode: activeSession.sessionCode,
+        objective,
+        maxRuns: 20,
+        criteria: [],
+      }),
+      t("chat.shortTermMemory.messages.goalSet"),
+    );
+  }
+
+  async function handlePauseGoal() {
+    if (!activeSession || !activeGoal) return;
+    await runGoalAction(
+      () => pauseChatSessionGoal({
+        sessionCode: activeSession.sessionCode,
+        goalCode: activeGoal.goal.goalCode,
+      }),
+      t("chat.shortTermMemory.messages.goalPaused"),
+    );
+  }
+
+  async function handleResumeGoal() {
+    if (!activeSession || !activeGoal) return;
+    await runGoalAction(
+      () => resumeChatSessionGoal({
+        sessionCode: activeSession.sessionCode,
+        goalCode: activeGoal.goal.goalCode,
+      }),
+      t("chat.shortTermMemory.messages.goalResumed"),
+    );
+  }
+
+  async function handleCancelGoal() {
+    if (!activeSession || !activeGoal) return;
+    await runGoalAction(
+      () => cancelChatSessionGoal({
+        sessionCode: activeSession.sessionCode,
+        goalCode: activeGoal.goal.goalCode,
+      }),
+      t("chat.shortTermMemory.messages.goalCancelled"),
+    );
+  }
+
+  async function handleClearGoal() {
+    if (!activeSession || !activeGoal) return;
+    await runGoalAction(
+      () => clearChatSessionGoal({
+        sessionCode: activeSession.sessionCode,
+        goalCode: activeGoal.goal.goalCode,
+      }),
+      t("chat.shortTermMemory.messages.goalCleared"),
+    );
   }
 
   async function handleCreateSession() {

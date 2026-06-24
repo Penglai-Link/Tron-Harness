@@ -2,6 +2,7 @@ mod coding_tools;
 mod discovery;
 mod memory_tools;
 mod platform_tools;
+mod short_term_memory_tools;
 
 use crate::domain::agent::{EffectiveTool, Tool, ToolError, ToolRegistry};
 use crate::{
@@ -15,6 +16,7 @@ use crate::{
             RagIngestRepository, RagRetryIndexRepository, RagSearchRepository, RagSearchRuntime,
             RagStrategyRegistry,
         },
+        short_term_memory::ShortTermMemoryService,
         skill::SkillRegistryService,
         task::TaskService,
         variable::VariableService,
@@ -49,6 +51,7 @@ pub fn register_default_agent_tools<R, S, E>(
     skills: SkillRegistryService,
     variables: VariableService,
     memory: MemoryService<R, S, E>,
+    short_term_memory: ShortTermMemoryService,
 ) -> Result<(), ToolError>
 where
     R: RagIngestRepository
@@ -73,6 +76,9 @@ where
     );
     tools.extend(coding_tools::coding_domain_tools());
     tools.extend(memory_tools::memory_business_tools(memory));
+    tools.extend(short_term_memory_tools::short_term_memory_tools(
+        short_term_memory,
+    ));
     tools.push(discovery::discovery_tool());
 
     for tool in tools {

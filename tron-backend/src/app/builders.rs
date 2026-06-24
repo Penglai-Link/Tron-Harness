@@ -53,10 +53,40 @@ fn build_automation_service(
     AutomationService::with_event_bus(repository, workspaces, event_bus)
 }
 
-fn build_chat_service(database_url: &str) -> ChatService {
+fn build_chat_service_with_id_provider<I>(database_url: &str, id_provider: Arc<I>) -> ChatService
+where
+    I: SnowflakeIdProvider + 'static,
+{
     let repository = SqliteChatRepository::connect(database_url)
         .expect("chat SQLite repository should initialize");
-    ChatService::new(repository)
+    ChatService::with_id_provider(repository, id_provider)
+}
+
+fn build_short_term_memory_service_with_id_provider<I>(
+    database_url: &str,
+    config: &AppConfig,
+    id_provider: Arc<I>,
+) -> ShortTermMemoryService
+where
+    I: SnowflakeIdProvider + 'static,
+{
+    let repository = SqliteShortTermMemoryRepository::connect(database_url)
+        .expect("short-term memory SQLite repository should initialize");
+    let service = ShortTermMemoryService::with_id_provider(
+        repository,
+        config.short_term_memory.clone(),
+        id_provider,
+    );
+    service
+        .recover_goal_state_on_startup()
+        .expect("short-term memory goal recovery should initialize");
+    if let Err(error) = service.cleanup_event_log_on_startup() {
+        eprintln!("short-term memory event log cleanup skipped: {error:?}");
+    }
+    if let Err(error) = service.sweep_externalized_tool_output_orphans() {
+        eprintln!("short-term memory tool output orphan sweep skipped: {error:?}");
+    }
+    service
 }
 
 fn build_variable_service(

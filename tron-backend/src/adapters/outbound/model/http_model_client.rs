@@ -4,10 +4,15 @@ use serde_json::Value;
 
 use crate::{
     application::agent::{ModelClient, ModelStreamSink},
-    domain::agent::{AgentModelConfig, ModelRequest, ModelResponse, ModelStreamEventKind},
+    domain::agent::{AgentModelConfig, ModelRequest, ModelResponse},
 };
 
 use super::protocol_adapters::{ModelProtocolAdapter, adapter_for_protocol};
+
+#[path = "http_model_stream_accumulator.rs"]
+mod http_model_stream_accumulator;
+
+use http_model_stream_accumulator::StreamAccumulator;
 
 pub trait ModelProviderClient: Send + Sync {
     fn post_json<'a>(
@@ -83,30 +88,22 @@ impl HttpModelClient {
             .ok_or_else(|| "model protocol was unsupported".to_string())?;
         let url = endpoint_url(config, adapter.default_path())?;
         let body = adapter.stream_request_body(config, request)?;
-        let output = Arc::new(std::sync::Mutex::new(String::new()));
-        let output_for_sink = output.clone();
-        let token_usage = Arc::new(std::sync::Mutex::new(None));
-        let token_usage_for_sink = token_usage.clone();
-        let terminal_response = Arc::new(std::sync::Mutex::new(None));
-        let terminal_response_for_sink = terminal_response.clone();
+        let accumulator = Arc::new(std::sync::Mutex::new(StreamAccumulator::default()));
+        let accumulator_for_sink = accumulator.clone();
+        let protocol = config.protocol;
         let event_sink = Arc::new(move |event: Value| {
+            let mut accumulator = accumulator_for_sink
+                .lock()
+                .expect("model stream accumulator mutex poisoned");
             if let Some(usage) = adapter.parse_usage(&event) {
-                *token_usage_for_sink
-                    .lock()
-                    .expect("model stream usage mutex poisoned") = Some(usage);
+                accumulator.token_usage = Some(usage);
             }
             if let Some(response) = adapter.parse_stream_terminal_response(&event)? {
-                *terminal_response_for_sink
-                    .lock()
-                    .expect("model stream terminal response mutex poisoned") = Some(response);
+                accumulator.terminal_response = Some(response);
             }
+            accumulator.observe_raw_event(protocol, &event);
             if let Some(delta) = adapter.parse_stream_event(&event)? {
-                if delta.kind == ModelStreamEventKind::Text {
-                    output_for_sink
-                        .lock()
-                        .expect("model stream output mutex poisoned")
-                        .push_str(&delta.delta);
-                }
+                accumulator.observe_delta(&delta);
                 sink(delta);
             }
             Ok::<(), String>(())
@@ -114,24 +111,17 @@ impl HttpModelClient {
         self.provider
             .post_event_stream(config, &url, &body, event_sink)
             .await?;
-        let output = output
+        let accumulator = accumulator
             .lock()
-            .expect("model stream output mutex poisoned")
+            .expect("model stream accumulator mutex poisoned")
             .clone();
-        let token_usage = *token_usage
-            .lock()
-            .expect("model stream usage mutex poisoned");
-        if let Some(response) = terminal_response
-            .lock()
-            .expect("model stream terminal response mutex poisoned")
-            .clone()
-        {
+        if let Some(response) = accumulator.terminal_response {
             return Ok(response);
         }
-        if output.is_empty() {
-            return self.generate_with_adapter(config, request).await;
+        if let Some(response) = accumulator.into_response() {
+            return Ok(response);
         }
-        Ok(ModelResponse::final_output_with_usage(output, token_usage))
+        self.generate_with_adapter(config, request).await
     }
 }
 
@@ -351,22 +341,18 @@ mod tests {
 
         assert_eq!(
             response,
-            ModelResponse::ToolCalls {
-                calls: vec![
-                    ToolCall {
-                        call_id: Some("call_123".into()),
-                        tool_name: "lookup".into(),
-                        input: json!({ "query": "status" }),
-                    },
-                    ToolCall {
-                        call_id: Some("call_456".into()),
-                        tool_name: "lookup".into(),
-                        input: json!({ "query": "health" }),
-                    },
-                ],
-                token_usage: None,
-                response_id: None,
-            }
+            ModelResponse::from_tool_calls(vec![
+                ToolCall {
+                    call_id: Some("call_123".into()),
+                    tool_name: "lookup".into(),
+                    input: json!({ "query": "status" }),
+                },
+                ToolCall {
+                    call_id: Some("call_456".into()),
+                    tool_name: "lookup".into(),
+                    input: json!({ "query": "health" }),
+                },
+            ])
         );
         assert_eq!(
             seen.lock()
@@ -376,12 +362,124 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn chat_completions_stream_accumulates_reasoning_summary_and_tool_calls() {
+        let client = HttpModelClient::new(Arc::new(StubProvider {
+            stream_events: vec![
+                json!({
+                    "id": "chatcmpl-stream-1",
+                    "choices": [{
+                        "delta": {
+                            "reasoning_summary": "Need a lookup. "
+                        }
+                    }]
+                }),
+                json!({
+                    "id": "chatcmpl-stream-1",
+                    "choices": [{
+                        "delta": {
+                            "tool_calls": [{
+                                "index": 0,
+                                "id": "call_chat_1",
+                                "function": {
+                                    "name": "lookup",
+                                    "arguments": "{\"query\":"
+                                }
+                            }]
+                        }
+                    }]
+                }),
+                json!({
+                    "id": "chatcmpl-stream-1",
+                    "choices": [{
+                        "delta": {
+                            "tool_calls": [{
+                                "index": 0,
+                                "function": {
+                                    "arguments": "\"status\"}"
+                                }
+                            }]
+                        },
+                        "finish_reason": "tool_calls"
+                    }],
+                    "usage": {
+                        "prompt_tokens": 11,
+                        "completion_tokens": 3,
+                        "total_tokens": 14
+                    }
+                }),
+            ],
+        }));
+        let seen = Arc::new(std::sync::Mutex::new(Vec::<ModelStreamEvent>::new()));
+        let seen_for_sink = seen.clone();
+        let sink: ModelStreamSink = Arc::new(move |event| {
+            seen_for_sink
+                .lock()
+                .expect("stream event collection mutex poisoned")
+                .push(event);
+        });
+
+        let response = client
+            .generate_stream(&chat_model_config(), &minimal_request(), sink)
+            .await
+            .expect("chat completions stream should accumulate tool call response");
+
+        assert_eq!(
+            response.finish,
+            crate::domain::agent::ModelFinish::ToolCalls
+        );
+        assert_eq!(response.response_id(), Some("chatcmpl-stream-1"));
+        assert_eq!(
+            response.token_usage(),
+            Some(crate::domain::agent::ModelTokenUsage {
+                input_tokens: 11,
+                output_tokens: 3,
+                total_tokens: 14,
+                cached_input_tokens: None,
+                reasoning_tokens: None,
+            })
+        );
+        assert!(response.assistant.text_content().contains("Need a lookup."));
+        assert_eq!(
+            response.tool_calls(),
+            vec![ToolCall {
+                call_id: Some("call_chat_1".into()),
+                tool_name: "lookup".into(),
+                input: json!({ "query": "status" }),
+            }]
+        );
+        assert_eq!(
+            seen.lock()
+                .expect("stream event collection mutex poisoned")
+                .as_slice(),
+            &[ModelStreamEvent::reasoning_summary_delta("Need a lookup. ")]
+        );
+    }
+
     fn responses_model_config() -> AgentModelConfig {
         AgentModelConfig {
             model_code: "MODEL-TEST".into(),
             protocol: AgentModelProtocol::Responses,
             base_url: "https://example.com/v1".into(),
             api_path: Some("/responses".into()),
+            api_key: "test-key".into(),
+            model_name: "qwen3.7-max".into(),
+            thinking_enabled: true,
+            responses_stateful_enabled: false,
+            temperature: Some(0.2),
+            max_tokens: Some(4096),
+            context_window_tokens: None,
+            top_p: None,
+            max_retries: None,
+        }
+    }
+
+    fn chat_model_config() -> AgentModelConfig {
+        AgentModelConfig {
+            model_code: "MODEL-CHAT-TEST".into(),
+            protocol: AgentModelProtocol::ChatCompletions,
+            base_url: "https://example.com/v1".into(),
+            api_path: Some("/chat/completions".into()),
             api_key: "test-key".into(),
             model_name: "qwen3.7-max".into(),
             thinking_enabled: true,

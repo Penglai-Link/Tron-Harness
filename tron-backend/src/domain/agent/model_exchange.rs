@@ -1,7 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
-use super::{AgentMessage, EffectiveTool};
+use super::{AgentMessage, AgentMessagePart, EffectiveTool};
+
+const GENERATED_TOOL_CALL_ID_PREFIX: &str = "generated_call_";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,7 +19,7 @@ pub struct ModelRequest {
     pub previous_response_id: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ToolCall {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -31,22 +34,67 @@ pub struct ModelTokenUsage {
     pub input_tokens: u32,
     pub output_tokens: u32,
     pub total_tokens: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cached_input_tokens: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_tokens: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenEstimateSnapshot {
+    pub estimated_input_tokens: u32,
+    pub message_token_estimate: u32,
+    pub tool_schema_token_estimate: u32,
+    pub context_window_limit: Option<u32>,
+    pub effective_input_budget: Option<u32>,
+    pub output_token_reserve: Option<u32>,
+    pub protocol_overhead_reserve: Option<u32>,
+    pub safety_margin_tokens: Option<u32>,
+    pub message_count: u32,
+    pub part_count: u32,
+    pub rebased: bool,
+    pub over_budget: bool,
+    pub checkpoint_code: Option<String>,
+    pub model_code: String,
+    pub model_name: String,
+    pub model_protocol: String,
+    pub usage_source: String,
+    pub usage_confidence: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub enum ModelResponse {
-    FinalOutput {
-        output: String,
-        token_usage: Option<ModelTokenUsage>,
-        system_agent_session_id: Option<String>,
-        response_id: Option<String>,
-    },
-    ToolCalls {
-        calls: Vec<ToolCall>,
-        token_usage: Option<ModelTokenUsage>,
-        response_id: Option<String>,
-    },
+pub struct TokenUsageAuditSnapshot {
+    pub request_estimate: TokenEstimateSnapshot,
+    pub provider_usage: Option<ModelTokenUsage>,
+    pub cumulative_run_usage: Option<ModelTokenUsage>,
+    pub input_token_delta: Option<i64>,
+    pub input_token_ratio: Option<f64>,
+    pub calibration_factor: Option<f64>,
+    pub response_id: Option<String>,
+    pub usage_source: String,
+    pub usage_confidence: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ModelFinish {
+    Final,
+    ToolCalls,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelResponse {
+    pub assistant: AgentMessage,
+    pub finish: ModelFinish,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub token_usage: Option<ModelTokenUsage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub system_agent_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub response_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -88,6 +136,25 @@ impl ModelStreamEvent {
 }
 
 impl ModelResponse {
+    pub fn from_assistant(
+        mut assistant: AgentMessage,
+        finish: ModelFinish,
+        token_usage: Option<ModelTokenUsage>,
+        system_agent_session_id: Option<String>,
+        response_id: Option<String>,
+    ) -> Self {
+        if finish == ModelFinish::ToolCalls {
+            ensure_tool_call_ids(&mut assistant);
+        }
+        Self {
+            assistant,
+            finish,
+            token_usage,
+            system_agent_session_id,
+            response_id,
+        }
+    }
+
     pub fn final_output(output: impl Into<String>) -> Self {
         Self::final_output_with_usage_and_response_id(output, None, None)
     }
@@ -131,12 +198,13 @@ impl ModelResponse {
         system_agent_session_id: Option<String>,
         response_id: Option<String>,
     ) -> Self {
-        Self::FinalOutput {
-            output: output.into(),
+        Self::from_assistant(
+            AgentMessage::assistant(output),
+            ModelFinish::Final,
             token_usage,
             system_agent_session_id,
             response_id,
-        }
+        )
     }
 
     pub fn tool_call(tool_name: impl Into<String>, input: Value) -> Self {
@@ -159,7 +227,7 @@ impl ModelResponse {
         )
     }
 
-    pub fn tool_calls(calls: Vec<ToolCall>) -> Self {
+    pub fn from_tool_calls(calls: Vec<ToolCall>) -> Self {
         Self::tool_calls_with_usage_and_response_id(calls, None, None)
     }
 
@@ -175,11 +243,17 @@ impl ModelResponse {
         token_usage: Option<ModelTokenUsage>,
         response_id: Option<String>,
     ) -> Self {
-        Self::ToolCalls {
-            calls,
+        Self::from_assistant(
+            AgentMessage::assistant_tool_calls(
+                calls
+                    .into_iter()
+                    .map(|call| (call.call_id, call.tool_name, call.input)),
+            ),
+            ModelFinish::ToolCalls,
             token_usage,
+            None,
             response_id,
-        }
+        )
     }
 
     pub fn tool_call_with_usage(
@@ -208,20 +282,74 @@ impl ModelResponse {
     }
 
     pub fn token_usage(&self) -> Option<ModelTokenUsage> {
-        match self {
-            Self::FinalOutput { token_usage, .. } | Self::ToolCalls { token_usage, .. } => {
-                *token_usage
-            }
-        }
+        self.token_usage
     }
 
     pub fn response_id(&self) -> Option<&str> {
-        match self {
-            Self::FinalOutput { response_id, .. } | Self::ToolCalls { response_id, .. } => {
-                response_id.as_deref()
+        self.response_id.as_deref()
+    }
+
+    pub fn system_agent_session_id(&self) -> Option<&str> {
+        self.system_agent_session_id.as_deref()
+    }
+
+    pub fn output_text(&self) -> String {
+        self.assistant.output_text_content()
+    }
+
+    pub fn tool_calls(&self) -> Vec<ToolCall> {
+        self.assistant
+            .parts
+            .iter()
+            .filter_map(|part| match part {
+                AgentMessagePart::ToolCall {
+                    call_id,
+                    tool_name,
+                    input,
+                } => Some(ToolCall {
+                    call_id: call_id.clone(),
+                    tool_name: tool_name.clone(),
+                    input: input.clone(),
+                }),
+                _ => None,
+            })
+            .collect()
+    }
+}
+
+fn ensure_tool_call_ids(assistant: &mut AgentMessage) {
+    let mut call_index = 0usize;
+    for part in &mut assistant.parts {
+        if let AgentMessagePart::ToolCall {
+            call_id,
+            tool_name,
+            input,
+        } = part
+        {
+            let missing = call_id
+                .as_ref()
+                .map_or(true, |value| value.trim().is_empty());
+            if missing {
+                *call_id = Some(stable_tool_call_id(tool_name, input, call_index));
             }
+            call_index = call_index.saturating_add(1);
         }
     }
+}
+
+fn stable_tool_call_id(tool_name: &str, input: &Value, call_index: usize) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(tool_name.as_bytes());
+    hasher.update(b"\0");
+    hasher.update(input.to_string().as_bytes());
+    hasher.update(b"\0");
+    hasher.update(call_index.to_string().as_bytes());
+    let digest = hex::encode(hasher.finalize());
+    format!("{GENERATED_TOOL_CALL_ID_PREFIX}{}", &digest[..16])
+}
+
+pub(crate) fn is_generated_tool_call_id(call_id: &str) -> bool {
+    call_id.starts_with(GENERATED_TOOL_CALL_ID_PREFIX)
 }
 
 impl ModelTokenUsage {
@@ -230,7 +358,19 @@ impl ModelTokenUsage {
             input_tokens: self.input_tokens.saturating_add(other.input_tokens),
             output_tokens: self.output_tokens.saturating_add(other.output_tokens),
             total_tokens: self.total_tokens.saturating_add(other.total_tokens),
+            cached_input_tokens: add_optional_tokens(
+                self.cached_input_tokens,
+                other.cached_input_tokens,
+            ),
+            reasoning_tokens: add_optional_tokens(self.reasoning_tokens, other.reasoning_tokens),
         }
+    }
+}
+
+fn add_optional_tokens(left: Option<u32>, right: Option<u32>) -> Option<u32> {
+    match (left, right) {
+        (None, None) => None,
+        (left, right) => Some(left.unwrap_or(0).saturating_add(right.unwrap_or(0))),
     }
 }
 
@@ -239,35 +379,65 @@ pub(crate) fn responses_input_item_json(message: &AgentMessage) -> Value {
         "system" | "developer" => json!({
             "type": "message",
             "role": message.role.as_str(),
-            "content": message.content.as_str(),
+            "content": message.plain_text_content(),
         }),
         "user" | "assistant" => json!({
             "type": "message",
             "role": message.role.as_str(),
-            "content": message.content.as_str(),
+            "content": message.plain_text_content(),
         }),
-        "tool" => {
-            if let Some(call_id) = &message.tool_call_id {
+        "tool" => match message.parts.iter().find_map(tool_result_part) {
+            Some((Some(call_id), output)) => {
                 json!({
                     "type": "function_call_output",
                     "call_id": call_id,
-                    "output": message
-                        .tool_output
-                        .as_deref()
-                        .unwrap_or(message.content.as_str()),
-                })
-            } else {
-                json!({
-                    "type": "message",
-                    "role": "user",
-                    "content": message.content.as_str(),
+                    "output": output,
                 })
             }
-        }
+            _ => json!({
+                "type": "message",
+                "role": "user",
+                "content": message.plain_text_content(),
+            }),
+        },
         _ => json!({
             "type": "message",
             "role": "user",
-            "content": message.content.as_str(),
+            "content": message.plain_text_content(),
         }),
+    }
+}
+
+fn tool_result_part(part: &AgentMessagePart) -> Option<(Option<&str>, &str)> {
+    match part {
+        AgentMessagePart::ToolResult {
+            call_id, output, ..
+        } => Some((call_id.as_deref(), output.as_str())),
+        _ => None,
+    }
+}
+
+pub(crate) fn responses_function_call_item_json(part: &AgentMessagePart) -> Option<Value> {
+    match part {
+        AgentMessagePart::ToolCall {
+            call_id,
+            tool_name,
+            input,
+        } => Some(json!({
+            "type": "function_call",
+            "call_id": call_id,
+            "name": tool_name,
+            "arguments": input.to_string(),
+        })),
+        AgentMessagePart::ToolResult {
+            call_id: Some(call_id),
+            output,
+            ..
+        } => Some(json!({
+            "type": "function_call_output",
+            "call_id": call_id,
+            "output": output,
+        })),
+        _ => None,
     }
 }

@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
-use crate::domain::agent::{AgentModelConfig, AgentRunLimits, EffectiveTool, ModelTokenUsage};
+use crate::domain::agent::{
+    AgentModelConfig, AgentRunLimits, EffectiveTool, ModelTokenUsage, TokenEstimateSnapshot,
+    TokenUsageAuditSnapshot,
+};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -20,6 +24,10 @@ pub struct AgentInvocationCommand {
     pub limits: Option<AgentRunLimits>,
     #[serde(default)]
     pub tools: Vec<EffectiveTool>,
+    #[serde(skip)]
+    pub transcript_input_kind: Option<String>,
+    #[serde(skip)]
+    pub transcript_input_metadata: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -33,5 +41,7 @@ pub struct AgentInvocationResult {
     pub final_output: String,
     pub step_count: u32,
     pub token_usage: Option<ModelTokenUsage>,
+    pub latest_request_estimate: Option<TokenEstimateSnapshot>,
+    pub latest_usage_audit: Option<TokenUsageAuditSnapshot>,
     pub system_agent_session_id: Option<String>,
 }

@@ -220,6 +220,24 @@ fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.tools.memory.delete.params.deleteMode" => {
             "ARCHIVE marks the memory archived; DISABLE marks it disabled."
         }
+        "agent.toolCatalog.tools.todo.update.name" => "Update session todos",
+        "agent.toolCatalog.tools.todo.update.description" => {
+            "Replace the current chat session working-state todo list."
+        }
+        "agent.toolCatalog.tools.todo.update.sampleResultSummary" => {
+            "Returns the normalized todo list stored for the session."
+        }
+        "agent.toolCatalog.tools.todo.update.params.todoCode" => {
+            "Optional stable todo code. Omit it for new todos."
+        }
+        "agent.toolCatalog.tools.todo.update.params.position" => {
+            "Zero-based todo order in the session list."
+        }
+        "agent.toolCatalog.tools.todo.update.params.content" => "Todo content.",
+        "agent.toolCatalog.tools.todo.update.params.status" => {
+            "Todo status. At most one item may be in_progress."
+        }
+        "agent.toolCatalog.tools.todo.update.params.priority" => "Todo priority.",
         "agent.toolCatalog.tools.memory.common.params.memoryCode" => {
             "Memory code in U/D/S:scopeCode:sourceCode:sourceVersion format."
         }
@@ -353,6 +371,20 @@ fn translate_zh_cn(key: &str) -> &'static str {
         "agent.toolCatalog.tools.memory.delete.params.deleteMode" => {
             "ARCHIVE 表示归档；DISABLE 表示禁用。"
         }
+        "agent.toolCatalog.tools.todo.update.name" => "更新会话待办",
+        "agent.toolCatalog.tools.todo.update.description" => "替换当前聊天会话的工作状态待办列表。",
+        "agent.toolCatalog.tools.todo.update.sampleResultSummary" => {
+            "返回写入会话后的规范化待办列表。"
+        }
+        "agent.toolCatalog.tools.todo.update.params.todoCode" => {
+            "可选的稳定待办编码；新待办可省略。"
+        }
+        "agent.toolCatalog.tools.todo.update.params.position" => "会话待办列表中的从 0 开始排序。",
+        "agent.toolCatalog.tools.todo.update.params.content" => "待办内容。",
+        "agent.toolCatalog.tools.todo.update.params.status" => {
+            "待办状态；最多只能有一个 in_progress。"
+        }
+        "agent.toolCatalog.tools.todo.update.params.priority" => "待办优先级。",
         "agent.toolCatalog.tools.memory.common.params.memoryCode" => {
             "记忆编码，格式为 U/D/S:scopeCode:sourceCode:sourceVersion。"
         }

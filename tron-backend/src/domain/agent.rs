@@ -14,8 +14,8 @@ pub use agui::{
     AgentAguiEvent, AgentAguiEventSnapshot, AgentAguiProtocolEvent, AgentAguiStreamState,
 };
 pub use context::{
-    AgentExecutionScope, AgentRunContext, AgentRunLimits, AgentToolExposureState, EffectiveSkill,
-    EffectiveTool, EffectiveVariable,
+    AgentExecutionScope, AgentRunContext, AgentRunLimits, AgentShortTermMemoryRunContext,
+    AgentToolExposureState, EffectiveSkill, EffectiveTool, EffectiveVariable,
 };
 pub use error::AgentError;
 pub use history::{
@@ -32,11 +32,14 @@ pub use management::{
     WorkspaceInternalAgentMcpServerAssignment, WorkspaceInternalAgentPolicy,
     WorkspaceInternalAgentToolAssignment, WorkspaceSystemAgentPolicy,
 };
-pub use message::{AgentMessage, AgentMessageToolCall};
+pub use message::{AgentMessage, AgentMessagePart};
 pub use model_config::AgentModelConfig;
-pub(crate) use model_exchange::responses_input_item_json;
 pub use model_exchange::{
-    ModelRequest, ModelResponse, ModelStreamEvent, ModelStreamEventKind, ModelTokenUsage, ToolCall,
+    ModelFinish, ModelRequest, ModelResponse, ModelStreamEvent, ModelStreamEventKind,
+    ModelTokenUsage, TokenEstimateSnapshot, TokenUsageAuditSnapshot, ToolCall,
+};
+pub(crate) use model_exchange::{
+    is_generated_tool_call_id, responses_function_call_item_json, responses_input_item_json,
 };
 pub use run::{AgentRunResult, AgentRunStatus};
 pub use tool::{

@@ -1,8 +1,8 @@
 use serde_json::{Value, json};
 
 use crate::domain::agent::{
-    AgentModelConfig, AgentModelProtocol, ModelRequest, ModelResponse, ModelStreamEvent,
-    ModelTokenUsage, ToolCall,
+    AgentMessage, AgentMessagePart, AgentModelConfig, AgentModelProtocol, ModelFinish,
+    ModelRequest, ModelResponse, ModelStreamEvent, ModelTokenUsage, ToolCall,
 };
 
 use super::{content::*, registry::ModelProtocolAdapter, usage::parse_openai_compatible_usage};
@@ -91,31 +91,58 @@ pub fn chat_completions_request(config: &AgentModelConfig, request: &ModelReques
 
 fn parse_chat_response(body: &Value) -> Option<ModelResponse> {
     let token_usage = parse_openai_compatible_usage(body);
+    let response_id = body.get("id").and_then(Value::as_str).map(str::to_string);
     let message = body.get("choices")?.as_array()?.first()?.get("message")?;
+    let mut parts = Vec::new();
+    if let Some(content) = message.get("content").and_then(text_from_content) {
+        parts.push(AgentMessagePart::Text { text: content });
+    }
+    if let Some(summary) = chat_reasoning_summary_delta(message) {
+        parts.push(AgentMessagePart::ReasoningSummary { text: summary });
+    }
     if let Some(tool_calls) = message
         .get("tool_calls")
         .and_then(Value::as_array)
         .map(|calls| parse_chat_tool_calls(calls.as_slice()))
         .filter(|calls| !calls.is_empty())
     {
-        return Some(ModelResponse::tool_calls_with_usage(
-            tool_calls,
+        parts.extend(tool_calls.into_iter().map(tool_call_part));
+        return Some(ModelResponse::from_assistant(
+            AgentMessage::new("assistant", parts),
+            ModelFinish::ToolCalls,
             token_usage,
+            None,
+            response_id,
         ));
     }
     if let Some(function_call) = message.get("function_call") {
-        return parse_chat_legacy_function_call(function_call, token_usage);
+        let tool_call = parse_chat_legacy_function_call(function_call)?;
+        parts.push(tool_call_part(tool_call));
+        return Some(ModelResponse::from_assistant(
+            AgentMessage::new("assistant", parts),
+            ModelFinish::ToolCalls,
+            token_usage,
+            None,
+            response_id,
+        ));
     }
-    message
-        .get("content")
-        .and_then(text_from_content)
-        .or_else(|| {
-            message
-                .get("reasoning_content")
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-        })
-        .map(|output| ModelResponse::final_output_with_usage(output, token_usage))
+    if parts.is_empty()
+        && let Some(output) = message
+            .get("reasoning_content")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+    {
+        parts.push(AgentMessagePart::Text { text: output });
+    }
+    (!parts.is_empty()).then(|| {
+        ModelResponse::from_assistant(
+            AgentMessage::new("assistant", parts),
+            ModelFinish::Final,
+            token_usage,
+            None,
+            response_id,
+        )
+    })
 }
 
 fn parse_chat_tool_calls(calls: &[Value]) -> Vec<ToolCall> {
@@ -145,24 +172,26 @@ fn parse_chat_tool_call(call: &Value) -> Option<ToolCall> {
     })
 }
 
-fn parse_chat_legacy_function_call(
-    function_call: &Value,
-    token_usage: Option<ModelTokenUsage>,
-) -> Option<ModelResponse> {
+fn parse_chat_legacy_function_call(function_call: &Value) -> Option<ToolCall> {
     let name = function_call.get("name")?.as_str()?;
     let arguments = function_call
         .get("arguments")
         .and_then(Value::as_str)
         .and_then(|raw| serde_json::from_str(raw).ok())
         .unwrap_or_else(|| json!({}));
-    Some(ModelResponse::tool_calls_with_usage(
-        vec![ToolCall {
-            call_id: None,
-            tool_name: name.to_owned(),
-            input: arguments,
-        }],
-        token_usage,
-    ))
+    Some(ToolCall {
+        call_id: None,
+        tool_name: name.to_owned(),
+        input: arguments,
+    })
+}
+
+fn tool_call_part(call: ToolCall) -> AgentMessagePart {
+    AgentMessagePart::ToolCall {
+        call_id: call.call_id,
+        tool_name: call.tool_name,
+        input: call.input,
+    }
 }
 
 fn parse_chat_stream_event(body: &Value) -> Option<ModelStreamEvent> {

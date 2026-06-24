@@ -1,4 +1,48 @@
 export const pages = {
+  chat: {
+    shortTermMemory: {
+      workingState: "Working State",
+      goal: "Session Goal",
+      noGoal: "No session goal",
+      goalControls: "Goal Controls",
+      goalPlaceholder: "Set a short-term goal for this chat session",
+      setGoal: "Set goal",
+      savingGoal: "Saving...",
+      pauseGoal: "Pause",
+      resumeGoal: "Resume",
+      cancelGoal: "Cancel",
+      clearGoal: "Clear",
+      emptyTodos: "No active todos",
+      loadingGoal: "Loading goal...",
+      loadingTodos: "Loading todos...",
+      loadingCheckpoint: "Loading checkpoint...",
+      loadFailed: "Unable to load working state",
+      retry: "Retry",
+      checkpoint: "Session Checkpoint",
+      checkpointReady: "Checkpoint ready",
+      noCheckpoint: "No checkpoint",
+      createCheckpoint: "Create checkpoint",
+      rows: {
+        checkpoint: "checkpoint",
+        source: "source",
+        created: "created",
+      },
+      messages: {
+        created: "Session checkpoint created",
+        createdTitle: "Checkpoint ready",
+        failed: "Session checkpoint could not be created",
+        failedTitle: "Checkpoint failed",
+        goalSet: "Goal set",
+        goalPaused: "Goal paused",
+        goalResumed: "Goal resumed",
+        goalCancelled: "Goal cancelled",
+        goalCleared: "Goal cleared",
+        goalUpdatedTitle: "Goal updated",
+        goalFailed: "Goal action failed",
+        goalFailedTitle: "Goal failed",
+      },
+    },
+  },
   settingsTools: {
     catalog: {
       domains: {

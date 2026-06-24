@@ -289,6 +289,8 @@ impl SystemCliRuntime {
             final_output,
             step_count: 1,
             token_usage: parsed.token_usage,
+            latest_request_estimate: None,
+            latest_usage_audit: None,
             system_agent_session_id: parsed
                 .system_agent_session_id
                 .or(context.system_agent_session_id),
@@ -409,14 +411,14 @@ fn prompt_from_context(context: &AgentRunContext) -> String {
         .rev()
         .find_map(|message| {
             (message.role == "user")
-                .then(|| message.content.trim().to_string())
+                .then(|| message.text_content().trim().to_string())
                 .filter(|value| !value.is_empty())
         })
         .unwrap_or_else(|| {
             context
                 .messages
                 .last()
-                .map(|message| message.content.trim().to_string())
+                .map(|message| message.text_content().trim().to_string())
                 .unwrap_or_default()
         })
 }

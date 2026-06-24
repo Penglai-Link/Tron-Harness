@@ -1,5 +1,6 @@
 mod agui_warning;
 mod helpers;
+mod short_term_memory;
 
 use std::sync::Arc;
 
@@ -7,15 +8,15 @@ use rand::RngCore;
 
 use crate::{
     application::{
-        app::AppService, mcp::McpService, skill::SkillRegistryService, variable::VariableService,
-        workspace::WorkspaceService,
+        app::AppService, mcp::McpService, short_term_memory::ShortTermMemoryService,
+        skill::SkillRegistryService, variable::VariableService, workspace::WorkspaceService,
     },
     domain::{
         agent::{
-            AgentExecutionScope, AgentManagementError, AgentMessage, AgentModelConfig,
-            AgentModelProtocol, AgentRunContext, AgentRunHistoryRecord, AgentRunLimits,
-            AgentRunStatus, AgentRuntimeType, AgentToolExposureState, EffectiveSkill,
-            EffectiveVariable, ToolAvailabilityState, ToolExposureMode, ToolRegistry,
+            AgentExecutionScope, AgentMessage, AgentModelConfig, AgentModelProtocol,
+            AgentRunContext, AgentRunHistoryRecord, AgentRunLimits, AgentRunStatus,
+            AgentRuntimeType, AgentToolExposureState, EffectiveSkill, EffectiveVariable,
+            ModelRequest, ModelResponse, ToolAvailabilityState, ToolExposureMode, ToolRegistry,
         },
         skill::WorkspaceSkillListQuery,
         workspace::WorkspaceStatus,
@@ -32,8 +33,8 @@ use super::{
 };
 use agui_warning::{McpWarningPublishContext, publish_mcp_runtime_warnings};
 use helpers::{
-    agent_kind_for_runtime, is_internal_agent, is_main_agent, normalize_optional,
-    required_runtime_command_name, runtime_type_label, safe_preview,
+    agent_kind_for_runtime, is_internal_agent, is_main_agent, map_agent_error, map_mcp_error,
+    normalize_optional, required_runtime_command_name, runtime_type_label, safe_preview,
 };
 const MAIN_AGENT_CODE: &str = "main-agent";
 const MAIN_AGENT_FINAL_OUTPUT_GUIDANCE: &str = r#"Final assistant output contract:
@@ -55,6 +56,7 @@ pub struct AgentInvocationService {
     model_client: Arc<dyn ModelClient>,
     tool_registry: Arc<ToolRegistry>,
     runtime_http_client: reqwest::Client,
+    short_term_memory: Option<ShortTermMemoryService>,
 }
 
 impl AgentInvocationService {
@@ -83,7 +85,28 @@ impl AgentInvocationService {
             model_client,
             tool_registry,
             runtime_http_client,
+            short_term_memory: None,
         }
+    }
+
+    pub fn with_short_term_memory(mut self, service: ShortTermMemoryService) -> Self {
+        self.short_term_memory = Some(service);
+        self
+    }
+
+    pub fn short_term_memory(&self) -> Option<ShortTermMemoryService> {
+        self.short_term_memory.clone()
+    }
+
+    pub async fn generate_stateless_model(
+        &self,
+        model: &AgentModelConfig,
+        request: &ModelRequest,
+    ) -> Result<ModelResponse, AgentInvocationError> {
+        self.model_client
+            .generate(model, request)
+            .await
+            .map_err(AgentInvocationError::ModelFailed)
     }
 
     pub async fn invoke(
@@ -127,6 +150,8 @@ impl AgentInvocationService {
             model: requested_model,
             limits: requested_limits,
             tools: requested_tools,
+            transcript_input_kind,
+            transcript_input_metadata,
         } = command;
         let prompt = requested_prompt
             .map(|value| value.trim().to_string())
@@ -313,7 +338,8 @@ impl AgentInvocationService {
                 &locale,
             )));
         }
-        messages.push(AgentMessage::user(prompt));
+        let prompt_prefix_messages = messages.clone();
+        messages.push(AgentMessage::user(prompt.clone()));
         let local_directory = app.as_ref().map(|app| app.local_directory.clone());
         let branch_name = app.as_ref().and_then(|app| app.default_branch.clone());
         let repository_url = app.as_ref().and_then(|app| app.repository_url.clone());
@@ -324,13 +350,14 @@ impl AgentInvocationService {
             self.tool_registry.clone(),
             self.event_bus.clone(),
             self.runtime_http_client.clone(),
-        );
+        )
+        .with_short_term_memory(self.short_term_memory.clone());
         let orchestrator = AgentOrchestrator::new(runtime_registry);
         let runtime_selection =
             runtime_selection_for_agent(&resolved_agent, local_directory.clone())?;
         let requested_system_agent_session_id =
             normalize_optional(requested_system_agent_session_id);
-        let context = AgentRunContext {
+        let mut context = AgentRunContext {
             conversation_code: requested_conversation_code.clone(),
             run_code: run_code.clone(),
             workspace_code: workspace.workspace_code.clone(),
@@ -357,8 +384,19 @@ impl AgentInvocationService {
             limits,
             messages,
             observations: Vec::new(),
+            short_term_memory: None,
             started_at: chrono::Utc::now().to_rfc3339(),
         };
+        self.activate_short_term_memory(
+            &mut context,
+            &runtime_selection,
+            requested_conversation_code.as_deref(),
+            &resolved_agent.agent_code,
+            &prompt,
+            prompt_prefix_messages,
+            transcript_input_kind.as_deref(),
+            transcript_input_metadata,
+        )?;
         let started_at = context.started_at.clone();
         let conversation_code = context.conversation_code.clone();
         let workspace_code = context.workspace_code.clone();
@@ -411,6 +449,8 @@ impl AgentInvocationService {
                     final_output: result.final_output,
                     step_count: result.step_count,
                     token_usage,
+                    latest_request_estimate: result.latest_request_estimate,
+                    latest_usage_audit: result.latest_usage_audit,
                     system_agent_session_id: result.system_agent_session_id,
                 })
             }
@@ -502,48 +542,6 @@ fn runtime_selection_for_agent(
             resolved_agent.agent_code,
             runtime_type_label(resolved_agent.runtime_type)
         ))),
-    }
-}
-
-fn map_agent_error(agent_code: &str, error: AgentManagementError) -> AgentInvocationError {
-    match error {
-        AgentManagementError::InvalidWorkspace => AgentInvocationError::WorkspaceInvalid,
-        AgentManagementError::InternalAgentNotFound => AgentInvocationError::RuntimeFailed(
-            format!("internal agent `{agent_code}` was not found"),
-        ),
-        AgentManagementError::InternalToolAssignmentStale(message)
-        | AgentManagementError::InternalMcpServerAssignmentStale(message)
-        | AgentManagementError::InternalToolUnknown(message) => {
-            AgentInvocationError::RuntimeFailed(format!(
-                "internal agent policy is invalid: {message}"
-            ))
-        }
-        AgentManagementError::SystemAgentNotFound => {
-            AgentInvocationError::RuntimeFailed(format!("agent `{agent_code}` was not found"))
-        }
-        AgentManagementError::SystemAgentUnavailable => AgentInvocationError::RuntimeFailed(
-            format!("agent `{agent_code}` is unavailable or disabled for this workspace"),
-        ),
-        AgentManagementError::StorageFailure => {
-            AgentInvocationError::RuntimeFailed("agent configuration load failed".into())
-        }
-    }
-}
-
-fn map_mcp_error(error: crate::domain::mcp::McpError) -> AgentInvocationError {
-    match error {
-        crate::domain::mcp::McpError::InvalidWorkspace
-        | crate::domain::mcp::McpError::WorkspaceRequired
-        | crate::domain::mcp::McpError::VerifyContextRequired => {
-            AgentInvocationError::WorkspaceInvalid
-        }
-        crate::domain::mcp::McpError::RuntimeDiscoveryFailed(message)
-        | crate::domain::mcp::McpError::VerificationFailed(message) => {
-            AgentInvocationError::RuntimeFailed(message)
-        }
-        other => {
-            AgentInvocationError::RuntimeFailed(format!("MCP runtime preparation failed: {other}"))
-        }
     }
 }
 

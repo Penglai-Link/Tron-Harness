@@ -8,7 +8,7 @@ use crate::{
         model::RuntimeModelConfig,
     },
     domain::{
-        agent::{AgentMessage, AgentModelConfig, AgentModelProtocol, ModelRequest, ModelResponse},
+        agent::{AgentMessage, AgentModelConfig, AgentModelProtocol, ModelFinish, ModelRequest},
         model::{ModelProtocol, ModelType},
     },
 };
@@ -82,9 +82,10 @@ impl HttpLlmRuntimeClient {
         let response_body = self
             .post_json_with_retry(config, url.as_str(), &body)
             .await?;
-        match adapter.parse_response(&response_body)? {
-            ModelResponse::FinalOutput { output, .. } => Ok(output),
-            ModelResponse::ToolCalls { .. } => {
+        let response = adapter.parse_response(&response_body)?;
+        match response.finish {
+            ModelFinish::Final => Ok(response.output_text()),
+            ModelFinish::ToolCalls => {
                 Err("text generation response unexpectedly requested tool calls".into())
             }
         }

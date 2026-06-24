@@ -399,6 +399,34 @@ test("AC-RCS-03: shell right-panel pages retain content and no-panel pages show 
   await expectNoRightSidebarControls(page);
 });
 
+test("AC-STM-08: chat right sidebar renders short-term memory state and compaction action", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await seedWorkspaceSelection(page);
+  await routeAuthApi(page);
+  await signIn(page, "/chats/8842-alpha");
+  await expect(page).toHaveURL(/\/chats\/8842-alpha$/);
+  await page.getByText("Primary investigation", { exact: true }).first().click();
+  await openRightSidebar(page);
+
+  const sidebar = rightSidebar(page);
+  await expect(sidebar.getByText("Working State")).toBeVisible();
+  await expect(sidebar.getByText("Goal Controls")).toBeVisible();
+  await expect(sidebar.getByText("Validate transcript storage after the next chat turn")).toBeVisible();
+  await expect(sidebar.getByText("Review compaction checkpoint output")).toBeVisible();
+  await expect(sidebar.getByText("in_progress")).toBeVisible();
+  await expect(sidebar.getByText("pending")).toBeVisible();
+
+  await expect(sidebar.getByText("Session Checkpoint")).toBeVisible();
+  await expect(sidebar.getByText("Checkpoint ready")).toBeVisible();
+  await expect(sidebar.getByText("ATM-MOCK-1")).toBeVisible();
+  await expect(sidebar.getByText("1-8", { exact: true })).toBeVisible();
+
+  await sidebar.getByRole("button", { name: "Create checkpoint" }).click();
+
+  await expect(sidebar.getByText("1-2", { exact: true })).toBeVisible();
+  await expect(sidebar.getByText("ATM-MOCK-1", { exact: true })).toHaveCount(0);
+});
+
 test("AC-RCS-04: graph and memory inspectors render in shell right sidebar and preserve selected context", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await routeAuthApi(page);

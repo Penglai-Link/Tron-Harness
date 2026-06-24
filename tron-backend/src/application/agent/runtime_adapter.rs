@@ -1,6 +1,7 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::{
+    application::short_term_memory::ShortTermMemoryService,
     domain::agent::{AgentRunContext, AgentRunResult, ToolRegistry},
     shared::event_bus::EventBusHandle,
 };
@@ -225,6 +226,7 @@ pub struct AgentRuntimeRegistry {
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
     runtime_http_client: reqwest::Client,
+    short_term_memory: Option<ShortTermMemoryService>,
 }
 
 impl AgentRuntimeRegistry {
@@ -239,7 +241,13 @@ impl AgentRuntimeRegistry {
             tool_registry,
             event_bus,
             runtime_http_client,
+            short_term_memory: None,
         }
+    }
+
+    pub fn with_short_term_memory(mut self, service: Option<ShortTermMemoryService>) -> Self {
+        self.short_term_memory = service;
+        self
     }
 
     pub fn resolve(&self, selection: RuntimeAdapterSelection) -> Arc<dyn AgentRuntime> {
@@ -250,6 +258,7 @@ impl AgentRuntimeRegistry {
                 self.default_model_client.clone(),
                 self.tool_registry.clone(),
                 self.event_bus.clone(),
+                self.short_term_memory.clone(),
             )),
             RuntimeAdapterSelection::CodexExec {
                 command_name,

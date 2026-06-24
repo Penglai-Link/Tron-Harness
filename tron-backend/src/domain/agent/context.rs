@@ -63,6 +63,21 @@ pub struct AgentExecutionScope {
     pub task_code: Option<String>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentShortTermMemoryRunContext {
+    pub session_code: String,
+    pub input_code: String,
+    pub input_kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_metadata: Option<Value>,
+    pub prompt_prefix: Vec<AgentMessage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_code: Option<String>,
+    #[serde(default)]
+    pub todo_enabled: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentRunLimits {
@@ -108,5 +123,7 @@ pub struct AgentRunContext {
     pub limits: AgentRunLimits,
     pub messages: Vec<AgentMessage>,
     pub observations: Vec<ToolObservation>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub short_term_memory: Option<AgentShortTermMemoryRunContext>,
     pub started_at: String,
 }

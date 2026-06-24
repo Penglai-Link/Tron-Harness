@@ -1513,51 +1513,48 @@ struct ParsedObservation {
 }
 
 fn memory_observations_in_request(request: &Value) -> Vec<ParsedObservation> {
-    let mut tool_names_by_call_id = Map::new();
+    let mut call_names = std::collections::HashMap::<String, String>::new();
     let mut observations = Vec::new();
     for message in request["messages"].as_array().into_iter().flatten() {
-        if message["role"] == json!("assistant") {
-            for tool_call in message["tool_calls"].as_array().into_iter().flatten() {
+        if let Some(tool_calls) = message["tool_calls"].as_array() {
+            for tool_call in tool_calls {
                 if let (Some(call_id), Some(tool_name)) = (
                     tool_call["id"].as_str(),
                     tool_call["function"]["name"].as_str(),
                 ) {
-                    tool_names_by_call_id.insert(call_id.to_string(), json!(tool_name));
+                    call_names.insert(call_id.to_string(), tool_name.to_string());
                 }
             }
-            continue;
         }
-
-        if message["role"] == json!("tool") {
-            let Some(call_id) = message["tool_call_id"].as_str() else {
-                continue;
-            };
-            let Some(tool_name) = tool_names_by_call_id
-                .get(call_id)
-                .and_then(Value::as_str)
-                .filter(|tool_name| tool_name.starts_with("memory."))
-            else {
-                continue;
-            };
-            let output = message["content"]
-                .as_str()
-                .and_then(|content| serde_json::from_str(content).ok())
-                .unwrap_or_else(|| panic!("{tool_name} tool observation should be valid JSON"));
-            observations.push(ParsedObservation {
-                tool_name: tool_name.to_string(),
-                output,
-            });
-            continue;
-        }
-
-        if let Some(observation) = message["content"]
-            .as_str()
-            .and_then(parse_memory_observation)
-        {
+        if let Some(observation) = parse_memory_observation_message(message, &call_names) {
             observations.push(observation);
         }
     }
     observations
+}
+
+fn parse_memory_observation_message(
+    message: &Value,
+    call_names: &std::collections::HashMap<String, String>,
+) -> Option<ParsedObservation> {
+    if message["role"] == json!("tool") {
+        let call_id = message["tool_call_id"].as_str()?;
+        let tool_name = call_names.get(call_id)?;
+        if !tool_name.starts_with("memory.") {
+            return None;
+        }
+        let output = message["content"].as_str()?;
+        let output = serde_json::from_str(output).unwrap_or_else(|error| {
+            panic!("{tool_name} observation should be valid JSON: {error}")
+        });
+        return Some(ParsedObservation {
+            tool_name: tool_name.to_string(),
+            output,
+        });
+    }
+    message["content"]
+        .as_str()
+        .and_then(parse_memory_observation)
 }
 
 fn parse_memory_observation(content: &str) -> Option<ParsedObservation> {

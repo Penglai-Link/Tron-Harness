@@ -9,11 +9,38 @@ use super::handler::{
     archive_session, create_session, delete_session, list_messages, list_session_groups,
     patch_session, send_message, stream_message,
 };
+use super::short_term_memory::{
+    add_goal_criterion, cancel_goal, clear_goal, create_compaction, get_goal,
+    get_latest_compaction, get_todos, pause_goal, remove_goal_criterion, resume_goal, set_goal,
+};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/chats/session-groups", get(list_session_groups))
         .route("/api/v1/chats/sessions", post(create_session))
+        .route("/api/v1/chats/sessions/get-todos", get(get_todos))
+        .route(
+            "/api/v1/chats/sessions/get-latest-compaction",
+            get(get_latest_compaction),
+        )
+        .route(
+            "/api/v1/chats/sessions/create-compaction",
+            post(create_compaction),
+        )
+        .route("/api/v1/chats/sessions/get-goal", get(get_goal))
+        .route("/api/v1/chats/sessions/set-goal", post(set_goal))
+        .route("/api/v1/chats/sessions/pause-goal", post(pause_goal))
+        .route("/api/v1/chats/sessions/resume-goal", post(resume_goal))
+        .route("/api/v1/chats/sessions/cancel-goal", post(cancel_goal))
+        .route("/api/v1/chats/sessions/clear-goal", post(clear_goal))
+        .route(
+            "/api/v1/chats/sessions/add-goal-criterion",
+            post(add_goal_criterion),
+        )
+        .route(
+            "/api/v1/chats/sessions/remove-goal-criterion",
+            post(remove_goal_criterion),
+        )
         .route(
             "/api/v1/chats/sessions/{session_code}",
             patch(patch_session).delete(delete_session),

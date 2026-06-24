@@ -9,8 +9,8 @@ use std::{
 
 use axum::{
     Json, Router,
-    body::to_bytes,
-    http::{Method, StatusCode},
+    body::{Body, to_bytes},
+    http::{Method, Request, StatusCode, header},
     response::{
         IntoResponse, Response,
         sse::{Event, Sse},
@@ -20,6 +20,7 @@ use axum::{
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle, time::sleep};
+use tower::ServiceExt;
 use tron_backend::{
     adapters::outbound::persistence::SqliteChatRepository,
     application::chat::{ChatService, CreateChatSessionCommand},
@@ -239,6 +240,85 @@ async fn chat_message_history_requires_an_existing_session() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     let body = response_json(response).await;
     assert_eq!(body["code"], json!("CHAT_SESSION_NOT_FOUND"));
+}
+
+#[tokio::test]
+async fn short_term_memory_endpoints_return_uniform_response_for_success_and_bad_extractors() {
+    let app = app();
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let created = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "STM API"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created_body = response_json(created).await;
+    let session_code = created_body["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned");
+
+    let todos = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/chats/sessions/get-todos?sessionCode={session_code}"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(todos.status(), StatusCode::OK);
+    let todos_body = response_json(todos).await;
+    assert_eq!(todos_body["code"], json!("SUCCESS"));
+    assert_eq!(todos_body["data"], json!([]));
+
+    let missing_query = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/chats/sessions/get-todos",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(missing_query.status(), StatusCode::BAD_REQUEST);
+    let missing_query_body = response_json(missing_query).await;
+    assert_eq!(
+        missing_query_body["code"],
+        json!("SHORT_TERM_MEMORY_REQUEST_INVALID")
+    );
+    assert!(missing_query_body["message"].is_string());
+    assert_eq!(missing_query_body["data"], json!({}));
+
+    let malformed_json = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/chats/sessions/set-goal")
+                .header(header::AUTHORIZATION, authorization)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from("{"))
+                .expect("malformed request should build"),
+        )
+        .await
+        .expect("router should respond");
+    assert_eq!(malformed_json.status(), StatusCode::BAD_REQUEST);
+    let malformed_json_body = response_json(malformed_json).await;
+    assert_eq!(
+        malformed_json_body["code"],
+        json!("SHORT_TERM_MEMORY_REQUEST_INVALID")
+    );
+    assert!(malformed_json_body["message"].is_string());
+    assert_eq!(malformed_json_body["data"], json!({}));
 }
 
 #[tokio::test]

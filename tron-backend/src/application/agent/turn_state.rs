@@ -1,8 +1,9 @@
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::domain::agent::{
-    AgentMessage, AgentMessageToolCall, AgentModelProtocol, AgentRunContext, ModelRequest,
-    ModelResponse, ModelStreamEventKind, ToolObservation,
+    AgentMessage, AgentModelProtocol, AgentRunContext, ModelRequest, ModelResponse,
+    ModelStreamEventKind, ToolObservation, responses_function_call_item_json,
+    responses_input_item_json,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,18 +29,14 @@ pub enum TurnStateAdapter {
 }
 
 impl TurnStateAdapter {
-    pub fn new(
-        protocol: AgentModelProtocol,
-        messages: Vec<AgentMessage>,
-        responses_stateful_enabled: bool,
-    ) -> Self {
+    pub fn new(protocol: AgentModelProtocol, responses_stateful_enabled: bool) -> Self {
         match protocol {
-            AgentModelProtocol::ChatCompletions => Self::Chat(ChatTranscriptState::new(messages)),
+            AgentModelProtocol::ChatCompletions => Self::Chat(ChatTranscriptState),
             AgentModelProtocol::Responses => {
                 if responses_stateful_enabled {
-                    Self::Responses(ResponsesItemState::new(messages))
+                    Self::Responses(ResponsesItemState::default())
                 } else {
-                    Self::Chat(ChatTranscriptState::new(messages))
+                    Self::Chat(ChatTranscriptState)
                 }
             }
             AgentModelProtocol::Embeddings => {
@@ -55,17 +52,23 @@ impl TurnStateAdapter {
         }
     }
 
-    pub fn build_request(&self, context: &AgentRunContext) -> ModelRequest {
+    pub fn build_request(
+        &mut self,
+        context: &AgentRunContext,
+        messages: &[AgentMessage],
+        rebased: bool,
+        context_hash: Option<&str>,
+    ) -> ModelRequest {
         match self {
-            Self::Chat(state) => state.build_request(context),
-            Self::Responses(state) => state.build_request(context),
+            Self::Chat(state) => state.build_request(context, messages),
+            Self::Responses(state) => state.build_request(context, messages, rebased, context_hash),
         }
     }
 
-    pub fn apply_model_response(&mut self, response: &ModelResponse) {
+    pub fn apply_model_response(&mut self, response: &ModelResponse, message_count: usize) {
         match self {
-            Self::Chat(state) => state.apply_model_response(response),
-            Self::Responses(state) => state.apply_model_response(response),
+            Self::Chat(state) => state.apply_model_response(response, message_count),
+            Self::Responses(state) => state.apply_model_response(response, message_count),
         }
     }
 
@@ -74,26 +77,21 @@ impl TurnStateAdapter {
         observation: &ToolObservation,
         model_call_id: Option<String>,
     ) -> AgentMessage {
-        match self {
-            Self::Chat(state) => state.record_tool_observation(observation, model_call_id),
-            Self::Responses(state) => state.record_tool_observation(observation, model_call_id),
-        }
+        tool_observation_message(observation, model_call_id)
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct ChatTranscriptState {
-    messages: Vec<AgentMessage>,
-}
+pub struct ChatTranscriptState;
 
 impl ChatTranscriptState {
-    pub fn new(messages: Vec<AgentMessage>) -> Self {
-        Self { messages }
-    }
-
-    pub fn build_request(&self, context: &AgentRunContext) -> ModelRequest {
+    pub fn build_request(
+        &self,
+        context: &AgentRunContext,
+        messages: &[AgentMessage],
+    ) -> ModelRequest {
         ModelRequest {
-            messages: self.messages.clone(),
+            messages: messages.to_vec(),
             tools: context.tools.clone(),
             system_agent_session_id: context.system_agent_session_id.clone(),
             response_input_items: None,
@@ -101,58 +99,36 @@ impl ChatTranscriptState {
         }
     }
 
-    pub fn apply_model_response(&mut self, response: &ModelResponse) {
-        let ModelResponse::ToolCalls { calls, .. } = response else {
-            return;
-        };
-        if calls.is_empty() || calls.iter().any(|call| call.call_id.is_none()) {
-            return;
-        }
-        self.messages.push(AgentMessage::assistant_tool_calls(
-            calls
-                .iter()
-                .map(|call| AgentMessageToolCall {
-                    call_id: call
-                        .call_id
-                        .as_ref()
-                        .expect("call id checked above")
-                        .clone(),
-                    tool_name: call.tool_name.clone(),
-                    input: call.input.clone(),
-                })
-                .collect(),
-        ));
-    }
-
-    pub fn record_tool_observation(
-        &mut self,
-        observation: &ToolObservation,
-        model_call_id: Option<String>,
-    ) -> AgentMessage {
-        let message = tool_observation_message(observation, model_call_id);
-        self.messages.push(message.clone());
-        message
-    }
+    pub fn apply_model_response(&mut self, _response: &ModelResponse, _message_count: usize) {}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ResponsesItemState {
-    messages: Vec<AgentMessage>,
     previous_response_id: Option<String>,
     consumed_message_count: usize,
+    context_hash: Option<String>,
 }
 
 impl ResponsesItemState {
-    pub fn new(messages: Vec<AgentMessage>) -> Self {
-        Self {
-            messages,
-            previous_response_id: None,
-            consumed_message_count: 0,
+    pub fn build_request(
+        &mut self,
+        context: &AgentRunContext,
+        messages: &[AgentMessage],
+        rebased: bool,
+        context_hash: Option<&str>,
+    ) -> ModelRequest {
+        let context_changed = context_hash
+            .map(|hash| self.context_hash.as_deref() != Some(hash))
+            .unwrap_or(false);
+        let unhashable_rebase = rebased && context_hash.is_none();
+        if unhashable_rebase || context_changed || self.consumed_message_count > messages.len() {
+            self.previous_response_id = None;
+            self.consumed_message_count = 0;
         }
-    }
-
-    pub fn build_request(&self, context: &AgentRunContext) -> ModelRequest {
-        let current_messages = self.current_messages();
+        if let Some(hash) = context_hash {
+            self.context_hash = Some(hash.to_string());
+        }
+        let current_messages = self.current_messages(messages);
         ModelRequest {
             messages: current_messages.to_vec(),
             tools: context.tools.clone(),
@@ -162,26 +138,16 @@ impl ResponsesItemState {
         }
     }
 
-    pub fn apply_model_response(&mut self, response: &ModelResponse) {
+    pub fn apply_model_response(&mut self, response: &ModelResponse, message_count: usize) {
         if let Some(response_id) = response.response_id() {
             self.previous_response_id = Some(response_id.to_string());
         }
-        self.consumed_message_count = self.messages.len();
+        self.consumed_message_count = message_count;
     }
 
-    pub fn record_tool_observation(
-        &mut self,
-        observation: &ToolObservation,
-        model_call_id: Option<String>,
-    ) -> AgentMessage {
-        let message = tool_observation_message(observation, model_call_id);
-        self.messages.push(message.clone());
-        message
-    }
-
-    fn current_messages(&self) -> &[AgentMessage] {
-        let start = self.consumed_message_count.min(self.messages.len());
-        &self.messages[start..]
+    fn current_messages<'a>(&self, messages: &'a [AgentMessage]) -> &'a [AgentMessage] {
+        let start = self.consumed_message_count.min(messages.len());
+        &messages[start..]
     }
 }
 
@@ -189,58 +155,38 @@ pub(crate) fn responses_input_items_from_messages(messages: &[AgentMessage]) -> 
     messages
         .iter()
         .filter(|message| !matches!(message.role.as_str(), "system" | "developer"))
-        .map(responses_input_item_json)
-        .collect::<Vec<_>>()
-}
-
-pub(crate) fn responses_input_item_json(message: &AgentMessage) -> Value {
-    match message.role.as_str() {
-        "system" | "developer" => json!({
-            "type": "message",
-            "role": message.role.as_str(),
-            "content": message.content.as_str(),
-        }),
-        "user" | "assistant" => json!({
-            "type": "message",
-            "role": message.role.as_str(),
-            "content": message.content.as_str(),
-        }),
-        "tool" => {
-            if let Some(call_id) = &message.tool_call_id {
-                json!({
-                    "type": "function_call_output",
-                    "call_id": call_id,
-                    "output": message
-                        .tool_output
-                        .as_deref()
-                        .unwrap_or(message.content.as_str()),
-                })
-            } else {
-                json!({
-                    "type": "message",
-                    "role": "user",
-                    "content": message.content.as_str(),
-                })
+        .flat_map(|message| {
+            let function_items = message
+                .parts
+                .iter()
+                .filter_map(responses_function_call_item_json)
+                .collect::<Vec<_>>();
+            let has_text = !message.plain_text_content().trim().is_empty();
+            let mut items = Vec::new();
+            if has_text || function_items.is_empty() {
+                items.push(responses_input_item_json(message));
             }
-        }
-        _ => json!({
-            "type": "message",
-            "role": "user",
-            "content": message.content.as_str(),
-        }),
-    }
+            items.extend(function_items);
+            items
+        })
+        .collect::<Vec<_>>()
 }
 
 fn tool_observation_message(
     observation: &ToolObservation,
     model_call_id: Option<String>,
 ) -> AgentMessage {
-    let content = format_tool_observation_message(observation);
     match model_call_id {
-        Some(call_id) => {
-            AgentMessage::tool_with_call_id(content, call_id, observation.output.clone())
-        }
-        None => AgentMessage::tool(content),
+        Some(call_id) => AgentMessage::tool_result(
+            observation.tool_name.clone(),
+            Some(call_id),
+            observation.output.clone(),
+        ),
+        None => AgentMessage::tool_result(
+            observation.tool_name.clone(),
+            None,
+            format_tool_observation_message(observation),
+        ),
     }
 }
 
@@ -258,7 +204,7 @@ mod tests {
     use crate::domain::agent::{
         AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig, AgentModelProtocol,
         AgentRunContext, AgentRunLimits, AgentToolExposureState, EffectiveSkill, EffectiveTool,
-        EffectiveVariable, ModelResponse, ToolCall, ToolObservation,
+        EffectiveVariable, ModelResponse, ToolObservation,
     };
 
     use super::{ResponsesItemState, TurnStateAdapter, TurnStateKind};
@@ -317,6 +263,7 @@ mod tests {
                 AgentMessage::user("hello"),
             ],
             observations: Vec::new(),
+            short_term_memory: None,
             started_at: "2026-06-04T00:00:00Z".into(),
         }
     }
@@ -324,35 +271,40 @@ mod tests {
     #[test]
     fn responses_state_uses_delta_items_and_previous_response_id() {
         let context = responses_context();
-        let mut state = ResponsesItemState::new(context.messages.clone());
+        let mut state = ResponsesItemState::default();
         assert_eq!(
             TurnStateAdapter::Responses(state.clone()).kind(),
             TurnStateKind::Responses
         );
 
-        let request = state.build_request(&context);
+        let request = state.build_request(&context, &context.messages, false, Some("hash-1"));
         assert_eq!(request.previous_response_id, None);
         let items = request.response_input_items.expect("stateful input items");
         assert_eq!(items.len(), 1);
         assert_eq!(items[0]["type"], json!("message"));
         assert_eq!(items[0]["content"], json!("hello"));
 
-        state.apply_model_response(&ModelResponse::tool_calls_with_usage_and_response_id(
-            vec![],
-            None,
-            Some("resp-1".into()),
-        ));
+        state.apply_model_response(
+            &ModelResponse::tool_calls_with_usage_and_response_id(
+                vec![],
+                None,
+                Some("resp-1".into()),
+            ),
+            context.messages.len(),
+        );
 
-        let message = state.record_tool_observation(
+        let message = TurnStateAdapter::Responses(state.clone()).record_tool_observation(
             &ToolObservation {
                 tool_name: "lookup".into(),
                 output: "found".into(),
             },
             Some("call-1".into()),
         );
-        assert_eq!(message.tool_call_id.as_deref(), Some("call-1"));
+        assert_eq!(message.first_tool_call_id(), Some("call-1"));
 
-        let request = state.build_request(&context);
+        let mut messages = context.messages.clone();
+        messages.push(message);
+        let request = state.build_request(&context, &messages, false, Some("hash-1"));
         assert_eq!(request.previous_response_id.as_deref(), Some("resp-1"));
         let items = request.response_input_items.expect("stateful input items");
         assert_eq!(items.len(), 1);
@@ -362,41 +314,111 @@ mod tests {
     }
 
     #[test]
-    fn chat_state_preserves_provider_tool_call_envelope_before_observation() {
-        let mut context = responses_context();
-        context.model.protocol = AgentModelProtocol::ChatCompletions;
-        context.model.responses_stateful_enabled = false;
-        let mut state = TurnStateAdapter::new(
-            context.model.protocol,
-            context.messages.clone(),
-            context.model.responses_stateful_enabled,
+    fn responses_state_resets_when_context_is_rebased() {
+        let context = responses_context();
+        let mut state = ResponsesItemState::default();
+        state.apply_model_response(
+            &ModelResponse::final_output_with_usage_and_response_id(
+                "ok",
+                None,
+                Some("resp-1".into()),
+            ),
+            context.messages.len(),
         );
 
-        state.apply_model_response(&ModelResponse::tool_calls_with_usage(
-            vec![ToolCall {
-                call_id: Some("call-1".into()),
-                tool_name: "lookup".into(),
-                input: json!({"query": "status"}),
-            }],
-            None,
-        ));
-        let message = state.record_tool_observation(
-            &ToolObservation {
-                tool_name: "lookup".into(),
-                output: "found".into(),
-            },
+        let request = state.build_request(&context, &context.messages, true, None);
+        assert_eq!(request.previous_response_id, None);
+        let items = request.response_input_items.expect("input items");
+        assert_eq!(items.len(), 1);
+    }
+
+    #[test]
+    fn responses_state_keeps_previous_response_id_when_rebase_hash_is_stable() {
+        let context = responses_context();
+        let mut state = ResponsesItemState::default();
+        let _ = state.build_request(&context, &context.messages, true, Some("base-hash"));
+        state.apply_model_response(
+            &ModelResponse::tool_calls_with_usage_and_response_id(
+                vec![],
+                None,
+                Some("resp-1".into()),
+            ),
+            context.messages.len(),
+        );
+        let mut messages = context.messages.clone();
+        messages.push(AgentMessage::tool_result(
+            "lookup",
             Some("call-1".into()),
-        );
-        assert_eq!(message.tool_call_id.as_deref(), Some("call-1"));
+            "found",
+        ));
 
-        let request = state.build_request(&context);
-        assert_eq!(request.messages.len(), 4);
-        assert_eq!(
-            request.messages[2].tool_calls.as_ref().unwrap()[0].call_id,
-            "call-1"
+        let request = state.build_request(&context, &messages, true, Some("base-hash"));
+
+        assert_eq!(request.previous_response_id.as_deref(), Some("resp-1"));
+        let items = request.response_input_items.expect("input items");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["type"], json!("function_call_output"));
+        assert_eq!(items[0]["call_id"], json!("call-1"));
+    }
+
+    #[test]
+    fn responses_state_resets_when_context_hash_changes() {
+        let context = responses_context();
+        let mut state = ResponsesItemState::default();
+        let _ = state.build_request(&context, &context.messages, false, Some("hash-1"));
+        state.apply_model_response(
+            &ModelResponse::final_output_with_usage_and_response_id(
+                "ok",
+                None,
+                Some("resp-1".into()),
+            ),
+            context.messages.len(),
         );
-        assert_eq!(request.messages[3].role, "tool");
-        assert_eq!(request.messages[3].tool_call_id.as_deref(), Some("call-1"));
-        assert_eq!(request.messages[3].tool_output.as_deref(), Some("found"));
+
+        let request = state.build_request(&context, &context.messages, false, Some("hash-2"));
+        assert_eq!(request.previous_response_id, None);
+        let items = request.response_input_items.expect("input items");
+        assert_eq!(items.len(), 1);
+    }
+
+    #[test]
+    fn responses_state_replays_tool_calls_after_rebase_without_previous_response() {
+        let mut context = responses_context();
+        context
+            .messages
+            .push(AgentMessage::assistant_tool_calls(vec![(
+                Some("call-1".into()),
+                "lookup".into(),
+                json!({"query": "stm"}),
+            )]));
+        context.messages.push(AgentMessage::tool_result(
+            "lookup",
+            Some("call-1".into()),
+            "found",
+        ));
+        let mut state = ResponsesItemState::default();
+        state.apply_model_response(
+            &ModelResponse::final_output_with_usage_and_response_id(
+                "ok",
+                None,
+                Some("resp-1".into()),
+            ),
+            2,
+        );
+
+        let request = state.build_request(&context, &context.messages, true, Some("hash-2"));
+
+        assert_eq!(request.previous_response_id, None);
+        let items = request.response_input_items.expect("input items");
+        assert_eq!(items.len(), 3);
+        assert_eq!(items[0]["type"], json!("message"));
+        assert_eq!(items[0]["content"], json!("hello"));
+        assert_eq!(items[1]["type"], json!("function_call"));
+        assert_eq!(items[1]["call_id"], json!("call-1"));
+        assert_eq!(items[1]["name"], json!("lookup"));
+        assert_eq!(items[1]["arguments"], json!("{\"query\":\"stm\"}"));
+        assert_eq!(items[2]["type"], json!("function_call_output"));
+        assert_eq!(items[2]["call_id"], json!("call-1"));
+        assert_eq!(items[2]["output"], json!("found"));
     }
 }

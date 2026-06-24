@@ -121,5 +121,42 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
             availability_state: ToolAvailabilityState::Available,
             sample_result_summary_i18n_key: "agent.toolCatalog.tools.memory.delete.sampleResultSummary",
         },
+        ToolCatalogDefinition {
+            tool_code: "todo.update",
+            domain_code: "memory",
+            name_i18n_key: "agent.toolCatalog.tools.todo.update.name",
+            description_i18n_key: "agent.toolCatalog.tools.todo.update.description",
+            operation_kind: ToolOperationKind::Command,
+            input_schema: schema(
+                "agent.toolCatalog.tools.todo.update.description",
+                json!([{ "todos": [{ "position": 1, "content": "Inspect transcript storage", "status": "in_progress", "priority": "high" }] }]),
+                json!({
+                    "type": "object",
+                    "required": ["todos"],
+                    "properties": {
+                        "todos": {
+                            "type": "array",
+                            "maxItems": 50,
+                            "items": {
+                                "type": "object",
+                                "required": ["position", "content", "status", "priority"],
+                                "properties": {
+                                    "todoCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.todo.update.params.todoCode" },
+                                    "position": { "type": "integer", "minimum": 0, "x-i18n-description-key": "agent.toolCatalog.tools.todo.update.params.position" },
+                                    "content": { "type": "string", "minLength": 1, "maxLength": 500, "x-i18n-description-key": "agent.toolCatalog.tools.todo.update.params.content" },
+                                    "status": { "type": "string", "enum": ["pending", "in_progress", "completed", "cancelled"], "x-i18n-description-key": "agent.toolCatalog.tools.todo.update.params.status" },
+                                    "priority": { "type": "string", "enum": ["high", "medium", "low"], "x-i18n-description-key": "agent.toolCatalog.tools.todo.update.params.priority" }
+                                },
+                                "additionalProperties": false
+                            }
+                        }
+                    },
+                    "additionalProperties": false
+                }),
+            ),
+            module_owner: "short-term-memory",
+            availability_state: ToolAvailabilityState::Available,
+            sample_result_summary_i18n_key: "agent.toolCatalog.tools.todo.update.sampleResultSummary",
+        },
     ]
 }

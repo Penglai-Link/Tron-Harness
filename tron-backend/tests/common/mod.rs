@@ -23,7 +23,7 @@ use tron_backend::{
         SqliteAppRepository, SqliteOpenAppRepository, SqliteRoleRepository, SqliteUserRepository,
         SqliteVariableRepository, SqliteWorkspaceRepository,
     },
-    app::build_router,
+    app::build_router_with_id_provider,
     application::{
         app::AppRepository, open_app::OpenAppRepository, role::RoleRepository,
         user::UserRepository, variable::VariableRepository, workspace::WorkspaceRepository,
@@ -44,7 +44,7 @@ use tron_backend::{
     },
     shared::{
         crypto::Aes256SecretBox,
-        id::SnowflakeId,
+        id::{FixedSnowflakeIdProvider, SnowflakeId},
         random::random_hex,
         time::{current_timestamp, current_timestamp_seconds},
     },
@@ -60,6 +60,7 @@ const GITHUB_TEST_ACCESS_TOKEN: &str = "github-access-token";
 pub const GITHUB_TEST_CODE: &str = "github-test-code";
 const FIXTURE_TIMESTAMP: &str = "2026-05-16T00:00:00Z";
 static TEST_DB_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+static TEST_ID_SEQUENCE: AtomicU64 = AtomicU64::new(734_900_000_000_000_000);
 pub const OPEN_API_TEST_APP_CODE: &str = "OPENAPP-FIXTURE-0001";
 pub const OPEN_API_TEST_APP_KEY: &str = "dev-open-api-key";
 pub const OPEN_API_TEST_USER_CODE: &str = "USR-0001";
@@ -109,11 +110,19 @@ pub struct GitHubMockServer {
 }
 
 pub fn app() -> Router {
-    build_router(prepared_config(AppConfig::default())).expect("test router should build")
+    build_router_with_test_ids(prepared_config(AppConfig::default()))
 }
 
 pub fn app_with_config(config: AppConfig) -> Router {
-    build_router(prepared_config(config)).expect("test router should build")
+    build_router_with_test_ids(prepared_config(config))
+}
+
+fn build_router_with_test_ids(config: AppConfig) -> Router {
+    build_router_with_id_provider(
+        config,
+        Arc::new(FixedSnowflakeIdProvider::new(next_test_id_seed())),
+    )
+    .expect("test router should build")
 }
 
 pub fn prepared_config(mut config: AppConfig) -> AppConfig {
@@ -194,6 +203,10 @@ fn seed_default_fixture_data(config: &AppConfig) {
     seed_apps(&config.database_url);
     seed_variables(&config.database_url);
     seed_open_apps(config);
+}
+
+fn next_test_id_seed() -> i64 {
+    TEST_ID_SEQUENCE.fetch_add(10_000, Ordering::Relaxed) as i64
 }
 
 fn seed_roles(database_url: &str) {

@@ -1,6 +1,9 @@
 use std::{
-    collections::BTreeMap,
-    sync::{Arc, Mutex},
+    collections::{BTreeMap, BTreeSet},
+    sync::{
+        Arc, Mutex, OnceLock,
+        atomic::{AtomicU64, Ordering},
+    },
 };
 
 use crate::{
@@ -12,7 +15,7 @@ use crate::{
             ChatRepository, ChatSendResult, ChatSessionQuery, CreateChatSessionCommand,
             SendChatMessageCommand, UpdateChatSessionCommand,
         },
-        llm::{LlmRuntimeService, LlmTextGenerationCallCommand},
+        llm::LlmRuntimeService,
     },
     domain::agent::{AgentModelConfig, ModelTokenUsage},
     domain::chat::{
@@ -25,17 +28,20 @@ use crate::{
     },
 };
 
+use super::title::{DEFAULT_MANUAL_SESSION_TITLE, should_generate_manual_session_title};
+
 const MAIN_AGENT_CODE: &str = "main-agent";
 const MAIN_RUNTIME_ADAPTER_KEY: &str = "REACT";
 const CODEX_RUNTIME_ADAPTER_KEY: &str = "CODEX_EXEC";
 const OPENCODE_RUNTIME_ADAPTER_KEY: &str = "OPENCODE_RUN";
-const DEFAULT_MANUAL_SESSION_TITLE: &str = "New chat";
-const MAX_GENERATED_TITLE_CHARS: usize = 64;
+static SESSION_RUN_COORDINATOR: OnceLock<Mutex<BTreeSet<String>>> = OnceLock::new();
+static CHAT_SERVICE_COORDINATOR_NAMESPACE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
 pub struct ChatService {
     repository: Arc<Mutex<Box<dyn ChatRepository>>>,
     id_provider: Arc<dyn SnowflakeIdProvider>,
+    coordinator_namespace: u64,
 }
 
 impl ChatService {
@@ -53,6 +59,16 @@ impl ChatService {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             id_provider,
+            coordinator_namespace: CHAT_SERVICE_COORDINATOR_NAMESPACE
+                .fetch_add(1, Ordering::Relaxed),
+        }
+    }
+
+    pub fn clone_with_id_provider(&self, id_provider: Arc<dyn SnowflakeIdProvider>) -> Self {
+        Self {
+            repository: self.repository.clone(),
+            id_provider,
+            coordinator_namespace: self.coordinator_namespace,
         }
     }
 
@@ -241,6 +257,7 @@ impl ChatService {
             .get_session(session_code)
             .map_err(ChatSendError::Chat)?;
         let should_generate_title = should_generate_manual_session_title(&session);
+        let _session_run_guard = acquire_session_run(self.coordinator_namespace, session_code)?;
         let workspace_code = session.workspace_code.clone();
         let channel = if command
             .task_code
@@ -272,6 +289,11 @@ impl ChatService {
             &content,
             None,
         )?;
+        let app_code_for_invocation = command.app_code.or(session.app_code.clone());
+        let task_code_for_invocation = command.task_code.or(session.task_code.clone());
+        let system_model_id_for_invocation = command.system_model_id;
+        let limits_for_invocation = command.limits;
+        let tools_for_invocation = command.tools;
         let invocation = AgentInvocationCommand {
             run_code: command.run_code,
             prompt: Some(content.clone()),
@@ -280,19 +302,23 @@ impl ChatService {
             agent_code: Some(effective_agent_code.clone()),
             system_agent_session_id: mapped_runtime_session_id
                 .or(session.system_agent_session_id.clone()),
-            app_code: command.app_code.or(session.app_code.clone()),
-            task_code: command.task_code.or(session.task_code.clone()),
-            model: Some(resolved_model),
-            system_model_id: command.system_model_id,
-            limits: command.limits,
-            tools: command.tools,
+            app_code: app_code_for_invocation.clone(),
+            task_code: task_code_for_invocation.clone(),
+            model: Some(resolved_model.clone()),
+            system_model_id: system_model_id_for_invocation.clone(),
+            limits: limits_for_invocation,
+            tools: tools_for_invocation.clone(),
+            transcript_input_kind: None,
+            transcript_input_metadata: None,
         };
         let run = if let Some(sink) = sink {
             agent
-                .invoke_stream(invocation, user_code, locale.clone(), sink)
+                .invoke_stream(invocation, user_code.clone(), locale.clone(), sink)
                 .await
         } else {
-            agent.invoke(invocation, user_code, locale).await
+            agent
+                .invoke(invocation, user_code.clone(), locale.clone())
+                .await
         }
         .map_err(ChatSendError::Agent)?;
         let final_output = run.final_output.clone();
@@ -305,6 +331,7 @@ impl ChatService {
             &run.final_output,
             run.token_usage,
         )?;
+        let mut result_messages = vec![user_message, assistant_message];
         let updated_at = current_timestamp();
         if let Some(runtime_session_id) = run.system_agent_session_id.as_deref() {
             self.repository()
@@ -338,6 +365,27 @@ impl ChatService {
             )
             .await;
         }
+        if let Some(short_term_memory) = agent.short_term_memory() {
+            let goal_messages = self
+                .run_goal_continuations(
+                    session_code,
+                    &session,
+                    &effective_agent_code,
+                    app_code_for_invocation,
+                    task_code_for_invocation,
+                    system_model_id_for_invocation,
+                    resolved_model,
+                    tools_for_invocation,
+                    user_code,
+                    locale,
+                    agent,
+                    short_term_memory,
+                    run.clone(),
+                    run.system_agent_session_id.clone(),
+                )
+                .await?;
+            result_messages.extend(goal_messages);
+        }
         let updated_session = self
             .repository()
             .get_session(session_code)
@@ -345,11 +393,11 @@ impl ChatService {
         Ok(ChatSendResult {
             session: updated_session,
             run,
-            messages: vec![user_message, assistant_message],
+            messages: result_messages,
         })
     }
 
-    fn create_message(
+    pub(super) fn create_message(
         &self,
         session_code: &str,
         run_code: Option<String>,
@@ -385,38 +433,10 @@ impl ChatService {
         Ok(message)
     }
 
-    fn repository(&self) -> std::sync::MutexGuard<'_, Box<dyn ChatRepository>> {
+    pub(super) fn repository(&self) -> std::sync::MutexGuard<'_, Box<dyn ChatRepository>> {
         self.repository
             .lock()
             .expect("chat repository mutex poisoned")
-    }
-
-    async fn try_generate_manual_session_title(
-        &self,
-        session_code: &str,
-        workspace_code: &str,
-        user_message: &str,
-        assistant_message: &str,
-        llm_runtime: LlmRuntimeService,
-    ) {
-        let prompt = manual_session_title_prompt(user_message, assistant_message);
-        let result = llm_runtime
-            .text_generation_call(LlmTextGenerationCallCommand {
-                workspace_code: workspace_code.to_string(),
-                model_code: None,
-                prompt,
-            })
-            .await;
-        let Ok(result) = result else {
-            return;
-        };
-        let Some(title) = normalize_generated_session_title(&result.output) else {
-            return;
-        };
-        let updated_at = current_timestamp();
-        let _ = self
-            .repository()
-            .update_session_title(session_code, &title, &updated_at);
     }
 }
 
@@ -424,6 +444,39 @@ impl ChatService {
 pub enum ChatSendError {
     Agent(AgentInvocationError),
     Chat(ChatError),
+}
+
+struct SessionRunGuard {
+    run_key: String,
+}
+
+impl Drop for SessionRunGuard {
+    fn drop(&mut self) {
+        if let Some(coordinator) = SESSION_RUN_COORDINATOR.get()
+            && let Ok(mut active_sessions) = coordinator.lock()
+        {
+            active_sessions.remove(&self.run_key);
+        }
+    }
+}
+
+fn acquire_session_run(
+    coordinator_namespace: u64,
+    session_code: &str,
+) -> Result<SessionRunGuard, ChatSendError> {
+    let coordinator = SESSION_RUN_COORDINATOR.get_or_init(|| Mutex::new(BTreeSet::new()));
+    let mut active_sessions = coordinator.lock().map_err(|_| {
+        ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+            "goal run coordinator is unavailable".into(),
+        ))
+    })?;
+    let run_key = format!("{coordinator_namespace}:{session_code}");
+    if !active_sessions.insert(run_key.clone()) {
+        return Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+            "session already has an active run".into(),
+        )));
+    }
+    Ok(SessionRunGuard { run_key })
 }
 
 fn normalized_optional(value: Option<String>) -> Option<String> {
@@ -436,111 +489,10 @@ fn normalized_required(value: Option<String>) -> Option<String> {
     normalized_optional(value)
 }
 
-fn should_generate_manual_session_title(session: &ChatSession) -> bool {
-    session.source_type == ChatSessionSourceType::Manual
-        && session.task_code.is_none()
-        && session
-            .title
-            .trim()
-            .eq_ignore_ascii_case(DEFAULT_MANUAL_SESSION_TITLE)
-}
-
-fn manual_session_title_prompt(user_message: &str, assistant_message: &str) -> String {
-    format!(
-        "Generate a concise chat title from the first exchange.\n\
-        Rules:\n\
-        - Return only the title.\n\
-        - Use 3 to 8 words.\n\
-        - No quotes, punctuation-only decorations, markdown, or prefixes.\n\
-        - Preserve product names and technical terms.\n\n\
-        User message:\n{user_message}\n\n\
-        Assistant response:\n{assistant_message}"
-    )
-}
-
-fn normalize_generated_session_title(value: &str) -> Option<String> {
-    let first_line = value.lines().map(str::trim).find(|line| !line.is_empty())?;
-    let mut title = first_line
-        .trim_matches(|character: char| {
-            character == '"'
-                || character == '\''
-                || character == '`'
-                || character == '*'
-                || character == '#'
-                || character == '-'
-                || character == ':'
-                || character.is_whitespace()
-        })
-        .trim()
-        .to_string();
-    for prefix in ["Title:", "title:", "Chat title:", "chat title:"] {
-        if let Some(stripped) = title.strip_prefix(prefix) {
-            title = stripped.trim().to_string();
-            break;
-        }
-    }
-    title = title
-        .chars()
-        .filter(|character| !character.is_control())
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
-    if title.is_empty() || title.eq_ignore_ascii_case(DEFAULT_MANUAL_SESSION_TITLE) {
-        return None;
-    }
-    if title.chars().count() > MAX_GENERATED_TITLE_CHARS {
-        title = title.chars().take(MAX_GENERATED_TITLE_CHARS).collect();
-        title = title.trim().to_string();
-    }
-    (!title.is_empty()).then_some(title)
-}
-
 fn runtime_adapter_key_for_agent(agent_code: &str) -> &'static str {
     match agent_code.trim().to_ascii_lowercase().as_str() {
         "codex" => CODEX_RUNTIME_ADAPTER_KEY,
         "opencode" => OPENCODE_RUNTIME_ADAPTER_KEY,
         _ => MAIN_RUNTIME_ADAPTER_KEY,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn manual_new_chat_session(last_run_code: Option<String>) -> ChatSession {
-        ChatSession {
-            id: 1,
-            session_code: "SESSION-1".into(),
-            workspace_code: "TRON_CORE".into(),
-            app_code: None,
-            task_code: None,
-            source_type: ChatSessionSourceType::Manual,
-            source_code: None,
-            title: DEFAULT_MANUAL_SESSION_TITLE.into(),
-            status: ChatSessionStatus::Active,
-            agent_code: Some(MAIN_AGENT_CODE.into()),
-            last_run_code,
-            last_run_status: None,
-            system_agent_session_id: None,
-            user_code: Some("user".into()),
-            created_at: "1".into(),
-            updated_at: "1".into(),
-        }
-    }
-
-    #[test]
-    fn manual_new_chat_title_generation_retries_after_first_run() {
-        let session = manual_new_chat_session(Some("RUN-1".into()));
-
-        assert!(should_generate_manual_session_title(&session));
-    }
-
-    #[test]
-    fn renamed_manual_chat_does_not_generate_title_again() {
-        let mut session = manual_new_chat_session(Some("RUN-1".into()));
-        session.title = "Existing title".into();
-
-        assert!(!should_generate_manual_session_title(&session));
     }
 }

@@ -898,6 +898,7 @@ fn automation_tool_context(tools: Vec<EffectiveTool>) -> AgentRunContext {
         },
         messages: vec![AgentMessage::user("manage automations")],
         observations: Vec::new(),
+        short_term_memory: None,
         started_at: "2026-06-22T00:00:00Z".into(),
     }
 }

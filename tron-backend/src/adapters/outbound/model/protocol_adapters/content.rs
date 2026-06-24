@@ -1,51 +1,52 @@
 use serde_json::{Value, json};
 
-use crate::domain::agent::AgentMessage;
+use crate::domain::agent::{AgentMessage, AgentMessagePart, is_generated_tool_call_id};
 
 pub(super) fn chat_message_json(message: &AgentMessage) -> Value {
-    if message.role == "assistant"
-        && let Some(tool_calls) = &message.tool_calls
+    let content = if message.role == "tool" {
+        message.text_content()
+    } else {
+        message.plain_text_content()
+    };
+    let mut payload = json!({ "role": provider_role(message) });
+    payload["content"] = if message.role == "assistant"
+        && content.is_empty()
+        && message
+            .parts
+            .iter()
+            .any(|part| matches!(part, AgentMessagePart::ToolCall { .. }))
     {
-        return json!({
-            "role": "assistant",
-            "content": Value::Null,
-            "tool_calls": tool_calls
-                .iter()
-                .map(|tool_call| json!({
-                    "id": tool_call.call_id,
-                    "type": "function",
-                    "function": {
-                        "name": tool_call.tool_name,
-                        "arguments": serde_json::to_string(&tool_call.input)
-                            .unwrap_or_else(|_| "{}".into()),
-                    }
-                }))
-                .collect::<Vec<_>>(),
-        });
+        Value::Null
+    } else {
+        json!(content)
+    };
+    if message.role == "assistant" {
+        let tool_calls = message
+            .parts
+            .iter()
+            .filter_map(chat_tool_call_json)
+            .collect::<Vec<_>>();
+        if !tool_calls.is_empty() {
+            payload["tool_calls"] = json!(tool_calls);
+        }
     }
     if message.role == "tool"
-        && let Some(tool_call_id) = &message.tool_call_id
+        && let Some(call_id) = message.first_tool_call_id()
+        && !is_generated_tool_call_id(call_id)
     {
-        return json!({
-            "role": "tool",
-            "tool_call_id": tool_call_id,
-            "content": message
-                .tool_output
-                .as_deref()
-                .unwrap_or(message.content.as_str()),
-        });
+        payload["role"] = json!("tool");
+        payload["tool_call_id"] = json!(call_id);
+        payload["content"] = json!(message.first_tool_output().unwrap_or_default());
     }
-    json!({
-        "role": provider_role(message),
-        "content": message.content,
-    })
+    payload
 }
 
 pub(super) fn responses_instructions_text(messages: &[AgentMessage]) -> Option<String> {
     let instructions = messages
         .iter()
         .filter(|message| matches!(message.role.as_str(), "system" | "developer"))
-        .map(|message| message.content.trim())
+        .map(|message| message.plain_text_content())
+        .map(|content| content.trim().to_string())
         .filter(|content| !content.is_empty())
         .collect::<Vec<_>>();
     if instructions.is_empty() {
@@ -63,6 +64,25 @@ fn provider_role(message: &AgentMessage) -> &str {
         "tool" => "user",
         other => other,
     }
+}
+
+fn chat_tool_call_json(part: &AgentMessagePart) -> Option<Value> {
+    let AgentMessagePart::ToolCall {
+        call_id,
+        tool_name,
+        input,
+    } = part
+    else {
+        return None;
+    };
+    Some(json!({
+        "id": call_id.as_deref().unwrap_or(tool_name.as_str()),
+        "type": "function",
+        "function": {
+            "name": tool_name,
+            "arguments": input.to_string(),
+        },
+    }))
 }
 
 pub(super) fn text_from_content(content: &Value) -> Option<String> {

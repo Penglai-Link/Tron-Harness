@@ -247,6 +247,7 @@ mod tests {
             limits: AgentRunLimits::default(),
             messages: vec![AgentMessage::user("run shell")],
             observations: Vec::new(),
+            short_term_memory: None,
             started_at: "2026-06-05T00:00:00Z".into(),
         }
     }

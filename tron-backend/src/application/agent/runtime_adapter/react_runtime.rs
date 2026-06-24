@@ -1,6 +1,7 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use crate::{
+    application::short_term_memory::ShortTermMemoryService,
     domain::agent::{AgentError, AgentRunContext, AgentRunResult, ToolRegistry},
     shared::event_bus::EventBusHandle,
 };
@@ -18,6 +19,7 @@ pub(super) struct ReactRuntime {
     model_client: Arc<dyn ModelClient>,
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
+    short_term_memory: Option<ShortTermMemoryService>,
 }
 
 impl ReactRuntime {
@@ -27,6 +29,7 @@ impl ReactRuntime {
         model_client: Arc<dyn ModelClient>,
         tool_registry: Arc<ToolRegistry>,
         event_bus: EventBusHandle,
+        short_term_memory: Option<ShortTermMemoryService>,
     ) -> Self {
         Self {
             key,
@@ -34,6 +37,7 @@ impl ReactRuntime {
             model_client,
             tool_registry,
             event_bus,
+            short_term_memory,
         }
     }
 
@@ -49,6 +53,7 @@ impl ReactRuntime {
                 self.tool_registry.clone(),
                 self.event_bus.clone(),
             )
+            .with_short_term_memory(self.short_term_memory.clone())
             .build()
             .map_err(map_agent_error)?;
             match sink {

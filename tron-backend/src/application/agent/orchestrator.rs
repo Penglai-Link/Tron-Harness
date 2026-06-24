@@ -271,6 +271,8 @@ mod tests {
             final_output: output.into(),
             step_count: 1,
             token_usage: None,
+            latest_request_estimate: None,
+            latest_usage_audit: None,
             system_agent_session_id: Some("ses-1".into()),
             observations: Vec::new(),
         }
@@ -327,6 +329,7 @@ mod tests {
             limits: AgentRunLimits::default(),
             messages: vec![AgentMessage::user("hello")],
             observations: Vec::new(),
+            short_term_memory: None,
             started_at: "2026-05-30T00:00:00Z".into(),
         }
     }

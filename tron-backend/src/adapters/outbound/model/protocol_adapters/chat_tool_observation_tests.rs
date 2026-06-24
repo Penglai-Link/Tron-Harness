@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 
 use crate::domain::agent::{
-    AgentMessage, AgentMessageToolCall, AgentModelConfig, AgentModelProtocol, ModelRequest,
+    AgentMessage, AgentMessagePart, AgentModelConfig, AgentModelProtocol, ModelRequest,
 };
 
 use super::{chat_completions_request, responses_request};
@@ -29,11 +29,11 @@ fn request_builders_handle_tool_observations_per_protocol() {
     let config = chat_config();
     let request = ModelRequest {
         messages: vec![
-            AgentMessage::assistant_tool_calls(vec![AgentMessageToolCall {
-                call_id: "call-123".into(),
-                tool_name: "workspace.page".into(),
-                input: json!({"workspaceCode": "TRON_CORE"}),
-            }]),
+            AgentMessage::assistant_tool_calls(vec![(
+                Some("call-123".into()),
+                "workspace.page".into(),
+                json!({"workspaceCode": "TRON_CORE"}),
+            )]),
             AgentMessage::tool_with_call_id("tool:workspace.page\nresult:\n[]", "call-123", "[]"),
         ],
         tools: vec![],
@@ -77,7 +77,12 @@ fn request_builders_handle_tool_observations_per_protocol() {
 #[test]
 fn chat_request_downgrades_tool_observations_without_call_id_to_user_text() {
     let request = ModelRequest {
-        messages: vec![AgentMessage::tool("tool:workspace.page\nresult:\n[]")],
+        messages: vec![AgentMessage::new(
+            "tool",
+            vec![AgentMessagePart::Text {
+                text: "tool:workspace.page\nresult:\n[]".into(),
+            }],
+        )],
         tools: vec![],
         system_agent_session_id: None,
         response_input_items: None,

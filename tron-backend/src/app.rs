@@ -3,8 +3,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 mod automation_runner;
 mod routing;
 mod startup;
+mod state_extractors;
 
-use axum::{Router, extract::FromRef, routing::get};
+use axum::{Router, routing::get};
 
 use crate::{
     adapters::{
@@ -20,9 +21,9 @@ use crate::{
                 SqliteAgentManagementRepository, SqliteAgentRunRepository, SqliteAppRepository,
                 SqliteAutomationRepository, SqliteChatRepository, SqliteMcpRepository,
                 SqliteMemoryWorkDomainRepository, SqliteModelRepository, SqliteOpenAppRepository,
-                SqliteRoleRepository, SqliteSkillRegistryRepository, SqliteTaskRepository,
-                SqliteUserRepository, SqliteVariableRepository, SqliteWorkspaceRepository,
-                bootstrap_platform_admin,
+                SqliteRoleRepository, SqliteShortTermMemoryRepository,
+                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteUserRepository,
+                SqliteVariableRepository, SqliteWorkspaceRepository, bootstrap_platform_admin,
             },
         },
     },
@@ -41,6 +42,7 @@ use crate::{
     application::open_app::OpenAppService,
     application::rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
     application::role::RoleService,
+    application::short_term_memory::ShortTermMemoryService,
     application::skill::SkillRegistryService,
     application::task::TaskService,
     application::user::UserService,
@@ -53,7 +55,7 @@ use crate::{
         crypto::Aes256SecretBox,
         event_bus::{AguiEventSink, EventBusHandle, EventBusRuntimeBuilder},
         http_client::HttpClientPool,
-        id::SnowflakedSnowflakeIdProvider,
+        id::{IdGenerator, SnowflakeIdProvider, SnowflakedSnowflakeIdProvider},
     },
 };
 
@@ -73,6 +75,7 @@ static GLOBAL_VARIABLE_SERVICE: OnceLock<VariableService> = OnceLock::new();
 static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
 static GLOBAL_MODEL_SERVICE: OnceLock<ModelService> = OnceLock::new();
 static GLOBAL_CHAT_SERVICE: OnceLock<ChatService> = OnceLock::new();
+static GLOBAL_SHORT_TERM_MEMORY_SERVICE: OnceLock<ShortTermMemoryService> = OnceLock::new();
 static GLOBAL_OPEN_APP_SERVICE: OnceLock<OpenAppService> = OnceLock::new();
 static GLOBAL_MEMORY_WORK_DOMAIN_SERVICE: OnceLock<MemoryWorkDomainService> = OnceLock::new();
 static GLOBAL_GRAPH_CORE: OnceLock<GrafeoStoreCore> = OnceLock::new();
@@ -101,6 +104,7 @@ pub struct AppState {
     pub apps: AppService,
     pub automations: AutomationService,
     pub chats: ChatService,
+    pub short_term_memory: ShortTermMemoryService,
     pub event_bus: EventBusHandle,
     pub graphs: GraphService,
     pub ontologies: OntologyService,
@@ -121,18 +125,25 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(config: AppConfig) -> Result<Self, AppBootstrapError> {
+        Self::new_with_id_provider(config, Arc::new(SnowflakedSnowflakeIdProvider::default()))
+    }
+
+    pub fn new_with_id_provider<I>(
+        config: AppConfig,
+        id_provider: Arc<I>,
+    ) -> Result<Self, AppBootstrapError>
+    where
+        I: SnowflakeIdProvider + IdGenerator + 'static,
+    {
         let agui_events = Arc::new(AguiEventSink::new(&config.event_bus));
         let agui_replay_store = Arc::new(
             SqliteAgentEventReplayStore::connect(&config.database_url)
                 .expect("agent event replay store should initialize"),
         );
-        let event_bus = EventBusRuntimeBuilder::new(
-            config.event_bus.clone(),
-            Arc::new(SnowflakedSnowflakeIdProvider::default()),
-        )
-        .register_sink(agui_events.clone())
-        .register_sink(agui_replay_store.clone())
-        .build();
+        let event_bus = EventBusRuntimeBuilder::new(config.event_bus.clone(), id_provider.clone())
+            .register_sink(agui_events.clone())
+            .register_sink(agui_replay_store.clone())
+            .build();
         let http_client_pool = HttpClientPool::from_profiles(&config.http_clients)
             .expect("http client pool should initialize");
         let model_inference_client = http_client_pool.model_inference_client();
@@ -291,6 +302,23 @@ impl AppState {
         } else {
             build_memory_work_domain_service(&config.database_url)
         };
+        let short_term_memory = if config.database_url == ":memory:" {
+            GLOBAL_SHORT_TERM_MEMORY_SERVICE
+                .get_or_init(|| {
+                    build_short_term_memory_service_with_id_provider(
+                        ":memory:",
+                        &config,
+                        id_provider.clone(),
+                    )
+                })
+                .clone_with_id_provider(id_provider.clone())
+        } else {
+            build_short_term_memory_service_with_id_provider(
+                &config.database_url,
+                &config,
+                id_provider.clone(),
+            )
+        };
         let agent_tool_registry = Arc::new(ToolRegistry::default());
         register_default_agent_tools(
             agent_tool_registry.as_ref(),
@@ -302,6 +330,7 @@ impl AppState {
             skills.clone(),
             variables.clone(),
             memory.clone(),
+            short_term_memory.clone(),
         )
         .expect("default agent tools should register");
         let (graphs, ontologies) = if config.graph_storage_path == ":memory:" {
@@ -322,10 +351,12 @@ impl AppState {
         let agent_runs = build_agent_run_history_service(&config.database_url);
         let chats = if config.database_url == ":memory:" {
             GLOBAL_CHAT_SERVICE
-                .get_or_init(|| build_chat_service(":memory:"))
-                .clone()
+                .get_or_init(|| {
+                    build_chat_service_with_id_provider(":memory:", id_provider.clone())
+                })
+                .clone_with_id_provider(id_provider.clone())
         } else {
-            build_chat_service(&config.database_url)
+            build_chat_service_with_id_provider(&config.database_url, id_provider)
         };
         automations.set_execution_runner(Arc::new(MainAgentAutomationRunner::new(
             automations.clone(),
@@ -364,6 +395,7 @@ impl AppState {
             apps,
             automations,
             chats,
+            short_term_memory,
             event_bus,
             graphs,
             ontologies,
@@ -384,135 +416,18 @@ impl AppState {
     }
 }
 
-impl FromRef<AppState> for AppConfig {
-    fn from_ref(state: &AppState) -> Self {
-        state.config.clone()
-    }
-}
-impl FromRef<AppState> for AppReadiness {
-    fn from_ref(state: &AppState) -> Self {
-        state.readiness.clone()
-    }
-}
-impl FromRef<AppState> for UserService {
-    fn from_ref(state: &AppState) -> Self {
-        state.users.clone()
-    }
-}
-impl FromRef<AppState> for AppService {
-    fn from_ref(state: &AppState) -> Self {
-        state.apps.clone()
-    }
-}
-impl FromRef<AppState> for EventBusHandle {
-    fn from_ref(state: &AppState) -> Self {
-        state.event_bus.clone()
-    }
-}
-impl FromRef<AppState> for RoleService {
-    fn from_ref(state: &AppState) -> Self {
-        state.roles.clone()
-    }
-}
-impl FromRef<AppState> for WorkspaceService {
-    fn from_ref(state: &AppState) -> Self {
-        state.workspaces.clone()
-    }
-}
-
-impl FromRef<AppState> for GraphService {
-    fn from_ref(state: &AppState) -> Self {
-        state.graphs.clone()
-    }
-}
-impl FromRef<AppState> for OntologyService {
-    fn from_ref(state: &AppState) -> Self {
-        state.ontologies.clone()
-    }
-}
-impl FromRef<AppState> for TaskService {
-    fn from_ref(state: &AppState) -> Self {
-        state.tasks.clone()
-    }
-}
-impl FromRef<AppState> for AutomationService {
-    fn from_ref(state: &AppState) -> Self {
-        state.automations.clone()
-    }
-}
-impl FromRef<AppState> for ChatService {
-    fn from_ref(state: &AppState) -> Self {
-        state.chats.clone()
-    }
-}
-
-impl FromRef<AppState> for VariableService {
-    fn from_ref(state: &AppState) -> Self {
-        state.variables.clone()
-    }
-}
-
-impl FromRef<AppState> for SkillRegistryService {
-    fn from_ref(state: &AppState) -> Self {
-        state.skills.clone()
-    }
-}
-
-impl FromRef<AppState> for ModelService {
-    fn from_ref(state: &AppState) -> Self {
-        state.models.clone()
-    }
-}
-
-impl FromRef<AppState> for OpenAppService {
-    fn from_ref(state: &AppState) -> Self {
-        state.open_apps.clone()
-    }
-}
-
-impl FromRef<AppState> for LlmRuntimeService {
-    fn from_ref(state: &AppState) -> Self {
-        state.llm_runtime.clone()
-    }
-}
-
-impl FromRef<AppState> for AppRagService {
-    fn from_ref(state: &AppState) -> Self {
-        state.rag.clone()
-    }
-}
-
-impl FromRef<AppState> for AppMemoryService {
-    fn from_ref(state: &AppState) -> Self {
-        state.memory.clone()
-    }
-}
-
-impl FromRef<AppState> for MemoryWorkDomainService {
-    fn from_ref(state: &AppState) -> Self {
-        state.memory_work_domains.clone()
-    }
-}
-
-impl FromRef<AppState> for AgentRunHistoryService {
-    fn from_ref(state: &AppState) -> Self {
-        state.agent_runs.clone()
-    }
-}
-
-impl FromRef<AppState> for AgentManagementService {
-    fn from_ref(state: &AppState) -> Self {
-        state.agent_management.clone()
-    }
-}
-
-impl FromRef<AppState> for McpService {
-    fn from_ref(state: &AppState) -> Self {
-        state.mcp.clone()
-    }
-}
 pub fn build_router(config: AppConfig) -> Result<Router, AppBootstrapError> {
-    let state = AppState::new(config)?;
+    build_router_with_id_provider(config, Arc::new(SnowflakedSnowflakeIdProvider::default()))
+}
+
+pub fn build_router_with_id_provider<I>(
+    config: AppConfig,
+    id_provider: Arc<I>,
+) -> Result<Router, AppBootstrapError>
+where
+    I: SnowflakeIdProvider + IdGenerator + 'static,
+{
+    let state = AppState::new_with_id_provider(config, id_provider)?;
     let protected_routes = build_protected_routes(&state);
     let open_api_routes = build_open_api_routes(&state);
 

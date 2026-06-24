@@ -24,6 +24,16 @@ fn application_yaml_uses_home_storage_defaults() {
         config.variable_crypto.key_base64,
         APPLICATION_VARIABLE_CRYPTO_KEY_BASE64
     );
+    assert!(
+        !config
+            .short_term_memory
+            .context
+            .reasoning_summary_replay_enabled
+    );
+    assert_eq!(config.short_term_memory.event_log.mode, "full");
+    assert_eq!(config.short_term_memory.event_log.retention_days, 5);
+    assert_eq!(config.short_term_memory.event_log.max_payload_bytes, 8192);
+    assert!(config.short_term_memory.event_log.cleanup_on_startup);
 }
 
 #[test]
@@ -79,6 +89,126 @@ mineru:
     assert_eq!(config.mineru.timeout_seconds, 120);
     assert_eq!(config.mineru.max_bytes, 2_097_152);
     assert!(config.mineru.return_content_list);
+}
+
+#[test]
+fn short_term_memory_yaml_overrides_load_policy() {
+    let config_path = temp_config_path();
+    fs::write(
+        &config_path,
+        r#"
+shortTermMemory:
+  toolOutput:
+    root: /tmp/stm-tools
+    externalizeAboveBytes: 64
+  eventLog:
+    mode: lifecycleOnly
+    retentionDays: 9
+    maxPayloadBytes: 4096
+    cleanupOnStartup: false
+    cleanupBatchSize: 123
+    cleanupMaxRowsPerStartup: 456
+  context:
+    defaultContextWindowTokens: 16000
+    familyContextMaxRatioBps: 750
+    familyContextHardCapTokens: 2000
+    protocolOverheadReserveTokens: 256
+    safetyMarginTokens: 128
+    familyContextMaxChars: 1200
+    reasoningSummaryReplayEnabled: true
+    blocks:
+      currentSessionCheckpoint:
+        maxRatioBps: 1250
+        maxTokens: 900
+      currentSessionWorkingState:
+        maxTokens: 300
+      currentSessionRecentTranscript:
+        allowBorrowUnusedBudget: false
+  familyLoad:
+    defaultMaxSnapshots: 2
+    defaultMaxSessions: 4
+    defaultSnapshotMaxChars: 700
+    defaultTtlHours: 24
+    taskWeightBps: 7000
+    requirementWeightBps: 2000
+    workspaceChatWeightBps: 500
+    workspaceHeartbeatWeightBps: 250
+    otherWeightBps: 100
+  compaction:
+    autoEnabled: false
+    maxRecentTurns: 6
+    keepRecentTokens: 3000
+    reservedTokens: 500
+    summaryMaxTokens: 700
+    toolOutputMaxChars: 256
+    overflowRetryLimit: 0
+    reasoningInclusion: none
+    toolResultPolicy: placeholder
+    filePolicy: metadata
+  goalLoop:
+    maxRuns: 7
+    maxConsecutiveJudgeFailures: 2
+    judgeInputMaxChars: 2000
+    judgeOutputMaxTokens: 512
+"#,
+    )
+    .expect("temp config should be written");
+
+    let config = AppConfig::from_yaml_file(&config_path).expect("temp config should load");
+
+    fs::remove_file(&config_path).expect("temp config should be removed");
+    assert_eq!(config.short_term_memory.tool_output.root, "/tmp/stm-tools");
+    assert_eq!(
+        config.short_term_memory.tool_output.externalize_above_bytes,
+        64
+    );
+    assert_eq!(config.short_term_memory.event_log.mode, "lifecycleOnly");
+    assert_eq!(config.short_term_memory.event_log.retention_days, 9);
+    assert_eq!(config.short_term_memory.event_log.max_payload_bytes, 4096);
+    assert!(!config.short_term_memory.event_log.cleanup_on_startup);
+    assert_eq!(config.short_term_memory.event_log.cleanup_batch_size, 123);
+    assert_eq!(
+        config
+            .short_term_memory
+            .event_log
+            .cleanup_max_rows_per_startup,
+        456
+    );
+    assert_eq!(
+        config
+            .short_term_memory
+            .context
+            .family_context_max_ratio_bps,
+        750
+    );
+    assert!(
+        config
+            .short_term_memory
+            .context
+            .reasoning_summary_replay_enabled
+    );
+    assert_eq!(
+        config.short_term_memory.family_load.default_max_snapshots,
+        2
+    );
+    assert_eq!(config.short_term_memory.family_load.default_max_sessions, 4);
+    assert_eq!(config.short_term_memory.family_load.task_weight_bps, 7000);
+    assert_eq!(
+        config
+            .short_term_memory
+            .context
+            .blocks
+            .current_session_checkpoint
+            .max_tokens,
+        Some(900)
+    );
+    assert!(!config.short_term_memory.compaction.auto_enabled);
+    assert_eq!(config.short_term_memory.compaction.max_recent_turns, 6);
+    assert_eq!(config.short_term_memory.goal_loop.max_runs, 7);
+    assert_eq!(
+        config.short_term_memory.goal_loop.judge_output_max_tokens,
+        512
+    );
 }
 
 fn database_url_expected_from_environment() -> PathBuf {

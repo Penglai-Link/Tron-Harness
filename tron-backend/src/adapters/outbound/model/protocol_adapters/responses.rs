@@ -1,8 +1,9 @@
 use serde_json::{Value, json};
 
 use crate::domain::agent::{
-    AgentModelConfig, AgentModelProtocol, ModelRequest, ModelResponse, ModelStreamEvent,
-    ModelTokenUsage, ToolCall, responses_input_item_json,
+    AgentMessage, AgentMessagePart, AgentModelConfig, AgentModelProtocol, ModelFinish,
+    ModelRequest, ModelResponse, ModelStreamEvent, ModelTokenUsage, ToolCall,
+    responses_function_call_item_json, responses_input_item_json,
 };
 
 use super::{content::*, registry::ModelProtocolAdapter, usage::parse_responses_usage};
@@ -97,12 +98,25 @@ fn responses_input_value(messages: &[crate::domain::agent::AgentMessage]) -> Val
         .filter(|message| !matches!(message.role.as_str(), "system" | "developer"))
         .collect::<Vec<_>>();
     if input_messages.len() == 1 && input_messages[0].role == "user" {
-        return json!(input_messages[0].content.as_str());
+        return json!(input_messages[0].text_content());
     }
     Value::Array(
         input_messages
             .into_iter()
-            .map(responses_input_item_json)
+            .flat_map(|message| {
+                let function_items = message
+                    .parts
+                    .iter()
+                    .filter_map(responses_function_call_item_json)
+                    .collect::<Vec<_>>();
+                let has_text = !message.plain_text_content().trim().is_empty();
+                let mut items = Vec::new();
+                if has_text || function_items.is_empty() {
+                    items.push(responses_input_item_json(message));
+                }
+                items.extend(function_items);
+                items
+            })
             .collect::<Vec<_>>(),
     )
 }
@@ -142,47 +156,57 @@ fn parse_responses_response(body: &Value) -> Option<ModelResponse> {
     let response_id = body.get("id").and_then(Value::as_str).map(str::to_owned);
     let token_usage = parse_responses_usage(body);
     if let Some(output) = body.get("output").and_then(Value::as_array) {
-        let tool_calls = output
-            .iter()
-            .filter_map(parse_responses_tool_call)
-            .collect::<Vec<_>>();
-        if !tool_calls.is_empty() {
-            return Some(ModelResponse::tool_calls_with_usage_and_response_id(
-                tool_calls,
-                token_usage,
-                response_id,
-            ));
-        }
-        let mut final_output = String::new();
+        let mut parts = Vec::new();
         for item in output {
+            if let Some(tool_call) = parse_responses_tool_call(item) {
+                parts.push(AgentMessagePart::ToolCall {
+                    call_id: tool_call.call_id,
+                    tool_name: tool_call.tool_name,
+                    input: tool_call.input,
+                });
+                continue;
+            }
             if item.get("type").and_then(Value::as_str) == Some("message")
                 && let Some(text) = item.get("content").and_then(text_from_content)
             {
-                final_output.push_str(&text);
+                parts.push(AgentMessagePart::Text { text });
+                continue;
+            }
+            if let Some(summary) = parse_responses_reasoning_summary(item) {
+                parts.push(AgentMessagePart::ReasoningSummary { text: summary });
             }
         }
-        if !final_output.is_empty() {
-            return Some(ModelResponse::final_output_with_usage_and_response_id(
-                final_output,
-                token_usage,
-                response_id,
-            ));
-        }
-        if let Some(text) = output
-            .iter()
-            .find_map(|item| item.get("content").and_then(text_from_content))
+        if parts.is_empty()
+            && let Some(text) = output
+                .iter()
+                .find_map(|item| item.get("content").and_then(text_from_content))
         {
-            return Some(ModelResponse::final_output_with_usage_and_response_id(
-                text,
+            parts.push(AgentMessagePart::Text { text });
+        }
+        let finish = if parts
+            .iter()
+            .any(|part| matches!(part, AgentMessagePart::ToolCall { .. }))
+        {
+            ModelFinish::ToolCalls
+        } else {
+            ModelFinish::Final
+        };
+        if !parts.is_empty() {
+            return Some(ModelResponse::from_assistant(
+                AgentMessage::new("assistant", parts),
+                finish,
                 token_usage,
+                None,
                 response_id,
             ));
         }
     }
     if let Some(text) = body.get("output_text").and_then(Value::as_str) {
-        return Some(ModelResponse::final_output_with_usage_and_response_id(
-            text,
+        return Some(ModelResponse::from_assistant(
+            AgentMessage::assistant(text),
+            ModelFinish::Final,
             token_usage,
+            None,
             response_id,
         ));
     }
@@ -212,4 +236,11 @@ fn parse_responses_tool_call(item: &Value) -> Option<ToolCall> {
         }
         _ => None,
     }
+}
+
+fn parse_responses_reasoning_summary(item: &Value) -> Option<String> {
+    if item.get("type").and_then(Value::as_str) != Some("reasoning") {
+        return None;
+    }
+    item.get("summary").and_then(text_from_content)
 }

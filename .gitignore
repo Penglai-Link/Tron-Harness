@@ -80,3 +80,6 @@ $RECYCLE.BIN/
 *.pyc
 electron/dist
 electron/resources
+
+docs/brainstorm/
+docs/features/

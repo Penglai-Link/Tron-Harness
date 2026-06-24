@@ -1,4 +1,6 @@
-use crate::shared::event_bus::EventBusConfig;
+use crate::{
+    application::short_term_memory::ShortTermMemoryConfig, shared::event_bus::EventBusConfig,
+};
 
 use super::{
     AppConfig, AuthConfig, DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS, DEFAULT_AUTH_DEV_OAUTH2_NAME,
@@ -31,6 +33,7 @@ impl Default for AppConfig {
             variable_crypto: VariableCryptoConfig::test_default(),
             http_clients: HttpClientProfilesConfig::default_profiles(),
             mineru: MineruConfig::default(),
+            short_term_memory: ShortTermMemoryConfig::default(),
             auth: AuthConfig {
                 jwt_secret: DEFAULT_AUTH_JWT_SECRET.into(),
                 access_token_ttl_seconds: DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS,

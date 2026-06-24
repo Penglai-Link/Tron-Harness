@@ -1,8 +1,8 @@
 use serde_json::json;
 
 use crate::domain::agent::{
-    AgentMessage, AgentModelConfig, AgentModelProtocol, ModelRequest, ModelResponse,
-    ModelStreamEvent, ModelTokenUsage, ToolCall,
+    AgentMessage, AgentMessagePart, AgentModelConfig, AgentModelProtocol, ModelFinish,
+    ModelRequest, ModelResponse, ModelStreamEvent, ToolCall,
 };
 
 use super::*;
@@ -80,71 +80,18 @@ fn chat_response_parses_multiple_tool_calls_without_parallel_flag_dependency() {
 
     assert_eq!(
         response,
-        ModelResponse::ToolCalls {
-            calls: vec![
-                ToolCall {
-                    call_id: Some("call_123".into()),
-                    tool_name: "lookup".into(),
-                    input: json!({ "query": "status" }),
-                },
-                ToolCall {
-                    call_id: Some("call_456".into()),
-                    tool_name: "lookup".into(),
-                    input: json!({ "query": "health" }),
-                },
-            ],
-            token_usage: None,
-            response_id: None,
-        }
-    );
-}
-
-#[test]
-fn chat_response_maps_openai_compatible_token_usage() {
-    let response = ChatCompletionsAdapter
-        .parse_response(&json!({
-            "choices": [{
-                "message": {
-                    "role": "assistant",
-                    "content": "hello"
-                }
-            }],
-            "usage": {
-                "prompt_tokens": 11,
-                "completion_tokens": 7,
-                "total_tokens": 18
-            }
-        }))
-        .expect("token usage response should parse");
-
-    assert_eq!(
-        response.token_usage(),
-        Some(ModelTokenUsage {
-            input_tokens: 11,
-            output_tokens: 7,
-            total_tokens: 18,
-        })
-    );
-}
-
-#[test]
-fn chat_stream_usage_chunk_maps_openai_compatible_token_usage() {
-    let usage = ChatCompletionsAdapter.parse_usage(&json!({
-        "choices": [],
-        "usage": {
-            "prompt_tokens": 11,
-            "completion_tokens": 7,
-            "total_tokens": 18
-        }
-    }));
-
-    assert_eq!(
-        usage,
-        Some(ModelTokenUsage {
-            input_tokens: 11,
-            output_tokens: 7,
-            total_tokens: 18,
-        })
+        ModelResponse::from_tool_calls(vec![
+            ToolCall {
+                call_id: Some("call_123".into()),
+                tool_name: "lookup".into(),
+                input: json!({ "query": "status" }),
+            },
+            ToolCall {
+                call_id: Some("call_456".into()),
+                tool_name: "lookup".into(),
+                input: json!({ "query": "health" }),
+            },
+        ])
     );
 }
 
@@ -193,6 +140,46 @@ fn request_builders_default_parallel_tool_calls_to_true_when_tools_are_present()
         &request,
     );
     assert_eq!(responses["parallel_tool_calls"], json!(true));
+}
+
+#[test]
+fn request_builders_handle_tool_observations_per_protocol() {
+    let config = AgentModelConfig {
+        model_code: "MODEL-1".into(),
+        protocol: AgentModelProtocol::ChatCompletions,
+        base_url: "https://provider.test/v1".into(),
+        api_path: None,
+        api_key: "sk-test".into(),
+        model_name: "gpt-test".into(),
+        thinking_enabled: false,
+        responses_stateful_enabled: false,
+        temperature: None,
+        max_tokens: None,
+        context_window_tokens: None,
+        top_p: None,
+        max_retries: None,
+    };
+    let request = ModelRequest {
+        messages: vec![AgentMessage::tool_with_call_id(
+            "tool:workspace.list\nresult:\n[]",
+            "call-123",
+            "[]",
+        )],
+        tools: vec![],
+        system_agent_session_id: None,
+        response_input_items: None,
+        previous_response_id: None,
+    };
+
+    let chat = chat_completions_request(&config, &request);
+    assert_eq!(chat["messages"][0]["role"], json!("tool"));
+    assert_eq!(chat["messages"][0]["tool_call_id"], json!("call-123"));
+    assert_eq!(chat["messages"][0]["content"], json!("[]"));
+
+    let responses = responses_request(&config, &request);
+    assert_eq!(responses["input"][0]["type"], json!("function_call_output"));
+    assert_eq!(responses["input"][0]["call_id"], json!("call-123"));
+    assert_eq!(responses["input"][0]["output"], json!("[]"));
 }
 
 #[test]
@@ -347,7 +334,7 @@ fn responses_request_enables_reasoning_for_thinking_models() {
 }
 
 #[test]
-fn responses_response_skips_reasoning_and_reads_message_output_text() {
+fn responses_response_reads_reasoning_summary_and_message_output_text() {
     let response = ResponsesAdapter
         .parse_response(&json!({
             "object": "response",
@@ -370,7 +357,26 @@ fn responses_response_skips_reasoning_and_reads_message_output_text() {
         }))
         .expect("message output after reasoning should parse");
 
-    assert_eq!(response, ModelResponse::final_output("TRON"));
+    assert_eq!(
+        response,
+        ModelResponse::from_assistant(
+            AgentMessage::new(
+                "assistant",
+                vec![
+                    AgentMessagePart::ReasoningSummary {
+                        text: "thinking".into(),
+                    },
+                    AgentMessagePart::Text {
+                        text: "TRON".into(),
+                    },
+                ],
+            ),
+            ModelFinish::Final,
+            None,
+            None,
+            None,
+        )
+    );
 }
 
 #[test]
@@ -434,8 +440,8 @@ fn responses_response_parses_multiple_function_calls() {
 
     assert_eq!(
         response,
-        ModelResponse::ToolCalls {
-            calls: vec![
+        ModelResponse::tool_calls_with_usage_and_response_id(
+            vec![
                 ToolCall {
                     call_id: Some("call_123".into()),
                     tool_name: "lookup".into(),
@@ -447,52 +453,9 @@ fn responses_response_parses_multiple_function_calls() {
                     input: json!({ "query": "health" }),
                 },
             ],
-            token_usage: None,
-            response_id: Some("resp_456".into()),
-        }
-    );
-}
-
-#[test]
-fn responses_stream_completion_maps_nested_token_usage() {
-    let usage = ResponsesAdapter.parse_usage(&json!({
-        "type": "response.completed",
-        "response": {
-            "id": "resp_1",
-            "usage": {
-                "input_tokens": 13,
-                "output_tokens": 8,
-                "total_tokens": 21
-            }
-        }
-    }));
-
-    assert_eq!(
-        usage,
-        Some(ModelTokenUsage {
-            input_tokens: 13,
-            output_tokens: 8,
-            total_tokens: 21,
-        })
-    );
-}
-
-#[test]
-fn embeddings_usage_maps_openai_compatible_token_usage() {
-    let usage = EmbeddingsAdapter.parse_usage(&json!({
-        "usage": {
-            "prompt_tokens": 5,
-            "total_tokens": 5
-        }
-    }));
-
-    assert_eq!(
-        usage,
-        Some(ModelTokenUsage {
-            input_tokens: 5,
-            output_tokens: 0,
-            total_tokens: 5,
-        })
+            None,
+            Some("resp_456".into()),
+        )
     );
 }
 

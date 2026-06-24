@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useCallback,
   useMemo,
   useRef,
   useState,
@@ -45,6 +46,13 @@ interface ServiceQueryOptions<T> {
   deps?: DependencyList;
   refreshKey?: unknown;
   select?: (payload: unknown) => T;
+}
+
+export interface ServiceQueryState<T> {
+  data: T;
+  loading: boolean;
+  error: Error | null;
+  retry: () => void;
 }
 
 const domainEnvKeys: Record<ServiceDomain, string> = {
@@ -115,7 +123,7 @@ function resolveEndpoint(endpoint: string, params?: EndpointParams) {
   };
 }
 
-export function useServiceQuery<T>({ apiInitialData, domain, enabled = true, endpoint, mockData, params, deps = [], refreshKey = 0, select = selectApiData<T> }: ServiceQueryOptions<T>): T {
+export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true, endpoint, mockData, params, deps = [], refreshKey = 0, select = selectApiData<T> }: ServiceQueryOptions<T>): ServiceQueryState<T> {
   const toast = useToast();
   const dataSource = getServiceDataSource(domain);
   const shouldUseMockData = dataSource === "mock";
@@ -123,6 +131,7 @@ export function useServiceQuery<T>({ apiInitialData, domain, enabled = true, end
   const apiInitialDataRef = useRef(apiInitialData);
   const mockDataRef = useRef(mockData);
   const selectRef = useRef(select);
+  const [retryKey, setRetryKey] = useState(0);
 
   apiInitialDataRef.current = apiInitialData;
   mockDataRef.current = mockData;
@@ -130,22 +139,32 @@ export function useServiceQuery<T>({ apiInitialData, domain, enabled = true, end
 
   const initialValue = useMemo(
     () => (shouldUseMockData ? mockDataRef.current() : apiInitialDataRef.current?.()) as T,
-    [shouldUseMockData, ...deps],
+    [refreshKey, shouldUseMockData, ...deps],
   );
   const [data, setData] = useState<T>(initialValue);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
   const paramsKey = JSON.stringify(params ?? {});
   const request = useMemo(() => resolveEndpoint(endpoint, params), [endpoint, paramsKey]);
+  const retry = useCallback(() => setRetryKey((value) => value + 1), []);
 
   useEffect(() => {
     lastFailureToastKey.current = null;
     setData(initialValue);
+    setError(null);
+    setLoading(false);
   }, [initialValue]);
 
   useEffect(() => {
-    if (dataSource !== "api" || !enabled) return;
+    if (dataSource !== "api" || !enabled) {
+      setLoading(false);
+      return;
+    }
 
     const controller = new AbortController();
     const accessToken = getApiAccessToken();
+    setLoading(true);
+    setError(null);
 
     fetch(request.url, {
       credentials: "include",
@@ -164,12 +183,16 @@ export function useServiceQuery<T>({ apiInitialData, domain, enabled = true, end
       .then((payload) => {
         lastFailureToastKey.current = null;
         setData(selectRef.current(payload));
+        setError(null);
+        setLoading(false);
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         const message = error instanceof Error
           ? error.message
           : `[services] API request failed for ${domain}.`;
+        setError(error instanceof Error ? error : new Error(message));
+        setLoading(false);
         const toastKey = `${request.method} ${request.url}: ${message}`;
         if (lastFailureToastKey.current === toastKey) return;
         lastFailureToastKey.current = toastKey;
@@ -179,7 +202,11 @@ export function useServiceQuery<T>({ apiInitialData, domain, enabled = true, end
       });
 
     return () => controller.abort();
-  }, [dataSource, domain, enabled, refreshKey, request.method, request.url, toast]);
+  }, [dataSource, domain, enabled, refreshKey, request.method, request.url, retryKey, toast]);
 
-  return data;
+  return { data, loading, error, retry };
+}
+
+export function useServiceQuery<T>(options: ServiceQueryOptions<T>): T {
+  return useServiceQueryState(options).data;
 }

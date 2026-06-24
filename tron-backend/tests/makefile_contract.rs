@@ -170,7 +170,9 @@ fn desktop_build_copies_only_current_platform_sidecar() {
     }
 
     assert!(
-        !makefile.contains("tron-backend.exe $(ELECTRON_DIR)/resources/binaries/tron-backend.exe || true"),
+        !makefile.contains(
+            "tron-backend.exe $(ELECTRON_DIR)/resources/binaries/tron-backend.exe || true"
+        ),
         "desktop-build must not unconditionally copy the Windows sidecar on non-Windows hosts",
     );
 }

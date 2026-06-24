@@ -5,23 +5,81 @@ use std::{
 };
 
 use crate::{
+    application::short_term_memory::{
+        ModelRequestTranscriptFacts, ModelResponseTranscriptFacts, ShortTermMemoryService,
+    },
     domain::agent::{
-        AgentError, AgentKind, AgentModelConfig, AgentRunContext, AgentRunResult,
-        ExpandedDomainPersistenceMode, ModelRequest, ModelResponse, ModelStreamEvent,
-        ModelStreamEventKind, ModelTokenUsage, ToolContextDelta, ToolExposureMode, ToolRegistry,
+        AgentError, AgentMessage, AgentModelConfig, AgentModelProtocol, AgentRunContext,
+        AgentRunResult, EffectiveTool, ModelRequest, ModelResponse, ModelStreamEvent,
+        ModelStreamEventKind, ModelTokenUsage, ToolRegistry,
     },
     shared::event_bus::{BusEventDraft, BusOutcome, BusRequestRef, EventBusHandle, PublishOutcome},
 };
 
 use super::{
-    DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, TurnStateAdapter, TurnStateKind,
-    discovery_expand_tool_definition,
+    TurnStateAdapter, TurnStateKind, request_estimate_snapshot, usage_audit_snapshot,
+    usage_event_payload,
 };
 
 #[path = "runtime_tool_calls.rs"]
 mod runtime_tool_calls;
 
+#[path = "runtime_helpers.rs"]
+mod runtime_helpers;
+
+#[path = "runtime_compaction.rs"]
+mod runtime_compaction;
+
+use runtime_helpers::{
+    agent_kind_label, compact_event_payload_value, compact_event_value, hash_text,
+    model_stream_delta_payloads, record_failure_on_short_term_memory_error,
+    short_term_memory_error, validate_context,
+};
+
 pub type ModelStreamSink = Arc<dyn Fn(ModelStreamEvent) + Send + Sync>;
+
+fn model_request_facts(
+    request: &ModelRequest,
+    context: &AgentRunContext,
+    prepared_context: &crate::application::short_term_memory::PreparedModelContext,
+    usage_estimate: crate::domain::agent::TokenEstimateSnapshot,
+) -> ModelRequestTranscriptFacts {
+    ModelRequestTranscriptFacts {
+        message_count: request.messages.len(),
+        part_count: request_message_part_count(&request.messages),
+        estimated_tokens: prepared_context.estimated_tokens,
+        message_hashes: request
+            .messages
+            .iter()
+            .map(|message| hash_text(&message.text_content()))
+            .collect(),
+        tool_schema_token_estimate: estimate_tool_schema_tokens(&request.tools),
+        protocol: protocol_code(context.model.protocol).into(),
+        previous_response_id_present: request.previous_response_id.is_some(),
+        context_window_estimate: context.model.context_window_tokens,
+        checkpoint_code: prepared_context.checkpoint_code.clone(),
+        usage_estimate: Some(usage_estimate),
+    }
+}
+
+fn request_message_part_count(messages: &[AgentMessage]) -> usize {
+    messages.iter().map(|message| message.parts.len()).sum()
+}
+
+fn estimate_tool_schema_tokens(tools: &[EffectiveTool]) -> u32 {
+    serde_json::to_string(tools)
+        .ok()
+        .map(|text| ((text.len() as u32).saturating_add(3)) / 4)
+        .unwrap_or(0)
+}
+
+fn protocol_code(protocol: AgentModelProtocol) -> &'static str {
+    match protocol {
+        AgentModelProtocol::ChatCompletions => "chatCompletions",
+        AgentModelProtocol::Responses => "responses",
+        AgentModelProtocol::Embeddings => "embeddings",
+    }
+}
 
 pub trait ModelClient: Send + Sync {
     fn generate<'a>(
@@ -38,10 +96,9 @@ pub trait ModelClient: Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
         Box::pin(async move {
             let response = self.generate(config, request).await?;
-            if let ModelResponse::FinalOutput { output, .. } = &response
-                && !output.is_empty()
-            {
-                sink(ModelStreamEvent::text_delta(output.clone()));
+            let output = response.output_text();
+            if response.finish == crate::domain::agent::ModelFinish::Final && !output.is_empty() {
+                sink(ModelStreamEvent::text_delta(output));
             }
             Ok(response)
         })
@@ -52,6 +109,7 @@ pub struct ReactAgentBuilder {
     model_client: Arc<dyn ModelClient>,
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
+    short_term_memory: Option<ShortTermMemoryService>,
 }
 
 impl ReactAgentBuilder {
@@ -64,7 +122,13 @@ impl ReactAgentBuilder {
             model_client,
             tool_registry,
             event_bus,
+            short_term_memory: None,
         }
+    }
+
+    pub fn with_short_term_memory(mut self, service: Option<ShortTermMemoryService>) -> Self {
+        self.short_term_memory = service;
+        self
     }
 
     pub fn build(self) -> Result<ReactAgent, AgentError> {
@@ -72,6 +136,7 @@ impl ReactAgentBuilder {
             model_client: self.model_client,
             tool_registry: self.tool_registry,
             event_bus: self.event_bus,
+            short_term_memory: self.short_term_memory,
         })
     }
 }
@@ -81,6 +146,7 @@ pub struct ReactAgent {
     model_client: Arc<dyn ModelClient>,
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
+    short_term_memory: Option<ShortTermMemoryService>,
 }
 
 impl ReactAgent {
@@ -104,7 +170,6 @@ impl ReactAgent {
         validate_context(&context)?;
         let mut turn_state = TurnStateAdapter::new(
             context.model.protocol,
-            context.messages.clone(),
             context.model.responses_stateful_enabled,
         );
         let turn_state_kind = turn_state.kind();
@@ -115,9 +180,15 @@ impl ReactAgent {
             Some("run_requested"),
         )?;
         self.publish(&context, "agent.run.started", BusOutcome::Started, None)?;
+        if let Some(short_term_memory) = self.short_term_memory.as_ref() {
+            short_term_memory
+                .record_run_started(context)
+                .map_err(short_term_memory_error)?;
+        }
         let mut step_count = 0;
         let mut tool_calls = 0;
         let mut token_usage: Option<ModelTokenUsage> = None;
+        let mut overflow_retries = 0;
 
         loop {
             if step_count >= context.limits.max_steps {
@@ -127,18 +198,89 @@ impl ReactAgent {
                     BusOutcome::Failure,
                     Some("max_steps_exceeded"),
                 )?;
+                self.record_short_term_memory_failure(context, "max_steps_exceeded")?;
                 return Err(AgentError::MaxStepsExceeded);
             }
             step_count += 1;
-            let request = turn_state.build_request(context);
-            self.publish(
+            let prepared_context = if let Some(short_term_memory) = self.short_term_memory.as_ref()
+            {
+                record_failure_on_short_term_memory_error(
+                    short_term_memory,
+                    context,
+                    "context_prepare_failed",
+                    short_term_memory.prepare_model_context(context),
+                )?
+            } else {
+                crate::application::short_term_memory::PreparedModelContext {
+                    messages: context.messages.clone(),
+                    rebased: false,
+                    context_hash: None,
+                    checkpoint_code: None,
+                    estimated_tokens: 0,
+                    message_token_estimate: 0,
+                    tool_schema_token_estimate: estimate_tool_schema_tokens(&context.tools),
+                    context_window_limit: context.model.context_window_tokens,
+                    effective_input_budget: None,
+                    output_token_reserve: context.model.max_tokens,
+                    protocol_overhead_reserve: None,
+                    safety_margin_tokens: None,
+                    over_budget: false,
+                }
+            };
+            if prepared_context.over_budget {
+                if self.try_auto_context_compaction(context).await? {
+                    continue;
+                }
+                self.publish(
+                    &context,
+                    "agent.run.failed",
+                    BusOutcome::Failure,
+                    Some("context_budget_exceeded"),
+                )?;
+                self.record_short_term_memory_failure(context, "context_budget_exceeded")?;
+                return Err(AgentError::InvalidConfiguration(
+                    "short-term memory context exceeded budget".into(),
+                ));
+            }
+            context.messages = prepared_context.messages.clone();
+            let request = turn_state.build_request(
+                context,
+                &context.messages,
+                prepared_context.rebased,
+                prepared_context.context_hash.as_deref(),
+            );
+            let request_estimate = request_estimate_snapshot(&request, context, &prepared_context);
+            self.publish_with_payload(
                 &context,
                 "agent.model.requested",
                 BusOutcome::Started,
                 Some("model_requested"),
+                usage_event_payload("usage_estimate_json", &request_estimate),
             )?;
+            if let Some(short_term_memory) = self.short_term_memory.as_ref() {
+                record_failure_on_short_term_memory_error(
+                    short_term_memory,
+                    context,
+                    "model_request_persist_failed",
+                    short_term_memory.record_model_requested(
+                        context,
+                        model_request_facts(
+                            &request,
+                            context,
+                            &prepared_context,
+                            request_estimate.clone(),
+                        ),
+                    ),
+                )?;
+            }
+            let output_started = Arc::new(Mutex::new(false));
             let response_result = if let Some(sink) = sink.clone() {
-                let stream_sink = self.model_stream_event_sink(context, sink, turn_state_kind);
+                let stream_sink = self.model_stream_event_sink(
+                    context,
+                    sink,
+                    turn_state_kind,
+                    Arc::clone(&output_started),
+                );
                 self.model_client
                     .generate_stream(&context.model, &request, stream_sink)
                     .await
@@ -148,35 +290,79 @@ impl ReactAgent {
             let response = match response_result {
                 Ok(response) => response,
                 Err(message) => {
+                    match self
+                        .try_recover_context_overflow(
+                            context,
+                            &message,
+                            &output_started,
+                            &mut overflow_retries,
+                        )
+                        .await
+                    {
+                        Ok(true) => continue,
+                        Ok(false) => {}
+                        Err(error) => {
+                            self.record_short_term_memory_failure(
+                                context,
+                                "context_overflow_recovery_failed",
+                            )?;
+                            return Err(error);
+                        }
+                    }
                     self.publish(
                         &context,
                         "agent.run.failed",
                         BusOutcome::Failure,
                         Some("model_failure"),
                     )?;
+                    self.record_short_term_memory_failure(context, "model_failure")?;
                     return Err(AgentError::ModelFailure(message));
                 }
             };
-            self.publish(
+            let next_token_usage = response.token_usage().map_or(token_usage, |usage| {
+                Some(match token_usage {
+                    Some(current) => current.add(usage),
+                    None => usage,
+                })
+            });
+            let usage_audit =
+                usage_audit_snapshot(request_estimate.clone(), &response, next_token_usage);
+            self.publish_with_payload(
                 &context,
                 "agent.model.responded",
                 BusOutcome::Completed,
                 Some("model_responded"),
+                usage_event_payload("usage_audit_json", &usage_audit),
             )?;
+            if let Some(short_term_memory) = self.short_term_memory.as_ref() {
+                record_failure_on_short_term_memory_error(
+                    short_term_memory,
+                    context,
+                    "assistant_message_persist_failed",
+                    short_term_memory.record_model_response_with_facts(
+                        context,
+                        &response,
+                        ModelResponseTranscriptFacts {
+                            usage_audit: Some(usage_audit.clone()),
+                        },
+                    ),
+                )?;
+            }
             if let Some(usage) = response.token_usage() {
                 token_usage = Some(match token_usage {
                     Some(current) => current.add(usage),
                     None => usage,
                 });
             }
-            turn_state.apply_model_response(&response);
+            if response.finish == crate::domain::agent::ModelFinish::ToolCalls
+                && !response.assistant.parts.is_empty()
+            {
+                context.messages.push(response.assistant.clone());
+            }
+            turn_state.apply_model_response(&response, context.messages.len());
 
-            match response {
-                ModelResponse::FinalOutput {
-                    output,
-                    system_agent_session_id,
-                    ..
-                } => {
+            match response.finish {
+                crate::domain::agent::ModelFinish::Final => {
                     self.publish(
                         &context,
                         "agent.output.created",
@@ -189,20 +375,38 @@ impl ReactAgent {
                         BusOutcome::Completed,
                         Some("run_completed"),
                     )?;
+                    if let Some(short_term_memory) = self.short_term_memory.as_ref() {
+                        record_failure_on_short_term_memory_error(
+                            short_term_memory,
+                            context,
+                            "run_completed_persist_failed",
+                            short_term_memory.record_run_completed(context),
+                        )?;
+                    }
                     return Ok(AgentRunResult {
                         run_code: context.run_code.clone(),
                         conversation_code: context.conversation_code.clone(),
                         workspace_code: context.workspace_code.clone(),
-                        final_output: output,
+                        final_output: response.output_text(),
                         step_count,
                         token_usage,
-                        system_agent_session_id,
+                        latest_request_estimate: Some(request_estimate),
+                        latest_usage_audit: Some(usage_audit),
+                        system_agent_session_id: response
+                            .system_agent_session_id()
+                            .map(str::to_string),
                         observations: context.observations.clone(),
                     });
                 }
-                ModelResponse::ToolCalls { calls, .. } => {
-                    self.execute_tool_calls(context, &mut tool_calls, &mut turn_state, calls)
-                        .await?;
+                crate::domain::agent::ModelFinish::ToolCalls => {
+                    let calls = response.tool_calls();
+                    if let Err(error) = self
+                        .execute_tool_calls(context, &mut tool_calls, &mut turn_state, calls)
+                        .await
+                    {
+                        self.record_short_term_memory_failure(context, "tool_failure")?;
+                        return Err(error);
+                    }
                 }
             }
         }
@@ -216,6 +420,19 @@ impl ReactAgent {
         summary: Option<&str>,
     ) -> Result<(), AgentError> {
         self.publish_with_payload(context, event_name, outcome, summary, Vec::new())
+    }
+
+    fn record_short_term_memory_failure(
+        &self,
+        context: &AgentRunContext,
+        reason: &str,
+    ) -> Result<(), AgentError> {
+        if let Some(short_term_memory) = self.short_term_memory.as_ref() {
+            short_term_memory
+                .record_run_failed(context, reason)
+                .map_err(short_term_memory_error)?;
+        }
+        Ok(())
     }
 
     fn publish_tool(
@@ -299,6 +516,7 @@ impl ReactAgent {
         context: &AgentRunContext,
         sink: ModelStreamSink,
         turn_state_kind: TurnStateKind,
+        output_started: Arc<Mutex<bool>>,
     ) -> ModelStreamSink {
         let event_bus = self.event_bus.clone();
         let run_code = context.run_code.clone();
@@ -312,7 +530,6 @@ impl ReactAgent {
             .model
             .context_window_tokens
             .map(|value| value.to_string());
-        let output_started = Arc::new(Mutex::new(false));
         Arc::new(move |event: ModelStreamEvent| {
             let event_name = turn_state_kind.stream_event_name(event.kind);
             if event.kind == ModelStreamEventKind::Text {
@@ -370,139 +587,4 @@ impl ReactAgent {
             sink(event);
         })
     }
-}
-
-fn agent_kind_label(agent_kind: AgentKind) -> &'static str {
-    match agent_kind {
-        AgentKind::React => "react",
-        AgentKind::SystemCli => "system_cli",
-    }
-}
-
-fn model_stream_delta_payloads(delta: &str) -> Vec<String> {
-    const MAX_DELTA_JSON_BYTES: usize = 90;
-    let mut payloads = Vec::new();
-    let mut current = String::new();
-
-    for character in delta.chars() {
-        let mut candidate = current.clone();
-        candidate.push(character);
-        let candidate_json = serde_json::to_string(&candidate).unwrap_or_else(|_| "\"\"".into());
-        if !current.is_empty() && candidate_json.len() > MAX_DELTA_JSON_BYTES {
-            payloads.push(serde_json::to_string(&current).unwrap_or_else(|_| "\"\"".into()));
-            current.clear();
-        }
-        current.push(character);
-    }
-
-    if !current.is_empty() {
-        payloads.push(serde_json::to_string(&current).unwrap_or_else(|_| "\"\"".into()));
-    }
-    payloads
-}
-
-fn compact_event_value(value: &str) -> String {
-    const LIMIT: usize = 96;
-    if value.len() <= LIMIT {
-        return value.to_string();
-    }
-
-    let mut end = LIMIT.saturating_sub(3);
-    while !value.is_char_boundary(end) {
-        end = end.saturating_sub(1);
-    }
-    format!("{}...", &value[..end])
-}
-
-fn compact_event_payload_value(value: &str) -> String {
-    const LIMIT: usize = 4096;
-    if value.len() <= LIMIT {
-        return value.to_string();
-    }
-
-    let marker = format!("\n...[truncated: original_bytes={}]", value.len());
-    let mut end = LIMIT.saturating_sub(marker.len());
-    while !value.is_char_boundary(end) {
-        end = end.saturating_sub(1);
-    }
-    format!("{}{}", &value[..end], marker)
-}
-
-fn validate_context(context: &AgentRunContext) -> Result<(), AgentError> {
-    if context.run_code.trim().is_empty() {
-        return Err(AgentError::InvalidConfiguration(
-            "runCode is required".into(),
-        ));
-    }
-    if context.workspace_code.trim().is_empty() {
-        return Err(AgentError::InvalidConfiguration(
-            "workspaceCode is required".into(),
-        ));
-    }
-    if context.model.model_name.trim().is_empty() {
-        return Err(AgentError::InvalidConfiguration(
-            "modelName is required".into(),
-        ));
-    }
-    if context.limits.max_steps == 0 {
-        return Err(AgentError::InvalidConfiguration(
-            "maxSteps must be greater than zero".into(),
-        ));
-    }
-    if context.limits.max_tool_calls == 0 {
-        return Err(AgentError::InvalidConfiguration(
-            "maxToolCalls must be greater than zero".into(),
-        ));
-    }
-    if context.limits.max_parallel_tool_calls == 0 {
-        return Err(AgentError::InvalidConfiguration(
-            "maxParallelToolCalls must be greater than zero".into(),
-        ));
-    }
-    Ok(())
-}
-fn apply_tool_context_delta(context: &mut AgentRunContext, delta: ToolContextDelta) {
-    if !delta.add_tools.is_empty() {
-        for tool in delta.add_tools {
-            if context
-                .tools
-                .iter()
-                .all(|existing| existing.tool_name != tool.tool_name)
-            {
-                context.tools.push(tool);
-            }
-        }
-    }
-    for domain_code in delta.expanded_domain_codes {
-        if context
-            .tool_exposure
-            .expanded_domain_codes
-            .iter()
-            .all(|existing| !existing.eq_ignore_ascii_case(&domain_code))
-        {
-            context
-                .tool_exposure
-                .expanded_domain_codes
-                .push(domain_code);
-        }
-    }
-}
-
-fn collapse_ephemeral_expanded_domains(context: &mut AgentRunContext, tool_name: &str) {
-    if context.tool_exposure.tool_exposure_mode != Some(ToolExposureMode::DomainDiscovery) {
-        return;
-    }
-    if context.tool_exposure.expanded_domain_persistence_mode
-        != Some(ExpandedDomainPersistenceMode::EphemeralExpanded)
-    {
-        return;
-    }
-    if context.tool_exposure.expanded_domain_codes.is_empty() {
-        return;
-    }
-    if tool_name == DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL {
-        return;
-    }
-    context.tools = vec![discovery_expand_tool_definition(&context.locale)];
-    context.tool_exposure.expanded_domain_codes.clear();
 }

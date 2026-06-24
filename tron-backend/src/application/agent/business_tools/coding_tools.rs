@@ -354,6 +354,7 @@ mod tests {
             },
             messages: vec![AgentMessage::user("hello")],
             observations: Vec::new(),
+            short_term_memory: None,
             started_at: "2026-06-04T00:00:00Z".into(),
         }
     }

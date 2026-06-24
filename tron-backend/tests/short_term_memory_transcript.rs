@@ -1,0 +1,4454 @@
+use std::{fs, path::Path, process::Command, sync::Arc};
+
+use serde_json::json;
+use tron_backend::{
+    adapters::outbound::persistence::{SqliteChatRepository, SqliteShortTermMemoryRepository},
+    application::{
+        chat::{ChatService, ChatSessionQuery, CreateChatSessionCommand},
+        short_term_memory::{
+            CreateCompactionCommand, GoalSessionCommand, ModelCompactionOutput,
+            ModelRequestTranscriptFacts, SetGoalCommand, ShortTermMemoryConfig,
+            ShortTermMemoryRepository, ShortTermMemoryService, TodoUpdateItem, ToolOutputConfig,
+            ToolTranscriptStatus,
+        },
+    },
+    domain::{
+        agent::{
+            AgentExecutionScope, AgentKind, AgentMessage, AgentMessagePart, AgentModelConfig,
+            AgentModelProtocol, AgentRunContext, AgentRunLimits, AgentShortTermMemoryRunContext,
+            EffectiveSkill, EffectiveTool, EffectiveVariable, ModelFinish, ModelResponse,
+            ModelTokenUsage, TokenEstimateSnapshot, TokenUsageAuditSnapshot, ToolCall,
+            ToolObservation,
+        },
+        chat::ChatSession,
+        short_term_memory::{
+            ShortTermMemoryCompaction, ShortTermMemoryError, ShortTermMemoryEvent,
+            ShortTermMemoryGoalEvent, ShortTermMemoryMessage, ShortTermMemoryPart,
+            ShortTermMemoryTodo, TodoPriority, TodoStatus,
+        },
+    },
+    shared::id::FixedSnowflakeIdProvider,
+    shared::time::current_timestamp,
+};
+
+#[test]
+fn transcript_service_records_todos_and_compaction() {
+    let database_url = temp_database_url("short-term-memory-transcript");
+    let chat_repository =
+        SqliteChatRepository::connect(&database_url).expect("chat repository should connect");
+    let chats = ChatService::new(chat_repository);
+    let session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("short-term memory".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("session should be created");
+    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("short-term memory repository should connect");
+    let artifact_root = temp_artifact_root("short-term-memory-tool-output");
+    let mut memory_config = ShortTermMemoryConfig::default();
+    memory_config.tool_output = ToolOutputConfig {
+        root: artifact_root.display().to_string(),
+        externalize_above_bytes: 8,
+    };
+    memory_config
+        .context
+        .blocks
+        .session_family_context
+        .max_ratio_bps = Some(10_000);
+    memory_config.context.family_context_max_chars = 12_000;
+    memory_config.family_load.default_snapshot_max_chars = 512;
+    let service = ShortTermMemoryService::with_id_provider(
+        repository,
+        memory_config,
+        Arc::new(FixedSnowflakeIdProvider::new(800_000_000_000_000_000)),
+    );
+
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "Track the implementation state")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: true,
+    });
+    service
+        .record_run_started(&context)
+        .expect("run start should be recorded");
+    service
+        .replace_todos(
+            &context,
+            vec![TodoUpdateItem {
+                todo_code: None,
+                position: 0,
+                content: "Verify transcript rows".into(),
+                status: "in_progress".into(),
+                priority: "high".into(),
+            }],
+        )
+        .expect("todo update should be recorded");
+    service
+        .record_model_response(
+            &context,
+            &ModelResponse::from_tool_calls(vec![ToolCall {
+                call_id: Some("call-1".into()),
+                tool_name: "todo.update".into(),
+                input: json!({"todos": []}),
+            }]),
+        )
+        .expect("tool call response should be recorded");
+    let large_output = "line-one\nline-two\nline-three";
+    let tool_message = service
+        .record_tool_result(
+            &context,
+            &ToolObservation {
+                tool_name: "shell.exec".into(),
+                output: large_output.into(),
+            },
+            Some("call-1".into()),
+            1,
+            ToolTranscriptStatus::Completed,
+        )
+        .expect("large tool output should be recorded");
+    let inline_tool_output = "rawtool";
+    service
+        .record_tool_result(
+            &context,
+            &ToolObservation {
+                tool_name: "shell.exec".into(),
+                output: inline_tool_output.into(),
+            },
+            Some("call-2".into()),
+            2,
+            ToolTranscriptStatus::Completed,
+        )
+        .expect("small inline tool output should be recorded");
+    let AgentMessagePart::ToolResult {
+        output,
+        externalized,
+        metadata,
+        ..
+    } = &tool_message.parts[0]
+    else {
+        panic!("tool result part should be returned");
+    };
+    assert!(*externalized);
+    assert!(output.contains("\"externalized\":true"));
+    let relative_path = metadata
+        .as_ref()
+        .and_then(|value| value.get("relativePath"))
+        .and_then(|value| value.as_str())
+        .expect("externalized result should include relative path");
+    let root_path = metadata
+        .as_ref()
+        .and_then(|value| value.get("rootPath"))
+        .and_then(|value| value.as_str())
+        .expect("externalized result should include root path");
+    assert_eq!(root_path, artifact_root.display().to_string());
+    assert!(output.contains("\"rootPath\""));
+    assert!(output.contains(root_path));
+    assert!(output.contains(relative_path));
+    assert!(!output.contains(large_output));
+    assert_eq!(
+        fs::read_to_string(artifact_root.join(relative_path))
+            .expect("externalized tool output should exist"),
+        large_output
+    );
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let (stored_text, stored_json): (String, String) = connection
+        .query_row(
+            "SELECT COALESCE(content_text, ''), content_json \
+             FROM agent_transcript_parts \
+             WHERE part_type = 'tool_result'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("tool result part should be persisted");
+    assert!(stored_text.contains("\"relativePath\""));
+    assert!(stored_text.contains("\"rootPath\""));
+    assert!(stored_text.contains(root_path));
+    assert!(stored_text.contains(relative_path));
+    assert!(stored_json.contains("\"externalized\":true"));
+    assert!(!stored_json.contains(large_output));
+    service
+        .record_model_response(
+            &context,
+            &ModelResponse::final_output_with_usage_and_session_and_response_id(
+                "Done",
+                Some(ModelTokenUsage {
+                    input_tokens: 10,
+                    output_tokens: 4,
+                    total_tokens: 14,
+                    cached_input_tokens: None,
+                    reasoning_tokens: None,
+                }),
+                None,
+                None,
+            ),
+        )
+        .expect("final output should be recorded");
+    service
+        .record_run_completed(&context)
+        .expect("run completion should be recorded");
+    let assistant_completed_count: i64 = connection
+        .query_row(
+            "SELECT count(1) FROM agent_transcript_events WHERE event_type = 'agent.message.assistant_completed'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("assistant completed event should be queryable");
+    assert_eq!(assistant_completed_count, 1);
+    let legacy_completed_count: i64 = connection
+        .query_row(
+            "SELECT count(1) FROM agent_transcript_events WHERE event_type = 'agent.message.completed'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("legacy assistant event should be queryable");
+    assert_eq!(legacy_completed_count, 0);
+    let family_snapshot_count: i64 = connection
+        .query_row(
+            "SELECT count(1) FROM agent_session_family_snapshots WHERE session_code = ?1 AND status = 'COMPLETED'",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("family snapshots should be queryable");
+    assert!(family_snapshot_count > 0);
+    let family_snapshot_summary: String = connection
+        .query_row(
+            "SELECT summary_markdown FROM agent_session_family_snapshots WHERE session_code = ?1 AND status = 'COMPLETED' ORDER BY id DESC LIMIT 1",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("family snapshot summary should be queryable");
+    assert!(family_snapshot_summary.contains("## Handoff Summary"));
+    assert!(family_snapshot_summary.contains("Raw transcript text"));
+    assert!(family_snapshot_summary.contains("raw reasoning are intentionally omitted"));
+    assert!(!family_snapshot_summary.contains("Track the implementation state"));
+    assert!(!family_snapshot_summary.contains(inline_tool_output));
+    assert!(!family_snapshot_summary.contains(large_output));
+
+    let todos = service
+        .list_todos(&session.session_code)
+        .expect("todos should load");
+    assert_eq!(todos.len(), 1);
+    assert_eq!(todos[0].content, "Verify transcript rows");
+
+    let compaction = create_stub_model_compaction(
+        &service,
+        CreateCompactionCommand {
+            session_code: session.session_code.clone(),
+            reason: Some("manual".into()),
+            note: None,
+            todo_enabled: None,
+        },
+        "## Goal\nTrack implementation state\n\n## Current State\nTodo remains active.\n\n## Tools And Results\nshell.exec output was captured.\n\n## Decisions\nUse model-generated checkpoint summary.",
+    );
+    assert_eq!(compaction.session_code, session.session_code);
+    assert!(compaction.source_end_seq >= compaction.source_start_seq);
+
+    let latest = service
+        .latest_compaction(&session.session_code)
+        .expect("latest compaction should load")
+        .expect("latest compaction should exist");
+    assert_eq!(
+        latest.checkpoint_message_code,
+        compaction.checkpoint_message_code
+    );
+    let compaction_summary: String = connection
+        .query_row(
+            "SELECT content_text FROM agent_transcript_parts WHERE message_code = ?1 AND part_type = 'compaction_summary'",
+            [compaction.checkpoint_message_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("compaction summary should be persisted");
+    assert!(compaction_summary.contains("## Goal"));
+    assert!(compaction_summary.contains("## Current State"));
+    assert!(compaction_summary.contains("## Tools And Results"));
+    assert!(compaction_summary.contains("Use model-generated checkpoint summary."));
+    assert!(!compaction_summary.contains("deterministic checkpoint pass"));
+    let prepared_after_compaction = service
+        .prepare_model_context(&context)
+        .expect("compaction summary should rehydrate into model context");
+    let rendered_after_compaction = prepared_after_compaction
+        .messages
+        .iter()
+        .map(AgentMessage::text_content)
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+    assert!(rendered_after_compaction.contains("Conversation checkpoint:"));
+    assert!(rendered_after_compaction.contains("## Goal"));
+    assert!(!rendered_after_compaction.contains("Previous conversation was compacted."));
+    let compaction_recent_count: i64 = connection
+        .query_row(
+            "SELECT count(1) FROM agent_transcript_parts WHERE message_code = ?1 AND part_type = 'compaction_recent'",
+            [compaction.checkpoint_message_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("compaction recent part should be queryable");
+    assert_eq!(compaction_recent_count, 1);
+    let compaction_started_count: i64 = connection
+        .query_row(
+            "SELECT count(1) FROM agent_transcript_events WHERE event_type = 'agent.compaction.started'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("compaction started event should be queryable");
+    assert!(compaction_started_count > 0);
+    let main_agent_message_count: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_messages
+             WHERE session_code = ?1
+               AND agent_code = 'main-agent'
+               AND message_type IN ('normal', 'tool_result')",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("agent code should be queryable");
+    assert!(main_agent_message_count > 0);
+    let second_compaction = create_stub_model_compaction(
+        &service,
+        CreateCompactionCommand {
+            session_code: session.session_code.clone(),
+            reason: Some("second manual".into()),
+            note: None,
+            todo_enabled: None,
+        },
+        "## Goal\nTrack implementation state\n\n## Critical Facts\nPrevious checkpoint summary:\nTrack implementation state\n\nPrevious retained recent transcript:\nshell.exec output was captured.\n\n## Decisions\nCarry prior checkpoint context forward.",
+    );
+    let second_compaction_summary: String = connection
+        .query_row(
+            "SELECT content_text FROM agent_transcript_parts WHERE message_code = ?1 AND part_type = 'compaction_summary'",
+            [second_compaction.checkpoint_message_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("second compaction summary should be persisted");
+    assert!(second_compaction_summary.contains("Previous checkpoint summary:"));
+    assert!(second_compaction_summary.contains("Previous retained recent transcript:"));
+    assert!(second_compaction_summary.contains("Carry prior checkpoint context forward."));
+    let todo_disabled_compaction = create_stub_model_compaction(
+        &service,
+        CreateCompactionCommand {
+            session_code: session.session_code.clone(),
+            reason: Some("todo-disabled".into()),
+            note: None,
+            todo_enabled: Some(false),
+        },
+        "## Goal\nTrack implementation state\n\n## Critical Facts\nPrevious checkpoint summary:\nTrack implementation state\n\nPrevious retained recent transcript:\nshell.exec output was captured.\n\n## Decisions\nTodo sections redacted.",
+    );
+    let todo_disabled_summary: String = connection
+        .query_row(
+            "SELECT content_text FROM agent_transcript_parts WHERE message_code = ?1 AND part_type = 'compaction_summary'",
+            [todo_disabled_compaction.checkpoint_message_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("todo-disabled compaction summary should be persisted");
+    assert!(todo_disabled_summary.contains("Previous checkpoint summary:"));
+    assert!(todo_disabled_summary.contains("Previous retained recent transcript:"));
+    assert!(!todo_disabled_summary.contains("## Current State"));
+    assert!(!todo_disabled_summary.contains("## Completed Work"));
+    assert!(!todo_disabled_summary.contains("Verify transcript rows"));
+    connection
+        .execute(
+            "INSERT INTO agent_transcript_messages (id, message_code, session_code, workspace_code, run_code, seq, role, message_type, status, created_at)
+             VALUES (900000000000000001, 'ATM-FAILED-LATEST', ?1, 'TRON_CORE', NULL, 999999, 'checkpoint', 'compaction', 'failed', 0)",
+            [session.session_code.as_str()],
+        )
+        .expect("failed compaction message should be insertable");
+    connection
+        .execute(
+            "INSERT INTO agent_transcript_parts (id, part_code, session_code, workspace_code, message_code, seq, part_type, status, content_text, content_json, visibility, created_at)
+             VALUES (900000000000000002, 'ATP-FAILED-LATEST', ?1, 'TRON_CORE', 'ATM-FAILED-LATEST', 1, 'compaction_summary', 'completed', 'failed checkpoint', '{\"sourceStartSeq\":1,\"sourceEndSeq\":999999,\"tailStartSeq\":999999,\"selectorVersion\":2,\"coverage\":\"full_source_includes_tail\"}', 'model', 0)",
+            [session.session_code.as_str()],
+        )
+        .expect("failed compaction part should be insertable");
+    let latest_after_failed = service
+        .latest_compaction(&session.session_code)
+        .expect("latest compaction should load after failed candidate")
+        .expect("completed compaction should still exist");
+    assert_eq!(
+        latest_after_failed.checkpoint_message_code,
+        todo_disabled_compaction.checkpoint_message_code
+    );
+
+    let second_session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("second short-term memory".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("second session should be created");
+    let mut second_context = base_context(&second_session.session_code);
+    second_context.run_code = "RUN-STMEM-2".into();
+    let second_input_code = service
+        .record_user_input(&second_context, "Continue the implementation")
+        .expect("second input should be recorded");
+    second_context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: second_session.session_code.clone(),
+        input_code: second_input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: true,
+    });
+    service
+        .record_run_started(&second_context)
+        .expect("second run start should upsert family membership");
+    service
+        .set_goal(SetGoalCommand {
+            session_code: second_session.session_code.clone(),
+            objective: "Finish the complete short-term memory design".into(),
+            max_runs: Some(5),
+            criteria: vec!["Family context is visible".into()],
+        })
+        .expect("goal should be set");
+    service
+        .replace_todos(
+            &second_context,
+            vec![
+                TodoUpdateItem {
+                    todo_code: Some("TODO-ACTIVE".into()),
+                    position: 0,
+                    content: "Inspect family context".into(),
+                    status: "in_progress".into(),
+                    priority: "high".into(),
+                },
+                TodoUpdateItem {
+                    todo_code: Some("TODO-DONE".into()),
+                    position: 1,
+                    content: "Do not inject completed todos".into(),
+                    status: "completed".into(),
+                    priority: "low".into(),
+                },
+            ],
+        )
+        .expect("mixed todo update should be recorded");
+    let active_state_session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("active state only".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("active-state session should be created");
+    let mut active_state_context = base_context(&active_state_session.session_code);
+    active_state_context.run_code = "RUN-STMEM-3".into();
+    let active_state_input_code = service
+        .record_user_input(&active_state_context, "Keep active state visible")
+        .expect("active-state input should be recorded");
+    active_state_context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: active_state_session.session_code.clone(),
+        input_code: active_state_input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: true,
+    });
+    service
+        .record_run_started(&active_state_context)
+        .expect("active-state run start should upsert family membership");
+    service
+        .set_goal(SetGoalCommand {
+            session_code: active_state_session.session_code.clone(),
+            objective: "Active state without snapshot".into(),
+            max_runs: Some(5),
+            criteria: vec!["Active state appears in family context".into()],
+        })
+        .expect("active-state goal should be set");
+    service
+        .replace_todos(
+            &active_state_context,
+            vec![TodoUpdateItem {
+                todo_code: Some("TODO-ACTIVE-STATE".into()),
+                position: 0,
+                content: "Carry active state without snapshot".into(),
+                status: "in_progress".into(),
+                priority: "medium".into(),
+            }],
+        )
+        .expect("active-state todos should be recorded");
+    let judge_input = service
+        .prepare_goal_judge_input(
+            &second_session.session_code,
+            &second_context.run_code,
+            "Continue with the next concrete implementation step.",
+            1,
+        )
+        .expect("goal judge input should prepare")
+        .expect("active goal should produce judge input");
+    let judge_response = ModelResponse::final_output(
+        r#"{"verdict":"CONTINUE","reason":"active todo remains","completionEvidence":[],"missingEvidence":["active todo remains"],"requiredUserInput":null,"nextStepHint":"carry active state","continuationPrompt":"Continue with the next concrete implementation step."}"#,
+    );
+    let judge_output = service
+        .model_goal_judge_output(&judge_response)
+        .expect("goal judge output should parse");
+    let decision = service
+        .commit_goal_judge_decision(
+            judge_input,
+            judge_output,
+            &second_context.model,
+            &judge_response,
+        )
+        .expect("goal judge decision should commit");
+    assert_eq!(decision.verdict, "CONTINUE");
+    let continuation_prompt = decision
+        .continuation_prompt
+        .expect("continue verdict should create a continuation prompt");
+    second_context.run_code = "RUN-STMEM-CONTINUATION".into();
+    let continuation_input = service
+        .record_invocation_input(
+            &second_context,
+            &continuation_prompt,
+            "CONTINUATION",
+            Some(json!({"goalCode": decision.goal_code, "source": "GOAL_LOOP"})),
+        )
+        .expect("continuation input should be recorded");
+    let (input_kind, input_metadata): (String, String) = connection
+        .query_row(
+            "SELECT input_kind, metadata_json FROM agent_transcript_inputs WHERE input_code = ?1",
+            [continuation_input.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("continuation input should be persisted");
+    assert_eq!(input_kind, "CONTINUATION");
+    assert!(input_metadata.contains("GOAL_LOOP"));
+    let continuation_user_message_count: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_messages
+             WHERE session_code = ?1
+               AND run_code = ?2
+               AND role = 'user'
+               AND message_type = 'normal'",
+            [
+                second_session.session_code.as_str(),
+                second_context.run_code.as_str(),
+            ],
+            |row| row.get(0),
+        )
+        .expect("continuation transcript messages should be queryable");
+    assert_eq!(continuation_user_message_count, 0);
+    let (continuation_event_source, continuation_event_payload, continuation_event_message_code): (
+        String,
+        String,
+        Option<String>,
+    ) = connection
+        .query_row(
+            "SELECT event_source, payload_json, message_code FROM agent_transcript_events WHERE input_code = ?1 AND event_type = 'agent.input.consumed'",
+            [continuation_input.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("continuation input event should be persisted");
+    assert_eq!(continuation_event_source, "RUNTIME");
+    assert!(continuation_event_payload.contains("GOAL_LOOP"));
+    assert!(continuation_event_payload.contains("runtime_context_block"));
+    assert!(continuation_event_message_code.is_none());
+    let prepared = service
+        .prepare_model_context(&second_context)
+        .expect("prepared context should load family and goal state");
+    let rendered = prepared
+        .messages
+        .iter()
+        .map(AgentMessage::text_content)
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+    assert!(rendered.contains("<session-family-context>"));
+    assert!(rendered.contains("<load-plan total_token_budget=\""));
+    assert!(rendered.contains("token_budget="));
+    assert!(rendered.contains("## Handoff Summary"));
+    assert!(rendered.contains("Raw transcript text"));
+    assert!(!rendered.contains("Track the implementation state"));
+    assert!(!rendered.contains(inline_tool_output));
+    assert!(rendered.contains("<current-session-working-state>"));
+    assert!(rendered.contains("Finish the complete short-term memory design"));
+    assert!(rendered.contains("Inspect family context"));
+    assert!(!rendered.contains("Do not inject completed todos"));
+    let non_expiring_snapshot_count: i64 = connection
+        .query_row(
+            "SELECT count(1) FROM agent_session_family_snapshots WHERE session_code = ?1 AND expires_at IS NOT NULL",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("snapshot expiration should be queryable");
+    assert!(non_expiring_snapshot_count > 0);
+    connection
+        .execute(
+            "UPDATE agent_session_family_snapshots SET expires_at = 0 WHERE session_code = ?1",
+            [session.session_code.as_str()],
+        )
+        .expect("snapshot should be markable as expired");
+    let rendered_after_expiry = service
+        .prepare_model_context(&second_context)
+        .expect("prepared context should skip expired snapshots")
+        .messages
+        .iter()
+        .map(AgentMessage::text_content)
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+    assert!(!rendered_after_expiry.contains("Track the implementation state"));
+    assert!(rendered_after_expiry.contains("Active state without snapshot"));
+    service
+        .record_model_requested(
+            &second_context,
+            ModelRequestTranscriptFacts {
+                message_count: prepared.messages.len(),
+                part_count: prepared
+                    .messages
+                    .iter()
+                    .map(|message| message.parts.len())
+                    .sum(),
+                estimated_tokens: prepared.estimated_tokens,
+                message_hashes: vec!["hash".into(); prepared.messages.len()],
+                tool_schema_token_estimate: 12,
+                protocol: "chatCompletions".into(),
+                previous_response_id_present: false,
+                context_window_estimate: Some(8_192),
+                checkpoint_code: prepared.checkpoint_code.clone(),
+                usage_estimate: None,
+            },
+        )
+        .expect("model request event should be recorded");
+    let model_requested_payload: String = connection
+        .query_row(
+            "SELECT payload_json FROM agent_transcript_events WHERE session_code = ?1 AND event_type = 'agent.model.requested' ORDER BY id DESC LIMIT 1",
+            [second_session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("model request event payload should be persisted");
+    assert!(model_requested_payload.contains("\"partCount\""));
+    assert!(model_requested_payload.contains("\"toolSchemaTokenEstimate\":12"));
+    assert!(model_requested_payload.contains("\"protocol\":\"chatCompletions\""));
+    assert!(model_requested_payload.contains("\"previousResponseIdPresent\":false"));
+    assert!(model_requested_payload.contains("\"contextWindowEstimate\":8192"));
+    assert!(model_requested_payload.contains("\"checkpointCode\""));
+    let context_epoch_snapshot: String = connection
+        .query_row(
+            "SELECT snapshot_json FROM agent_transcript_context_epochs WHERE session_code = ?1 ORDER BY revision DESC LIMIT 1",
+            [second_session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("context epoch should be persisted");
+    assert!(context_epoch_snapshot.contains("promptPrefix"));
+    assert!(context_epoch_snapshot.contains("budgetPlan"));
+    assert!(context_epoch_snapshot.contains("policyHash"));
+    let context_event_count: i64 = connection
+        .query_row(
+            "SELECT count(1) FROM agent_transcript_events WHERE session_code = ?1 AND event_type IN ('agent.context.baseline_created', 'agent.context.assembled', 'agent.model.requested')",
+            [second_session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("context events should be queryable");
+    assert!(context_event_count >= 3);
+
+    let heartbeat_session = service
+        .ensure_heartbeat_session("TRON_CORE", "main-agent")
+        .expect("heartbeat hidden session should be ensured");
+    let (heartbeat_source, heartbeat_visibility): (String, String) = connection
+        .query_row(
+            "SELECT source, visibility FROM chat_sessions WHERE session_code = ?1",
+            [heartbeat_session.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("heartbeat session should be queryable");
+    assert_eq!(heartbeat_source, "HEARTBEAT");
+    assert_eq!(heartbeat_visibility, "HIDDEN");
+    let visible_groups = chats
+        .list_session_groups(ChatSessionQuery {
+            workspace_code: Some("TRON_CORE".into()),
+        })
+        .expect("visible session groups should load");
+    assert!(
+        !visible_groups
+            .iter()
+            .flat_map(|group| group.sessions.iter())
+            .any(|session| session.session_code == heartbeat_session),
+        "hidden heartbeat sessions must not appear in normal chat lists"
+    );
+
+    service
+        .recover_goal_state_on_startup()
+        .expect("recovery should pause ambiguous in-flight goals");
+    let recovered_goal_status: String = connection
+        .query_row(
+            "SELECT status FROM agent_session_goals WHERE session_code = ?1 ORDER BY updated_at DESC LIMIT 1",
+            [second_session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("recovered goal should be queryable");
+    assert_eq!(recovered_goal_status, "PAUSED");
+    let recovery_event_count: i64 = connection
+        .query_row(
+            "SELECT count(1) FROM agent_session_goal_events WHERE session_code = ?1 AND event_kind = 'RECOVERY_REQUIRED'",
+            [second_session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("recovery goal event should be queryable");
+    assert_eq!(recovery_event_count, 1);
+}
+
+#[test]
+fn family_snapshot_failure_is_bounded_and_does_not_fail_run_completion() {
+    let database_url = temp_database_url("short-term-memory-family-failure");
+    let chat_repository =
+        SqliteChatRepository::connect(&database_url).expect("chat repository should connect");
+    let chats = ChatService::new(chat_repository);
+    let session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("family failure".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("session should be created");
+    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("short-term memory repository should connect");
+    let service = ShortTermMemoryService::new(repository, ShortTermMemoryConfig::default());
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "Do not block completion on snapshot failure")
+        .expect("input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: true,
+    });
+    service
+        .record_run_started(&context)
+        .expect("run start should create family membership");
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    connection
+        .execute_batch(
+            "CREATE TRIGGER fail_completed_family_snapshot
+             BEFORE INSERT ON agent_session_family_snapshots
+             WHEN NEW.status = 'COMPLETED'
+             BEGIN
+               SELECT RAISE(ABORT, 'completed snapshot blocked');
+             END;",
+        )
+        .expect("failure trigger should be installable");
+
+    service
+        .record_run_completed(&context)
+        .expect("snapshot failure should not fail run completion");
+
+    let failed_snapshot_count: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_session_family_snapshots
+             WHERE session_code = ?1
+               AND status = 'FAILED'
+               AND error_code = 'SNAPSHOT_WRITE_FAILED'",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("failed snapshot evidence should be queryable");
+    assert!(failed_snapshot_count > 0);
+    let failure_event_count: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_events
+             WHERE session_code = ?1
+               AND event_type = 'agent.session_family.snapshot_failed'",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("snapshot failure event should be queryable");
+    assert_eq!(failure_event_count, 1);
+}
+
+#[test]
+fn goal_continuation_admission_rechecks_active_goal_state() {
+    let database_url = temp_database_url("short-term-memory-goal-admission");
+    let session = create_test_session(&database_url, "goal admission");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let goal = service
+        .set_goal(SetGoalCommand {
+            session_code: session.session_code.clone(),
+            objective: "Continue only while active".into(),
+            criteria: vec!["second admission check passes".into()],
+            max_runs: Some(3),
+        })
+        .expect("goal should be set");
+
+    assert!(
+        service
+            .should_admit_goal_continuation(&session.session_code, &goal.goal.goal_code)
+            .expect("active goal admission should be queryable")
+    );
+
+    service
+        .pause_goal(GoalSessionCommand {
+            session_code: session.session_code.clone(),
+            goal_code: Some(goal.goal.goal_code.clone()),
+        })
+        .expect("goal should pause");
+
+    assert!(
+        !service
+            .should_admit_goal_continuation(&session.session_code, &goal.goal.goal_code)
+            .expect("paused goal admission should be queryable")
+    );
+}
+
+#[test]
+fn family_context_deduplicates_sessions_across_families_and_counts_wrapper_budget() {
+    let database_url = temp_database_url("short-term-memory-family-dedupe");
+    let prior_session = create_test_session(&database_url, "prior family context");
+    let mut config = ShortTermMemoryConfig::default();
+    config.context.family_context_max_chars = 900;
+    config.family_load.default_snapshot_max_chars = 500;
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        config.clone(),
+    );
+
+    let mut prior_context = base_context(&prior_session.session_code);
+    prior_context.execution_scope.task_code = Some("TASK-FAMILY-DEDUPE".into());
+    let prior_input = service
+        .record_user_input(&prior_context, "build a dedupe family snapshot")
+        .expect("prior input should be recorded");
+    prior_context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: prior_session.session_code.clone(),
+        input_code: prior_input,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    service
+        .record_run_started(&prior_context)
+        .expect("prior memberships should be recorded");
+    service
+        .record_model_response(
+            &prior_context,
+            &ModelResponse::final_output(format!(
+                "family dedupe marker {}",
+                "large snapshot body ".repeat(80)
+            )),
+        )
+        .expect("prior response should be recorded");
+    service
+        .record_run_completed(&prior_context)
+        .expect("prior snapshots should be recorded");
+
+    let current_session = create_test_session(&database_url, "current family context");
+    let mut current_context = base_context(&current_session.session_code);
+    current_context.run_code = "RUN-FAMILY-DEDUPE-CURRENT".into();
+    current_context.execution_scope.task_code = Some("TASK-FAMILY-DEDUPE".into());
+    current_context.model.context_window_tokens = Some(4_000);
+    current_context.model.max_tokens = Some(0);
+    let current_input = service
+        .record_user_input(&current_context, "load deduped family context")
+        .expect("current input should be recorded");
+    current_context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: current_session.session_code.clone(),
+        input_code: current_input,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    service
+        .record_run_started(&current_context)
+        .expect("current memberships should be recorded");
+
+    let messages = service
+        .prepare_model_context(&current_context)
+        .expect("family context should prepare")
+        .messages;
+    let rendered = messages
+        .iter()
+        .map(AgentMessage::text_content)
+        .collect::<Vec<_>>()
+        .join("\n");
+    let family_context = messages
+        .iter()
+        .map(AgentMessage::text_content)
+        .find(|message| message.contains("<session-family-context>"))
+        .expect("family context message should be present");
+
+    assert!(rendered.contains("<session-family-context>"));
+    assert_eq!(rendered.matches(&prior_session.session_code).count(), 1);
+    assert!(
+        family_context.len() <= config.context.family_context_max_chars,
+        "family context should count wrappers inside the configured max chars"
+    );
+}
+
+#[test]
+fn schema_guard_backfills_legacy_short_term_memory_columns() {
+    let database_url = temp_database_url("short-term-memory-schema-guard");
+    {
+        let connection =
+            rusqlite::Connection::open(&database_url).expect("legacy database should open");
+        connection
+            .execute_batch(
+                "CREATE TABLE agent_transcript_parts (
+                    id INTEGER PRIMARY KEY,
+                    part_code TEXT NOT NULL UNIQUE,
+                    message_code TEXT NOT NULL,
+                    seq INTEGER NOT NULL,
+                    part_type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    content_text TEXT,
+                    content_json TEXT,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE TABLE agent_transcript_messages (
+                    id INTEGER PRIMARY KEY,
+                    message_code TEXT NOT NULL UNIQUE,
+                    session_code TEXT NOT NULL,
+                    seq INTEGER NOT NULL,
+                    role TEXT NOT NULL,
+                    message_type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE TABLE agent_transcript_context_epochs (
+                    id INTEGER PRIMARY KEY,
+                    epoch_code TEXT NOT NULL UNIQUE,
+                    session_code TEXT NOT NULL,
+                    workspace_code TEXT NOT NULL,
+                    baseline_seq INTEGER NOT NULL,
+                    snapshot_json TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );",
+            )
+            .expect("legacy stm tables should be creatable");
+    }
+
+    SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("schema guard should backfill legacy stm columns");
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let part_columns = table_columns(&connection, "agent_transcript_parts");
+    assert!(part_columns.contains(&"session_code".to_string()));
+    assert!(part_columns.contains(&"workspace_code".to_string()));
+    assert!(part_columns.contains(&"provider_metadata_json".to_string()));
+    assert!(part_columns.contains(&"visibility".to_string()));
+    assert!(part_columns.contains(&"completed_at".to_string()));
+    let message_columns = table_columns(&connection, "agent_transcript_messages");
+    assert!(message_columns.contains(&"workspace_code".to_string()));
+    let epoch_columns = table_columns(&connection, "agent_transcript_context_epochs");
+    assert!(epoch_columns.contains(&"replacement_seq".to_string()));
+    assert!(epoch_columns.contains(&"prompt_prefix_hash".to_string()));
+    assert!(epoch_columns.contains(&"revision".to_string()));
+    assert!(epoch_columns.contains(&"updated_at".to_string()));
+}
+
+#[test]
+fn schema_guard_resequences_legacy_goal_events_after_event_seq_backfill() {
+    let database_url = temp_database_url("short-term-memory-goal-event-seq-backfill");
+    let session = create_test_session(&database_url, "goal event seq backfill");
+    {
+        let connection =
+            rusqlite::Connection::open(&database_url).expect("legacy database should open");
+        connection
+            .execute_batch(&format!(
+                "CREATE TABLE agent_session_goals (
+                    id INTEGER PRIMARY KEY,
+                    goal_code TEXT NOT NULL UNIQUE,
+                    session_code TEXT NOT NULL,
+                    workspace_code TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    revision INTEGER NOT NULL DEFAULT 0,
+                    last_input_code TEXT,
+                    updated_at INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE agent_session_goal_events (
+                    id INTEGER PRIMARY KEY,
+                    event_code TEXT NOT NULL UNIQUE,
+                    goal_code TEXT NOT NULL,
+                    session_code TEXT NOT NULL,
+                    workspace_code TEXT NOT NULL,
+                    event_kind TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                INSERT INTO agent_session_goals
+                (id, goal_code, session_code, workspace_code, status, revision, last_input_code, updated_at)
+                VALUES
+                  (1, 'GOAL-1', '{}', 'TRON_CORE', 'PAUSED', 0, NULL, 1);
+                INSERT INTO agent_session_goal_events
+                (id, event_code, goal_code, session_code, workspace_code, event_kind, created_at)
+                VALUES
+                  (1, 'GOALEVENT-1', 'GOAL-1', '{}', 'TRON_CORE', 'GOAL_SET', 1),
+                  (2, 'GOALEVENT-2', 'GOAL-1', '{}', 'TRON_CORE', 'JUDGE_VERDICT', 2);",
+                session.session_code, session.session_code, session.session_code
+            ))
+            .expect("legacy goal events should be creatable");
+    }
+
+    SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("legacy goal event_seq should be backfilled and repaired");
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let sequences = {
+        let mut statement = connection
+            .prepare(
+                "SELECT event_seq
+                 FROM agent_session_goal_events
+                 WHERE goal_code = 'GOAL-1'
+                 ORDER BY id ASC",
+            )
+            .expect("goal event seq query should prepare");
+        statement
+            .query_map([], |row| row.get::<_, i64>(0))
+            .expect("goal event seq query should run")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("goal event seq rows should map")
+    };
+    assert_eq!(sequences, vec![1, 2]);
+    assert!(index_exists(
+        &connection,
+        "idx_agent_session_goal_events_goal_seq"
+    ));
+}
+
+#[test]
+fn schema_guard_repairs_legacy_transcript_ownership_and_drops_unowned_rows() {
+    let database_url = temp_database_url("short-term-memory-legacy-owner-repair");
+    let session = create_test_session(&database_url, "legacy owner repair");
+    {
+        let connection =
+            rusqlite::Connection::open(&database_url).expect("legacy database should open");
+        connection
+            .execute_batch(&format!(
+                "CREATE TABLE agent_transcript_messages (
+                    id INTEGER PRIMARY KEY,
+                    message_code TEXT NOT NULL UNIQUE,
+                    session_code TEXT NOT NULL,
+                    seq INTEGER NOT NULL,
+                    role TEXT NOT NULL,
+                    message_type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE TABLE agent_transcript_parts (
+                    id INTEGER PRIMARY KEY,
+                    part_code TEXT NOT NULL UNIQUE,
+                    message_code TEXT NOT NULL,
+                    seq INTEGER NOT NULL,
+                    part_type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    content_text TEXT,
+                    content_json TEXT,
+                    created_at INTEGER NOT NULL
+                );
+                INSERT INTO agent_transcript_messages
+                (id, message_code, session_code, seq, role, message_type, status, created_at)
+                VALUES
+                  (1, 'ATM-LEGACY', '{}', 1, 'user', 'normal', 'completed', 1);
+                INSERT INTO agent_transcript_parts
+                (id, part_code, message_code, seq, part_type, status, content_text, content_json, created_at)
+                VALUES
+                  (1, 'ATP-OWNED', 'ATM-LEGACY', 1, 'text', 'completed', 'owned text', NULL, 1),
+                  (2, 'ATP-ORPHAN', 'ATM-MISSING', 1, 'text', 'completed', 'orphan text', NULL, 1);",
+                session.session_code
+            ))
+            .expect("legacy transcript rows should be creatable");
+    }
+
+    SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("legacy owner fields should be repaired");
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let (part_session, part_workspace): (String, String) = connection
+        .query_row(
+            "SELECT session_code, workspace_code
+             FROM agent_transcript_parts
+             WHERE part_code = 'ATP-OWNED'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("owned legacy part should remain");
+    assert_eq!(part_session, session.session_code);
+    assert_eq!(part_workspace, "TRON_CORE");
+    let orphan_count: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_parts
+             WHERE part_code = 'ATP-ORPHAN'
+                OR session_code = ''
+                OR workspace_code = ''",
+            [],
+            |row| row.get(0),
+        )
+        .expect("orphan count should be queryable");
+    assert_eq!(orphan_count, 0);
+}
+
+#[test]
+fn schema_initialization_rolls_back_partial_backfills_when_validation_fails() {
+    let database_url = temp_database_url("short-term-memory-init-rollback");
+    {
+        let connection =
+            rusqlite::Connection::open(&database_url).expect("legacy database should open");
+        connection
+            .execute_batch(
+                "CREATE TABLE agent_transcript_context_epochs (
+                    id INTEGER PRIMARY KEY,
+                    epoch_code TEXT NOT NULL UNIQUE,
+                    session_code TEXT NOT NULL,
+                    workspace_code TEXT NOT NULL,
+                    baseline_seq INTEGER NOT NULL,
+                    replacement_seq TEXT NOT NULL,
+                    snapshot_json TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );",
+            )
+            .expect("drifted legacy table should be creatable");
+    }
+
+    let error = match SqliteShortTermMemoryRepository::connect(&database_url) {
+        Ok(_) => panic!("drifted schema should fail validation"),
+        Err(error) => error,
+    };
+    assert_eq!(error, ShortTermMemoryError::StorageFailure);
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let columns = table_columns(&connection, "agent_transcript_context_epochs");
+    assert!(
+        !columns.contains(&"revision".to_string()),
+        "failed initialization should not leave backfilled columns behind"
+    );
+    assert!(
+        !table_exists(&connection, "agent_transcript_inputs"),
+        "failed initialization should roll back STM migration tables"
+    );
+}
+
+#[test]
+fn schema_guard_validates_required_indexes_and_tables() {
+    let database_url = temp_database_url("short-term-memory-schema-required");
+    SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("fresh short-term memory schema should validate");
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    for table in [
+        "agent_transcript_inputs",
+        "agent_transcript_events",
+        "agent_transcript_messages",
+        "agent_transcript_parts",
+        "agent_transcript_context_epochs",
+        "agent_session_todos",
+        "agent_session_families",
+        "agent_session_family_members",
+        "agent_session_family_snapshots",
+        "agent_session_goals",
+        "agent_session_goal_criteria",
+        "agent_session_goal_events",
+    ] {
+        assert!(table_exists(&connection, table), "{table} should exist");
+    }
+    for index in [
+        "idx_agent_transcript_inputs_session_idempotency",
+        "idx_agent_transcript_events_session_seq",
+        "idx_agent_transcript_events_session_seq_unique",
+        "idx_agent_transcript_messages_session_seq",
+        "idx_agent_transcript_messages_session_seq_unique",
+        "idx_agent_transcript_parts_message_seq",
+        "idx_agent_transcript_parts_message_seq_unique",
+        "idx_agent_transcript_context_epochs_session_revision",
+        "idx_agent_transcript_context_epochs_session_revision_unique",
+        "idx_agent_session_todos_session_position",
+        "idx_agent_session_family_members_session_enabled",
+        "idx_agent_session_family_snapshots_family_status",
+        "idx_agent_session_goals_one_open",
+        "idx_agent_session_goal_criteria_goal_position",
+        "idx_agent_session_goal_events_goal_seq",
+        "idx_agent_session_todos_session_todo_code",
+        "idx_agent_session_run_leases_session",
+        "idx_agent_session_run_leases_run",
+    ] {
+        assert!(index_exists(&connection, index), "{index} should exist");
+    }
+    let context_epoch_index_sql: String = connection
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_agent_transcript_context_epochs_session_revision_unique'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("context epoch unique index should be queryable");
+    assert!(context_epoch_index_sql.starts_with("CREATE UNIQUE INDEX"));
+    for index in [
+        "idx_agent_transcript_events_session_seq_unique",
+        "idx_agent_transcript_messages_session_seq_unique",
+        "idx_agent_transcript_parts_message_seq_unique",
+        "idx_agent_session_todos_session_position",
+        "idx_agent_session_todos_session_todo_code",
+        "idx_agent_session_goal_criteria_goal_position",
+        "idx_agent_session_goal_events_goal_seq",
+        "idx_agent_session_run_leases_session",
+        "idx_agent_session_run_leases_run",
+    ] {
+        let index_sql: String = connection
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = ?1",
+                [index],
+                |row| row.get(0),
+            )
+            .expect("transcript unique index should be queryable");
+        assert!(
+            index_sql.starts_with("CREATE UNIQUE INDEX"),
+            "{index} should be unique"
+        );
+    }
+    let input_idempotency_index_sql: String = connection
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_agent_transcript_inputs_session_idempotency'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("input idempotency index should be queryable");
+    assert!(input_idempotency_index_sql.contains("CREATE UNIQUE INDEX"));
+    assert!(input_idempotency_index_sql.contains("idempotency_key IS NOT NULL"));
+}
+
+#[test]
+fn schema_guard_rejects_drifted_required_index_definitions() {
+    let database_url = temp_database_url("short-term-memory-schema-drifted-index");
+    SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("fresh short-term memory schema should validate");
+    {
+        let connection =
+            rusqlite::Connection::open(&database_url).expect("database should be queryable");
+        connection
+            .execute_batch(
+                "DROP INDEX idx_agent_session_goals_one_open;
+                 CREATE INDEX idx_agent_session_goals_one_open
+                 ON agent_session_goals (session_code);",
+            )
+            .expect("test should be able to create drifted same-name index");
+    }
+
+    let error = match SqliteShortTermMemoryRepository::connect(&database_url) {
+        Ok(_) => panic!("drifted goal open index should fail schema validation"),
+        Err(error) => error,
+    };
+
+    assert_eq!(error, ShortTermMemoryError::StorageFailure);
+}
+
+#[test]
+fn schema_guard_rejects_orphan_json_and_invalid_enum_rows() {
+    for (label, mutation) in [
+        (
+            "orphan-part",
+            "INSERT INTO agent_transcript_parts
+             (id, part_code, session_code, workspace_code, message_code, seq, part_type, status, content_text, content_json, visibility, created_at, completed_at)
+             VALUES
+             (910100000000000001, 'ATP-ORPHAN', 'CHAT-1', 'TRON_CORE', 'ATM-MISSING', 1, 'text', 'completed', 'orphan', NULL, 'model', 1, 1);",
+        ),
+        (
+            "bad-json",
+            "INSERT INTO agent_transcript_messages
+             (id, message_code, session_code, workspace_code, run_code, seq, role, message_type, status, created_at, completed_at)
+             VALUES
+             (910100000000000002, 'ATM-BAD-JSON', 'CHAT-1', 'TRON_CORE', NULL, 100, 'assistant', 'normal', 'completed', 1, 1);
+             INSERT INTO agent_transcript_parts
+             (id, part_code, session_code, workspace_code, message_code, seq, part_type, status, content_text, content_json, visibility, created_at, completed_at)
+             VALUES
+             (910100000000000003, 'ATP-BAD-JSON', 'CHAT-1', 'TRON_CORE', 'ATM-BAD-JSON', 1, 'context', 'completed', 'bad json', '{not-json', 'model', 1, 1);",
+        ),
+        (
+            "invalid-enum",
+            "INSERT INTO agent_transcript_messages
+             (id, message_code, session_code, workspace_code, run_code, seq, role, message_type, status, created_at, completed_at)
+             VALUES
+             (910100000000000004, 'ATM-BAD-ENUM', 'CHAT-1', 'TRON_CORE', NULL, 100, 'alien', 'normal', 'completed', 1, 1);",
+        ),
+    ] {
+        let database_url = temp_database_url(&format!("short-term-memory-schema-guard-{label}"));
+        let session = create_test_session(&database_url, "schema guard invalid row");
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("fresh schema should initialize before corruption");
+        {
+            let connection =
+                rusqlite::Connection::open(&database_url).expect("database should be queryable");
+            connection
+                .execute_batch(&mutation.replace("CHAT-1", &session.session_code))
+                .expect("test corruption should be insertable");
+        }
+
+        let error = match SqliteShortTermMemoryRepository::connect(&database_url) {
+            Ok(_) => panic!("invalid {label} row should fail schema validation"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error, ShortTermMemoryError::StorageFailure);
+    }
+}
+
+#[test]
+fn schema_guard_rejects_legacy_duplicate_transcript_sequences() {
+    for (label, ddl) in [
+        (
+            "events",
+            "CREATE TABLE agent_transcript_events (
+                id INTEGER PRIMARY KEY,
+                event_code TEXT NOT NULL UNIQUE,
+                session_code TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                input_code TEXT,
+                event_type TEXT NOT NULL,
+                event_source TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                occurred_at INTEGER NOT NULL,
+                created_at INTEGER NOT NULL
+             );
+             INSERT INTO agent_transcript_events (id, event_code, session_code, seq, input_code, event_type, event_source, payload_json, occurred_at, created_at)
+             VALUES
+               (1, 'ATE-1', 'CHAT-1', 7, NULL, 'agent.run.started', 'RUNTIME', '{}', 1, 1),
+               (2, 'ATE-2', 'CHAT-1', 7, NULL, 'agent.run.completed', 'RUNTIME', '{}', 2, 2);",
+        ),
+        (
+            "messages",
+            "CREATE TABLE agent_transcript_messages (
+                id INTEGER PRIMARY KEY,
+                message_code TEXT NOT NULL UNIQUE,
+                session_code TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                message_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+             );
+             INSERT INTO agent_transcript_messages (id, message_code, session_code, seq, role, message_type, status, created_at)
+             VALUES
+               (1, 'ATM-1', 'CHAT-1', 9, 'assistant', 'normal', 'completed', 1),
+               (2, 'ATM-2', 'CHAT-1', 9, 'assistant', 'normal', 'completed', 2);",
+        ),
+        (
+            "parts",
+            "CREATE TABLE agent_transcript_messages (
+                id INTEGER PRIMARY KEY,
+                message_code TEXT NOT NULL UNIQUE,
+                session_code TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                role TEXT NOT NULL,
+                message_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+             );
+             INSERT INTO agent_transcript_messages (id, message_code, session_code, seq, role, message_type, status, created_at)
+             VALUES (10, 'ATM-1', 'CHAT-1', 8, 'assistant', 'normal', 'completed', 1);
+             CREATE TABLE agent_transcript_parts (
+                id INTEGER PRIMARY KEY,
+                part_code TEXT NOT NULL UNIQUE,
+                message_code TEXT NOT NULL,
+                seq INTEGER NOT NULL,
+                part_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                content_text TEXT,
+                content_json TEXT,
+                created_at INTEGER NOT NULL
+             );
+             INSERT INTO agent_transcript_parts (id, part_code, message_code, seq, part_type, status, content_text, content_json, created_at)
+             VALUES
+               (1, 'ATP-1', 'ATM-1', 1, 'text', 'completed', 'first', NULL, 1),
+               (2, 'ATP-2', 'ATM-1', 1, 'text', 'completed', 'second', NULL, 2);",
+        ),
+    ] {
+        let database_url = temp_database_url(&format!(
+            "short-term-memory-legacy-duplicate-{label}"
+        ));
+        let session = create_test_session(&database_url, "legacy duplicate transcript");
+        let ddl = ddl.replace("CHAT-1", &session.session_code);
+        {
+            let connection =
+                rusqlite::Connection::open(&database_url).expect("legacy database should open");
+            connection
+                .execute_batch(&ddl)
+                .expect("legacy duplicate table should be creatable");
+        }
+
+        let error = match SqliteShortTermMemoryRepository::connect(&database_url) {
+            Ok(_) => panic!("legacy duplicate {label} sequences should fail schema validation"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error, ShortTermMemoryError::StorageFailure);
+    }
+}
+
+#[test]
+fn schema_guard_rejects_legacy_duplicate_working_state_uniques() {
+    for (label, ddl) in [
+        (
+            "todos-position",
+            "CREATE TABLE agent_session_todos (
+                id INTEGER PRIMARY KEY,
+                todo_code TEXT NOT NULL,
+                session_code TEXT NOT NULL,
+                workspace_code TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                content TEXT NOT NULL,
+                status TEXT NOT NULL,
+                priority TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+             );
+             INSERT INTO agent_session_todos
+             (id, todo_code, session_code, workspace_code, position, content, status, priority, created_at, updated_at)
+             VALUES
+               (1, 'TODO-1', 'CHAT-1', 'TRON_CORE', 0, 'first', 'pending', 'medium', 1, 1),
+               (2, 'TODO-2', 'CHAT-1', 'TRON_CORE', 0, 'second', 'pending', 'medium', 1, 1);",
+        ),
+        (
+            "goal-criteria-position",
+            "CREATE TABLE agent_session_goal_criteria (
+                id INTEGER PRIMARY KEY,
+                criterion_code TEXT NOT NULL UNIQUE,
+                goal_code TEXT NOT NULL,
+                session_code TEXT NOT NULL,
+                position INTEGER NOT NULL,
+                text TEXT NOT NULL,
+                status TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+             );
+             INSERT INTO agent_session_goal_criteria
+             (id, criterion_code, goal_code, session_code, position, text, status, created_at, updated_at)
+             VALUES
+               (1, 'CRIT-1', 'GOAL-1', 'CHAT-1', 0, 'first', 'pending', 1, 1),
+               (2, 'CRIT-2', 'GOAL-1', 'CHAT-1', 0, 'second', 'pending', 1, 1);",
+        ),
+        (
+            "goal-events-seq",
+            "CREATE TABLE agent_session_goal_events (
+                id INTEGER PRIMARY KEY,
+                event_code TEXT NOT NULL UNIQUE,
+                goal_code TEXT NOT NULL,
+                session_code TEXT NOT NULL,
+                workspace_code TEXT NOT NULL,
+                event_kind TEXT NOT NULL,
+                event_seq INTEGER NOT NULL,
+                created_at INTEGER NOT NULL
+             );
+             INSERT INTO agent_session_goal_events
+             (id, event_code, goal_code, session_code, workspace_code, event_kind, event_seq, created_at)
+             VALUES
+               (1, 'GE-1', 'GOAL-1', 'CHAT-1', 'TRON_CORE', 'CREATED', 1, 1),
+               (2, 'GE-2', 'GOAL-1', 'CHAT-1', 'TRON_CORE', 'UPDATED', 1, 1);",
+        ),
+    ] {
+        let database_url = temp_database_url(&format!(
+            "short-term-memory-legacy-working-state-duplicate-{label}"
+        ));
+        let session = create_test_session(&database_url, "legacy duplicate working state");
+        let ddl = ddl.replace("CHAT-1", &session.session_code);
+        {
+            let connection =
+                rusqlite::Connection::open(&database_url).expect("legacy database should open");
+            connection
+                .execute_batch(&ddl)
+                .expect("legacy duplicate working-state table should be creatable");
+        }
+
+        let error = match SqliteShortTermMemoryRepository::connect(&database_url) {
+            Ok(_) => panic!("legacy duplicate {label} rows should fail schema validation"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error, ShortTermMemoryError::StorageFailure);
+    }
+}
+
+#[test]
+fn schema_backfill_reassigns_context_epoch_revisions_before_unique_index() {
+    let database_url = temp_database_url("short-term-memory-legacy-context-revisions");
+    let session = create_test_session(&database_url, "legacy context revisions");
+    {
+        let connection =
+            rusqlite::Connection::open(&database_url).expect("legacy database should open");
+        connection
+            .execute_batch(&format!(
+                "CREATE TABLE agent_transcript_context_epochs (
+                    id INTEGER PRIMARY KEY,
+                    epoch_code TEXT NOT NULL UNIQUE,
+                    session_code TEXT NOT NULL,
+                    workspace_code TEXT NOT NULL,
+                    baseline_seq INTEGER NOT NULL,
+                    snapshot_json TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                INSERT INTO agent_transcript_context_epochs
+                (id, epoch_code, session_code, workspace_code, baseline_seq, snapshot_json, created_at)
+                VALUES
+                  (1, 'ATCE-OLD-1', '{}', 'TRON_CORE', 1, '{{}}', 10),
+                  (2, 'ATCE-OLD-2', '{}', 'TRON_CORE', 2, '{{}}', 20);",
+                session.session_code, session.session_code
+            ))
+            .expect("legacy context epoch rows should be creatable");
+    }
+
+    SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("legacy context epoch revisions should be repaired before validation");
+
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let revisions = connection
+        .prepare(
+            "SELECT revision
+             FROM agent_transcript_context_epochs
+             WHERE session_code = ?1
+             ORDER BY created_at ASC, id ASC",
+        )
+        .expect("context epoch revisions should be selectable")
+        .query_map([session.session_code.as_str()], |row| row.get::<_, i64>(0))
+        .expect("context epoch revisions should be queryable")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("context epoch revisions should be readable");
+    assert_eq!(revisions, vec![1, 2]);
+    let unique_index_sql: String = connection
+        .query_row(
+            "SELECT sql
+             FROM sqlite_master
+             WHERE type = 'index'
+               AND name = 'idx_agent_transcript_context_epochs_session_revision_unique'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("context epoch unique index should exist");
+    assert!(unique_index_sql.starts_with("CREATE UNIQUE INDEX"));
+}
+
+#[test]
+fn transcript_input_idempotency_reuses_existing_input() {
+    let database_url = temp_database_url("short-term-memory-input-idempotency");
+    let session = create_test_session(&database_url, "input idempotency");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let mut context = base_context(&session.session_code);
+
+    let first = service
+        .record_user_input(&context, "same user input")
+        .expect("first user input should be recorded");
+    let second = service
+        .record_user_input(&context, "same user input")
+        .expect("duplicate user input should reuse the first row");
+    assert_eq!(first, second);
+
+    context.run_code = "RUN-STMEM-CONTINUATION-A".into();
+    let continuation_a = service
+        .record_invocation_input(
+            &context,
+            "Continue the active goal.",
+            "CONTINUATION",
+            Some(json!({"source": "GOAL_LOOP", "goalCode": "GOAL-1"})),
+        )
+        .expect("first continuation should be recorded");
+    let continuation_a_retry = service
+        .record_invocation_input(
+            &context,
+            "Continue the active goal.",
+            "CONTINUATION",
+            Some(json!({"source": "GOAL_LOOP", "goalCode": "GOAL-1"})),
+        )
+        .expect("same continuation run should reuse the first row");
+    assert_eq!(continuation_a, continuation_a_retry);
+
+    context.run_code = "RUN-STMEM-CONTINUATION-B".into();
+    context.request_id = Some("REQ-STMEM-CONTINUATION-B".into());
+    let continuation_b = service
+        .record_invocation_input(
+            &context,
+            "Continue the active goal.",
+            "CONTINUATION",
+            Some(json!({"source": "GOAL_LOOP", "goalCode": "GOAL-1"})),
+        )
+        .expect("new continuation run should be recorded");
+    assert_ne!(continuation_a, continuation_b);
+
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let user_created_events: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_events
+             WHERE input_code = ?1
+               AND event_type = 'agent.message.user_created'",
+            [first.as_str()],
+            |row| row.get(0),
+        )
+        .expect("user created event count should be queryable");
+    assert_eq!(user_created_events, 1);
+    let (input_count, user_message_count, continuation_count): (i64, i64, i64) = connection
+        .query_row(
+            "SELECT
+                (SELECT count(1) FROM agent_transcript_inputs WHERE session_code = ?1),
+                (SELECT count(1) FROM agent_transcript_messages WHERE session_code = ?1 AND role = 'user'),
+                (SELECT count(1) FROM agent_transcript_inputs WHERE session_code = ?1 AND input_kind = 'CONTINUATION')",
+            [session.session_code.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("idempotent input counts should be queryable");
+    assert_eq!(input_count, 3);
+    assert_eq!(user_message_count, 1);
+    assert_eq!(continuation_count, 2);
+}
+
+#[test]
+fn repository_rejects_todo_workspace_mismatch_inside_transaction() {
+    let database_url = temp_database_url("short-term-memory-todo-workspace-mismatch");
+    let session = create_test_session(&database_url, "todo workspace mismatch");
+    let mut repository = SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("short-term memory repository should connect");
+    let now = current_timestamp();
+    let todo = ShortTermMemoryTodo {
+        id: 0,
+        todo_code: "TODO-WORKSPACE-MISMATCH".into(),
+        session_code: session.session_code.clone(),
+        workspace_code: "TRON_CORE".into(),
+        position: 0,
+        content: "must not write under the wrong workspace".into(),
+        status: TodoStatus::Pending,
+        priority: TodoPriority::Medium,
+        created_by_run_code: None,
+        updated_by_run_code: None,
+        created_at: now.clone(),
+        updated_at: now,
+    };
+
+    let error = repository
+        .replace_todos(&session.session_code, "OTHER_WORKSPACE", &[todo])
+        .expect_err("workspace mismatch should fail inside repository transaction");
+
+    assert_eq!(error, ShortTermMemoryError::StorageFailure);
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let todo_count: i64 = connection
+        .query_row(
+            "SELECT count(1) FROM agent_session_todos WHERE session_code = ?1",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("todo count should be queryable");
+    assert_eq!(todo_count, 0);
+}
+
+#[test]
+fn concurrent_input_writes_allocate_unique_ids_inside_repository_transactions() {
+    let database_url = temp_database_url("short-term-memory-input-id-concurrent");
+    let first_session = create_test_session(&database_url, "input id first");
+    let second_session = create_test_session(&database_url, "input id second");
+    let barrier = Arc::new(std::sync::Barrier::new(2));
+    let handles = [
+        (first_session.session_code.clone(), 100_000_i64),
+        (second_session.session_code.clone(), 200_000_i64),
+    ]
+    .into_iter()
+    .map(|(session_code, id_seed)| {
+        let database_url = database_url.clone();
+        let barrier = Arc::clone(&barrier);
+        std::thread::spawn(move || {
+            let service = ShortTermMemoryService::with_id_provider(
+                SqliteShortTermMemoryRepository::connect(&database_url)
+                    .expect("short-term memory repository should connect"),
+                ShortTermMemoryConfig::default(),
+                Arc::new(FixedSnowflakeIdProvider::new(id_seed)),
+            );
+            let mut context = base_context(&session_code);
+            context.run_code = format!("RUN-INPUT-{id_seed}");
+            context.request_id = Some(format!("REQ-INPUT-{id_seed}"));
+            barrier.wait();
+            service
+                .record_user_input(&context, &format!("concurrent input {id_seed}"))
+                .expect("input should be recorded")
+        })
+    })
+    .collect::<Vec<_>>();
+    for handle in handles {
+        handle.join().expect("input writer should finish");
+    }
+
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let (input_count, distinct_ids): (i64, i64) = connection
+        .query_row(
+            "SELECT count(1), count(DISTINCT id)
+             FROM agent_transcript_inputs
+             WHERE session_code IN (?1, ?2)",
+            [
+                first_session.session_code.as_str(),
+                second_session.session_code.as_str(),
+            ],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("input ids should be queryable");
+    assert_eq!(input_count, 2);
+    assert_eq!(distinct_ids, 2);
+}
+
+#[test]
+fn message_with_event_transaction_rolls_back_on_event_insert_failure() {
+    let database_url = temp_database_url("short-term-memory-message-event-rollback");
+    let chats = ChatService::new(
+        SqliteChatRepository::connect(&database_url).expect("chat repository should connect"),
+    );
+    let session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("rollback".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("session should be created");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "rollback input")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    connection
+        .execute_batch(
+            "CREATE TRIGGER fail_assistant_completed_event
+             BEFORE INSERT ON agent_transcript_events
+             WHEN NEW.event_type = 'agent.message.assistant_completed'
+             BEGIN
+               SELECT RAISE(ABORT, 'assistant event blocked');
+             END;",
+        )
+        .expect("event failure trigger should be installable");
+
+    let result = service.record_model_response(
+        &context,
+        &ModelResponse::final_output("assistant row must roll back"),
+    );
+
+    assert!(matches!(result, Err(ShortTermMemoryError::StorageFailure)));
+    let assistant_messages: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_messages
+             WHERE session_code = ?1
+               AND role = 'assistant'
+               AND message_type = 'normal'",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("assistant message count should be queryable");
+    assert_eq!(assistant_messages, 0);
+    let responded_events: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_events
+             WHERE session_code = ?1
+               AND event_type = 'agent.model.responded'",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("model responded event count should be queryable");
+    assert_eq!(responded_events, 0);
+}
+
+#[test]
+fn context_epoch_revision_is_unique_under_concurrent_prepare() {
+    let database_url = temp_database_url("short-term-memory-context-epoch-concurrent");
+    let chats = ChatService::new(
+        SqliteChatRepository::connect(&database_url).expect("chat repository should connect"),
+    );
+    let session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("context epoch concurrent".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("session should be created");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let mut context = base_context(&session.session_code);
+    context.tools.clear();
+    let input_code = service
+        .record_user_input(&context, "prepare concurrently")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+
+    let handles = (0..6)
+        .map(|index| {
+            let service = service.clone();
+            let mut context = context.clone();
+            context.run_code = format!("RUN-CONTEXT-EPOCH-{index}");
+            std::thread::spawn(move || {
+                service
+                    .prepare_model_context(&context)
+                    .expect("context prepare should succeed");
+            })
+        })
+        .collect::<Vec<_>>();
+    for handle in handles {
+        handle.join().expect("prepare thread should finish");
+    }
+
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let (row_count, distinct_revisions): (i64, i64) = connection
+        .query_row(
+            "SELECT count(1), count(DISTINCT revision)
+             FROM agent_transcript_context_epochs
+             WHERE session_code = ?1",
+            [session.session_code.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("context epoch revisions should be queryable");
+    assert_eq!(row_count, 6);
+    assert_eq!(distinct_revisions, 6);
+}
+
+#[test]
+fn goal_storage_rejects_second_open_goal_and_preserves_existing_goal() {
+    let database_url = temp_database_url("short-term-memory-goal-conflict");
+    let chats = ChatService::new(
+        SqliteChatRepository::connect(&database_url).expect("chat repository should connect"),
+    );
+    let session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("goal conflict".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("session should be created");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+
+    service
+        .set_goal(SetGoalCommand {
+            session_code: session.session_code.clone(),
+            objective: "Keep the original goal".into(),
+            max_runs: Some(3),
+            criteria: vec!["criterion one".into()],
+        })
+        .expect("first goal should be created");
+    let conflict = service
+        .set_goal(SetGoalCommand {
+            session_code: session.session_code.clone(),
+            objective: "Reject this second goal".into(),
+            max_runs: Some(3),
+            criteria: Vec::new(),
+        })
+        .expect_err("second open goal should conflict");
+
+    assert_eq!(conflict, ShortTermMemoryError::GoalConflict);
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let (goal_count, objective): (i64, String) = connection
+        .query_row(
+            "SELECT count(1), max(objective_markdown)
+             FROM agent_session_goals
+             WHERE session_code = ?1",
+            [session.session_code.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("goal rows should be queryable");
+    assert_eq!(goal_count, 1);
+    assert_eq!(objective, "Keep the original goal");
+}
+
+#[test]
+fn goal_update_rejects_stale_revision_and_preserves_current_state() {
+    let database_url = temp_database_url("short-term-memory-goal-revision-conflict");
+    let chats = ChatService::new(
+        SqliteChatRepository::connect(&database_url).expect("chat repository should connect"),
+    );
+    let session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("goal revision conflict".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("session should be created");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let created = service
+        .set_goal(SetGoalCommand {
+            session_code: session.session_code.clone(),
+            objective: "Keep revision safe".into(),
+            max_runs: Some(3),
+            criteria: vec!["criterion one".into()],
+        })
+        .expect("goal should be created");
+    let mut repository = SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("short-term memory repository should reconnect");
+    let stale = repository
+        .get_active_goal(&session.session_code)
+        .expect("active goal should load")
+        .expect("active goal should exist");
+    let expected_revision = stale.goal.revision;
+
+    let mut first = stale.clone();
+    first.goal.status = "PAUSED".into();
+    first.goal.revision = expected_revision + 1;
+    first.goal.updated_at = current_timestamp();
+    let first_event = test_goal_event(&first.goal, "GOAL_PAUSED");
+    repository
+        .update_goal(
+            &first.goal,
+            &first.criteria,
+            &first_event,
+            expected_revision,
+        )
+        .expect("first update should win");
+
+    let mut second = stale;
+    second.goal.status = "BLOCKED".into();
+    second.goal.revision = expected_revision + 1;
+    second.goal.updated_at = current_timestamp();
+    let second_event = test_goal_event(&second.goal, "GOAL_BLOCKED");
+    let error = repository
+        .update_goal(
+            &second.goal,
+            &second.criteria,
+            &second_event,
+            expected_revision,
+        )
+        .expect_err("stale update must conflict");
+
+    assert_eq!(error, ShortTermMemoryError::GoalStateConflict);
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let (status, revision): (String, i64) = connection
+        .query_row(
+            "SELECT status, revision FROM agent_session_goals WHERE goal_code = ?1",
+            [created.goal.goal_code.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("goal row should be queryable");
+    assert_eq!(status, "PAUSED");
+    assert_eq!(revision, expected_revision + 1);
+    let blocked_events: i64 = connection
+        .query_row(
+            "SELECT count(1) FROM agent_session_goal_events WHERE goal_code = ?1 AND event_kind = 'GOAL_BLOCKED'",
+            [created.goal.goal_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("goal event rows should be queryable");
+    assert_eq!(blocked_events, 0);
+}
+
+fn test_goal_event(
+    goal: &tron_backend::domain::short_term_memory::ShortTermMemoryGoal,
+    event_kind: &str,
+) -> ShortTermMemoryGoalEvent {
+    ShortTermMemoryGoalEvent {
+        id: 0,
+        event_code: String::new(),
+        goal_code: goal.goal_code.clone(),
+        session_code: goal.session_code.clone(),
+        workspace_code: goal.workspace_code.clone(),
+        run_code: None,
+        input_code: None,
+        event_kind: event_kind.into(),
+        event_seq: 0,
+        summary: Some(event_kind.to_string()),
+        payload_json: Some(json!({"source": "test"})),
+        created_at: current_timestamp(),
+    }
+}
+
+#[test]
+fn assistant_response_persists_reasoning_summary_and_enforces_raw_reasoning_policy() {
+    let default_database_url = temp_database_url("short-term-memory-reasoning-summary");
+    let default_session = create_test_session(&default_database_url, "reasoning summary");
+    let default_service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&default_database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let mut default_context = base_context(&default_session.session_code);
+    let default_input = default_service
+        .record_user_input(&default_context, "reasoning default")
+        .expect("user input should be recorded");
+    default_context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: default_session.session_code.clone(),
+        input_code: default_input,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    default_service
+        .record_model_response(&default_context, &reasoning_response())
+        .expect("assistant response should persist summary");
+    let default_connection =
+        rusqlite::Connection::open(&default_database_url).expect("database should be queryable");
+    assert_eq!(
+        part_type_count(
+            &default_connection,
+            &default_session.session_code,
+            "reasoning_summary",
+        ),
+        1
+    );
+    assert_eq!(
+        part_type_count(
+            &default_connection,
+            &default_session.session_code,
+            "reasoning"
+        ),
+        0
+    );
+
+    let raw_database_url = temp_database_url("short-term-memory-reasoning-raw");
+    let raw_session = create_test_session(&raw_database_url, "reasoning raw");
+    let mut raw_config = ShortTermMemoryConfig::default();
+    raw_config.compaction.reasoning_inclusion = "raw".into();
+    let raw_service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&raw_database_url)
+            .expect("short-term memory repository should connect"),
+        raw_config,
+    );
+    let mut raw_context = base_context(&raw_session.session_code);
+    let raw_input = raw_service
+        .record_user_input(&raw_context, "reasoning raw")
+        .expect("user input should be recorded");
+    raw_context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: raw_session.session_code.clone(),
+        input_code: raw_input,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    raw_service
+        .record_model_response(&raw_context, &reasoning_response())
+        .expect("assistant response should persist raw reasoning when configured");
+    let raw_connection =
+        rusqlite::Connection::open(&raw_database_url).expect("database should be queryable");
+    assert_eq!(
+        part_type_count(&raw_connection, &raw_session.session_code, "reasoning"),
+        1
+    );
+    let raw_reasoning_visibility: String = raw_connection
+        .query_row(
+            "SELECT visibility
+             FROM agent_transcript_parts
+             WHERE session_code = ?1
+               AND part_type = 'reasoning'",
+            [raw_session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("raw reasoning visibility should be queryable");
+    assert_eq!(raw_reasoning_visibility, "audit");
+    let raw_rendered = rendered_model_context(
+        &raw_service
+            .prepare_model_context(&raw_context)
+            .expect("raw context should prepare")
+            .messages,
+    );
+    assert!(!raw_rendered.contains("raw reasoning should be policy gated"));
+}
+
+#[test]
+fn reasoning_summary_replay_is_disabled_by_default_and_configurable() {
+    let default_database_url = temp_database_url("short-term-memory-reasoning-replay-default");
+    let default_session = create_test_session(&default_database_url, "reasoning replay default");
+    let default_service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&default_database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let mut default_context = base_context(&default_session.session_code);
+    record_reasoning_tool_turn(
+        &default_service,
+        &mut default_context,
+        &default_session.session_code,
+        "reasoning replay default",
+    );
+
+    let default_prepared = default_service
+        .prepare_model_context(&default_context)
+        .expect("default context should prepare");
+    let default_rendered = rendered_model_context(&default_prepared.messages);
+    assert!(!default_rendered.contains("summary reasoning"));
+    assert!(default_rendered.contains("visible answer before tool"));
+    assert!(default_rendered.contains("tool_call:shell.exec"));
+    assert!(default_rendered.contains("tool result visible to model"));
+    assert!(!default_prepared.messages.iter().any(|message| {
+        message
+            .parts
+            .iter()
+            .any(|part| matches!(part, AgentMessagePart::ReasoningSummary { .. }))
+    }));
+
+    let enabled_database_url = temp_database_url("short-term-memory-reasoning-replay-enabled");
+    let enabled_session = create_test_session(&enabled_database_url, "reasoning replay enabled");
+    let mut enabled_config = ShortTermMemoryConfig::default();
+    enabled_config.context.reasoning_summary_replay_enabled = true;
+    let enabled_service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&enabled_database_url)
+            .expect("short-term memory repository should connect"),
+        enabled_config,
+    );
+    let mut enabled_context = base_context(&enabled_session.session_code);
+    record_reasoning_tool_turn(
+        &enabled_service,
+        &mut enabled_context,
+        &enabled_session.session_code,
+        "reasoning replay enabled",
+    );
+
+    let enabled_rendered = rendered_model_context(
+        &enabled_service
+            .prepare_model_context(&enabled_context)
+            .expect("enabled context should prepare")
+            .messages,
+    );
+    assert!(enabled_rendered.contains("summary reasoning"));
+}
+
+#[test]
+fn compaction_input_filters_reasoning_summary_unless_replay_is_enabled() {
+    let default_database_url = temp_database_url("short-term-memory-reasoning-compaction-default");
+    let default_session =
+        create_test_session(&default_database_url, "reasoning compaction default");
+    let default_service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&default_database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let mut default_context = base_context(&default_session.session_code);
+    record_reasoning_tool_turn(
+        &default_service,
+        &mut default_context,
+        &default_session.session_code,
+        "reasoning compaction default",
+    );
+    let default_input = default_service
+        .prepare_automatic_model_compaction_input(
+            &default_session.session_code,
+            "test_reasoning_filter",
+            tron_backend::application::short_term_memory::CompactionContextPolicy {
+                todo_enabled: false,
+            },
+            default_context.model.context_window_tokens,
+            default_context.model.max_tokens,
+            None,
+        )
+        .expect("default compaction input should prepare");
+    assert!(!default_input.prompt.contains("summary reasoning"));
+    assert!(!default_input.recent.contains("summary reasoning"));
+    assert!(default_input.prompt.contains("visible answer before tool"));
+    assert!(
+        default_input
+            .prompt
+            .contains("tool result visible to model")
+    );
+
+    let enabled_database_url = temp_database_url("short-term-memory-reasoning-compaction-enabled");
+    let enabled_session =
+        create_test_session(&enabled_database_url, "reasoning compaction enabled");
+    let mut enabled_config = ShortTermMemoryConfig::default();
+    enabled_config.context.reasoning_summary_replay_enabled = true;
+    let enabled_service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&enabled_database_url)
+            .expect("short-term memory repository should connect"),
+        enabled_config,
+    );
+    let mut enabled_context = base_context(&enabled_session.session_code);
+    record_reasoning_tool_turn(
+        &enabled_service,
+        &mut enabled_context,
+        &enabled_session.session_code,
+        "reasoning compaction enabled",
+    );
+    let enabled_input = enabled_service
+        .prepare_automatic_model_compaction_input(
+            &enabled_session.session_code,
+            "test_reasoning_enabled",
+            tron_backend::application::short_term_memory::CompactionContextPolicy {
+                todo_enabled: false,
+            },
+            enabled_context.model.context_window_tokens,
+            enabled_context.model.max_tokens,
+            None,
+        )
+        .expect("enabled compaction input should prepare");
+    assert!(enabled_input.prompt.contains("summary reasoning"));
+}
+
+#[test]
+fn model_response_usage_audit_persists_when_visible_parts_are_empty() {
+    let database_url = temp_database_url("short-term-memory-empty-visible-usage-audit");
+    let session = create_test_session(&database_url, "empty visible usage audit");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "usage audit prompt")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    let token_usage = ModelTokenUsage {
+        input_tokens: 100,
+        output_tokens: 8,
+        total_tokens: 108,
+        cached_input_tokens: Some(32),
+        reasoning_tokens: Some(6),
+    };
+    let usage_estimate = TokenEstimateSnapshot {
+        estimated_input_tokens: 90,
+        message_token_estimate: 84,
+        tool_schema_token_estimate: 6,
+        context_window_limit: Some(8_192),
+        effective_input_budget: Some(7_000),
+        output_token_reserve: Some(512),
+        protocol_overhead_reserve: Some(256),
+        safety_margin_tokens: Some(128),
+        message_count: 2,
+        part_count: 2,
+        rebased: false,
+        over_budget: false,
+        checkpoint_code: None,
+        model_code: context.model.model_code.clone(),
+        model_name: context.model.model_name.clone(),
+        model_protocol: "chatCompletions".into(),
+        usage_source: "local_estimate".into(),
+        usage_confidence: "estimated".into(),
+    };
+    let response = ModelResponse::from_assistant(
+        AgentMessage::new(
+            "assistant",
+            vec![AgentMessagePart::Reasoning {
+                text: "raw reasoning is not visible by default".into(),
+            }],
+        ),
+        ModelFinish::Final,
+        Some(token_usage),
+        None,
+        Some("resp-empty-visible".into()),
+    );
+
+    service
+        .record_model_response_with_facts(
+            &context,
+            &response,
+            tron_backend::application::short_term_memory::ModelResponseTranscriptFacts {
+                usage_audit: Some(TokenUsageAuditSnapshot {
+                    request_estimate: usage_estimate,
+                    provider_usage: Some(token_usage),
+                    cumulative_run_usage: Some(token_usage),
+                    input_token_delta: Some(10),
+                    input_token_ratio: Some(1.111_111_111),
+                    calibration_factor: Some(1.111_111_111),
+                    response_id: Some("resp-empty-visible".into()),
+                    usage_source: "provider".into(),
+                    usage_confidence: "actual".into(),
+                }),
+            },
+        )
+        .expect("usage audit event should persist without visible parts");
+
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let assistant_messages: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_messages
+             WHERE session_code = ?1
+               AND run_code = ?2
+               AND role = 'assistant'",
+            [session.session_code.as_str(), context.run_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("assistant message count should be queryable");
+    assert_eq!(assistant_messages, 0);
+    let payload: String = connection
+        .query_row(
+            "SELECT payload_json
+             FROM agent_transcript_events
+             WHERE session_code = ?1
+               AND run_code = ?2
+               AND event_type = 'agent.model.responded'
+             ORDER BY seq DESC
+             LIMIT 1",
+            [session.session_code.as_str(), context.run_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("responded event should be persisted");
+    assert!(payload.contains("\"usageAudit\""));
+    assert!(payload.contains("\"tokenUsage\""));
+    assert!(payload.contains("\"cachedInputTokens\":32"));
+    assert!(payload.contains("\"reasoningTokens\":6"));
+    assert!(payload.contains("\"messageCode\":null"));
+}
+
+#[test]
+fn prepare_model_context_enforces_part_visibility_replay_policy() {
+    let database_url = temp_database_url("short-term-memory-part-visibility");
+    let session = create_test_session(&database_url, "part visibility");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "visibility user prompt")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    service
+        .record_model_response(
+            &context,
+            &ModelResponse::final_output("visible assistant ui text"),
+        )
+        .expect("assistant response should be recorded");
+
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let persisted_text_visibility: String = connection
+        .query_row(
+            "SELECT visibility
+             FROM agent_transcript_parts
+             WHERE session_code = ?1
+               AND part_type = 'text'
+               AND content_text = 'visible assistant ui text'",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("assistant text visibility should be queryable");
+    assert_eq!(persisted_text_visibility, "model");
+    connection
+        .execute(
+            "INSERT INTO agent_transcript_messages
+             (id, message_code, session_code, workspace_code, run_code, seq, role, message_type, status, agent_code, created_at, completed_at)
+             VALUES
+             (910000000000000001, 'ATM-VISIBILITY-POLICY', ?1, 'TRON_CORE', 'RUN-VISIBILITY-POLICY', 100, 'assistant', 'normal', 'completed', 'main-agent', 1, 1)",
+            [session.session_code.as_str()],
+        )
+        .expect("visibility policy message should be insertable");
+    connection
+        .execute(
+            "INSERT INTO agent_transcript_parts
+             (id, part_code, session_code, workspace_code, message_code, seq, part_type, status, content_text, content_json, visibility, created_at, completed_at)
+             VALUES
+             (910000000000000002, 'ATP-UI-TEXT', ?1, 'TRON_CORE', 'ATM-VISIBILITY-POLICY', 1, 'text', 'completed', 'ui-only annotation should not replay', NULL, 'ui', 1, 1),
+             (910000000000000003, 'ATP-AUDIT-TEXT', ?1, 'TRON_CORE', 'ATM-VISIBILITY-POLICY', 2, 'text', 'completed', 'audit secret should not replay', NULL, 'audit', 1, 1),
+             (910000000000000004, 'ATP-INTERNAL-CONTEXT', ?1, 'TRON_CORE', 'ATM-VISIBILITY-POLICY', 3, 'context', 'completed', 'internal context should not replay', '{\"kind\":\"internal_test\"}', 'internal', 1, 1)",
+            [session.session_code.as_str()],
+        )
+        .expect("visibility policy parts should be insertable");
+
+    let rendered = service
+        .prepare_model_context(&context)
+        .expect("model context should prepare")
+        .messages
+        .iter()
+        .map(AgentMessage::text_content)
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+
+    assert!(rendered.contains("visibility user prompt"));
+    assert!(rendered.contains("visible assistant ui text"));
+    assert!(!rendered.contains("ui-only annotation should not replay"));
+    assert!(!rendered.contains("audit secret should not replay"));
+    assert!(!rendered.contains("internal context should not replay"));
+}
+
+#[test]
+fn prepare_model_context_replays_only_messages_after_v2_checkpoint_source_end_seq() {
+    let database_url = temp_database_url("short-term-memory-v2-replay-boundary");
+    let session = create_test_session(&database_url, "v2 replay");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "pre-checkpoint-user-unique")
+        .expect("pre-checkpoint input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    service
+        .record_model_response(
+            &context,
+            &ModelResponse::final_output("pre-checkpoint assistant"),
+        )
+        .expect("assistant response should be recorded");
+    create_stub_model_compaction(
+        &service,
+        CreateCompactionCommand {
+            session_code: session.session_code.clone(),
+            reason: Some("v2-boundary".into()),
+            note: None,
+            todo_enabled: Some(false),
+        },
+        "## Goal\nReplay boundary\n\n## Decisions\nUse v2 replay boundary.",
+    );
+    context.run_code = "RUN-STMEM-AFTER-CHECKPOINT".into();
+    let input_code = service
+        .record_user_input(&context, "post-checkpoint-user-unique")
+        .expect("post-checkpoint input should be recorded");
+    context.short_term_memory.as_mut().unwrap().input_code = input_code;
+    let prepared = service
+        .prepare_model_context(&context)
+        .expect("model context should prepare");
+    let rendered = prepared
+        .messages
+        .iter()
+        .map(AgentMessage::text_content)
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+    assert!(rendered.contains("Conversation checkpoint:"));
+    assert!(rendered.contains("post-checkpoint-user-unique"));
+    assert_eq!(rendered.matches("pre-checkpoint-user-unique").count(), 1);
+}
+
+#[test]
+fn manual_compaction_conflicts_when_session_has_active_run() {
+    let database_url = temp_database_url("short-term-memory-manual-conflict");
+    let session = create_test_session(&database_url, "manual conflict");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "active run blocks manual compaction")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    service
+        .record_run_started(&context)
+        .expect("run start should be recorded");
+
+    let conflict = service
+        .prepare_manual_model_compaction_input(
+            CreateCompactionCommand {
+                session_code: session.session_code.clone(),
+                reason: Some("manual".into()),
+                note: None,
+                todo_enabled: Some(false),
+            },
+            Some(8_192),
+            Some(128),
+        )
+        .expect_err("manual compaction should conflict with active run");
+    assert_eq!(conflict, ShortTermMemoryError::CompactionConflict);
+
+    service
+        .recover_goal_state_on_startup()
+        .expect("startup recovery should close stale runs");
+    create_stub_model_compaction(
+        &service,
+        CreateCompactionCommand {
+            session_code: session.session_code.clone(),
+            reason: Some("manual-after-recovery".into()),
+            note: None,
+            todo_enabled: Some(false),
+        },
+        "## Goal\nRecovered manual compaction\n\n## Decisions\nProceed after stale run recovery.",
+    );
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let recovered_events: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_events
+             WHERE session_code = ?1
+               AND event_type = 'agent.run.recovered'",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("recovery event count should be queryable");
+    assert_eq!(recovered_events, 1);
+}
+
+#[test]
+fn repository_compaction_write_rechecks_active_run_inside_transaction() {
+    let database_url = temp_database_url("short-term-memory-compaction-transaction-idle-check");
+    let session = create_test_session(&database_url, "compaction transaction idle check");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "active run should block repository compaction")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    service
+        .record_run_started(&context)
+        .expect("run start should be recorded");
+
+    let now = current_timestamp();
+    let checkpoint_message_code = "ATM-REPOSITORY-IDLE-CHECK";
+    let compaction = ShortTermMemoryCompaction {
+        session_code: session.session_code.clone(),
+        checkpoint_message_code: checkpoint_message_code.into(),
+        status: "completed".into(),
+        source_start_seq: 1,
+        source_end_seq: 1,
+        tail_start_seq: 1,
+        selector_version: 2,
+        coverage: Some("full_source_includes_tail".into()),
+        summary_token_estimate: 1,
+        created_at: now.clone(),
+    };
+    let message = ShortTermMemoryMessage {
+        id: 0,
+        message_code: checkpoint_message_code.into(),
+        session_code: session.session_code.clone(),
+        workspace_code: "TRON_CORE".into(),
+        run_code: None,
+        seq: 0,
+        role: "checkpoint".into(),
+        message_type: "compaction".into(),
+        status: "completed".into(),
+        agent_code: Some("main-agent".into()),
+        model_code: None,
+        model_provider: None,
+        model_name: None,
+        model_protocol: None,
+        finish_reason: None,
+        error_json: None,
+        input_tokens: None,
+        output_tokens: None,
+        reasoning_tokens: None,
+        total_tokens: None,
+        metadata_json: None,
+        created_at: now.clone(),
+        completed_at: Some(now.clone()),
+    };
+    let part = ShortTermMemoryPart {
+        id: 0,
+        part_code: String::new(),
+        session_code: session.session_code.clone(),
+        workspace_code: "TRON_CORE".into(),
+        message_code: String::new(),
+        seq: 1,
+        part_type: "compaction_summary".into(),
+        status: "completed".into(),
+        content_text: Some("should not be written while run is active".into()),
+        content_json: Some(json!({
+            "sourceStartSeq": 1,
+            "sourceEndSeq": 1,
+            "tailStartSeq": 1,
+            "selectorVersion": 2,
+            "coverage": "full_source_includes_tail"
+        })),
+        provider_metadata_json: None,
+        visibility: "model".into(),
+        created_at: now.clone(),
+        completed_at: Some(now.clone()),
+    };
+    let event = ShortTermMemoryEvent {
+        id: 0,
+        event_code: String::new(),
+        session_code: session.session_code.clone(),
+        workspace_code: "TRON_CORE".into(),
+        seq: 0,
+        run_code: None,
+        input_code: None,
+        message_code: Some(checkpoint_message_code.into()),
+        part_code: None,
+        event_type: "agent.compaction.completed".into(),
+        event_source: "COMPACTION".into(),
+        payload_json: json!({"checkpointMessageCode": checkpoint_message_code}),
+        metadata_json: None,
+        occurred_at: now.clone(),
+        created_at: now,
+    };
+
+    let mut repository = SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("short-term memory repository should reconnect");
+    let error = repository
+        .create_compaction(&compaction, &message, &[part], Some(&event), true)
+        .expect_err("repository write should recheck active runs inside its transaction");
+    assert_eq!(error, ShortTermMemoryError::CompactionConflict);
+
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let persisted_checkpoint_rows: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_messages
+             WHERE message_code = ?1",
+            [checkpoint_message_code],
+            |row| row.get(0),
+        )
+        .expect("checkpoint row count should be queryable");
+    assert_eq!(persisted_checkpoint_rows, 0);
+}
+
+#[test]
+fn run_lifecycle_uses_sqlite_session_lease() {
+    let database_url = temp_database_url("short-term-memory-run-lease");
+    let session = create_test_session(&database_url, "run lease");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "lease first run")
+        .expect("first input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    service
+        .record_run_started(&context)
+        .expect("first run should acquire lease");
+
+    let mut second_context = base_context(&session.session_code);
+    second_context.run_code = "RUN-STMEM-SECOND-LEASE".into();
+    second_context.request_id = Some("REQ-STMEM-SECOND-LEASE".into());
+    second_context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code: context
+            .short_term_memory
+            .as_ref()
+            .expect("short-term memory context should exist")
+            .input_code
+            .clone(),
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    let second_start_error = service
+        .record_run_started(&second_context)
+        .expect_err("second open run should be rejected by sqlite lease");
+    assert_eq!(second_start_error, ShortTermMemoryError::RunConflict);
+
+    service
+        .record_run_completed(&context)
+        .expect("run completion should release lease");
+    service
+        .record_run_started(&second_context)
+        .expect("new run should acquire lease after completion releases it");
+
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let active_lease_count: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_session_run_leases
+             WHERE session_code = ?1",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("run lease count should be queryable");
+    assert_eq!(active_lease_count, 1);
+}
+
+#[test]
+fn tool_output_externalization_persists_full_metadata_and_cleans_orphan_on_db_failure() {
+    let database_url = temp_database_url("short-term-memory-tool-cleanup");
+    let session = create_test_session(&database_url, "tool cleanup");
+    let artifact_root = temp_artifact_root("short-term-memory-tool-cleanup");
+    let mut config = ShortTermMemoryConfig::default();
+    config.tool_output = ToolOutputConfig {
+        root: artifact_root.display().to_string(),
+        externalize_above_bytes: 8,
+    };
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        config,
+    );
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "externalize failure cleanup")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    connection
+        .execute_batch(
+            "CREATE TRIGGER fail_tool_completed_event
+             BEFORE INSERT ON agent_transcript_events
+             WHEN NEW.event_type = 'agent.tool.completed'
+             BEGIN
+               SELECT RAISE(ABORT, 'tool event blocked');
+             END;",
+        )
+        .expect("tool failure trigger should be installable");
+    let observation = ToolObservation {
+        tool_name: "shell.exec".into(),
+        output: "line-one\nline-two\nline-three".into(),
+    };
+    let failed = service.record_tool_result(
+        &context,
+        &observation,
+        Some("call-cleanup".into()),
+        1,
+        ToolTranscriptStatus::Completed,
+    );
+    assert!(matches!(failed, Err(ShortTermMemoryError::StorageFailure)));
+    let expected_artifact = artifact_root
+        .join("TRON_CORE")
+        .join(&session.session_code)
+        .join(&context.run_code)
+        .join("0001-shell.exec.txt");
+    assert!(!expected_artifact.exists());
+    let tool_result_rows: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_parts
+             WHERE session_code = ?1
+               AND part_type = 'tool_result'",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("tool result row count should be queryable");
+    assert_eq!(tool_result_rows, 0);
+
+    connection
+        .execute_batch("DROP TRIGGER fail_tool_completed_event;")
+        .expect("tool failure trigger should drop");
+    connection
+        .execute_batch(
+            "CREATE TRIGGER fail_tool_result_created_event
+             BEFORE INSERT ON agent_transcript_events
+             WHEN NEW.event_type = 'agent.message.tool_result_created'
+             BEGIN
+               SELECT RAISE(ABORT, 'tool result created event blocked');
+             END;",
+        )
+        .expect("second tool failure trigger should be installable");
+    let failed_second_event = service.record_tool_result(
+        &context,
+        &observation,
+        Some("call-cleanup-created".into()),
+        2,
+        ToolTranscriptStatus::Completed,
+    );
+    assert!(matches!(
+        failed_second_event,
+        Err(ShortTermMemoryError::StorageFailure)
+    ));
+    let second_artifact = artifact_root
+        .join("TRON_CORE")
+        .join(&session.session_code)
+        .join(&context.run_code)
+        .join("0002-shell.exec.txt");
+    assert!(!second_artifact.exists());
+    let tool_result_rows_after_second_failure: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_parts
+             WHERE session_code = ?1
+               AND part_type = 'tool_result'",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("tool result row count should be queryable after second failure");
+    assert_eq!(tool_result_rows_after_second_failure, 0);
+
+    connection
+        .execute_batch("DROP TRIGGER fail_tool_result_created_event;")
+        .expect("second tool failure trigger should drop");
+    service
+        .record_tool_result(
+            &context,
+            &observation,
+            Some("call-cleanup".into()),
+            1,
+            ToolTranscriptStatus::Completed,
+        )
+        .expect("tool result should persist after trigger drop");
+    let (content_text, content_json): (String, String) = connection
+        .query_row(
+            "SELECT content_text, content_json
+             FROM agent_transcript_parts
+             WHERE session_code = ?1
+               AND part_type = 'tool_result'
+             ORDER BY id DESC
+             LIMIT 1",
+            [session.session_code.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("tool metadata should be queryable");
+    for required in [
+        "sha256",
+        "bytes",
+        "chars",
+        "lines",
+        "rootConfigKey",
+        "relativePath",
+    ] {
+        assert!(content_text.contains(required));
+        assert!(content_json.contains(required));
+    }
+    for required in ["callIndex", "modelCallId"] {
+        assert!(content_json.contains(required));
+    }
+    let parsed_part_json: serde_json::Value =
+        serde_json::from_str(&content_json).expect("tool result json should parse");
+    assert_eq!(parsed_part_json["callIndex"], json!(1));
+    assert_eq!(parsed_part_json["modelCallId"], json!("call-cleanup"));
+    let (completed_payload, created_payload): (String, String) = connection
+        .query_row(
+            "SELECT
+                max(CASE WHEN event_type = 'agent.tool.completed' THEN payload_json END),
+                max(CASE WHEN event_type = 'agent.message.tool_result_created' THEN payload_json END)
+             FROM agent_transcript_events
+             WHERE session_code = ?1
+               AND message_code IN (
+                   SELECT message_code
+                   FROM agent_transcript_parts
+                   WHERE session_code = ?1
+                     AND part_type = 'tool_result'
+                     AND content_json = ?2
+               )",
+            (session.session_code.as_str(), content_json.as_str()),
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("tool event payloads should be queryable");
+    for payload in [completed_payload, created_payload] {
+        let parsed_payload: serde_json::Value =
+            serde_json::from_str(&payload).expect("tool event payload should parse");
+        assert_eq!(parsed_payload["callIndex"], json!(1));
+        assert_eq!(parsed_payload["modelCallId"], json!("call-cleanup"));
+    }
+    assert!(expected_artifact.exists());
+}
+
+#[test]
+#[cfg(unix)]
+fn tool_output_orphan_sweep_deletes_unreferenced_artifacts_and_keeps_referenced_artifacts() {
+    let database_url = temp_database_url("short-term-memory-tool-orphan-sweep");
+    let session = create_test_session(&database_url, "tool orphan sweep");
+    let artifact_root = temp_artifact_root("short-term-memory-tool-orphan-sweep");
+    let mut config = ShortTermMemoryConfig::default();
+    config.tool_output = ToolOutputConfig {
+        root: artifact_root.display().to_string(),
+        externalize_above_bytes: 8,
+    };
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        config,
+    );
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "externalize orphan sweep")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    let tool_message = service
+        .record_tool_result(
+            &context,
+            &ToolObservation {
+                tool_name: "shell.exec".into(),
+                output: "line-one\nline-two\nline-three".into(),
+            },
+            Some("call-retained".into()),
+            1,
+            ToolTranscriptStatus::Completed,
+        )
+        .expect("referenced tool result should persist");
+    let referenced_relative_path = match &tool_message.parts[0] {
+        AgentMessagePart::ToolResult { metadata, .. } => metadata
+            .as_ref()
+            .and_then(|value| value.get("relativePath"))
+            .and_then(|value| value.as_str())
+            .expect("referenced artifact should include relative path")
+            .to_string(),
+        _ => panic!("tool result message should contain a tool result part"),
+    };
+    let referenced_path = artifact_root.join(referenced_relative_path);
+    assert!(referenced_path.exists());
+
+    let orphan_path = artifact_root
+        .join("TRON_CORE")
+        .join(&session.session_code)
+        .join(&context.run_code)
+        .join("9999-orphan.txt");
+    fs::write(&orphan_path, "orphan output").expect("orphan artifact should be writable");
+    mark_file_old(&referenced_path);
+    mark_file_old(&orphan_path);
+
+    let deleted = service
+        .sweep_externalized_tool_output_orphans()
+        .expect("orphan sweep should complete");
+
+    assert_eq!(deleted, 1);
+    assert!(referenced_path.exists());
+    assert!(!orphan_path.exists());
+}
+
+#[test]
+fn working_state_budget_prioritizes_goal_before_todos() {
+    let database_url = temp_database_url("short-term-memory-working-state-budget");
+    let session = create_test_session(&database_url, "working state budget");
+    let mut config = ShortTermMemoryConfig::default();
+    config
+        .context
+        .blocks
+        .current_session_working_state
+        .max_ratio_bps = None;
+    config
+        .context
+        .blocks
+        .current_session_working_state
+        .max_tokens = Some(80);
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        config,
+    );
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "prepare goal under budget pressure")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: true,
+    });
+    service
+        .set_goal(SetGoalCommand {
+            session_code: session.session_code.clone(),
+            objective: "Preserve the active session goal under pressure".into(),
+            max_runs: Some(5),
+            criteria: Vec::new(),
+        })
+        .expect("goal should be set");
+    service
+        .replace_todos(
+            &context,
+            vec![TodoUpdateItem {
+                todo_code: Some("TODO-BUDGET-PRESSURE".into()),
+                position: 0,
+                content:
+                    "TODO-SHOULD-TRUNCATE before this lower-priority active todo displaces the goal"
+                        .into(),
+                status: "pending".into(),
+                priority: "high".into(),
+            }],
+        )
+        .expect("todo should be recorded");
+
+    let prepared = service
+        .prepare_model_context(&context)
+        .expect("prepared context should be returned");
+    let rendered = prepared
+        .messages
+        .iter()
+        .map(AgentMessage::text_content)
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+
+    assert!(rendered.contains("<active-goal"));
+    assert!(rendered.contains("Preserve the active session goal under pressure"));
+    assert!(rendered.contains("truncated by short-term-memory block budget"));
+    assert!(!rendered.contains("TODO-SHOULD-TRUNCATE"));
+}
+
+#[test]
+fn prepared_context_hash_includes_recent_transcript_delta_for_stateful_responses() {
+    let database_url = temp_database_url("short-term-memory-context-hash-delta");
+    let session = create_test_session(&database_url, "context hash delta");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let mut context = base_context(&session.session_code);
+    context.model.protocol = AgentModelProtocol::Responses;
+    context.model.responses_stateful_enabled = true;
+    let input_code = service
+        .record_user_input(&context, "lookup current workspace")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("stable seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+
+    let before_hash = service
+        .prepare_model_context(&context)
+        .expect("initial context should prepare")
+        .context_hash
+        .expect("context hash should be present");
+    service
+        .record_model_response(
+            &context,
+            &ModelResponse::from_tool_calls(vec![ToolCall {
+                call_id: Some("call-hash".into()),
+                tool_name: "workspace.lookup".into(),
+                input: json!({"workspaceCode": "TRON_CORE"}),
+            }]),
+        )
+        .expect("assistant tool call should be recorded");
+    service
+        .record_tool_result(
+            &context,
+            &ToolObservation {
+                tool_name: "workspace.lookup".into(),
+                output: "{\"name\":\"Tron Core\"}".into(),
+            },
+            Some("call-hash".into()),
+            1,
+            ToolTranscriptStatus::Completed,
+        )
+        .expect("tool result should be recorded");
+    let after_hash = service
+        .prepare_model_context(&context)
+        .expect("context should prepare after transcript delta")
+        .context_hash
+        .expect("context hash should be present after delta");
+
+    assert_ne!(before_hash, after_hash);
+}
+
+#[test]
+fn selector_preserves_current_user_input_when_single_turn_exceeds_budget() {
+    let database_url = temp_database_url("short-term-memory-current-input");
+    let chats = ChatService::new(
+        SqliteChatRepository::connect(&database_url).expect("chat repository should connect"),
+    );
+    let session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("current input pinning".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("session should be created");
+    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("short-term memory repository should connect");
+    let mut config = ShortTermMemoryConfig::default();
+    config.compaction.auto_enabled = false;
+    config.compaction.keep_recent_tokens = 8;
+    let service = ShortTermMemoryService::new(repository, config);
+    let mut context = base_context(&session.session_code);
+    context.model.context_window_tokens = Some(512);
+    context.model.max_tokens = Some(0);
+    context.tools.clear();
+    let long_input = format!(
+        "current-user-input-start {} current-user-input-end",
+        "preserve-this-intent ".repeat(160)
+    );
+    let input_code = service
+        .record_user_input(&context, &long_input)
+        .expect("long user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+
+    let prepared = service
+        .prepare_model_context(&context)
+        .expect("prepared context should be returned even when over budget");
+    let rendered = prepared
+        .messages
+        .iter()
+        .map(AgentMessage::text_content)
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(prepared.over_budget);
+    assert!(rendered.contains(&long_input));
+}
+
+#[test]
+fn selector_preserves_tool_call_result_structure_when_single_turn_exceeds_budget() {
+    let database_url = temp_database_url("short-term-memory-tool-pair-budget");
+    let session = create_test_session(&database_url, "tool pair budget");
+    let mut config = ShortTermMemoryConfig::default();
+    config.compaction.auto_enabled = false;
+    config.compaction.keep_recent_tokens = 8;
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        config,
+    );
+    let mut context = base_context(&session.session_code);
+    context.model.context_window_tokens = Some(512);
+    context.model.max_tokens = Some(0);
+    context.tools.clear();
+    let input_code = service
+        .record_user_input(&context, "use the structured tool pair")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    service
+        .record_model_response(
+            &context,
+            &ModelResponse::from_tool_calls(vec![ToolCall {
+                call_id: Some("call-structured".into()),
+                tool_name: "shell.exec".into(),
+                input: json!({"cmd": "printf structured"}),
+            }]),
+        )
+        .expect("tool call response should be recorded");
+    service
+        .record_tool_result(
+            &context,
+            &ToolObservation {
+                tool_name: "shell.exec".into(),
+                output: "large tool output ".repeat(240),
+            },
+            Some("call-structured".into()),
+            1,
+            ToolTranscriptStatus::Completed,
+        )
+        .expect("tool result should be recorded");
+
+    let prepared = service
+        .prepare_model_context(&context)
+        .expect("model context should prepare");
+    let flattened_parts = prepared
+        .messages
+        .iter()
+        .flat_map(|message| message.parts.iter())
+        .collect::<Vec<_>>();
+    let tool_call_index = flattened_parts
+        .iter()
+        .position(|part| {
+            matches!(
+                part,
+                AgentMessagePart::ToolCall {
+                    call_id: Some(call_id),
+                    ..
+                } if call_id == "call-structured"
+            )
+        })
+        .expect("tool call should remain structured");
+    let tool_result_index = flattened_parts
+        .iter()
+        .position(|part| {
+            matches!(
+                part,
+                AgentMessagePart::ToolResult {
+                    call_id: Some(call_id),
+                    output,
+                    ..
+                } if call_id == "call-structured"
+                    && output.contains("omitted for budget")
+            )
+        })
+        .expect("tool result should remain structured");
+
+    assert!(prepared.over_budget);
+    assert!(
+        tool_call_index < tool_result_index,
+        "tool result should remain after its tool call"
+    );
+}
+
+#[test]
+fn model_compaction_keeps_current_tool_pair_as_raw_tail() {
+    let database_url = temp_database_url("short-term-memory-current-tool-pair-pinned");
+    let session = create_test_session(&database_url, "current tool pair pinned");
+    let service = ShortTermMemoryService::with_id_provider(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(803_000_000_000_000_000)),
+    );
+    let mut old_context = base_context(&session.session_code);
+    old_context.run_code = "RUN-STMEM-TOOL-OLD".into();
+    service
+        .record_user_input(&old_context, "old context before current tool")
+        .expect("old input should be recorded");
+
+    let mut context = base_context(&session.session_code);
+    context.run_code = "RUN-STMEM-TOOL-CURRENT".into();
+    let input_code = service
+        .record_user_input(&context, "current run uses structured tool")
+        .expect("current input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    service
+        .record_model_response(
+            &context,
+            &ModelResponse::from_tool_calls(vec![ToolCall {
+                call_id: Some("call-pinned-tool".into()),
+                tool_name: "shell.exec".into(),
+                input: json!({"cmd": "printf pinned"}),
+            }]),
+        )
+        .expect("tool call should be recorded");
+    service
+        .record_tool_result(
+            &context,
+            &ToolObservation {
+                tool_name: "shell.exec".into(),
+                output: "pinned tool result".into(),
+            },
+            Some("call-pinned-tool".into()),
+            1,
+            ToolTranscriptStatus::Completed,
+        )
+        .expect("tool result should be recorded");
+
+    let compaction_input = service
+        .prepare_automatic_model_compaction_input(
+            &session.session_code,
+            "auto_over_budget",
+            tron_backend::application::short_term_memory::CompactionContextPolicy {
+                todo_enabled: false,
+            },
+            context.model.context_window_tokens,
+            context.model.max_tokens,
+            Some(&context.run_code),
+        )
+        .expect("model compaction input should prepare");
+    assert!(
+        compaction_input
+            .pinned_start_seq
+            .is_some_and(|pinned_seq| compaction_input.source_end_seq < pinned_seq),
+        "current run messages must stay outside checkpoint coverage"
+    );
+    let model = service.compaction_model_config(&context.model);
+    service
+        .commit_model_compaction(
+            compaction_input,
+            ModelCompactionOutput {
+                summary: "## Goal\nOld context compacted\n\n## Decisions\nKeep current tool raw."
+                    .into(),
+                token_usage: None,
+                provider_metadata: None,
+            },
+            &model,
+        )
+        .expect("model compaction should commit");
+
+    let prepared = service
+        .prepare_model_context(&context)
+        .expect("model context should prepare after compaction");
+    let flattened_parts = prepared
+        .messages
+        .iter()
+        .flat_map(|message| message.parts.iter())
+        .collect::<Vec<_>>();
+    let tool_call_index = flattened_parts
+        .iter()
+        .position(|part| {
+            matches!(
+                part,
+                AgentMessagePart::ToolCall {
+                    call_id: Some(call_id),
+                    ..
+                } if call_id == "call-pinned-tool"
+            )
+        })
+        .expect("current tool call should remain structured");
+    let tool_result_index = flattened_parts
+        .iter()
+        .position(|part| {
+            matches!(
+                part,
+                AgentMessagePart::ToolResult {
+                    call_id: Some(call_id),
+                    output,
+                    ..
+                } if call_id == "call-pinned-tool" && output.contains("pinned tool result")
+            )
+        })
+        .expect("current tool result should remain structured");
+    assert!(tool_call_index < tool_result_index);
+}
+
+#[test]
+fn tool_schema_tokens_participate_in_context_budget() {
+    let database_url = temp_database_url("short-term-memory-tool-schema-budget");
+    let chats = ChatService::new(
+        SqliteChatRepository::connect(&database_url).expect("chat repository should connect"),
+    );
+    let session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("tool schema budget".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("session should be created");
+    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("short-term memory repository should connect");
+    let mut config = ShortTermMemoryConfig::default();
+    config.compaction.auto_enabled = false;
+    let service = ShortTermMemoryService::new(repository, config);
+    let mut context = base_context(&session.session_code);
+    context.model.context_window_tokens = Some(900);
+    context.model.max_tokens = Some(0);
+    context.tools = vec![EffectiveTool {
+        tool_name: "large.schema".into(),
+        domain_code: Some("memory".into()),
+        description: "Large schema".repeat(80),
+        input_schema: json!({
+            "type": "object",
+            "properties": {
+                "payload": {
+                    "type": "string",
+                    "description": "x".repeat(1400)
+                }
+            }
+        }),
+        skill_name: None,
+        required_variable_keys: Vec::new(),
+    }];
+    let input_code = service
+        .record_user_input(&context, "small prompt")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+
+    let prepared = service
+        .prepare_model_context(&context)
+        .expect("prepared context should include tool schema budget");
+
+    assert!(prepared.over_budget);
+    assert!(prepared.estimated_tokens > 300);
+}
+
+#[test]
+fn model_compaction_preserves_current_user_input_after_auto_retry() {
+    let database_url = temp_database_url("short-term-memory-auto-compaction");
+    let session = create_test_session(&database_url, "auto compaction");
+    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("short-term memory repository should connect");
+    let mut config = ShortTermMemoryConfig::default();
+    config.context.protocol_overhead_reserve_tokens = 0;
+    config.context.safety_margin_tokens = 0;
+    config
+        .context
+        .blocks
+        .current_session_checkpoint
+        .max_ratio_bps = None;
+    config.context.blocks.current_session_checkpoint.max_tokens = Some(50);
+    config
+        .context
+        .blocks
+        .current_session_recent_transcript
+        .max_ratio_bps = None;
+    config
+        .context
+        .blocks
+        .current_session_recent_transcript
+        .max_tokens = Some(5_000);
+    config.compaction.keep_recent_tokens = 2_000;
+    config.compaction.reserved_tokens = 0;
+    config.compaction.summary_max_tokens = 50;
+    config.compaction.tool_output_max_chars = 64;
+    let service = ShortTermMemoryService::new(repository, config);
+
+    let mut old_context = base_context(&session.session_code);
+    old_context.run_code = "RUN-STMEM-OLD-CONTEXT".into();
+    service
+        .record_user_input(
+            &old_context,
+            &format!("older context {}", "A".repeat(4_000)),
+        )
+        .expect("older input should be recorded");
+    let mut context = base_context(&session.session_code);
+    context.run_code = "RUN-STMEM-CURRENT-CONTEXT".into();
+    let current_prompt = format!("current user input must stay raw {}", "B".repeat(500));
+    let latest_input = service
+        .record_user_input(&context, &current_prompt)
+        .expect("latest input should be recorded");
+    context.model.context_window_tokens = Some(1_200);
+    context.model.max_tokens = Some(0);
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code: latest_input,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system(format!(
+            "large stable prefix {}",
+            "P".repeat(3_400)
+        ))],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+
+    let before = service
+        .prepare_model_context(&context)
+        .expect("over-budget context should be detected");
+
+    assert!(
+        before.over_budget,
+        "initial context should exceed the budget before model compaction"
+    );
+    assert!(
+        before.checkpoint_code.is_none(),
+        "prepare should not write a deterministic checkpoint"
+    );
+    let compaction_input = service
+        .prepare_automatic_model_compaction_input(
+            &session.session_code,
+            "auto_over_budget",
+            tron_backend::application::short_term_memory::CompactionContextPolicy {
+                todo_enabled: false,
+            },
+            context.model.context_window_tokens,
+            context.model.max_tokens,
+            Some(&context.run_code),
+        )
+        .expect("auto compaction input should prepare");
+    assert!(
+        compaction_input
+            .pinned_start_seq
+            .is_some_and(|pinned_seq| compaction_input.source_end_seq < pinned_seq),
+        "current run transcript should remain outside checkpoint coverage"
+    );
+    let model = service.compaction_model_config(&context.model);
+    service
+        .commit_model_compaction(
+            compaction_input,
+            ModelCompactionOutput {
+                summary:
+                    "## Goal\nMODEL SUMMARY UNIQUE\n\n## Decisions\nOld context compacted by model."
+                        .into(),
+                token_usage: Some(ModelTokenUsage {
+                    input_tokens: 100,
+                    output_tokens: 20,
+                    total_tokens: 120,
+                    cached_input_tokens: None,
+                    reasoning_tokens: None,
+                }),
+                provider_metadata: None,
+            },
+            &model,
+        )
+        .expect("model compaction should commit");
+    let prepared = service
+        .prepare_model_context(&context)
+        .expect("retry after model compaction should prepare context");
+
+    assert!(
+        !prepared.over_budget,
+        "retry after model compaction should fit the budget"
+    );
+    assert!(
+        prepared.checkpoint_code.is_some(),
+        "model compaction should create a checkpoint"
+    );
+    let rendered = prepared
+        .messages
+        .iter()
+        .map(AgentMessage::text_content)
+        .collect::<Vec<_>>()
+        .join("\n---\n");
+    assert!(rendered.contains("MODEL SUMMARY UNIQUE"));
+    assert!(rendered.contains(&current_prompt));
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let checkpoint_count: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_messages
+             WHERE session_code = ?1
+               AND role = 'checkpoint'
+               AND message_type = 'compaction'
+               AND metadata_json LIKE '%auto_over_budget%'",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("checkpoint count should be queryable");
+    assert_eq!(checkpoint_count, 1);
+    let requested_count: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_events
+             WHERE session_code = ?1
+               AND event_type = 'agent.context.compaction_requested'",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("compaction request count should be queryable");
+    assert_eq!(requested_count, 1);
+    let assembled_count: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_events
+             WHERE session_code = ?1
+               AND event_type = 'agent.context.assembled'",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("assembled count should be queryable");
+    assert_eq!(assembled_count, 1);
+}
+
+#[test]
+fn delete_session_removes_short_term_memory_rows() {
+    let database_url = temp_database_url("short-term-memory-delete-session");
+    let chats = ChatService::new(
+        SqliteChatRepository::connect(&database_url).expect("chat repository should connect"),
+    );
+    let session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("delete stm".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("session should be created");
+    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("short-term memory repository should connect");
+    let service = ShortTermMemoryService::new(repository, ShortTermMemoryConfig::default());
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "delete this transcript")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: true,
+    });
+    service
+        .record_run_started(&context)
+        .expect("run lease should be recorded");
+    service
+        .replace_todos(
+            &context,
+            vec![TodoUpdateItem {
+                todo_code: Some("TODO-DELETE".into()),
+                position: 0,
+                content: "remove me".into(),
+                status: "pending".into(),
+                priority: "medium".into(),
+            }],
+        )
+        .expect("todo should be recorded");
+    service
+        .set_goal(SetGoalCommand {
+            session_code: session.session_code.clone(),
+            objective: "Delete this goal with its session".into(),
+            criteria: vec!["cleanup leaves no goal rows".into()],
+            max_runs: Some(2),
+        })
+        .expect("goal should be recorded");
+    service
+        .prepare_model_context(&context)
+        .expect("context epoch should be recorded");
+    service
+        .record_model_response(&context, &ModelResponse::final_output("done"))
+        .expect("assistant response should be recorded");
+
+    chats
+        .delete_session(&session.session_code)
+        .expect("session should delete");
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    for table in [
+        "agent_transcript_inputs",
+        "agent_transcript_events",
+        "agent_transcript_messages",
+        "agent_transcript_parts",
+        "agent_session_todos",
+        "agent_transcript_context_epochs",
+        "agent_session_goals",
+        "agent_session_goal_criteria",
+        "agent_session_goal_events",
+        "agent_session_family_members",
+        "agent_session_family_snapshots",
+        "agent_session_run_leases",
+    ] {
+        let count: i64 = connection
+            .query_row(
+                &format!("SELECT count(1) FROM {table} WHERE session_code = ?1"),
+                [session.session_code.as_str()],
+                |row| row.get(0),
+            )
+            .expect("stm table should be queryable");
+        assert_eq!(count, 0, "{table} should not retain deleted session rows");
+    }
+}
+
+#[test]
+fn event_log_payload_is_bounded_before_persistence() {
+    let database_url = temp_database_url("short-term-memory-event-payload-bound");
+    let session = create_test_session(&database_url, "bounded event payload");
+    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("short-term memory repository should connect");
+    let mut config = ShortTermMemoryConfig::default();
+    config.event_log.max_payload_bytes = 512;
+    let service = ShortTermMemoryService::new(repository, config);
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "payload bound")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+
+    service
+        .record_model_requested(
+            &context,
+            ModelRequestTranscriptFacts {
+                message_count: 1,
+                part_count: 1,
+                estimated_tokens: 1,
+                message_hashes: vec!["x".repeat(2_000)],
+                tool_schema_token_estimate: 1,
+                protocol: "chatCompletions".into(),
+                previous_response_id_present: false,
+                context_window_estimate: Some(32_000),
+                checkpoint_code: None,
+                usage_estimate: None,
+            },
+        )
+        .expect("oversized request event should be recorded");
+
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let payload_json: String = connection
+        .query_row(
+            "SELECT payload_json
+             FROM agent_transcript_events
+             WHERE session_code = ?1
+               AND event_type = 'agent.model.requested'
+             ORDER BY id DESC
+             LIMIT 1",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("model request event should be queryable");
+    assert!(payload_json.len() <= 512);
+    let payload: serde_json::Value =
+        serde_json::from_str(&payload_json).expect("payload should be JSON");
+    assert_eq!(
+        payload.get("truncated").and_then(|value| value.as_bool()),
+        Some(true)
+    );
+    assert!(
+        payload
+            .get("originalBytes")
+            .and_then(|value| value.as_u64())
+            .unwrap_or_default()
+            > 512
+    );
+    assert!(
+        payload
+            .get("sha256")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .starts_with("sha256:")
+    );
+    assert!(
+        payload
+            .get("preview")
+            .and_then(|value| value.as_str())
+            .is_some()
+    );
+}
+
+#[test]
+fn lifecycle_only_event_log_keeps_projections_and_run_events() {
+    let database_url = temp_database_url("short-term-memory-event-lifecycle-only");
+    let session = create_test_session(&database_url, "lifecycle only event log");
+    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("short-term memory repository should connect");
+    let mut config = ShortTermMemoryConfig::default();
+    config.event_log.mode = "lifecycleOnly".into();
+    let service = ShortTermMemoryService::new(repository, config);
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "lifecycle only input")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: true,
+    });
+
+    service
+        .record_run_started(&context)
+        .expect("run start should be recorded");
+    service
+        .replace_todos(
+            &context,
+            vec![TodoUpdateItem {
+                todo_code: Some("TODO-LIFE".into()),
+                position: 0,
+                content: "Projection should survive".into(),
+                status: "in_progress".into(),
+                priority: "medium".into(),
+            }],
+        )
+        .expect("todo projection should be recorded without audit event");
+    service
+        .prepare_model_context(&context)
+        .expect("context epoch projection should be recorded without audit event");
+    service
+        .record_model_requested(
+            &context,
+            ModelRequestTranscriptFacts {
+                message_count: 1,
+                part_count: 1,
+                estimated_tokens: 1,
+                message_hashes: vec!["hash".into()],
+                tool_schema_token_estimate: 1,
+                protocol: "chatCompletions".into(),
+                previous_response_id_present: false,
+                context_window_estimate: Some(32_000),
+                checkpoint_code: None,
+                usage_estimate: None,
+            },
+        )
+        .expect("ordinary audit event should be skipped");
+    service
+        .record_model_response(&context, &ModelResponse::final_output("projection ok"))
+        .expect("assistant projection should be recorded");
+    service
+        .record_run_completed(&context)
+        .expect("run completion should be recorded");
+    create_stub_model_compaction(
+        &service,
+        CreateCompactionCommand {
+            session_code: session.session_code.clone(),
+            reason: Some("lifecycle only".into()),
+            note: None,
+            todo_enabled: None,
+        },
+        "## Goal\nProjection should survive\n\n## Current State\nLifecycle mode keeps checkpoint rows.",
+    );
+
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let run_events: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_events
+             WHERE session_code = ?1
+               AND event_type IN ('agent.run.started', 'agent.run.completed')",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("run events should be queryable");
+    assert_eq!(run_events, 2);
+    let ordinary_events: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_events
+             WHERE session_code = ?1
+               AND event_type NOT IN ('agent.run.started', 'agent.run.completed', 'agent.run.failed', 'agent.run.recovered')",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("ordinary events should be queryable");
+    assert_eq!(ordinary_events, 0);
+    let message_count: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_messages
+             WHERE session_code = ?1",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("messages should be queryable");
+    assert!(message_count >= 3);
+    let todo_count: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_session_todos
+             WHERE session_code = ?1",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("todos should be queryable");
+    assert_eq!(todo_count, 1);
+    let epoch_count: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_context_epochs
+             WHERE session_code = ?1",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("context epochs should be queryable");
+    assert!(epoch_count >= 1);
+}
+
+#[test]
+fn event_log_cleanup_removes_old_closed_events_in_bounded_batches() {
+    let database_url = temp_database_url("short-term-memory-event-cleanup");
+    let session = create_test_session(&database_url, "event cleanup");
+    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("short-term memory repository should connect");
+    let mut config = ShortTermMemoryConfig::default();
+    config.event_log.retention_days = 5;
+    config.event_log.cleanup_batch_size = 2;
+    config.event_log.cleanup_max_rows_per_startup = 3;
+    let service = ShortTermMemoryService::new(repository, config);
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let old_ms = 1_000_i64;
+    let new_ms = chrono::Utc::now().timestamp_millis();
+    for id in 1..=5_i64 {
+        connection
+            .execute(
+                "INSERT INTO agent_transcript_events
+                 (id, event_code, session_code, workspace_code, seq, run_code, input_code, message_code, part_code, event_type, event_source, payload_json, metadata_json, occurred_at, created_at)
+                 VALUES (?1, ?2, ?3, 'TRON_CORE', ?4, NULL, NULL, NULL, NULL, 'agent.model.requested', 'TEST', '{}', NULL, ?5, ?5)",
+                rusqlite::params![
+                    id,
+                    format!("ATE-OLD-{id}"),
+                    session.session_code,
+                    id,
+                    old_ms,
+                ],
+            )
+            .expect("old event should insert");
+    }
+    connection
+        .execute(
+            "INSERT INTO agent_transcript_events
+             (id, event_code, session_code, workspace_code, seq, run_code, input_code, message_code, part_code, event_type, event_source, payload_json, metadata_json, occurred_at, created_at)
+             VALUES (10, 'ATE-NEW', ?1, 'TRON_CORE', 10, NULL, NULL, NULL, NULL, 'agent.model.requested', 'TEST', '{}', NULL, ?2, ?2)",
+            rusqlite::params![session.session_code, new_ms],
+        )
+        .expect("new event should insert");
+    connection
+        .execute(
+            "INSERT INTO agent_transcript_events
+             (id, event_code, session_code, workspace_code, seq, run_code, input_code, message_code, part_code, event_type, event_source, payload_json, metadata_json, occurred_at, created_at)
+             VALUES (20, 'ATE-ACTIVE', ?1, 'TRON_CORE', 20, 'RUN-ACTIVE', NULL, NULL, NULL, 'agent.run.started', 'TEST', '{}', NULL, ?2, ?2)",
+            rusqlite::params![session.session_code, old_ms],
+        )
+        .expect("active run event should insert");
+    connection
+        .execute(
+            "INSERT INTO agent_session_run_leases
+             (id, session_code, workspace_code, run_code, input_code, started_at, updated_at)
+             VALUES (30, ?1, 'TRON_CORE', 'RUN-ACTIVE', NULL, ?2, ?2)",
+            rusqlite::params![session.session_code, old_ms],
+        )
+        .expect("active run lease should insert");
+
+    let deleted = service
+        .cleanup_event_log_on_startup()
+        .expect("event cleanup should run");
+    assert_eq!(deleted, 3);
+    let old_remaining: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_events
+             WHERE event_code LIKE 'ATE-OLD-%'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("old events should be queryable");
+    assert_eq!(old_remaining, 2);
+    let new_remaining: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_events
+             WHERE event_code = 'ATE-NEW'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("new event should be queryable");
+    assert_eq!(new_remaining, 1);
+    let active_remaining: i64 = connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_events
+             WHERE event_code = 'ATE-ACTIVE'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("active event should be queryable");
+    assert_eq!(active_remaining, 1);
+}
+
+#[test]
+fn concurrent_append_allocates_unique_session_sequence_values() {
+    let database_url = temp_database_url("short-term-memory-concurrent-seq");
+    let chats = ChatService::new(
+        SqliteChatRepository::connect(&database_url).expect("chat repository should connect"),
+    );
+    let session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("concurrent seq".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("session should be created");
+    let repository = SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("short-term memory repository should connect");
+    let service = ShortTermMemoryService::new(repository, ShortTermMemoryConfig::default());
+    let mut context = base_context(&session.session_code);
+    let input_code = service
+        .record_user_input(&context, "parallel append")
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+
+    let handles = (0..8)
+        .map(|index| {
+            let service = service.clone();
+            let mut context = context.clone();
+            context.run_code = format!("RUN-CONCURRENT-{index}");
+            std::thread::spawn(move || {
+                service
+                    .record_model_response(
+                        &context,
+                        &ModelResponse::final_output(format!("parallel output {index}")),
+                    )
+                    .expect("parallel model response should be recorded");
+            })
+        })
+        .collect::<Vec<_>>();
+    for handle in handles {
+        handle.join().expect("thread should finish");
+    }
+
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let (row_count, distinct_seq_count): (i64, i64) = connection
+        .query_row(
+            "SELECT count(1), count(DISTINCT seq)
+             FROM (
+                 SELECT seq FROM agent_transcript_messages WHERE session_code = ?1
+                 UNION ALL
+                 SELECT seq FROM agent_transcript_events WHERE session_code = ?1
+             )",
+            [session.session_code.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("transcript seq values should be queryable");
+    assert_eq!(row_count, distinct_seq_count);
+}
+
+fn base_context(session_code: &str) -> AgentRunContext {
+    AgentRunContext {
+        conversation_code: Some(session_code.into()),
+        run_code: "RUN-STMEM-1".into(),
+        workspace_code: "TRON_CORE".into(),
+        user_code: Some("USER-1".into()),
+        locale: "en-US".into(),
+        request_id: Some("REQ-STMEM-1".into()),
+        stream_key: Some(session_code.into()),
+        agent_kind: AgentKind::React,
+        system_agent_session_id: None,
+        model: AgentModelConfig {
+            model_code: "MODEL-1".into(),
+            protocol: AgentModelProtocol::ChatCompletions,
+            base_url: "http://127.0.0.1:1/v1".into(),
+            api_path: None,
+            api_key: "sk-test".into(),
+            model_name: "gpt-test".into(),
+            thinking_enabled: false,
+            responses_stateful_enabled: false,
+            temperature: Some(0.2),
+            max_tokens: Some(128),
+            context_window_tokens: Some(8_192),
+            top_p: Some(1.0),
+            max_retries: Some(0),
+        },
+        variables: Vec::<EffectiveVariable>::new(),
+        skills: Vec::<EffectiveSkill>::new(),
+        tools: vec![EffectiveTool {
+            tool_name: "todo.update".into(),
+            domain_code: Some("memory".into()),
+            description: "Update session todos".into(),
+            input_schema: json!({}),
+            skill_name: None,
+            required_variable_keys: Vec::new(),
+        }],
+        tool_exposure: Default::default(),
+        execution_scope: AgentExecutionScope {
+            app_code: None,
+            repository_url: None,
+            local_directory: None,
+            branch_name: None,
+            task_code: None,
+        },
+        limits: AgentRunLimits::default(),
+        messages: vec![AgentMessage::user("Track the implementation state")],
+        observations: Vec::new(),
+        short_term_memory: None,
+        started_at: "2026-06-15T00:00:00Z".into(),
+    }
+}
+
+fn create_stub_model_compaction(
+    service: &ShortTermMemoryService,
+    command: CreateCompactionCommand,
+    summary: &str,
+) -> ShortTermMemoryCompaction {
+    let base_model = compaction_test_model();
+    let model = service.compaction_model_config(&base_model);
+    let input = service
+        .prepare_manual_model_compaction_input(
+            command,
+            model.context_window_tokens,
+            model.max_tokens,
+        )
+        .expect("model compaction input should prepare");
+    service
+        .commit_model_compaction(
+            input,
+            ModelCompactionOutput {
+                summary: summary.to_string(),
+                token_usage: Some(ModelTokenUsage {
+                    input_tokens: 42,
+                    output_tokens: 12,
+                    total_tokens: 54,
+                    cached_input_tokens: None,
+                    reasoning_tokens: None,
+                }),
+                provider_metadata: None,
+            },
+            &model,
+        )
+        .expect("model compaction should commit")
+}
+
+fn compaction_test_model() -> AgentModelConfig {
+    AgentModelConfig {
+        model_code: "MODEL-COMPACTION".into(),
+        protocol: AgentModelProtocol::ChatCompletions,
+        base_url: "http://127.0.0.1:1/v1".into(),
+        api_path: None,
+        api_key: "sk-test".into(),
+        model_name: "gpt-compaction-test".into(),
+        thinking_enabled: false,
+        responses_stateful_enabled: false,
+        temperature: Some(0.2),
+        max_tokens: Some(4_096),
+        context_window_tokens: Some(200_000),
+        top_p: Some(1.0),
+        max_retries: Some(0),
+    }
+}
+
+fn table_columns(connection: &rusqlite::Connection, table: &str) -> Vec<String> {
+    let mut statement = connection
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .expect("pragma should prepare");
+    statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .expect("pragma should run")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("columns should map")
+}
+
+fn table_exists(connection: &rusqlite::Connection, table: &str) -> bool {
+    connection
+        .query_row(
+            "SELECT count(1) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [table],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("table metadata should be queryable")
+        > 0
+}
+
+fn index_exists(connection: &rusqlite::Connection, index: &str) -> bool {
+    connection
+        .query_row(
+            "SELECT count(1) FROM sqlite_master WHERE type = 'index' AND name = ?1",
+            [index],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("index metadata should be queryable")
+        > 0
+}
+
+fn create_test_session(database_url: &str, title: &str) -> ChatSession {
+    let chats = ChatService::new(
+        SqliteChatRepository::connect(database_url).expect("chat repository should connect"),
+    );
+    chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some(title.into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("session should be created")
+}
+
+fn reasoning_response() -> ModelResponse {
+    ModelResponse::from_assistant(
+        AgentMessage::new(
+            "assistant",
+            vec![
+                AgentMessagePart::ReasoningSummary {
+                    text: "summary reasoning".into(),
+                },
+                AgentMessagePart::Reasoning {
+                    text: "raw reasoning should be policy gated".into(),
+                },
+                AgentMessagePart::Text {
+                    text: "visible answer".into(),
+                },
+            ],
+        ),
+        ModelFinish::Final,
+        None,
+        None,
+        None,
+    )
+}
+
+fn reasoning_tool_response() -> ModelResponse {
+    ModelResponse::from_assistant(
+        AgentMessage::new(
+            "assistant",
+            vec![
+                AgentMessagePart::ReasoningSummary {
+                    text: "summary reasoning".into(),
+                },
+                AgentMessagePart::Text {
+                    text: "visible answer before tool".into(),
+                },
+                AgentMessagePart::ToolCall {
+                    call_id: Some("call-reasoning-summary".into()),
+                    tool_name: "shell.exec".into(),
+                    input: json!({"cmd": "printf replay"}),
+                },
+            ],
+        ),
+        ModelFinish::ToolCalls,
+        None,
+        None,
+        None,
+    )
+}
+
+fn record_reasoning_tool_turn(
+    service: &ShortTermMemoryService,
+    context: &mut AgentRunContext,
+    session_code: &str,
+    user_text: &str,
+) {
+    let input_code = service
+        .record_user_input(context, user_text)
+        .expect("user input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session_code.to_string(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    service
+        .record_model_response(context, &reasoning_tool_response())
+        .expect("reasoning tool response should be recorded");
+    service
+        .record_tool_result(
+            context,
+            &ToolObservation {
+                tool_name: "shell.exec".into(),
+                output: "tool result visible to model".into(),
+            },
+            Some("call-reasoning-summary".into()),
+            1,
+            ToolTranscriptStatus::Completed,
+        )
+        .expect("tool result should be recorded");
+}
+
+fn rendered_model_context(messages: &[AgentMessage]) -> String {
+    messages
+        .iter()
+        .map(AgentMessage::text_content)
+        .collect::<Vec<_>>()
+        .join("\n---\n")
+}
+
+fn part_type_count(connection: &rusqlite::Connection, session_code: &str, part_type: &str) -> i64 {
+    connection
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_parts
+             WHERE session_code = ?1
+               AND part_type = ?2",
+            [session_code, part_type],
+            |row| row.get(0),
+        )
+        .expect("part type count should be queryable")
+}
+
+#[cfg(unix)]
+fn mark_file_old(path: &Path) {
+    let status = Command::new("touch")
+        .arg("-t")
+        .arg("197001010000.00")
+        .arg(path)
+        .status()
+        .expect("touch should be available for unix mtime setup");
+    assert!(status.success());
+}
+
+fn temp_database_url(label: &str) -> String {
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system time should be after unix epoch")
+        .as_millis();
+    std::env::temp_dir()
+        .join(format!("{label}-{}-{millis}.sqlite3", std::process::id()))
+        .display()
+        .to_string()
+}
+
+fn temp_artifact_root(label: &str) -> std::path::PathBuf {
+    let millis = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system time should be after unix epoch")
+        .as_millis();
+    std::env::temp_dir().join(format!("{label}-{}-{millis}", std::process::id()))
+}

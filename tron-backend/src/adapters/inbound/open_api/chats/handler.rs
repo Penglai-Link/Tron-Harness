@@ -176,7 +176,8 @@ pub async fn send_message(
         state.agent_model_client.clone(),
         state.agent_tool_registry.clone(),
         state.runtime_http_client.clone(),
-    );
+    )
+    .with_short_term_memory(state.short_term_memory.clone());
     match state
         .chats
         .send_message(
@@ -253,7 +254,8 @@ pub async fn stream_message(
         state.agent_model_client.clone(),
         state.agent_tool_registry.clone(),
         state.runtime_http_client.clone(),
-    );
+    )
+    .with_short_term_memory(state.short_term_memory.clone());
     let live_replay_recorder_for_sink = live_replay_recorder.clone();
     let forwarding_gate = ChatStreamForwardingGate::new();
     let forwarding_gate_for_sink = forwarding_gate.clone();

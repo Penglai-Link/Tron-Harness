@@ -2,10 +2,18 @@ import type {
   ChatAguiEvent,
   ChatMessage,
   ChatSendResult,
+  ChatSessionCompaction,
+  ChatSessionGoalView,
   ChatSession,
   ChatSessionGroup,
+  ChatSessionTodo,
+  AddChatSessionGoalCriterionInput,
+  ChatSessionGoalCommand,
+  CreateChatCompactionInput,
   CreateChatSessionInput,
+  RemoveChatSessionGoalCriterionInput,
   SendChatMessageInput,
+  SetChatSessionGoalInput,
   UpdateChatSessionInput,
 } from "@/domain/chat/model/ChatModel";
 
@@ -126,6 +134,106 @@ const messagesBySession: Record<string, ChatMessage[]> = {
   "SESSION-UNASSIGNED": [],
 };
 
+const todosBySession: Record<string, ChatSessionTodo[]> = {
+  "SESSION-8842": [
+    {
+      id: 735210000000000001,
+      todoCode: "TODO-MOCK-1",
+      sessionCode: "SESSION-8842",
+      workspaceCode: "TRON_CORE",
+      position: 0,
+      content: "Validate transcript storage after the next chat turn",
+      status: "in_progress",
+      priority: "high",
+      createdByRunCode: "RUN-42",
+      updatedByRunCode: "RUN-42",
+      createdAt: "2026-05-27T10:42:30Z",
+      updatedAt: "2026-05-27T10:44:00Z",
+    },
+    {
+      id: 735210000000000002,
+      todoCode: "TODO-MOCK-2",
+      sessionCode: "SESSION-8842",
+      workspaceCode: "TRON_CORE",
+      position: 1,
+      content: "Review compaction checkpoint output",
+      status: "pending",
+      priority: "medium",
+      createdByRunCode: "RUN-42",
+      updatedByRunCode: "RUN-42",
+      createdAt: "2026-05-27T10:43:00Z",
+      updatedAt: "2026-05-27T10:44:00Z",
+    },
+  ],
+  "SESSION-REFACTOR": [],
+  "SESSION-UNASSIGNED": [],
+};
+
+const compactionsBySession: Record<string, ChatSessionCompaction | null> = {
+  "SESSION-8842": {
+    sessionCode: "SESSION-8842",
+    checkpointMessageCode: "ATM-MOCK-1",
+    status: "completed",
+    sourceStartSeq: 1,
+    sourceEndSeq: 8,
+    tailStartSeq: 5,
+    summaryTokenEstimate: 96,
+    createdAt: "2026-05-27T10:45:00Z",
+  },
+  "SESSION-REFACTOR": null,
+  "SESSION-UNASSIGNED": null,
+};
+
+const goalsBySession: Record<string, ChatSessionGoalView | null> = {
+  "SESSION-8842": {
+    goal: {
+      id: 735220000000000001,
+      goalCode: "GOAL-MOCK-1",
+      sessionCode: "SESSION-8842",
+      workspaceCode: "TRON_CORE",
+      userCode: "USER-AUTH",
+      taskCode: "TASK-8842",
+      activeFamilyCode: null,
+      objectiveMarkdown: "Finish the auth latency rollback investigation with evidence.",
+      status: "ACTIVE",
+      runsUsed: 2,
+      maxRuns: 20,
+      lastRunCode: "RUN-42",
+      lastInputCode: null,
+      lastVerdict: "CONTINUE",
+      lastReason: "Rollback path is identified; verification evidence is still pending.",
+      blockedReason: null,
+      requiredUserInput: null,
+      consecutiveJudgeFailures: 0,
+      createdByRunCode: "RUN-42",
+      createdAt: "2026-05-27T10:40:00Z",
+      updatedAt: "2026-05-27T10:44:00Z",
+      pausedAt: null,
+      blockedAt: null,
+      completedAt: null,
+      cancelledAt: null,
+      clearedAt: null,
+      metadataJson: null,
+    },
+    criteria: [
+      {
+        id: 735221000000000001,
+        criterionCode: "CRITERION-MOCK-1",
+        goalCode: "GOAL-MOCK-1",
+        sessionCode: "SESSION-8842",
+        position: 0,
+        text: "Rollback path includes the affected regions and a verification step.",
+        status: "ACTIVE",
+        createdAt: "2026-05-27T10:40:00Z",
+        updatedAt: "2026-05-27T10:40:00Z",
+        removedAt: null,
+      },
+    ],
+  },
+  "SESSION-REFACTOR": null,
+  "SESSION-UNASSIGNED": null,
+};
+
 export function getChatSessionGroups(): ChatSessionGroup[] {
   return [
     {
@@ -147,6 +255,148 @@ export function getChatSessionGroups(): ChatSessionGroup[] {
 
 export function getChatMessages(sessionCode: string): ChatMessage[] {
   return messagesBySession[sessionCode] ?? [];
+}
+
+export function getMockChatSessionTodos(sessionCode: string): ChatSessionTodo[] {
+  return [...(todosBySession[sessionCode] ?? [])];
+}
+
+export function getMockChatLatestCompaction(sessionCode: string): ChatSessionCompaction | null {
+  const compaction = compactionsBySession[sessionCode] ?? null;
+  return compaction ? { ...compaction } : null;
+}
+
+export function createMockChatCompaction(input: CreateChatCompactionInput): ChatSessionCompaction {
+  const now = new Date().toISOString();
+  const messages = messagesBySession[input.sessionCode] ?? [];
+  const compaction: ChatSessionCompaction = {
+    sessionCode: input.sessionCode,
+    checkpointMessageCode: `ATM-MOCK-${Date.now()}`,
+    status: "completed",
+    sourceStartSeq: messages.length ? 1 : 0,
+    sourceEndSeq: messages.length,
+    tailStartSeq: Math.max(messages.length - 3, 0),
+    summaryTokenEstimate: Math.max(messages.length * 24, 1),
+    createdAt: now,
+  };
+  compactionsBySession[input.sessionCode] = compaction;
+  return { ...compaction };
+}
+
+export function getMockChatSessionGoal(sessionCode: string): ChatSessionGoalView | null {
+  const goal = goalsBySession[sessionCode] ?? null;
+  if (!goal) return null;
+  return ["ACTIVE", "PAUSED", "BLOCKED"].includes(goal.goal.status) ? cloneGoalView(goal) : null;
+}
+
+export function setMockChatSessionGoal(input: SetChatSessionGoalInput): ChatSessionGoalView {
+  const session = sessions.find((item) => item.sessionCode === input.sessionCode);
+  if (!session) throw new Error("chat session was not found");
+  if (!input.objective.trim()) throw new Error("goal objective is required");
+  const now = new Date().toISOString();
+  const goalCode = `GOAL-MOCK-${Date.now()}`;
+  const goal: ChatSessionGoalView = {
+    goal: {
+      id: Date.now(),
+      goalCode,
+      sessionCode: input.sessionCode,
+      workspaceCode: session.workspaceCode,
+      userCode: session.userCode,
+      taskCode: session.taskCode,
+      activeFamilyCode: null,
+      objectiveMarkdown: input.objective.trim(),
+      status: "ACTIVE",
+      runsUsed: 0,
+      maxRuns: input.maxRuns ?? 20,
+      lastRunCode: null,
+      lastInputCode: null,
+      lastVerdict: null,
+      lastReason: null,
+      blockedReason: null,
+      requiredUserInput: null,
+      consecutiveJudgeFailures: 0,
+      createdByRunCode: null,
+      createdAt: now,
+      updatedAt: now,
+      pausedAt: null,
+      blockedAt: null,
+      completedAt: null,
+      cancelledAt: null,
+      clearedAt: null,
+      metadataJson: { outerLoopStatus: "not_started", startPolicy: "after_next_run" },
+    },
+    criteria: (input.criteria ?? []).map((text, index) => ({
+      id: Date.now() + index + 1,
+      criterionCode: `CRITERION-MOCK-${Date.now()}-${index}`,
+      goalCode,
+      sessionCode: input.sessionCode,
+      position: index,
+      text,
+      status: "ACTIVE",
+      createdAt: now,
+      updatedAt: now,
+      removedAt: null,
+    })),
+  };
+  goalsBySession[input.sessionCode] = goal;
+  return cloneGoalView(goal);
+}
+
+export function transitionMockChatSessionGoal(
+  input: ChatSessionGoalCommand,
+  status: ChatSessionGoalView["goal"]["status"],
+): ChatSessionGoalView {
+  const goal = goalsBySession[input.sessionCode];
+  if (!goal || (input.goalCode && goal.goal.goalCode !== input.goalCode)) {
+    throw new Error("session goal was not found");
+  }
+  goal.goal.status = status;
+  goal.goal.updatedAt = new Date().toISOString();
+  return cloneGoalView(goal);
+}
+
+export function addMockChatSessionGoalCriterion(input: AddChatSessionGoalCriterionInput): ChatSessionGoalView {
+  const goal = goalsBySession[input.sessionCode];
+  if (!goal || (input.goalCode && goal.goal.goalCode !== input.goalCode)) {
+    throw new Error("session goal was not found");
+  }
+  const now = new Date().toISOString();
+  goal.criteria.push({
+    id: Date.now(),
+    criterionCode: `CRITERION-MOCK-${Date.now()}`,
+    goalCode: goal.goal.goalCode,
+    sessionCode: input.sessionCode,
+    position: goal.criteria.length,
+    text: input.text,
+    status: "ACTIVE",
+    createdAt: now,
+    updatedAt: now,
+    removedAt: null,
+  });
+  goal.goal.updatedAt = now;
+  return cloneGoalView(goal);
+}
+
+export function removeMockChatSessionGoalCriterion(input: RemoveChatSessionGoalCriterionInput): ChatSessionGoalView {
+  const goal = goalsBySession[input.sessionCode];
+  if (!goal || goal.goal.goalCode !== input.goalCode) {
+    throw new Error("session goal was not found");
+  }
+  const now = new Date().toISOString();
+  goal.criteria = goal.criteria.map((criterion) => (
+    criterion.criterionCode === input.criterionCode
+      ? { ...criterion, status: "REMOVED", removedAt: now, updatedAt: now }
+      : criterion
+  ));
+  goal.goal.updatedAt = now;
+  return cloneGoalView(goal);
+}
+
+function cloneGoalView(goal: ChatSessionGoalView): ChatSessionGoalView {
+  return {
+    goal: { ...goal.goal },
+    criteria: goal.criteria.map((criterion) => ({ ...criterion })),
+  };
 }
 
 export function getChatAguiEvents(sessionCode: string): ChatAguiEvent[] {
@@ -204,6 +454,9 @@ export function createMockChatSession(input: CreateChatSessionInput): ChatSessio
   };
   sessions.unshift(session);
   messagesBySession[session.sessionCode] = [];
+  todosBySession[session.sessionCode] = [];
+  compactionsBySession[session.sessionCode] = null;
+  goalsBySession[session.sessionCode] = null;
   return session;
 }
 
@@ -226,6 +479,9 @@ export function deleteMockChatSession(sessionCode: string): ChatSession {
 
   const [session] = sessions.splice(sessionIndex, 1);
   delete messagesBySession[sessionCode];
+  delete todosBySession[sessionCode];
+  delete compactionsBySession[sessionCode];
+  delete goalsBySession[sessionCode];
   return { ...session };
 }
 

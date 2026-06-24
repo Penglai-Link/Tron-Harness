@@ -13,8 +13,9 @@ use crate::{
 
 use super::migrations::{
     CHAT_MANAGEMENT_MIGRATION, CHAT_MESSAGE_TOKEN_USAGE_MIGRATION,
-    CHAT_SESSION_AGENT_CODE_MIGRATION, CHAT_SESSION_SOURCE_MIGRATION,
-    CHAT_SESSION_SYSTEM_AGENT_SESSION_ID_MIGRATION, CONVERSATION_RUNTIME_SESSIONS_MIGRATION,
+    CHAT_SESSION_AGENT_CODE_MIGRATION, CHAT_SESSION_LEGACY_SOURCE_MIGRATION,
+    CHAT_SESSION_SOURCE_MIGRATION, CHAT_SESSION_SYSTEM_AGENT_SESSION_ID_MIGRATION,
+    CHAT_SESSION_VISIBILITY_MIGRATION, CONVERSATION_RUNTIME_SESSIONS_MIGRATION,
 };
 
 pub struct SqliteChatRepository {
@@ -54,6 +55,18 @@ impl SqliteChatRepository {
             repository
                 .connection
                 .execute_batch(CHAT_SESSION_SYSTEM_AGENT_SESSION_ID_MIGRATION)
+                .map_err(storage_error)?;
+        }
+        if !column_exists(&repository.connection, "chat_sessions", "source")? {
+            repository
+                .connection
+                .execute_batch(CHAT_SESSION_LEGACY_SOURCE_MIGRATION)
+                .map_err(storage_error)?;
+        }
+        if !column_exists(&repository.connection, "chat_sessions", "visibility")? {
+            repository
+                .connection
+                .execute_batch(CHAT_SESSION_VISIBILITY_MIGRATION)
                 .map_err(storage_error)?;
         }
         if !column_exists(&repository.connection, "chat_messages", "input_tokens")? {
@@ -108,14 +121,14 @@ impl ChatRepository for SqliteChatRepository {
     }
 
     fn delete_session(&mut self, session_code: &str) -> Result<(), ChatError> {
-        self.connection
-            .execute(
-                "DELETE FROM chat_messages WHERE session_code = ?1",
-                [session_code],
-            )
-            .map_err(storage_error)?;
-        let changed = self
-            .connection
+        let tx = self.connection.transaction().map_err(storage_error)?;
+        delete_short_term_memory_rows_for_session(&tx, session_code)?;
+        tx.execute(
+            "DELETE FROM chat_messages WHERE session_code = ?1",
+            [session_code],
+        )
+        .map_err(storage_error)?;
+        let changed = tx
             .execute(
                 "DELETE FROM chat_sessions WHERE session_code = ?1",
                 [session_code],
@@ -124,6 +137,7 @@ impl ChatRepository for SqliteChatRepository {
         if changed == 0 {
             return Err(ChatError::SessionNotFound);
         }
+        tx.commit().map_err(storage_error)?;
         Ok(())
     }
 
@@ -134,6 +148,7 @@ impl ChatRepository for SqliteChatRepository {
                 "SELECT id, session_code, workspace_code, user_code, app_code, task_code, agent_code, title, status, last_run_code, last_run_status, created_at, updated_at
                         , system_agent_session_id, source_type, source_code
                  FROM chat_sessions
+                 WHERE COALESCE(visibility, 'VISIBLE') != 'HIDDEN'
                  ORDER BY updated_at DESC, id DESC",
             )
             .map_err(storage_error)?;
@@ -411,6 +426,73 @@ fn table_exists(connection: &Connection, table_name: &str) -> Result<bool, ChatE
         .optional()
         .map_err(storage_error)?;
     Ok(table.is_some())
+}
+
+fn delete_short_term_memory_rows_for_session(
+    connection: &Connection,
+    session_code: &str,
+) -> Result<(), ChatError> {
+    if table_exists(connection, "agent_session_families")? {
+        connection
+            .execute(
+                "UPDATE agent_session_families
+                 SET active_session_code = CASE WHEN active_session_code = ?1 THEN NULL ELSE active_session_code END,
+                     root_session_code = CASE WHEN root_session_code = ?1 THEN NULL ELSE root_session_code END
+                 WHERE active_session_code = ?1
+                    OR root_session_code = ?1",
+                [session_code],
+            )
+            .map_err(storage_error)?;
+        if table_exists(connection, "agent_session_family_snapshots")? {
+            connection
+                .execute(
+                    "UPDATE agent_session_families
+                     SET latest_snapshot_code = NULL
+                     WHERE latest_snapshot_code IN (
+                         SELECT snapshot_code
+                         FROM agent_session_family_snapshots
+                         WHERE session_code = ?1
+                     )",
+                    [session_code],
+                )
+                .map_err(storage_error)?;
+        }
+    }
+
+    for table in [
+        "agent_session_goal_events",
+        "agent_session_goal_criteria",
+        "agent_session_goals",
+        "agent_session_run_leases",
+        "agent_session_todos",
+        "agent_session_family_snapshots",
+        "agent_session_family_members",
+        "agent_transcript_context_epochs",
+        "agent_transcript_parts",
+        "agent_transcript_messages",
+        "agent_transcript_events",
+        "agent_transcript_inputs",
+    ] {
+        delete_session_rows_if_table_exists(connection, table, session_code)?;
+    }
+    Ok(())
+}
+
+fn delete_session_rows_if_table_exists(
+    connection: &Connection,
+    table: &str,
+    session_code: &str,
+) -> Result<(), ChatError> {
+    if !table_exists(connection, table)? {
+        return Ok(());
+    }
+    connection
+        .execute(
+            &format!("DELETE FROM {table} WHERE session_code = ?1"),
+            [session_code],
+        )
+        .map_err(storage_error)?;
+    Ok(())
 }
 
 fn next_id(connection: &Connection, table: &str) -> Result<i64, ChatError> {

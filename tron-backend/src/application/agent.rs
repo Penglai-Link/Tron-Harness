@@ -16,6 +16,7 @@ mod system_agent_model_probe;
 mod system_cli_output_parser;
 mod tool_catalog;
 mod turn_state;
+mod usage_snapshots;
 
 pub use agui_stream::{AgentAguiReplayStore, AgentAguiStreamError, AgentAguiStreamService};
 pub use business_tools::{
@@ -42,3 +43,6 @@ pub use runtime_adapter::{
 };
 pub use tool_catalog::BusinessToolCatalog;
 pub(crate) use turn_state::{TurnStateAdapter, TurnStateKind};
+pub(crate) use usage_snapshots::{
+    request_estimate_snapshot, usage_audit_snapshot, usage_event_payload,
+};

@@ -1,6 +1,8 @@
 mod dto;
+mod goal_loop;
 mod port;
 mod service;
+mod title;
 
 pub use dto::{
     ChatSendResult, ChatSessionQuery, CreateChatSessionCommand, SendChatMessageCommand,

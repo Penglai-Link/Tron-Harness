@@ -136,3 +136,11 @@ pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_MCP_MIGRATION: &str = include_s
 );
 pub(super) const OPEN_APPS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260611_0001_create_platform_open_apps.sql");
+pub(super) const SHORT_TERM_MEMORY_TRANSCRIPT_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260615_0001_create_short_term_memory_transcript.sql");
+pub(super) const CHAT_SESSION_LEGACY_SOURCE_MIGRATION: &str =
+    "ALTER TABLE chat_sessions ADD COLUMN source TEXT NOT NULL DEFAULT 'USER_CHAT';";
+pub(super) const CHAT_SESSION_VISIBILITY_MIGRATION: &str =
+    "ALTER TABLE chat_sessions ADD COLUMN visibility TEXT NOT NULL DEFAULT 'VISIBLE';
+CREATE INDEX IF NOT EXISTS idx_chat_sessions_visibility_updated
+    ON chat_sessions (visibility, updated_at DESC, id DESC);";

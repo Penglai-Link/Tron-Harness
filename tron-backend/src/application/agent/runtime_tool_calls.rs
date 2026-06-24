@@ -1,13 +1,18 @@
 use std::sync::Arc;
 
-use crate::domain::agent::{
-    AgentError, AgentRunContext, ToolCall, ToolError, ToolExecutionResult, ToolObservation,
-    ToolRequest,
-};
 use crate::shared::event_bus::BusOutcome;
+use crate::{
+    application::short_term_memory::ToolTranscriptStatus,
+    domain::agent::{
+        AgentError, AgentRunContext, ExpandedDomainPersistenceMode, ToolCall, ToolContextDelta,
+        ToolError, ToolExecutionResult, ToolExposureMode, ToolObservation, ToolRequest,
+    },
+};
 
-use super::super::TurnStateAdapter;
-use super::{ReactAgent, apply_tool_context_delta, collapse_ephemeral_expanded_domains};
+use super::super::{
+    DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, TurnStateAdapter, discovery_expand_tool_definition,
+};
+use super::ReactAgent;
 
 impl ReactAgent {
     pub(super) async fn execute_tool_calls(
@@ -43,6 +48,7 @@ impl ReactAgent {
     ) -> Result<(), AgentError> {
         *tool_calls += 1;
         let tool_call_id = format!("{}-tool-{}", context.run_code, *tool_calls);
+        let sequence = *tool_calls;
         let model_call_id = call.call_id.clone();
         let tool_name = call.tool_name.clone();
         let tool_input = call.input.clone();
@@ -66,6 +72,11 @@ impl ReactAgent {
             Some(&tool_input),
             None,
         )?;
+        if let Some(short_term_memory) = self.short_term_memory.as_ref() {
+            short_term_memory
+                .record_tool_started(context, &tool_name, model_call_id.as_deref(), sequence)
+                .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
+        }
         let registry = Arc::clone(&self.tool_registry);
         let context_snapshot = context.clone();
         let activity_publisher = self.clone();
@@ -115,7 +126,14 @@ impl ReactAgent {
                     None,
                     Some(observation.output.as_str()),
                 )?;
-                let message = turn_state.record_tool_observation(&observation, model_call_id);
+                let message = self.record_tool_observation_message(
+                    context,
+                    turn_state,
+                    &observation,
+                    model_call_id,
+                    *tool_calls,
+                    ToolTranscriptStatus::Completed,
+                )?;
                 context.messages.push(message);
                 let completed_tool_name = observation.tool_name.clone();
                 context.observations.push(observation);
@@ -143,16 +161,17 @@ impl ReactAgent {
                     None,
                     Some(error_message.as_str()),
                 )?;
-                if error.is_execution_failure() {
-                    self.record_tool_failure_observation(
-                        context,
-                        &tool_call_id,
-                        &tool_name,
-                        model_call_id,
-                        turn_state,
-                        error_message,
-                    )?;
-                } else {
+                let should_continue = error.is_execution_failure();
+                self.record_tool_failure_observation(
+                    context,
+                    &tool_call_id,
+                    &tool_name,
+                    model_call_id,
+                    turn_state,
+                    sequence,
+                    error_message,
+                )?;
+                if !should_continue {
                     self.publish(
                         &context,
                         "agent.run.failed",
@@ -207,6 +226,7 @@ impl ReactAgent {
         for call in calls {
             *tool_calls += 1;
             let tool_call_id = format!("{}-tool-{}", context.run_code, *tool_calls);
+            let sequence = *tool_calls;
             let model_call_id = call.call_id.clone();
             let tool_name = call.tool_name.clone();
             let tool_input = call.input.clone();
@@ -231,6 +251,11 @@ impl ReactAgent {
                 Some(&tool_input),
                 None,
             )?;
+            if let Some(short_term_memory) = self.short_term_memory.as_ref() {
+                short_term_memory
+                    .record_tool_started(context, &tool_name, model_call_id.as_deref(), sequence)
+                    .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
+            }
 
             let registry = Arc::clone(&self.tool_registry);
             let context_snapshot = Arc::clone(&context_snapshot);
@@ -269,6 +294,7 @@ impl ReactAgent {
                 tool_call_id,
                 tool_name,
                 model_call_id,
+                sequence,
                 handle,
             });
         }
@@ -279,6 +305,7 @@ impl ReactAgent {
                 tool_call_id,
                 tool_name,
                 model_call_id,
+                sequence,
                 handle,
             } = planned_call;
             let execution_result = handle.await.map_err(|error| {
@@ -292,6 +319,7 @@ impl ReactAgent {
                         &tool_name,
                         model_call_id,
                         turn_state,
+                        sequence,
                         execution,
                     )?;
                 }
@@ -307,16 +335,17 @@ impl ReactAgent {
                         None,
                         Some(error_message.as_str()),
                     )?;
-                    if error.is_execution_failure() {
-                        self.record_tool_failure_observation(
-                            context,
-                            &tool_call_id,
-                            &tool_name,
-                            model_call_id,
-                            turn_state,
-                            error_message,
-                        )?;
-                    } else if first_error.is_none() {
+                    let should_continue = error.is_execution_failure();
+                    self.record_tool_failure_observation(
+                        context,
+                        &tool_call_id,
+                        &tool_name,
+                        model_call_id,
+                        turn_state,
+                        sequence,
+                        error_message,
+                    )?;
+                    if !should_continue && first_error.is_none() {
                         first_error = Some(error.into());
                     }
                 }
@@ -352,6 +381,7 @@ impl ReactAgent {
         tool_name: &str,
         model_call_id: Option<String>,
         turn_state: &mut TurnStateAdapter,
+        sequence: u32,
         execution: ToolExecutionResult,
     ) -> Result<(), AgentError> {
         let observation = execution.observation;
@@ -366,7 +396,14 @@ impl ReactAgent {
             None,
             Some(observation.output.as_str()),
         )?;
-        let message = turn_state.record_tool_observation(&observation, model_call_id);
+        let message = self.record_tool_observation_message(
+            context,
+            turn_state,
+            &observation,
+            model_call_id,
+            sequence,
+            ToolTranscriptStatus::Completed,
+        )?;
         context.messages.push(message);
         let completed_tool_name = observation.tool_name.clone();
         context.observations.push(observation);
@@ -392,13 +429,21 @@ impl ReactAgent {
         tool_name: &str,
         model_call_id: Option<String>,
         turn_state: &mut TurnStateAdapter,
+        sequence: u32,
         error_message: String,
     ) -> Result<(), AgentError> {
         let observation = ToolObservation {
             tool_name: tool_name.to_string(),
             output: error_message,
         };
-        let message = turn_state.record_tool_observation(&observation, model_call_id);
+        let message = self.record_tool_observation_message(
+            context,
+            turn_state,
+            &observation,
+            model_call_id,
+            sequence,
+            ToolTranscriptStatus::Failed,
+        )?;
         context.messages.push(message);
         context.observations.push(observation);
         self.publish_tool(
@@ -414,11 +459,76 @@ impl ReactAgent {
 
         Ok(())
     }
+
+    fn record_tool_observation_message(
+        &self,
+        context: &AgentRunContext,
+        turn_state: &mut TurnStateAdapter,
+        observation: &ToolObservation,
+        model_call_id: Option<String>,
+        sequence: u32,
+        status: ToolTranscriptStatus,
+    ) -> Result<crate::domain::agent::AgentMessage, AgentError> {
+        if let Some(short_term_memory) = self.short_term_memory.as_ref() {
+            short_term_memory
+                .record_tool_result(context, observation, model_call_id, sequence, status)
+                .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))
+        } else {
+            Ok(turn_state.record_tool_observation(observation, model_call_id))
+        }
+    }
 }
 
 struct ParallelToolCall {
     tool_call_id: String,
     tool_name: String,
     model_call_id: Option<String>,
+    sequence: u32,
     handle: tokio::task::JoinHandle<Result<ToolExecutionResult, ToolError>>,
+}
+
+fn apply_tool_context_delta(context: &mut AgentRunContext, delta: ToolContextDelta) {
+    if !delta.add_tools.is_empty() {
+        for tool in delta.add_tools {
+            if context
+                .tools
+                .iter()
+                .all(|existing| existing.tool_name != tool.tool_name)
+            {
+                context.tools.push(tool);
+            }
+        }
+    }
+    for domain_code in delta.expanded_domain_codes {
+        if context
+            .tool_exposure
+            .expanded_domain_codes
+            .iter()
+            .all(|existing| !existing.eq_ignore_ascii_case(&domain_code))
+        {
+            context
+                .tool_exposure
+                .expanded_domain_codes
+                .push(domain_code);
+        }
+    }
+}
+
+fn collapse_ephemeral_expanded_domains(context: &mut AgentRunContext, tool_name: &str) {
+    if context.tool_exposure.tool_exposure_mode != Some(ToolExposureMode::DomainDiscovery) {
+        return;
+    }
+    if context.tool_exposure.expanded_domain_persistence_mode
+        != Some(ExpandedDomainPersistenceMode::EphemeralExpanded)
+    {
+        return;
+    }
+    if context.tool_exposure.expanded_domain_codes.is_empty() {
+        return;
+    }
+    if tool_name == DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL {
+        return;
+    }
+    context.tools = vec![discovery_expand_tool_definition(&context.locale)];
+    context.tool_exposure.expanded_domain_codes.clear();
 }
