@@ -94,13 +94,7 @@ where
         let model_code = llm_summary_model_code(node)?;
         let mut summaries: BTreeMap<String, String> = BTreeMap::new();
         let mut tree_nodes_by_code: BTreeMap<String, RagTreeNodeWrite> = BTreeMap::new();
-        let mut ordered_nodes = tree_nodes.iter().collect::<Vec<_>>();
-        ordered_nodes.sort_by(|left, right| {
-            right
-                .level
-                .cmp(&left.level)
-                .then_with(|| left.ordinal.cmp(&right.ordinal))
-        });
+        let ordered_nodes = tree_summary_post_order(tree_nodes, children_by_parent)?;
         for tree_node in ordered_nodes {
             let child_summaries = children_by_parent
                 .get(&tree_node.tree_node_code)
@@ -427,6 +421,80 @@ fn required_string_array(value: &Value, field: &str) -> Result<Vec<String>, RagE
         .collect()
 }
 
+fn tree_summary_post_order<'a>(
+    tree_nodes: &'a [TreeExtractedNode],
+    children_by_parent: &BTreeMap<String, Vec<&'a TreeExtractedNode>>,
+) -> Result<Vec<&'a TreeExtractedNode>, RagError> {
+    let mut roots = tree_nodes
+        .iter()
+        .filter(|tree_node| tree_node.parent_node_code == "0")
+        .collect::<Vec<_>>();
+    roots.sort_by_key(|tree_node| tree_node.ordinal);
+
+    let mut visiting = BTreeSet::new();
+    let mut visited = BTreeSet::new();
+    let mut ordered = Vec::with_capacity(tree_nodes.len());
+    for root in roots {
+        append_tree_summary_post_order(
+            root,
+            children_by_parent,
+            &mut visiting,
+            &mut visited,
+            &mut ordered,
+        )?;
+    }
+
+    let mut unvisited = tree_nodes
+        .iter()
+        .filter(|tree_node| !visited.contains(&tree_node.tree_node_code))
+        .collect::<Vec<_>>();
+    unvisited.sort_by_key(|tree_node| tree_node.ordinal);
+    for tree_node in unvisited {
+        append_tree_summary_post_order(
+            tree_node,
+            children_by_parent,
+            &mut visiting,
+            &mut visited,
+            &mut ordered,
+        )?;
+    }
+
+    if ordered.len() != tree_nodes.len() {
+        return Err(RagError::IngestStageFailed);
+    }
+    Ok(ordered)
+}
+
+fn append_tree_summary_post_order<'a>(
+    tree_node: &'a TreeExtractedNode,
+    children_by_parent: &BTreeMap<String, Vec<&'a TreeExtractedNode>>,
+    visiting: &mut BTreeSet<String>,
+    visited: &mut BTreeSet<String>,
+    ordered: &mut Vec<&'a TreeExtractedNode>,
+) -> Result<(), RagError> {
+    if visited.contains(&tree_node.tree_node_code) {
+        return Ok(());
+    }
+    if !visiting.insert(tree_node.tree_node_code.clone()) {
+        return Err(RagError::IngestStageFailed);
+    }
+    if let Some(children) = children_by_parent.get(&tree_node.tree_node_code) {
+        for child in children {
+            append_tree_summary_post_order(
+                child,
+                children_by_parent,
+                visiting,
+                visited,
+                ordered,
+            )?;
+        }
+    }
+    visiting.remove(&tree_node.tree_node_code);
+    visited.insert(tree_node.tree_node_code.clone());
+    ordered.push(tree_node);
+    Ok(())
+}
+
 fn direct_text_units(
     prepared: &PreparedIngestPayload,
     tree_node: &TreeExtractedNode,
@@ -610,6 +678,55 @@ fn merge_tree_vector_status(target: &mut RagTreeIndexArtifact, vector: &RagTreeI
             node.summary_embedding_text_hash = vector_node.summary_embedding_text_hash.clone();
             node.summary_embedding_dimension = vector_node.summary_embedding_dimension;
             node.summary_embedding = vector_node.summary_embedding.clone();
+        }
+    }
+}
+
+#[cfg(test)]
+mod tree_stage_tests {
+    use super::*;
+
+    #[test]
+    fn tree_summary_post_order_uses_edges_even_when_levels_are_inconsistent() {
+        let nodes = vec![
+            extracted_node("root", "0", 99, 0, "Root", &["u0", "u1"]),
+            extracted_node("parent", "root", 1, 1, "Parent", &["u0", "u1"]),
+            extracted_node("leaf", "parent", 0, 2, "Leaf", &["u1"]),
+        ];
+        let mut children_by_parent = BTreeMap::new();
+        children_by_parent.insert("root".into(), vec![&nodes[1]]);
+        children_by_parent.insert("parent".into(), vec![&nodes[2]]);
+
+        let ordered = tree_summary_post_order(&nodes, &children_by_parent).unwrap();
+
+        assert_eq!(
+            ordered
+                .iter()
+                .map(|node| node.tree_node_code.as_str())
+                .collect::<Vec<_>>(),
+            vec!["leaf", "parent", "root"]
+        );
+    }
+
+    fn extracted_node(
+        tree_node_code: &str,
+        parent_node_code: &str,
+        level: i64,
+        ordinal: i64,
+        title: &str,
+        covered_text_unit_codes: &[&str],
+    ) -> TreeExtractedNode {
+        TreeExtractedNode {
+            tree_node_code: tree_node_code.into(),
+            parent_node_code: parent_node_code.into(),
+            path_key: title.into(),
+            level,
+            ordinal,
+            title: title.into(),
+            covered_text_unit_codes: covered_text_unit_codes
+                .iter()
+                .map(|code| (*code).into())
+                .collect(),
         }
     }
 }
