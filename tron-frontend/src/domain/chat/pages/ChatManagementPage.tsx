@@ -189,6 +189,8 @@ const chatSessionSourceTabs: { id: ChatSessionSourceTab; icon: LucideIcon; label
 ];
 const defaultChatSessionSourceTab: ChatSessionSourceTab = "chat";
 const chatSessionSourceTabStorageKey = "tron.chat.activeSourceTab";
+const emptyLiveAguiEvents: ChatAguiStreamEvent[] = [];
+const emptyLiveAguiAnchorMessageCodes: Record<string, string> = {};
 
 function normalizedSessionSource(value: string | null | undefined) {
   return value?.trim().toLowerCase() ?? "";
@@ -253,10 +255,6 @@ async function copyPlainText(value: string) {
   const copied = document.execCommand("copy");
   document.body.removeChild(textarea);
   if (!copied) throw new Error("Clipboard copy failed");
-}
-
-function firstSession(groups: ChatSessionGroup[]) {
-  return groups.flatMap((group) => group.sessions)[0];
 }
 
 function firstSessionForSourceTab(groups: ChatSessionGroup[], sourceTab: ChatSessionSourceTab) {
@@ -3120,10 +3118,16 @@ export function ChatManagementPage() {
   const currentUserDisplayName = authSession?.user.displayName ?? "";
 
   const replaceChatSearchParams = useCallback((update: (next: URLSearchParams) => void) => {
-    const currentSearch = typeof window === "undefined" ? currentSearchText : window.location.search;
+    const currentSearch = typeof window === "undefined"
+      ? currentSearchText
+      : window.location.search.replace(/^\?/, "");
     const next = new URLSearchParams(currentSearch);
     update(next);
     const nextSearch = next.toString();
+    if (nextSearch === currentSearch) {
+      if (currentSearchText !== nextSearch) setCurrentSearchText(nextSearch);
+      return;
+    }
     setCurrentSearchText(nextSearch);
     const pathname = typeof window === "undefined" ? "/chats" : window.location.pathname;
     navigate(`${pathname}${nextSearch ? `?${nextSearch}` : ""}`, { replace: true });
@@ -3423,18 +3427,27 @@ export function ChatManagementPage() {
 
   useEffect(() => {
     const sessionCode = activeSession?.sessionCode ?? "";
-    setVisibleMessages(sessionCode ? messages.filter((message) => message.sessionCode === sessionCode) : []);
+    const nextMessages = sessionCode ? messages.filter((message) => message.sessionCode === sessionCode) : [];
+    setVisibleMessages((current) => {
+      if (
+        current.length === nextMessages.length
+        && current.every((message, index) => message === nextMessages[index])
+      ) {
+        return current;
+      }
+      return nextMessages;
+    });
     if (visibleSessionCodeRef.current !== sessionCode) {
       visibleSessionCodeRef.current = sessionCode;
     }
   }, [activeSession?.sessionCode, messages]);
 
   const liveAguiEvents = activeSession?.sessionCode
-    ? liveAguiEventsBySessionCode[activeSession.sessionCode] ?? []
-    : [];
+    ? liveAguiEventsBySessionCode[activeSession.sessionCode] ?? emptyLiveAguiEvents
+    : emptyLiveAguiEvents;
   const liveAguiAnchorMessageCodes = activeSession?.sessionCode
-    ? liveAguiAnchorMessageCodesBySessionCode[activeSession.sessionCode] ?? {}
-    : {};
+    ? liveAguiAnchorMessageCodesBySessionCode[activeSession.sessionCode] ?? emptyLiveAguiAnchorMessageCodes
+    : emptyLiveAguiAnchorMessageCodes;
   const liveAguiPending = Boolean(
     sending
     && activeSession
@@ -3526,20 +3539,26 @@ export function ChatManagementPage() {
     );
   }, [
     activeSession,
-    activeGoalState,
     activeGoal,
+    activeGoalState.error,
+    activeGoalState.loading,
+    activeGoalState.retry,
     aguiEvents,
     compactingSessionCode,
     goalActionSessionCode,
     hasActiveSession,
-    latestCompactionState,
     latestCompaction,
+    latestCompactionState.error,
+    latestCompactionState.loading,
+    latestCompactionState.retry,
     latestRequestEstimatesBySessionCode,
     latestUsageAuditsBySessionCode,
     selectedMainAgentModel,
     selectedModel,
-    shortTermMemoryTodosState,
     shortTermMemoryTodos,
+    shortTermMemoryTodosState.error,
+    shortTermMemoryTodosState.loading,
+    shortTermMemoryTodosState.retry,
     visibleMessages,
   ]);
   const transcriptDebugOptions = useMemo(() => ({
@@ -3641,6 +3660,24 @@ export function ChatManagementPage() {
       handleSessionSelect(nextSession, sourceTab);
       return;
     }
+    activeSessionCodeRef.current = "";
+    setOptimisticActiveSession(null);
+    setActiveSessionCode("");
+    setVisibleMessages([]);
+    replaceChatSearchParams((next) => {
+      next.delete("sessionCode");
+      next.set("sourceTab", sourceTab);
+    });
+  }
+
+  function selectSessionAfterRemoval(groupsAfterRemoval: ChatSessionGroup[], sourceTab: ChatSessionSourceTab) {
+    selectSourceTab(sourceTab);
+    const nextSession = firstSessionForSourceTab(groupsAfterRemoval, sourceTab);
+    if (nextSession) {
+      handleSessionSelect(nextSession, sourceTab);
+      return;
+    }
+
     activeSessionCodeRef.current = "";
     setOptimisticActiveSession(null);
     setActiveSessionCode("");
@@ -4045,6 +4082,7 @@ export function ChatManagementPage() {
   }
 
   async function handleArchiveSession(session: ChatSession) {
+    const returnSourceTab = requestedSourceTab ?? activeSourceTab;
     setSessionActionPendingCode(session.sessionCode);
     try {
       const archived = await archiveChatSession(session.sessionCode);
@@ -4057,8 +4095,7 @@ export function ChatManagementPage() {
         return next;
       });
       if (activeSessionCode === archived.sessionCode) {
-        handleSessionSelect(firstSession(nextGroups) ?? "");
-        setVisibleMessages([]);
+        selectSessionAfterRemoval(nextGroups, returnSourceTab);
       }
       forgetSessionModelSelection(archived.sessionCode);
       toast.success("Session archived", { title: archived.sessionCode });
@@ -4073,6 +4110,7 @@ export function ChatManagementPage() {
   async function confirmDeleteSession() {
     if (!deleteTargetSession) return;
     const session = deleteTargetSession;
+    const returnSourceTab = requestedSourceTab ?? activeSourceTab;
 
     setSessionActionPendingCode(session.sessionCode);
     try {
@@ -4086,8 +4124,7 @@ export function ChatManagementPage() {
         return next;
       });
       if (activeSessionCode === deleted.sessionCode) {
-        handleSessionSelect(firstSession(nextGroups) ?? "");
-        setVisibleMessages([]);
+        selectSessionAfterRemoval(nextGroups, returnSourceTab);
       }
       forgetSessionModelSelection(deleted.sessionCode);
       // Clear MainAgentChatWindow's persisted session if it matches the deleted one
