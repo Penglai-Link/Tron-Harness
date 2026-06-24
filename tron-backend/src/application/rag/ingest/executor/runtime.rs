@@ -136,21 +136,7 @@ where
                 let prepared = bundle.prepared_payload()?;
                 store.put_json(
                     "tree.hints",
-                    json!(
-                        prepared
-                            .tree_hints
-                            .iter()
-                            .map(|hint| json!({
-                                "treeNodeCode": hint.tree_node_code,
-                                "parentNodeCode": hint.parent_node_code,
-                                "pathKey": hint.path_key,
-                                "level": hint.level,
-                                "ordinal": hint.ordinal,
-                                "title": hint.title,
-                                "coveredTextUnitCodes": hint.covered_text_unit_codes
-                            }))
-                            .collect::<Vec<_>>()
-                    ),
+                    build_tree_hints_artifact(prepared, &compiled.split_strategy_id),
                 );
             }
             IngestStageKind::FulltextIndex => {

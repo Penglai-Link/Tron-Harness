@@ -404,6 +404,7 @@ where
             source_version,
             scopes: search_scopes(&context.request.access_context),
             filters,
+            policy: route.policy.clone(),
             return_fields: context.request.context.return_fields.clone(),
             limit: route.top_k.max(context.request.limit).max(1) * 4,
         };

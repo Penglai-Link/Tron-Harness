@@ -108,6 +108,7 @@ pub struct RagRouteSearchQuery {
     pub source_version: String,
     pub scopes: Vec<RagSearchScope>,
     pub filters: Value,
+    pub policy: Value,
     pub return_fields: Vec<String>,
     pub limit: usize,
 }

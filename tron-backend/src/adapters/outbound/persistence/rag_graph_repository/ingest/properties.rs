@@ -102,7 +102,7 @@ pub(super) fn text_unit_properties(
 }
 
 pub(super) fn tree_node_properties(
-    corpus: &RagCorpusRecord,
+    _corpus: &RagCorpusRecord,
     command: &RagPersistIngestCommand,
     node: &RagTreeNodeWrite,
     node_code: &str,
@@ -123,6 +123,7 @@ pub(super) fn tree_node_properties(
     properties.insert("ordinal".into(), GraphPropertyValue::Integer(node.ordinal));
     push_text_prop(&mut properties, "title", &node.title);
     push_text_prop(&mut properties, "summaryText", &node.summary_text);
+    push_text_prop(&mut properties, "text", &node.summary_text);
     push_text_prop(&mut properties, "searchText", &node.summary_text);
     properties.insert(
         "summaryTokenCount".into(),
@@ -177,8 +178,21 @@ pub(super) fn tree_node_properties(
         &json_string(&node.metadata)?,
     );
     push_text_prop(&mut properties, "status", &node.status);
-    push_domain_field_properties(corpus, "tree", command, &mut properties)?;
     Ok(properties)
+}
+
+pub(super) fn tree_edge_properties(
+    command: &RagPersistIngestCommand,
+    node: &RagTreeNodeWrite,
+) -> BTreeMap<String, GraphPropertyValue> {
+    let mut properties = BTreeMap::new();
+    push_text_prop(&mut properties, "corpusId", &command.corpus_id);
+    push_text_prop(&mut properties, "sourceCode", &node.source_code);
+    push_text_prop(&mut properties, "sourceVersion", &node.source_version);
+    push_text_prop(&mut properties, "scopeType", &node.scope_type);
+    push_text_prop(&mut properties, "scopeCode", &node.scope_code);
+    properties.insert("ordinal".into(), GraphPropertyValue::Integer(node.ordinal));
+    properties
 }
 
 pub(super) fn push_domain_field_properties(

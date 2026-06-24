@@ -104,6 +104,8 @@ pub struct RagTreeNodeWrite {
     pub summary_embedding: Option<Vec<u8>>,
     pub covered_text_unit_codes: Vec<String>,
     pub covered_text_unit_count: i64,
+    pub child_start_ordinal: i64,
+    pub child_end_ordinal: i64,
     pub metadata: Value,
     pub status: String,
 }

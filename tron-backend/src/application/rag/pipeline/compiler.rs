@@ -422,11 +422,57 @@ fn stage_orchestration(stage_type: &str) -> StageOrchestrationDefinition {
             must_run_before_stage_types: &["SPLIT_TEXT"],
             must_run_after_stage_types: &[],
         },
-        "PERSIST_TREE" => StageOrchestrationDefinition {
+        "EXTRACT_TREE" => StageOrchestrationDefinition {
             required: false,
-            acts_as_barrier: true,
+            acts_as_barrier: false,
+            must_run_before_stage_types: &["SUMMARIZE_TREE"],
+            must_run_after_stage_types: &["SPLIT_TEXT"],
+        },
+        "SUMMARIZE_TREE" => StageOrchestrationDefinition {
+            required: false,
+            acts_as_barrier: false,
+            must_run_before_stage_types: &["TREE_FULLTEXT_INDEX", "TREE_VECTOR_INDEX"],
+            must_run_after_stage_types: &["EXTRACT_TREE"],
+        },
+        "FULLTEXT_INDEX" => StageOrchestrationDefinition {
+            required: false,
+            acts_as_barrier: false,
             must_run_before_stage_types: &["PERSIST_SOURCE"],
             must_run_after_stage_types: &[],
+        },
+        "VECTOR_INDEX" => StageOrchestrationDefinition {
+            required: false,
+            acts_as_barrier: false,
+            must_run_before_stage_types: &["PERSIST_SOURCE"],
+            must_run_after_stage_types: &[],
+        },
+        "TREE_FULLTEXT_INDEX" => StageOrchestrationDefinition {
+            required: false,
+            acts_as_barrier: false,
+            must_run_before_stage_types: &["PERSIST_TREE", "PERSIST_SOURCE"],
+            must_run_after_stage_types: &["SUMMARIZE_TREE"],
+        },
+        "TREE_VECTOR_INDEX" => StageOrchestrationDefinition {
+            required: false,
+            acts_as_barrier: false,
+            must_run_before_stage_types: &["PERSIST_TREE", "PERSIST_SOURCE"],
+            must_run_after_stage_types: &["SUMMARIZE_TREE"],
+        },
+        "PERSIST_TREE" => StageOrchestrationDefinition {
+            required: false,
+            acts_as_barrier: false,
+            must_run_before_stage_types: &["PERSIST_SOURCE"],
+            must_run_after_stage_types: &[
+                "SUMMARIZE_TREE",
+                "TREE_FULLTEXT_INDEX",
+                "TREE_VECTOR_INDEX",
+            ],
+        },
+        "PERSIST_SOURCE" => StageOrchestrationDefinition {
+            required: false,
+            acts_as_barrier: false,
+            must_run_before_stage_types: &[],
+            must_run_after_stage_types: &["FULLTEXT_INDEX", "VECTOR_INDEX", "PERSIST_TREE"],
         },
         _ => StageOrchestrationDefinition::default(),
     }

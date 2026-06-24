@@ -114,17 +114,35 @@ fn execute_graph_write(
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
     ensure_graph_runtime_supported(corpus)?;
-    if operations.len() > 1
-        || operations
-            .iter()
-            .any(|operation| operation.segments.contains("tree"))
-    {
-        repository.persist_graph_segmented(corpus, command.clone())
-    } else {
-        repository.persist_graph_single_node(corpus, command.clone())
+    let has_tree = operations
+        .iter()
+        .any(|operation| operation.segments.contains("tree"));
+    let has_non_tree = operations
+        .iter()
+        .any(|operation| operation.segments.iter().any(is_non_tree_graph_segment));
+    if has_non_tree {
+        if operations.len() > 1 {
+            repository.persist_graph_segmented(corpus, command.clone())?;
+        } else {
+            repository.persist_graph_single_node(corpus, command.clone())?;
+        }
     }
+    if has_tree {
+        repository.persist_graph_tree_nodes(corpus, command.clone())?;
+    }
+    Ok(())
 }
 
 fn is_retrieval_segment(segment: &String) -> bool {
-    matches!(segment.as_str(), "textUnit" | "fulltext" | "vector")
+    matches!(
+        segment.as_str(),
+        "textUnit" | "fulltext" | "vector" | "tree"
+    )
+}
+
+fn is_non_tree_graph_segment(segment: &String) -> bool {
+    matches!(
+        segment.as_str(),
+        "source" | "textUnit" | "fulltext" | "vector"
+    )
 }

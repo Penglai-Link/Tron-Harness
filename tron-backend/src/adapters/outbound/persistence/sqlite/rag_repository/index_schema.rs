@@ -403,6 +403,8 @@ fn dynamic_columns_sql(columns: &BTreeSet<String>) -> String {
                     | "summary_token_count"
                     | "summary_embedding_dimension"
                     | "covered_text_unit_count"
+                    | "child_start_ordinal"
+                    | "child_end_ordinal"
             ) {
                 "INTEGER NOT NULL DEFAULT 0"
             } else if column == "text" {

@@ -36,6 +36,7 @@ pub struct RetrievalRoute {
     pub top_k: usize,
     pub weight: f64,
     pub filters: Value,
+    pub policy: Value,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -234,6 +235,11 @@ fn parse_pipeline_routes(
                     .and_then(|config| config.get("filters"))
                     .cloned()
                     .unwrap_or_else(|| json!({})),
+                policy: node
+                    .config
+                    .as_ref()
+                    .map(route_policy_from_config)
+                    .unwrap_or_else(|| json!({})),
             })
         })
         .collect::<Result<Vec<_>, _>>()
@@ -259,7 +265,8 @@ fn legacy_pipeline_input(
                 "corpusId": route.corpus_id,
                 "topK": route.top_k,
                 "weight": route.weight,
-                "filters": route.filters
+                "filters": route.filters,
+                "policy": route.policy
             })),
         })
         .collect::<Vec<_>>();
@@ -359,6 +366,7 @@ fn parse_routes(
                         .filter(|value| *value > 0.0)
                         .unwrap_or(1.0),
                     filters: object.get("filters").cloned().unwrap_or_else(|| json!({})),
+                    policy: route_policy_from_config(value),
                 })
             })
             .collect::<Result<Vec<_>, _>>()
@@ -381,10 +389,20 @@ fn parse_routes(
                 top_k: 20,
                 weight: 1.0,
                 filters: json!({}),
+                policy: json!({}),
             })
         })
         .collect::<Result<Vec<_>, _>>()
         .and_then(|routes| validate_route_corpora(profile, routes))
+}
+
+fn route_policy_from_config(config: &Value) -> Value {
+    config
+        .get("policy")
+        .or_else(|| config.get("routePolicy"))
+        .or_else(|| config.get("treePolicy"))
+        .cloned()
+        .unwrap_or_else(|| config.clone())
 }
 
 fn validate_route_corpora(

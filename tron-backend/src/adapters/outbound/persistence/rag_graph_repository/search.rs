@@ -7,8 +7,8 @@ use crate::{
     },
     domain::{
         graph::{
-            GraphQueryLimit, GraphSearchQuery, GraphTraversalClause, GraphTraversalDirection,
-            GraphTraverseQuery,
+            GraphPropertyFilter, GraphPropertyValue, GraphQueryLimit, GraphSearchHit,
+            GraphSearchQuery, GraphTraversalClause, GraphTraversalDirection, GraphTraverseQuery,
         },
         rag::{RagCorpusRecord, RagError},
     },
@@ -20,6 +20,7 @@ use super::{
     model::{
         graph_hit_to_row, graph_node_json, graph_properties_json, graph_segment_for_retriever,
         graph_target_for_retriever, map_graph_error, optional_graph_target_for_segment,
+        prop_i64,
     },
     tree_rows::{
         covered_text_unit_codes_from_row, graph_text_unit_hit_to_tree_row, graph_tree_hit_to_row,
@@ -64,7 +65,7 @@ impl GraphBackedRagRepository {
                 None
             };
             let graph_query = GraphSearchQuery {
-                filters,
+                filters: filters.clone(),
                 full_text,
                 vector_text: None,
                 embedding_model_code: None,
@@ -101,6 +102,7 @@ impl GraphBackedRagRepository {
         corpus: &RagCorpusRecord,
         query: &RagRouteSearchQuery,
     ) -> Result<Vec<RagSearchRow>, RagError> {
+        let policy = TreeRoutePolicy::from_query(query);
         let target = graph_target_for_retriever(corpus, &query.retriever)?;
         let mut tree_rows = Vec::new();
         for rag_scope in &query.scopes {
@@ -118,6 +120,13 @@ impl GraphBackedRagRepository {
                 graph_filter("sourceStatus", "ACTIVE"),
                 graph_filter("status", "ACTIVE"),
             ];
+            if !policy.include_root {
+                filters.push(GraphPropertyFilter {
+                    property_name: "parentNodeCode".into(),
+                    operator: crate::domain::graph::GraphFilterOperator::NotEquals,
+                    value: GraphPropertyValue::Text("0".into()),
+                });
+            }
             match query.retriever.as_str() {
                 "TREE_FULLTEXT_V1" => {
                     filters.push(graph_filter("summaryFulltextStatus", "INDEXED"));
@@ -134,7 +143,7 @@ impl GraphBackedRagRepository {
                 None
             };
             let graph_query = GraphSearchQuery {
-                filters,
+                filters: filters.clone(),
                 full_text,
                 vector_text: None,
                 embedding_model_code: None,
@@ -146,13 +155,17 @@ impl GraphBackedRagRepository {
             .validate()
             .map_err(map_graph_error)?;
             let prepared_query = prepare_graph_search_query(graph_query, query);
-            let hits = self
+            let mut hits = self
                 .graph_store
                 .search(&scope, prepared_query)
                 .map_err(map_graph_error)?;
+            sort_tree_hits(&mut hits, &policy);
             tree_rows.extend(
                 hits.into_iter().map(|hit| {
-                    graph_tree_hit_to_row(corpus, hit.node, hit.score, &query.retriever)
+                    let mut row =
+                        graph_tree_hit_to_row(corpus, hit.node, hit.score, &query.retriever);
+                    apply_tree_policy_to_row(&mut row, &policy);
+                    row
                 }),
             );
         }
@@ -164,6 +177,7 @@ impl GraphBackedRagRepository {
                 .then_with(|| left.target_code.cmp(&right.target_code))
         });
         let mut rows = self.hydrate_graph_tree_rows(corpus, query, tree_rows)?;
+        rows = dedup_graph_tree_rows(rows);
         rows.truncate(query.limit);
         Ok(rows)
     }
@@ -346,6 +360,84 @@ fn prepare_graph_search_query(
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct TreeRoutePolicy {
+    include_root: bool,
+    max_covered_units_per_node: Option<usize>,
+    prefer_deeper_tree_node: bool,
+}
+
+impl TreeRoutePolicy {
+    fn from_query(query: &RagRouteSearchQuery) -> Self {
+        let policy = query
+            .policy
+            .get("treePolicy")
+            .or_else(|| query.policy.get("policy"))
+            .or_else(|| query.policy.get("routePolicy"))
+            .unwrap_or(&query.policy);
+        Self {
+            include_root: policy_bool(policy, "includeRoot", false),
+            max_covered_units_per_node: policy_optional_usize(policy, "maxCoveredUnitsPerNode"),
+            prefer_deeper_tree_node: policy_bool(policy, "preferDeeperTreeNode", false),
+        }
+    }
+}
+
+fn sort_tree_hits(hits: &mut [GraphSearchHit], policy: &TreeRoutePolicy) {
+    hits.sort_by(|left, right| {
+        right
+            .score
+            .partial_cmp(&left.score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                if policy.prefer_deeper_tree_node {
+                    prop_i64(&right.node.properties, "level")
+                        .unwrap_or_default()
+                        .cmp(&prop_i64(&left.node.properties, "level").unwrap_or_default())
+                } else {
+                    std::cmp::Ordering::Equal
+                }
+            })
+            .then_with(|| {
+                prop_i64(&left.node.properties, "ordinal")
+                    .unwrap_or_default()
+                    .cmp(&prop_i64(&right.node.properties, "ordinal").unwrap_or_default())
+            })
+    });
+}
+
+fn apply_tree_policy_to_row(row: &mut RagSearchRow, policy: &TreeRoutePolicy) {
+    let Some(max) = policy.max_covered_units_per_node else {
+        return;
+    };
+    let Some(values) = row
+        .field_values
+        .get("coveredTextUnitCodes")
+        .and_then(Value::as_array)
+    else {
+        return;
+    };
+    row.field_values.insert(
+        "coveredTextUnitCodes".into(),
+        Value::Array(values.iter().take(max).cloned().collect()),
+    );
+}
+
+fn policy_bool(policy: &Value, field: &str, default_value: bool) -> bool {
+    policy
+        .get(field)
+        .and_then(Value::as_bool)
+        .unwrap_or(default_value)
+}
+
+fn policy_optional_usize(policy: &Value, field: &str) -> Option<usize> {
+    policy
+        .get(field)
+        .and_then(Value::as_u64)
+        .map(|value| value as usize)
+        .filter(|value| *value > 0)
+}
+
 fn policy_usize(policy: &Value, field: &str, default_value: usize) -> usize {
     policy
         .get(field)
@@ -387,6 +479,7 @@ mod tests {
                 scope_code: "TRON_CORE".into(),
             }],
             filters: json!({}),
+            policy: json!({}),
             return_fields: Vec::new(),
             limit: 5,
         };

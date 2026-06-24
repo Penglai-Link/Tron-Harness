@@ -22,11 +22,11 @@ use tron_backend::{
             DefaultRagStrategyRegistry, RagConfigRepository, RagDocumentSourceCall,
             RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime,
             RagIngestAccessContext, RagIngestRepository, RagIngestRequest, RagIngestScope,
-            RagIngestService, RagIngestSource, RagPersistIngestCommand, RagRerankCall,
-            RagResolvedDocument, RagRetryIndexRequest, RagRetryIndexService, RagRouteSearchQuery,
-            RagSearchContextRequest, RagSearchGraphExpansionRequest, RagSearchRepository,
-            RagSearchRequest, RagSearchRuntime, RagSearchScope, RagSearchService,
-            RagSearchTraceRequest, RagTextUnitWrite, RagTreeNodeWrite,
+            RagIngestService, RagIngestSource, RagManagementService, RagPersistIngestCommand,
+            RagRerankCall, RagResolvedDocument, RagRetryIndexRequest, RagRetryIndexService,
+            RagRouteSearchQuery, RagSearchContextRequest, RagSearchGraphExpansionRequest,
+            RagSearchRepository, RagSearchRequest, RagSearchRuntime, RagSearchScope,
+            RagSearchService, RagSearchTraceRequest, RagTextUnitWrite, RagTreeNodeWrite,
         },
     },
     domain::{
@@ -167,6 +167,7 @@ fn graph_backed_repository_dispatches_by_backend_before_layout() {
                 scope_code: "TRON_CORE".into(),
             }],
             filters: json!({}),
+            policy: json!({}),
             return_fields: Vec::new(),
             limit: 5,
         })
@@ -474,6 +475,7 @@ async fn mixed_graph_carrier_search_hydrates_sqlite_canonical_text_units() {
                 scope_code: "TRON_CORE".into(),
             }],
             filters: json!({ "skillName": { "value": "rag-mixed" } }),
+            policy: json!({}),
             return_fields: Vec::new(),
             limit: 5,
         })
@@ -526,6 +528,7 @@ async fn graph_text_units_can_use_sqlite_fulltext_carrier_without_sqlite_text_un
                 scope_code: "TRON_CORE".into(),
             }],
             filters: json!({}),
+            policy: json!({}),
             return_fields: Vec::new(),
             limit: 5,
         })
@@ -661,6 +664,7 @@ async fn segmented_graph_runtime_writes_and_searches_role_specific_nodes() {
                 scope_code: "TRON_CORE".into(),
             }],
             filters: json!({ "skillName": { "value": "rag-segmented" } }),
+            policy: json!({}),
             return_fields: Vec::new(),
             limit: 5,
         })
@@ -685,6 +689,7 @@ async fn segmented_graph_runtime_writes_and_searches_role_specific_nodes() {
                 scope_code: "TRON_CORE".into(),
             }],
             filters: json!({ "skillName": { "value": "rag-segmented" } }),
+            policy: json!({}),
             return_fields: Vec::new(),
             limit: 5,
         })
@@ -1212,6 +1217,35 @@ fn graph_backed_write_rejects_sqlite_tree_without_sqlite_text_units() {
         .unwrap_err();
 
     assert_eq!(error, RagError::StorageTopologyUnsupported);
+}
+
+#[test]
+fn graph_tree_storage_exposes_tree_retrieval_strategy_options() {
+    let database_url = temp_database_path("rag-skill-graph-tree-options")
+        .to_string_lossy()
+        .to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    enable_skill_graph_tree_with_graph_text_units(&database_url);
+    let service = RagManagementService::new(repository, DefaultRagStrategyRegistry::default());
+
+    let catalog = service.profile_catalog().unwrap();
+    let tree_options = catalog
+        .retrieval_strategies
+        .iter()
+        .filter(|option| {
+            option.corpus_id == "skill-graph"
+                && matches!(option.route_type.as_str(), "TREE_FULLTEXT" | "TREE_VECTOR")
+        })
+        .collect::<Vec<_>>();
+
+    assert!(tree_options.iter().any(|option| {
+        option.route_type == "TREE_FULLTEXT"
+            && option.strategy_ids == vec!["TREE_FULLTEXT_V1".to_string()]
+    }));
+    assert!(tree_options.iter().any(|option| {
+        option.route_type == "TREE_VECTOR"
+            && option.strategy_ids == vec!["TREE_VECTOR_V1".to_string()]
+    }));
 }
 
 #[tokio::test]
@@ -2640,6 +2674,8 @@ fn tree_route_command(
                 .map(ToOwned::to_owned)
                 .collect(),
             covered_text_unit_count,
+            child_start_ordinal: 0,
+            child_end_ordinal: 0,
             metadata: json!({ "summaryStrategy": "TEST" }),
             status: "ACTIVE".into(),
         }],
@@ -2670,6 +2706,7 @@ fn tree_route_query(
             scope_code: "TRON_CORE".into(),
         }],
         filters: json!({}),
+        policy: json!({ "includeRoot": true }),
         return_fields: Vec::new(),
         limit: 5,
     }

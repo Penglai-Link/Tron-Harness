@@ -522,7 +522,10 @@ fn has_sqlite_text_unit_storage(corpus: &RagCorpusRecord) -> bool {
 }
 
 fn has_tree_storage(corpus: &RagCorpusRecord) -> bool {
-    segment_target_backend(&corpus.storage_binding, "tree").is_some()
+    matches!(
+        segment_target_backend(&corpus.storage_binding, "tree"),
+        Some(RagStorageBackend::Sqlite | RagStorageBackend::Graph)
+    )
 }
 
 fn legacy_graph_strategy_ids_for_corpus(corpus: &RagCorpusRecord) -> Option<Vec<String>> {

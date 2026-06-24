@@ -109,6 +109,7 @@ const buttonName = {
   enablePreparePayload: /Enable PREPARE_PAYLOAD node|启用 准备载荷 节点/,
   enableSplitText: /Enable SPLIT_TEXT node|启用 文本切分 节点/,
   enableExtractTree: /Enable EXTRACT_TREE node|启用 提取结构树 节点/,
+  enableFulltextIndex: /Enable FULLTEXT_INDEX node|启用 全文索引 节点/,
   enablePersistTree: /Enable PERSIST_TREE node|启用 持久化结构树 节点/,
   enableSummarizeTree: /Enable SUMMARIZE_TREE node|启用 摘要结构树 节点/,
   enableTreeFulltextIndex: /Enable TREE_FULLTEXT_INDEX node|启用 结构树全文索引 节点/,
@@ -145,6 +146,28 @@ test.afterAll(async () => {
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem("tron.locale", "en-US"));
+});
+
+test("pipeline flow shows actual outgoing targets for parallel branches", async ({ page }) => {
+  const requests: CapturedRequest[] = [];
+  await installRagManagementApiMock(page, requests);
+
+  await page.goto(`${frontendBaseUrl}/rag/profiles/ingest/new?returnProfileType=ingest`);
+  await expect(page.getByRole("heading", { name: /Pipeline Flow|流水线流程/ })).toBeVisible();
+  await openAdvancedNodeControls(page);
+  await page.getByRole("button", { name: buttonName.enableSplitText }).click();
+  await page.getByRole("button", { name: buttonName.enableExtractTree }).click();
+  await page.getByRole("button", { name: buttonName.enableSummarizeTree }).click();
+  await page.getByRole("button", { name: buttonName.enableFulltextIndex }).click();
+  await page.getByRole("button", { name: buttonName.enableVectorIndex }).click();
+  await page.getByRole("button", { name: buttonName.enablePersistSource }).click();
+
+  const flow = page.getByTestId("pipeline-flow");
+  const fulltextNode = flow.getByTestId("pipeline-flow-node-fulltext-index");
+  await expect(fulltextNode).toContainText("→ persist-source");
+  await expect(fulltextNode).not.toContainText("summarize-tree");
+  await expect(flow.getByTestId("pipeline-flow-node-vector-index")).toContainText("→ persist-source");
+  await expect(flow.getByTestId("pipeline-flow-node-extract-tree")).toContainText("→ summarize-tree");
 });
 
 test("creates and edits ingest profiles through management APIs", async ({ page }) => {
@@ -186,11 +209,11 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await expect(page.getByLabel(/Text split heading depth|文本切分标题深度/)).toHaveValue("6");
   await splitStrategySelect.selectOption("RAG_SPLIT_PLAIN_TEXT_V1");
   await expect(page.getByLabel(/Text split splitter type|文本切分切分器类型/)).toHaveValue("plainText");
-  await page.getByLabel(/EXTRACT_TREE (strategy ID|策略标识)/).selectOption("RAG_EXTRACT_TREE");
+  await page.getByLabel(/EXTRACT_TREE (strategy ID|策略标识)/).selectOption("RAG_MARKDOWN_TREE_EXTRACT_V1");
   await page.getByLabel(/SUMMARIZE_TREE (strategy ID|策略标识)/).selectOption("RAG_TREE_EXTRACTIVE_SUMMARY_V1");
   await page.getByLabel(/TREE_FULLTEXT_INDEX (strategy ID|策略标识)/).selectOption("RAG_TREE_FULLTEXT_INDEX");
   await page.getByLabel(/TREE_VECTOR_INDEX (strategy ID|策略标识)/).selectOption("RAG_TREE_VECTOR_INDEX");
-  await page.getByLabel(/PERSIST_TREE (strategy ID|策略标识)/).selectOption("RAG_PERSIST_TREE");
+  await page.getByLabel(/PERSIST_TREE (strategy ID|策略标识)/).selectOption("RAG_PERSIST_TREE_GRAPH_V1");
   await page.getByLabel(/PERSIST_SOURCE (strategy ID|策略标识)/).selectOption("RAG_PERSIST_SOURCE");
   await page.getByLabel(label.supportedSourceTypes).fill("RUNBOOK, INCIDENT_NOTE");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
@@ -237,11 +260,11 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
         nodes: expect.arrayContaining([
           expect.objectContaining({ nodeId: "prepare-payload", stageType: "PREPARE_PAYLOAD", strategyId: "RAG_TEXT_CONTRACT_PAYLOAD_V1" }),
           expect.objectContaining({ nodeId: "split-text", stageType: "SPLIT_TEXT", strategyId: "RAG_SPLIT_PLAIN_TEXT_V1" }),
-          expect.objectContaining({ nodeId: "extract-tree", stageType: "EXTRACT_TREE", strategyId: "RAG_EXTRACT_TREE" }),
+          expect.objectContaining({ nodeId: "extract-tree", stageType: "EXTRACT_TREE", strategyId: "RAG_MARKDOWN_TREE_EXTRACT_V1" }),
           expect.objectContaining({ nodeId: "summarize-tree", stageType: "SUMMARIZE_TREE", strategyId: "RAG_TREE_EXTRACTIVE_SUMMARY_V1" }),
           expect.objectContaining({ nodeId: "tree-fulltext-index", stageType: "TREE_FULLTEXT_INDEX", strategyId: "RAG_TREE_FULLTEXT_INDEX" }),
           expect.objectContaining({ nodeId: "tree-vector-index", stageType: "TREE_VECTOR_INDEX", strategyId: "RAG_TREE_VECTOR_INDEX" }),
-          expect.objectContaining({ nodeId: "persist-tree", stageType: "PERSIST_TREE", strategyId: "RAG_PERSIST_TREE" }),
+          expect.objectContaining({ nodeId: "persist-tree", stageType: "PERSIST_TREE", strategyId: "RAG_PERSIST_TREE_GRAPH_V1" }),
           expect.objectContaining({ nodeId: "persist-source", stageType: "PERSIST_SOURCE", strategyId: "RAG_PERSIST_SOURCE" }),
         ]),
       }),
@@ -267,7 +290,7 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
         expect.objectContaining({ enabled: true, nodeId: "summarize-tree", stageType: "SUMMARIZE_TREE", strategyId: "RAG_TREE_EXTRACTIVE_SUMMARY_V1" }),
         expect.objectContaining({ enabled: true, nodeId: "tree-fulltext-index", stageType: "TREE_FULLTEXT_INDEX", strategyId: "RAG_TREE_FULLTEXT_INDEX" }),
         expect.objectContaining({ enabled: true, nodeId: "tree-vector-index", stageType: "TREE_VECTOR_INDEX", strategyId: "RAG_TREE_VECTOR_INDEX" }),
-        expect.objectContaining({ enabled: true, nodeId: "persist-tree", stageType: "PERSIST_TREE", strategyId: "RAG_PERSIST_TREE" }),
+        expect.objectContaining({ enabled: true, nodeId: "persist-tree", stageType: "PERSIST_TREE", strategyId: "RAG_PERSIST_TREE_GRAPH_V1" }),
         expect.objectContaining({ enabled: true, nodeId: "persist-source", stageType: "PERSIST_SOURCE", strategyId: "RAG_PERSIST_SOURCE" }),
       ]),
     }),
@@ -578,38 +601,37 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
   await installRagManagementApiMock(page, requests);
 
   await page.goto(`${frontendBaseUrl}/rag?tab=workbench`);
-  await expect(page.getByRole("heading", { name: /RAG Management|知识检索管理/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Ingest Request|写入请求/ })).toBeVisible();
-  await expect(page.getByRole("tab", { name: /Retrieval Test|检索测试/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "知识检索管理" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "写入请求" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /检索测试/ })).toBeVisible();
 
   await expect(page.getByLabel("语料库", { exact: true })).toContainText("memory-card");
   await expect(page.getByLabel("写入配置", { exact: true })).toContainText("project-doc-ingest-v1");
-  await page.getByRole("tab", { name: /Retrieval Test|检索测试/ }).click();
-  await expect(page.getByLabel("检索配置", { exact: true })).toContainText("project-doc-related-v1");
-  await page.getByRole("tab", { name: /Ingest Request|写入请求/ }).click();
 
   await page.getByLabel("语料库", { exact: true }).selectOption("project-doc");
   await page.getByLabel("写入配置", { exact: true }).selectOption("project-doc-ingest-v1");
-  await page.getByLabel("作用域类型", { exact: true }).selectOption("SPACE");
+  await expect(page.getByLabel("作用域类型", { exact: true })).toHaveValue("SPACE");
   await page.getByLabel("来源编码", { exact: true }).fill("docs/features/rag-storage-runtime-workbench");
   await page.getByLabel("来源类型", { exact: true }).selectOption("MARKDOWN");
   await expect(page.getByLabel("来源版本", { exact: true })).toHaveValue("v1");
   await page.getByLabel("语言", { exact: true }).fill("en-US");
   await page.getByLabel("元数据来源路径", { exact: true }).fill("docs/features/rag-storage-runtime-workbench");
-  await page.getByRole("button", { name: /Add Business Attribute|添加业务属性/ }).click();
+  await page.getByRole("button", { name: "添加业务属性" }).click();
   await page.getByLabel("业务属性 1 字段", { exact: true }).selectOption("documentCode");
   await page.getByLabel("业务属性 1 值", { exact: true }).fill("rag-storage-runtime-workbench");
-  await page.getByRole("button", { name: /Add Business Attribute|添加业务属性/ }).click();
+  await page.getByRole("button", { name: "添加业务属性" }).click();
   await page.getByLabel("业务属性 2 字段", { exact: true }).selectOption("repoCode");
   await page.getByLabel("业务属性 2 值", { exact: true }).fill("tron");
   await page.getByLabel("文本内容", { exact: true }).fill("Workbench ingest verifies backend runtime writes from the frontend.");
-  await page.getByRole("button", { name: /Submit Ingest|提交写入/ }).click();
+  await page.getByRole("button", { name: "提交写入" }).click();
 
   await expect(page.getByText("docs/features/rag-storage-runtime-workbench 写入完成。").first()).toBeVisible();
-  await expect(page.getByText("文本单元")).toBeVisible();
-  const ingestStageResults = page.locator("details").filter({ hasText: "写入阶段结果" });
-  await expect(ingestStageResults).toBeVisible();
-  await ingestStageResults.locator("summary").click();
+  const ingestResultPanel = page.locator("div").filter({ hasText: /^写入结果/ }).first();
+  await expect(ingestResultPanel.getByText("文本单元")).toBeVisible();
+  await expect(ingestResultPanel).toContainText(/文本单元\s*\d+/);
+  const ingestStageHeading = page.getByRole("heading", { name: "写入阶段结果" });
+  await expect(ingestStageHeading).toBeVisible();
+  await ingestStageHeading.click();
   await expect(page.getByText("prepare-payload")).toBeVisible();
   await expect(page.getByText("PREPARE_PAYLOAD")).toBeVisible();
   await expect(page.getByText("RAG_TEXT_CONTRACT_PAYLOAD_V1")).toBeVisible();
@@ -623,25 +645,25 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
   await expect(page.getByText("textUnits.generated")).toBeVisible();
   await expect(page.getByText("告警：splitter used default overlap")).toBeVisible();
 
-  await page.getByRole("tab", { name: /Retrieval Test|检索测试/ }).click();
+  await page.getByRole("tab", { name: /检索测试/ }).click();
   await page.getByLabel("检索配置", { exact: true }).selectOption("project-doc-related-v1");
   await page.getByLabel("查询", { exact: true }).fill("How does the runtime workbench call backend search?");
   await page.getByLabel("上下文策略", { exact: true }).selectOption("DOC_QA_CONTEXT_PACK");
-  await page.getByRole("button", { name: /Add Query Field|添加查询字段/ }).click();
+  await page.getByRole("button", { name: "添加查询字段" }).click();
   await page.getByLabel("查询字段 1", { exact: true }).selectOption("documentCode");
-  await page.getByRole("button", { name: /Add Query Field|添加查询字段/ }).click();
+  await page.getByRole("button", { name: "添加查询字段" }).click();
   await page.getByLabel("查询字段 2", { exact: true }).selectOption("repoCode");
-  await page.getByRole("button", { name: /Add Filter Condition|添加筛选条件/ }).click();
+  await page.getByRole("button", { name: "添加筛选条件" }).click();
   await page.getByLabel("筛选条件 1 字段", { exact: true }).selectOption("scopeCode");
   await page.getByLabel("筛选条件 1 操作符", { exact: true }).selectOption("eq");
   await page.getByLabel("筛选条件 1 值", { exact: true }).fill("TRON_CORE");
   await page.getByLabel("返回数量", { exact: true }).fill("5");
   await page.getByLabel("令牌预算", { exact: true }).fill("2048");
-  await page.getByRole("button", { name: /Enable trace|启用追踪/ }).click();
-  await expect(page.getByRole("button", { name: /Enable trace|启用追踪/ })).toHaveAttribute("aria-pressed", "false");
-  await page.getByRole("button", { name: /Enable trace|启用追踪/ }).click();
-  await expect(page.getByRole("button", { name: /Enable trace|启用追踪/ })).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: /Run Search|执行检索/ }).click();
+  await page.getByRole("button", { name: "启用追踪" }).click();
+  await expect(page.getByRole("button", { name: "启用追踪" })).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("button", { name: "启用追踪" }).click();
+  await expect(page.getByRole("button", { name: "启用追踪" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "执行检索" }).click();
 
   await expect(page.getByText("检索返回 1 条命中。").first()).toBeVisible();
   await expect(page.getByText("trace-workbench-001")).toBeVisible();
@@ -654,9 +676,9 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
   await expect(page.getByText("tron", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("RAG workbench can execute retrieval through the backend API.")).toBeVisible();
   await expect(page.getByText("Workbench search result from mocked runtime.")).toBeVisible();
-  const searchStageResults = page.locator("details").filter({ hasText: "检索阶段结果" });
-  await expect(searchStageResults).toBeVisible();
-  await searchStageResults.locator("summary").click();
+  const searchStageHeading = page.getByRole("heading", { name: "检索阶段结果" });
+  await expect(searchStageHeading).toBeVisible();
+  await searchStageHeading.click();
   await expect(page.getByText("route-search-fulltext")).toBeVisible();
   await expect(page.getByText("ROUTE_SEARCH · FULLTEXT_SQLITE_FTS5_SIMPLE_V1")).toBeVisible();
   await expect(page.getByText("已完成 · 5ms")).toBeVisible();
@@ -669,10 +691,10 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
   await expect(page.getByText("告警：rerank disabled; using lexical order")).toBeVisible();
 
   await page.getByLabel("查询", { exact: true }).fill("legacy fallback search without stage results");
-  await page.getByRole("button", { name: /Run Search|执行检索/ }).click();
+  await page.getByRole("button", { name: "执行检索" }).click();
   await expect(page.getByText("检索返回 1 条命中。").first()).toBeVisible();
   await expect(page.getByText("RAG Storage Runtime Workbench").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Search Stage Results|检索阶段结果/ })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "检索阶段结果" })).toHaveCount(0);
 
   const ingestBodies = requestBodies(requests, "/api/v1/rag/ingest", "POST");
   expect(ingestBodies).toEqual(expect.arrayContaining([

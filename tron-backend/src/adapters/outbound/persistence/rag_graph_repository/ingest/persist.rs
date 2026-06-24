@@ -2,11 +2,11 @@ use std::collections::BTreeMap;
 
 use crate::{
     application::{
-        graph::{GraphSemanticProjection, PreparedGraphNodeWrite},
+        graph::{GraphSemanticProjection, PreparedGraphEdgeWrite, PreparedGraphNodeWrite},
         rag::RagPersistIngestCommand,
     },
     domain::{
-        graph::{GraphNodeWrite, GraphPropertyValue},
+        graph::{GraphEdgeWrite, GraphNodeWrite, GraphPropertyValue},
         rag::{RagCorpusRecord, RagError},
     },
 };
@@ -17,11 +17,12 @@ use super::{
         model::{
             GraphRuntimeTarget, decode_embedding, fold_text_units, graph_main_node_code,
             graph_segment_node_code, json_string, legacy_graph_skill_node_code, map_graph_error,
-            node_label, optional_graph_target_for_segment, push_text_prop,
+            node_label, optional_graph_target_for_segment, push_text_prop, stable_graph_code,
         },
     },
     properties::{
-        push_domain_field_properties, source_properties, text_unit_properties, tree_node_properties,
+        push_domain_field_properties, source_properties, text_unit_properties,
+        tree_edge_properties, tree_node_properties,
     },
 };
 
@@ -318,6 +319,133 @@ impl GraphBackedRagRepository {
                 &command.scope.scope_type,
                 &command.scope.scope_code,
             )?;
+            self.replace_contains_edges(&scope, &node_code)?;
+            self.persist_related_graph(
+                &scope,
+                &node_code,
+                command.related_graph.as_ref(),
+                &command.graph_write_policy,
+            )?;
+        }
+        Ok(())
+    }
+
+    pub(in super::super) fn persist_graph_tree_nodes(
+        &self,
+        corpus: &RagCorpusRecord,
+        command: RagPersistIngestCommand,
+    ) -> Result<(), RagError> {
+        let Some(target) = optional_graph_target_for_segment(corpus, "tree")? else {
+            return Ok(());
+        };
+        if command.tree_nodes.is_empty() {
+            return Ok(());
+        }
+        let scope = self.resolve_graph_scope_for_namespace(
+            &target.namespace,
+            &command.workspace_code,
+            &command.scope.scope_type,
+            &command.scope.scope_code,
+        )?;
+
+        for tree_node in &command.tree_nodes {
+            let node_code =
+                graph_segment_node_code("tree", &command, Some(&tree_node.tree_node_code));
+            let semantic_projection = tree_node
+                .summary_embedding
+                .as_deref()
+                .map(decode_embedding)
+                .filter(|embedding| !embedding.is_empty())
+                .map(GraphSemanticProjection::from_values);
+            let semantic_model_code = tree_node
+                .summary_embedding_model_code
+                .clone()
+                .filter(|value| !value.trim().is_empty());
+            let node = GraphNodeWrite {
+                node_code: node_code.clone(),
+                labels: vec![target.node_label.clone()],
+                properties: tree_node_properties(corpus, &command, tree_node, &node_code)?,
+                full_text: Some(tree_node.summary_text.clone()),
+                embedding_text: semantic_embedding_text(
+                    &tree_node.summary_text,
+                    &semantic_model_code,
+                    &semantic_projection,
+                ),
+                embedding_model_code: semantic_model_code.clone(),
+            }
+            .validate()
+            .map_err(map_graph_error)?;
+            let write = PreparedGraphNodeWrite {
+                command: node,
+                semantic_model_code,
+                semantic_projection,
+                semantic_slices: Vec::new(),
+            };
+            if self
+                .graph_store
+                .get_node(&scope, &node_code)
+                .map_err(map_graph_error)?
+                .is_some()
+            {
+                self.graph_store
+                    .update_node(&scope, write)
+                    .map_err(map_graph_error)?;
+            } else {
+                self.graph_store
+                    .create_node(&scope, write)
+                    .map_err(map_graph_error)?;
+            }
+        }
+
+        for tree_node in command
+            .tree_nodes
+            .iter()
+            .filter(|node| node.parent_node_code != "0")
+        {
+            let source_node_code =
+                graph_segment_node_code("tree", &command, Some(&tree_node.parent_node_code));
+            let target_node_code =
+                graph_segment_node_code("tree", &command, Some(&tree_node.tree_node_code));
+            let edge_code = stable_graph_code(
+                "RAG_TREE_EDGE",
+                &[
+                    &command.corpus_id,
+                    &source_node_code,
+                    "HAS_CHILD",
+                    &target_node_code,
+                ],
+            );
+            let edge = GraphEdgeWrite {
+                edge_code: edge_code.clone(),
+                source_node_code,
+                target_node_code,
+                relationship: "HAS_CHILD".into(),
+                properties: tree_edge_properties(&command, tree_node),
+                full_text: None,
+                embedding_text: None,
+                embedding_model_code: None,
+            }
+            .validate()
+            .map_err(map_graph_error)?;
+            let prepared = PreparedGraphEdgeWrite::plain(edge);
+            if self
+                .graph_store
+                .get_edge(&scope, &edge_code)
+                .map_err(map_graph_error)?
+                .is_some()
+            {
+                self.graph_store
+                    .update_edge(&scope, prepared)
+                    .map_err(map_graph_error)?;
+            } else {
+                self.graph_store
+                    .create_edge(&scope, prepared)
+                    .map_err(map_graph_error)?;
+            }
+        }
+        for tree_node in &command.tree_nodes {
+            let node_code =
+                graph_segment_node_code("tree", &command, Some(&tree_node.tree_node_code));
             self.replace_contains_edges(&scope, &node_code)?;
             self.persist_related_graph(
                 &scope,

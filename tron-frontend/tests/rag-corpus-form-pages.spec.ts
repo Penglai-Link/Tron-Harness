@@ -158,36 +158,36 @@ test("loads corpora from management APIs and persists create/edit through verify
   await installRagManagementApiMock(page, requests);
 
   await page.goto(`${frontendBaseUrl}/rag`);
-  await expect(page.getByRole("heading", { name: "RAG Management" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /RAG Management|RAG 管理|知识检索管理/ })).toBeVisible();
   await expect(page.getByRole("cell", { name: "Project Document project-doc" })).toBeVisible();
 
-  await page.getByRole("button", { name: "New Corpus" }).click();
+  await page.getByRole("button", { name: /New Corpus|新建语料库/ }).click();
   await expect(page).toHaveURL(/\/rag\/corpora\/new$/);
-  await expect(page.getByRole("heading", { name: "Create Corpus" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Create Corpus|新建语料库/ })).toBeVisible();
 
-  await page.getByLabel("Corpus code").fill("support-notes");
-  await page.getByLabel("Corpus name").fill("Support Notes");
-  await page.getByLabel("Corpus description").fill("Support playbooks and incident review notes.");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByLabel(/Corpus code|语料库编码/).fill("support-notes");
+  await page.getByLabel(/Corpus name|语料库名称/).fill("Support Notes");
+  await page.getByLabel(/Corpus description|语料库描述/).fill("Support playbooks and incident review notes.");
+  await page.getByRole("button", { name: /^Save$|^保存$/ }).click();
 
   await expect(page).toHaveURL(/\/rag$/);
-  await expect(notifications(page, "Support Notes created")).toBeVisible();
+  await expect(notifications(page, /Support Notes created|Support Notes 已创建/)).toBeVisible();
   await expect(page.getByRole("cell", { name: "Support Notes support-notes" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Edit Project Document" }).click();
+  await page.getByRole("cell", { name: "Project Document project-doc" }).click();
   await expect(page).toHaveURL(/\/rag\/corpora\/project-doc\/edit$/);
-  await expect(page.getByRole("heading", { name: "Edit Corpus" })).toBeVisible();
-  await expect(page.getByLabel("Corpus code")).toHaveValue("project-doc");
-  await expect(page.getByLabel("Corpus code")).toBeDisabled();
-  await expect(page.getByLabel("Text Unit target")).toHaveValue("content-store");
-  await expect(page.getByLabel("Fulltext target")).toHaveValue("content-store");
+  await expect(page.getByRole("heading", { name: /Edit Corpus|编辑语料库/ })).toBeVisible();
+  await expect(page.getByLabel(/Corpus code|语料库编码/)).toHaveValue("project-doc");
+  await expect(page.getByLabel(/Corpus code|语料库编码/)).toBeDisabled();
+  await expect(page.getByLabel(/Text Unit target|文本单元目标/)).toHaveValue("content-store");
+  await expect(page.getByLabel(/Fulltext target|全文索引目标/)).toHaveValue("content-store");
 
-  await page.getByLabel("Corpus name").fill("Project Documents QA");
-  await page.getByLabel("Storage target 2 table").fill("rag_project_doc_text_units_qa");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByLabel(/Corpus name|语料库名称/).fill("Project Documents QA");
+  await page.getByLabel(/Storage target 2 table|存储目标 2 表名/).fill("rag_project_doc_text_units_qa");
+  await page.getByRole("button", { name: /^Save$|^保存$/ }).click();
 
   await expect(page).toHaveURL(/\/rag$/);
-  await expect(notifications(page, "Project Documents QA saved")).toBeVisible();
+  await expect(notifications(page, /Project Documents QA saved|Project Documents QA 已保存/)).toBeVisible();
   await expect(page.getByRole("cell", { name: "Project Documents QA project-doc" })).toBeVisible();
 
   expect(requests.some((request) => request.pathname === "/api/v1/rag/corpora" && request.method === "GET")).toBeTruthy();
@@ -245,20 +245,20 @@ test("allows mixed graph and sqlite segment bindings", async ({ page }) => {
   await installRagManagementApiMock(page, requests);
 
   await page.goto(`${frontendBaseUrl}/rag/corpora/new`);
-  await expect(page.getByRole("heading", { name: "Create Corpus" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Create Corpus|新建语料库/ })).toBeVisible();
 
-  await page.getByLabel("Corpus code").fill("support-mixed");
-  await page.getByLabel("Corpus name").fill("Support Mixed");
-  await page.getByRole("button", { name: "Add Storage Target" }).click();
-  await page.getByLabel("Storage target 5 backend").selectOption("GRAPH");
-  await page.getByLabel("Storage target 5 graph namespace").fill("rag_support_mixed_tree");
-  await page.getByLabel("Storage target 5 node label").fill("RagTreeNode");
-  await page.getByLabel("Graph enabled").check();
-  await page.getByLabel("Tree target").selectOption("target-5");
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByLabel(/Corpus code|语料库编码/).fill("support-mixed");
+  await page.getByLabel(/Corpus name|语料库名称/).fill("Support Mixed");
+  await page.getByRole("button", { name: /Add Storage Target|添加存储目标/ }).click();
+  await page.getByLabel(/Storage target 5 backend|存储目标 5 后端/).selectOption("GRAPH");
+  await page.getByLabel(/Storage target 5 graph namespace|存储目标 5 图命名空间/).fill("rag_support_mixed_tree");
+  await page.getByLabel(/Storage target 5 node label|存储目标 5 节点标签/).fill("RagTreeNode");
+  await page.getByLabel(/Graph enabled|启用图能力/).check();
+  await page.getByLabel(/Tree target|摘要树目标/).selectOption("target-5");
+  await page.getByRole("button", { name: /^Save$|^保存$/ }).click();
 
   await expect(page).toHaveURL(/\/rag$/);
-  await expect(notifications(page, "Support Mixed created")).toBeVisible();
+  await expect(notifications(page, /Support Mixed (created|已创建)/)).toBeVisible();
 
   const verifyBodies = requestBodies(requests, "/api/v1/rag/corpora/verify", "POST")
     .filter((body) => body.corpusId === "support-mixed");

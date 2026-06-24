@@ -525,8 +525,8 @@ fn heading_covers(heading_path: &str, prefix: &[String]) -> bool {
 
 fn tree_node_code(source_code: &str, source_version: &str, path_key: &str) -> String {
     format!(
-        "{source_code}:{source_version}:tree:{}",
-        stable_hash(path_key)
+        "RAG_TREE_{}",
+        stable_hash(&format!("{source_code}:{source_version}:{path_key}")).to_ascii_uppercase()
     )
 }
 

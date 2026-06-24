@@ -713,7 +713,7 @@ const ragMockStrategyRegistry: RagMockStrategyRegistry = {
     },
     {
       status: "Enabled",
-      strategyId: "RAG_EXTRACT_TREE",
+      strategyId: "RAG_MARKDOWN_TREE_EXTRACT_V1",
       supportedStageIds: ["extractTree"],
     },
     {
@@ -743,7 +743,7 @@ const ragMockStrategyRegistry: RagMockStrategyRegistry = {
     },
     {
       status: "Enabled",
-      strategyId: "RAG_PERSIST_TREE",
+      strategyId: "RAG_PERSIST_TREE_GRAPH_V1",
       supportedStageIds: ["persistTree"],
     },
     {
@@ -1089,7 +1089,7 @@ const seedProfiles: ProfileRecord[] = [
     config: buildIngestConfig(["validateSource", "preparePayload", "resolveSource", "parseDocument", "splitText", "extractTree", "summarizeTree", "fulltextIndex", "vectorIndex", "treeFulltextIndex", "treeVectorIndex", "persistTree", "persistSource"], {
       sourceInputPolicy: { supportedSourceTypes: ["PROJECT_DOC_REF"] },
       stageBindings: {
-        extractTree: { strategyId: "RAG_EXTRACT_TREE" },
+        extractTree: { strategyId: "RAG_MARKDOWN_TREE_EXTRACT_V1" },
         fulltextIndex: { strategyId: "RAG_FULLTEXT_INDEX" },
         parseDocument: {
           strategyId: "RAG_PARSE_MARKDOWN_DOCUMENT",
@@ -1099,7 +1099,7 @@ const seedProfiles: ProfileRecord[] = [
           },
         },
         persistSource: { strategyId: "RAG_PERSIST_SOURCE" },
-        persistTree: { strategyId: "RAG_PERSIST_TREE" },
+        persistTree: { strategyId: "RAG_PERSIST_TREE_GRAPH_V1" },
         preparePayload: { strategyId: "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1" },
         resolveSource: {
           strategyId: "PROJECT_DOC_RESOLVE_SOURCE",
@@ -1479,7 +1479,7 @@ function normalizeStoredIngestProfile(value: unknown): IngestProfileRecord | und
       extractTree: "RAG_MARKDOWN_TREE_EXTRACT_V1",
       fulltextIndex: "RAG_FULLTEXT_INDEX",
       parseDocument: "RAG_PARSE_MARKDOWN_DOCUMENT",
-      persistTree: "RAG_PERSIST_TREE",
+      persistTree: "RAG_PERSIST_TREE_GRAPH_V1",
       persistSource: "RAG_PERSIST_SOURCE",
       preparePayload: legacyConfig.payloadStrategy?.trim() || "RAG_TEXT_CONTRACT_PAYLOAD_V1",
       resolveSource: "PROJECT_DOC_RESOLVE_SOURCE",

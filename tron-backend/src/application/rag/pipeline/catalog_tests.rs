@@ -74,98 +74,7 @@ mod tests {
         );
     }
 
-    #[test]
-    fn rag_pipeline_catalog_exposes_phase3_advanced_stage_contracts() {
-        let ingest = pipeline_catalog(RagProfileType::Ingest);
-        let extract_tree = ingest
-            .stages
-            .iter()
-            .find(|stage| stage.stage_type == "EXTRACT_TREE")
-            .expect("ingest catalog should expose EXTRACT_TREE");
-        assert_eq!(
-            extract_tree.input_artifact_keys,
-            vec!["textUnits.generated"]
-        );
-        assert_eq!(
-            extract_tree.output_artifact_keys,
-            vec!["tree.extracted", "graph.related"]
-        );
-        assert!(
-            extract_tree
-                .strategies
-                .iter()
-                .any(|strategy| strategy.strategy_id == "RAG_MARKDOWN_TREE_EXTRACT_V1")
-        );
-        let persist_tree = ingest
-            .stages
-            .iter()
-            .find(|stage| stage.stage_type == "PERSIST_TREE")
-            .expect("ingest catalog should expose PERSIST_TREE");
-        assert_eq!(persist_tree.input_artifact_keys, vec!["index.treeVector"]);
-        assert_eq!(persist_tree.output_artifact_keys, vec!["tree.persisted"]);
-        assert_eq!(
-            persist_tree.orchestration.must_run_before_stage_types,
-            vec!["PERSIST_SOURCE"]
-        );
-
-        let summarize_tree = ingest
-            .stages
-            .iter()
-            .find(|stage| stage.stage_type == "SUMMARIZE_TREE")
-            .expect("ingest catalog should expose SUMMARIZE_TREE");
-        assert_eq!(summarize_tree.input_artifact_keys, vec!["tree.extracted"]);
-        assert_eq!(summarize_tree.output_artifact_keys, vec!["tree.summarized"]);
-
-        let retrieval = pipeline_catalog(RagProfileType::Retrieval);
-        let question_generalization = retrieval
-            .stages
-            .iter()
-            .find(|stage| stage.stage_type == "QUESTION_GENERALIZATION")
-            .expect("retrieval catalog should expose QUESTION_GENERALIZATION");
-        assert_eq!(
-            question_generalization.input_artifact_keys,
-            vec!["query.original"]
-        );
-        assert_eq!(
-            question_generalization.output_artifact_keys,
-            vec!["query.generalized", "query.effective"]
-        );
-        let query_rewrite = retrieval
-            .stages
-            .iter()
-            .find(|stage| stage.stage_type == "QUERY_REWRITE")
-            .expect("retrieval catalog should expose QUERY_REWRITE");
-        assert_eq!(query_rewrite.input_artifact_keys, vec!["query.effective"]);
-        assert_eq!(
-            query_rewrite.output_artifact_keys,
-            vec!["query.rewritten", "query.effective"]
-        );
-
-        let compiled_ingest = validate_pipeline(&ingest_phase3_pipeline(), RagProfileType::Ingest)
-            .expect("advanced ingest tree pipeline should compile");
-        assert_eq!(
-            compiled_ingest
-                .nodes
-                .iter()
-                .find(|node| node.stage_type == "PERSIST_TREE")
-                .expect("persist tree node should compile")
-                .input_artifact_keys,
-            vec!["index.treeVector"]
-        );
-
-        let compiled_retrieval =
-            validate_pipeline(&retrieval_phase3_pipeline(), RagProfileType::Retrieval)
-                .expect("advanced retrieval query pipeline should compile");
-        assert_eq!(
-            compiled_retrieval
-                .nodes
-                .iter()
-                .find(|node| node.stage_type == "ROUTE_SEARCH")
-                .expect("route node should compile")
-                .input_artifact_keys,
-            vec!["query.effective"]
-        );
-    }
+    include!("phase3_catalog_tests.rs");
 
     #[test]
     fn rag_pipeline_catalog_templates_compile_against_declared_stage_contracts() {
@@ -297,6 +206,8 @@ mod tests {
         }
     }
 
+    include!("tree_orchestration_tests.rs");
+
     #[test]
     fn rag_pipeline_plan_preserves_branch_merge_levels_and_stage_owned_artifacts() {
         let compiled = validate_pipeline(&ingest_branch_pipeline(), RagProfileType::Ingest)
@@ -374,17 +285,47 @@ mod tests {
     #[test]
     fn rag_pipeline_compiler_rejects_missing_stage_inputs_and_repeatability_violations() {
         let mut missing_input = ingest_branch_pipeline();
-        missing_input.edges.retain(|edge| {
-            !(edge.from == "split" && edge.to == "fulltext")
-                && !(edge.from == "fulltext" && edge.to == "persist")
+        missing_input.nodes.insert(2, RagPipelineNodeInput {
+            node_id: "parse".into(),
+            stage_type: "PARSE_DOCUMENT".into(),
+            strategy_id: "RAG_PARSE_MARKDOWN_DOCUMENT".into(),
+            enabled: true,
+            join_policy: None,
+            failure_policy: None,
+            config: Some(json!({})),
+        });
+        missing_input
+            .edges
+            .retain(|edge| !(edge.from == "prepare" && edge.to == "split"));
+        missing_input.edges.push(RagPipelineEdgeInput {
+            from: "prepare".into(),
+            to: "parse".into(),
+        });
+        missing_input.edges.push(RagPipelineEdgeInput {
+            from: "parse".into(),
+            to: "split".into(),
         });
         let missing_input_errors = validate_pipeline(&missing_input, RagProfileType::Ingest)
-            .expect_err("persist should not compile without index.fulltext availability");
+            .expect_err("parse should not compile without document.resolved availability");
         assert!(
             missing_input_errors
                 .iter()
                 .any(|error| error.code == "RAG_PIPELINE_INPUT_ARTIFACT_MISSING"),
             "missing input should be rejected; actual errors: {missing_input_errors:?}",
+        );
+
+        let mut missing_control_dependency = ingest_branch_pipeline();
+        missing_control_dependency
+            .edges
+            .retain(|edge| !(edge.from == "fulltext" && edge.to == "persist"));
+        let missing_control_errors =
+            validate_pipeline(&missing_control_dependency, RagProfileType::Ingest)
+                .expect_err("persist should not compile without fulltext before persist");
+        assert!(
+            missing_control_errors
+                .iter()
+                .any(|error| error.code == "RAG_PIPELINE_CONTROL_DEPENDENCY_MISSING"),
+            "missing control dependency should be rejected; actual errors: {missing_control_errors:?}",
         );
 
         let mut repeated_non_repeatable = ingest_branch_pipeline();
@@ -580,6 +521,65 @@ mod tests {
             },
             RagPipelineEdgeInput {
                 from: "tree-vector".into(),
+                to: "persist-tree".into(),
+            },
+            RagPipelineEdgeInput {
+                from: "persist-tree".into(),
+                to: "persist".into(),
+            },
+        ]);
+        pipeline
+    }
+
+    fn ingest_phase3_pipeline_without_tree_indexes() -> RagPipelineInput {
+        let mut pipeline = ingest_branch_pipeline();
+        pipeline.nodes.insert(
+            3,
+            RagPipelineNodeInput {
+                node_id: "extract-tree".into(),
+                stage_type: "EXTRACT_TREE".into(),
+                strategy_id: "RAG_MARKDOWN_TREE_EXTRACT_V1".into(),
+                enabled: true,
+                join_policy: None,
+                failure_policy: None,
+                config: Some(json!({})),
+            },
+        );
+        pipeline.nodes.insert(
+            6,
+            RagPipelineNodeInput {
+                node_id: "summarize-tree".into(),
+                stage_type: "SUMMARIZE_TREE".into(),
+                strategy_id: "RAG_TREE_EXTRACTIVE_SUMMARY_V1".into(),
+                enabled: true,
+                join_policy: None,
+                failure_policy: None,
+                config: Some(json!({})),
+            },
+        );
+        pipeline.nodes.insert(
+            7,
+            RagPipelineNodeInput {
+                node_id: "persist-tree".into(),
+                stage_type: "PERSIST_TREE".into(),
+                strategy_id: "RAG_PERSIST_TREE_GRAPH_V1".into(),
+                enabled: true,
+                join_policy: None,
+                failure_policy: None,
+                config: Some(json!({})),
+            },
+        );
+        pipeline.edges.extend([
+            RagPipelineEdgeInput {
+                from: "split".into(),
+                to: "extract-tree".into(),
+            },
+            RagPipelineEdgeInput {
+                from: "extract-tree".into(),
+                to: "summarize-tree".into(),
+            },
+            RagPipelineEdgeInput {
+                from: "summarize-tree".into(),
                 to: "persist-tree".into(),
             },
             RagPipelineEdgeInput {

@@ -269,6 +269,8 @@ pub(crate) fn compile_sql_corpus_plan(
                 "summary_fulltext_status",
                 "summary_embedding_status",
                 "covered_text_unit_codes",
+                "child_start_ordinal",
+                "child_end_ordinal",
                 "status",
                 "updated_at",
             ],

@@ -64,6 +64,13 @@ fn tree_unique_key(
                 "source_version".to_string(),
                 "scope_type".to_string(),
                 "scope_code".to_string(),
+                "tree_node_code".to_string(),
+            ],
+            vec![
+                "source_code".to_string(),
+                "source_version".to_string(),
+                "scope_type".to_string(),
+                "scope_code".to_string(),
                 "path_key".to_string(),
             ],
             vec!["tree_node_code".to_string()],

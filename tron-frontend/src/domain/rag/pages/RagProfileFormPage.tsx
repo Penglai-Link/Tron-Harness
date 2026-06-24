@@ -558,7 +558,7 @@ function IngestTemplateCard({
           </p>
         </div>
       </div>
-      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+      <div className="mt-4 grid min-w-0 gap-3 lg:grid-cols-[repeat(3,minmax(0,1fr))]">
         {templates.length > 0 ? templates.map((template) => {
           const capabilities = templateRequiredCapabilities(template, pipelineCatalog);
           const requiresGraph = capabilities.includes("graph");
@@ -567,7 +567,7 @@ function IngestTemplateCard({
           return (
             <button
               aria-pressed={selected}
-              className={`relative rounded-xl border p-4 text-left transition ${
+              className={`relative min-w-0 rounded-xl border p-4 text-left transition ${
                 selected
                   ? "border-[var(--color-primary)] bg-[var(--color-surface-container-low)] shadow-[inset_4px_0_0_var(--color-primary)]"
                   : "border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] hover:border-[var(--color-outline)]"
@@ -577,8 +577,8 @@ function IngestTemplateCard({
               type="button"
               onClick={() => onApply(template)}
             >
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-medium">{templateName(template)}</p>
+              <div className="flex min-w-0 items-center justify-between gap-3">
+                <p className="min-w-0 break-words font-medium">{templateName(template)}</p>
                 <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] ${
                   selected
                     ? "border-[var(--color-primary)] bg-[var(--color-primary-container)] text-[var(--color-on-primary-container)]"
@@ -588,7 +588,7 @@ function IngestTemplateCard({
                   </span>
               </div>
               {templateDescription(template) ? (
-                <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{templateDescription(template)}</p>
+                <p className="mt-2 break-words text-sm text-[var(--color-on-surface-variant)]">{templateDescription(template)}</p>
               ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
                 {capabilities.length > 0 ? capabilities.map((capability) => (
@@ -627,14 +627,20 @@ function PipelineFlowCard({
 }) {
   const levels = pipelineExecutionLevels(pipeline);
   const nodeCount = pipeline.nodes.filter((node) => node.enabled).length;
+  const enabledNodeIds = new Set(pipeline.nodes.filter((node) => node.enabled).map((node) => node.nodeId));
+  const outgoingTargets = pipeline.edges.reduce<Record<string, string[]>>((targetsByNode, edge) => {
+    if (!enabledNodeIds.has(edge.from) || !enabledNodeIds.has(edge.to)) return targetsByNode;
+    targetsByNode[edge.from] = [...(targetsByNode[edge.from] ?? []), edge.to];
+    return targetsByNode;
+  }, {});
 
   return (
-    <SurfaceCard>
+    <SurfaceCard data-testid="pipeline-flow">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-base font-semibold">流水线流程</h2>
           <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-            保存后的流水线仍是有向无环图；同一列中的分支可以并行运行。
+            保存后的流水线仍是有向无环图；同一列中的分支可以并行运行，节点卡片展示真实出边。
           </p>
         </div>
         <span className="rounded-full border border-[var(--color-outline-variant)] px-3 py-1 text-sm">{nodeCount} 个已启用节点</span>
@@ -643,25 +649,44 @@ function PipelineFlowCard({
         <div className="mt-5 overflow-x-auto">
           <div className="flex min-w-max items-stretch gap-3">
             {levels.map((level, levelIndex) => (
-              <div className="flex items-center gap-3" key={`level-${levelIndex}`}>
-                <div className="grid min-w-52 gap-3">
+              <div className="grid min-w-56 gap-3" key={`level-${levelIndex}`}>
+                <div className="flex min-h-6 items-center justify-between gap-2">
                   {level.length > 1 ? (
                     <span className="w-fit rounded-full bg-[var(--color-surface-container-high)] px-2 py-0.5 text-[11px] uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
                       并行
                     </span>
-                  ) : null}
-                  {level.map((node) => {
-                    return (
-                      <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3" key={node.nodeId}>
-                        <p className="font-medium">{stageDisplayName(pipelineCatalog, node.stageType)}</p>
-                        <p className="mt-1 font-mono text-[11px] text-[var(--color-on-surface-variant)]">{node.strategyId || "未设置策略"}</p>
-                      </div>
-                    );
-                  })}
+                  ) : (
+                    <span />
+                  )}
+                  <span className="font-mono text-[11px] text-[var(--color-on-surface-variant)]">
+                    第 {levelIndex + 1} 层
+                  </span>
                 </div>
-                {levelIndex < levels.length - 1 ? (
-                  <span className="text-xl text-[var(--color-on-surface-variant)]">→</span>
-                ) : null}
+                {level.map((node) => {
+                  const targets = outgoingTargets[node.nodeId] ?? [];
+                  return (
+                    <div
+                      className="min-w-0 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3"
+                      data-testid={`pipeline-flow-node-${node.nodeId}`}
+                      key={node.nodeId}
+                    >
+                      <p className="font-medium">{stageDisplayName(pipelineCatalog, node.stageType)}</p>
+                      <p className="mt-1 break-all font-mono text-[11px] text-[var(--color-on-surface-variant)]">{node.strategyId || "未设置策略"}</p>
+                      <div className="mt-3 border-t border-[var(--color-outline-variant)] pt-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">目标节点</p>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {targets.length > 0 ? targets.map((target) => (
+                            <span className="rounded-full border border-[var(--color-outline-variant)] px-2 py-0.5 font-mono text-[11px] text-[var(--color-on-surface-variant)]" key={`${node.nodeId}-${target}`}>
+                              → {target}
+                            </span>
+                          )) : (
+                            <span className="rounded-full border border-[var(--color-outline-variant)] px-2 py-0.5 text-[11px] text-[var(--color-on-surface-variant)]">终点</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -1317,10 +1342,10 @@ export function RagIngestProfileFormPage() {
         )}
       />
 
-      <form className="grid gap-5" id="rag-ingest-profile-form" onSubmit={handleSubmit}>
+      <form className="grid min-w-0 gap-5" id="rag-ingest-profile-form" onSubmit={handleSubmit}>
         <SurfaceCard>
           <h2 className="text-base font-semibold">基础信息</h2>
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <Field label="配置标识" error={errors.id} hint={ingestFieldHints.profileId}>
               <TextInput
                 aria-label="配置标识"
@@ -1953,10 +1978,10 @@ export function RagRetrievalProfileFormPage() {
         )}
       />
 
-      <form className="grid gap-5" id="rag-retrieval-profile-form" onSubmit={handleSubmit}>
+      <form className="grid min-w-0 gap-5" id="rag-retrieval-profile-form" onSubmit={handleSubmit}>
         <SurfaceCard>
           <h2 className="text-base font-semibold">基础信息</h2>
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+          <div className="mt-4 grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
             <Field label="配置标识" error={errors.id} hint={retrievalFieldHints.profileId}>
               <TextInput
                 aria-label="配置标识"

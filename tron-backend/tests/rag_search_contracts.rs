@@ -213,6 +213,7 @@ async fn tree_fulltext_retriever_matches_summary_and_hydrates_text_units() {
                 scope_code: "TRON_CORE".into(),
             }],
             filters: json!({}),
+            policy: json!({ "includeRoot": true }),
             return_fields: vec![],
             limit: 5,
         })
@@ -280,6 +281,7 @@ async fn tree_fulltext_retriever_filters_tree_node_scope_before_hydration() {
                 scope_code: "TRON_CORE".into(),
             }],
             filters: json!({}),
+            policy: json!({}),
             return_fields: vec![],
             limit: 5,
         })
@@ -288,6 +290,67 @@ async fn tree_fulltext_retriever_filters_tree_node_scope_before_hydration() {
     assert!(
         rows.is_empty(),
         "tree rows from a different scope must not hydrate target-scope text units: {rows:?}"
+    );
+}
+
+#[tokio::test]
+async fn tree_vector_retriever_filters_tree_rows_by_source_and_scope_before_hydrating_units() {
+    let database_url = temp_database_path("rag-search-tree-scope-isolation")
+        .to_string_lossy()
+        .to_string();
+    let repository = Arc::new(Mutex::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+    ));
+    set_memory_card_tree_table(&database_url, "rag_memory_tree_nodes");
+    insert_tree_pipeline_ingest_profile(&database_url, "memory-card-tree-pipeline-v1");
+    let service = RagIngestService::new(
+        repository.clone(),
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new().with_embedding(embedding_4096(0.25, 0.75)),
+    );
+    let core_request = memory_request("memory-rag-rule", "v1", "SPACE", "TRON_CORE");
+    service.ingest(core_request).await.unwrap();
+    let mut alternate_request = memory_request("memory-rerank-second", "v1", "SPACE", "TRON_ALT");
+    alternate_request.ingest_profile_id = "memory-card-tree-pipeline-v1".into();
+    alternate_request.access_context.workspace_code = "TRON_ALT".into();
+    alternate_request.workspace_code = "TRON_ALT".into();
+    service.ingest(alternate_request).await.unwrap();
+    let connection = open_prepared_connection(&database_url);
+    connection
+        .execute(
+            "UPDATE rag_memory_tree_nodes
+             SET covered_text_unit_codes = '[\"memory-rag-rule:v1:0\"]',
+                 covered_text_unit_count = 1
+             WHERE source_code = 'memory-rerank-second'
+               AND scope_code = 'TRON_ALT'",
+            [],
+        )
+        .unwrap();
+    drop(connection);
+
+    let core_rows = repository
+        .search_route(RagRouteSearchQuery {
+            corpus_id: "memory-card".into(),
+            route_id: "tree-vector".into(),
+            retriever: "TREE_VECTOR_V1".into(),
+            workspace_code: "TRON_CORE".into(),
+            query: "alternate vector tree".into(),
+            query_embedding: Some(embedding_4096(0.25, 0.75)),
+            query_embedding_model_code: Some("fake-embedding".into()),
+            source_version: "v1".into(),
+            scopes: vec![RagSearchScope {
+                scope_type: "SPACE".into(),
+                scope_code: "TRON_CORE".into(),
+            }],
+            filters: json!({}),
+            policy: json!({ "includeRoot": true }),
+            return_fields: vec![],
+            limit: 5,
+        })
+        .unwrap();
+    assert!(
+        core_rows.is_empty(),
+        "tree rows from another scope must not hydrate same-code core text units"
     );
 }
 
@@ -325,6 +388,7 @@ async fn tree_vector_retriever_matches_summary_embedding_and_hydrates_text_units
                 scope_code: "TRON_CORE".into(),
             }],
             filters: json!({}),
+            policy: json!({ "includeRoot": true }),
             return_fields: vec![],
             limit: 5,
         })
@@ -334,6 +398,87 @@ async fn tree_vector_retriever_matches_summary_embedding_and_hydrates_text_units
     assert_eq!(rows[0].target_code, "memory-rag-rule:v1:0");
     assert_eq!(rows[0].field_values["matchedBy"], json!("TREE_VECTOR_V1"));
     assert!(rows[0].field_values.get("treeScore").is_some());
+}
+
+#[tokio::test]
+async fn tree_fulltext_route_policy_excludes_root_limits_expansion_and_prefers_deeper_nodes() {
+    let database_url = temp_database_path("rag-search-tree-route-policy")
+        .to_string_lossy()
+        .to_string();
+    let repository = Arc::new(Mutex::new(
+        SqliteRagRepository::connect(&database_url).unwrap(),
+    ));
+    set_memory_card_tree_table(&database_url, "rag_memory_tree_nodes");
+    insert_markdown_tree_pipeline_ingest_profile(&database_url, "memory-card-heading-tree-v1");
+    let service = RagIngestService::new(
+        repository.clone(),
+        DefaultRagStrategyRegistry::default(),
+        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
+    );
+    let mut request = memory_request("memory-rag-rule", "v1", "SPACE", "TRON_CORE");
+    request.ingest_profile_id = "memory-card-heading-tree-v1".into();
+    request.payload["text"] = json!(
+        "# Overview\nRoot overview.\n## Deep Leaf\nAlways cite source titles in deep leaf.\n## Another Leaf\nAlways cite source titles in another leaf."
+    );
+    service.ingest(request).await.unwrap();
+    rewrite_tree_summaries_for_tie(&database_url, "policy tie phrase");
+
+    let query = |policy: Value| RagRouteSearchQuery {
+        corpus_id: "memory-card".into(),
+        route_id: "tree-fulltext".into(),
+        retriever: "TREE_FULLTEXT_V1".into(),
+        workspace_code: "TRON_CORE".into(),
+        query: "policy tie phrase".into(),
+        query_embedding: None,
+        query_embedding_model_code: None,
+        source_version: "v1".into(),
+        scopes: vec![RagSearchScope {
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+        }],
+        filters: json!({}),
+        policy,
+        return_fields: vec![],
+        limit: 10,
+    };
+
+    let default_rows = repository.search_route(query(json!({}))).unwrap();
+    assert!(
+        default_rows
+            .iter()
+            .all(|row| row.field_values["treeNodeTitle"] != json!("RAG citation rule")),
+        "includeRoot should default to false for tree routes"
+    );
+
+    let limited_rows = repository
+        .search_route(query(json!({
+            "includeRoot": true,
+            "maxCoveredUnitsPerNode": 1
+        })))
+        .unwrap();
+    let limited_titles = limited_rows
+        .iter()
+        .map(|row| row.field_values["treeNodeTitle"].clone())
+        .collect::<Vec<_>>();
+    assert_eq!(limited_rows.len(), 3);
+    assert!(limited_titles.contains(&json!("RAG citation rule")));
+    assert!(
+        limited_titles.contains(&json!("Deep Leaf"))
+            || limited_titles.contains(&json!("Another Leaf")),
+        "maxCoveredUnitsPerNode should let child tree nodes hydrate units not consumed by root"
+    );
+
+    let deeper_rows = repository
+        .search_route(query(json!({
+            "includeRoot": true,
+            "maxCoveredUnitsPerNode": 1,
+            "preferDeeperTreeNode": true
+        })))
+        .unwrap();
+    assert_eq!(
+        deeper_rows[0].field_values["treeNodeTitle"],
+        json!("Deep Leaf")
+    );
 }
 
 #[tokio::test]
@@ -584,6 +729,7 @@ async fn project_doc_vector_route_reads_distinct_vector_storage_table_when_confi
                 scope_code: "TRON_CORE".into(),
             }],
             filters: json!({}),
+            policy: json!({}),
             return_fields: Vec::new(),
             limit: 5,
         })
@@ -654,6 +800,7 @@ async fn project_doc_fulltext_route_reads_distinct_carrier_and_hydrates_text_uni
                 scope_code: "TRON_CORE".into(),
             }],
             filters: json!({}),
+            policy: json!({}),
             return_fields: Vec::new(),
             limit: 5,
         })
@@ -1462,7 +1609,7 @@ async fn sqlite_extension_indexes_survive_reconnect_without_main_index_payload()
     );
     drop(repository);
 
-    let connection = Connection::open(&database_url).unwrap();
+    let connection = open_prepared_connection(&database_url);
     let sidecar_count = connection
         .query_row(
             "SELECT COUNT(*)
@@ -1900,7 +2047,7 @@ async fn seed_structured_filter_fixture(database_url: &str) {
         ))
         .await
         .unwrap();
-    let connection = Connection::open(database_url).unwrap();
+    let connection = open_prepared_connection(database_url);
     connection
         .execute(
             "UPDATE rag_memory_text_units
@@ -2060,7 +2207,7 @@ fn insert_structured_filter_profile(
     rerank_enabled: bool,
     route_top_k: usize,
 ) {
-    let connection = Connection::open(database_url).unwrap();
+    let connection = open_prepared_connection(database_url);
     let mut routes = vec![json!({
         "routeId": "memory-structured",
         "retriever": "STRUCTURED_FILTER_SQLITE_V1",
@@ -2106,7 +2253,7 @@ fn insert_structured_filter_profile(
 }
 
 fn insert_pipeline_only_retrieval_profile(database_url: &str, profile_id: &str) {
-    let connection = Connection::open(database_url).unwrap();
+    let connection = open_prepared_connection(database_url);
     let config = json!({
         "pipeline": {
             "mode": "DAG",
@@ -2186,7 +2333,7 @@ fn insert_pipeline_only_retrieval_profile(database_url: &str, profile_id: &str) 
 }
 
 fn insert_tree_pipeline_ingest_profile(database_url: &str, profile_id: &str) {
-    let connection = Connection::open(database_url).unwrap();
+    let connection = open_prepared_connection(database_url);
     let config = json!({
         "sourceInputPolicy": {
             "supportedSourceTypes": ["MEMORY_CARD"]
@@ -2236,8 +2383,65 @@ fn insert_tree_pipeline_ingest_profile(database_url: &str, profile_id: &str) {
         .unwrap();
 }
 
+fn insert_markdown_tree_pipeline_ingest_profile(database_url: &str, profile_id: &str) {
+    insert_tree_pipeline_ingest_profile(database_url, profile_id);
+    let connection = open_prepared_connection(database_url);
+    let raw_config: String = connection
+        .query_row(
+            "SELECT config_json FROM rag_profiles WHERE profile_id = ?1",
+            params![profile_id],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let mut config: Value = serde_json::from_str(&raw_config).unwrap();
+    for node in config["pipeline"]["nodes"]
+        .as_array_mut()
+        .expect("pipeline nodes should be an array")
+    {
+        if node["nodeId"] == json!("split-text") {
+            node["strategyId"] = json!("RAG_SPLIT_MARKDOWN_HEADING_V1");
+            node["config"] = json!({
+                "splitter": {
+                    "headingDepth": 2,
+                    "includeHeadingInIndexText": true
+                }
+            });
+        }
+    }
+    connection
+        .execute(
+            "UPDATE rag_profiles SET config_json = ?1 WHERE profile_id = ?2",
+            params![config.to_string(), profile_id],
+        )
+        .unwrap();
+}
+
+fn rewrite_tree_summaries_for_tie(database_url: &str, summary_text: &str) {
+    let connection = open_prepared_connection(database_url);
+    connection
+        .execute(
+            "UPDATE rag_memory_tree_nodes
+             SET summary_text = ?1,
+                 summary_fulltext_status = 'INDEXED'",
+            params![summary_text],
+        )
+        .unwrap();
+    connection
+        .execute("DELETE FROM rag_memory_tree_nodes_fts", [])
+        .unwrap();
+    connection
+        .execute(
+            "INSERT INTO rag_memory_tree_nodes_fts(rowid, search_text)
+             SELECT id, summary_text
+             FROM rag_memory_tree_nodes
+             WHERE status = 'ACTIVE'",
+            [],
+        )
+        .unwrap();
+}
+
 fn insert_advanced_query_retrieval_profile(database_url: &str, profile_id: &str) {
-    let connection = Connection::open(database_url).unwrap();
+    let connection = open_prepared_connection(database_url);
     let config = json!({
         "pipeline": {
             "mode": "DAG",
@@ -2335,7 +2539,7 @@ fn set_project_doc_segment_table(
     target_id: &str,
     table_name: &str,
 ) {
-    let connection = Connection::open(database_url).unwrap();
+    let connection = open_prepared_connection(database_url);
     let binding_json = connection
         .query_row(
             "SELECT storage_binding_json FROM rag_corpora WHERE corpus_id = 'project-doc'",
@@ -2404,7 +2608,7 @@ fn open_prepared_connection(database_url: &str) -> Connection {
 }
 
 fn insert_extension_memory_profile(database_url: &str, profile_id: &str) {
-    let connection = Connection::open(database_url).unwrap();
+    let connection = open_prepared_connection(database_url);
     let config = json!({
         "routes": [
             {
@@ -2440,7 +2644,7 @@ fn insert_extension_memory_profile(database_url: &str, profile_id: &str) {
 }
 
 fn insert_rrf_mmr_profile(database_url: &str, profile_id: &str, include_project_doc: bool) {
-    let connection = Connection::open(database_url).unwrap();
+    let connection = open_prepared_connection(database_url);
     let (primary_corpus, corpus_ids, routes) = if include_project_doc {
         (
             "memory-card",
@@ -2517,7 +2721,7 @@ fn insert_rrf_mmr_profile(database_url: &str, profile_id: &str, include_project_
 }
 
 fn insert_mixed_filter_profile(database_url: &str, profile_id: &str) {
-    let connection = Connection::open(database_url).unwrap();
+    let connection = open_prepared_connection(database_url);
     let config = json!({
         "routes": [
             {
@@ -2603,7 +2807,7 @@ fn table_exists(repository: &SqliteRagRepository, table_name: &str) -> bool {
 }
 
 fn set_memory_card_tree_table(database_url: &str, table_name: &str) {
-    let connection = Connection::open(database_url).unwrap();
+    let connection = open_prepared_connection(database_url);
     let binding_json = connection
         .query_row(
             "SELECT storage_binding_json FROM rag_corpora WHERE corpus_id = 'memory-card'",
@@ -2793,6 +2997,8 @@ fn tree_scope_filter_command(
                 .map(ToOwned::to_owned)
                 .collect(),
             covered_text_unit_count: 1,
+            child_start_ordinal: 0,
+            child_end_ordinal: 0,
             metadata: json!({}),
             status: "ACTIVE".into(),
         }],

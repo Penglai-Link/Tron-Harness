@@ -69,6 +69,122 @@ fn build_tree_graph_artifact(
     })
 }
 
+fn build_tree_hints_artifact(prepared: &PreparedIngestPayload, split_strategy_id: &str) -> Value {
+    let root = prepared
+        .tree_hints
+        .iter()
+        .find(|hint| hint.parent_node_code == "0")
+        .map(tree_hint_json)
+        .unwrap_or_else(|| json!({}));
+    let outline = prepared
+        .tree_hints
+        .iter()
+        .filter(|hint| hint.parent_node_code != "0")
+        .map(tree_hint_json)
+        .collect::<Vec<_>>();
+    let leaf_attachments = prepared
+        .units
+        .iter()
+        .map(|unit| {
+            let tree_node_codes = prepared
+                .tree_hints
+                .iter()
+                .filter(|hint| hint.covered_text_unit_codes.contains(&unit.text_unit_code))
+                .map(|hint| hint.tree_node_code.clone())
+                .collect::<Vec<_>>();
+            json!({
+                "textUnitCode": unit.text_unit_code,
+                "treeNodeCodes": tree_node_codes,
+                "headingPath": unit.heading_path,
+                "ordinal": unit.ordinal
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "schemaVersion": "rag-tree-hints-v1",
+        "split": {
+            "strategyId": split_strategy_id,
+            "structureKind": tree_structure_kind(prepared)
+        },
+        "root": root,
+        "outline": outline,
+        "leafAttachments": leaf_attachments
+    })
+}
+
+fn build_tree_extracted_artifact(
+    request: &RagIngestRequest,
+    prepared: &PreparedIngestPayload,
+) -> Value {
+    let root = prepared
+        .tree_hints
+        .iter()
+        .find(|hint| hint.parent_node_code == "0")
+        .map(tree_hint_json)
+        .unwrap_or_else(|| json!({}));
+    let nodes = prepared
+        .tree_hints
+        .iter()
+        .map(|hint| {
+            json!({
+                "kind": "TREE_NODE",
+                "treeNodeCode": hint.tree_node_code,
+                "parentNodeCode": hint.parent_node_code,
+                "pathKey": hint.path_key,
+                "level": hint.level,
+                "ordinal": hint.ordinal,
+                "title": hint.title,
+                "coveredTextUnitCodes": hint.covered_text_unit_codes,
+                "coveredTextUnitCount": hint.covered_text_unit_codes.len()
+            })
+        })
+        .collect::<Vec<_>>();
+    let edges = prepared
+        .tree_hints
+        .iter()
+        .filter(|hint| hint.parent_node_code != "0")
+        .map(|hint| {
+            json!({
+                "from": hint.parent_node_code,
+                "to": hint.tree_node_code,
+                "relationship": "PARENT_OF"
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "schemaVersion": "rag-tree-extracted-v1",
+        "sourceCode": request.source.code,
+        "sourceVersion": request.source.version,
+        "root": root,
+        "nodes": nodes,
+        "edges": edges
+    })
+}
+
+fn tree_hint_json(hint: &crate::application::rag::ingest_payload::RagTreeHintDraft) -> Value {
+    json!({
+        "treeNodeCode": hint.tree_node_code,
+        "parentNodeCode": hint.parent_node_code,
+        "pathKey": hint.path_key,
+        "level": hint.level,
+        "ordinal": hint.ordinal,
+        "title": hint.title,
+        "coveredTextUnitCodes": hint.covered_text_unit_codes
+    })
+}
+
+fn tree_structure_kind(prepared: &PreparedIngestPayload) -> &'static str {
+    if prepared
+        .tree_hints
+        .iter()
+        .any(|hint| hint.level > 0 && !hint.path_key.trim().is_empty())
+    {
+        "HEADING_TREE"
+    } else {
+        "FLAT_TREE"
+    }
+}
+
 fn summarize_tree_node(
     request: &RagIngestRequest,
     prepared: &PreparedIngestPayload,
@@ -82,6 +198,12 @@ fn summarize_tree_node(
         .filter(|text| !text.is_empty())
         .collect::<Vec<_>>()
         .join("\n\n");
+    let covered_ordinals = prepared
+        .units
+        .iter()
+        .filter(|unit| hint.covered_text_unit_codes.contains(&unit.text_unit_code))
+        .map(|unit| unit.ordinal as i64)
+        .collect::<Vec<_>>();
     let summary_text = extractive_summary(&hint.title, &covered_text);
     RagTreeNodeWrite {
         tree_node_code: hint.tree_node_code.clone(),
@@ -106,6 +228,8 @@ fn summarize_tree_node(
         summary_embedding: None,
         covered_text_unit_count: hint.covered_text_unit_codes.len() as i64,
         covered_text_unit_codes: hint.covered_text_unit_codes.clone(),
+        child_start_ordinal: covered_ordinals.iter().min().copied().unwrap_or(0),
+        child_end_ordinal: covered_ordinals.iter().max().copied().unwrap_or(0),
         metadata: json!({ "summaryStrategy": "EXTRACTIVE_DETERMINISTIC_V1" }),
         status: "ACTIVE".into(),
     }
@@ -174,6 +298,138 @@ fn validate_project_doc_ref_request(request: &RagIngestRequest) -> Result<(), Ra
         return Err(RagError::IngestRequestInvalid);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::application::rag::{
+        RagIngestAccessContext, RagIngestScope, RagIngestSource,
+        ingest_payload::{PreparedIngestPayload, RagTextUnitDraft, RagTreeHintDraft},
+    };
+
+    #[test]
+    fn split_text_tree_hints_artifact_uses_object_contract() {
+        let prepared = prepared_tree_payload();
+
+        let artifact = build_tree_hints_artifact(&prepared, "RAG_SPLIT_MARKDOWN_HEADING_V1");
+
+        assert_eq!(artifact["schemaVersion"], json!("rag-tree-hints-v1"));
+        assert_eq!(
+            artifact["split"],
+            json!({
+                "strategyId": "RAG_SPLIT_MARKDOWN_HEADING_V1",
+                "structureKind": "HEADING_TREE"
+            })
+        );
+        assert_eq!(artifact["root"]["treeNodeCode"], json!("tree-root"));
+        assert_eq!(artifact["outline"][0]["treeNodeCode"], json!("tree-child"));
+        assert_eq!(
+            artifact["leafAttachments"],
+            json!([
+                {
+                    "textUnitCode": "source:v1:0",
+                    "treeNodeCodes": ["tree-root", "tree-child"],
+                    "headingPath": "Intro",
+                    "ordinal": 0
+                }
+            ])
+        );
+        assert!(
+            artifact.as_array().is_none(),
+            "tree.hints should be an object, not the internal Vec shape"
+        );
+    }
+
+    #[test]
+    fn extract_tree_artifact_uses_tree_node_shape_not_related_graph_shape() {
+        let request = tree_request();
+        let prepared = prepared_tree_payload();
+
+        let artifact = build_tree_extracted_artifact(&request, &prepared);
+
+        assert_eq!(artifact["schemaVersion"], json!("rag-tree-extracted-v1"));
+        assert_eq!(artifact["root"]["treeNodeCode"], json!("tree-root"));
+        assert!(
+            artifact["nodes"].as_array().is_some_and(|nodes| nodes.iter().all(
+                |node| node["kind"] == json!("TREE_NODE")
+                    && node.get("treeNodeCode").is_some()
+                    && node.get("textUnitCode").is_none()
+            )),
+            "tree.extracted nodes should describe tree nodes instead of text-unit graph nodes"
+        );
+        assert!(
+            artifact["edges"].as_array().is_some_and(|edges| edges.iter().any(
+                |edge| edge["from"] == json!("tree-root")
+                    && edge["to"] == json!("tree-child")
+                    && edge["relationship"] == json!("PARENT_OF")
+            )),
+            "tree.extracted should describe parent-child tree edges"
+        );
+    }
+
+    fn prepared_tree_payload() -> PreparedIngestPayload {
+        PreparedIngestPayload {
+            title: Some("Source title".into()),
+            content_hash: "content-hash".into(),
+            body_hash: None,
+            metadata: json!({}),
+            domain_fields: Default::default(),
+            units: vec![RagTextUnitDraft {
+                text_unit_code: "source:v1:0".into(),
+                text: "# Intro\nAlways cite source titles.".into(),
+                index_text: "Intro\nAlways cite source titles.".into(),
+                heading_path: "Intro".into(),
+                ordinal: 0,
+                content_hash: "unit-hash".into(),
+            }],
+            tree_hints: vec![
+                RagTreeHintDraft {
+                    tree_node_code: "tree-root".into(),
+                    parent_node_code: "0".into(),
+                    path_key: "/".into(),
+                    level: 0,
+                    ordinal: 0,
+                    title: "Source title".into(),
+                    covered_text_unit_codes: vec!["source:v1:0".into()],
+                },
+                RagTreeHintDraft {
+                    tree_node_code: "tree-child".into(),
+                    parent_node_code: "tree-root".into(),
+                    path_key: "Intro".into(),
+                    level: 1,
+                    ordinal: 1,
+                    title: "Intro".into(),
+                    covered_text_unit_codes: vec!["source:v1:0".into()],
+                },
+            ],
+        }
+    }
+
+    fn tree_request() -> RagIngestRequest {
+        RagIngestRequest {
+            corpus_id: "memory-card".into(),
+            ingest_profile_id: "memory-card-tree".into(),
+            workspace_code: "TRON_CORE".into(),
+            access_context: RagIngestAccessContext {
+                user_code: "USR-LARGE-ID".into(),
+                agent_code: "AGENT_CODEX".into(),
+                workspace_code: "TRON_CORE".into(),
+            },
+            target_scope: RagIngestScope {
+                scope_type: "SPACE".into(),
+                scope_code: "TRON_CORE".into(),
+            },
+            source: RagIngestSource {
+                code: "source".into(),
+                version: "v1".into(),
+                source_type: "MEMORY_CARD".into(),
+            },
+            payload: json!({}),
+        }
+    }
 }
 
 fn document_uri<'a>(

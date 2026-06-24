@@ -477,10 +477,10 @@ function createSeedProfileCatalog(corpora: RagCatalogCorpusApi[]): RagProfileCat
       "persistSource",
     ],
     ingestStageStrategies: {
-      extractTree: ["RAG_EXTRACT_TREE"],
+      extractTree: ["RAG_MARKDOWN_TREE_EXTRACT_V1"],
       fulltextIndex: ["RAG_FULLTEXT_INDEX"],
       parseDocument: ["RAG_PARSE_MARKDOWN_DOCUMENT"],
-      persistTree: ["RAG_PERSIST_TREE"],
+      persistTree: ["RAG_PERSIST_TREE_GRAPH_V1"],
       persistSource: ["RAG_PERSIST_SOURCE"],
       preparePayload: ["RAG_TEXT_CONTRACT_PAYLOAD_V1", "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1"],
       resolveSource: ["PROJECT_DOC_RESOLVE_SOURCE"],
@@ -560,12 +560,24 @@ function createSeedPipelineCatalog(profileType: "INGEST" | "RETRIEVAL"): RagPipe
       inputArtifactKeys: string[],
       outputArtifactKeys: string[],
       strategies: Array<ReturnType<typeof createStrategy>>,
+      orchestration: {
+        actsAsBarrier?: boolean;
+        mustRunAfterStageTypes?: string[];
+        mustRunBeforeStageTypes?: string[];
+        required?: boolean;
+      } = {},
     ) => ({
       allowedStrategies: strategies.map((strategy) => strategy.strategyId),
       defaultFailurePolicy: "FAIL_PIPELINE",
       defaultJoinPolicy: "ALL_SUCCESS",
       displayName: stageType,
       inputArtifactKeys,
+      orchestration: {
+        actsAsBarrier: orchestration.actsAsBarrier ?? false,
+        mustRunAfterStageTypes: orchestration.mustRunAfterStageTypes ?? [],
+        mustRunBeforeStageTypes: orchestration.mustRunBeforeStageTypes ?? [],
+        required: orchestration.required ?? false,
+      },
       outputArtifactKeys,
       profileTypes: ["INGEST"] as const,
       repeatable: false,
@@ -589,21 +601,32 @@ function createSeedPipelineCatalog(profileType: "INGEST" | "RETRIEVAL"): RagPipe
           createStrategy("RAG_SPLIT_MARKDOWN_HEADING_V1", { splitter: { type: "object" } }),
           createStrategy("RAG_SPLIT_TEXT", { splitter: { type: "object" } }),
         ]),
-        stage("EXTRACT_TREE", ["textUnits.generated"], ["tree.extracted"], [createStrategy("RAG_EXTRACT_TREE")]),
-        stage("SUMMARIZE_TREE", ["tree.extracted"], ["tree.summarized"], [createStrategy("RAG_TREE_EXTRACTIVE_SUMMARY_V1")]),
-        stage("FULLTEXT_INDEX", ["textUnits.generated"], ["index.fulltext"], [createStrategy("RAG_FULLTEXT_INDEX")]),
-        stage("VECTOR_INDEX", ["textUnits.generated"], ["index.vector"], [createStrategy("RAG_VECTOR_INDEX")]),
-        stage("TREE_FULLTEXT_INDEX", ["tree.summarized"], ["index.treeFulltext"], [createStrategy("RAG_TREE_FULLTEXT_INDEX")]),
-        stage("TREE_VECTOR_INDEX", ["tree.summarized"], ["index.treeVector"], [createStrategy("RAG_TREE_VECTOR_INDEX")]),
-        {
-          ...stage("PERSIST_TREE", ["tree.summarized"], ["tree.persisted"], [createStrategy("RAG_PERSIST_TREE")]),
-          orchestration: {
-            actsAsBarrier: true,
-            mustRunAfterStageTypes: [],
-            mustRunBeforeStageTypes: ["PERSIST_SOURCE"],
-            required: false,
-          },
-        },
+        stage("EXTRACT_TREE", ["tree.hints", "textUnits.generated"], ["tree.extracted", "graph.related"], [createStrategy("RAG_MARKDOWN_TREE_EXTRACT_V1")], {
+          mustRunBeforeStageTypes: ["SUMMARIZE_TREE"],
+          mustRunAfterStageTypes: ["SPLIT_TEXT"],
+        }),
+        stage("SUMMARIZE_TREE", ["tree.extracted"], ["tree.summarized"], [createStrategy("RAG_TREE_EXTRACTIVE_SUMMARY_V1")], {
+          mustRunBeforeStageTypes: ["TREE_FULLTEXT_INDEX", "TREE_VECTOR_INDEX"],
+          mustRunAfterStageTypes: ["EXTRACT_TREE"],
+        }),
+        stage("FULLTEXT_INDEX", ["textUnits.generated"], ["index.fulltext"], [createStrategy("RAG_FULLTEXT_INDEX")], {
+          mustRunBeforeStageTypes: ["PERSIST_SOURCE"],
+        }),
+        stage("VECTOR_INDEX", ["textUnits.generated"], ["index.vector"], [createStrategy("RAG_VECTOR_INDEX")], {
+          mustRunBeforeStageTypes: ["PERSIST_SOURCE"],
+        }),
+        stage("TREE_FULLTEXT_INDEX", ["tree.summarized"], ["index.treeFulltext"], [createStrategy("RAG_TREE_FULLTEXT_INDEX")], {
+          mustRunBeforeStageTypes: ["PERSIST_TREE", "PERSIST_SOURCE"],
+          mustRunAfterStageTypes: ["SUMMARIZE_TREE"],
+        }),
+        stage("TREE_VECTOR_INDEX", ["tree.summarized"], ["index.treeVector"], [createStrategy("RAG_TREE_VECTOR_INDEX")], {
+          mustRunBeforeStageTypes: ["PERSIST_TREE", "PERSIST_SOURCE"],
+          mustRunAfterStageTypes: ["SUMMARIZE_TREE"],
+        }),
+        stage("PERSIST_TREE", ["tree.summarized"], ["tree.writePayload", "tree.persisted"], [createStrategy("RAG_PERSIST_TREE_GRAPH_V1")], {
+          mustRunBeforeStageTypes: ["PERSIST_SOURCE"],
+          mustRunAfterStageTypes: ["SUMMARIZE_TREE", "TREE_FULLTEXT_INDEX", "TREE_VECTOR_INDEX"],
+        }),
         stage("PERSIST_SOURCE", ["textUnits.generated"], ["source.persisted"], [createStrategy("RAG_PERSIST_SOURCE")]),
       ],
     };

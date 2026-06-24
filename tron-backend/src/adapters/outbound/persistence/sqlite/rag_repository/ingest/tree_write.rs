@@ -193,6 +193,18 @@ fn persist_tree_node(
         "covered_text_unit_count",
         node.covered_text_unit_count,
     );
+    push_integer(
+        &mut values,
+        &plan.tree_columns,
+        "child_start_ordinal",
+        node.child_start_ordinal,
+    );
+    push_integer(
+        &mut values,
+        &plan.tree_columns,
+        "child_end_ordinal",
+        node.child_end_ordinal,
+    );
     push_text(
         &mut values,
         &plan.tree_columns,
@@ -269,14 +281,14 @@ fn tree_rowid_for_node(
                AND source_version = ?2
                AND scope_type = ?3
                AND scope_code = ?4
-               AND path_key = ?5"
+               AND tree_node_code = ?5"
         ),
-        [
+        params![
             node.source_code.as_str(),
             node.source_version.as_str(),
             node.scope_type.as_str(),
             node.scope_code.as_str(),
-            node.path_key.as_str(),
+            node.tree_node_code.as_str(),
         ],
         |row| row.get::<_, i64>(0),
     )

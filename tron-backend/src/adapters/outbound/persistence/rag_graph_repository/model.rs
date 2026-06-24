@@ -482,8 +482,9 @@ pub(super) fn graph_property_name_for_logical<'a>(
 ) -> Option<&'a str> {
     let primary = match segment {
         "source" => non_empty_mapping(&corpus.source_field_mapping),
-        "textUnit" | "fulltext" | "vector" => non_empty_mapping(&corpus.text_unit_field_mapping),
-        "tree" => non_empty_mapping(&corpus.source_field_mapping),
+        "textUnit" | "fulltext" | "vector" | "tree" => {
+            non_empty_mapping(&corpus.text_unit_field_mapping)
+        }
         _ => None,
     };
     primary

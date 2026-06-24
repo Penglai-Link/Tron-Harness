@@ -11,6 +11,7 @@ where
         store: &mut RagArtifactStore,
     ) -> Result<(), RagError> {
         let prepared = bundle.prepared_payload()?.clone();
+        let tree = build_tree_extracted_artifact(request, &prepared);
         let graph = build_tree_graph_artifact(request, &prepared);
         bundle.append(
             request,
@@ -20,7 +21,7 @@ where
                 "nodeCount": graph.get("nodes").and_then(Value::as_array).map_or(0, Vec::len)
             }),
         );
-        store.put_json("tree.extracted", graph.clone());
+        store.put_json("tree.extracted", tree);
         store.put_json("graph.related", graph);
         publish_ingest_stage_event(
             &self.event_bus,
@@ -98,7 +99,7 @@ where
         compiled: &CompiledRagIngestProfile,
         bundle: &mut ArtifactBundle,
     ) -> Result<(), RagError> {
-        let mut result = bundle.tree_fulltext_result()?.clone();
+        let mut result = bundle.tree_summary_result()?.clone();
         let mut embedding_failed = false;
         let mut fatal_error = None;
         let mut warnings = Vec::new();
@@ -178,7 +179,13 @@ where
         bundle: &mut ArtifactBundle,
         store: &mut RagArtifactStore,
     ) -> Result<(), RagError> {
-        let result = bundle.tree_vector_result()?.clone();
+        let mut result = bundle.tree_summary_result()?.clone();
+        if let Ok(fulltext_result) = bundle.tree_fulltext_result() {
+            merge_tree_fulltext_status(&mut result, fulltext_result);
+        }
+        if let Ok(vector_result) = bundle.tree_vector_result() {
+            merge_tree_vector_status(&mut result, vector_result);
+        }
         if result
             .tree_nodes
             .iter()
@@ -196,6 +203,14 @@ where
                 "nodeCount": result.tree_nodes.len()
             }),
         );
+        store.put_json(
+            "tree.writePayload",
+            json!({
+                "sourceCode": request.source.code,
+                "sourceVersion": request.source.version,
+                "nodeCount": result.tree_nodes.len()
+            }),
+        );
         store.put_json("tree.persisted", json!({"nodeCount": result.tree_nodes.len()}));
         publish_ingest_stage_event(
             &self.event_bus,
@@ -205,5 +220,40 @@ where
             request,
         );
         Ok(())
+    }
+}
+
+fn merge_tree_fulltext_status(
+    target: &mut RagTreeIndexArtifact,
+    fulltext: &RagTreeIndexArtifact,
+) {
+    for node in &mut target.tree_nodes {
+        if let Some(fulltext_node) = fulltext
+            .tree_nodes
+            .iter()
+            .find(|candidate| candidate.tree_node_code == node.tree_node_code)
+        {
+            node.summary_fulltext_status = fulltext_node.summary_fulltext_status.clone();
+        }
+    }
+}
+
+fn merge_tree_vector_status(target: &mut RagTreeIndexArtifact, vector: &RagTreeIndexArtifact) {
+    target.embedding_status = vector.embedding_status.clone();
+    target.warnings.extend(vector.warnings.clone());
+    target.fatal_error = vector.fatal_error.clone();
+    for node in &mut target.tree_nodes {
+        if let Some(vector_node) = vector
+            .tree_nodes
+            .iter()
+            .find(|candidate| candidate.tree_node_code == node.tree_node_code)
+        {
+            node.summary_embedding_status = vector_node.summary_embedding_status.clone();
+            node.summary_embedding_model_code = vector_node.summary_embedding_model_code.clone();
+            node.summary_embedding_version = vector_node.summary_embedding_version.clone();
+            node.summary_embedding_text_hash = vector_node.summary_embedding_text_hash.clone();
+            node.summary_embedding_dimension = vector_node.summary_embedding_dimension;
+            node.summary_embedding = vector_node.summary_embedding.clone();
+        }
     }
 }

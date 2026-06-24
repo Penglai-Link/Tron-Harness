@@ -198,7 +198,7 @@ async fn pipeline_extracts_and_persists_tree_graph_without_request_related_graph
     assert!(
         result.stage_results.iter().any(|stage| {
             stage.node_id == "extract-tree"
-                && stage.input_artifact_keys == vec!["textUnits.generated"]
+                && stage.input_artifact_keys == vec!["tree.hints", "textUnits.generated"]
                 && stage.output_artifact_keys == vec!["tree.extracted", "graph.related"]
         }),
         "EXTRACT_TREE should report the actual tree graph artifact handoff"
@@ -206,10 +206,10 @@ async fn pipeline_extracts_and_persists_tree_graph_without_request_related_graph
     assert!(
         result.stage_results.iter().any(|stage| {
             stage.node_id == "persist-tree"
-                && stage.input_artifact_keys == vec!["index.treeVector"]
-                && stage.output_artifact_keys == vec!["tree.persisted"]
+                && stage.input_artifact_keys == vec!["tree.summarized"]
+                && stage.output_artifact_keys == vec!["tree.writePayload", "tree.persisted"]
         }),
-        "PERSIST_TREE should report consuming the extracted graph artifact"
+        "PERSIST_TREE should report consuming the summarized tree baseline"
     );
     let commands = persisted_commands.lock().unwrap();
     let related_graph = commands
@@ -245,6 +245,74 @@ async fn pipeline_extracts_and_persists_tree_graph_without_request_related_graph
             && node.covered_text_unit_codes == vec!["memory-rag-rule:v1:0"]),
         "splitText should provide tree hints that summarize into a root node"
     );
+    let root = tree_nodes
+        .iter()
+        .find(|node| node.parent_node_code == "0")
+        .expect("tree pipeline should persist a root summary node");
+    assert_eq!(root.summary_fulltext_status, "INDEXED");
+    assert_eq!(root.summary_embedding_status, "INDEXED");
+    assert_eq!(
+        root.summary_embedding_model_code,
+        Some("workspace-default-embedding".into())
+    );
+}
+
+#[tokio::test]
+async fn pipeline_persists_summary_tree_without_optional_tree_indexes() {
+    let database_path = temp_database_path("rag-ingest-summary-tree-no-tree-indexes");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = CapturingIngestRepository::connect(&database_url);
+    insert_summary_tree_only_ingest_profile(&database_url, "memory-card-summary-tree-only-v1");
+    let persisted_commands = repository.persisted_commands.clone();
+    let embeddings = FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75));
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        embeddings.clone(),
+    );
+    let mut request = memory_request("v1");
+    request.ingest_profile_id = "memory-card-summary-tree-only-v1".into();
+
+    let result = service.ingest(request).await.unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(
+        result
+            .stage_results
+            .iter()
+            .map(|stage| stage.node_id.as_str())
+            .collect::<Vec<_>>(),
+        vec![
+            "validate-source",
+            "prepare-payload",
+            "split-text",
+            "extract-tree",
+            "fulltext-index",
+            "vector-index",
+            "summarize-tree",
+            "persist-tree",
+            "persist-source"
+        ]
+    );
+    assert_eq!(
+        embeddings.call_count(),
+        1,
+        "tree vector indexing is absent, so only text units should be embedded"
+    );
+    assert!(result.stage_results.iter().any(|stage| {
+        stage.node_id == "persist-tree" && stage.input_artifact_keys == vec!["tree.summarized"]
+    }));
+    let commands = persisted_commands.lock().unwrap();
+    let root = commands
+        .first()
+        .expect("source should persist")
+        .tree_nodes
+        .iter()
+        .find(|node| node.parent_node_code == "0")
+        .expect("summary baseline should persist a root tree node");
+    assert_eq!(root.summary_fulltext_status, "PENDING");
+    assert_eq!(root.summary_embedding_status, "PENDING");
+    assert_eq!(root.summary_embedding_model_code, None);
 }
 
 #[tokio::test]
@@ -304,6 +372,8 @@ async fn sqlite_tree_segment_creates_indexes_and_ingest_persists_summary_rows() 
     for required in [
         "tree_node_code",
         "parent_node_code",
+        "child_start_ordinal",
+        "child_end_ordinal",
         "summary_text",
         "summary_embedding",
         "covered_text_unit_codes",
@@ -312,6 +382,52 @@ async fn sqlite_tree_segment_creates_indexes_and_ingest_persists_summary_rows() 
     }
     assert!(table_exists(&connection, "rag_memory_tree_nodes_fts"));
     assert!(table_exists(&connection, "rag_memory_tree_nodes_vec_d4096"));
+    assert!(
+        index_with_columns_exists(
+            &connection,
+            "rag_memory_tree_nodes",
+            &[
+                "source_code",
+                "source_version",
+                "scope_type",
+                "scope_code",
+                "parent_node_code",
+                "ordinal",
+            ],
+            false,
+        ),
+        "tree storage should expose source/scope parent ordinal lookup index"
+    );
+    assert!(
+        index_with_columns_exists(
+            &connection,
+            "rag_memory_tree_nodes",
+            &[
+                "source_code",
+                "source_version",
+                "scope_type",
+                "scope_code",
+                "path_key",
+            ],
+            false,
+        ),
+        "tree storage should expose source/scope path lookup index"
+    );
+    assert!(
+        index_with_columns_exists(
+            &connection,
+            "rag_memory_tree_nodes",
+            &[
+                "source_code",
+                "source_version",
+                "scope_type",
+                "scope_code",
+                "tree_node_code",
+            ],
+            true,
+        ),
+        "tree storage unique key should be source/scope aware while preserving tree_node_code"
+    );
     assert_eq!(
         query_string(
             &connection,
@@ -392,6 +508,109 @@ fn sqlite_tree_rows_are_isolated_by_scope_for_same_tree_node_code() {
         ),
         "Shared summary for user scope."
     );
+}
+
+#[tokio::test]
+async fn sqlite_tree_rows_keep_stable_codes_but_do_not_collide_across_scopes() {
+    let database_path = temp_database_path("rag-ingest-summary-tree-scope-isolation");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    set_memory_card_tree_table(&database_url, "rag_memory_tree_nodes");
+    for scope_code in ["TRON_CORE", "TRON_ALT"] {
+        repository
+            .persist_ingest(tree_only_command(scope_code))
+            .unwrap();
+    }
+
+    let connection = open_prepared_connection(&database_url);
+    assert!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(DISTINCT tree_node_code) FROM rag_memory_tree_nodes WHERE source_code = 'memory-rag-rule'"
+        ) < query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_memory_tree_nodes WHERE source_code = 'memory-rag-rule'"
+        ),
+        "tree_node_code stays stable across scopes"
+    );
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_memory_tree_nodes WHERE source_code = 'memory-rag-rule' AND source_version = 'v1'"
+        ),
+        2
+    );
+    assert!(table_exists(&connection, "rag_memory_tree_nodes_fts"));
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_memory_tree_nodes_vec_d4096"
+        ),
+        2,
+        "vector rows should sync by the source/scope-aware rowid"
+    );
+}
+
+fn tree_only_command(scope_code: &str) -> RagPersistIngestCommand {
+    RagPersistIngestCommand {
+        corpus_id: "memory-card".into(),
+        profile_id: "memory-card-tree-pipeline-v1".into(),
+        source_code: "memory-rag-rule".into(),
+        source_version: "v1".into(),
+        source_type: "MEMORY_CARD".into(),
+        scope: RagIngestScope {
+            scope_type: "SPACE".into(),
+            scope_code: scope_code.into(),
+        },
+        source_status: "ACTIVE".into(),
+        title: Some("RAG citation rule".into()),
+        content_hash: "hash-tree-scope".into(),
+        body_hash: None,
+        metadata: json!({}),
+        domain_fields: Default::default(),
+        related_graph: None,
+        graph_write_policy: json!({}),
+        text_units: Vec::new(),
+        tree_nodes: vec![RagTreeNodeWrite {
+            tree_node_code: "memory-rag-rule:v1:tree:stable-root".into(),
+            parent_node_code: "0".into(),
+            source_code: "memory-rag-rule".into(),
+            source_version: "v1".into(),
+            scope_type: "SPACE".into(),
+            scope_code: scope_code.into(),
+            path_key: "/".into(),
+            level: 0,
+            ordinal: 0,
+            title: "RAG citation rule".into(),
+            summary_text: format!("{scope_code} scoped tree summary"),
+            summary_token_count: 4,
+            summary_content_hash: format!("summary-hash-{scope_code}"),
+            summary_fulltext_status: "INDEXED".into(),
+            summary_embedding_status: "INDEXED".into(),
+            summary_embedding_model_code: Some("fake-embedding".into()),
+            summary_embedding_version: Some("v1".into()),
+            summary_embedding_text_hash: Some(format!("embedding-hash-{scope_code}")),
+            summary_embedding_dimension: Some(4096),
+            summary_embedding: Some(encoded_embedding_4096()),
+            covered_text_unit_codes: vec!["memory-rag-rule:v1:0".into()],
+            covered_text_unit_count: 1,
+            child_start_ordinal: 0,
+            child_end_ordinal: 0,
+            metadata: json!({}),
+            status: "ACTIVE".into(),
+        }],
+        warnings: Vec::new(),
+        workspace_code: scope_code.into(),
+        user_code: "USR-LARGE-ID".into(),
+        agent_code: "AGENT_CODEX".into(),
+    }
+}
+
+fn encoded_embedding_4096() -> Vec<u8> {
+    embedding_4096(0.25, 0.75)
+        .into_iter()
+        .flat_map(|value| value.to_le_bytes())
+        .collect()
 }
 
 #[tokio::test]
@@ -1856,6 +2075,89 @@ fn insert_tree_pipeline_ingest_profile(database_url: &str, profile_id: &str) {
         .unwrap();
 }
 
+fn insert_summary_tree_only_ingest_profile(database_url: &str, profile_id: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let config = json!({
+        "sourceInputPolicy": {
+            "supportedSourceTypes": ["MEMORY_CARD"]
+        },
+        "pipeline": {
+            "mode": "DAG",
+            "nodes": [
+                {
+                    "nodeId": "validate-source",
+                    "stageType": "VALIDATE_SOURCE",
+                    "strategyId": "RAG_VALIDATE_SOURCE"
+                },
+                {
+                    "nodeId": "prepare-payload",
+                    "stageType": "PREPARE_PAYLOAD",
+                    "strategyId": "RAG_TEXT_CONTRACT_PAYLOAD_V1"
+                },
+                {
+                    "nodeId": "split-text",
+                    "stageType": "SPLIT_TEXT",
+                    "strategyId": "RAG_SPLIT_TEXT"
+                },
+                {
+                    "nodeId": "extract-tree",
+                    "stageType": "EXTRACT_TREE",
+                    "strategyId": "RAG_MARKDOWN_TREE_EXTRACT_V1"
+                },
+                {
+                    "nodeId": "summarize-tree",
+                    "stageType": "SUMMARIZE_TREE",
+                    "strategyId": "RAG_TREE_EXTRACTIVE_SUMMARY_V1"
+                },
+                {
+                    "nodeId": "fulltext-index",
+                    "stageType": "FULLTEXT_INDEX",
+                    "strategyId": "RAG_FULLTEXT_INDEX"
+                },
+                {
+                    "nodeId": "vector-index",
+                    "stageType": "VECTOR_INDEX",
+                    "strategyId": "RAG_VECTOR_INDEX"
+                },
+                {
+                    "nodeId": "persist-tree",
+                    "stageType": "PERSIST_TREE",
+                    "strategyId": "RAG_PERSIST_TREE_GRAPH_V1"
+                },
+                {
+                    "nodeId": "persist-source",
+                    "stageType": "PERSIST_SOURCE",
+                    "strategyId": "RAG_PERSIST_SOURCE"
+                }
+            ],
+            "edges": [
+                { "from": "validate-source", "to": "prepare-payload" },
+                { "from": "prepare-payload", "to": "split-text" },
+                { "from": "split-text", "to": "extract-tree" },
+                { "from": "split-text", "to": "fulltext-index" },
+                { "from": "split-text", "to": "vector-index" },
+                { "from": "extract-tree", "to": "summarize-tree" },
+                { "from": "summarize-tree", "to": "persist-tree" },
+                { "from": "fulltext-index", "to": "persist-source" },
+                { "from": "vector-index", "to": "persist-source" },
+                { "from": "persist-tree", "to": "persist-source" }
+            ]
+        }
+    });
+    connection
+        .execute(
+            "INSERT INTO rag_profiles (
+                profile_id, profile_type, status, primary_corpus_id, corpus_ids_json,
+                required_source_version, config_json, filters_json, degrade_policy,
+                created_at, updated_at
+            )
+            VALUES (?1, 'INGEST', 'enabled', 'memory-card', '[\"memory-card\"]',
+                NULL, ?2, '{}', 'FAIL_FAST', 1, 1)",
+            params![profile_id, config.to_string()],
+        )
+        .unwrap();
+}
+
 struct CapturingIngestRepository {
     inner: SqliteRagRepository,
     persisted_commands: Arc<Mutex<Vec<RagPersistIngestCommand>>>,
@@ -1981,6 +2283,41 @@ fn table_exists(connection: &Connection, table: &str) -> bool {
             |_| Ok(()),
         )
         .is_ok()
+}
+
+fn index_with_columns_exists(
+    connection: &Connection,
+    table: &str,
+    expected_columns: &[&str],
+    expected_unique: bool,
+) -> bool {
+    let mut statement = connection
+        .prepare(&format!("PRAGMA index_list({table})"))
+        .unwrap();
+    let indexes = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2).map(|unique| unique == 1)?,
+            ))
+        })
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    indexes.into_iter().any(|(index_name, unique)| {
+        if unique != expected_unique {
+            return false;
+        }
+        let mut info = connection
+            .prepare(&format!("PRAGMA index_info({index_name})"))
+            .unwrap();
+        let columns = info
+            .query_map([], |row| row.get::<_, String>(2))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        columns == expected_columns
+    })
 }
 
 fn query_project_doc_source(connection: &Connection) -> Value {
@@ -2126,6 +2463,8 @@ fn tree_scope_command(
             ),
             covered_text_unit_codes: vec![text_unit_code.into()],
             covered_text_unit_count: 1,
+            child_start_ordinal: 0,
+            child_end_ordinal: 0,
             metadata: json!({}),
             status: "ACTIVE".into(),
         }],
