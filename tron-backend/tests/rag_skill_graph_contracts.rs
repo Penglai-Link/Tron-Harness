@@ -841,6 +841,114 @@ async fn graph_tree_route_with_graph_text_units_returns_covered_text_unit_rows()
 }
 
 #[tokio::test]
+async fn graph_tree_hydration_deduplicates_parent_child_hits_by_text_unit() {
+    let database_url = temp_database_path("rag-skill-graph-tree-dedup")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-tree-dedup-store")
+        .to_string_lossy()
+        .to_string();
+    let (repository, _) = build_repository(&database_url, &graph_path);
+    enable_skill_graph_tree_with_graph_text_units(&database_url);
+
+    let mut command = tree_route_command(
+        "rag-tree-dedup",
+        "Duplicate branch summary root.",
+        vec![(
+            "skill:TRON_CORE:rag-tree-dedup:v1:0",
+            "Covered graph unit should appear once.",
+        )],
+        vec!["skill:TRON_CORE:rag-tree-dedup:v1:0"],
+    );
+    let mut child = command.tree_nodes[0].clone();
+    child.tree_node_code = "rag-tree-dedup:child".into();
+    child.parent_node_code = "rag-tree-dedup:root".into();
+    child.title = "rag-tree-dedup child summary".into();
+    child.summary_text = "Duplicate branch summary child.".into();
+    child.ordinal = 1;
+    command.tree_nodes.push(child);
+    repository.lock().unwrap().persist_ingest(command).unwrap();
+
+    let mut query = tree_route_query(
+        "TREE_FULLTEXT_V1",
+        "Duplicate branch summary",
+        None,
+        "rag-tree-dedup",
+    );
+    query.limit = 2;
+    let rows = repository.lock().unwrap().search_route(query).unwrap();
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].target_code, "skill:TRON_CORE:rag-tree-dedup:v1:0");
+}
+
+#[tokio::test]
+async fn graph_tree_route_rejects_in_filter_instead_of_ignoring_it() {
+    let database_url = temp_database_path("rag-skill-graph-tree-filter-in")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-tree-filter-in-store")
+        .to_string_lossy()
+        .to_string();
+    let (repository, _) = build_repository(&database_url, &graph_path);
+    enable_skill_graph_tree_with_graph_text_units(&database_url);
+    repository
+        .lock()
+        .unwrap()
+        .persist_ingest(tree_route_command(
+            "rag-tree-filter",
+            "Graph filter branch summary.",
+            vec![(
+                "skill:TRON_CORE:rag-tree-filter:v1:0",
+                "Covered graph filter unit.",
+            )],
+            vec!["skill:TRON_CORE:rag-tree-filter:v1:0"],
+        ))
+        .unwrap();
+
+    let mut query = tree_route_query(
+        "TREE_FULLTEXT_V1",
+        "Graph filter branch",
+        None,
+        "rag-tree-filter",
+    );
+    query.filters = json!({
+        "skillName": { "op": "in", "value": ["rag-tree-filter"] }
+    });
+    let error = repository.lock().unwrap().search_route(query).unwrap_err();
+
+    assert_eq!(error, RagError::SearchFilterInvalid);
+}
+
+#[test]
+fn graph_backed_write_rejects_sqlite_tree_without_sqlite_text_units() {
+    let database_url = temp_database_path("rag-skill-graph-tree-sqlite-no-text")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-tree-sqlite-no-text-store")
+        .to_string_lossy()
+        .to_string();
+    let (repository, _) = build_repository(&database_url, &graph_path);
+    enable_skill_graph_tree_with_sqlite_tree_and_graph_text_units(&database_url);
+
+    let error = repository
+        .lock()
+        .unwrap()
+        .persist_ingest(tree_route_command(
+            "rag-tree-sqlite-no-text",
+            "SQLite tree without SQLite text units cannot run.",
+            vec![(
+                "skill:TRON_CORE:rag-tree-sqlite-no-text:v1:0",
+                "Covered graph unit.",
+            )],
+            vec!["skill:TRON_CORE:rag-tree-sqlite-no-text:v1:0"],
+        ))
+        .unwrap_err();
+
+    assert_eq!(error, RagError::StorageTopologyUnsupported);
+}
+
+#[tokio::test]
 async fn graph_related_write_keeps_legacy_skill_anchor_compatible() {
     let database_url = temp_database_path("rag-skill-graph-legacy-anchor")
         .to_string_lossy()
@@ -1644,6 +1752,37 @@ fn enable_skill_graph_tree_with_graph_text_units(database_url: &str) {
                 })
                 .to_string()
             ],
+        )
+        .unwrap();
+}
+
+fn enable_skill_graph_tree_with_sqlite_tree_and_graph_text_units(database_url: &str) {
+    enable_skill_graph_tree_with_graph_text_units(database_url);
+    let connection = Connection::open(database_url).unwrap();
+    let binding_json: String = connection
+        .query_row(
+            "SELECT storage_binding_json FROM rag_corpora WHERE corpus_id = 'skill-graph'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let mut binding = serde_json::from_str::<Value>(&binding_json).unwrap();
+    binding["bindings"]["tree"] = json!("skill-tree-sqlite");
+    binding["targets"]
+        .as_array_mut()
+        .expect("storage targets should be an array")
+        .push(json!({
+            "id": "skill-tree-sqlite",
+            "backend": "SQLITE",
+            "layout": "TABLE",
+            "table": "rag_skill_tree_nodes"
+        }));
+    connection
+        .execute(
+            "UPDATE rag_corpora
+             SET storage_binding_json = ?1
+             WHERE corpus_id = 'skill-graph'",
+            params![binding.to_string()],
         )
         .unwrap();
 }

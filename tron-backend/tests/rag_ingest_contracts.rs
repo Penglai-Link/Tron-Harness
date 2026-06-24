@@ -1,5 +1,5 @@
 use std::{
-    collections::VecDeque,
+    collections::{BTreeMap, VecDeque},
     future::Future,
     path::PathBuf,
     pin::Pin,
@@ -19,7 +19,7 @@ use tron_backend::{
         RagDocumentSourceCall, RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult,
         RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRepository, RagIngestRequest,
         RagIngestScope, RagIngestService, RagIngestSource, RagPersistIngestCommand,
-        RagResolvedDocument, compile_ingest_profile,
+        RagResolvedDocument, RagTextUnitWrite, RagTreeNodeWrite, compile_ingest_profile,
     },
     domain::rag::{RagError, RagProfileRecord, RagProfileType, RagStatus},
     shared::sqlite_extensions::default_sqlite_extension_context,
@@ -332,6 +332,65 @@ async fn sqlite_tree_segment_creates_indexes_and_ingest_persists_summary_rows() 
         ))
         .unwrap(),
         json!(["memory-rag-rule:v1:0"])
+    );
+}
+
+#[test]
+fn sqlite_tree_rows_are_isolated_by_scope_for_same_tree_node_code() {
+    let database_path = temp_database_path("rag-ingest-tree-scope-isolation");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = SqliteRagRepository::connect(&database_url).unwrap();
+    insert_tree_scope_corpus(
+        &database_url,
+        "tree-scope-corpus",
+        "rag_tree_scope_tree_nodes",
+    );
+
+    repository
+        .persist_ingest(tree_scope_command(
+            "tree-scope-corpus",
+            "SPACE",
+            "TRON_CORE",
+            "scope-space-unit",
+            "Shared summary for space scope.",
+        ))
+        .unwrap();
+    repository
+        .persist_ingest(tree_scope_command(
+            "tree-scope-corpus",
+            "USER",
+            "USR-AUTH-0001",
+            "scope-user-unit",
+            "Shared summary for user scope.",
+        ))
+        .unwrap();
+
+    let connection = Connection::open(&database_url).unwrap();
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_tree_scope_tree_nodes
+             WHERE source_code = 'scope-collision-source'
+               AND source_version = 'v1'
+               AND path_key = '/'"
+        ),
+        2
+    );
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT summary_text FROM rag_tree_scope_tree_nodes
+             WHERE scope_type = 'SPACE' AND scope_code = 'TRON_CORE'"
+        ),
+        "Shared summary for space scope."
+    );
+    assert_eq!(
+        query_string(
+            &connection,
+            "SELECT summary_text FROM rag_tree_scope_tree_nodes
+             WHERE scope_type = 'USER' AND scope_code = 'USR-AUTH-0001'"
+        ),
+        "Shared summary for user scope."
     );
 }
 
@@ -1399,6 +1458,86 @@ fn set_memory_card_tree_table(database_url: &str, table_name: &str) {
         .unwrap();
 }
 
+fn insert_tree_scope_corpus(database_url: &str, corpus_id: &str, tree_table: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let text_table = "rag_tree_scope_text_units";
+    let diagnostics_table = "rag_tree_scope_diagnostics";
+    connection
+        .execute(
+            "INSERT INTO rag_corpora (
+                corpus_id, display_name, status, description, capabilities_json,
+                filter_schema_json, field_mapping_json, storage_binding_json, created_at, updated_at
+            )
+            VALUES (?1, 'Tree Scope Corpus', 'enabled', 'Tree scope test corpus.',
+                ?2, '{\"fields\":{}}', ?3, ?4, 1, 1)",
+            params![
+                corpus_id,
+                json!({
+                    "fulltext": true,
+                    "vector": true,
+                    "tree": true,
+                    "graph": false,
+                    "reserved": false
+                })
+                .to_string(),
+                json!({
+                    "source": {
+                        "sourceCode": "source_code",
+                        "sourceVersion": "source_version",
+                        "sourceType": "source_type",
+                        "scopeType": "scope_type",
+                        "scopeCode": "scope_code",
+                        "status": "status",
+                        "title": "title",
+                        "metadata": "metadata"
+                    },
+                    "textUnit": {
+                        "sourceCode": "source_code",
+                        "sourceVersion": "source_version",
+                        "scopeType": "scope_type",
+                        "scopeCode": "scope_code",
+                        "text": "text",
+                        "textUnitStatus": "status"
+                    }
+                })
+                .to_string(),
+                json!({
+                    "mode": "TARGETED",
+                    "bindings": {
+                        "source": "tree-scope-text-store",
+                        "textUnit": "tree-scope-text-store",
+                        "fulltext": "tree-scope-text-store",
+                        "vector": "tree-scope-text-store",
+                        "tree": "tree-scope-tree-store",
+                        "diagnostics": "tree-scope-diagnostics-store"
+                    },
+                    "targets": [
+                        {
+                            "id": "tree-scope-text-store",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": text_table
+                        },
+                        {
+                            "id": "tree-scope-tree-store",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": tree_table
+                        },
+                        {
+                            "id": "tree-scope-diagnostics-store",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": diagnostics_table
+                        }
+                    ]
+                })
+                .to_string(),
+            ],
+        )
+        .unwrap();
+}
+
 fn open_prepared_connection(database_url: &str) -> Connection {
     let connection = Connection::open(database_url).unwrap();
     default_sqlite_extension_context()
@@ -1908,6 +2047,93 @@ fn query_ordinals(connection: &Connection, table: &str) -> Vec<i64> {
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap()
+}
+
+fn tree_scope_command(
+    corpus_id: &str,
+    scope_type: &str,
+    scope_code: &str,
+    text_unit_code: &str,
+    summary_text: &str,
+) -> RagPersistIngestCommand {
+    RagPersistIngestCommand {
+        corpus_id: corpus_id.into(),
+        profile_id: "memory-card-tree-pipeline-v1".into(),
+        source_code: "scope-collision-source".into(),
+        source_version: "v1".into(),
+        source_type: "MEMORY_CARD".into(),
+        scope: RagIngestScope {
+            scope_type: scope_type.into(),
+            scope_code: scope_code.into(),
+        },
+        source_status: "ACTIVE".into(),
+        title: Some("Scope collision source".into()),
+        content_hash: format!("{scope_type}-{scope_code}-content"),
+        body_hash: None,
+        metadata: json!({}),
+        domain_fields: BTreeMap::new(),
+        related_graph: None,
+        graph_write_policy: json!({}),
+        text_units: vec![RagTextUnitWrite {
+            text_unit_code: text_unit_code.into(),
+            unit_type: "LEAF".into(),
+            text: format!("Text unit for {scope_type}:{scope_code}."),
+            search_text: format!("Text unit for {scope_type}:{scope_code}."),
+            heading_path: "Scope".into(),
+            ordinal: 0,
+            token_count: 4,
+            content_hash: format!("{text_unit_code}-hash"),
+            status: "ACTIVE".into(),
+            fulltext_status: "INDEXED".into(),
+            embedding_model_code: Some("fake-embedding".into()),
+            embedding_version: Some("v1".into()),
+            embedding_text_hash: Some(format!("{text_unit_code}-embedding-hash")),
+            embedding_dimension: Some(4096),
+            embedding: Some(
+                embedding_4096(0.25, 0.75)
+                    .into_iter()
+                    .flat_map(f32::to_le_bytes)
+                    .collect(),
+            ),
+            embedding_status: "INDEXED".into(),
+            metadata: json!({}),
+        }],
+        tree_nodes: vec![RagTreeNodeWrite {
+            tree_node_code: "scope-collision-source:v1:tree:root".into(),
+            parent_node_code: "0".into(),
+            source_code: "scope-collision-source".into(),
+            source_version: "v1".into(),
+            scope_type: scope_type.into(),
+            scope_code: scope_code.into(),
+            path_key: "/".into(),
+            level: 0,
+            ordinal: 0,
+            title: format!("{scope_type} summary"),
+            summary_text: summary_text.into(),
+            summary_token_count: 5,
+            summary_content_hash: format!("{scope_type}-{scope_code}-summary"),
+            summary_fulltext_status: "INDEXED".into(),
+            summary_embedding_status: "INDEXED".into(),
+            summary_embedding_model_code: Some("fake-embedding".into()),
+            summary_embedding_version: Some("v1".into()),
+            summary_embedding_text_hash: Some(format!("{scope_type}-{scope_code}-tree-embedding")),
+            summary_embedding_dimension: Some(4096),
+            summary_embedding: Some(
+                embedding_4096(0.25, 0.75)
+                    .into_iter()
+                    .flat_map(f32::to_le_bytes)
+                    .collect(),
+            ),
+            covered_text_unit_codes: vec![text_unit_code.into()],
+            covered_text_unit_count: 1,
+            metadata: json!({}),
+            status: "ACTIVE".into(),
+        }],
+        warnings: Vec::new(),
+        workspace_code: "TRON_CORE".into(),
+        user_code: "USR-AUTH-0001".into(),
+        agent_code: "AGENT_CODEX".into(),
+    }
 }
 
 fn embedding_4096(first: f32, second: f32) -> Vec<f32> {

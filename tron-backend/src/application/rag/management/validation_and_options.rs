@@ -289,6 +289,25 @@ fn validate_storage_binding(
             }
         }
     }
+    let tree_backend = binding
+        .bindings
+        .get("tree")
+        .and_then(|target_id| segment_targets.get(target_id))
+        .map(|target| target.backend);
+    let text_unit_backend = binding
+        .bindings
+        .get("textUnit")
+        .and_then(|target_id| segment_targets.get(target_id))
+        .map(|target| target.backend);
+    if tree_backend == Some(RagStorageBackend::Sqlite)
+        && text_unit_backend != Some(RagStorageBackend::Sqlite)
+    {
+        errors.push(validation_issue(
+            "RAG_STORAGE_TOPOLOGY_UNSUPPORTED",
+            "SQLite tree storage requires SQLite textUnit storage.",
+            Some("storageBinding"),
+        ));
+    }
 
     let has_business_graph_target = binding
         .bindings

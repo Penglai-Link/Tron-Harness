@@ -501,6 +501,46 @@ async fn corpus_management_tree_graph_layout_is_valid_for_tree_segment() {
 }
 
 #[tokio::test]
+async fn corpus_management_rejects_sqlite_tree_without_sqlite_text_units() {
+    let database_url = temp_database_path("rag-management-tree-sqlite-graph-text")
+        .to_string_lossy()
+        .to_string();
+    let router = app_with_database(&database_url);
+    let mut payload = team_playbook_text_graph_with_sqlite_retrieval_request();
+    payload["capabilities"]["tree"] = json!(true);
+    payload["storageBinding"]["targets"]
+        .as_array_mut()
+        .expect("targets should be an array")
+        .push(json!({
+            "id": "playbook-tree-store",
+            "backend": "SQLITE",
+            "layout": "TABLE",
+            "table": "rag_team_playbook_tree_nodes"
+        }));
+    payload["storageBinding"]["bindings"]["tree"] = json!("playbook-tree-store");
+
+    let verify = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/corpora/verify",
+        Some(payload),
+    )
+    .await;
+    assert_eq!(verify.status(), StatusCode::OK);
+    let verify_body = response_json(verify).await;
+
+    assert_eq!(verify_body["data"]["valid"], json!(false));
+    assert!(
+        verify_body["data"]["errors"]
+            .as_array()
+            .is_some_and(|errors| errors
+                .iter()
+                .any(|error| { error["code"] == json!("RAG_STORAGE_TOPOLOGY_UNSUPPORTED") })),
+        "{verify_body}"
+    );
+}
+
+#[tokio::test]
 async fn profile_catalog_exposes_graph_tree_routes_and_storage_summary() {
     let database_url = temp_database_path("rag-management-tree-graph-catalog")
         .to_string_lossy()

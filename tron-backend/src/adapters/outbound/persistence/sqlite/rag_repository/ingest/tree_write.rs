@@ -221,7 +221,7 @@ fn sync_tree_indexes(
     node: &RagTreeNodeWrite,
 ) -> Result<(), RagError> {
     let table_name = plan.tree_storage_table()?;
-    let rowid = tree_rowid_for_code(tx, table_name, &node.tree_node_code)?;
+    let rowid = tree_rowid_for_node(tx, table_name, node)?;
     let fts_table = fts_table_name(table_name);
     if table_exists(tx, &fts_table)? {
         let quoted_fts = quote_identifier(&fts_table)?;
@@ -256,15 +256,28 @@ fn sync_tree_indexes(
     Ok(())
 }
 
-fn tree_rowid_for_code(
+fn tree_rowid_for_node(
     tx: &Transaction<'_>,
     table_name: &str,
-    tree_node_code: &str,
+    node: &RagTreeNodeWrite,
 ) -> Result<i64, RagError> {
     let table = quote_identifier(table_name)?;
     tx.query_row(
-        &format!("SELECT id FROM {table} WHERE tree_node_code = ?1"),
-        params![tree_node_code],
+        &format!(
+            "SELECT id FROM {table}
+             WHERE source_code = ?1
+               AND source_version = ?2
+               AND scope_type = ?3
+               AND scope_code = ?4
+               AND path_key = ?5"
+        ),
+        [
+            node.source_code.as_str(),
+            node.source_version.as_str(),
+            node.scope_type.as_str(),
+            node.scope_code.as_str(),
+            node.path_key.as_str(),
+        ],
         |row| row.get::<_, i64>(0),
     )
     .map_err(storage_error)

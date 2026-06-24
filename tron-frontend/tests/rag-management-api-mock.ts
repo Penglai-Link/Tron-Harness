@@ -407,11 +407,11 @@ function createSupportTreeGraphCorpus(): RagCorpusDetailApi {
 
   return {
     capabilities: {
-      fulltext: false,
+      fulltext: true,
       graph: true,
       reserved: false,
       tree: true,
-      vector: false,
+      vector: true,
     },
     corpusId: "support-tree-graph",
     description: "Support knowledge summary tree backed by graph storage.",

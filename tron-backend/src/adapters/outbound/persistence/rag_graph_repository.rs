@@ -20,6 +20,7 @@ use crate::{
 use super::sqlite::SqliteRagRepository;
 
 mod diagnostics;
+mod filters;
 mod ingest;
 mod model;
 mod search;

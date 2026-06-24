@@ -8,10 +8,7 @@ use serde_json::{Map, Value, json};
 use crate::{
     application::rag::{RagPersistIngestCommand, RagRetryIndexRequest, RagSearchRow},
     domain::{
-        graph::{
-            GraphError, GraphFilterOperator, GraphNode, GraphPropertyFilter, GraphPropertyValue,
-            GraphScopeCommand,
-        },
+        graph::{GraphError, GraphNode, GraphPropertyValue, GraphScopeCommand},
         rag::{RagCorpusRecord, RagError},
     },
 };
@@ -255,37 +252,6 @@ pub(super) fn graph_hit_to_row(
         source_metadata: metadata,
         text_metadata: json!({}),
         field_values: graph_field_values(corpus, props, segment),
-    }
-}
-
-pub(super) fn append_graph_filters(
-    filters: &mut Vec<GraphPropertyFilter>,
-    corpus: &RagCorpusRecord,
-    raw: &Value,
-    segment: &str,
-) {
-    let Some(object) = raw.as_object() else {
-        return;
-    };
-    for (field, value) in object {
-        if matches!(field.as_str(), "sourceVersion" | "ragWorkspaceCode") {
-            continue;
-        }
-        let value = value.get("value").unwrap_or(value);
-        let Some(text) = value.as_str() else {
-            continue;
-        };
-        let property_name =
-            graph_property_name_for_logical(corpus, segment, field).unwrap_or(field);
-        filters.push(graph_filter(property_name, text));
-    }
-}
-
-pub(super) fn graph_filter(property_name: &str, value: &str) -> GraphPropertyFilter {
-    GraphPropertyFilter {
-        property_name: property_name.to_string(),
-        operator: GraphFilterOperator::Equals,
-        value: GraphPropertyValue::Text(value.to_string()),
     }
 }
 

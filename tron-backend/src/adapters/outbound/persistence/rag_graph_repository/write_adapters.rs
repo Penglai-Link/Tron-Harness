@@ -81,6 +81,19 @@ fn execute_sqlite_write(
 ) -> Result<(), RagError> {
     if operations
         .iter()
+        .any(|operation| operation.segments.contains("tree"))
+    {
+        if corpus
+            .storage_binding
+            .sqlite_table_for_segment("textUnit")
+            .is_none()
+        {
+            return Err(RagError::StorageTopologyUnsupported);
+        }
+        return repository.sqlite.persist_ingest(command.clone());
+    }
+    if operations
+        .iter()
         .any(|operation| operation.segments.iter().any(is_retrieval_segment))
     {
         return repository.sqlite.persist_ingest(command.clone());

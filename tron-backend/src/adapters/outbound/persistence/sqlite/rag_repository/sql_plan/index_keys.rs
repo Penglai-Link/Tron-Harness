@@ -59,7 +59,6 @@ fn tree_unique_key(
         repository,
         table_name,
         &[
-            vec!["tree_node_code".to_string()],
             vec![
                 "source_code".to_string(),
                 "source_version".to_string(),
@@ -67,6 +66,7 @@ fn tree_unique_key(
                 "scope_code".to_string(),
                 "path_key".to_string(),
             ],
+            vec!["tree_node_code".to_string()],
         ],
     )
 }

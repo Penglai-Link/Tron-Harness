@@ -413,6 +413,15 @@ test("API catalog exposes summary tree strategies for graph tree corpora", async
 
   await page.goto(`${frontendBaseUrl}/rag/profiles/retrieval/new`);
   await expect(page.getByRole("heading", { name: /Create Retrieval Profile|新建检索配置/ })).toBeVisible();
+  const supportTreeDetail = await page.evaluate(async () => {
+    const response = await fetch("/api/v1/rag/corpora/support-tree-graph");
+    return response.json();
+  });
+  expect(supportTreeDetail.data.capabilities).toEqual(expect.objectContaining({
+    fulltext: true,
+    tree: true,
+    vector: true,
+  }));
 
   await page.getByLabel(/Profile ID|配置标识/).fill("support-tree-graph-related-v1");
   await page.getByLabel(/Primary Corpus|主语料库/).selectOption("support-tree-graph");

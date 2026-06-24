@@ -16,10 +16,10 @@ use crate::{
 
 use super::{
     GraphBackedRagRepository,
+    filters::{append_graph_filters, graph_filter},
     model::{
-        append_graph_filters, graph_filter, graph_hit_to_row, graph_node_json,
-        graph_properties_json, graph_segment_for_retriever, graph_target_for_retriever,
-        map_graph_error, optional_graph_target_for_segment,
+        graph_hit_to_row, graph_node_json, graph_properties_json, graph_segment_for_retriever,
+        graph_target_for_retriever, map_graph_error, optional_graph_target_for_segment,
     },
     tree_rows::{
         covered_text_unit_codes_from_row, graph_text_unit_hit_to_tree_row, graph_tree_hit_to_row,
@@ -57,7 +57,7 @@ impl GraphBackedRagRepository {
                 graph_filter("sourceStatus", "ACTIVE"),
                 graph_filter("textUnitStatus", "ACTIVE"),
             ];
-            append_graph_filters(&mut filters, corpus, &query.filters, segment);
+            append_graph_filters(&mut filters, corpus, &query.filters, segment)?;
             let full_text = if query.retriever == "FULLTEXT_GRAPH_SINGLE_NODE_V1" {
                 Some(query.query.clone())
             } else {
@@ -127,7 +127,7 @@ impl GraphBackedRagRepository {
                 }
                 _ => return Err(RagError::SearchRouteUnavailable),
             }
-            append_graph_filters(&mut filters, corpus, &query.filters, "tree");
+            append_graph_filters(&mut filters, corpus, &query.filters, "tree")?;
             let full_text = if query.retriever == "TREE_FULLTEXT_V1" {
                 Some(query.query.clone())
             } else {
@@ -328,15 +328,7 @@ impl GraphBackedRagRepository {
 fn dedup_graph_tree_rows(rows: Vec<RagSearchRow>) -> Vec<RagSearchRow> {
     let mut seen = std::collections::BTreeSet::new();
     rows.into_iter()
-        .filter(|row| {
-            let tree_node_code = row
-                .field_values
-                .get("treeNodeCode")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string();
-            seen.insert((row.target_code.clone(), tree_node_code))
-        })
+        .filter(|row| seen.insert(row.target_code.clone()))
         .collect()
 }
 

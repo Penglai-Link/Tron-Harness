@@ -45,6 +45,10 @@ fn search_tree_route(
     };
     let mut clauses = vec![
         "tu.source_version = ?".to_string(),
+        "tn.source_code = tu.source_code".to_string(),
+        "tn.source_version = tu.source_version".to_string(),
+        "tn.scope_type = tu.scope_type".to_string(),
+        "tn.scope_code = tu.scope_code".to_string(),
         "tn.status = 'ACTIVE'".to_string(),
         "tn.summary_fulltext_status = 'INDEXED'".to_string(),
         format!(

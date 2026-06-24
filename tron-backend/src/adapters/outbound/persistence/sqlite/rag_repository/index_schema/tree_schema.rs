@@ -14,17 +14,19 @@ pub(super) fn ensure_tree_storage_table(
     let table = quote_identifier(table_name)?;
     let source_index = quote_identifier(&format!("idx_{table_name}_source_scope"))?;
     let parent_index = quote_identifier(&format!("idx_{table_name}_parent"))?;
+    let code_index = quote_identifier(&format!("idx_{table_name}_code"))?;
     let column_sql = dynamic_columns_sql(&columns);
     connection
         .execute_batch(&format!(
             "CREATE TABLE IF NOT EXISTS {table} (
                 id INTEGER PRIMARY KEY,
                 {column_sql},
-                UNIQUE (tree_node_code),
                 UNIQUE (source_code, source_version, scope_type, scope_code, path_key)
             );
             CREATE INDEX IF NOT EXISTS {source_index}
                 ON {table} (source_code, source_version, scope_type, scope_code, ordinal);
+            CREATE INDEX IF NOT EXISTS {code_index}
+                ON {table} (tree_node_code);
             CREATE INDEX IF NOT EXISTS {parent_index}
                 ON {table} (parent_node_code);"
         ))
