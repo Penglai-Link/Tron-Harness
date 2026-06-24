@@ -14,22 +14,6 @@ tron-backend/resources/frontend/
 # logs
 *.log
 
-# JavaScript dependencies
-node_modules
-node_modules/
-
-# Integrated frontend build output
-tron-backend/resources/frontend/
-
-# Tauri generated schema artifacts
-src-tauri/gen/
-
-# Tauri desktop build artifacts (desktop-build / desktop-dev)
-src-tauri/target/
-src-tauri/bundle/
-src-tauri/frontend/
-src-tauri/binaries/
-
 # Archives
 *.tar.gz
 *.tar

@@ -36,3 +36,6 @@ lcov.info
 flamegraph.svg
 perf.data
 perf.data.old
+
+# Integrated frontend build output
+tron-backend/resources/frontend/
