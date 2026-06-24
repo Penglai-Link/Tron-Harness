@@ -220,6 +220,7 @@ test("agent management works fully in mock mode without backend requests", async
   const toolAssignmentSelect = mainAgentSection.getByRole("combobox", { name: /^tool assignment mode/i });
   const toolExposureSelect = mainAgentSection.getByRole("combobox", { name: /^tool exposure mode/i });
   const expandedPersistenceSelect = mainAgentSection.getByRole("combobox", { name: /^expanded domain persistence mode/i });
+  const toolExposureHelpButton = mainAgentSection.getByRole("button", { name: "Explain tool exposure mode" });
   await expect(mainAgentHeader).toBeVisible();
   await expect(mcpAccessSelect).toBeVisible();
   await expect(toolAssignmentSelect).toBeVisible();
@@ -227,8 +228,21 @@ test("agent management works fully in mock mode without backend requests", async
   await expect(expandedPersistenceSelect).toBeVisible();
   await expect(mcpAccessSelect).toHaveValue("all_enabled_servers");
   await expect(mainAgentSection.getByRole("button", { name: "Explain tool assignment mode" })).toBeVisible();
-  await expect(mainAgentSection.getByRole("button", { name: "Explain tool exposure mode" })).toBeVisible();
+  await expect(toolExposureHelpButton).toBeVisible();
   await expect(mainAgentSection.getByRole("button", { name: "Explain expanded domain persistence mode" })).toBeVisible();
+  await toolExposureHelpButton.hover();
+  const toolExposureTooltip = page.getByRole("tooltip").filter({
+    hasText: "Direct list: send the concrete tool schemas",
+  });
+  await expect(toolExposureTooltip).toBeVisible();
+  const tooltipBox = await toolExposureTooltip.boundingBox();
+  const mainBox = await page.locator("main").boundingBox();
+  const viewport = page.viewportSize();
+  if (!tooltipBox || !mainBox || !viewport) {
+    throw new Error("Failed to measure the tool exposure tooltip bounds.");
+  }
+  expect(tooltipBox.x).toBeGreaterThanOrEqual(mainBox.x + 15);
+  expect(tooltipBox.x + tooltipBox.width).toBeLessThanOrEqual(viewport.width - 15);
   await expect(mainAgentSection.getByRole("button", { name: /^save$/i })).toHaveCount(0);
   await expect(mainAgentSection.getByRole("button", { name: /^reset$/i })).toHaveCount(0);
   await expect(toolAssignmentSelect).toHaveValue("all_platform_tools");
