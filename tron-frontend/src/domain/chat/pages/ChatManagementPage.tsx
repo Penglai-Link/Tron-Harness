@@ -186,6 +186,7 @@ const chatSessionSourceTabs: { id: ChatSessionSourceTab; icon: LucideIcon; label
   { id: "automation", icon: AlarmClock, label: "Automation sessions" },
   { id: "task", icon: ListTodo, label: "Task sessions" },
 ];
+const defaultChatSessionSourceTab: ChatSessionSourceTab = "chat";
 const chatSessionSourceTabStorageKey = "tron.chat.activeSourceTab";
 
 function normalizedSessionSource(value: string | null | undefined) {
@@ -196,11 +197,6 @@ function parseChatSessionSourceTab(value: string | null | undefined): ChatSessio
   const source = normalizedSessionSource(value);
   if (source === "chat" || source === "automation" || source === "task") return source;
   return undefined;
-}
-
-function readStoredChatSessionSourceTab(): ChatSessionSourceTab | undefined {
-  if (typeof window === "undefined") return undefined;
-  return parseChatSessionSourceTab(window.sessionStorage.getItem(chatSessionSourceTabStorageKey));
 }
 
 function writeStoredChatSessionSourceTab(sourceTab: ChatSessionSourceTab) {
@@ -3008,14 +3004,14 @@ export function ChatManagementPage() {
   const [sessionGroups, setSessionGroups] = useState<ChatSessionGroup[]>([]);
   const [activeSessionCode, setActiveSessionCode] = useState("");
   const [activeSourceTab, setActiveSourceTab] = useState<ChatSessionSourceTab>(() => (
-    requestedSourceTab ?? readStoredChatSessionSourceTab() ?? "chat"
+    requestedSourceTab ?? defaultChatSessionSourceTab
   ));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [composer, setComposer] = useState("");
   const selectedSession = activeSessionCode ? findSession(sessionGroups, activeSessionCode) : undefined;
   const activeSession = selectedSession ?? (
     !requestedSessionCode && !requestedSourceTab && !activeSessionCode
-      ? firstSession(sessionGroups)
+      ? firstSessionForSourceTab(sessionGroups, defaultChatSessionSourceTab)
       : undefined
   );
   const messages = useChatMessageListBySession(activeSession?.sessionCode ?? "", activeChatDataRefreshKey);
@@ -3308,11 +3304,10 @@ export function ChatManagementPage() {
 
   useEffect(() => {
     if (requestedSessionCode || requestedSourceTab || activeSessionCode) return;
-    const defaultSession = firstSession(sessionGroups);
+    const defaultSession = firstSessionForSourceTab(sessionGroups, defaultChatSessionSourceTab);
     if (defaultSession) {
       setActiveSessionCode(defaultSession.sessionCode);
-      const sourceTab = sourceTabForSessionCode(sessionGroups, defaultSession.sessionCode);
-      if (sourceTab) selectSourceTab(sourceTab);
+      selectSourceTab(defaultChatSessionSourceTab);
     }
   }, [activeSessionCode, requestedSessionCode, requestedSourceTab, sessionGroups]);
 
