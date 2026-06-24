@@ -36,6 +36,7 @@ pub fn task_priority_to_storage(priority: TaskPriority) -> &'static str {
         TaskPriority::Low => "Low",
         TaskPriority::Medium => "Medium",
         TaskPriority::High => "High",
+        TaskPriority::ExtraHigh => "Extra High",
     }
 }
 
@@ -44,6 +45,7 @@ pub fn task_priority_from_storage(value: &str) -> Result<TaskPriority, TaskError
         "Low" => Ok(TaskPriority::Low),
         "Medium" => Ok(TaskPriority::Medium),
         "High" => Ok(TaskPriority::High),
+        "Extra High" => Ok(TaskPriority::ExtraHigh),
         _ => Err(TaskError::InvalidRequest),
     }
 }

@@ -157,7 +157,7 @@ pub(super) const EN_US: &[(&str, &str)] = &[
     ),
     (
         "agent.toolCatalog.tools.task.common.params.priority",
-        "Task priority. Allowed values: low, medium, high.",
+        "Task priority. Allowed values: low, medium, high, extra_high.",
     ),
     (
         "agent.toolCatalog.tools.task.common.params.taskType",

@@ -19,6 +19,8 @@ pub enum TaskPriority {
     Low,
     Medium,
     High,
+    #[serde(rename = "Extra High")]
+    ExtraHigh,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -360,7 +360,7 @@ pub(super) fn task_mutation_schema(create: bool) -> Value {
             "parentTaskCode": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.parentTaskCode" },
             "title": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.title" },
             "description": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.description" },
-            "priority": { "type": "string", "enum": ["low", "medium", "high"], "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.priority" },
+            "priority": { "type": "string", "enum": ["low", "medium", "high", "extra_high"], "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.priority" },
             "taskType": { "type": "string", "enum": ["feature", "bug"], "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.taskType" },
             "sourceType": { "type": "string", "enum": ["internal", "github", "gitlab"], "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.sourceType" },
             "sourceUrl": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.task.common.params.sourceUrl" },

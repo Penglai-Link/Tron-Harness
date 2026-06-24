@@ -25,7 +25,7 @@ const taskOptions: TaskOptions = {
     featureChild: "Open",
     featureRoot: "Open",
   },
-  priorities: ["Low", "Medium", "High"],
+  priorities: ["Low", "Medium", "High", "Extra High"],
   sourceTypes: ["Internal", "GitHub", "GitLab"],
   statusRules: {
     bug: ["Open", "InProgress", "Reopen", "Completed", "Archived"],

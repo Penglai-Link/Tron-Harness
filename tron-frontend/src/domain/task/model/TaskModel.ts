@@ -10,7 +10,7 @@ export type TaskStatus =
   | "Completed"
   | "Archived";
 
-export type TaskPriority = "Low" | "Medium" | "High";
+export type TaskPriority = "Low" | "Medium" | "High" | "Extra High";
 export type TaskType = "Feature" | "Bug";
 export type TaskSourceType = "Internal" | "GitHub" | "GitLab";
 export type TaskRoleKey = "featureRoot" | "featureChild" | "bug";
@@ -54,9 +54,10 @@ export function inferTaskRole(taskType: TaskType, parentTaskCode?: string | null
 }
 
 function taskPriorityRank(priority: TaskPriority) {
-  if (priority === "High") return 0;
-  if (priority === "Medium") return 1;
-  return 2;
+  if (priority === "Extra High") return 0;
+  if (priority === "High") return 1;
+  if (priority === "Medium") return 2;
+  return 3;
 }
 
 function taskCodeSequence(taskCode: string) {

@@ -29,6 +29,7 @@ import {
 import type {
   KanbanColumn,
   TaskListItem,
+  TaskPriority,
   TaskSourceType,
   TaskStatus,
   TaskType,
@@ -89,6 +90,12 @@ function taskTypeTone(taskType: TaskType) {
 function sourceTypeTone(sourceType: TaskSourceType) {
   if (sourceType === "Internal") return "neutral";
   return "success";
+}
+
+function taskPriorityTone(priority: TaskPriority) {
+  if (priority === "Extra High" || priority === "High") return "error";
+  if (priority === "Medium") return "warning";
+  return "neutral";
 }
 
 function reorderKanbanColumns(
@@ -204,7 +211,7 @@ function KanbanCard({
     >
       <div className={cn("flex items-center justify-between gap-2", dense ? "mb-1" : compact ? "mb-1.5" : "mb-2")}>
         <span className="min-w-0 truncate font-mono text-[11px] text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
-        <Badge tone={task.priority === "High" ? "error" : task.priority === "Medium" ? "warning" : "neutral"}>{task.priority}</Badge>
+        <Badge tone={taskPriorityTone(task.priority)}>{task.priority}</Badge>
       </div>
       <h3 className={cn("font-medium leading-5", dense ? "mb-1.5 text-[12px]" : compact ? "mb-2 text-[13px]" : "mb-3 text-sm")}>{task.title}</h3>
       <div className={cn("flex flex-wrap", dense ? "mb-1.5 gap-1" : compact ? "mb-2 gap-1" : "mb-3 gap-1.5")}>

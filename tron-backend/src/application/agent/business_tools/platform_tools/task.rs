@@ -342,6 +342,7 @@ fn parse_task_priority(value: Option<&str>) -> Result<Option<TaskPriority>, Tool
         Some("low") => Ok(Some(TaskPriority::Low)),
         Some("medium") => Ok(Some(TaskPriority::Medium)),
         Some("high") => Ok(Some(TaskPriority::High)),
+        Some("extra_high" | "extra high") => Ok(Some(TaskPriority::ExtraHigh)),
         Some(other) => Err(enum_tool_error("priority", other)),
     }
 }

@@ -49,7 +49,7 @@ export function Field({ children, error, hint, label }: FieldProps) {
   }
 
   return (
-    <div className="grid gap-1.5">
+    <div className="grid min-w-0 gap-1.5">
       <div className="flex items-center gap-1.5">
         {controlId ? (
           <label className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]" htmlFor={controlId}>

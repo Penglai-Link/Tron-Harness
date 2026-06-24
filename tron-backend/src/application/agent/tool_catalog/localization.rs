@@ -272,7 +272,7 @@ fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.tools.task.create.params.title" => "Task title.",
         "agent.toolCatalog.tools.task.create.params.description" => "Optional task description.",
         "agent.toolCatalog.tools.task.create.params.priority" => {
-            "Task priority. Allowed values: low, medium, high."
+            "Task priority. Allowed values: low, medium, high, extra_high."
         }
         "agent.toolCatalog.tools.task.create.params.taskType" => {
             "Task type. Allowed values: feature, bug."
@@ -411,7 +411,7 @@ fn translate_zh_cn(key: &str) -> &'static str {
         "agent.toolCatalog.tools.task.create.params.title" => "任务标题。",
         "agent.toolCatalog.tools.task.create.params.description" => "可选的任务说明。",
         "agent.toolCatalog.tools.task.create.params.priority" => {
-            "任务优先级，可选值：low、medium、high。"
+            "任务优先级，可选值：low、medium、high、extra_high。"
         }
         "agent.toolCatalog.tools.task.create.params.taskType" => "任务类型，可选值：feature、bug。",
         "agent.toolCatalog.tools.task.create.params.sourceType" => {

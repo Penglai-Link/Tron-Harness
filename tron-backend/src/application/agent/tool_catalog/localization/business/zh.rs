@@ -151,7 +151,7 @@ pub(super) const ZH_CN: &[(&str, &str)] = &[
     ),
     (
         "agent.toolCatalog.tools.task.common.params.priority",
-        "任务优先级，可选值：low、medium、high。",
+        "任务优先级，可选值：low、medium、high、extra_high。",
     ),
     (
         "agent.toolCatalog.tools.task.common.params.taskType",

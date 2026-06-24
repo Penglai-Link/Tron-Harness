@@ -309,9 +309,10 @@ fn compare_kanban_task_items(left: &TaskListItem, right: &TaskListItem) -> std::
 
 fn kanban_priority_rank(priority: TaskPriority) -> u8 {
     match priority {
-        TaskPriority::High => 0,
-        TaskPriority::Medium => 1,
-        TaskPriority::Low => 2,
+        TaskPriority::ExtraHigh => 0,
+        TaskPriority::High => 1,
+        TaskPriority::Medium => 2,
+        TaskPriority::Low => 3,
     }
 }
 
@@ -364,8 +365,10 @@ mod tests {
         let mut items = vec![
             list_item(TaskPriority::Medium, "TSK-12"),
             list_item(TaskPriority::High, "TSK-10"),
+            list_item(TaskPriority::ExtraHigh, "TSK-15"),
             list_item(TaskPriority::Low, "TSK-999"),
             list_item(TaskPriority::High, "TSK-20"),
+            list_item(TaskPriority::ExtraHigh, "TSK-40"),
             list_item(TaskPriority::Medium, "TSK-30"),
         ];
 
@@ -377,7 +380,9 @@ mod tests {
             .collect::<Vec<_>>();
         assert_eq!(
             task_codes,
-            vec!["TSK-20", "TSK-10", "TSK-30", "TSK-12", "TSK-999"]
+            vec![
+                "TSK-40", "TSK-15", "TSK-20", "TSK-10", "TSK-30", "TSK-12", "TSK-999"
+            ]
         );
     }
 }

@@ -1,6 +1,7 @@
 import {
   type CSSProperties,
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -9,6 +10,7 @@ import {
 import {
   Check,
   ChevronDown,
+  Search,
 } from "lucide-react";
 
 import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
@@ -32,6 +34,8 @@ export function MultiSelectDropdown({
   onToggle,
   options,
   placeholder,
+  searchEmptyMessage = "No matching options.",
+  searchPlaceholder = "Search options...",
   selectedValues,
 }: {
   "aria-describedby"?: string;
@@ -44,20 +48,33 @@ export function MultiSelectDropdown({
   onToggle?: (value: string) => void;
   options: MultiSelectOption[];
   placeholder: string;
+  searchEmptyMessage?: string;
+  searchPlaceholder?: string;
   selectedValues: string[];
 }) {
   const [open, setOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [placement, setPlacement] = useState<{ maxHeight: number; side: "bottom" | "top" }>({
     maxHeight: 288,
     side: "bottom",
   });
   const popupRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const optionByValue = useMemo(() => new Map(options.map((option) => [option.value, option])), [options]);
   const uniqueSelectedValues = useMemo(() => Array.from(new Set(selectedValues.filter(Boolean))), [selectedValues]);
   const selectedItems = uniqueSelectedValues.map((value) => optionByValue.get(value) ?? { label: value, value });
   const hiddenSelectionCount = Math.max(0, selectedItems.length - 4);
   const triggerDisabled = disabled || !onToggle;
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filteredOptions = useMemo(() => {
+    if (!normalizedSearchQuery) return options;
+    return options.filter((option) => [
+      option.label,
+      option.value,
+      option.description ?? "",
+    ].some((value) => value.toLowerCase().includes(normalizedSearchQuery)));
+  }, [normalizedSearchQuery, options]);
 
   const updatePlacement = useCallback(() => {
     const triggerElement = triggerRef.current;
@@ -90,6 +107,14 @@ export function MultiSelectDropdown({
       window.removeEventListener("scroll", updatePlacement, true);
     };
   }, [open, updatePlacement]);
+
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery("");
+      return;
+    }
+    window.requestAnimationFrame(() => searchInputRef.current?.focus());
+  }, [open]);
 
   useDismissibleLayer({
     onDismiss: () => setOpen(false),
@@ -147,56 +172,81 @@ export function MultiSelectDropdown({
         <div
           ref={popupRef}
           className={cn(
-            "absolute z-40 w-full overflow-y-auto rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-1 shadow-xl",
+            "absolute z-40 w-full overflow-hidden rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-1 shadow-xl",
             placement.side === "bottom" ? "top-full mt-2" : "bottom-full mb-2",
           )}
           style={{ maxHeight: placement.maxHeight } satisfies CSSProperties}
-          role="listbox"
-          aria-label={`${ariaLabel} options`}
-          aria-multiselectable="true"
         >
           {loading ? (
             <p className="px-3 py-2 text-sm text-[var(--color-on-surface-variant)]">{loadingMessage}</p>
           ) : options.length ? (
-            options.map((option) => {
-              const active = uniqueSelectedValues.includes(option.value);
-              return (
-                <button
-                  aria-selected={active}
-                  className={cn(
-                    "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]",
-                    active
-                      ? "bg-[var(--color-surface-container-high)] text-[var(--color-on-surface)] ring-1 ring-inset ring-[var(--color-outline-variant)] hover:bg-[var(--color-surface-container-highest)]"
-                      : "text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]",
-                    option.disabled && "cursor-not-allowed opacity-60",
-                  )}
-                  disabled={option.disabled}
-                  key={option.value}
-                  role="option"
-                  type="button"
-                  onClick={() => onToggle?.(option.value)}
-                >
-                  <span
-                    className={cn(
-                      "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
-                      active
-                        ? "border-[var(--color-on-surface)] bg-[var(--color-on-surface)] text-[var(--color-surface-container-lowest)]"
-                        : "border-[var(--color-outline)] bg-[var(--color-surface-container-lowest)]",
-                    )}
-                  >
-                    {active ? <Check size={12} aria-hidden="true" /> : null}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{option.label}</span>
-                    {option.description ? (
-                      <span className="mt-0.5 block truncate text-[12px] text-[var(--color-on-surface-variant)]">
-                        {option.description}
+            <>
+              <div className="relative p-1">
+                <Search
+                  aria-hidden="true"
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]"
+                  size={14}
+                />
+                <input
+                  ref={searchInputRef}
+                  aria-label={`Search ${ariaLabel}`}
+                  className="h-9 w-full rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] pl-8 pr-3 text-sm text-[var(--color-on-surface)] outline-none transition focus:border-[var(--color-focus-ring)] focus:ring-2 focus:ring-[var(--color-focus-ring)]/20"
+                  placeholder={searchPlaceholder}
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                />
+              </div>
+              <div
+                className="overflow-y-auto"
+                style={{ maxHeight: Math.max(80, placement.maxHeight - 48) } satisfies CSSProperties}
+                role="listbox"
+                aria-label={`${ariaLabel} options`}
+                aria-multiselectable="true"
+              >
+                {filteredOptions.length ? filteredOptions.map((option) => {
+                  const active = uniqueSelectedValues.includes(option.value);
+                  return (
+                    <button
+                      aria-selected={active}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]",
+                        active
+                          ? "bg-[var(--color-surface-container-high)] text-[var(--color-on-surface)] ring-1 ring-inset ring-[var(--color-outline-variant)] hover:bg-[var(--color-surface-container-highest)]"
+                          : "text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]",
+                        option.disabled && "cursor-not-allowed opacity-60",
+                      )}
+                      disabled={option.disabled}
+                      key={option.value}
+                      role="option"
+                      type="button"
+                      onClick={() => onToggle?.(option.value)}
+                    >
+                      <span
+                        className={cn(
+                          "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                          active
+                            ? "border-[var(--color-on-surface)] bg-[var(--color-on-surface)] text-[var(--color-surface-container-lowest)]"
+                            : "border-[var(--color-outline)] bg-[var(--color-surface-container-lowest)]",
+                        )}
+                      >
+                        {active ? <Check size={12} aria-hidden="true" /> : null}
                       </span>
-                    ) : null}
-                  </span>
-                </button>
-              );
-            })
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{option.label}</span>
+                        {option.description ? (
+                          <span className="mt-0.5 block truncate text-[12px] text-[var(--color-on-surface-variant)]">
+                            {option.description}
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                  );
+                }) : (
+                  <p className="px-3 py-2 text-sm text-[var(--color-on-surface-variant)]">{searchEmptyMessage}</p>
+                )}
+              </div>
+            </>
           ) : (
             <p className="px-3 py-2 text-sm text-[var(--color-on-surface-variant)]">{emptyMessage}</p>
           )}

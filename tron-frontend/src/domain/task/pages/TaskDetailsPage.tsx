@@ -118,7 +118,7 @@ function taskDetailHref(taskCode: string) {
 
 function ReadValue({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-6 py-1 text-sm leading-6 text-[var(--color-on-surface)] whitespace-pre-wrap">
+    <div className="min-h-6 min-w-0 max-w-full py-1 text-sm leading-6 text-[var(--color-on-surface)] whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
       {children || <span className="text-[var(--color-on-surface-variant)]">None</span>}
     </div>
   );
