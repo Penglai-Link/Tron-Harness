@@ -103,6 +103,10 @@ mod tests {
             .expect("ingest catalog should expose PERSIST_TREE");
         assert_eq!(persist_tree.input_artifact_keys, vec!["index.treeVector"]);
         assert_eq!(persist_tree.output_artifact_keys, vec!["tree.persisted"]);
+        assert_eq!(
+            persist_tree.orchestration.must_run_before_stage_types,
+            vec!["PERSIST_SOURCE"]
+        );
 
         let summarize_tree = ingest
             .stages
@@ -328,6 +332,43 @@ mod tests {
             vec!["index.fulltext", "index.vector"]
         );
         assert_eq!(persist.output_artifact_keys, vec!["source.persisted"]);
+    }
+
+    #[test]
+    fn rag_pipeline_compiler_completes_legacy_graph_tree_persist_dependency() {
+        let mut pipeline = ingest_phase3_pipeline();
+        pipeline
+            .edges
+            .retain(|edge| !(edge.from == "persist-tree" && edge.to == "persist"));
+
+        let compiled = validate_pipeline(&pipeline, RagProfileType::Ingest)
+            .expect("legacy graph-tree pipeline should compile with completed persist edge");
+
+        assert!(
+            compiled
+                .edges
+                .iter()
+                .any(|edge| edge.from == "persist-tree" && edge.to == "persist"),
+            "compiler should complete the persist-tree to persist-source dependency"
+        );
+        assert_eq!(
+            compiled.execution_levels,
+            vec![
+                vec!["validate".to_string()],
+                vec!["prepare".to_string()],
+                vec!["split".to_string()],
+                vec![
+                    "extract-tree".to_string(),
+                    "fulltext".to_string(),
+                    "vector".to_string()
+                ],
+                vec!["summarize-tree".to_string()],
+                vec!["tree-fulltext".to_string()],
+                vec!["tree-vector".to_string()],
+                vec!["persist-tree".to_string()],
+                vec!["persist".to_string()],
+            ]
+        );
     }
 
     #[test]

@@ -453,6 +453,11 @@ pub fn validate_pipeline(
         }
         enabled_edges.push(edge.clone());
     }
+    complete_legacy_persist_tree_dependency(
+        profile_type.clone(),
+        &compiled_nodes,
+        &mut enabled_edges,
+    );
 
     let execution_levels = if errors
         .iter()
@@ -494,4 +499,3 @@ pub fn validate_pipeline(
         Err(errors)
     }
 }
-

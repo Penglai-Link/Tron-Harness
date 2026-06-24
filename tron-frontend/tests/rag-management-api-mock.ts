@@ -595,7 +595,15 @@ function createSeedPipelineCatalog(profileType: "INGEST" | "RETRIEVAL"): RagPipe
         stage("VECTOR_INDEX", ["textUnits.generated"], ["index.vector"], [createStrategy("RAG_VECTOR_INDEX")]),
         stage("TREE_FULLTEXT_INDEX", ["tree.summarized"], ["index.treeFulltext"], [createStrategy("RAG_TREE_FULLTEXT_INDEX")]),
         stage("TREE_VECTOR_INDEX", ["tree.summarized"], ["index.treeVector"], [createStrategy("RAG_TREE_VECTOR_INDEX")]),
-        stage("PERSIST_TREE", ["tree.summarized"], ["tree.persisted"], [createStrategy("RAG_PERSIST_TREE")]),
+        {
+          ...stage("PERSIST_TREE", ["tree.summarized"], ["tree.persisted"], [createStrategy("RAG_PERSIST_TREE")]),
+          orchestration: {
+            actsAsBarrier: true,
+            mustRunAfterStageTypes: [],
+            mustRunBeforeStageTypes: ["PERSIST_SOURCE"],
+            required: false,
+          },
+        },
         stage("PERSIST_SOURCE", ["textUnits.generated"], ["source.persisted"], [createStrategy("RAG_PERSIST_SOURCE")]),
       ],
     };

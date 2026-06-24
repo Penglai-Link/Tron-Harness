@@ -136,6 +136,38 @@ fn validate_repeatability(
     }
 }
 
+fn complete_legacy_persist_tree_dependency(
+    profile_type: RagProfileType,
+    nodes: &[CompiledRagPipelineNode],
+    edges: &mut Vec<RagPipelineEdgeInput>,
+) {
+    if profile_type != RagProfileType::Ingest {
+        return;
+    }
+    let persist_tree_nodes = nodes
+        .iter()
+        .filter(|node| node.stage_type == "PERSIST_TREE")
+        .collect::<Vec<_>>();
+    let persist_source_nodes = nodes
+        .iter()
+        .filter(|node| node.stage_type == "PERSIST_SOURCE")
+        .collect::<Vec<_>>();
+    for tree_node in persist_tree_nodes {
+        for source_node in &persist_source_nodes {
+            if !edge_path_exists(
+                tree_node.node_id.as_str(),
+                source_node.node_id.as_str(),
+                edges,
+            ) {
+                edges.push(RagPipelineEdgeInput {
+                    from: tree_node.node_id.clone(),
+                    to: source_node.node_id.clone(),
+                });
+            }
+        }
+    }
+}
+
 fn validate_orchestration(
     profile_type: RagProfileType,
     nodes: &[CompiledRagPipelineNode],
@@ -388,6 +420,12 @@ fn stage_orchestration(stage_type: &str) -> StageOrchestrationDefinition {
             required: false,
             acts_as_barrier: true,
             must_run_before_stage_types: &["SPLIT_TEXT"],
+            must_run_after_stage_types: &[],
+        },
+        "PERSIST_TREE" => StageOrchestrationDefinition {
+            required: false,
+            acts_as_barrier: true,
+            must_run_before_stage_types: &["PERSIST_SOURCE"],
             must_run_after_stage_types: &[],
         },
         _ => StageOrchestrationDefinition::default(),

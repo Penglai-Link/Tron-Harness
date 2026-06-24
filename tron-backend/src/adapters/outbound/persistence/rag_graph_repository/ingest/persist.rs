@@ -108,12 +108,14 @@ impl GraphBackedRagRepository {
         let semantic_model_code = first_unit
             .and_then(|unit| unit.embedding_model_code.clone())
             .filter(|value| !value.trim().is_empty());
+        let embedding_text =
+            semantic_embedding_text(&text, &semantic_model_code, &semantic_projection);
         let node = GraphNodeWrite {
             node_code: node_code.clone(),
             labels: vec![node_label(corpus)?],
             properties,
             full_text: Some(text.clone()),
-            embedding_text: Some(text),
+            embedding_text,
             embedding_model_code: semantic_model_code.clone(),
         }
         .validate()
@@ -233,12 +235,17 @@ impl GraphBackedRagRepository {
                     .embedding_model_code
                     .clone()
                     .filter(|value| !value.trim().is_empty());
+                let embedding_text = semantic_embedding_text(
+                    &unit.search_text,
+                    &semantic_model_code,
+                    &semantic_projection,
+                );
                 let node = GraphNodeWrite {
                     node_code: node_code.clone(),
                     labels: vec![target.node_label.clone()],
                     properties,
                     full_text: Some(unit.search_text.clone()),
-                    embedding_text: Some(unit.search_text.clone()),
+                    embedding_text,
                     embedding_model_code: semantic_model_code.clone(),
                 }
                 .validate()
@@ -275,12 +282,17 @@ impl GraphBackedRagRepository {
                     .summary_embedding_model_code
                     .clone()
                     .filter(|value| !value.trim().is_empty());
+                let embedding_text = semantic_embedding_text(
+                    &tree_node.summary_text,
+                    &semantic_model_code,
+                    &semantic_projection,
+                );
                 let node = GraphNodeWrite {
                     node_code: node_code.clone(),
                     labels: vec![target.node_label.clone()],
                     properties,
                     full_text: Some(tree_node.summary_text.clone()),
-                    embedding_text: Some(tree_node.summary_text.clone()),
+                    embedding_text,
                     embedding_model_code: semantic_model_code.clone(),
                 }
                 .validate()
@@ -374,5 +386,17 @@ impl GraphBackedRagRepository {
             return Ok(legacy_node_code);
         }
         Ok(node_code)
+    }
+}
+
+fn semantic_embedding_text(
+    text: &str,
+    semantic_model_code: &Option<String>,
+    semantic_projection: &Option<GraphSemanticProjection>,
+) -> Option<String> {
+    if semantic_model_code.is_some() && semantic_projection.is_some() {
+        Some(text.to_string())
+    } else {
+        None
     }
 }

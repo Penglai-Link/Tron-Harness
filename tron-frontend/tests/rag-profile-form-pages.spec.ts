@@ -231,6 +231,7 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
         edges: expect.arrayContaining([
           expect.objectContaining({ from: "prepare-payload", to: "split-text" }),
           expect.objectContaining({ from: "split-text", to: "persist-source" }),
+          expect.objectContaining({ from: "persist-tree", to: "persist-source" }),
         ]),
         mode: "DAG",
         nodes: expect.arrayContaining([
@@ -256,6 +257,9 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   const createBody = createBodies.find((body) => body.profileId === "support-notes-ingest-v1");
   expect(createBody).toEqual(expect.objectContaining({
     pipeline: expect.objectContaining({
+      edges: expect.arrayContaining([
+        expect.objectContaining({ from: "persist-tree", to: "persist-source" }),
+      ]),
       mode: "DAG",
       nodes: expect.arrayContaining([
         expect.objectContaining({ enabled: true, nodeId: "prepare-payload", stageType: "PREPARE_PAYLOAD", strategyId: "RAG_TEXT_CONTRACT_PAYLOAD_V1" }),
@@ -574,68 +578,72 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
   await installRagManagementApiMock(page, requests);
 
   await page.goto(`${frontendBaseUrl}/rag?tab=workbench`);
-  await expect(page.getByRole("heading", { name: "RAG Management" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Ingest Request" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Retrieval Test" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /RAG Management|知识检索管理/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Ingest Request|写入请求/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /Retrieval Test|检索测试/ })).toBeVisible();
 
-  await expect(page.getByLabel("Corpus")).toContainText("memory-card");
-  await expect(page.getByLabel("Ingest Profile")).toContainText("project-doc-ingest-v1");
-  await expect(page.getByLabel("Retrieval Profile")).toContainText("project-doc-related-v1");
+  await expect(page.getByLabel("语料库", { exact: true })).toContainText("memory-card");
+  await expect(page.getByLabel("写入配置", { exact: true })).toContainText("project-doc-ingest-v1");
+  await page.getByRole("tab", { name: /Retrieval Test|检索测试/ }).click();
+  await expect(page.getByLabel("检索配置", { exact: true })).toContainText("project-doc-related-v1");
+  await page.getByRole("tab", { name: /Ingest Request|写入请求/ }).click();
 
-  await page.getByLabel("Corpus").selectOption("project-doc");
-  await page.getByLabel("Ingest Profile").selectOption("project-doc-ingest-v1");
-  await page.getByLabel("Target Scope").fill("workspace:TRON_CORE");
-  await page.getByLabel("Source Code").fill("docs/features/rag-storage-runtime-workbench");
-  await page.getByLabel("Source Type").selectOption("MARKDOWN");
-  await expect(page.getByLabel("Source Version")).toHaveValue("v1");
-  await page.getByLabel("Language").fill("en-US");
-  await page.getByLabel("Metadata Source Path").fill("docs/features/rag-storage-runtime-workbench");
-  await page.getByRole("button", { name: "Add Business Attribute" }).click();
-  await page.getByLabel("Business Attribute 1 Field").selectOption("documentCode");
-  await page.getByLabel("Business Attribute 1 Value").fill("rag-storage-runtime-workbench");
-  await page.getByRole("button", { name: "Add Business Attribute" }).click();
-  await page.getByLabel("Business Attribute 2 Field").selectOption("repoCode");
-  await page.getByLabel("Business Attribute 2 Value").fill("tron");
-  await page.getByLabel("Text Content").fill("Workbench ingest verifies backend runtime writes from the frontend.");
-  await page.getByRole("button", { name: "Submit Ingest" }).click();
+  await page.getByLabel("语料库", { exact: true }).selectOption("project-doc");
+  await page.getByLabel("写入配置", { exact: true }).selectOption("project-doc-ingest-v1");
+  await page.getByLabel("作用域类型", { exact: true }).selectOption("SPACE");
+  await page.getByLabel("来源编码", { exact: true }).fill("docs/features/rag-storage-runtime-workbench");
+  await page.getByLabel("来源类型", { exact: true }).selectOption("MARKDOWN");
+  await expect(page.getByLabel("来源版本", { exact: true })).toHaveValue("v1");
+  await page.getByLabel("语言", { exact: true }).fill("en-US");
+  await page.getByLabel("元数据来源路径", { exact: true }).fill("docs/features/rag-storage-runtime-workbench");
+  await page.getByRole("button", { name: /Add Business Attribute|添加业务属性/ }).click();
+  await page.getByLabel("业务属性 1 字段", { exact: true }).selectOption("documentCode");
+  await page.getByLabel("业务属性 1 值", { exact: true }).fill("rag-storage-runtime-workbench");
+  await page.getByRole("button", { name: /Add Business Attribute|添加业务属性/ }).click();
+  await page.getByLabel("业务属性 2 字段", { exact: true }).selectOption("repoCode");
+  await page.getByLabel("业务属性 2 值", { exact: true }).fill("tron");
+  await page.getByLabel("文本内容", { exact: true }).fill("Workbench ingest verifies backend runtime writes from the frontend.");
+  await page.getByRole("button", { name: /Submit Ingest|提交写入/ }).click();
 
-  await expect(page.getByText("Ingest completed for docs/features/rag-storage-runtime-workbench.").first()).toBeVisible();
-  await expect(page.getByText("Text Units")).toBeVisible();
-  await expect(page.getByText("3").last()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Ingest Stage Results" })).toBeVisible();
+  await expect(page.getByText("docs/features/rag-storage-runtime-workbench 写入完成。").first()).toBeVisible();
+  await expect(page.getByText("文本单元")).toBeVisible();
+  const ingestStageResults = page.locator("details").filter({ hasText: "写入阶段结果" });
+  await expect(ingestStageResults).toBeVisible();
+  await ingestStageResults.locator("summary").click();
   await expect(page.getByText("prepare-payload")).toBeVisible();
   await expect(page.getByText("PREPARE_PAYLOAD")).toBeVisible();
   await expect(page.getByText("RAG_TEXT_CONTRACT_PAYLOAD_V1")).toBeVisible();
-  await expect(page.getByText("COMPLETED · 2ms")).toBeVisible();
+  await expect(page.getByText("已完成 · 2ms")).toBeVisible();
   await expect(page.getByText("request.payload")).toBeVisible();
   await expect(page.getByText("payload.prepared, source.metadata")).toBeVisible();
   await expect(page.getByText("split-text")).toBeVisible();
   await expect(page.getByText("SPLIT_TEXT · RAG_SPLIT_TEXT")).toBeVisible();
-  await expect(page.getByText("COMPLETED · 3ms")).toBeVisible();
+  await expect(page.getByText("已完成 · 3ms")).toBeVisible();
   await expect(page.getByText("payload.prepared").first()).toBeVisible();
   await expect(page.getByText("textUnits.generated")).toBeVisible();
-  await expect(page.getByText("Warning splitter used default overlap")).toBeVisible();
+  await expect(page.getByText("告警：splitter used default overlap")).toBeVisible();
 
-  await page.getByLabel("Retrieval Profile").selectOption("project-doc-related-v1");
-  await page.getByLabel("Query", { exact: true }).fill("How does the runtime workbench call backend search?");
-  await page.getByLabel("Context Strategy").selectOption("DOC_QA_CONTEXT_PACK");
-  await page.getByRole("button", { name: "Add Query Field" }).click();
-  await page.getByLabel("Query Field 1").selectOption("documentCode");
-  await page.getByRole("button", { name: "Add Query Field" }).click();
-  await page.getByLabel("Query Field 2").selectOption("repoCode");
-  await page.getByRole("button", { name: "Add Filter Condition" }).click();
-  await page.getByLabel("Filter 1 Field").selectOption("scopeCode");
-  await page.getByLabel("Filter 1 Operator").selectOption("eq");
-  await page.getByLabel("Filter 1 Value").fill("TRON_CORE");
-  await page.getByLabel("Limit").fill("5");
-  await page.getByLabel("Token Budget").fill("2048");
-  await page.getByRole("button", { name: "Enable trace" }).click();
-  await expect(page.getByRole("button", { name: "Enable trace" })).toHaveAttribute("aria-pressed", "false");
-  await page.getByRole("button", { name: "Enable trace" }).click();
-  await expect(page.getByRole("button", { name: "Enable trace" })).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Run Search" }).click();
+  await page.getByRole("tab", { name: /Retrieval Test|检索测试/ }).click();
+  await page.getByLabel("检索配置", { exact: true }).selectOption("project-doc-related-v1");
+  await page.getByLabel("查询", { exact: true }).fill("How does the runtime workbench call backend search?");
+  await page.getByLabel("上下文策略", { exact: true }).selectOption("DOC_QA_CONTEXT_PACK");
+  await page.getByRole("button", { name: /Add Query Field|添加查询字段/ }).click();
+  await page.getByLabel("查询字段 1", { exact: true }).selectOption("documentCode");
+  await page.getByRole("button", { name: /Add Query Field|添加查询字段/ }).click();
+  await page.getByLabel("查询字段 2", { exact: true }).selectOption("repoCode");
+  await page.getByRole("button", { name: /Add Filter Condition|添加筛选条件/ }).click();
+  await page.getByLabel("筛选条件 1 字段", { exact: true }).selectOption("scopeCode");
+  await page.getByLabel("筛选条件 1 操作符", { exact: true }).selectOption("eq");
+  await page.getByLabel("筛选条件 1 值", { exact: true }).fill("TRON_CORE");
+  await page.getByLabel("返回数量", { exact: true }).fill("5");
+  await page.getByLabel("令牌预算", { exact: true }).fill("2048");
+  await page.getByRole("button", { name: /Enable trace|启用追踪/ }).click();
+  await expect(page.getByRole("button", { name: /Enable trace|启用追踪/ })).toHaveAttribute("aria-pressed", "false");
+  await page.getByRole("button", { name: /Enable trace|启用追踪/ }).click();
+  await expect(page.getByRole("button", { name: /Enable trace|启用追踪/ })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: /Run Search|执行检索/ }).click();
 
-  await expect(page.getByText("Search returned 1 hit.").first()).toBeVisible();
+  await expect(page.getByText("检索返回 1 条命中。").first()).toBeVisible();
   await expect(page.getByText("trace-workbench-001")).toBeVisible();
   await expect(page.getByText("RAG Storage Runtime Workbench").first()).toBeVisible();
   await expect(page.getByText("TREE_VECTOR")).toBeVisible();
@@ -646,23 +654,25 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
   await expect(page.getByText("tron", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("RAG workbench can execute retrieval through the backend API.")).toBeVisible();
   await expect(page.getByText("Workbench search result from mocked runtime.")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Search Stage Results" })).toBeVisible();
+  const searchStageResults = page.locator("details").filter({ hasText: "检索阶段结果" });
+  await expect(searchStageResults).toBeVisible();
+  await searchStageResults.locator("summary").click();
   await expect(page.getByText("route-search-fulltext")).toBeVisible();
   await expect(page.getByText("ROUTE_SEARCH · FULLTEXT_SQLITE_FTS5_SIMPLE_V1")).toBeVisible();
-  await expect(page.getByText("COMPLETED · 5ms")).toBeVisible();
+  await expect(page.getByText("已完成 · 5ms")).toBeVisible();
   await expect(page.getByText("query.effective")).toBeVisible();
   await expect(page.getByText("hits.route")).toHaveCount(2);
   await expect(page.getByText("context-pack")).toBeVisible();
   await expect(page.getByText("CONTEXT_PACK · DOC_QA_CONTEXT_PACK")).toBeVisible();
   await expect(page.getByText("COMPLETED_WITH_WARNINGS · 7ms")).toBeVisible();
   await expect(page.getByText("context.pack")).toBeVisible();
-  await expect(page.getByText("Warning rerank disabled; using lexical order")).toBeVisible();
+  await expect(page.getByText("告警：rerank disabled; using lexical order")).toBeVisible();
 
-  await page.getByLabel("Query", { exact: true }).fill("legacy fallback search without stage results");
-  await page.getByRole("button", { name: "Run Search" }).click();
-  await expect(page.getByText("Search returned 1 hit.").first()).toBeVisible();
+  await page.getByLabel("查询", { exact: true }).fill("legacy fallback search without stage results");
+  await page.getByRole("button", { name: /Run Search|执行检索/ }).click();
+  await expect(page.getByText("检索返回 1 条命中。").first()).toBeVisible();
   await expect(page.getByText("RAG Storage Runtime Workbench").first()).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Search Stage Results" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /Search Stage Results|检索阶段结果/ })).toHaveCount(0);
 
   const ingestBodies = requestBodies(requests, "/api/v1/rag/ingest", "POST");
   expect(ingestBodies).toEqual(expect.arrayContaining([
@@ -670,7 +680,7 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
       accessContext: expect.objectContaining({
         agentCode: "AGENT_CODEX",
         userCode: "USR-AUTH-0001",
-        workspaceCode: "TRON_CORE",
+        workspaceCode: "ENTERPRISE",
       }),
       corpusId: "project-doc",
       ingestProfileId: "project-doc-ingest-v1",
@@ -686,7 +696,7 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
         }),
       }),
       targetScope: {
-        scopeCode: "TRON_CORE",
+        scopeCode: "ENTERPRISE",
         scopeType: "SPACE",
       },
     }),
@@ -724,7 +734,7 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
       accessContext: expect.objectContaining({
         agentCode: "AGENT_CODEX",
         userCode: "USR-AUTH-0001",
-        workspaceCode: "TRON_CORE",
+        workspaceCode: "ENTERPRISE",
       }),
       context: expect.objectContaining({
         returnFields: ["documentCode", "repoCode"],

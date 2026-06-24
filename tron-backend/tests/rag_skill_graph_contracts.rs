@@ -787,6 +787,272 @@ async fn graph_tree_route_with_sqlite_text_units_returns_covered_text_unit_rows(
 }
 
 #[tokio::test]
+async fn graph_tree_pipeline_with_sqlite_segments_persists_when_embeddings_degrade() {
+    let database_url = temp_database_path("rag-skill-graph-tree-sqlite-degraded")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-tree-sqlite-degraded-store")
+        .to_string_lossy()
+        .to_string();
+    let (repository, graph_service) = build_repository(&database_url, &graph_path);
+    enable_skill_graph_tree_with_ui_sqlite_segments(&database_url);
+    insert_skill_graph_tree_pipeline_ingest_profile(
+        &database_url,
+        "skill-graph-tree-pipeline-degraded-v1",
+        "SKIP_VECTOR_ON_UNAVAILABLE",
+    );
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        FailingEmbeddingRuntime::default(),
+    );
+
+    let result = service
+        .ingest(skill_graph_tree_text_request(
+            "skill-graph-tree-pipeline-degraded-v1",
+            "rag-tree-degraded",
+            "# Runtime Workbench Summary\n\nThe runtime workbench stores root and section summaries.\n\n## Section A\n\nGraph tree persistence should survive unavailable embeddings.",
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(result.embedding_status, "FAILED");
+    assert!(result.text_unit_count >= 2);
+
+    let connection = Connection::open(&database_url).unwrap();
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_ui_tree_graph_live_sources WHERE source_code = 'skill:TRON_CORE:rag-tree-degraded'"
+        ),
+        1
+    );
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_ui_tree_graph_live_text_units WHERE source_code = 'skill:TRON_CORE:rag-tree-degraded'"
+        ),
+        result.text_unit_count as i64
+    );
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_ui_tree_graph_live_vectors WHERE source_code = 'skill:TRON_CORE:rag-tree-degraded'"
+        ),
+        result.text_unit_count as i64,
+        "degraded vector carrier rows should still preserve source/text metadata for retry"
+    );
+
+    let tree_nodes = graph_service
+        .search(
+            graph_scope_for_namespace("rag_ui_tree_graph_live_tree"),
+            GraphSearchQuery {
+                filters: vec![GraphPropertyFilter {
+                    property_name: "sourceCode".into(),
+                    operator: GraphFilterOperator::Equals,
+                    value: GraphPropertyValue::Text("skill:TRON_CORE:rag-tree-degraded".into()),
+                }],
+                full_text: None,
+                vector_text: None,
+                embedding_model_code: None,
+                traversal: None,
+                labels: vec!["RagUiTreeGraphLiveNode".into()],
+                limit: GraphQueryLimit::new(10).unwrap(),
+                min_score: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(
+        tree_nodes.len() >= 2,
+        "markdown headings should persist root and section tree nodes"
+    );
+    assert!(
+        tree_nodes.iter().all(|hit| hit.node.full_text.is_some()),
+        "tree fulltext should remain available when embedding degrades"
+    );
+    assert!(
+        tree_nodes
+            .iter()
+            .all(|hit| hit.node.embedding_text.is_none()),
+        "failed tree-vector indexing must not write semantic text without a projection"
+    );
+}
+
+#[tokio::test]
+async fn ui_graph_tree_memory_card_profile_persists_with_fulltext_text_unit_fallback_and_legacy_edge()
+ {
+    let database_url = temp_database_path("rag-ui-tree-graph-live-degraded")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-ui-tree-graph-live-degraded-store")
+        .to_string_lossy()
+        .to_string();
+    let (repository, graph_service) = build_repository(&database_url, &graph_path);
+    insert_ui_tree_graph_live_corpus(&database_url);
+    insert_ui_tree_graph_live_pipeline_ingest_profile(
+        &database_url,
+        "ui-tree-graph-live-ingest-v1",
+        false,
+        "SKIP_VECTOR_ON_UNAVAILABLE",
+    );
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        FailingEmbeddingRuntime::default(),
+    );
+
+    let result = service
+        .ingest(ui_tree_graph_live_memory_card_request(
+            "ui-tree-graph-live-ingest-v1",
+            "# Runtime Workbench Summary\n\nThe workbench stores a runtime summary.\n\n## Retrieval Detail\n\nGraph tree persistence should keep source, text units, degraded vector carrier rows, and tree nodes.",
+        ))
+        .await
+        .unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(result.embedding_status, "FAILED");
+    assert!(result.text_unit_count >= 2);
+
+    let connection = Connection::open(&database_url).unwrap();
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_ui_tree_graph_live_sources WHERE source_code = 'ui-tree-graph-live-source-fixed'"
+        ),
+        1
+    );
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_ui_tree_graph_live_text_units WHERE source_code = 'ui-tree-graph-live-source-fixed'"
+        ),
+        result.text_unit_count as i64
+    );
+    assert_eq!(
+        query_i64(
+            &connection,
+            "SELECT COUNT(*) FROM rag_ui_tree_graph_live_vectors WHERE source_code = 'ui-tree-graph-live-source-fixed'"
+        ),
+        result.text_unit_count as i64
+    );
+
+    let tree_nodes = graph_service
+        .search(
+            graph_scope_for_namespace("rag_ui_tree_graph_live_tree"),
+            GraphSearchQuery {
+                filters: vec![GraphPropertyFilter {
+                    property_name: "sourceCode".into(),
+                    operator: GraphFilterOperator::Equals,
+                    value: GraphPropertyValue::Text("ui-tree-graph-live-source-fixed".into()),
+                }],
+                full_text: None,
+                vector_text: None,
+                embedding_model_code: None,
+                traversal: None,
+                labels: vec!["RagUiTreeGraphLiveNode".into()],
+                limit: GraphQueryLimit::new(10).unwrap(),
+                min_score: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(
+        tree_nodes.len() >= 2,
+        "markdown headings should persist root and section tree nodes"
+    );
+    assert!(
+        tree_nodes.iter().all(|hit| hit.node.full_text.is_some()),
+        "tree fulltext should remain available when embedding degrades"
+    );
+    assert!(
+        tree_nodes
+            .iter()
+            .all(|hit| hit.node.embedding_text.is_none()),
+        "failed tree-vector indexing must not write semantic text without a projection"
+    );
+
+    let related_text_units = graph_service
+        .search(
+            graph_scope_for_namespace("rag_ui_tree_graph_live_tree"),
+            GraphSearchQuery {
+                filters: Vec::new(),
+                full_text: None,
+                vector_text: None,
+                embedding_model_code: None,
+                traversal: None,
+                labels: vec!["RAG_TEXT_UNIT".into()],
+                limit: GraphQueryLimit::new(10).unwrap(),
+                min_score: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert!(
+        !related_text_units.is_empty(),
+        "extract-tree generated relatedGraph should be persisted beside tree nodes"
+    );
+}
+
+#[tokio::test]
+async fn graph_tree_persist_accepts_tree_nodes_without_summary_embedding() {
+    let database_url = temp_database_path("rag-skill-graph-tree-no-summary-embedding")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-tree-no-summary-embedding-store")
+        .to_string_lossy()
+        .to_string();
+    let (repository, graph_service) = build_repository(&database_url, &graph_path);
+    enable_skill_graph_tree_with_sqlite_text_units(&database_url);
+    let mut command = tree_route_command(
+        "rag-tree-no-summary-embedding",
+        "Graph fulltext summary without semantic projection.",
+        vec![(
+            "skill:TRON_CORE:rag-tree-no-summary-embedding:v1:0",
+            "Covered SQLite unit.",
+        )],
+        vec!["skill:TRON_CORE:rag-tree-no-summary-embedding:v1:0"],
+    );
+    command.tree_nodes[0].summary_embedding_status = "FAILED".into();
+    command.tree_nodes[0].summary_embedding_model_code = None;
+    command.tree_nodes[0].summary_embedding_version = None;
+    command.tree_nodes[0].summary_embedding_text_hash = None;
+    command.tree_nodes[0].summary_embedding_dimension = None;
+    command.tree_nodes[0].summary_embedding = None;
+
+    repository.lock().unwrap().persist_ingest(command).unwrap();
+
+    let tree_nodes = graph_service
+        .search(
+            graph_scope_for_namespace("rag_skill_tree"),
+            GraphSearchQuery {
+                filters: vec![GraphPropertyFilter {
+                    property_name: "treeNodeCode".into(),
+                    operator: GraphFilterOperator::Equals,
+                    value: GraphPropertyValue::Text("rag-tree-no-summary-embedding:root".into()),
+                }],
+                full_text: None,
+                vector_text: None,
+                embedding_model_code: None,
+                traversal: None,
+                labels: vec!["RagSkillTreeNode".into()],
+                limit: GraphQueryLimit::new(10).unwrap(),
+                min_score: None,
+            },
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(tree_nodes.len(), 1);
+    assert_eq!(
+        tree_nodes[0].node.full_text.as_deref(),
+        Some("Graph fulltext summary without semantic projection.")
+    );
+    assert_eq!(tree_nodes[0].node.embedding_text, None);
+}
+
+#[tokio::test]
 async fn graph_tree_route_with_graph_text_units_returns_covered_text_unit_rows() {
     let database_url = temp_database_path("rag-skill-graph-tree-graph-text")
         .to_string_lossy()
@@ -1281,6 +1547,70 @@ fn skill_graph_request(skill_name: &str, description: &str) -> RagIngestRequest 
     }
 }
 
+fn skill_graph_tree_text_request(
+    profile_id: &str,
+    skill_name: &str,
+    text: &str,
+) -> RagIngestRequest {
+    RagIngestRequest {
+        corpus_id: "skill-graph".into(),
+        ingest_profile_id: profile_id.into(),
+        workspace_code: "TRON_CORE".into(),
+        access_context: access_context(),
+        target_scope: RagIngestScope {
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+        },
+        source: RagIngestSource {
+            code: format!("skill:TRON_CORE:{skill_name}"),
+            version: "v1".into(),
+            source_type: "SKILL".into(),
+        },
+        payload: json!({
+            "source": {
+                "code": format!("skill:TRON_CORE:{skill_name}"),
+                "version": "v1",
+                "type": "SKILL"
+            },
+            "title": skill_name,
+            "text": text,
+            "metadata": {}
+        }),
+    }
+}
+
+fn ui_tree_graph_live_memory_card_request(profile_id: &str, text: &str) -> RagIngestRequest {
+    RagIngestRequest {
+        corpus_id: "ui-tree-graph-live".into(),
+        ingest_profile_id: profile_id.into(),
+        workspace_code: "TRON_CORE".into(),
+        access_context: RagIngestAccessContext {
+            user_code: "USR-ADMIN".into(),
+            agent_code: "AGENT_CODEX".into(),
+            workspace_code: "TRON_CORE".into(),
+        },
+        target_scope: RagIngestScope {
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+        },
+        source: RagIngestSource {
+            code: "ui-tree-graph-live-source-fixed".into(),
+            version: "v1".into(),
+            source_type: "MEMORY_CARD".into(),
+        },
+        payload: json!({
+            "source": {
+                "code": "ui-tree-graph-live-source-fixed",
+                "version": "v1",
+                "type": "MEMORY_CARD"
+            },
+            "title": "Runtime Workbench Summary",
+            "text": text,
+            "metadata": {}
+        }),
+    }
+}
+
 fn set_skill_graph_write_policy(database_url: &str, policy: Value) {
     let connection = Connection::open(database_url).unwrap();
     let config_json: String = connection
@@ -1296,6 +1626,208 @@ fn set_skill_graph_write_policy(database_url: &str, policy: Value) {
         .execute(
             "UPDATE rag_profiles SET config_json = ?1 WHERE profile_id = 'skill-graph-ingest-v1'",
             params![serde_json::to_string(&config).unwrap()],
+        )
+        .unwrap();
+}
+
+fn insert_skill_graph_tree_pipeline_ingest_profile(
+    database_url: &str,
+    profile_id: &str,
+    degrade_policy: &str,
+) {
+    let connection = Connection::open(database_url).unwrap();
+    let config = json!({
+        "sourceInputPolicy": {
+            "supportedSourceTypes": ["SKILL"]
+        },
+        "pipeline": {
+            "mode": "DAG",
+            "nodes": [
+                {
+                    "nodeId": "validate-source",
+                    "stageType": "VALIDATE_SOURCE",
+                    "strategyId": "RAG_VALIDATE_SOURCE"
+                },
+                {
+                    "nodeId": "prepare-payload",
+                    "stageType": "PREPARE_PAYLOAD",
+                    "strategyId": "RAG_TEXT_CONTRACT_PAYLOAD_V1"
+                },
+                {
+                    "nodeId": "split-text",
+                    "stageType": "SPLIT_TEXT",
+                    "strategyId": "RAG_SPLIT_MARKDOWN_HEADING_V1"
+                },
+                {
+                    "nodeId": "extract-tree",
+                    "stageType": "EXTRACT_TREE",
+                    "strategyId": "RAG_MARKDOWN_TREE_EXTRACT_V1"
+                },
+                {
+                    "nodeId": "summarize-tree",
+                    "stageType": "SUMMARIZE_TREE",
+                    "strategyId": "RAG_TREE_EXTRACTIVE_SUMMARY_V1"
+                },
+                {
+                    "nodeId": "fulltext-index",
+                    "stageType": "FULLTEXT_INDEX",
+                    "strategyId": "RAG_FULLTEXT_INDEX"
+                },
+                {
+                    "nodeId": "vector-index",
+                    "stageType": "VECTOR_INDEX",
+                    "strategyId": "RAG_VECTOR_INDEX"
+                },
+                {
+                    "nodeId": "tree-fulltext-index",
+                    "stageType": "TREE_FULLTEXT_INDEX",
+                    "strategyId": "RAG_TREE_FULLTEXT_INDEX"
+                },
+                {
+                    "nodeId": "tree-vector-index",
+                    "stageType": "TREE_VECTOR_INDEX",
+                    "strategyId": "RAG_TREE_VECTOR_INDEX"
+                },
+                {
+                    "nodeId": "persist-tree",
+                    "stageType": "PERSIST_TREE",
+                    "strategyId": "RAG_PERSIST_TREE_GRAPH_V1"
+                },
+                {
+                    "nodeId": "persist-source",
+                    "stageType": "PERSIST_SOURCE",
+                    "strategyId": "RAG_PERSIST_SOURCE"
+                }
+            ],
+            "edges": [
+                { "from": "validate-source", "to": "prepare-payload" },
+                { "from": "prepare-payload", "to": "split-text" },
+                { "from": "split-text", "to": "extract-tree" },
+                { "from": "split-text", "to": "fulltext-index" },
+                { "from": "split-text", "to": "vector-index" },
+                { "from": "extract-tree", "to": "summarize-tree" },
+                { "from": "summarize-tree", "to": "tree-fulltext-index" },
+                { "from": "tree-fulltext-index", "to": "tree-vector-index" },
+                { "from": "tree-vector-index", "to": "persist-tree" },
+                { "from": "fulltext-index", "to": "persist-source" },
+                { "from": "vector-index", "to": "persist-source" },
+                { "from": "persist-tree", "to": "persist-source" }
+            ]
+        }
+    });
+    connection
+        .execute(
+            "INSERT INTO rag_profiles (
+                profile_id, profile_type, status, primary_corpus_id, corpus_ids_json,
+                required_source_version, config_json, filters_json, degrade_policy,
+                created_at, updated_at
+            )
+            VALUES (?1, 'INGEST', 'enabled', 'skill-graph', '[\"skill-graph\"]',
+                'v1', ?2, '{}', ?3, 1, 1)",
+            params![profile_id, config.to_string(), degrade_policy],
+        )
+        .unwrap();
+}
+
+fn insert_ui_tree_graph_live_pipeline_ingest_profile(
+    database_url: &str,
+    profile_id: &str,
+    include_persist_tree_edge: bool,
+    degrade_policy: &str,
+) {
+    let connection = Connection::open(database_url).unwrap();
+    let mut edges = vec![
+        json!({ "from": "validate-source", "to": "prepare-payload" }),
+        json!({ "from": "prepare-payload", "to": "split-text" }),
+        json!({ "from": "split-text", "to": "extract-tree" }),
+        json!({ "from": "split-text", "to": "fulltext-index" }),
+        json!({ "from": "split-text", "to": "vector-index" }),
+        json!({ "from": "extract-tree", "to": "summarize-tree" }),
+        json!({ "from": "summarize-tree", "to": "tree-fulltext-index" }),
+        json!({ "from": "tree-fulltext-index", "to": "tree-vector-index" }),
+        json!({ "from": "tree-vector-index", "to": "persist-tree" }),
+        json!({ "from": "fulltext-index", "to": "persist-source" }),
+        json!({ "from": "vector-index", "to": "persist-source" }),
+    ];
+    if include_persist_tree_edge {
+        edges.push(json!({ "from": "persist-tree", "to": "persist-source" }));
+    }
+    let config = json!({
+        "sourceInputPolicy": {
+            "supportedSourceTypes": ["MEMORY_CARD"]
+        },
+        "pipeline": {
+            "mode": "DAG",
+            "nodes": [
+                {
+                    "nodeId": "validate-source",
+                    "stageType": "VALIDATE_SOURCE",
+                    "strategyId": "RAG_VALIDATE_SOURCE"
+                },
+                {
+                    "nodeId": "prepare-payload",
+                    "stageType": "PREPARE_PAYLOAD",
+                    "strategyId": "RAG_TEXT_CONTRACT_PAYLOAD_V1"
+                },
+                {
+                    "nodeId": "split-text",
+                    "stageType": "SPLIT_TEXT",
+                    "strategyId": "RAG_SPLIT_MARKDOWN_HEADING_V1"
+                },
+                {
+                    "nodeId": "extract-tree",
+                    "stageType": "EXTRACT_TREE",
+                    "strategyId": "RAG_MARKDOWN_TREE_EXTRACT_V1"
+                },
+                {
+                    "nodeId": "summarize-tree",
+                    "stageType": "SUMMARIZE_TREE",
+                    "strategyId": "RAG_TREE_EXTRACTIVE_SUMMARY_V1"
+                },
+                {
+                    "nodeId": "fulltext-index",
+                    "stageType": "FULLTEXT_INDEX",
+                    "strategyId": "RAG_FULLTEXT_INDEX"
+                },
+                {
+                    "nodeId": "vector-index",
+                    "stageType": "VECTOR_INDEX",
+                    "strategyId": "RAG_VECTOR_INDEX"
+                },
+                {
+                    "nodeId": "tree-fulltext-index",
+                    "stageType": "TREE_FULLTEXT_INDEX",
+                    "strategyId": "RAG_TREE_FULLTEXT_INDEX"
+                },
+                {
+                    "nodeId": "tree-vector-index",
+                    "stageType": "TREE_VECTOR_INDEX",
+                    "strategyId": "RAG_TREE_VECTOR_INDEX"
+                },
+                {
+                    "nodeId": "persist-tree",
+                    "stageType": "PERSIST_TREE",
+                    "strategyId": "RAG_PERSIST_TREE_GRAPH_V1"
+                },
+                {
+                    "nodeId": "persist-source",
+                    "stageType": "PERSIST_SOURCE",
+                    "strategyId": "RAG_PERSIST_SOURCE"
+                }
+            ],
+            "edges": edges
+        }
+    });
+    connection
+        .execute(
+            "INSERT INTO rag_profiles (
+                profile_id, profile_type, status, primary_corpus_id, corpus_ids_json,
+                required_source_version, config_json, filters_json, degrade_policy,
+                created_at, updated_at
+            )
+            VALUES (?1, 'INGEST', 'enabled', 'ui-tree-graph-live', '[\"ui-tree-graph-live\"]',
+                'v1', ?2, '{}', ?3, 1, 1)",
+            params![profile_id, config.to_string(), degrade_policy],
         )
         .unwrap();
 }
@@ -1637,6 +2169,219 @@ fn enable_skill_graph_tree_with_sqlite_text_units(database_url: &str) {
                             "layout": "GRAPH_TREE",
                             "namespace": "rag_skill_tree",
                             "nodeLabel": "RagSkillTreeNode",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        },
+                        {
+                            "id": "diagnostics-store",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_diagnostics"
+                        }
+                    ]
+                })
+                .to_string()
+            ],
+        )
+        .unwrap();
+}
+
+fn insert_ui_tree_graph_live_corpus(database_url: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    connection
+        .execute(
+            "INSERT INTO rag_corpora (
+                corpus_id, display_name, status, description, capabilities_json,
+                filter_schema_json, field_mapping_json, storage_binding_json,
+                created_at, updated_at
+            )
+            VALUES (?1, ?2, 'enabled', ?3, ?4, ?5, ?6, ?7, 1, 1)",
+            params![
+                "ui-tree-graph-live",
+                "UI Tree Graph Live",
+                "Workbench-created graph tree corpus fixture.",
+                json!({
+                    "fulltext": true,
+                    "vector": true,
+                    "tree": true,
+                    "graph": true,
+                    "reserved": false
+                })
+                .to_string(),
+                json!({
+                    "fields": {
+                        "sourceCode": {"type": "string", "column": "source_code"},
+                        "sourceVersion": {"type": "string", "column": "source_version"},
+                        "scopeType": {"type": "string", "column": "scope_type"},
+                        "scopeCode": {"type": "string", "column": "scope_code"},
+                        "status": {"type": "string", "column": "status"},
+                        "textUnitStatus": {"type": "string", "column": "status"}
+                    }
+                })
+                .to_string(),
+                json!({
+                    "source": {
+                        "sourceCode": "source_code",
+                        "sourceVersion": "source_version",
+                        "sourceType": "source_type",
+                        "scopeType": "scope_type",
+                        "scopeCode": "scope_code",
+                        "status": "status",
+                        "title": "title",
+                        "sourceMetadata": "metadata"
+                    },
+                    "textUnit": {
+                        "sourceCode": "source_code",
+                        "sourceVersion": "source_version",
+                        "scopeType": "scope_type",
+                        "scopeCode": "scope_code",
+                        "textUnitStatus": "status",
+                        "text": "text"
+                    }
+                })
+                .to_string(),
+                json!({
+                    "mode": "TARGETED",
+                    "bindings": {
+                        "source": "source-store",
+                        "textUnit": "text-unit-store",
+                        "fulltext": "text-unit-store",
+                        "vector": "vector-store",
+                        "tree": "tree-graph",
+                        "diagnostics": "diagnostics-store"
+                    },
+                    "targets": [
+                        {
+                            "id": "source-store",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_ui_tree_graph_live_sources"
+                        },
+                        {
+                            "id": "text-unit-store",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_ui_tree_graph_live_text_units"
+                        },
+                        {
+                            "id": "vector-store",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_ui_tree_graph_live_vectors"
+                        },
+                        {
+                            "id": "tree-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_TREE",
+                            "namespace": "rag_ui_tree_graph_live_tree",
+                            "nodeLabel": "RagUiTreeGraphLiveNode",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        },
+                        {
+                            "id": "diagnostics-store",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_diagnostics"
+                        }
+                    ]
+                })
+                .to_string()
+            ],
+        )
+        .unwrap();
+}
+
+fn enable_skill_graph_tree_with_ui_sqlite_segments(database_url: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    connection
+        .execute(
+            "UPDATE rag_corpora
+             SET capabilities_json = ?1,
+                 field_mapping_json = ?2,
+                 filter_schema_json = ?3,
+                 storage_binding_json = ?4
+             WHERE corpus_id = 'skill-graph'",
+            params![
+                json!({
+                    "fulltext": true,
+                    "vector": true,
+                    "tree": true,
+                    "graph": true,
+                    "reserved": false
+                })
+                .to_string(),
+                json!({
+                    "source": {
+                        "sourceCode": "source_code",
+                        "sourceVersion": "source_version",
+                        "sourceType": "source_type",
+                        "scopeType": "scope_type",
+                        "scopeCode": "scope_code",
+                        "status": "status",
+                        "title": "title",
+                        "sourceMetadata": "metadata"
+                    },
+                    "textUnit": {
+                        "sourceCode": "source_code",
+                        "sourceVersion": "source_version",
+                        "scopeType": "scope_type",
+                        "scopeCode": "scope_code",
+                        "textUnitStatus": "status",
+                        "text": "text"
+                    }
+                })
+                .to_string(),
+                json!({
+                    "fields": {
+                        "sourceCode": {"type": "string", "column": "source_code"},
+                        "sourceVersion": {"type": "string", "column": "source_version"},
+                        "scopeType": {"type": "string", "column": "scope_type"},
+                        "scopeCode": {"type": "string", "column": "scope_code"},
+                        "status": {"type": "string", "column": "status"},
+                        "textUnitStatus": {"type": "string", "column": "status"}
+                    }
+                })
+                .to_string(),
+                json!({
+                    "mode": "TARGETED",
+                    "bindings": {
+                        "source": "ui-source-sqlite",
+                        "textUnit": "ui-text-unit-sqlite",
+                        "fulltext": "ui-fulltext-sqlite",
+                        "vector": "ui-vector-sqlite",
+                        "tree": "ui-tree-graph",
+                        "diagnostics": "diagnostics-store"
+                    },
+                    "targets": [
+                        {
+                            "id": "ui-source-sqlite",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_ui_tree_graph_live_sources"
+                        },
+                        {
+                            "id": "ui-text-unit-sqlite",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_ui_tree_graph_live_text_units"
+                        },
+                        {
+                            "id": "ui-fulltext-sqlite",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_ui_tree_graph_live_fulltext"
+                        },
+                        {
+                            "id": "ui-vector-sqlite",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_ui_tree_graph_live_vectors"
+                        },
+                        {
+                            "id": "ui-tree-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_TREE",
+                            "namespace": "rag_ui_tree_graph_live_tree",
+                            "nodeLabel": "RagUiTreeGraphLiveNode",
                             "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
                         },
                         {
@@ -2048,6 +2793,27 @@ impl RagEmbeddingRuntime for FakeRuntime {
     }
 }
 
+#[derive(Clone, Default)]
+struct FailingEmbeddingRuntime;
+
+impl RagEmbeddingRuntime for FailingEmbeddingRuntime {
+    fn embed<'a>(
+        &'a self,
+        _call: RagEmbeddingCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
+        Box::pin(async { Err("embedding provider unavailable".into()) })
+    }
+}
+
+impl RagDocumentSourceRuntime for FailingEmbeddingRuntime {
+    fn resolve_project_doc_markdown<'a>(
+        &'a self,
+        _call: RagDocumentSourceCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagResolvedDocument, RagError>> + Send + 'a>> {
+        Box::pin(async { Err(RagError::SourceResolveFailed) })
+    }
+}
+
 impl RagSearchRuntime for FakeRuntime {
     fn embed<'a>(
         &'a self,
@@ -2120,4 +2886,8 @@ fn temp_database_path(label: &str) -> PathBuf {
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
     std::env::temp_dir().join(format!("{label}-{millis}.sqlite"))
+}
+
+fn query_i64(connection: &Connection, sql: &str) -> i64 {
+    connection.query_row(sql, [], |row| row.get(0)).unwrap()
 }
