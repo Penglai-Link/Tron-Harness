@@ -14,7 +14,7 @@ use crate::{
             RagSearchRepository, RagSearchRow, RagSearchTraceWrite, RagSourceLifecycleRepository,
         },
     },
-    domain::rag::{RagCorpusRecord, RagError, RagProfileRecord},
+    domain::rag::{RagCorpusRecord, RagError, RagProfileRecord, RagStorageBackend},
 };
 
 use super::sqlite::SqliteRagRepository;
@@ -23,6 +23,7 @@ mod diagnostics;
 mod ingest;
 mod model;
 mod search;
+mod tree_rows;
 mod write_adapters;
 mod write_plan;
 
@@ -120,6 +121,20 @@ impl RagSearchRepository for GraphBackedRagRepository {
             .ok_or(RagError::CorpusNotFound)?;
         if !corpus.storage_binding.is_graph_backend() {
             return self.sqlite.search_route(query);
+        }
+        if is_tree_retriever(&query.retriever) {
+            return match corpus
+                .storage_binding
+                .target_for_segment("tree")
+                .map(|target| target.backend)
+            {
+                Some(RagStorageBackend::Sqlite) => self.sqlite.search_route(query),
+                Some(RagStorageBackend::Graph) => {
+                    ensure_graph_runtime_supported(&corpus)?;
+                    self.search_graph_route(&corpus, &query)
+                }
+                None => Err(RagError::SearchRouteUnavailable),
+            };
         }
         if is_sqlite_retriever(&query.retriever) {
             if !has_sqlite_runtime_tables(&corpus) {
@@ -264,8 +279,15 @@ fn has_sqlite_runtime_tables(corpus: &RagCorpusRecord) -> bool {
 fn is_graph_retriever(retriever: &str) -> bool {
     matches!(
         retriever,
-        "FULLTEXT_GRAPH_SINGLE_NODE_V1" | "VECTOR_GRAPH_SINGLE_NODE_V1"
+        "FULLTEXT_GRAPH_SINGLE_NODE_V1"
+            | "VECTOR_GRAPH_SINGLE_NODE_V1"
+            | "TREE_FULLTEXT_V1"
+            | "TREE_VECTOR_V1"
     )
+}
+
+fn is_tree_retriever(retriever: &str) -> bool {
+    matches!(retriever, "TREE_FULLTEXT_V1" | "TREE_VECTOR_V1")
 }
 
 fn is_sqlite_retriever(retriever: &str) -> bool {

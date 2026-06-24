@@ -154,6 +154,7 @@ pub(super) fn graph_segment_for_retriever(retriever: &str) -> Result<&'static st
     match retriever {
         "FULLTEXT_GRAPH_SINGLE_NODE_V1" => Ok("fulltext"),
         "VECTOR_GRAPH_SINGLE_NODE_V1" => Ok("vector"),
+        "TREE_FULLTEXT_V1" | "TREE_VECTOR_V1" => Ok("tree"),
         _ => Err(RagError::SearchRouteUnavailable),
     }
 }
@@ -516,6 +517,7 @@ pub(super) fn graph_property_name_for_logical<'a>(
     let primary = match segment {
         "source" => non_empty_mapping(&corpus.source_field_mapping),
         "textUnit" | "fulltext" | "vector" => non_empty_mapping(&corpus.text_unit_field_mapping),
+        "tree" => non_empty_mapping(&corpus.source_field_mapping),
         _ => None,
     };
     primary

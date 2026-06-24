@@ -21,11 +21,12 @@ use tron_backend::{
         rag::{
             DefaultRagStrategyRegistry, RagConfigRepository, RagDocumentSourceCall,
             RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime,
-            RagIngestAccessContext, RagIngestRequest, RagIngestScope, RagIngestService,
-            RagIngestSource, RagRerankCall, RagResolvedDocument, RagRetryIndexRequest,
-            RagRetryIndexService, RagRouteSearchQuery, RagSearchContextRequest,
-            RagSearchGraphExpansionRequest, RagSearchRepository, RagSearchRequest,
-            RagSearchRuntime, RagSearchScope, RagSearchService, RagSearchTraceRequest,
+            RagIngestAccessContext, RagIngestRepository, RagIngestRequest, RagIngestScope,
+            RagIngestService, RagIngestSource, RagPersistIngestCommand, RagRerankCall,
+            RagResolvedDocument, RagRetryIndexRequest, RagRetryIndexService, RagRouteSearchQuery,
+            RagSearchContextRequest, RagSearchGraphExpansionRequest, RagSearchRepository,
+            RagSearchRequest, RagSearchRuntime, RagSearchScope, RagSearchService,
+            RagSearchTraceRequest, RagTextUnitWrite, RagTreeNodeWrite,
         },
     },
     domain::{
@@ -696,6 +697,150 @@ async fn segmented_graph_runtime_writes_and_searches_role_specific_nodes() {
 }
 
 #[tokio::test]
+async fn graph_tree_route_with_sqlite_text_units_returns_covered_text_unit_rows() {
+    let database_url = temp_database_path("rag-skill-graph-tree-sqlite-text")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-tree-sqlite-text-store")
+        .to_string_lossy()
+        .to_string();
+    let (repository, graph_service) = build_repository(&database_url, &graph_path);
+    enable_skill_graph_tree_with_sqlite_text_units(&database_url);
+
+    repository
+        .lock()
+        .unwrap()
+        .persist_ingest(tree_route_command(
+            "rag-tree-sqlite",
+            "Graph summary for the first branch.",
+            vec![
+                (
+                    "skill:TRON_CORE:rag-tree-sqlite:v1:0",
+                    "Covered SQLite unit only.",
+                ),
+                (
+                    "skill:TRON_CORE:rag-tree-sqlite:v1:1",
+                    "Uncovered SQLite unit must stay out.",
+                ),
+            ],
+            vec!["skill:TRON_CORE:rag-tree-sqlite:v1:0"],
+        ))
+        .unwrap();
+
+    let tree_nodes = graph_service
+        .search(
+            graph_scope_for_namespace("rag_skill_tree"),
+            GraphSearchQuery {
+                filters: vec![GraphPropertyFilter {
+                    property_name: "treeNodeCode".into(),
+                    operator: GraphFilterOperator::Equals,
+                    value: GraphPropertyValue::Text("rag-tree-sqlite:root".into()),
+                }],
+                full_text: None,
+                vector_text: None,
+                embedding_model_code: None,
+                traversal: None,
+                labels: vec!["RagSkillTreeNode".into()],
+                limit: GraphQueryLimit::new(10).unwrap(),
+                min_score: None,
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(tree_nodes.len(), 1);
+    assert_eq!(
+        tree_nodes[0].node.properties.get("summaryText"),
+        Some(&GraphPropertyValue::Text(
+            "Graph summary for the first branch.".into()
+        ))
+    );
+
+    let rows = repository
+        .lock()
+        .unwrap()
+        .search_route(tree_route_query(
+            "TREE_FULLTEXT_V1",
+            "first branch",
+            None,
+            "rag-tree-sqlite",
+        ))
+        .unwrap();
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].target_code, "skill:TRON_CORE:rag-tree-sqlite:v1:0");
+    assert_eq!(rows[0].field_values["matchedBy"], json!("TREE_FULLTEXT_V1"));
+    assert_eq!(
+        rows[0].field_values["treeNodeCode"],
+        json!("rag-tree-sqlite:root")
+    );
+    assert_eq!(
+        rows[0].field_values["treeNodeTitle"],
+        json!("rag-tree-sqlite summary")
+    );
+    assert!(rows[0].field_values.get("treeScore").is_some());
+    assert!(rows[0].text.contains("Covered SQLite unit only."));
+    assert!(
+        !rows[0]
+            .text
+            .contains("Uncovered SQLite unit must stay out.")
+    );
+}
+
+#[tokio::test]
+async fn graph_tree_route_with_graph_text_units_returns_covered_text_unit_rows() {
+    let database_url = temp_database_path("rag-skill-graph-tree-graph-text")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-tree-graph-text-store")
+        .to_string_lossy()
+        .to_string();
+    let (repository, _) = build_repository(&database_url, &graph_path);
+    enable_skill_graph_tree_with_graph_text_units(&database_url);
+
+    repository
+        .lock()
+        .unwrap()
+        .persist_ingest(tree_route_command(
+            "rag-tree-graph",
+            "Graph vector summary for a covered branch.",
+            vec![
+                (
+                    "skill:TRON_CORE:rag-tree-graph:v1:0",
+                    "Covered graph unit only.",
+                ),
+                (
+                    "skill:TRON_CORE:rag-tree-graph:v1:1",
+                    "Uncovered graph unit must stay out.",
+                ),
+            ],
+            vec!["skill:TRON_CORE:rag-tree-graph:v1:0"],
+        ))
+        .unwrap();
+
+    let rows = repository
+        .lock()
+        .unwrap()
+        .search_route(tree_route_query(
+            "TREE_VECTOR_V1",
+            "covered branch",
+            Some(embedding_4(1.0, 0.0)),
+            "rag-tree-graph",
+        ))
+        .unwrap();
+
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].target_code, "skill:TRON_CORE:rag-tree-graph:v1:0");
+    assert_eq!(rows[0].field_values["matchedBy"], json!("TREE_VECTOR_V1"));
+    assert_eq!(
+        rows[0].field_values["treeNodeCode"],
+        json!("rag-tree-graph:root")
+    );
+    assert!(rows[0].field_values.get("treeScore").is_some());
+    assert!(rows[0].text.contains("Covered graph unit only."));
+    assert!(!rows[0].text.contains("Uncovered graph unit must stay out."));
+}
+
+#[tokio::test]
 async fn graph_related_write_keeps_legacy_skill_anchor_compatible() {
     let database_url = temp_database_path("rag-skill-graph-legacy-anchor")
         .to_string_lossy()
@@ -1335,6 +1480,174 @@ fn enable_skill_graph_segmented_graph_storage(database_url: &str) {
         .unwrap();
 }
 
+fn enable_skill_graph_tree_with_sqlite_text_units(database_url: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    let sqlite_field_mapping_json: String = connection
+        .query_row(
+            "SELECT field_mapping_json FROM rag_corpora WHERE corpus_id = 'skill'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    connection
+        .execute(
+            "UPDATE rag_corpora
+             SET capabilities_json = ?1,
+                 field_mapping_json = ?2,
+                 storage_binding_json = ?3
+             WHERE corpus_id = 'skill-graph'",
+            params![
+                json!({
+                    "fulltext": true,
+                    "vector": true,
+                    "tree": true,
+                    "graph": true,
+                    "reserved": false
+                })
+                .to_string(),
+                sqlite_field_mapping_json,
+                json!({
+                    "mode": "TARGETED",
+                    "bindings": {
+                        "source": "skill-sqlite-store",
+                        "textUnit": "skill-sqlite-store",
+                        "fulltext": "skill-sqlite-store",
+                        "vector": "skill-sqlite-store",
+                        "tree": "skill-tree-graph",
+                        "diagnostics": "diagnostics-store"
+                    },
+                    "targets": [
+                        {
+                            "id": "skill-sqlite-store",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_skill_text_units"
+                        },
+                        {
+                            "id": "skill-tree-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_TREE",
+                            "namespace": "rag_skill_tree",
+                            "nodeLabel": "RagSkillTreeNode",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        },
+                        {
+                            "id": "diagnostics-store",
+                            "backend": "SQLITE",
+                            "layout": "TABLE",
+                            "table": "rag_diagnostics"
+                        }
+                    ]
+                })
+                .to_string()
+            ],
+        )
+        .unwrap();
+}
+
+fn enable_skill_graph_tree_with_graph_text_units(database_url: &str) {
+    let connection = Connection::open(database_url).unwrap();
+    connection
+        .execute(
+            "UPDATE rag_corpora
+             SET capabilities_json = ?1,
+                 field_mapping_json = ?2,
+                 storage_binding_json = ?3
+             WHERE corpus_id = 'skill-graph'",
+            params![
+                json!({
+                    "fulltext": true,
+                    "vector": true,
+                    "tree": true,
+                    "graph": true,
+                    "reserved": false
+                })
+                .to_string(),
+                json!({
+                    "source": {
+                        "sourceCode": "sourceCode",
+                        "sourceVersion": "sourceVersion",
+                        "sourceType": "sourceType",
+                        "scopeType": "scopeType",
+                        "scopeCode": "scopeCode",
+                        "status": "sourceStatus",
+                        "sourceStatus": "sourceStatus",
+                        "title": "title",
+                        "sourceMetadata": "sourceMetadataJson",
+                        "skillName": "skillName",
+                        "skillDescription": "skillDescription"
+                    },
+                    "textUnit": {
+                        "sourceCode": "sourceCode",
+                        "sourceVersion": "sourceVersion",
+                        "scopeType": "scopeType",
+                        "scopeCode": "scopeCode",
+                        "targetCode": "targetCode",
+                        "textUnitStatus": "textUnitStatus",
+                        "text": "text",
+                        "skillName": "skillName",
+                        "skillDescription": "skillDescription"
+                    }
+                })
+                .to_string(),
+                json!({
+                    "mode": "TARGETED",
+                    "bindings": {
+                        "source": "skill-source-graph",
+                        "textUnit": "skill-text-unit-graph",
+                        "fulltext": "skill-fulltext-graph",
+                        "vector": "skill-vector-graph",
+                        "tree": "skill-tree-graph"
+                    },
+                    "targets": [
+                        {
+                            "id": "skill-source-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_SINGLE_NODE",
+                            "namespace": "rag_skill_tree_source",
+                            "nodeLabel": "RagSkillTreeSource",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        },
+                        {
+                            "id": "skill-text-unit-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_SINGLE_NODE",
+                            "namespace": "rag_skill_tree_text_units",
+                            "nodeLabel": "RagSkillTreeTextUnit",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        },
+                        {
+                            "id": "skill-fulltext-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_SINGLE_NODE",
+                            "namespace": "rag_skill_tree_fulltext",
+                            "nodeLabel": "RagSkillTreeFulltext",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        },
+                        {
+                            "id": "skill-vector-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_SINGLE_NODE",
+                            "namespace": "rag_skill_tree_vectors",
+                            "nodeLabel": "RagSkillTreeVector",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        },
+                        {
+                            "id": "skill-tree-graph",
+                            "backend": "GRAPH",
+                            "layout": "GRAPH_TREE",
+                            "namespace": "rag_skill_tree",
+                            "nodeLabel": "RagSkillTreeNode",
+                            "codeStrategy": "CORPUS_SOURCE_VERSION_SCOPE_HASH"
+                        }
+                    ]
+                })
+                .to_string()
+            ],
+        )
+        .unwrap();
+}
+
 async fn assert_segment_node(
     graph_service: &GraphService<ScopeResolver<FakeWorkspaceProvider>>,
     namespace: &str,
@@ -1363,6 +1676,119 @@ async fn assert_segment_node(
         .await
         .unwrap();
     assert_eq!(nodes.len(), 1, "{label} should contain one segment node");
+}
+
+fn tree_route_command(
+    skill_name: &str,
+    summary_text: &str,
+    units: Vec<(&str, &str)>,
+    covered_text_unit_codes: Vec<&str>,
+) -> RagPersistIngestCommand {
+    let source_code = format!("skill:TRON_CORE:{skill_name}");
+    let covered_text_unit_count = covered_text_unit_codes.len() as i64;
+    RagPersistIngestCommand {
+        corpus_id: "skill-graph".into(),
+        profile_id: "skill-graph-tree-ingest-v1".into(),
+        source_code: source_code.clone(),
+        source_version: "v1".into(),
+        source_type: "SKILL".into(),
+        scope: RagIngestScope {
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+        },
+        source_status: "ACTIVE".into(),
+        title: Some(skill_name.into()),
+        content_hash: format!("{skill_name}-content-hash"),
+        body_hash: Some(format!("{skill_name}-body-hash")),
+        metadata: json!({}),
+        domain_fields: std::collections::BTreeMap::from([
+            ("skillName".into(), json!(skill_name)),
+            ("skillDescription".into(), json!(summary_text)),
+        ]),
+        related_graph: None,
+        graph_write_policy: json!({}),
+        text_units: units
+            .into_iter()
+            .enumerate()
+            .map(|(ordinal, (code, text))| RagTextUnitWrite {
+                text_unit_code: code.into(),
+                unit_type: "LEAF".into(),
+                text: text.into(),
+                search_text: text.into(),
+                heading_path: "Skill".into(),
+                ordinal,
+                token_count: 4,
+                content_hash: format!("{code}-hash"),
+                status: "ACTIVE".into(),
+                fulltext_status: "INDEXED".into(),
+                embedding_model_code: Some("FAKE_EMBEDDING".into()),
+                embedding_version: Some("v1".into()),
+                embedding_text_hash: Some(format!("{code}-embedding-hash")),
+                embedding_dimension: Some(4),
+                embedding: Some(embedding_bytes_4(1.0, 0.0)),
+                embedding_status: "INDEXED".into(),
+                metadata: json!({}),
+            })
+            .collect(),
+        tree_nodes: vec![RagTreeNodeWrite {
+            tree_node_code: format!("{skill_name}:root"),
+            parent_node_code: "0".into(),
+            source_code,
+            source_version: "v1".into(),
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+            path_key: "/".into(),
+            level: 0,
+            ordinal: 0,
+            title: format!("{skill_name} summary"),
+            summary_text: summary_text.into(),
+            summary_token_count: 6,
+            summary_content_hash: format!("{skill_name}-summary-hash"),
+            summary_fulltext_status: "INDEXED".into(),
+            summary_embedding_status: "INDEXED".into(),
+            summary_embedding_model_code: Some("FAKE_EMBEDDING".into()),
+            summary_embedding_version: Some("v1".into()),
+            summary_embedding_text_hash: Some(format!("{skill_name}-summary-embedding-hash")),
+            summary_embedding_dimension: Some(4),
+            summary_embedding: Some(embedding_bytes_4(1.0, 0.0)),
+            covered_text_unit_codes: covered_text_unit_codes
+                .into_iter()
+                .map(ToOwned::to_owned)
+                .collect(),
+            covered_text_unit_count,
+            metadata: json!({ "summaryStrategy": "TEST" }),
+            status: "ACTIVE".into(),
+        }],
+        warnings: Vec::new(),
+        workspace_code: "TRON_CORE".into(),
+        user_code: "USR-AUTH-0001".into(),
+        agent_code: "AGENT_CODEX".into(),
+    }
+}
+
+fn tree_route_query(
+    retriever: &str,
+    query: &str,
+    query_embedding: Option<Vec<f32>>,
+    skill_name: &str,
+) -> RagRouteSearchQuery {
+    RagRouteSearchQuery {
+        corpus_id: "skill-graph".into(),
+        route_id: format!("{skill_name}-tree"),
+        retriever: retriever.into(),
+        workspace_code: "TRON_CORE".into(),
+        query: query.into(),
+        query_embedding,
+        query_embedding_model_code: Some("FAKE_EMBEDDING".into()),
+        source_version: "v1".into(),
+        scopes: vec![RagSearchScope {
+            scope_type: "SPACE".into(),
+            scope_code: "TRON_CORE".into(),
+        }],
+        filters: json!({}),
+        return_fields: Vec::new(),
+        limit: 5,
+    }
 }
 
 fn search_request(profile_id: &str, query: &str) -> RagSearchRequest {
@@ -1434,6 +1860,13 @@ fn graph_scope_for_namespace(namespace: &str) -> GraphScopeCommand {
 
 fn embedding_4(left: f32, right: f32) -> Vec<f32> {
     vec![left, right, 0.0, 0.0]
+}
+
+fn embedding_bytes_4(left: f32, right: f32) -> Vec<u8> {
+    embedding_4(left, right)
+        .into_iter()
+        .flat_map(f32::to_le_bytes)
+        .collect()
 }
 
 #[derive(Clone)]

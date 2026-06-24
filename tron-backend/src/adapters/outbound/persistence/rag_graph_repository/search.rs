@@ -19,7 +19,11 @@ use super::{
     model::{
         append_graph_filters, graph_filter, graph_hit_to_row, graph_node_json,
         graph_properties_json, graph_segment_for_retriever, graph_target_for_retriever,
-        map_graph_error,
+        map_graph_error, optional_graph_target_for_segment,
+    },
+    tree_rows::{
+        covered_text_unit_codes_from_row, graph_text_unit_hit_to_tree_row, graph_tree_hit_to_row,
+        tree_output_field_values,
     },
 };
 
@@ -29,6 +33,12 @@ impl GraphBackedRagRepository {
         corpus: &RagCorpusRecord,
         query: &RagRouteSearchQuery,
     ) -> Result<Vec<RagSearchRow>, RagError> {
+        if matches!(
+            query.retriever.as_str(),
+            "TREE_FULLTEXT_V1" | "TREE_VECTOR_V1"
+        ) {
+            return self.search_graph_tree_route(corpus, query);
+        }
         let mut rows = Vec::new();
         let segment = graph_segment_for_retriever(&query.retriever)?;
         let target = graph_target_for_retriever(corpus, &query.retriever)?;
@@ -84,6 +94,157 @@ impl GraphBackedRagRepository {
         });
         rows.truncate(query.limit);
         Ok(rows)
+    }
+
+    fn search_graph_tree_route(
+        &self,
+        corpus: &RagCorpusRecord,
+        query: &RagRouteSearchQuery,
+    ) -> Result<Vec<RagSearchRow>, RagError> {
+        let target = graph_target_for_retriever(corpus, &query.retriever)?;
+        let mut tree_rows = Vec::new();
+        for rag_scope in &query.scopes {
+            let scope = self.resolve_graph_scope_for_namespace(
+                &target.namespace,
+                &query.workspace_code,
+                &rag_scope.scope_type,
+                &rag_scope.scope_code,
+            )?;
+            let mut filters = vec![
+                graph_filter("corpusId", &query.corpus_id),
+                graph_filter("sourceVersion", &query.source_version),
+                graph_filter("scopeType", &rag_scope.scope_type),
+                graph_filter("scopeCode", &rag_scope.scope_code),
+                graph_filter("sourceStatus", "ACTIVE"),
+                graph_filter("status", "ACTIVE"),
+            ];
+            match query.retriever.as_str() {
+                "TREE_FULLTEXT_V1" => {
+                    filters.push(graph_filter("summaryFulltextStatus", "INDEXED"));
+                }
+                "TREE_VECTOR_V1" => {
+                    filters.push(graph_filter("summaryEmbeddingStatus", "INDEXED"));
+                }
+                _ => return Err(RagError::SearchRouteUnavailable),
+            }
+            append_graph_filters(&mut filters, corpus, &query.filters, "tree");
+            let full_text = if query.retriever == "TREE_FULLTEXT_V1" {
+                Some(query.query.clone())
+            } else {
+                None
+            };
+            let graph_query = GraphSearchQuery {
+                filters,
+                full_text,
+                vector_text: None,
+                embedding_model_code: None,
+                traversal: None,
+                labels: vec![target.node_label.clone()],
+                limit: GraphQueryLimit::new(query.limit.max(1)).map_err(map_graph_error)?,
+                min_score: None,
+            }
+            .validate()
+            .map_err(map_graph_error)?;
+            let prepared_query = prepare_graph_search_query(graph_query, query);
+            let hits = self
+                .graph_store
+                .search(&scope, prepared_query)
+                .map_err(map_graph_error)?;
+            tree_rows.extend(
+                hits.into_iter().map(|hit| {
+                    graph_tree_hit_to_row(corpus, hit.node, hit.score, &query.retriever)
+                }),
+            );
+        }
+        tree_rows.sort_by(|left, right| {
+            right
+                .storage_score
+                .partial_cmp(&left.storage_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| left.target_code.cmp(&right.target_code))
+        });
+        let mut rows = self.hydrate_graph_tree_rows(corpus, query, tree_rows)?;
+        rows.truncate(query.limit);
+        Ok(rows)
+    }
+
+    fn hydrate_graph_tree_rows(
+        &self,
+        corpus: &RagCorpusRecord,
+        query: &RagRouteSearchQuery,
+        tree_rows: Vec<RagSearchRow>,
+    ) -> Result<Vec<RagSearchRow>, RagError> {
+        if optional_graph_target_for_segment(corpus, "textUnit")?.is_some() {
+            return self.hydrate_graph_tree_rows_from_graph_text_units(corpus, query, tree_rows);
+        }
+        if corpus
+            .storage_binding
+            .sqlite_table_for_segment("textUnit")
+            .is_some()
+        {
+            return self
+                .sqlite
+                .hydrate_graph_tree_rows_from_text_units(corpus, tree_rows);
+        }
+        Ok(tree_rows
+            .into_iter()
+            .map(|mut row| {
+                row.field_values = tree_output_field_values(&row);
+                row
+            })
+            .collect())
+    }
+
+    fn hydrate_graph_tree_rows_from_graph_text_units(
+        &self,
+        corpus: &RagCorpusRecord,
+        query: &RagRouteSearchQuery,
+        tree_rows: Vec<RagSearchRow>,
+    ) -> Result<Vec<RagSearchRow>, RagError> {
+        let target = optional_graph_target_for_segment(corpus, "textUnit")?
+            .ok_or(RagError::SearchRouteUnavailable)?;
+        let mut rows = Vec::new();
+        for tree_row in tree_rows {
+            let covered_codes = covered_text_unit_codes_from_row(&tree_row);
+            for text_unit_code in covered_codes {
+                let scope = self.resolve_graph_scope_for_namespace(
+                    &target.namespace,
+                    &query.workspace_code,
+                    &tree_row.scope_type,
+                    &tree_row.scope_code,
+                )?;
+                let graph_query = GraphSearchQuery {
+                    filters: vec![
+                        graph_filter("corpusId", &query.corpus_id),
+                        graph_filter("sourceCode", &tree_row.source_code),
+                        graph_filter("sourceVersion", &tree_row.source_version),
+                        graph_filter("scopeType", &tree_row.scope_type),
+                        graph_filter("scopeCode", &tree_row.scope_code),
+                        graph_filter("sourceStatus", "ACTIVE"),
+                        graph_filter("textUnitStatus", "ACTIVE"),
+                        graph_filter("textUnitCode", &text_unit_code),
+                    ],
+                    full_text: None,
+                    vector_text: None,
+                    embedding_model_code: None,
+                    traversal: None,
+                    labels: vec![target.node_label.clone()],
+                    limit: GraphQueryLimit::new(1).map_err(map_graph_error)?,
+                    min_score: None,
+                }
+                .validate()
+                .map_err(map_graph_error)?;
+                let hits = self
+                    .graph_store
+                    .search(&scope, PreparedGraphSearchQuery::plain(graph_query))
+                    .map_err(map_graph_error)?;
+                rows.extend(
+                    hits.into_iter()
+                        .map(|hit| graph_text_unit_hit_to_tree_row(corpus, hit.node, &tree_row)),
+                );
+            }
+        }
+        Ok(dedup_graph_tree_rows(rows))
     }
 
     pub(super) fn expand_graph_hit(
@@ -162,6 +323,21 @@ impl GraphBackedRagRepository {
             "edges": edges.into_values().collect::<Vec<_>>()
         })))
     }
+}
+
+fn dedup_graph_tree_rows(rows: Vec<RagSearchRow>) -> Vec<RagSearchRow> {
+    let mut seen = std::collections::BTreeSet::new();
+    rows.into_iter()
+        .filter(|row| {
+            let tree_node_code = row
+                .field_values
+                .get("treeNodeCode")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            seen.insert((row.target_code.clone(), tree_node_code))
+        })
+        .collect()
 }
 
 fn prepare_graph_search_query(

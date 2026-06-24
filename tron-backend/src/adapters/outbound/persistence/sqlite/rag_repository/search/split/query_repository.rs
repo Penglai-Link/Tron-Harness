@@ -76,6 +76,7 @@ impl SqliteRagRepository {
             .map(|row| hydrate_graph_row_from_text_units(self, &plan, row))
             .collect()
     }
+
 }
 
 fn search_route(

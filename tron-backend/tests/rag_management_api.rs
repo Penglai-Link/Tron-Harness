@@ -501,6 +501,82 @@ async fn corpus_management_tree_graph_layout_is_valid_for_tree_segment() {
 }
 
 #[tokio::test]
+async fn profile_catalog_exposes_graph_tree_routes_and_storage_summary() {
+    let database_url = temp_database_path("rag-management-tree-graph-catalog")
+        .to_string_lossy()
+        .to_string();
+    let router = app_with_database(&database_url);
+
+    let create = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/corpora",
+        Some(team_playbook_tree_graph_request()),
+    )
+    .await;
+    assert_eq!(create.status(), StatusCode::CREATED);
+
+    let list = authenticated_request(&router, Method::GET, "/api/v1/rag/corpora", None).await;
+    let list_body = response_json(list).await;
+    let team_playbook = list_body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|record| record["corpusId"] == json!("team-playbook"))
+        .cloned()
+        .expect("team-playbook should be returned");
+    assert!(
+        team_playbook["storageSummary"]
+            .as_str()
+            .is_some_and(|summary| summary
+                .contains("tree=graph.rag_team_playbook_tree/TeamPlaybookTreeNode")),
+        "{team_playbook}"
+    );
+
+    let catalog = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/rag/profiles/catalog?profileType=RETRIEVAL",
+        None,
+    )
+    .await;
+    assert_eq!(catalog.status(), StatusCode::OK);
+    let catalog_body = response_json(catalog).await;
+    assert!(
+        catalog_body["data"]["retrievalRouteTypes"]
+            .as_array()
+            .is_some_and(|rows| rows.iter().any(|row| {
+                row["corpusId"] == json!("team-playbook")
+                    && row["routeTypes"].as_array().is_some_and(|route_types| {
+                        route_types.contains(&json!("TREE_FULLTEXT"))
+                            && route_types.contains(&json!("TREE_VECTOR"))
+                    })
+            })),
+        "{catalog_body}"
+    );
+    assert!(
+        catalog_body["data"]["retrievalStrategies"]
+            .as_array()
+            .is_some_and(|rows| rows.iter().any(|row| {
+                row["corpusId"] == json!("team-playbook")
+                    && row["routeType"] == json!("TREE_FULLTEXT")
+                    && row["strategyIds"] == json!(["TREE_FULLTEXT_V1"])
+            })),
+        "{catalog_body}"
+    );
+    assert!(
+        catalog_body["data"]["retrievalStrategies"]
+            .as_array()
+            .is_some_and(|rows| rows.iter().any(|row| {
+                row["corpusId"] == json!("team-playbook")
+                    && row["routeType"] == json!("TREE_VECTOR")
+                    && row["strategyIds"] == json!(["TREE_VECTOR_V1"])
+            })),
+        "{catalog_body}"
+    );
+}
+
+#[tokio::test]
 async fn corpus_management_saves_segmented_graph_targets_for_runtime() {
     let database_url = temp_database_path("rag-management-segmented-graph-runtime")
         .to_string_lossy()

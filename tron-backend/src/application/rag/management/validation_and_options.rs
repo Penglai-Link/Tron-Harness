@@ -378,7 +378,7 @@ fn best_profile_reference<'a>(
 }
 
 fn storage_summary(binding: &RagStorageBinding) -> String {
-    ["source", "textUnit", "fulltext", "vector"]
+    ["source", "textUnit", "fulltext", "vector", "tree"]
         .into_iter()
         .map(|segment| {
             let target = binding.target_for_segment(segment);
@@ -460,12 +460,10 @@ fn retrieval_strategy_ids_for_corpus(
             RagStorageBackend::Sqlite => Some(vec!["VECTOR_SQLITE_VEC0_COSINE_V1".into()]),
             RagStorageBackend::Graph => Some(vec!["VECTOR_GRAPH_SINGLE_NODE_V1".into()]),
         },
-        "TREE_FULLTEXT"
-            if capabilities.tree && capabilities.fulltext && has_sqlite_tree_storage(corpus) =>
-        {
+        "TREE_FULLTEXT" if capabilities.tree && capabilities.fulltext && has_tree_storage(corpus) => {
             Some(vec!["TREE_FULLTEXT_V1".into()])
         }
-        "TREE_VECTOR" if capabilities.tree && capabilities.vector && has_sqlite_tree_storage(corpus) => {
+        "TREE_VECTOR" if capabilities.tree && capabilities.vector && has_tree_storage(corpus) => {
             Some(vec!["TREE_VECTOR_V1".into()])
         }
         "STRUCTURED_FILTER" if has_sqlite_text_unit_storage(corpus) => {
@@ -504,11 +502,8 @@ fn has_sqlite_text_unit_storage(corpus: &RagCorpusRecord) -> bool {
     )
 }
 
-fn has_sqlite_tree_storage(corpus: &RagCorpusRecord) -> bool {
-    matches!(
-        segment_target_backend(&corpus.storage_binding, "tree"),
-        Some(RagStorageBackend::Sqlite)
-    )
+fn has_tree_storage(corpus: &RagCorpusRecord) -> bool {
+    segment_target_backend(&corpus.storage_binding, "tree").is_some()
 }
 
 fn legacy_graph_strategy_ids_for_corpus(corpus: &RagCorpusRecord) -> Option<Vec<String>> {

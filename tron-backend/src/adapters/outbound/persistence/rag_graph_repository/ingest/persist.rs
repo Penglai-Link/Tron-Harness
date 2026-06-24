@@ -20,7 +20,9 @@ use super::{
             node_label, optional_graph_target_for_segment, push_text_prop,
         },
     },
-    properties::{push_domain_field_properties, source_properties, text_unit_properties},
+    properties::{
+        push_domain_field_properties, source_properties, text_unit_properties, tree_node_properties,
+    },
 };
 
 impl GraphBackedRagRepository {
@@ -156,6 +158,7 @@ impl GraphBackedRagRepository {
         let fulltext_target = optional_graph_target_for_segment(corpus, "fulltext")?
             .or_else(|| text_unit_target.clone());
         let vector_target = optional_graph_target_for_segment(corpus, "vector")?;
+        let tree_target = optional_graph_target_for_segment(corpus, "tree")?;
         let mut related_anchors = Vec::new();
 
         if let Some(target) = source_target.as_ref() {
@@ -236,6 +239,48 @@ impl GraphBackedRagRepository {
                     properties,
                     full_text: Some(unit.search_text.clone()),
                     embedding_text: Some(unit.search_text.clone()),
+                    embedding_model_code: semantic_model_code.clone(),
+                }
+                .validate()
+                .map_err(map_graph_error)?;
+                self.upsert_segment_node(
+                    target,
+                    &command,
+                    PreparedGraphNodeWrite {
+                        command: node,
+                        semantic_model_code,
+                        semantic_projection,
+                        semantic_slices: Vec::new(),
+                    },
+                )?;
+                related_anchors.push((target.clone(), node_code));
+            }
+        }
+
+        if let Some(target) = tree_target.as_ref() {
+            for tree_node in &command.tree_nodes {
+                let node_code = graph_segment_node_code(
+                    "tree",
+                    &command,
+                    Some(tree_node.tree_node_code.as_str()),
+                );
+                let properties = tree_node_properties(corpus, &command, tree_node, &node_code)?;
+                let semantic_projection = tree_node
+                    .summary_embedding
+                    .as_deref()
+                    .map(decode_embedding)
+                    .filter(|embedding| !embedding.is_empty())
+                    .map(GraphSemanticProjection::from_values);
+                let semantic_model_code = tree_node
+                    .summary_embedding_model_code
+                    .clone()
+                    .filter(|value| !value.trim().is_empty());
+                let node = GraphNodeWrite {
+                    node_code: node_code.clone(),
+                    labels: vec![target.node_label.clone()],
+                    properties,
+                    full_text: Some(tree_node.summary_text.clone()),
+                    embedding_text: Some(tree_node.summary_text.clone()),
                     embedding_model_code: semantic_model_code.clone(),
                 }
                 .validate()

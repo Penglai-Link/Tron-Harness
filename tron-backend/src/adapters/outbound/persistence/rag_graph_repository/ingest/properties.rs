@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde_json::Value;
 
 use crate::{
-    application::rag::{RagPersistIngestCommand, RagTextUnitWrite},
+    application::rag::{RagPersistIngestCommand, RagTextUnitWrite, RagTreeNodeWrite},
     domain::{
         graph::GraphPropertyValue,
         rag::{RagCorpusRecord, RagError},
@@ -101,6 +101,86 @@ pub(super) fn text_unit_properties(
     Ok(properties)
 }
 
+pub(super) fn tree_node_properties(
+    corpus: &RagCorpusRecord,
+    command: &RagPersistIngestCommand,
+    node: &RagTreeNodeWrite,
+    node_code: &str,
+) -> Result<BTreeMap<String, GraphPropertyValue>, RagError> {
+    let mut properties = BTreeMap::new();
+    push_text_prop(&mut properties, "corpusId", &command.corpus_id);
+    push_text_prop(&mut properties, "sourceCode", &node.source_code);
+    push_text_prop(&mut properties, "sourceVersion", &node.source_version);
+    push_text_prop(&mut properties, "scopeType", &node.scope_type);
+    push_text_prop(&mut properties, "scopeCode", &node.scope_code);
+    push_text_prop(&mut properties, "sourceStatus", &command.source_status);
+    push_text_prop(&mut properties, "ragWorkspaceCode", &command.workspace_code);
+    push_text_prop(&mut properties, "targetCode", node_code);
+    push_text_prop(&mut properties, "treeNodeCode", &node.tree_node_code);
+    push_text_prop(&mut properties, "parentNodeCode", &node.parent_node_code);
+    push_text_prop(&mut properties, "pathKey", &node.path_key);
+    properties.insert("level".into(), GraphPropertyValue::Integer(node.level));
+    properties.insert("ordinal".into(), GraphPropertyValue::Integer(node.ordinal));
+    push_text_prop(&mut properties, "title", &node.title);
+    push_text_prop(&mut properties, "summaryText", &node.summary_text);
+    push_text_prop(&mut properties, "searchText", &node.summary_text);
+    properties.insert(
+        "summaryTokenCount".into(),
+        GraphPropertyValue::Integer(node.summary_token_count),
+    );
+    push_text_prop(
+        &mut properties,
+        "summaryContentHash",
+        &node.summary_content_hash,
+    );
+    push_text_prop(
+        &mut properties,
+        "summaryFulltextStatus",
+        &node.summary_fulltext_status,
+    );
+    push_text_prop(
+        &mut properties,
+        "summaryEmbeddingStatus",
+        &node.summary_embedding_status,
+    );
+    push_text_prop(
+        &mut properties,
+        "summaryEmbeddingModelCode",
+        node.summary_embedding_model_code.as_deref().unwrap_or(""),
+    );
+    push_text_prop(
+        &mut properties,
+        "summaryEmbeddingVersion",
+        node.summary_embedding_version.as_deref().unwrap_or(""),
+    );
+    push_text_prop(
+        &mut properties,
+        "summaryEmbeddingTextHash",
+        node.summary_embedding_text_hash.as_deref().unwrap_or(""),
+    );
+    properties.insert(
+        "summaryEmbeddingDimension".into(),
+        GraphPropertyValue::Integer(node.summary_embedding_dimension.unwrap_or(0)),
+    );
+    push_text_prop(
+        &mut properties,
+        "coveredTextUnitCodes",
+        &json_string(&node.covered_text_unit_codes)?,
+    );
+    properties.insert(
+        "coveredTextUnitCount".into(),
+        GraphPropertyValue::Integer(node.covered_text_unit_count),
+    );
+    push_text_prop(
+        &mut properties,
+        "metadataJson",
+        &json_string(&node.metadata)?,
+    );
+    push_text_prop(&mut properties, "status", &node.status);
+    push_domain_field_properties(corpus, "tree", command, &mut properties)?;
+    Ok(properties)
+}
+
 pub(super) fn push_domain_field_properties(
     corpus: &RagCorpusRecord,
     segment: &str,
@@ -143,6 +223,21 @@ fn is_reserved_main_node_property(name: &str) -> bool {
             | "sourceMetadataJson"
             | "tokenCount"
             | "embeddingJson"
+            | "treeNodeCode"
+            | "parentNodeCode"
+            | "pathKey"
+            | "level"
+            | "summaryText"
+            | "summaryTokenCount"
+            | "summaryContentHash"
+            | "summaryFulltextStatus"
+            | "summaryEmbeddingStatus"
+            | "summaryEmbeddingModelCode"
+            | "summaryEmbeddingVersion"
+            | "summaryEmbeddingTextHash"
+            | "summaryEmbeddingDimension"
+            | "coveredTextUnitCodes"
+            | "coveredTextUnitCount"
     )
 }
 

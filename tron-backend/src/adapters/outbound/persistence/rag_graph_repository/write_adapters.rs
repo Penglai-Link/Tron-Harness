@@ -101,7 +101,11 @@ fn execute_graph_write(
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
     ensure_graph_runtime_supported(corpus)?;
-    if operations.len() > 1 {
+    if operations.len() > 1
+        || operations
+            .iter()
+            .any(|operation| operation.segments.contains("tree"))
+    {
         repository.persist_graph_segmented(corpus, command.clone())
     } else {
         repository.persist_graph_single_node(corpus, command.clone())
