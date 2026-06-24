@@ -70,7 +70,7 @@ pub(super) const ZH_CN: &[(&str, &str)] = &[
     ),
     (
         "agent.toolCatalog.tools.app.common.params.runtimeRole",
-        "应用运行角色，可选值：frontend、backend。",
+        "应用运行角色，可选值：frontend、backend、mono。",
     ),
     (
         "agent.toolCatalog.tools.app.common.params.repositoryUrl",

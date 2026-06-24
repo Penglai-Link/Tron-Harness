@@ -1,6 +1,6 @@
 import type { BadgeProps } from "@/shared/ui/Badge";
 
-export type AppRuntimeRole = "Frontend" | "Backend";
+export type AppRuntimeRole = "Frontend" | "Backend" | "Mono";
 export type AppStatus = "Active" | "Archived";
 
 export interface AppListItem {
@@ -76,7 +76,9 @@ export function appStatusTone(status: AppStatus): BadgeProps["tone"] {
 }
 
 export function appRuntimeRoleTone(runtimeRole: AppRuntimeRole): BadgeProps["tone"] {
-  return runtimeRole === "Frontend" ? "accent" : "neutral";
+  if (runtimeRole === "Frontend") return "accent";
+  if (runtimeRole === "Mono") return "success";
+  return "neutral";
 }
 
 export function formatAppTimestamp(value: string | null) {

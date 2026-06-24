@@ -751,8 +751,9 @@ export function WorkspaceManagementPage() {
   }
 
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader
+        className="mb-5 shrink-0"
         title={pt("Workspace Management")}
         actions={(
           <>
@@ -768,8 +769,8 @@ export function WorkspaceManagementPage() {
         )}
       />
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
-        <SurfaceCard className="flex min-h-[28rem] flex-col space-y-4 xl:sticky xl:top-20 xl:h-[calc(100vh-6.5rem)]">
+      <div className="grid min-h-0 flex-1 gap-5 xl:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
+        <SurfaceCard className="flex min-h-[28rem] flex-col space-y-4 xl:min-h-0 xl:h-full">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pt("Workspace Tree")}</h2>
@@ -804,8 +805,8 @@ export function WorkspaceManagementPage() {
           </div>
         </SurfaceCard>
 
-        <div className="space-y-5">
-          <SurfaceCard className="space-y-6">
+        <div className="min-h-0 space-y-5 xl:overflow-hidden">
+          <SurfaceCard className="min-h-[28rem] space-y-6 xl:h-full xl:min-h-0 xl:overflow-y-auto">
             <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">{pt("Workspace Studio")}</p>
@@ -832,10 +833,10 @@ export function WorkspaceManagementPage() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-4 border-t border-[var(--color-outline-variant)] pt-4 xl:flex-row xl:items-center xl:justify-between">
+            <div className="space-y-4 border-t border-[var(--color-outline-variant)] pt-4">
               <SegmentedTabs value={inspectorTab} onValueChange={(value) => setInspectorTab(value as WorkspaceInspectorTab)} items={localizedInspectorTabs} />
               {detail && inspectorTab !== "create" ? (
-                <div className="grid gap-3 sm:grid-cols-3 xl:max-w-[28rem] xl:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-3">
                   <InspectorStat label={pt("Direct Users")} value={formatNumber(detail.directUserCount)} />
                   <InspectorStat label={pt("Role Grants")} value={formatNumber(detail.roleGrantCount)} />
                   <InspectorStat label={pt("Effective Users")} value={formatNumber(detail.effectiveUserCount)} />
@@ -1180,6 +1181,6 @@ export function WorkspaceManagementPage() {
           </SurfaceCard>
         </div>
       </div>
-    </>
+    </div>
   );
 }

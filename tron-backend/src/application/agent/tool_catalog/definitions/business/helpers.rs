@@ -322,7 +322,7 @@ pub(super) fn app_mutation_schema(create: bool) -> Value {
             "name": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.name" },
             "description": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.description" },
             "localDirectory": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.app.common.params.localDirectory" },
-            "runtimeRole": { "type": "string", "enum": ["frontend", "backend"], "x-i18n-description-key": "agent.toolCatalog.tools.app.common.params.runtimeRole" },
+            "runtimeRole": { "type": "string", "enum": ["frontend", "backend", "mono"], "x-i18n-description-key": "agent.toolCatalog.tools.app.common.params.runtimeRole" },
             "repositoryUrl": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.app.common.params.repositoryUrl" },
             "defaultBranch": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.app.common.params.defaultBranch" },
             "tags": { "type": "array", "items": { "type": "string" }, "default": [], "x-i18n-description-key": "agent.toolCatalog.common.params.tags" }

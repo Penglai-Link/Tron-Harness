@@ -8,6 +8,7 @@ use crate::shared::id::SnowflakeId;
 pub enum AppRuntimeRole {
     Frontend,
     Backend,
+    Mono,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -184,6 +185,7 @@ pub fn app_runtime_role_to_storage(runtime_role: AppRuntimeRole) -> &'static str
     match runtime_role {
         AppRuntimeRole::Frontend => "frontend",
         AppRuntimeRole::Backend => "backend",
+        AppRuntimeRole::Mono => "mono",
     }
 }
 
@@ -191,6 +193,7 @@ pub fn app_runtime_role_from_storage(value: &str) -> Result<AppRuntimeRole, AppE
     match value {
         "frontend" => Ok(AppRuntimeRole::Frontend),
         "backend" => Ok(AppRuntimeRole::Backend),
+        "mono" => Ok(AppRuntimeRole::Mono),
         _ => Err(AppError::StorageFailure),
     }
 }

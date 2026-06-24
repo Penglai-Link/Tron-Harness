@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import { useNavigate } from "react-router";
@@ -12,6 +13,8 @@ import {
 import { Button } from "@/shared/ui/Button";
 import {
   Field,
+  MultiSelectDropdown,
+  OptionSelect,
   PageHeader,
   SelectInput,
   SurfaceCard,
@@ -29,6 +32,17 @@ import {
 } from "@/domain/task/hooks";
 import { TaskAppSelectionField } from "@/domain/task/components";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { fetchWorkspaceSystemAgents } from "@/domain/agent/api";
+import { listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
+import { fetchWorkspaceSelectOptions } from "@/domain/model/api/modelApi";
+import { getWorkspaceSelectOptions } from "@/domain/model/mock/data";
+import {
+  automationModelCodeFromOption,
+  automationModelOptionsForAgent,
+  availableAutomationAgents,
+  mainAutomationAgentOption,
+} from "@/domain/automation/pages/automationExecutionOptions";
+import type { AutomationAgentOption } from "@/domain/automation/pages/automationExecutionOptions";
 import type {
   TaskPriority,
   TaskSourceType,
@@ -51,6 +65,11 @@ export function CreateTaskPage() {
   const [sourceType, setSourceType] = useState<TaskSourceType>("Internal");
   const [sourceUrl, setSourceUrl] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("Medium");
+  const [agentOptions, setAgentOptions] = useState<AutomationAgentOption[]>(() => [mainAutomationAgentOption]);
+  const [selectedAgentCode, setSelectedAgentCode] = useState(mainAutomationAgentOption.agentCode);
+  const [selectedModelOptionCode, setSelectedModelOptionCode] = useState("");
+  const [workspaceModelOptions, setWorkspaceModelOptions] = useState<ReturnType<typeof getWorkspaceSelectOptions>>(() => []);
+  const [executionOptionsLoading, setExecutionOptionsLoading] = useState(false);
   const [agentCodesInput, setAgentCodesInput] = useState("");
   const [selectedAppCodes, setSelectedAppCodes] = useState<string[]>([]);
   const [assigneeUserCodes, setAssigneeUserCodes] = useState<string[]>([]);
@@ -63,6 +82,91 @@ export function CreateTaskPage() {
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const activeWorkspaceCode = activeWorkspace?.workspaceCode ?? "";
   const { appOptions, effectiveUsers, loading: workspaceOptionsLoading } = useTaskWorkspaceOptions(activeWorkspaceCode);
+  const executionAgentSelectOptions = useMemo(
+    () => agentOptions.map((agent) => ({
+      label: `${agent.name} (${agent.agentCode})`,
+      value: agent.agentCode,
+    })),
+    [agentOptions],
+  );
+  const userOptions = useMemo(
+    () => effectiveUsers.map((user) => ({
+      description: user.userCode,
+      label: user.displayName,
+      value: user.userCode,
+    })),
+    [effectiveUsers],
+  );
+  const selectedAgent = useMemo(
+    () => agentOptions.find((agent) => agent.agentCode === selectedAgentCode) ?? mainAutomationAgentOption,
+    [agentOptions, selectedAgentCode],
+  );
+  const modelOptions = useMemo(
+    () => automationModelOptionsForAgent(workspaceModelOptions, selectedAgent),
+    [selectedAgent, workspaceModelOptions],
+  );
+  const executionModelSelectOptions = useMemo(
+    () => modelOptions.map((model) => ({
+      label: model.label,
+      value: model.optionCode,
+    })),
+    [modelOptions],
+  );
+  const selectedModelCode = useMemo(
+    () => automationModelCodeFromOption(modelOptions, selectedModelOptionCode),
+    [modelOptions, selectedModelOptionCode],
+  );
+
+  useEffect(() => {
+    if (agentOptions.some((agent) => agent.agentCode === selectedAgentCode)) return;
+    setSelectedAgentCode(mainAutomationAgentOption.agentCode);
+  }, [agentOptions, selectedAgentCode]);
+
+  useEffect(() => {
+    if (!modelOptions.length) {
+      setSelectedModelOptionCode("");
+      return;
+    }
+    if (modelOptions.some((option) => option.optionCode === selectedModelOptionCode)) return;
+    setSelectedModelOptionCode(modelOptions[0].optionCode);
+  }, [modelOptions, selectedModelOptionCode]);
+
+  useEffect(() => {
+    if (!activeWorkspaceCode) {
+      setAgentOptions([mainAutomationAgentOption]);
+      setWorkspaceModelOptions([]);
+      return;
+    }
+
+    let active = true;
+    setExecutionOptionsLoading(true);
+    const agentsPromise = getServiceDataSource("agent") === "api"
+      ? fetchWorkspaceSystemAgents(activeWorkspaceCode)
+      : Promise.resolve(listWorkspaceSystemAgentsMock(activeWorkspaceCode));
+    const modelsPromise = getServiceDataSource("model") === "api"
+      ? fetchWorkspaceSelectOptions(activeWorkspaceCode)
+      : Promise.resolve(getWorkspaceSelectOptions(activeWorkspaceCode));
+
+    Promise.all([agentsPromise, modelsPromise])
+      .then(([agents, models]) => {
+        if (!active) return;
+        setAgentOptions(availableAutomationAgents(agents));
+        setWorkspaceModelOptions(models);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setAgentOptions([mainAutomationAgentOption]);
+        setWorkspaceModelOptions([]);
+        toast.error(error instanceof Error ? error.message : "Execution options could not be loaded");
+      })
+      .finally(() => {
+        if (active) setExecutionOptionsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [activeWorkspaceCode, toast]);
 
   useEffect(() => {
     const allowed = new Set(effectiveUsers.map((user) => user.userCode));
@@ -101,10 +205,12 @@ export function CreateTaskPage() {
 
     setSubmitting(true);
     const payload = {
+      agentCode: selectedAgentCode,
       agentCodes: splitCodes(agentCodesInput),
       appCodes: selectedAppCodes,
       assigneeUserCodes,
       description,
+      modelCode: selectedModelCode,
       priority,
       sourceType,
       sourceUrl,
@@ -165,6 +271,29 @@ export function CreateTaskPage() {
           <Field label="Source URL">
             <TextInput aria-label="Source URL" placeholder="Optional GitHub/GitLab URL" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} />
           </Field>
+          <Field label="Execution Agent">
+            <OptionSelect
+              ariaLabel="Task execution agent"
+              disabled={executionOptionsLoading || !activeWorkspaceCode}
+              loading={executionOptionsLoading}
+              loadingLabel="Loading agents..."
+              options={executionAgentSelectOptions}
+              value={selectedAgentCode}
+              onChange={setSelectedAgentCode}
+            />
+          </Field>
+          <Field label="Execution Model">
+            <OptionSelect
+              ariaLabel="Task execution model"
+              emptyLabel="No executable models"
+              disabled={executionOptionsLoading || !activeWorkspaceCode || !modelOptions.length}
+              loading={executionOptionsLoading}
+              loadingLabel="Loading models..."
+              options={executionModelSelectOptions}
+              value={selectedModelOptionCode}
+              onChange={setSelectedModelOptionCode}
+            />
+          </Field>
           <Field label="Agent Codes">
             <TextInput aria-label="Agent Codes" placeholder="agent-reviewer, agent-builder" value={agentCodesInput} onChange={(event) => setAgentCodesInput(event.target.value)} />
           </Field>
@@ -180,31 +309,18 @@ export function CreateTaskPage() {
             </Field>
           </div>
         </div>
-        <SurfaceCard>
-          <h2 className="mb-3 text-base font-semibold">Assigned Users</h2>
-          <div className="grid gap-2 md:grid-cols-2">
-            {effectiveUsers.map((user) => (
-              <label className="flex items-start gap-3 rounded-lg border border-[var(--color-outline-variant)] p-3 text-sm" key={user.userCode}>
-                <input
-                  aria-label={`Assign ${user.displayName}`}
-                  checked={assigneeUserCodes.includes(user.userCode)}
-                  className="mt-1"
-                  type="checkbox"
-                  onChange={() => setAssigneeUserCodes((current) => toggleCode(current, user.userCode))}
-                />
-                <span>
-                  <span className="block font-medium">{user.displayName}</span>
-                  <span className="block text-xs text-[var(--color-on-surface-variant)]">{user.userCode}</span>
-                </span>
-              </label>
-            ))}
-            {!effectiveUsers.length ? (
-              <p className="text-sm text-[var(--color-on-surface-variant)]">
-                {activeWorkspaceCode ? "No effective users available for the active workspace." : "Select a workspace in the shell header to assign users."}
-              </p>
-            ) : null}
-          </div>
-        </SurfaceCard>
+        <Field label="Assigned Users" hint="Only effective users from the current workspace can be assigned.">
+          <MultiSelectDropdown
+            ariaLabel="Task assignees"
+            emptyMessage={activeWorkspaceCode ? "No effective users available for the active workspace." : "Select a workspace in the shell header to assign users."}
+            loading={workspaceOptionsLoading}
+            loadingMessage="Loading user options..."
+            options={userOptions}
+            placeholder="Select assigned users"
+            selectedValues={assigneeUserCodes}
+            onToggle={(userCode) => setAssigneeUserCodes((current) => toggleCode(current, userCode))}
+          />
+        </Field>
         <SurfaceCard>
           <div className="grid gap-1.5">
             <div className="flex flex-wrap items-center justify-between gap-2">

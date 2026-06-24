@@ -76,7 +76,7 @@ pub(super) const EN_US: &[(&str, &str)] = &[
     ),
     (
         "agent.toolCatalog.tools.app.common.params.runtimeRole",
-        "App runtime role. Allowed values: frontend, backend.",
+        "App runtime role. Allowed values: frontend, backend, mono.",
     ),
     (
         "agent.toolCatalog.tools.app.common.params.repositoryUrl",

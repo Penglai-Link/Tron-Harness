@@ -11,13 +11,16 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 function emptyTaskDetail(taskCode: string): TaskDetailData {
   return {
+    agentCode: "main-agent",
     agentCodes: [],
     appCodes: [],
     archivedAt: null,
     assigneeUserCodes: [],
     createdAt: "",
     description: null,
+    executionResult: null,
     id: "",
+    modelCode: null,
     parent: null,
     parentTaskCode: null,
     previousStatus: null,

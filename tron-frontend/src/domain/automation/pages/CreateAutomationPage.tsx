@@ -13,6 +13,7 @@ import {
 import { Button } from "@/shared/ui/Button";
 import {
   Field,
+  OptionSelect,
   PageHeader,
   SelectInput,
   SurfaceCard,
@@ -63,9 +64,23 @@ export function CreateAutomationPage() {
     () => agentOptions.find((agent) => agent.agentCode === selectedAgentCode) ?? mainAutomationAgentOption,
     [agentOptions, selectedAgentCode],
   );
+  const executionAgentSelectOptions = useMemo(
+    () => agentOptions.map((agent) => ({
+      label: `${agent.name} (${agent.agentCode})`,
+      value: agent.agentCode,
+    })),
+    [agentOptions],
+  );
   const modelOptions = useMemo(
     () => automationModelOptionsForAgent(workspaceModelOptions, selectedAgent),
     [selectedAgent, workspaceModelOptions],
+  );
+  const executionModelSelectOptions = useMemo(
+    () => modelOptions.map((model) => ({
+      label: model.label,
+      value: model.optionCode,
+    })),
+    [modelOptions],
   );
   const selectedModelCode = useMemo(
     () => automationModelCodeFromOption(modelOptions, selectedModelOptionCode),
@@ -215,39 +230,30 @@ export function CreateAutomationPage() {
           </Field>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Execution agent">
-              <SelectInput
-                aria-label="Automation execution agent"
+              <OptionSelect
+                ariaLabel="Automation execution agent"
                 disabled={executionOptionsLoading || !activeWorkspaceCode}
+                loading={executionOptionsLoading}
+                loadingLabel="Loading agents..."
+                options={executionAgentSelectOptions}
                 value={selectedAgentCode}
-                onChange={(event) => {
-                  setSelectedAgentCode(event.target.value);
+                onChange={(value) => {
+                  setSelectedAgentCode(value);
                   setSelectedModelOptionCode("");
                 }}
-              >
-                {agentOptions.map((agent) => (
-                  <option key={agent.agentCode} value={agent.agentCode}>
-                    {agent.name} ({agent.agentCode})
-                  </option>
-                ))}
-              </SelectInput>
+              />
             </Field>
             <Field label="Execution model">
-              <SelectInput
-                aria-label="Automation execution model"
+              <OptionSelect
+                ariaLabel="Automation execution model"
+                emptyLabel="No executable models"
                 disabled={executionOptionsLoading || !activeWorkspaceCode || !modelOptions.length}
+                loading={executionOptionsLoading}
+                loadingLabel="Loading models..."
+                options={executionModelSelectOptions}
                 value={selectedModelOptionCode}
-                onChange={(event) => setSelectedModelOptionCode(event.target.value)}
-              >
-                {modelOptions.length ? modelOptions.map((model) => (
-                  <option key={model.optionCode} value={model.optionCode}>
-                    {model.label}
-                  </option>
-                )) : (
-                  <option value="">
-                    {executionOptionsLoading ? "Loading models..." : "No executable models"}
-                  </option>
-                )}
-              </SelectInput>
+                onChange={setSelectedModelOptionCode}
+              />
             </Field>
           </div>
           <Field label="Cron expression">

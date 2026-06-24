@@ -86,13 +86,12 @@ impl AppService {
         }
 
         let id = self
-            .repository
-            .lock()
-            .expect("app repository mutex poisoned")
-            .next_id()?;
-        let app_code = format!("{GENERATED_APP_CODE_PREFIX}{id}");
+            .id_generator
+            .next_id()
+            .map_err(|_| AppError::StorageFailure)?;
+        let app_code = format!("{GENERATED_APP_CODE_PREFIX}{}", id.as_decimal_string());
         let app = App {
-            id: SnowflakeId::new(id),
+            id,
             app_code: app_code.clone(),
             workspace_code: workspace.workspace_code,
             name,

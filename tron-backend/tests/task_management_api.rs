@@ -169,6 +169,11 @@ async fn create_task_validates_workspace_assignees_and_defaults_to_open() {
     let body = response_json(created).await;
     assert_eq!(body["data"]["taskType"], "Bug");
     assert_eq!(body["data"]["status"], "Open");
+    assert_eq!(
+        body["data"]["description"],
+        "Persist the role-aware task workflow"
+    );
+    assert_eq!(body["data"]["executionResult"], Value::Null);
     assert_eq!(body["data"]["sourceType"], "GitHub");
     assert_eq!(body["data"]["sourceUrl"], "");
     assert_eq!(body["data"]["appCodes"], json!(["APP-TRON-API"]));
@@ -590,6 +595,30 @@ async fn role_based_status_updates_and_type_changes_are_validated() {
 }
 
 #[tokio::test]
+async fn task_repository_migrates_completed_description_to_execution_result() {
+    let database_path = database_path("execution-result-migration");
+    seed_current_task_schema_without_execution_result(&database_path);
+    let router = task_app_with_database_path(database_path.clone(), false);
+
+    let response =
+        authenticated_request(&router, Method::GET, "/api/v1/tasks/TSK-CURRENT-0001", None).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["data"]["description"], Value::Null);
+    assert_eq!(body["data"]["executionResult"], "Legacy execution markdown");
+
+    let connection = Connection::open(&database_path).expect("task database should open");
+    let migrated: (Option<String>, Option<String>) = connection
+        .query_row(
+            "SELECT description, execution_result FROM tasks WHERE task_code = 'TSK-CURRENT-0001'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("migrated task should exist");
+    assert_eq!(migrated, (None, Some("Legacy execution markdown".into())));
+}
+
+#[tokio::test]
 async fn task_repository_resets_legacy_schema_and_removes_seed_tasks() {
     let database_path = database_path("legacy-reset");
     seed_legacy_task_schema(&database_path);
@@ -679,6 +708,88 @@ fn clear_previous_status(database_path: &PathBuf, task_code: &str) {
             [task_code],
         )
         .expect("previous status should be clearable");
+}
+
+fn seed_current_task_schema_without_execution_result(database_path: &PathBuf) {
+    if database_path.exists() {
+        std::fs::remove_file(database_path).expect("task database should be resettable");
+    }
+    if let Some(parent) = database_path.parent() {
+        std::fs::create_dir_all(parent).expect("task database parent should be creatable");
+    }
+    let connection = Connection::open(database_path).expect("task database should open");
+    connection
+        .execute_batch(
+            "
+            CREATE TABLE tasks (
+                id INTEGER PRIMARY KEY,
+                task_code TEXT NOT NULL UNIQUE,
+                workspace_code TEXT NOT NULL,
+                parent_task_code TEXT NULL REFERENCES tasks(task_code),
+                title TEXT NOT NULL,
+                description TEXT NULL,
+                status TEXT NOT NULL CHECK (status IN ('Open', 'Designing', 'Red', 'Green', 'Regressioning', 'Review', 'InProgress', 'Reopen', 'Completed', 'Archived')),
+                previous_status TEXT NULL CHECK (previous_status IS NULL OR previous_status IN ('Open', 'Designing', 'Red', 'Green', 'Regressioning', 'Review', 'InProgress', 'Reopen', 'Completed')),
+                priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High')),
+                task_type TEXT NOT NULL CHECK (task_type IN ('Feature', 'Bug')),
+                source_type TEXT NOT NULL CHECK (source_type IN ('Internal', 'GitHub', 'GitLab')),
+                source_url TEXT NULL,
+                agent_code TEXT NOT NULL DEFAULT 'main-agent',
+                model_code TEXT NULL,
+                progress_value INTEGER NOT NULL DEFAULT 0 CHECK (progress_value >= 0 AND progress_value <= 100),
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL,
+                archived_at INTEGER NULL
+            );
+            CREATE TABLE task_user_assignments (
+                id INTEGER PRIMARY KEY,
+                task_code TEXT NOT NULL REFERENCES tasks(task_code),
+                user_code TEXT NOT NULL,
+                assigned_at INTEGER NOT NULL,
+                UNIQUE (task_code, user_code)
+            );
+            CREATE TABLE task_agent_links (
+                id INTEGER PRIMARY KEY,
+                task_code TEXT NOT NULL REFERENCES tasks(task_code),
+                agent_code TEXT NOT NULL,
+                linked_at INTEGER NOT NULL,
+                UNIQUE (task_code, agent_code)
+            );
+            CREATE TABLE task_app_links (
+                id INTEGER PRIMARY KEY,
+                task_code TEXT NOT NULL REFERENCES tasks(task_code),
+                app_code TEXT NOT NULL,
+                linked_at INTEGER NOT NULL,
+                UNIQUE (task_code, app_code)
+            );
+            ",
+        )
+        .expect("current schema should be creatable");
+    connection
+        .execute(
+            "INSERT INTO tasks (id, task_code, workspace_code, parent_task_code, title, description, status, previous_status, priority, task_type, source_type, source_url, agent_code, model_code, progress_value, created_at, updated_at, archived_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+            params![
+                734_500_000_000_000_001_i64,
+                "TSK-CURRENT-0001",
+                "TRON_CORE",
+                Option::<String>::None,
+                "Current task",
+                "Legacy execution markdown",
+                "Completed",
+                Option::<String>::None,
+                "Medium",
+                "Feature",
+                "Internal",
+                "",
+                "main-agent",
+                Option::<String>::None,
+                100_i64,
+                1_779_830_400_000_i64,
+                1_779_830_400_000_i64,
+                Option::<i64>::None
+            ],
+        )
+        .expect("current row should be insertable");
 }
 
 fn seed_legacy_task_schema(database_path: &PathBuf) {

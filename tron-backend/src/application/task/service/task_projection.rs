@@ -102,12 +102,15 @@ impl TaskService {
             parent_task_code: task.parent_task_code,
             title: task.title,
             description: task.description,
+            execution_result: task.execution_result,
             status: task.status,
             previous_status: task.previous_status,
             priority: task.priority,
             task_type: task.task_type,
             source_type: task.source_type,
             source_url: task.source_url,
+            agent_code: task.agent_code,
+            model_code: task.model_code,
             progress,
             assignee_user_codes,
             agent_codes,
@@ -136,6 +139,8 @@ impl TaskService {
             task_type: task.task_type,
             source_type: task.source_type,
             source_url: task.source_url.clone(),
+            agent_code: task.agent_code.clone(),
+            model_code: task.model_code.clone(),
             assignee_user_codes: self
                 .raw_user_assignments(&task.task_code)?
                 .into_iter()

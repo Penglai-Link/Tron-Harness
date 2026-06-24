@@ -153,6 +153,8 @@ impl Tool for TaskCreateTool {
                 source_type: parse_task_source_type(input.source_type.as_deref())?
                     .unwrap_or(TaskSourceType::Internal),
                 source_url: input.source_url,
+                agent_code: None,
+                model_code: None,
                 assignee_user_codes: input.assignee_user_codes,
                 agent_codes: input.agent_codes,
                 app_codes,
@@ -226,6 +228,8 @@ impl Tool for TaskUpdateTool {
                     task_type,
                     source_type,
                     source_url: input.source_url.map(|value| optional_trimmed(Some(value))),
+                    agent_code: None,
+                    model_code: None,
                     assignee_user_codes: input.assignee_user_codes,
                     agent_codes: input.agent_codes,
                     app_codes: input.app_codes,

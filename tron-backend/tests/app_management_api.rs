@@ -93,7 +93,7 @@ async fn create_update_archive_restore_and_options_flow_work_for_apps() {
             "name": "Task Console",
             "description": "Frontend for task execution oversight.",
             "localDirectory": "/workspace/apps/task-console",
-            "runtimeRole": "Frontend",
+            "runtimeRole": "Mono",
             "repositoryUrl": "https://github.com/clouds3n/task-console",
             "defaultBranch": "master",
             "tags": ["React", "Tasking"]
@@ -103,7 +103,17 @@ async fn create_update_archive_restore_and_options_flow_work_for_apps() {
     assert_eq!(created.status(), StatusCode::CREATED);
     let created_json = response_json(created).await;
     let app_code = created_json["data"]["appCode"].as_str().unwrap().to_owned();
+    let app_id = app_code
+        .strip_prefix("APP-")
+        .expect("created app code should keep APP prefix")
+        .parse::<i64>()
+        .expect("created app code suffix should be numeric");
+    assert!(
+        app_id > 734_900_000_000_000_100,
+        "created app code should use the shared snowflake provider instead of the SQLite max(id)+1 allocator: {app_code}",
+    );
     assert_eq!(created_json["data"]["workspaceCode"], "TRON_CORE");
+    assert_eq!(created_json["data"]["runtimeRole"], "Mono");
     assert_eq!(
         created_json["data"]["localDirectory"],
         "/workspace/apps/task-console"
@@ -120,6 +130,22 @@ async fn create_update_archive_restore_and_options_flow_work_for_apps() {
     assert_eq!(options.status(), StatusCode::OK);
     assert!(
         response_json(options).await["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["appCode"] == app_code)
+    );
+
+    let mono_only = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/apps/workspaces/TRON_CORE?runtimeRole=Mono",
+        None,
+    )
+    .await;
+    assert_eq!(mono_only.status(), StatusCode::OK);
+    assert!(
+        response_json(mono_only).await["data"]["records"]
             .as_array()
             .unwrap()
             .iter()

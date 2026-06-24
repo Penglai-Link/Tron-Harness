@@ -12,7 +12,10 @@ use crate::{
         },
         workspace::{WorkspaceDetail, WorkspaceError, WorkspaceStatus},
     },
-    shared::{id::SnowflakeId, time::current_timestamp},
+    shared::{
+        id::{IdGenerator, SnowflakedSnowflakeIdProvider},
+        time::current_timestamp,
+    },
 };
 
 const GENERATED_APP_CODE_PREFIX: &str = "APP-";
@@ -59,13 +62,27 @@ pub trait AppRepository: Send {
 
 #[derive(Clone)]
 pub struct AppService {
+    id_generator: Arc<dyn IdGenerator>,
     repository: Arc<Mutex<Box<dyn AppRepository>>>,
     workspaces: WorkspaceService,
 }
 
 impl AppService {
     pub fn new(repository: impl AppRepository + 'static, workspaces: WorkspaceService) -> Self {
+        Self::with_id_generator(
+            repository,
+            workspaces,
+            Arc::new(SnowflakedSnowflakeIdProvider::default()),
+        )
+    }
+
+    pub fn with_id_generator(
+        repository: impl AppRepository + 'static,
+        workspaces: WorkspaceService,
+        id_generator: Arc<dyn IdGenerator>,
+    ) -> Self {
         Self {
+            id_generator,
             repository: Arc::new(Mutex::new(Box::new(repository))),
             workspaces,
         }

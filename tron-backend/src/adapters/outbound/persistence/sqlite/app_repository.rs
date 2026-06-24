@@ -60,8 +60,10 @@ impl SqliteAppRepository {
                 )
                 .map_err(storage_error)?;
         }
-        if columns.iter().any(|column| column == "creation_mode") {
-            rebuild_apps_schema_without_creation_mode(&self.connection)?;
+        if columns.iter().any(|column| column == "creation_mode")
+            || !apps_schema_allows_mono_runtime_role(&self.connection)?
+        {
+            rebuild_apps_schema(&self.connection)?;
         }
         self.connection
             .execute_batch(
@@ -299,7 +301,7 @@ fn storage_error(_error: rusqlite::Error) -> AppError {
     AppError::StorageFailure
 }
 
-fn rebuild_apps_schema_without_creation_mode(connection: &Connection) -> Result<(), AppError> {
+fn rebuild_apps_schema(connection: &Connection) -> Result<(), AppError> {
     connection
         .execute_batch(
             "PRAGMA foreign_keys=OFF;
@@ -315,7 +317,7 @@ fn rebuild_apps_schema_without_creation_mode(connection: &Connection) -> Result<
                  app_name TEXT NOT NULL,
                  description TEXT NULL,
                  local_directory TEXT NOT NULL,
-                 runtime_role TEXT NOT NULL CHECK (runtime_role IN ('frontend', 'backend')),
+                 runtime_role TEXT NOT NULL CHECK (runtime_role IN ('frontend', 'backend', 'mono')),
                  repository_url TEXT NULL,
                  default_branch TEXT NULL,
                  status TEXT NOT NULL CHECK (status IN ('active', 'archived')),
@@ -380,6 +382,18 @@ fn rebuild_apps_schema_without_creation_mode(connection: &Connection) -> Result<
         .map_err(storage_error)?;
 
     Ok(())
+}
+
+fn apps_schema_allows_mono_runtime_role(connection: &Connection) -> Result<bool, AppError> {
+    let table_sql = connection
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'apps'",
+            [],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .map_err(storage_error)?
+        .unwrap_or_default();
+    Ok(table_sql.contains("'mono'"))
 }
 
 fn table_columns(connection: &Connection, table_name: &str) -> Result<Vec<String>, AppError> {

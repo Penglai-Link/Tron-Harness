@@ -8,6 +8,7 @@ import {
   type KanbanColumn,
   type QuickReference,
   type TaskDetailData,
+  type TaskExecutionResult,
   type TaskLifecycleResult,
   type TaskListItem,
   type TaskOptions,
@@ -38,13 +39,16 @@ const taskOptions: TaskOptions = {
 let nextTaskId = 1;
 let tasks: TaskDetailData[] = [
   {
+    agentCode: "main-agent",
     agentCodes: [],
     appCodes: [],
     archivedAt: null,
     assigneeUserCodes: ["USR-AUTH-0001"],
     createdAt: NOW,
     description: "Capture the initial superpower intent and task boundary.",
+    executionResult: null,
     id: "734500000000000101",
+    modelCode: null,
     parent: null,
     parentTaskCode: null,
     previousStatus: null,
@@ -61,13 +65,16 @@ let tasks: TaskDetailData[] = [
     workspaceCode: "TRON_CORE",
   },
   {
+    agentCode: "main-agent",
     agentCodes: ["agent-reviewer"],
     appCodes: ["APP-TRON-API"],
     archivedAt: null,
     assigneeUserCodes: ["USR-AUTH-0001"],
     createdAt: NOW,
     description: "Fix a board rendering gap under the new workflow.",
+    executionResult: null,
     id: "734500000000000102",
+    modelCode: null,
     parent: null,
     parentTaskCode: null,
     previousStatus: null,
@@ -84,13 +91,16 @@ let tasks: TaskDetailData[] = [
     workspaceCode: "TRON_CORE",
   },
   {
+    agentCode: "main-agent",
     agentCodes: [],
     appCodes: ["APP-TRON-CONSOLE", "github"],
     archivedAt: null,
     assigneeUserCodes: ["USR-AUTH-0001"],
     createdAt: NOW,
     description: "Legacy app codes should remain visible until the selection is explicitly changed.",
+    executionResult: null,
     id: "734500000000000104",
+    modelCode: null,
     parent: null,
     parentTaskCode: null,
     previousStatus: null,
@@ -107,13 +117,16 @@ let tasks: TaskDetailData[] = [
     workspaceCode: "TRON_CORE",
   },
   {
+    agentCode: "main-agent",
     agentCodes: [],
     appCodes: [],
     archivedAt: NOW,
     assigneeUserCodes: [],
     createdAt: NOW,
     description: "Archived example under the new flow.",
+    executionResult: null,
     id: "734500000000000103",
+    modelCode: null,
     parent: null,
     parentTaskCode: null,
     previousStatus: "Review",
@@ -176,13 +189,16 @@ export function createMockTask(payload: CreateTaskPayload) {
   const taskCode = `TSK-MOCK-${nextTaskId++}`;
   const taskRole = inferTaskRole(payload.taskType, payload.parentTaskCode ?? null);
   const task: TaskDetailData = {
+    agentCode: payload.agentCode?.trim() || "main-agent",
     agentCodes: uniqueCodes(payload.agentCodes),
     appCodes: uniqueCodes(payload.appCodes),
     archivedAt: null,
     assigneeUserCodes: uniqueCodes(payload.assigneeUserCodes),
     createdAt: NOW,
     description: payload.description?.trim() ? payload.description : null,
+    executionResult: null,
     id: String(734500000000100000 + nextTaskId),
+    modelCode: payload.modelCode?.trim() || null,
     parent: null,
     parentTaskCode: payload.parentTaskCode ?? null,
     previousStatus: null,
@@ -213,10 +229,12 @@ export function updateMockTask(taskCode: string, payload: UpdateTaskPayload) {
   tasks = tasks.map((task) => task.taskCode !== taskCode || task.status === "Archived" ? task : {
     ...task,
     ...payload,
+    agentCode: payload.agentCode === undefined ? task.agentCode : (payload.agentCode.trim() || "main-agent"),
     agentCodes: payload.agentCodes ? uniqueCodes(payload.agentCodes) : task.agentCodes,
     appCodes: payload.appCodes ? uniqueCodes(payload.appCodes) : task.appCodes,
     assigneeUserCodes: payload.assigneeUserCodes ? uniqueCodes(payload.assigneeUserCodes) : task.assigneeUserCodes,
     description: payload.description === undefined ? task.description : payload.description,
+    modelCode: payload.modelCode === undefined ? task.modelCode : (payload.modelCode?.trim() || null),
     sourceUrl: payload.sourceUrl === undefined ? task.sourceUrl : payload.sourceUrl,
     updatedAt: NOW,
   });
@@ -271,6 +289,30 @@ export function restoreMockTask(taskCode: string): TaskLifecycleResult {
   return { archivedAt: task.archivedAt, previousStatus: task.previousStatus, status: task.status, taskCode };
 }
 
+export function executeMockTask(taskCode: string): TaskExecutionResult {
+  const task = getTaskDetail(taskCode);
+  if (task.status === "Archived" || task.archivedAt) {
+    throw new Error("restore archived task before executing it");
+  }
+  const runSequence = Date.now();
+  const summary = `Mock execution completed for ${task.taskCode}.`;
+  tasks = tasks.map((item) => item.taskCode === task.taskCode ? {
+    ...item,
+    executionResult: summary,
+    progress: 100,
+    status: "Completed",
+    updatedAt: NOW,
+  } : item);
+  return {
+    agentCode: task.agentCode || "main-agent",
+    modelCode: task.modelCode,
+    runCode: `RUN-${runSequence}`,
+    sessionCode: `SESSION-${runSequence}`,
+    summary,
+    taskCode: task.taskCode,
+  };
+}
+
 function filterTasks(query: TaskListQuery) {
   const includeArchived = query.includeArchived === true;
   const search = query.search?.trim().toLowerCase();
@@ -298,10 +340,12 @@ function effectiveProgress(task: TaskDetailData): number {
 
 function toListItem(task: TaskDetailData): TaskListItem {
   return {
+    agentCode: task.agentCode,
     agentCodes: task.agentCodes,
     appCodes: task.appCodes,
     archivedAt: task.archivedAt,
     assigneeUserCodes: task.assigneeUserCodes,
+    modelCode: task.modelCode,
     parentTaskCode: task.parentTaskCode,
     priority: task.priority,
     progress: effectiveProgress(task),

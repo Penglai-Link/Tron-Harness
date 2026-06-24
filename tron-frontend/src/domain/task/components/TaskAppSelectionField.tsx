@@ -1,6 +1,5 @@
-import { cn } from "@/shared/lib/utils";
-
 import type { AppOption } from "@/domain/app/model";
+import { MultiSelectDropdown } from "@/shared";
 
 function LegacyChip({
   code,
@@ -50,38 +49,25 @@ export function TaskAppSelectionField({
 }) {
   const availableCodes = new Set(availableApps.map((app) => app.appCode));
   const selectedKnownCodes = selectedAppCodes.filter((code) => availableCodes.has(code));
+  const appOptions = availableApps.map((app) => ({
+    description: `${app.appCode} · ${app.runtimeRole}`,
+    label: app.name,
+    value: app.appCode,
+  }));
 
   return (
     <div className="space-y-3">
-      {availableApps.length ? (
-        <div className="flex flex-wrap gap-2" aria-label="Available apps">
-          {availableApps.map((app) => {
-            const active = selectedKnownCodes.includes(app.appCode);
-            return (
-              <button
-                className={cn(
-                  "min-w-[12rem] rounded-2xl border px-3 py-2 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]",
-                  active
-                    ? "border-[var(--color-primary)] bg-[var(--color-primary)] text-[var(--color-on-primary)]"
-                    : "border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]",
-                )}
-                disabled={disabled || !onToggle}
-                type="button"
-                key={app.appCode}
-                aria-pressed={active}
-                onClick={() => onToggle?.(app.appCode)}
-              >
-                <span className="block font-medium">{app.name}</span>
-                <span className={cn("mt-1 block font-mono text-[11px]", active ? "text-[var(--color-on-primary)]/85" : "text-[var(--color-on-surface-variant)]")}>
-                  {app.appCode} · {app.runtimeRole}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      ) : loading ? (
-        <p className="text-sm text-[var(--color-on-surface-variant)]">Loading app options...</p>
-      ) : null}
+      <MultiSelectDropdown
+        ariaLabel="Task apps"
+        disabled={disabled}
+        emptyMessage={emptyMessage}
+        loading={loading}
+        loadingMessage="Loading app options..."
+        options={appOptions}
+        placeholder="Select apps"
+        selectedValues={selectedKnownCodes}
+        onToggle={onToggle}
+      />
       {legacyAppCodes.length ? (
         <div className="space-y-2">
           <p className="text-[12px] text-[var(--color-on-surface-variant)]">
@@ -93,9 +79,6 @@ export function TaskAppSelectionField({
             ))}
           </div>
         </div>
-      ) : null}
-      {!availableApps.length && !legacyAppCodes.length && !loading ? (
-        <p className="text-sm text-[var(--color-on-surface-variant)]">{emptyMessage}</p>
       ) : null}
     </div>
   );

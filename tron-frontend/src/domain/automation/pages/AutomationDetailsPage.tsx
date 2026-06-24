@@ -34,6 +34,7 @@ import {
   Field,
   InspectorPanel,
   MarkdownContent,
+  OptionSelect,
   PageHeader,
   SelectInput,
   SurfaceCard,
@@ -239,6 +240,13 @@ export function AutomationDetailsPage() {
     }
     return [selectedAgent, ...agentOptions];
   }, [agentOptions, selectedAgent]);
+  const executionAgentSelectOptions = useMemo(
+    () => visibleAgentOptions.map((agent) => ({
+      label: `${agent.name} (${agent.agentCode})`,
+      value: agent.agentCode,
+    })),
+    [visibleAgentOptions],
+  );
   const modelOptions = useMemo(
     () => automationModelOptionsForAgent(workspaceModelOptions, selectedAgent),
     [selectedAgent, workspaceModelOptions],
@@ -257,6 +265,13 @@ export function AutomationDetailsPage() {
       ...modelOptions,
     ];
   }, [automation.modelCode, modelOptions, selectedModelOptionCode]);
+  const executionModelSelectOptions = useMemo(
+    () => visibleModelOptions.map((model) => ({
+      label: model.label,
+      value: model.optionCode,
+    })),
+    [visibleModelOptions],
+  );
   const selectedModelCode = useMemo(
     () => automationModelCodeFromOption(visibleModelOptions, selectedModelOptionCode),
     [selectedModelOptionCode, visibleModelOptions],
@@ -708,39 +723,30 @@ export function AutomationDetailsPage() {
               <TextInput aria-label="Workspace code" disabled value={automation.workspaceCode} />
             </Field>
             <Field label="Execution agent">
-              <SelectInput
-                aria-label="Automation execution agent"
+              <OptionSelect
+                ariaLabel="Automation execution agent"
                 disabled={!editing || archived || executionOptionsLoading}
+                loading={executionOptionsLoading}
+                loadingLabel="Loading agents..."
+                options={executionAgentSelectOptions}
                 value={selectedAgentCode}
-                onChange={(event) => {
-                  setSelectedAgentCode(event.target.value);
+                onChange={(value) => {
+                  setSelectedAgentCode(value);
                   setSelectedModelOptionCode("");
                 }}
-              >
-                {visibleAgentOptions.map((agent) => (
-                  <option key={agent.agentCode} value={agent.agentCode}>
-                    {agent.name} ({agent.agentCode})
-                  </option>
-                ))}
-              </SelectInput>
+              />
             </Field>
             <Field label="Execution model">
-              <SelectInput
-                aria-label="Automation execution model"
+              <OptionSelect
+                ariaLabel="Automation execution model"
+                emptyLabel="No executable models"
                 disabled={!editing || archived || executionOptionsLoading || !visibleModelOptions.length}
+                loading={executionOptionsLoading}
+                loadingLabel="Loading models..."
+                options={executionModelSelectOptions}
                 value={selectedModelOptionCode}
-                onChange={(event) => setSelectedModelOptionCode(event.target.value)}
-              >
-                {visibleModelOptions.length ? visibleModelOptions.map((model) => (
-                  <option key={model.optionCode} value={model.optionCode}>
-                    {model.label}
-                  </option>
-                )) : (
-                  <option value="">
-                    {executionOptionsLoading ? "Loading models..." : "No executable models"}
-                  </option>
-                )}
-              </SelectInput>
+                onChange={setSelectedModelOptionCode}
+              />
             </Field>
             <Field label="Cron expression">
               <TextInput aria-label="Cron expression" className="font-mono" disabled={!editing || archived} value={cronExpression} onChange={(event) => setCronExpression(event.target.value)} />

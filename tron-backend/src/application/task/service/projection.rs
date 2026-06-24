@@ -71,6 +71,7 @@ pub(super) fn matches_search(task: &Task, search: Option<&str>) -> bool {
         task.workspace_code.as_str(),
         task.title.as_str(),
         task.description.as_deref().unwrap_or_default(),
+        task.execution_result.as_deref().unwrap_or_default(),
         task.source_url.as_deref().unwrap_or_default(),
     ]
     .join(" ")

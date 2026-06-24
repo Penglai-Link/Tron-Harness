@@ -49,12 +49,15 @@ pub struct TaskDetail {
     pub parent_task_code: Option<String>,
     pub title: String,
     pub description: Option<String>,
+    pub execution_result: Option<String>,
     pub status: TaskStatus,
     pub previous_status: Option<TaskStatus>,
     pub priority: TaskPriority,
     pub task_type: TaskType,
     pub source_type: TaskSourceType,
     pub source_url: Option<String>,
+    pub agent_code: String,
+    pub model_code: Option<String>,
     pub progress: u8,
     pub assignee_user_codes: Vec<String>,
     pub agent_codes: Vec<String>,
@@ -79,6 +82,8 @@ pub struct TaskListItem {
     pub task_type: TaskType,
     pub source_type: TaskSourceType,
     pub source_url: Option<String>,
+    pub agent_code: String,
+    pub model_code: Option<String>,
     pub assignee_user_codes: Vec<String>,
     pub agent_codes: Vec<String>,
     pub app_codes: Vec<String>,
@@ -102,6 +107,17 @@ pub struct TaskLifecycleResult {
     pub status: TaskStatus,
     pub previous_status: Option<TaskStatus>,
     pub archived_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskExecutionResult {
+    pub task_code: String,
+    pub session_code: String,
+    pub run_code: String,
+    pub agent_code: String,
+    pub model_code: Option<String>,
+    pub summary: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

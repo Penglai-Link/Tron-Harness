@@ -45,7 +45,48 @@ impl SqliteTaskRepository {
             .execute_batch(TASKS_MIGRATION)
             .map_err(storage_error)?;
         repository.reset_legacy_schema_if_needed()?;
+        let added_execution_result =
+            if !column_exists(&repository.connection, "tasks", "execution_result")? {
+                repository
+                    .connection
+                    .execute(
+                        "ALTER TABLE tasks ADD COLUMN execution_result TEXT NULL",
+                        [],
+                    )
+                    .map_err(storage_error)?;
+                true
+            } else {
+                false
+            };
+        if added_execution_result {
+            repository.migrate_legacy_completed_task_descriptions()?;
+        }
+        if !column_exists(&repository.connection, "tasks", "agent_code")? {
+            repository
+                .connection
+                .execute(
+                    "ALTER TABLE tasks ADD COLUMN agent_code TEXT NOT NULL DEFAULT 'main-agent'",
+                    [],
+                )
+                .map_err(storage_error)?;
+        }
+        if !column_exists(&repository.connection, "tasks", "model_code")? {
+            repository
+                .connection
+                .execute("ALTER TABLE tasks ADD COLUMN model_code TEXT NULL", [])
+                .map_err(storage_error)?;
+        }
         Ok(repository)
+    }
+
+    fn migrate_legacy_completed_task_descriptions(&mut self) -> Result<(), TaskError> {
+        self.connection
+            .execute(
+                "UPDATE tasks SET execution_result = description, description = NULL WHERE execution_result IS NULL AND status = 'Completed' AND description IS NOT NULL AND trim(description) <> ''",
+                [],
+            )
+            .map_err(storage_error)?;
+        Ok(())
     }
 
     fn reset_legacy_schema_if_needed(&mut self) -> Result<(), TaskError> {
@@ -126,7 +167,7 @@ impl SqliteTaskRepository {
 impl TaskRepository for SqliteTaskRepository {
     fn list_tasks(&mut self) -> Result<Vec<Task>, TaskError> {
         let mut statement = self.connection.prepare(
-            "SELECT id, task_code, workspace_code, parent_task_code, title, description, status, previous_status, priority, task_type, source_type, source_url, progress_value, created_at, updated_at, archived_at FROM tasks ORDER BY id ASC"
+            "SELECT id, task_code, workspace_code, parent_task_code, title, description, execution_result, status, previous_status, priority, task_type, source_type, source_url, agent_code, model_code, progress_value, created_at, updated_at, archived_at FROM tasks ORDER BY id ASC"
         ).map_err(storage_error)?;
         statement
             .query_map([], row_to_task)
@@ -146,16 +187,16 @@ impl TaskRepository for SqliteTaskRepository {
 
     fn create_task(&mut self, task: &Task) -> Result<(), TaskError> {
         self.connection.execute(
-            "INSERT INTO tasks (id, task_code, workspace_code, parent_task_code, title, description, status, previous_status, priority, task_type, source_type, source_url, progress_value, created_at, updated_at, archived_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
-            params![task.id.value(), task.task_code, task.workspace_code, task.parent_task_code, task.title, task.description, task_status_to_storage(task.status), task.previous_status.map(task_status_to_storage), task_priority_to_storage(task.priority), task_type_to_storage(task.task_type), task_source_type_to_storage(task.source_type), task.source_url, i64::from(task.progress), timestamp_to_millis(&task.created_at), timestamp_to_millis(&task.updated_at), option_timestamp_to_millis(task.archived_at.as_deref())],
+            "INSERT INTO tasks (id, task_code, workspace_code, parent_task_code, title, description, execution_result, status, previous_status, priority, task_type, source_type, source_url, agent_code, model_code, progress_value, created_at, updated_at, archived_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+            params![task.id.value(), task.task_code, task.workspace_code, task.parent_task_code, task.title, task.description, task.execution_result, task_status_to_storage(task.status), task.previous_status.map(task_status_to_storage), task_priority_to_storage(task.priority), task_type_to_storage(task.task_type), task_source_type_to_storage(task.source_type), task.source_url, task.agent_code, task.model_code, i64::from(task.progress), timestamp_to_millis(&task.created_at), timestamp_to_millis(&task.updated_at), option_timestamp_to_millis(task.archived_at.as_deref())],
         ).map_err(storage_error)?;
         Ok(())
     }
 
     fn update_task(&mut self, task: &Task) -> Result<(), TaskError> {
         self.connection.execute(
-            "UPDATE tasks SET parent_task_code = ?2, title = ?3, description = ?4, status = ?5, previous_status = ?6, priority = ?7, task_type = ?8, source_type = ?9, source_url = ?10, progress_value = ?11, updated_at = ?12, archived_at = ?13 WHERE task_code = ?1",
-            params![task.task_code, task.parent_task_code, task.title, task.description, task_status_to_storage(task.status), task.previous_status.map(task_status_to_storage), task_priority_to_storage(task.priority), task_type_to_storage(task.task_type), task_source_type_to_storage(task.source_type), task.source_url, i64::from(task.progress), timestamp_to_millis(&task.updated_at), option_timestamp_to_millis(task.archived_at.as_deref())],
+            "UPDATE tasks SET parent_task_code = ?2, title = ?3, description = ?4, execution_result = ?5, status = ?6, previous_status = ?7, priority = ?8, task_type = ?9, source_type = ?10, source_url = ?11, agent_code = ?12, model_code = ?13, progress_value = ?14, updated_at = ?15, archived_at = ?16 WHERE task_code = ?1",
+            params![task.task_code, task.parent_task_code, task.title, task.description, task.execution_result, task_status_to_storage(task.status), task.previous_status.map(task_status_to_storage), task_priority_to_storage(task.priority), task_type_to_storage(task.task_type), task_source_type_to_storage(task.source_type), task.source_url, task.agent_code, task.model_code, i64::from(task.progress), timestamp_to_millis(&task.updated_at), option_timestamp_to_millis(task.archived_at.as_deref())],
         ).map_err(storage_error)?;
         Ok(())
     }
@@ -222,12 +263,12 @@ impl TaskRepository for SqliteTaskRepository {
 }
 
 fn row_to_task(row: &Row<'_>) -> rusqlite::Result<Task> {
-    let status: String = row.get(6)?;
-    let previous_status: Option<String> = row.get(7)?;
-    let priority: String = row.get(8)?;
-    let task_type: String = row.get(9)?;
-    let source_type: String = row.get(10)?;
-    let progress: i64 = row.get(12)?;
+    let status: String = row.get(7)?;
+    let previous_status: Option<String> = row.get(8)?;
+    let priority: String = row.get(9)?;
+    let task_type: String = row.get(10)?;
+    let source_type: String = row.get(11)?;
+    let progress: i64 = row.get(15)?;
     Ok(Task {
         id: SnowflakeId::new(row.get(0)?),
         task_code: row.get(1)?,
@@ -235,6 +276,7 @@ fn row_to_task(row: &Row<'_>) -> rusqlite::Result<Task> {
         parent_task_code: row.get(3)?,
         title: row.get(4)?,
         description: row.get(5)?,
+        execution_result: row.get(6)?,
         status: task_status_from_storage(&status).map_err(task_mapping_error)?,
         previous_status: previous_status
             .as_deref()
@@ -244,11 +286,13 @@ fn row_to_task(row: &Row<'_>) -> rusqlite::Result<Task> {
         priority: task_priority_from_storage(&priority).map_err(task_mapping_error)?,
         task_type: task_type_from_storage(&task_type).map_err(task_mapping_error)?,
         source_type: task_source_type_from_storage(&source_type).map_err(task_mapping_error)?,
-        source_url: row.get(11)?,
+        source_url: row.get(12)?,
+        agent_code: row.get(13)?,
+        model_code: row.get(14)?,
         progress: progress.clamp(0, 100) as u8,
-        created_at: timestamp_from_millis(row.get(13)?),
-        updated_at: timestamp_from_millis(row.get(14)?),
-        archived_at: option_timestamp_from_millis(row.get::<_, Option<i64>>(15)?),
+        created_at: timestamp_from_millis(row.get(16)?),
+        updated_at: timestamp_from_millis(row.get(17)?),
+        archived_at: option_timestamp_from_millis(row.get::<_, Option<i64>>(18)?),
     })
 }
 
@@ -272,6 +316,21 @@ fn uses_legacy_task_schema_definition(create_sql: &str) -> bool {
     ["Backlog", "Todo", "Testing", "BugFix", "Refactor"]
         .iter()
         .any(|needle| create_sql.contains(needle))
+}
+
+fn column_exists(
+    connection: &Connection,
+    table_name: &str,
+    column_name: &str,
+) -> Result<bool, TaskError> {
+    let pragma = format!("PRAGMA table_info({table_name})");
+    let mut statement = connection.prepare(&pragma).map_err(storage_error)?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(storage_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(storage_error)?;
+    Ok(columns.iter().any(|value| value == column_name))
 }
 
 fn task_mapping_error(error: TaskError) -> rusqlite::Error {

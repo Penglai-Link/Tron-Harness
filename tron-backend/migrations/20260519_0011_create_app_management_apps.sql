@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS apps (
     app_name TEXT NOT NULL,
     description TEXT NULL,
     local_directory TEXT NOT NULL,
-    runtime_role TEXT NOT NULL CHECK (runtime_role IN ('frontend', 'backend')),
+    runtime_role TEXT NOT NULL CHECK (runtime_role IN ('frontend', 'backend', 'mono')),
     repository_url TEXT NULL,
     default_branch TEXT NULL,
     status TEXT NOT NULL CHECK (status IN ('active', 'archived')),

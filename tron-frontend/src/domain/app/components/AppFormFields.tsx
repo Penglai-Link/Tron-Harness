@@ -138,6 +138,7 @@ export function AppFormFields({
         >
           <option value="Frontend">Frontend</option>
           <option value="Backend">Backend</option>
+          <option value="Mono">Mono</option>
         </SelectInput>
       </Field>
       <Field label="Local Directory" hint={localDirectoryHint}>

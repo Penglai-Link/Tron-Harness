@@ -63,6 +63,7 @@ pub(super) fn matches_search(
         match app.runtime_role {
             AppRuntimeRole::Frontend => "frontend",
             AppRuntimeRole::Backend => "backend",
+            AppRuntimeRole::Mono => "mono",
         },
         app.repository_url.as_deref().unwrap_or_default(),
         app.default_branch.as_deref().unwrap_or_default(),

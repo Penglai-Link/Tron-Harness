@@ -59,38 +59,6 @@ export const settingsNavigation = [
     ],
   },
   {
-    groupKey: "administration",
-    label: "Administration",
-    requiredRoleCodes: ["ADMIN"],
-    translationKey: "shell:settings.groups.administration",
-    items: [
-      {
-        label: "Users",
-        href: "/admin/users",
-        icon: UsersRound,
-        translationKey: "shell:settings.items.users",
-      },
-      {
-        label: "Roles",
-        href: "/admin/roles",
-        icon: LockKeyhole,
-        translationKey: "shell:settings.items.roles",
-      },
-      {
-        label: "Audit Logs",
-        href: "/admin/audit-logs",
-        icon: FileClock,
-        translationKey: "shell:settings.items.auditLogs",
-      },
-      {
-        label: "Workspace",
-        href: "/admin/workspace",
-        icon: Settings2,
-        translationKey: "shell:settings.items.workspaceAdmin",
-      },
-    ],
-  },
-  {
     groupKey: "registry",
     label: "Registry",
     translationKey: "shell:settings.groups.registry",
@@ -125,6 +93,38 @@ export const settingsNavigation = [
         href: "/settings/openapi",
         icon: ShieldCheck,
         translationKey: "shell:settings.items.openapi",
+      },
+    ],
+  },
+  {
+    groupKey: "administration",
+    label: "Administration",
+    requiredRoleCodes: ["ADMIN"],
+    translationKey: "shell:settings.groups.administration",
+    items: [
+      {
+        label: "Users",
+        href: "/admin/users",
+        icon: UsersRound,
+        translationKey: "shell:settings.items.users",
+      },
+      {
+        label: "Roles",
+        href: "/admin/roles",
+        icon: LockKeyhole,
+        translationKey: "shell:settings.items.roles",
+      },
+      {
+        label: "Audit Logs",
+        href: "/admin/audit-logs",
+        icon: FileClock,
+        translationKey: "shell:settings.items.auditLogs",
+      },
+      {
+        label: "Workspace",
+        href: "/admin/workspace",
+        icon: Settings2,
+        translationKey: "shell:settings.items.workspaceAdmin",
       },
     ],
   },

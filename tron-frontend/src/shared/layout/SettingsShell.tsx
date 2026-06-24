@@ -38,6 +38,7 @@ interface SettingsNavGroup {
 interface SettingsShellProps {
   activeItem: string;
   children: ReactNode;
+  contentClassName?: string;
   items: readonly SettingsNavGroup[];
   roleCodes?: readonly string[];
 }
@@ -59,7 +60,7 @@ function resolveReturnTo(state: unknown) {
   return "/dashboard";
 }
 
-export function SettingsShell({ activeItem, children, items, roleCodes }: SettingsShellProps) {
+export function SettingsShell({ activeItem, children, contentClassName, items, roleCodes }: SettingsShellProps) {
   const { t } = useTranslation(["common", "shell"]);
   const location = useLocation();
   const returnTo = resolveReturnTo(location.state);
@@ -126,7 +127,7 @@ export function SettingsShell({ activeItem, children, items, roleCodes }: Settin
         </div>
       </header>
 
-      <div className="pt-14 lg:grid lg:h-[calc(100vh-3.5rem)] lg:grid-cols-[260px_minmax(0,1fr)] lg:overflow-hidden">
+      <div className="pt-14 lg:grid lg:h-screen lg:grid-cols-[260px_minmax(0,1fr)] lg:overflow-hidden">
         <aside className="bg-[var(--color-elevated-surface)] px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.03)] lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto lg:px-3 lg:py-6 lg:shadow-[10px_0_28px_rgba(15,23,42,0.04)]">
           <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
             {t("shell:settings.navigation")}
@@ -211,7 +212,13 @@ export function SettingsShell({ activeItem, children, items, roleCodes }: Settin
           </div>
         </aside>
 
-        <main className="min-w-0 px-6 py-6 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto">{children}</main>
+        <main className={cn(
+          "min-w-0 lg:h-[calc(100vh-3.5rem)]",
+          contentClassName ?? "px-6 py-6 lg:overflow-y-auto",
+        )}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

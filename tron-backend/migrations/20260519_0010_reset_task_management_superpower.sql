@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     parent_task_code TEXT NULL REFERENCES tasks(task_code),
     title TEXT NOT NULL,
     description TEXT NULL,
+    execution_result TEXT NULL,
     status TEXT NOT NULL CHECK (status IN ('Open', 'Designing', 'Red', 'Green', 'Regressioning', 'Review', 'InProgress', 'Reopen', 'Completed', 'Archived')),
     previous_status TEXT NULL CHECK (previous_status IS NULL OR previous_status IN ('Open', 'Designing', 'Red', 'Green', 'Regressioning', 'Review', 'InProgress', 'Reopen', 'Completed')),
     priority TEXT NOT NULL CHECK (priority IN ('Low', 'Medium', 'High')),

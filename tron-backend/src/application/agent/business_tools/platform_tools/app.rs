@@ -250,6 +250,7 @@ fn parse_app_runtime_role(value: &str) -> Result<AppRuntimeRole, ToolError> {
     match normalize_optional_token(Some(value)).as_deref() {
         Some("frontend") => Ok(AppRuntimeRole::Frontend),
         Some("backend") => Ok(AppRuntimeRole::Backend),
+        Some("mono") => Ok(AppRuntimeRole::Mono),
         Some(other) => Err(enum_tool_error("runtimeRole", other)),
         None => Err(ToolError::ExecutionFailed(
             "runtimeRole is required".to_string(),

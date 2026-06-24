@@ -253,6 +253,7 @@ export function AppsPage() {
               <option value="">All roles</option>
               <option value="Frontend">Frontend</option>
               <option value="Backend">Backend</option>
+              <option value="Mono">Mono</option>
             </SelectInput>
             <SelectInput aria-label="App status filter" className="h-8 min-w-36" value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)}>
               <option value="Active">Active</option>

@@ -7,6 +7,7 @@ import {
 } from "react";
 import {
   Link,
+  useNavigate,
   useSearchParams,
 } from "react-router";
 import { createPortal } from "react-dom";
@@ -24,6 +25,8 @@ import {
   Field,
   InspectorPanel,
   MarkdownContent,
+  MultiSelectDropdown,
+  OptionSelect,
   PageHeader,
   SelectInput,
   SurfaceCard,
@@ -36,6 +39,7 @@ import {
 import {
   archiveTask,
   createTask,
+  executeTask,
   restoreTask,
   updateTask,
   updateTaskStatus,
@@ -43,6 +47,7 @@ import {
 import {
   archiveMockTask,
   createMockTask,
+  executeMockTask,
   restoreMockTask,
   updateMockTask,
   updateMockTaskStatus,
@@ -65,6 +70,21 @@ import {
   statusLabel,
 } from "@/domain/task/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { fetchWorkspaceSystemAgents } from "@/domain/agent/api";
+import { listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
+import { fetchWorkspaceSelectOptions } from "@/domain/model/api/modelApi";
+import { getWorkspaceSelectOptions } from "@/domain/model/mock/data";
+import {
+  automationModelCodeFromOption,
+  automationModelOptionsForAgent,
+  availableAutomationAgents,
+  mainAutomationAgentOption,
+  optionCodeForAutomationModel,
+} from "@/domain/automation/pages/automationExecutionOptions";
+import type {
+  AutomationAgentOption,
+  AutomationModelOption,
+} from "@/domain/automation/pages/automationExecutionOptions";
 
 function ProgressBar({ value }: { value: number }) {
   return (
@@ -106,6 +126,7 @@ function ReadValue({ children }: { children: ReactNode }) {
 
 export function TaskDetailsPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const taskCode = searchParams.get("taskCode") || "TSK-SEED-FEATURE";
   const { task, setTask, refresh, loading } = useTaskDetail(taskCode);
   const options = useTaskOptions();
@@ -120,11 +141,18 @@ export function TaskDetailsPage() {
   const [priority, setPriority] = useState<TaskPriority>(task.priority);
   const [status, setStatus] = useState<TaskStatus>(task.status);
   const [progress, setProgress] = useState(String(task.progress));
+  const [agentOptions, setAgentOptions] = useState<AutomationAgentOption[]>(() => [mainAutomationAgentOption]);
+  const [selectedAgentCode, setSelectedAgentCode] = useState(task.agentCode || mainAutomationAgentOption.agentCode);
+  const [selectedModelOptionCode, setSelectedModelOptionCode] = useState(optionCodeForAutomationModel(task.agentCode || mainAutomationAgentOption.agentCode, task.modelCode ?? null));
+  const [workspaceModelOptions, setWorkspaceModelOptions] = useState<ReturnType<typeof getWorkspaceSelectOptions>>(() => []);
+  const [executionOptionsLoading, setExecutionOptionsLoading] = useState(false);
+  const [executing, setExecuting] = useState(false);
   const [agentCodesInput, setAgentCodesInput] = useState(task.agentCodes.join(", "));
   const [selectedAppCodes, setSelectedAppCodes] = useState(task.appCodes);
   const [assigneeUserCodes, setAssigneeUserCodes] = useState(task.assigneeUserCodes);
   const [childTitle, setChildTitle] = useState("Follow-up subtask");
   const [descriptionFullscreenOpen, setDescriptionFullscreenOpen] = useState(false);
+  const [executionResultFullscreenOpen, setExecutionResultFullscreenOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const skipNextTaskSync = useRef(false);
   const taskRef = useRef(task);
@@ -138,6 +166,62 @@ export function TaskDetailsPage() {
   const availableStatuses = options.statusRules[taskRole];
   const availableAppCodeSet = useMemo(() => new Set(appOptions.map((app) => app.appCode)), [appOptions]);
   const legacyAppCodes = selectedAppCodes.filter((code) => !availableAppCodeSet.has(code));
+  const configuredAgentOption = useMemo<AutomationAgentOption>(() => {
+    const configuredAgentCode = selectedAgentCode || mainAutomationAgentOption.agentCode;
+    const matched = agentOptions.find((agent) => agent.agentCode === configuredAgentCode);
+    if (matched) return matched;
+    if (configuredAgentCode === mainAutomationAgentOption.agentCode) return mainAutomationAgentOption;
+    return {
+      agentCode: configuredAgentCode,
+      description: "Configured task execution agent.",
+      models: [],
+      name: configuredAgentCode,
+    };
+  }, [agentOptions, selectedAgentCode]);
+  const visibleAgentOptions = useMemo(
+    () => agentOptions.some((agent) => agent.agentCode === configuredAgentOption.agentCode)
+      ? agentOptions
+      : [configuredAgentOption, ...agentOptions],
+    [agentOptions, configuredAgentOption],
+  );
+  const executionAgentSelectOptions = useMemo(
+    () => visibleAgentOptions.map((agent) => ({
+      label: `${agent.name} (${agent.agentCode})`,
+      value: agent.agentCode,
+    })),
+    [visibleAgentOptions],
+  );
+  const modelOptions = useMemo(
+    () => automationModelOptionsForAgent(workspaceModelOptions, configuredAgentOption),
+    [configuredAgentOption, workspaceModelOptions],
+  );
+  const selectedModelCode = useMemo(() => {
+    const resolvedModelCode = automationModelCodeFromOption(modelOptions, selectedModelOptionCode);
+    if (resolvedModelCode) return resolvedModelCode;
+    const configuredOptionCode = optionCodeForAutomationModel(selectedAgentCode, task.modelCode ?? null);
+    if (task.modelCode && selectedModelOptionCode === configuredOptionCode && !modelOptions.some((option) => option.optionCode === selectedModelOptionCode)) {
+      return task.modelCode;
+    }
+    return null;
+  }, [modelOptions, selectedAgentCode, selectedModelOptionCode, task.modelCode]);
+  const visibleModelOptions = useMemo<AutomationModelOption[]>(() => {
+    if (!selectedModelOptionCode || modelOptions.some((option) => option.optionCode === selectedModelOptionCode)) {
+      return modelOptions;
+    }
+    if (!task.modelCode) return modelOptions;
+    return [{
+      label: task.modelCode,
+      modelCode: task.modelCode,
+      optionCode: selectedModelOptionCode,
+    }, ...modelOptions];
+  }, [modelOptions, selectedModelOptionCode, task.modelCode]);
+  const executionModelSelectOptions = useMemo(
+    () => visibleModelOptions.map((model) => ({
+      label: model.label,
+      value: model.optionCode,
+    })),
+    [visibleModelOptions],
+  );
 
   useEffect(() => {
     if (skipNextTaskSync.current) {
@@ -152,19 +236,74 @@ export function TaskDetailsPage() {
     setPriority(task.priority);
     setStatus(task.status);
     setProgress(String(task.progress));
+    setSelectedAgentCode(task.agentCode || mainAutomationAgentOption.agentCode);
+    setSelectedModelOptionCode(optionCodeForAutomationModel(task.agentCode || mainAutomationAgentOption.agentCode, task.modelCode ?? null));
     setAgentCodesInput(task.agentCodes.join(", "));
     setSelectedAppCodes(task.appCodes);
     setAssigneeUserCodes(task.assigneeUserCodes);
     setDescriptionFullscreenOpen(false);
+    setExecutionResultFullscreenOpen(false);
     setEditing(false);
   }, [task]);
 
   useEffect(() => {
-    if (!descriptionFullscreenOpen) return;
+    if (!task.workspaceCode) {
+      setAgentOptions([mainAutomationAgentOption]);
+      setWorkspaceModelOptions([]);
+      return;
+    }
+
+    let active = true;
+    setExecutionOptionsLoading(true);
+    const agentsPromise = getServiceDataSource("agent") === "api"
+      ? fetchWorkspaceSystemAgents(task.workspaceCode)
+      : Promise.resolve(listWorkspaceSystemAgentsMock(task.workspaceCode));
+    const modelsPromise = getServiceDataSource("model") === "api"
+      ? fetchWorkspaceSelectOptions(task.workspaceCode)
+      : Promise.resolve(getWorkspaceSelectOptions(task.workspaceCode));
+
+    Promise.all([agentsPromise, modelsPromise])
+      .then(([agents, models]) => {
+        if (!active) return;
+        setAgentOptions(availableAutomationAgents(agents));
+        setWorkspaceModelOptions(models);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setAgentOptions([mainAutomationAgentOption]);
+        setWorkspaceModelOptions([]);
+        toast.error(error instanceof Error ? error.message : "Execution options could not be loaded");
+      })
+      .finally(() => {
+        if (active) setExecutionOptionsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [task.workspaceCode, toast]);
+
+  useEffect(() => {
+    if (visibleAgentOptions.some((agent) => agent.agentCode === selectedAgentCode)) return;
+    setSelectedAgentCode(mainAutomationAgentOption.agentCode);
+  }, [selectedAgentCode, visibleAgentOptions]);
+
+  useEffect(() => {
+    if (!visibleModelOptions.length) {
+      setSelectedModelOptionCode("");
+      return;
+    }
+    if (visibleModelOptions.some((option) => option.optionCode === selectedModelOptionCode)) return;
+    setSelectedModelOptionCode(visibleModelOptions[0].optionCode);
+  }, [selectedModelOptionCode, visibleModelOptions]);
+
+  useEffect(() => {
+    if (!descriptionFullscreenOpen && !executionResultFullscreenOpen) return;
 
     const originalOverflow = document.body.style.overflow;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setDescriptionFullscreenOpen(false);
+      if (event.key === "Escape") setExecutionResultFullscreenOpen(false);
     };
 
     document.body.style.overflow = "hidden";
@@ -174,9 +313,14 @@ export function TaskDetailsPage() {
       document.body.style.overflow = originalOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [descriptionFullscreenOpen]);
+  }, [descriptionFullscreenOpen, executionResultFullscreenOpen]);
 
   const effectiveUserByCode = new Map(effectiveUsers.map((user) => [user.userCode, user]));
+  const userOptions = effectiveUsers.map((user) => ({
+    description: user.userCode,
+    label: user.displayName,
+    value: user.userCode,
+  }));
   const assignedUsers = assigneeUserCodes.map((userCode) => effectiveUserByCode.get(userCode)?.displayName ?? userCode);
   const detailEditable = editing && !archived;
   const updatesEditable = !archived;
@@ -187,7 +331,9 @@ export function TaskDetailsPage() {
     || description !== (task.description ?? "")
     || taskType !== task.taskType
     || sourceType !== task.sourceType
-    || sourceUrl !== (task.sourceUrl ?? "");
+    || sourceUrl !== (task.sourceUrl ?? "")
+    || selectedAgentCode !== (task.agentCode || mainAutomationAgentOption.agentCode)
+    || selectedModelCode !== task.modelCode;
 
   const rightPanel = useMemo(() => (
     <InspectorPanel title="Task Metadata">
@@ -265,6 +411,7 @@ export function TaskDetailsPage() {
     setSourceType(task.sourceType);
     setSourceUrl(task.sourceUrl ?? "");
     setDescriptionFullscreenOpen(false);
+    setExecutionResultFullscreenOpen(false);
     setEditing(false);
   }
 
@@ -275,7 +422,9 @@ export function TaskDetailsPage() {
     }
     try {
       const payload = {
+        agentCode: selectedAgentCode,
         description,
+        modelCode: selectedModelCode,
         sourceType,
         sourceUrl,
         taskType,
@@ -284,6 +433,7 @@ export function TaskDetailsPage() {
       const updated = dataSource === "api" ? await updateTask(task.taskCode, payload) : updateMockTask(task.taskCode, payload);
       setTask(updated);
       setDescriptionFullscreenOpen(false);
+      setExecutionResultFullscreenOpen(false);
       setEditing(false);
       toast.success(`Task ${updated.taskCode} details saved`);
     } catch (error) {
@@ -452,9 +602,11 @@ export function TaskDetailsPage() {
     try {
       const payload = {
         agentCodes: [],
+        agentCode: task.agentCode,
         appCodes: selectedAppCodes.filter((code) => availableAppCodeSet.has(code)),
         assigneeUserCodes: assigneeUserCodes.slice(0, 1),
         description: `Subtask for ${task.taskCode}`,
+        modelCode: task.modelCode,
         parentTaskCode: task.taskCode,
         priority: "Low" as TaskPriority,
         sourceType: "Internal" as TaskSourceType,
@@ -473,6 +625,20 @@ export function TaskDetailsPage() {
     }
   }
 
+  async function handleExecute() {
+    if (executing || archived) return;
+    setExecuting(true);
+    try {
+      const result = dataSource === "api" ? await executeTask(task.taskCode) : executeMockTask(task.taskCode);
+      toast.success(`Task ${result.taskCode} execution started`, { title: result.runCode });
+      navigate(`/chats?sessionCode=${encodeURIComponent(result.sessionCode)}&sourceTab=chat`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Task execution failed");
+    } finally {
+      setExecuting(false);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -480,9 +646,10 @@ export function TaskDetailsPage() {
         title="Task Details"
         actions={
           <>
-            <Button variant="primary" onClick={() => {
-              toast.info("Task execution is not available in v1");
-            }}><Play size={15} aria-hidden="true" />Execute</Button>
+            <Button disabled={executing || archived} variant="primary" onClick={() => void handleExecute()}>
+              <Play size={15} aria-hidden="true" />
+              {executing ? "Executing..." : "Execute"}
+            </Button>
             {detailEditable ? (
               <>
                 <Button variant="secondary" onClick={resetDetailFields}>Cancel</Button>
@@ -495,167 +662,197 @@ export function TaskDetailsPage() {
         }
       />
       <div className="space-y-5">
-          <SurfaceCard>
-            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Task Attributes</h2>
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Task Status">
-                <SelectInput aria-label="Task detail status" value={status} onChange={(event) => {
-                  void handleStatusChange(event.target.value as TaskStatus);
-                }}>
-                  {availableStatuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
-                </SelectInput>
-              </Field>
-              <Field label="Priority">
-                {updatesEditable ? (
-                  <SelectInput aria-label="Task detail priority" value={priority} onChange={(event) => handlePriorityChange(event.target.value as TaskPriority)}>
-                    {options.priorities.map((item) => <option key={item}>{item}</option>)}
-                  </SelectInput>
-                ) : (
-                  <ReadValue>{task.priority}</ReadValue>
-                )}
-              </Field>
-              <Field label="Progress">
-                {updatesEditable ? (
-                  <TextInput
-                    aria-label="Task detail progress"
-                    disabled={progressManagedBySubtasks}
-                    max="100"
-                    min="0"
-                    type="number"
-                    value={progressManagedBySubtasks ? String(task.progress) : progress}
-                    onChange={(event) => setProgress(event.target.value)}
-                    onBlur={handleProgressBlur}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                    }}
-                  />
-                ) : (
-                  <ReadValue>{task.progress}%</ReadValue>
-                )}
-              </Field>
-              <Field label="Agent Codes">
-                {updatesEditable ? (
-                  <TextInput
-                    aria-label="Task detail agent codes"
-                    placeholder="agent-reviewer, agent-builder"
-                    value={agentCodesInput}
-                    onChange={(event) => setAgentCodesInput(event.target.value)}
-                    onBlur={handleAgentCodesBlur}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter") event.currentTarget.blur();
-                    }}
-                  />
-                ) : (
-                  <ReadValue>{task.agentCodes.join(", ") || "None"}</ReadValue>
-                )}
-              </Field>
-              <div className="md:col-span-2">
-                <Field label="Apps" hint="Only active apps from this workspace can be newly assigned.">
-                  <TaskAppSelectionField
-                    availableApps={appOptions}
-                    disabled={!updatesEditable}
-                    emptyMessage="No active apps are available for this workspace."
-                    legacyAppCodes={legacyAppCodes}
-                    loading={workspaceOptionsLoading}
-                    selectedAppCodes={selectedAppCodes}
-                    onRemoveLegacy={updatesEditable ? handleLegacyAppRemove : undefined}
-                    onToggle={updatesEditable ? handleAppToggle : undefined}
-                  />
-                </Field>
-              </div>
-            </div>
-            <SurfaceCard className="mt-4 bg-[var(--color-surface-container-lowest)]">
-              <h3 className="mb-3 text-sm font-semibold">Assigned Users</h3>
+        <SurfaceCard>
+          <div className="mb-5">
+            <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Task Details</h2>
+            <p className="mt-1 font-mono text-sm text-[var(--color-on-surface-variant)]">{task.taskCode}</p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label="Task Status">
+              <SelectInput aria-label="Task detail status" value={status} onChange={(event) => {
+                void handleStatusChange(event.target.value as TaskStatus);
+              }}>
+                {availableStatuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
+              </SelectInput>
+            </Field>
+            <Field label="Priority">
               {updatesEditable ? (
-                <div className="grid gap-2 md:grid-cols-2">
-                  {effectiveUsers.map((user) => (
-                    <label className="flex items-start gap-3 rounded-lg border border-[var(--color-outline-variant)] p-3 text-sm" key={user.userCode}>
-                      <input
-                        aria-label={`Assign ${user.displayName}`}
-                        checked={assigneeUserCodes.includes(user.userCode)}
-                        className="mt-1"
-                        type="checkbox"
-                        onChange={() => handleAssigneeToggle(user.userCode)}
-                      />
-                      <span>
-                        <span className="block font-medium">{user.displayName}</span>
-                        <span className="block text-xs text-[var(--color-on-surface-variant)]">{user.userCode}</span>
-                      </span>
-                    </label>
-                  ))}
-                  {!effectiveUsers.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">No effective users available for this workspace.</p> : null}
-                </div>
+                <SelectInput aria-label="Task detail priority" value={priority} onChange={(event) => handlePriorityChange(event.target.value as TaskPriority)}>
+                  {options.priorities.map((item) => <option key={item}>{item}</option>)}
+                </SelectInput>
               ) : (
-                <ReadValue>{assignedUsers.join(", ") || "None"}</ReadValue>
+                <ReadValue>{task.priority}</ReadValue>
               )}
-            </SurfaceCard>
-          </SurfaceCard>
-          <SurfaceCard>
-            <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Task Definition</h2>
-                <p className="mt-1 font-mono text-sm text-[var(--color-on-surface-variant)]">{task.taskCode}</p>
-              </div>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Title">
-                {detailEditable ? (
-                  <TextInput aria-label="Task detail title" value={title} onChange={(event) => setTitle(event.target.value)} />
-                ) : (
-                  <ReadValue>{task.title}</ReadValue>
-                )}
-              </Field>
-              <Field label="Task Type">
-                {detailEditable ? (
-                  <SelectInput aria-label="Task detail type" value={taskType} onChange={(event) => setTaskType(event.target.value as TaskType)}>
-                    {options.taskTypes.map((item) => <option key={item}>{item}</option>)}
-                  </SelectInput>
-                ) : (
-                  <ReadValue>{task.taskType}</ReadValue>
-                )}
-              </Field>
-              <Field label="Source Type">
-                {detailEditable ? (
-                  <SelectInput aria-label="Task detail source type" value={sourceType} onChange={(event) => setSourceType(event.target.value as TaskSourceType)}>
-                    {options.sourceTypes.map((item) => <option key={item}>{item}</option>)}
-                  </SelectInput>
-                ) : (
-                  <ReadValue>{task.sourceType}</ReadValue>
-                )}
-              </Field>
-              <Field label="Source URL">
-                {detailEditable ? (
-                  <TextInput aria-label="Task detail source URL" placeholder="Optional GitHub/GitLab URL" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} />
-                ) : (
-                  <ReadValue>{task.sourceUrl || "None"}</ReadValue>
-                )}
-              </Field>
-            </div>
-            <div className="mt-4 grid gap-1.5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Description</span>
-                <Button
-                  size="sm"
-                  type="button"
-                  variant="ghost"
-                  aria-label="Open description fullscreen"
-                  onClick={() => setDescriptionFullscreenOpen(true)}
-                >
-                  <Maximize2 size={14} aria-hidden="true" />
-                  Fullscreen
-                </Button>
-              </div>
+            </Field>
+            <Field label="Progress">
+              {updatesEditable ? (
+                <TextInput
+                  aria-label="Task detail progress"
+                  disabled={progressManagedBySubtasks}
+                  max="100"
+                  min="0"
+                  type="number"
+                  value={progressManagedBySubtasks ? String(task.progress) : progress}
+                  onChange={(event) => setProgress(event.target.value)}
+                  onBlur={handleProgressBlur}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                />
+              ) : (
+                <ReadValue>{task.progress}%</ReadValue>
+              )}
+            </Field>
+            <Field label="Agent Codes">
+              {updatesEditable ? (
+                <TextInput
+                  aria-label="Task detail agent codes"
+                  placeholder="agent-reviewer, agent-builder"
+                  value={agentCodesInput}
+                  onChange={(event) => setAgentCodesInput(event.target.value)}
+                  onBlur={handleAgentCodesBlur}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                  }}
+                />
+              ) : (
+                <ReadValue>{task.agentCodes.join(", ") || "None"}</ReadValue>
+              )}
+            </Field>
+            <Field label="Execution Agent">
               {detailEditable ? (
-                <TextArea aria-label="Task detail description" className="min-h-36 w-full" value={description} onChange={(event) => setDescription(event.target.value)} />
+                <OptionSelect
+                  ariaLabel="Task execution agent"
+                  disabled={executionOptionsLoading}
+                  loading={executionOptionsLoading}
+                  loadingLabel="Loading agents..."
+                  options={executionAgentSelectOptions}
+                  value={selectedAgentCode}
+                  onChange={setSelectedAgentCode}
+                />
               ) : (
-                <MarkdownContent ariaLabel="Task description markdown" className="max-h-80 overflow-y-auto pr-2" content={task.description} />
+                <ReadValue>{task.agentCode || "main-agent"}</ReadValue>
               )}
+            </Field>
+            <Field label="Execution Model">
+              {detailEditable ? (
+                <OptionSelect
+                  ariaLabel="Task execution model"
+                  emptyLabel="No executable models"
+                  disabled={executionOptionsLoading || !visibleModelOptions.length}
+                  loading={executionOptionsLoading}
+                  loadingLabel="Loading models..."
+                  options={executionModelSelectOptions}
+                  value={selectedModelOptionCode}
+                  onChange={setSelectedModelOptionCode}
+                />
+              ) : (
+                <ReadValue>{task.modelCode || "Workspace default text model"}</ReadValue>
+              )}
+            </Field>
+            <Field label="Title">
+              {detailEditable ? (
+                <TextInput aria-label="Task detail title" value={title} onChange={(event) => setTitle(event.target.value)} />
+              ) : (
+                <ReadValue>{task.title}</ReadValue>
+              )}
+            </Field>
+            <Field label="Task Type">
+              {detailEditable ? (
+                <SelectInput aria-label="Task detail type" value={taskType} onChange={(event) => setTaskType(event.target.value as TaskType)}>
+                  {options.taskTypes.map((item) => <option key={item}>{item}</option>)}
+                </SelectInput>
+              ) : (
+                <ReadValue>{task.taskType}</ReadValue>
+              )}
+            </Field>
+            <Field label="Source Type">
+              {detailEditable ? (
+                <SelectInput aria-label="Task detail source type" value={sourceType} onChange={(event) => setSourceType(event.target.value as TaskSourceType)}>
+                  {options.sourceTypes.map((item) => <option key={item}>{item}</option>)}
+                </SelectInput>
+              ) : (
+                <ReadValue>{task.sourceType}</ReadValue>
+              )}
+            </Field>
+            <Field label="Source URL">
+              {detailEditable ? (
+                <TextInput aria-label="Task detail source URL" placeholder="Optional GitHub/GitLab URL" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} />
+              ) : (
+                <ReadValue>{task.sourceUrl || "None"}</ReadValue>
+              )}
+            </Field>
+            <div className="md:col-span-2">
+              <Field label="Apps" hint="Only active apps from this workspace can be newly assigned.">
+                <TaskAppSelectionField
+                  availableApps={appOptions}
+                  disabled={!updatesEditable}
+                  emptyMessage="No active apps are available for this workspace."
+                  legacyAppCodes={legacyAppCodes}
+                  loading={workspaceOptionsLoading}
+                  selectedAppCodes={selectedAppCodes}
+                  onRemoveLegacy={updatesEditable ? handleLegacyAppRemove : undefined}
+                  onToggle={updatesEditable ? handleAppToggle : undefined}
+                />
+              </Field>
             </div>
-          </SurfaceCard>
+            <div className="md:col-span-2">
+              <Field label="Assigned Users" hint="Only effective users from the current workspace can be assigned.">
+                {updatesEditable ? (
+                  <MultiSelectDropdown
+                    ariaLabel="Task assignees"
+                    emptyMessage="No effective users available for this workspace."
+                    loading={workspaceOptionsLoading}
+                    loadingMessage="Loading user options..."
+                    options={userOptions}
+                    placeholder="Select assigned users"
+                    selectedValues={assigneeUserCodes}
+                    onToggle={handleAssigneeToggle}
+                  />
+                ) : (
+                  <ReadValue>{assignedUsers.join(", ") || "None"}</ReadValue>
+                )}
+              </Field>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-1.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Description</span>
+              <Button
+                size="sm"
+                type="button"
+                variant="ghost"
+                aria-label="Open description fullscreen"
+                onClick={() => setDescriptionFullscreenOpen(true)}
+              >
+                <Maximize2 size={14} aria-hidden="true" />
+                Fullscreen
+              </Button>
+            </div>
+            {detailEditable ? (
+              <TextArea aria-label="Task detail description" className="min-h-36 w-full" value={description} onChange={(event) => setDescription(event.target.value)} />
+            ) : (
+              <MarkdownContent ariaLabel="Task description markdown" className="max-h-80 overflow-y-auto pr-2" content={task.description} />
+            )}
+          </div>
+          <div className="mt-4 grid gap-1.5 border-t border-[var(--color-outline-variant)] pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Execution Result</span>
+              <Button
+                size="sm"
+                type="button"
+                variant="ghost"
+                aria-label="Open execution result fullscreen"
+                disabled={!task.executionResult}
+                onClick={() => setExecutionResultFullscreenOpen(true)}
+              >
+                <Maximize2 size={14} aria-hidden="true" />
+                Fullscreen
+              </Button>
+            </div>
+            <MarkdownContent ariaLabel="Task execution result markdown" className="max-h-80 overflow-y-auto pr-2" content={task.executionResult} />
+          </div>
+        </SurfaceCard>
       </div>
       {descriptionFullscreenOpen ? createPortal(
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
@@ -695,6 +892,38 @@ export function TaskDetailsPage() {
                   <MarkdownContent ariaLabel="Task description markdown fullscreen" className="max-w-none" content={task.description} />
                 </div>
               )}
+            </div>
+          </div>
+        </div>,
+        document.body,
+      ) : null}
+      {executionResultFullscreenOpen ? createPortal(
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+          <div
+            className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Execution result fullscreen preview"
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
+              <div>
+                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Execution Result</h2>
+                <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">Preview the final agent reply recorded for this task execution.</p>
+              </div>
+              <Button
+                size="icon"
+                type="button"
+                variant="ghost"
+                aria-label="Close execution result fullscreen"
+                onClick={() => setExecutionResultFullscreenOpen(false)}
+              >
+                <X size={16} aria-hidden="true" />
+              </Button>
+            </div>
+            <div className="min-h-0 flex-1 px-5 py-4">
+              <div className="h-full overflow-y-auto pr-1">
+                <MarkdownContent ariaLabel="Task execution result markdown fullscreen" className="max-w-none" content={task.executionResult} />
+              </div>
             </div>
           </div>
         </div>,

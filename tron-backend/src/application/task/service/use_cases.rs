@@ -77,12 +77,16 @@ impl TaskService {
             parent_task_code,
             title,
             description: optional_trimmed(command.description),
+            execution_result: None,
             status: task_default_status_for_role(task_role),
             previous_status: None,
             priority: command.priority,
             task_type: command.task_type,
             source_type: command.source_type,
             source_url: optional_source_url(command.source_url),
+            agent_code: optional_trimmed(command.agent_code)
+                .unwrap_or_else(|| "main-agent".to_string()),
+            model_code: optional_trimmed(command.model_code),
             progress: 0,
             created_at: current_timestamp(),
             updated_at: current_timestamp(),
@@ -137,6 +141,13 @@ impl TaskService {
         }
         if let Some(source_url) = command.source_url {
             task.source_url = optional_source_url(source_url);
+        }
+        if let Some(agent_code) = command.agent_code {
+            task.agent_code =
+                normalized_required(agent_code).unwrap_or_else(|| "main-agent".to_string());
+        }
+        if let Some(model_code) = command.model_code {
+            task.model_code = model_code.and_then(|value| optional_trimmed(Some(value)));
         }
         task.updated_at = current_timestamp();
         let assignees = command
@@ -200,6 +211,32 @@ impl TaskService {
             .update_task(&task)?;
         let detail = self.get_task(task_code)?;
         self.publish_task_detail_event("task.status_updated", "Updated task status", &detail);
+        Ok(detail)
+    }
+
+    pub fn record_execution_result(
+        &self,
+        task_code: &str,
+        execution_result: String,
+    ) -> Result<TaskDetail, TaskError> {
+        let mut task = self.get_task_record(task_code)?;
+        if task.status == TaskStatus::Archived {
+            return Err(TaskError::ArchivedMutationDenied);
+        }
+        task.execution_result = optional_trimmed(Some(execution_result));
+        task.status = TaskStatus::Completed;
+        task.progress = 100;
+        task.updated_at = current_timestamp();
+        self.repository
+            .lock()
+            .expect("task repository mutex poisoned")
+            .update_task(&task)?;
+        let detail = self.get_task(task_code)?;
+        self.publish_task_detail_event(
+            "task.execution_recorded",
+            "Recorded task execution result",
+            &detail,
+        );
         Ok(detail)
     }
 
@@ -311,6 +348,8 @@ mod tests {
             task_type: TaskType::Feature,
             source_type: TaskSourceType::Internal,
             source_url: Some(String::new()),
+            agent_code: "main-agent".into(),
+            model_code: None,
             assignee_user_codes: vec![],
             agent_codes: vec![],
             app_codes: vec![],
