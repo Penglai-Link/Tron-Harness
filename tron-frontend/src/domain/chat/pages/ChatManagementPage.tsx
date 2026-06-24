@@ -2995,7 +2995,7 @@ function AguiRunWorkRail({
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
       ) : null}
-      {!terminalEvent || expanded ? (
+      {expanded ? (
         <>
           <AguiUserWorkRail cards={displayUserCards} />
           <AguiEventRail events={debugEvents} />
