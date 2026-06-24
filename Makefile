@@ -158,6 +158,9 @@ app-clean: fe-clean
 	rm -rf $(BACKEND_FRONTEND_DIR)
 	mkdir -p $(BACKEND_FRONTEND_DIR)
 
+ELECTRON_DIR := src-electron
+ELECTRON_NPM := npm
+
 .PHONY: desktop-build
 desktop-build: desktop-clean app-build
 	rm -rf $(ELECTRON_DIR)/resources/frontend

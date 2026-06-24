@@ -83,5 +83,5 @@ $RECYCLE.BIN/
 .nfs*
 
 *.pyc
-src-tauri/target
-src-tauri/Cargo.lock
+electron/dist
+electron/resources
