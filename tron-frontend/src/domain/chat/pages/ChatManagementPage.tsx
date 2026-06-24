@@ -1,11 +1,12 @@
 import {
   Fragment,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import {
   AlarmClock,
   ArrowDown,
@@ -2163,7 +2164,7 @@ function SessionSidebar({
   onCreateSession: () => void;
   onDeleteSession: (session: ChatSession) => void;
   onRenameSession: (session: ChatSession, title: string) => Promise<void>;
-  onSessionSelect: (sessionCode: string, sourceTab?: ChatSessionSourceTab) => void;
+  onSessionSelect: (session: ChatSession, sourceTab?: ChatSessionSourceTab) => void;
   onSourceTabSelect: (sourceTab: ChatSessionSourceTab) => void;
   runningSessionCode: string;
   sessionActionPendingCode: string;
@@ -2294,7 +2295,7 @@ function SessionSidebar({
             }}
           />
         ) : (
-          <button className="min-w-0 text-left" type="button" onClick={() => onSessionSelect(session.sessionCode, sourceTab)}>
+          <button className="min-w-0 text-left" type="button" onClick={() => onSessionSelect(session, sourceTab)}>
             <span className="block truncate text-sm font-medium">{session.title}</span>
             <span className="mt-1 flex items-center gap-1.5 text-xs text-[var(--color-on-surface-variant)]">
               <span
@@ -2354,7 +2355,7 @@ function SessionSidebar({
                 key={session.sessionCode}
                 type="button"
                 aria-label={`Open ${session.title}`}
-                onClick={() => onSessionSelect(session.sessionCode, sourceTabsBySessionCode.get(session.sessionCode))}
+                onClick={() => onSessionSelect(session, sourceTabsBySessionCode.get(session.sessionCode))}
                 onMouseEnter={(event) => showCollapsedTooltip(event.currentTarget, session)}
                 onMouseLeave={hideCollapsedTooltip}
                 onFocus={(event) => showCollapsedTooltip(event.currentTarget, session)}
@@ -3006,9 +3007,17 @@ function AguiRunWorkRail({
 }
 
 export function ChatManagementPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const requestedSessionCode = searchParams.get("sessionCode")?.trim() ?? "";
-  const requestedSourceTab = parseChatSessionSourceTab(searchParams.get("sourceTab"));
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const routerSearchText = searchParams.toString();
+  const [currentSearchText, setCurrentSearchText] = useState(() => (
+    typeof window === "undefined"
+      ? routerSearchText
+      : window.location.search.replace(/^\?/, "")
+  ));
+  const currentSearchParams = useMemo(() => new URLSearchParams(currentSearchText), [currentSearchText]);
+  const requestedSessionCode = currentSearchParams.get("sessionCode")?.trim() ?? "";
+  const requestedSourceTab = parseChatSessionSourceTab(currentSearchParams.get("sourceTab"));
   const toast = useToast();
   const { t } = useTranslation("pages");
   const { session: authSession } = useAuthSession();
@@ -3027,7 +3036,16 @@ export function ChatManagementPage() {
   ));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [composer, setComposer] = useState("");
-  const selectedSession = activeSessionCode ? findSession(sessionGroups, activeSessionCode) : undefined;
+  const [optimisticActiveSession, setOptimisticActiveSession] = useState<ChatSession | null>(null);
+  const requestedSession = requestedSessionCode ? findSession(sessionGroups, requestedSessionCode) : undefined;
+  const optimisticSession = optimisticActiveSession
+    && optimisticActiveSession.sessionCode === (requestedSessionCode || activeSessionCode)
+    ? optimisticActiveSession
+    : undefined;
+  const resolvedActiveSessionCode = requestedSession?.sessionCode ?? optimisticSession?.sessionCode ?? activeSessionCode;
+  const selectedSession = requestedSession
+    ?? optimisticSession
+    ?? (!requestedSessionCode && resolvedActiveSessionCode ? findSession(sessionGroups, resolvedActiveSessionCode) : undefined);
   const activeSession = selectedSession ?? (
     !requestedSessionCode && !requestedSourceTab && !activeSessionCode
       ? firstSessionForSourceTab(sessionGroups, defaultChatSessionSourceTab)
@@ -3101,6 +3119,27 @@ export function ChatManagementPage() {
     : `No models for ${selectedAgent?.name ?? effectiveAgentCode}`;
   const currentUserDisplayName = authSession?.user.displayName ?? "";
 
+  const replaceChatSearchParams = useCallback((update: (next: URLSearchParams) => void) => {
+    const currentSearch = typeof window === "undefined" ? currentSearchText : window.location.search;
+    const next = new URLSearchParams(currentSearch);
+    update(next);
+    const nextSearch = next.toString();
+    setCurrentSearchText(nextSearch);
+    const pathname = typeof window === "undefined" ? "/chats" : window.location.pathname;
+    navigate(`${pathname}${nextSearch ? `?${nextSearch}` : ""}`, { replace: true });
+  }, [currentSearchText, navigate]);
+
+  useEffect(() => {
+    setCurrentSearchText(routerSearchText);
+  }, [routerSearchText]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const syncCurrentSearch = () => setCurrentSearchText(window.location.search.replace(/^\?/, ""));
+    window.addEventListener("popstate", syncCurrentSearch);
+    return () => window.removeEventListener("popstate", syncCurrentSearch);
+  }, []);
+
   function scrollToLatestMessage(behavior: ScrollBehavior = "auto") {
     if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
     scrollFrameRef.current = window.requestAnimationFrame(() => {
@@ -3131,12 +3170,21 @@ export function ChatManagementPage() {
   }, [groups]);
 
   useEffect(() => {
+    if (!optimisticActiveSession) return;
+    if (requestedSession?.sessionCode === optimisticActiveSession.sessionCode) {
+      setOptimisticActiveSession(null);
+    }
+  }, [optimisticActiveSession, requestedSession?.sessionCode]);
+
+  useEffect(() => {
     if (!requestedSessionCode) {
       requestedSessionCodeSyncedRef.current = "";
       return;
     }
     if (requestedSessionCodeSyncedRef.current === requestedSessionCode && activeSessionCode === requestedSessionCode) return;
     if (!findSession(sessionGroups, requestedSessionCode)) return;
+    if (activeSessionCodeRef.current !== requestedSessionCode) setVisibleMessages([]);
+    activeSessionCodeRef.current = requestedSessionCode;
     setActiveSessionCode(requestedSessionCode);
     const sourceTab = sourceTabForSessionCode(sessionGroups, requestedSessionCode);
     if (sourceTab) selectSourceTab(sourceTab);
@@ -3148,22 +3196,25 @@ export function ChatManagementPage() {
     selectSourceTab(requestedSourceTab);
     if (!sessionGroups.length) return;
 
-    const requestedSessionSourceTab = requestedSessionCode
-      ? sourceTabForSessionCode(sessionGroups, requestedSessionCode)
-      : undefined;
-    if (requestedSessionCode && requestedSessionSourceTab === requestedSourceTab) return;
+    if (requestedSessionCode) {
+      const requestedSessionSourceTab = sourceTabForSessionCode(sessionGroups, requestedSessionCode);
+      if (requestedSessionSourceTab && requestedSessionSourceTab !== requestedSourceTab) {
+        replaceChatSearchParams((next) => {
+          next.set("sourceTab", requestedSessionSourceTab);
+        });
+      }
+      return;
+    }
 
     const nextSession = firstSessionForSourceTab(sessionGroups, requestedSourceTab);
     if (nextSession) {
       if (activeSessionCodeRef.current !== nextSession.sessionCode) setVisibleMessages([]);
       activeSessionCodeRef.current = nextSession.sessionCode;
       setActiveSessionCode(nextSession.sessionCode);
-      setSearchParams((current) => {
-        const next = new URLSearchParams(current);
+      replaceChatSearchParams((next) => {
         next.set("sessionCode", nextSession.sessionCode);
         next.set("sourceTab", requestedSourceTab);
-        return next;
-      }, { replace: true });
+      });
       return;
     }
 
@@ -3171,13 +3222,11 @@ export function ChatManagementPage() {
     activeSessionCodeRef.current = "";
     setActiveSessionCode("");
     setVisibleMessages([]);
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
+    replaceChatSearchParams((next) => {
       next.delete("sessionCode");
       next.set("sourceTab", requestedSourceTab);
-      return next;
-    }, { replace: true });
-  }, [requestedSessionCode, requestedSourceTab, sessionGroups, setSearchParams]);
+    });
+  }, [replaceChatSearchParams, requestedSessionCode, requestedSourceTab, sessionGroups]);
 
   useEffect(() => {
     let active = true;
@@ -3559,14 +3608,16 @@ export function ChatManagementPage() {
     else handleTranscriptScroll();
   }, [transcriptAguiEvents, visibleMessages]);
 
-  function handleSessionSelect(sessionCode: string, sourceTab?: ChatSessionSourceTab) {
+  function handleSessionSelect(sessionOrCode: ChatSession | string, sourceTab?: ChatSessionSourceTab) {
+    const sessionCode = typeof sessionOrCode === "string" ? sessionOrCode : sessionOrCode.sessionCode;
+    const selected = typeof sessionOrCode === "string" ? findSession(sessionGroups, sessionCode) : sessionOrCode;
     if (sessionCode !== activeSessionCode) setVisibleMessages([]);
+    setOptimisticActiveSession(selected ?? null);
     activeSessionCodeRef.current = sessionCode;
     setActiveSessionCode(sessionCode);
     const nextSourceTab = sourceTab ?? sourceTabForSessionCode(sessionGroups, sessionCode);
     if (nextSourceTab) selectSourceTab(nextSourceTab);
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
+    replaceChatSearchParams((next) => {
       if (sessionCode) {
         next.set("sessionCode", sessionCode);
         if (nextSourceTab) next.set("sourceTab", nextSourceTab);
@@ -3574,8 +3625,7 @@ export function ChatManagementPage() {
         next.delete("sessionCode");
         next.delete("sourceTab");
       }
-      return next;
-    }, { replace: true });
+    });
     setUnseenSessionCodes((current) => {
       if (!current.has(sessionCode)) return current;
       const next = new Set(current);
@@ -3588,18 +3638,17 @@ export function ChatManagementPage() {
     selectSourceTab(sourceTab);
     const nextSession = firstSessionForSourceTab(sessionGroups, sourceTab);
     if (nextSession) {
-      handleSessionSelect(nextSession.sessionCode, sourceTab);
+      handleSessionSelect(nextSession, sourceTab);
       return;
     }
     activeSessionCodeRef.current = "";
+    setOptimisticActiveSession(null);
     setActiveSessionCode("");
     setVisibleMessages([]);
-    setSearchParams((current) => {
-      const next = new URLSearchParams(current);
+    replaceChatSearchParams((next) => {
       next.delete("sessionCode");
       next.set("sourceTab", sourceTab);
-      return next;
-    }, { replace: true });
+    });
   }
 
   function handleAgentSelect(agentCode: string) {
@@ -3983,7 +4032,7 @@ export function ChatManagementPage() {
         workspaceCode: activeWorkspaceCode,
       });
       setSessionGroups((current) => insertSession(current, session));
-      handleSessionSelect(session.sessionCode);
+      handleSessionSelect(session);
       setVisibleMessages([]);
       setComposer("");
       toast.success("Session created", { title: session.sessionCode });
@@ -4008,7 +4057,7 @@ export function ChatManagementPage() {
         return next;
       });
       if (activeSessionCode === archived.sessionCode) {
-        handleSessionSelect(firstSession(nextGroups)?.sessionCode ?? "");
+        handleSessionSelect(firstSession(nextGroups) ?? "");
         setVisibleMessages([]);
       }
       forgetSessionModelSelection(archived.sessionCode);
@@ -4037,7 +4086,7 @@ export function ChatManagementPage() {
         return next;
       });
       if (activeSessionCode === deleted.sessionCode) {
-        handleSessionSelect(firstSession(nextGroups)?.sessionCode ?? "");
+        handleSessionSelect(firstSession(nextGroups) ?? "");
         setVisibleMessages([]);
       }
       forgetSessionModelSelection(deleted.sessionCode);
@@ -4103,7 +4152,7 @@ export function ChatManagementPage() {
   return (
     <div className="relative z-0 flex h-full min-h-0 min-w-0 overflow-hidden overscroll-none bg-white">
       <SessionSidebar
-        activeSessionCode={activeSessionCode}
+        activeSessionCode={activeSession?.sessionCode ?? activeSessionCode}
         activeSourceTab={activeSourceTab}
         collapsed={sidebarCollapsed}
         creatingSession={creatingSession}
