@@ -168,12 +168,20 @@ fn stage_definitions() -> Vec<StageDefinition> {
             parallel: false,
             default_join_policy: "ALL_SUCCESS",
             default_failure_policy: "FAIL_PIPELINE",
-            strategies: &[StrategyDefinition {
-                strategy_id: "RAG_TREE_EXTRACTIVE_SUMMARY_V1",
-                display_name: "Extractive Summary Tree",
-                required_capabilities: &[],
-                required_storage_segments: &["tree"],
-            }],
+            strategies: &[
+                StrategyDefinition {
+                    strategy_id: "RAG_TREE_EXTRACTIVE_SUMMARY_V1",
+                    display_name: "Extractive Summary Tree",
+                    required_capabilities: &[],
+                    required_storage_segments: &["tree"],
+                },
+                StrategyDefinition {
+                    strategy_id: "RAG_TREE_LLM_SUMMARY_V1",
+                    display_name: "LLM Summary Tree",
+                    required_capabilities: &[],
+                    required_storage_segments: &["tree"],
+                },
+            ],
             execution_stage_id: "summarizeTree",
         },
         StageDefinition {

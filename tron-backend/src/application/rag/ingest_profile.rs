@@ -135,6 +135,7 @@ where
     }
     let split_strategy_id =
         optional_stage_strategy_id(&stages, "splitText")?.ok_or(RagError::IngestProfileInvalid)?;
+    validate_summary_tree_config(&stages)?;
     let supported_source_types = supported_source_types(&profile.config)?;
     let source_resolver_strategy_id = optional_stage_strategy_id(&stages, "resolveSource")?;
     let document_parser_strategy_id = optional_stage_strategy_id(&stages, "parseDocument")?;
@@ -433,6 +434,27 @@ fn include_heading_in_index_text(
                 .and_then(Value::as_bool)
         })
         .unwrap_or(split_strategy_id == "RAG_SPLIT_MARKDOWN_HEADING_V1")
+}
+
+fn validate_summary_tree_config(stages: &serde_json::Map<String, Value>) -> Result<(), RagError> {
+    if optional_stage_strategy_id(stages, "summarizeTree")?.as_deref()
+        != Some("RAG_TREE_LLM_SUMMARY_V1")
+    {
+        return Ok(());
+    }
+    let config = stage_config(stages, "summarizeTree")
+        .and_then(Value::as_object)
+        .ok_or(RagError::IngestProfileInvalid)?;
+    if config.keys().any(|key| key != "modelCode") {
+        return Err(RagError::IngestProfileInvalid);
+    }
+    config
+        .get("modelCode")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|_| ())
+        .ok_or(RagError::IngestProfileInvalid)
 }
 
 fn document_formats(

@@ -18,6 +18,7 @@ impl RagStrategyRegistry for DefaultRagStrategyRegistry {
                 "RAG_FULLTEXT_INDEX",
                 "RAG_MARKDOWN_TREE_EXTRACT_V1",
                 "RAG_TREE_EXTRACTIVE_SUMMARY_V1",
+                "RAG_TREE_LLM_SUMMARY_V1",
                 "RAG_TREE_FULLTEXT_INDEX",
                 "RAG_TREE_VECTOR_INDEX",
                 "RAG_VECTOR_INDEX",

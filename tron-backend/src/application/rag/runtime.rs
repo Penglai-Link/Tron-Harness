@@ -1,11 +1,14 @@
 use std::{future::Future, path::PathBuf, pin::Pin};
 
-use crate::application::llm::{LlmEmbeddingCallCommand, LlmRerankCallCommand, LlmRuntimeService};
+use crate::application::llm::{
+    LlmEmbeddingCallCommand, LlmRerankCallCommand, LlmRuntimeService, LlmTextGenerationCallCommand,
+};
 use crate::config::MineruConfig;
 
 use super::{
     RagDocumentParseCall, RagDocumentSourceCall, RagDocumentSourceRuntime, RagEmbeddingCall,
-    RagEmbeddingResult, RagEmbeddingRuntime, RagRerankCall, RagSearchRuntime,
+    RagEmbeddingResult, RagEmbeddingRuntime, RagRerankCall, RagSearchRuntime, RagTreeSummaryCall,
+    RagTreeSummaryResult, RagTreeSummaryRuntime,
     document_source::{
         RagResolvedDocument, resolve_project_doc_markdown_file, resolve_project_doc_parse_file,
         resolve_project_doc_reference_file,
@@ -90,6 +93,28 @@ impl RagSearchRuntime for DefaultRagRuntime {
                         .into_iter()
                         .map(|item| (item.document_index, item.score))
                         .collect()
+                })
+                .map_err(|error| error.to_string())
+        })
+    }
+}
+
+impl RagTreeSummaryRuntime for DefaultRagRuntime {
+    fn summarize_tree<'a>(
+        &'a self,
+        call: RagTreeSummaryCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagTreeSummaryResult, String>> + Send + 'a>> {
+        Box::pin(async move {
+            self.llm
+                .text_generation_call(LlmTextGenerationCallCommand {
+                    workspace_code: call.workspace_code,
+                    model_code: call.model_code,
+                    prompt: call.prompt,
+                })
+                .await
+                .map(|result| RagTreeSummaryResult {
+                    model_code: result.model_code,
+                    summary_text: result.output,
                 })
                 .map_err(|error| error.to_string())
         })

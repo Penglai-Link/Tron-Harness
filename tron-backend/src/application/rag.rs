@@ -36,7 +36,7 @@ pub use ingest::{
     RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime, RagIngestAccessContext,
     RagIngestRepository, RagIngestRequest, RagIngestResult, RagIngestScope, RagIngestService,
     RagIngestSource, RagIngestWarning, RagPersistIngestCommand, RagTextUnitWrite, RagTreeNodeWrite,
-    validate_direct_scope,
+    RagTreeSummaryCall, RagTreeSummaryResult, RagTreeSummaryRuntime, validate_direct_scope,
 };
 pub use ingest_profile::{
     CompiledRagIngestProfile, CompiledRagIngestStage, compile_ingest_profile,

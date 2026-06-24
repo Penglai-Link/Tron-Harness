@@ -33,18 +33,26 @@ where
         Ok(())
     }
 
-    fn execute_summarize_tree_stage(
+    async fn execute_summarize_tree_stage(
         &self,
         request: &RagIngestRequest,
+        node: &CompiledRagPipelineNode,
         bundle: &mut ArtifactBundle,
         _store: &mut RagArtifactStore,
     ) -> Result<(), RagError> {
         let prepared = bundle.prepared_payload()?.clone();
-        let tree_nodes = prepared
-            .tree_hints
-            .iter()
-            .map(|hint| summarize_tree_node(request, &prepared, hint))
-            .collect::<Vec<_>>();
+        let tree_nodes = match node.strategy_id.as_str() {
+            "RAG_TREE_EXTRACTIVE_SUMMARY_V1" => prepared
+                .tree_hints
+                .iter()
+                .map(|hint| summarize_tree_node(request, &prepared, hint))
+                .collect::<Vec<_>>(),
+            "RAG_TREE_LLM_SUMMARY_V1" => {
+                self.execute_llm_summarize_tree(request, node, &prepared)
+                    .await?
+            }
+            _ => return Err(RagError::IngestProfileInvalid),
+        };
         let count = tree_nodes.len();
         bundle.append(
             request,
@@ -65,6 +73,68 @@ where
             request,
         );
         Ok(())
+    }
+
+    async fn execute_llm_summarize_tree(
+        &self,
+        request: &RagIngestRequest,
+        node: &CompiledRagPipelineNode,
+        prepared: &PreparedIngestPayload,
+    ) -> Result<Vec<RagTreeNodeWrite>, RagError> {
+        let model_code = llm_summary_model_code(node)?;
+        let children_by_parent = tree_children_by_parent(prepared);
+        let mut summaries: BTreeMap<String, String> = BTreeMap::new();
+        let mut tree_nodes_by_code: BTreeMap<String, RagTreeNodeWrite> = BTreeMap::new();
+        let mut ordered_hints = prepared.tree_hints.iter().collect::<Vec<_>>();
+        ordered_hints.sort_by(|left, right| {
+            right
+                .level
+                .cmp(&left.level)
+                .then_with(|| left.ordinal.cmp(&right.ordinal))
+        });
+        for hint in ordered_hints {
+            let child_summaries = children_by_parent
+                .get(&hint.tree_node_code)
+                .into_iter()
+                .flat_map(|children| children.iter())
+                .filter_map(|child| {
+                    summaries
+                        .get(child.tree_node_code.as_str())
+                        .map(|summary| (child.title.as_str(), summary.as_str()))
+                })
+                .collect::<Vec<_>>();
+            let direct_text_units = direct_text_units(prepared, hint, &children_by_parent);
+            let prompt = llm_tree_summary_prompt(&hint.title, &child_summaries, &direct_text_units);
+            let result = self
+                .tree_summary_runtime
+                .as_ref()
+                .ok_or(RagError::IngestStageFailed)?
+                .summarize_tree(RagTreeSummaryCall {
+                    workspace_code: request.workspace_code.clone(),
+                    model_code: Some(model_code.clone()),
+                    prompt,
+                })
+                .await
+                .map_err(|_| RagError::IngestStageFailed)?;
+            let summary_text = result.summary_text.trim().to_string();
+            if summary_text.is_empty() {
+                return Err(RagError::IngestStageFailed);
+            }
+            let tree_node = llm_summary_tree_node(
+                request,
+                prepared,
+                hint,
+                summary_text.clone(),
+                result.model_code,
+            );
+            summaries.insert(hint.tree_node_code.clone(), summary_text);
+            tree_nodes_by_code.insert(hint.tree_node_code.clone(), tree_node);
+        }
+        Ok(prepared
+            .tree_hints
+            .iter()
+            .filter_map(|hint| tree_nodes_by_code.remove(&hint.tree_node_code))
+            .collect())
     }
 
     fn execute_tree_fulltext_index_stage(
@@ -220,6 +290,138 @@ where
             request,
         );
         Ok(())
+    }
+}
+
+fn llm_summary_model_code(node: &CompiledRagPipelineNode) -> Result<String, RagError> {
+    node.config
+        .as_ref()
+        .and_then(|config| config.get("modelCode"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .ok_or(RagError::IngestProfileInvalid)
+}
+
+fn tree_children_by_parent<'a>(
+    prepared: &'a PreparedIngestPayload,
+) -> BTreeMap<String, Vec<&'a RagTreeHintDraft>> {
+    let mut children_by_parent: BTreeMap<String, Vec<&RagTreeHintDraft>> = BTreeMap::new();
+    for hint in prepared
+        .tree_hints
+        .iter()
+        .filter(|hint| hint.parent_node_code != "0")
+    {
+        children_by_parent
+            .entry(hint.parent_node_code.clone())
+            .or_default()
+            .push(hint);
+    }
+    for children in children_by_parent.values_mut() {
+        children.sort_by_key(|hint| hint.ordinal);
+    }
+    children_by_parent
+}
+
+fn direct_text_units(
+    prepared: &PreparedIngestPayload,
+    hint: &RagTreeHintDraft,
+    children_by_parent: &BTreeMap<String, Vec<&RagTreeHintDraft>>,
+) -> Vec<String> {
+    let child_covered_codes = children_by_parent
+        .get(&hint.tree_node_code)
+        .into_iter()
+        .flat_map(|children| children.iter())
+        .flat_map(|child| child.covered_text_unit_codes.iter().cloned())
+        .collect::<BTreeSet<_>>();
+    prepared
+        .units
+        .iter()
+        .filter(|unit| hint.covered_text_unit_codes.contains(&unit.text_unit_code))
+        .filter(|unit| !child_covered_codes.contains(&unit.text_unit_code))
+        .map(|unit| unit.text.trim().to_string())
+        .filter(|text| !text.is_empty())
+        .collect()
+}
+
+fn llm_tree_summary_prompt(
+    title: &str,
+    child_summaries: &[(&str, &str)],
+    direct_text_units: &[String],
+) -> String {
+    let mut prompt = String::new();
+    prompt.push_str("Summarize this RAG tree node. Return only the summary text.\n");
+    prompt.push_str("Node title:\n");
+    prompt.push_str(title.trim());
+    prompt.push('\n');
+    if !child_summaries.is_empty() {
+        prompt.push_str("\nChild summaries:\n");
+        for (child_title, child_summary) in child_summaries {
+            prompt.push_str("- ");
+            prompt.push_str(child_title.trim());
+            prompt.push_str(": ");
+            prompt.push_str(child_summary.trim());
+            prompt.push('\n');
+        }
+    }
+    if !direct_text_units.is_empty() {
+        prompt.push_str("\nDirect text units:\n");
+        for (index, text) in direct_text_units.iter().enumerate() {
+            prompt.push_str("[");
+            prompt.push_str(&(index + 1).to_string());
+            prompt.push_str("]\n");
+            prompt.push_str(text);
+            prompt.push('\n');
+        }
+    }
+    prompt
+}
+
+fn llm_summary_tree_node(
+    request: &RagIngestRequest,
+    prepared: &PreparedIngestPayload,
+    hint: &RagTreeHintDraft,
+    summary_text: String,
+    model_code: String,
+) -> RagTreeNodeWrite {
+    let covered_ordinals = prepared
+        .units
+        .iter()
+        .filter(|unit| hint.covered_text_unit_codes.contains(&unit.text_unit_code))
+        .map(|unit: &RagTextUnitDraft| unit.ordinal as i64)
+        .collect::<Vec<_>>();
+    RagTreeNodeWrite {
+        tree_node_code: hint.tree_node_code.clone(),
+        parent_node_code: hint.parent_node_code.clone(),
+        source_code: request.source.code.clone(),
+        source_version: request.source.version.clone(),
+        scope_type: request.target_scope.scope_type.clone(),
+        scope_code: request.target_scope.scope_code.clone(),
+        path_key: hint.path_key.clone(),
+        level: hint.level,
+        ordinal: hint.ordinal,
+        title: hint.title.clone(),
+        summary_token_count: token_count(&summary_text),
+        summary_content_hash: stable_hash(&summary_text),
+        summary_text,
+        summary_fulltext_status: "PENDING".into(),
+        summary_embedding_status: "PENDING".into(),
+        summary_embedding_model_code: None,
+        summary_embedding_version: None,
+        summary_embedding_text_hash: None,
+        summary_embedding_dimension: None,
+        summary_embedding: None,
+        covered_text_unit_count: hint.covered_text_unit_codes.len() as i64,
+        covered_text_unit_codes: hint.covered_text_unit_codes.clone(),
+        child_start_ordinal: covered_ordinals.iter().min().copied().unwrap_or(0),
+        child_end_ordinal: covered_ordinals.iter().max().copied().unwrap_or(0),
+        metadata: json!({
+            "summaryStrategy": "RAG_TREE_LLM_SUMMARY_V1",
+            "summaryModelCode": model_code,
+            "summaryStatus": "SUMMARIZED"
+        }),
+        status: "ACTIVE".into(),
     }
 }
 

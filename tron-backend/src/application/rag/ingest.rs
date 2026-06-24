@@ -1,4 +1,5 @@
 use std::{
+    any::Any,
     collections::BTreeMap,
     future::Future,
     pin::Pin,
@@ -18,6 +19,7 @@ use crate::{
 use super::{
     RagConfigRepository, RagDocumentSourceRuntime, RagStageExecutionResult, RagStrategyRegistry,
     ingest_artifact::ArtifactBundle, ingest_profile::compile_ingest_profile, publish_rag_event,
+    runtime::DefaultRagRuntime,
 };
 
 pub trait RagIngestRepository: RagConfigRepository {
@@ -123,11 +125,31 @@ pub struct RagEmbeddingResult {
     pub embedding: Vec<f32>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RagTreeSummaryCall {
+    pub workspace_code: String,
+    pub model_code: Option<String>,
+    pub prompt: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RagTreeSummaryResult {
+    pub model_code: String,
+    pub summary_text: String,
+}
+
 pub trait RagEmbeddingRuntime: Clone + Send + Sync + 'static {
     fn embed<'a>(
         &'a self,
         call: RagEmbeddingCall,
     ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>>;
+}
+
+pub trait RagTreeSummaryRuntime: Send + Sync + 'static {
+    fn summarize_tree<'a>(
+        &'a self,
+        call: RagTreeSummaryCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagTreeSummaryResult, String>> + Send + 'a>>;
 }
 
 impl RagEmbeddingRuntime for LlmRuntimeService {
@@ -207,6 +229,7 @@ pub struct RagIngestService<R, S, E> {
     repository: R,
     strategy_registry: S,
     embedding_runtime: E,
+    tree_summary_runtime: Option<Arc<dyn RagTreeSummaryRuntime>>,
     event_bus: EventBusHandle,
 }
 
@@ -214,15 +237,25 @@ impl<R, S, E> RagIngestService<R, S, E>
 where
     R: RagIngestRepository,
     S: RagStrategyRegistry,
-    E: RagEmbeddingRuntime + RagDocumentSourceRuntime,
+    E: RagEmbeddingRuntime + RagDocumentSourceRuntime + Any,
 {
     pub fn new(repository: R, strategy_registry: S, embedding_runtime: E) -> Self {
+        let tree_summary_runtime = default_tree_summary_runtime(&embedding_runtime);
         Self {
             repository,
             strategy_registry,
             embedding_runtime,
+            tree_summary_runtime,
             event_bus: EventBusHandle::disabled(),
         }
+    }
+
+    pub fn with_tree_summary_runtime<T>(mut self, runtime: T) -> Self
+    where
+        T: RagTreeSummaryRuntime,
+    {
+        self.tree_summary_runtime = Some(Arc::new(runtime));
+        self
     }
 
     pub fn with_event_bus(mut self, event_bus: EventBusHandle) -> Self {
@@ -306,6 +339,15 @@ where
             stage_results,
         })
     }
+}
+
+fn default_tree_summary_runtime<E>(runtime: &E) -> Option<Arc<dyn RagTreeSummaryRuntime>>
+where
+    E: Any,
+{
+    (runtime as &dyn Any)
+        .downcast_ref::<DefaultRagRuntime>()
+        .map(|runtime| Arc::new(runtime.clone()) as Arc<dyn RagTreeSummaryRuntime>)
 }
 
 fn publish_ingest_event(

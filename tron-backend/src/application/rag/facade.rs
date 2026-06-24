@@ -206,13 +206,9 @@ where
 
 impl<R, S, E> RagService<R, S, E>
 where
-    R: RagIngestRepository
-        + RagSearchRepository
-        + RagDiagnosticsRepository
-        + RagRetryIndexRepository
-        + Clone,
+    R: RagIngestRepository + Clone,
     S: RagStrategyRegistry,
-    E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime,
+    E: RagEmbeddingRuntime + RagDocumentSourceRuntime,
 {
     pub async fn ingest(&self, request: RagIngestRequest) -> Result<RagIngestResult, RagError> {
         RagIngestService::new(
@@ -224,7 +220,14 @@ where
         .ingest(request)
         .await
     }
+}
 
+impl<R, S, E> RagService<R, S, E>
+where
+    R: RagSearchRepository + Clone,
+    S: RagStrategyRegistry,
+    E: RagSearchRuntime,
+{
     pub async fn search(&self, request: RagSearchRequest) -> Result<RagSearchResult, RagError> {
         RagSearchService::new(
             self.repository.clone(),
@@ -235,7 +238,14 @@ where
         .search(request)
         .await
     }
+}
 
+impl<R, S, E> RagService<R, S, E>
+where
+    R: RagDiagnosticsRepository + Clone,
+    S: RagStrategyRegistry,
+    E: Clone,
+{
     pub fn debug_profile(
         &self,
         workspace_code: &str,
@@ -252,7 +262,13 @@ where
         RagDiagnosticsService::new(self.repository.clone(), self.strategy_registry.clone())
             .debug_source(request)
     }
+}
 
+impl<R, S, E> RagService<R, S, E>
+where
+    R: RagRetryIndexRepository + Clone,
+    E: RagEmbeddingRuntime,
+{
     pub async fn retry_index(
         &self,
         request: RagRetryIndexRequest,

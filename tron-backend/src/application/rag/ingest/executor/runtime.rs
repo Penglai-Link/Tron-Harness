@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 
 use serde_json::{Value, json};
@@ -7,7 +7,8 @@ use crate::domain::rag::RagError;
 
 use super::{
     RagEmbeddingCall, RagEmbeddingRuntime, RagIngestRepository, RagIngestRequest, RagIngestService,
-    RagIngestWarning, RagPersistIngestCommand, RagTreeNodeWrite, publish_ingest_stage_event,
+    RagIngestWarning, RagPersistIngestCommand, RagTreeNodeWrite, RagTreeSummaryCall,
+    publish_ingest_stage_event,
 };
 use crate::application::rag::{
     CompiledRagIngestProfile, CompiledRagPipelineNode, RagArtifactStore, RagConfigRepository,
@@ -21,7 +22,7 @@ use crate::application::rag::{
         ArtifactBundle, RagArtifactPayload, RagPersistResultArtifact, RagTreeIndexArtifact,
         RagVectorIndexArtifact,
     },
-    ingest_payload::{PreparedIngestPayload, prepare_payload},
+    ingest_payload::{PreparedIngestPayload, RagTextUnitDraft, RagTreeHintDraft, prepare_payload},
 };
 use crate::shared::event_bus::BusOutcome;
 
@@ -152,7 +153,8 @@ where
                 self.execute_extract_tree_stage(request, bundle, store)?;
             }
             IngestStageKind::SummarizeTree => {
-                self.execute_summarize_tree_stage(request, bundle, store)?;
+                self.execute_summarize_tree_stage(request, node, bundle, store)
+                    .await?;
                 store.put_json("tree.summarized", json!({"nodeId": node.node_id}));
             }
             IngestStageKind::TreeFulltextIndex => {

@@ -19,7 +19,9 @@ use tron_backend::{
         RagDocumentSourceCall, RagDocumentSourceRuntime, RagEmbeddingCall, RagEmbeddingResult,
         RagEmbeddingRuntime, RagIngestAccessContext, RagIngestRepository, RagIngestRequest,
         RagIngestScope, RagIngestService, RagIngestSource, RagPersistIngestCommand,
-        RagResolvedDocument, RagTextUnitWrite, RagTreeNodeWrite, compile_ingest_profile,
+        RagResolvedDocument, RagStrategyRegistry, RagTextUnitWrite, RagTreeNodeWrite,
+        RagTreeSummaryCall, RagTreeSummaryResult, RagTreeSummaryRuntime, StrategyRegistration,
+        StrategyRegistrationStatus, compile_ingest_profile,
     },
     domain::rag::{RagError, RagProfileRecord, RagProfileType, RagStatus},
     shared::sqlite_extensions::default_sqlite_extension_context,
@@ -313,6 +315,124 @@ async fn pipeline_persists_summary_tree_without_optional_tree_indexes() {
     assert_eq!(root.summary_fulltext_status, "PENDING");
     assert_eq!(root.summary_embedding_status, "PENDING");
     assert_eq!(root.summary_embedding_model_code, None);
+}
+
+#[tokio::test]
+async fn llm_summary_tree_ingest_summarizes_bottom_up_with_configured_model() {
+    let database_path = temp_database_path("rag-ingest-llm-summary-tree");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = CapturingIngestRepository::connect(&database_url);
+    insert_llm_summary_tree_ingest_profile(
+        &database_url,
+        "memory-card-llm-summary-tree-v1",
+        Some(json!({ "modelCode": "summary-model-alpha" })),
+    );
+    let persisted_commands = repository.persisted_commands.clone();
+    let runtime = FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75)).with_summary_outputs([
+        "leaf summary",
+        "parent summary",
+        "root summary",
+    ]);
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    )
+    .with_tree_summary_runtime(runtime.clone());
+    let mut request = memory_markdown_tree_request("v1");
+    request.ingest_profile_id = "memory-card-llm-summary-tree-v1".into();
+
+    let result = service.ingest(request).await.unwrap();
+
+    assert_eq!(result.status, "ACTIVE");
+    let summarize_stage = result
+        .stage_results
+        .iter()
+        .find(|stage| stage.node_id == "summarize-tree")
+        .expect("summary stage should be reported");
+    assert_eq!(summarize_stage.strategy_id, "RAG_TREE_LLM_SUMMARY_V1");
+    let summary_calls = runtime.summary_calls();
+    assert_eq!(summary_calls.len(), 3);
+    assert!(
+        summary_calls
+            .iter()
+            .all(|call| call.model_code == Some("summary-model-alpha".into()))
+    );
+    assert!(
+        summary_calls[0]
+            .prompt
+            .contains("## Write Path\nPersist synchronously.")
+    );
+    assert!(summary_calls[1].prompt.contains("leaf summary"));
+    assert!(summary_calls[1].prompt.contains("# RAG MVP\nIntro."));
+    assert!(summary_calls[2].prompt.contains("parent summary"));
+
+    let commands = persisted_commands.lock().unwrap();
+    let tree_nodes = &commands
+        .first()
+        .expect("source should persist after all summaries complete")
+        .tree_nodes;
+    let root = tree_nodes
+        .iter()
+        .find(|node| node.parent_node_code == "0")
+        .expect("root summary node should be persisted");
+    assert_eq!(root.summary_text, "root summary");
+    assert_eq!(
+        root.metadata["summaryStrategy"],
+        json!("RAG_TREE_LLM_SUMMARY_V1")
+    );
+    assert_eq!(
+        root.metadata["summaryModelCode"],
+        json!("summary-model-alpha")
+    );
+    assert_eq!(root.metadata["summaryStatus"], json!("SUMMARIZED"));
+    assert!(
+        tree_nodes
+            .iter()
+            .any(|node| node.title == "Write Path" && node.summary_text == "leaf summary")
+    );
+    assert!(
+        tree_nodes
+            .iter()
+            .any(|node| node.title == "RAG MVP" && node.summary_text == "parent summary")
+    );
+}
+
+#[tokio::test]
+async fn llm_summary_tree_empty_response_fails_fast_without_partial_tree_persist() {
+    let database_path = temp_database_path("rag-ingest-llm-summary-tree-empty");
+    let database_url = database_path.to_string_lossy().to_string();
+    let repository = CapturingIngestRepository::connect(&database_url);
+    insert_llm_summary_tree_ingest_profile(
+        &database_url,
+        "memory-card-llm-summary-tree-empty-v1",
+        Some(json!({ "modelCode": "summary-model-alpha" })),
+    );
+    let persisted_commands = repository.persisted_commands.clone();
+    let runtime =
+        FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75)).with_summary_outputs([""]);
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    )
+    .with_tree_summary_runtime(runtime.clone());
+    let mut request = memory_markdown_tree_request("v1");
+    request.ingest_profile_id = "memory-card-llm-summary-tree-empty-v1".into();
+
+    let error = service.ingest(request).await.unwrap_err();
+
+    assert_eq!(error, RagError::IngestStageFailed);
+    assert_eq!(runtime.summary_calls().len(), 1);
+    assert!(
+        persisted_commands.lock().unwrap().is_empty(),
+        "failing summary must not persist a partial tree"
+    );
+    let connection = Connection::open(&database_url).unwrap();
+    assert_eq!(
+        query_i64(&connection, "SELECT COUNT(*) FROM rag_memory_text_units"),
+        0
+    );
 }
 
 #[tokio::test]
@@ -1187,6 +1307,47 @@ fn ingest_profile_compiler_rejects_invalid_dag_contracts() {
 }
 
 #[test]
+fn ingest_profile_compiler_requires_llm_summary_model_code() {
+    let repository = SqliteRagRepository::connect(":memory:").unwrap();
+    let corpus = repository.get_corpus("memory-card").unwrap().unwrap();
+    let registry = LlmSummaryTestRegistry;
+
+    for (name, summary_config) in [
+        ("missing-model", None),
+        ("empty-model", Some(json!({ "modelCode": " " }))),
+    ] {
+        assert_eq!(
+            compile_ingest_profile(
+                &ingest_profile(name, llm_summary_tree_config(summary_config)),
+                &corpus,
+                &registry,
+            )
+            .unwrap_err(),
+            RagError::IngestProfileInvalid,
+            "{name} should require a non-empty modelCode",
+        );
+    }
+
+    let compiled = compile_ingest_profile(
+        &ingest_profile(
+            "valid-llm-summary",
+            llm_summary_tree_config(Some(json!({ "modelCode": "summary-model-alpha" }))),
+        ),
+        &corpus,
+        &registry,
+    )
+    .expect("LLM summary profile should compile when modelCode is present");
+    assert_eq!(
+        compiled
+            .stage_metadata
+            .get("summarizeTree")
+            .expect("summary stage metadata should compile")
+            .strategy_id,
+        "RAG_TREE_LLM_SUMMARY_V1"
+    );
+}
+
+#[test]
 fn ingest_profile_compiler_accepts_legacy_mineru_format_config_as_pdf_docx() {
     let repository = SqliteRagRepository::connect(":memory:").unwrap();
     let corpus = repository.get_corpus("project-doc").unwrap().unwrap();
@@ -1268,11 +1429,19 @@ fn ingest_executor_uses_generic_pipeline_dispatch_instead_of_fixed_stage_match()
     );
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SummaryCall {
+    model_code: Option<String>,
+    prompt: String,
+}
+
 #[derive(Clone)]
 struct FakeEmbeddingRuntime {
     result: Arc<Mutex<Result<RagEmbeddingResult, String>>>,
     documents: Arc<Mutex<VecDeque<Result<RagResolvedDocument, RagError>>>>,
     mineru_documents: Arc<Mutex<VecDeque<Result<RagResolvedDocument, RagError>>>>,
+    summary_outputs: Arc<Mutex<VecDeque<Result<String, String>>>>,
+    summary_calls: Arc<Mutex<Vec<SummaryCall>>>,
     calls: Arc<AtomicUsize>,
     mineru_calls: Arc<AtomicUsize>,
     last_model_code: Arc<Mutex<Option<String>>>,
@@ -1290,6 +1459,8 @@ impl FakeEmbeddingRuntime {
             }))),
             documents: Arc::new(Mutex::new(VecDeque::new())),
             mineru_documents: Arc::new(Mutex::new(VecDeque::new())),
+            summary_outputs: Arc::new(Mutex::new(VecDeque::new())),
+            summary_calls: Arc::new(Mutex::new(Vec::new())),
             calls: Arc::new(AtomicUsize::new(0)),
             mineru_calls: Arc::new(AtomicUsize::new(0)),
             last_model_code: Arc::new(Mutex::new(None)),
@@ -1304,6 +1475,8 @@ impl FakeEmbeddingRuntime {
             result: Arc::new(Mutex::new(Err(message.to_string()))),
             documents: Arc::new(Mutex::new(VecDeque::new())),
             mineru_documents: Arc::new(Mutex::new(VecDeque::new())),
+            summary_outputs: Arc::new(Mutex::new(VecDeque::new())),
+            summary_calls: Arc::new(Mutex::new(Vec::new())),
             calls: Arc::new(AtomicUsize::new(0)),
             mineru_calls: Arc::new(AtomicUsize::new(0)),
             last_model_code: Arc::new(Mutex::new(None)),
@@ -1316,6 +1489,18 @@ impl FakeEmbeddingRuntime {
     fn fail_after_successes(mut self, success_count: usize, message: &str) -> Self {
         self.fail_after_successes = Some(success_count);
         self.fail_after_message = message.to_string();
+        self
+    }
+
+    fn with_summary_outputs<I, S>(self, outputs: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.summary_outputs
+            .lock()
+            .unwrap()
+            .extend(outputs.into_iter().map(|output| Ok(output.into())));
         self
     }
 
@@ -1358,6 +1543,10 @@ impl FakeEmbeddingRuntime {
     fn embedding_inputs(&self) -> Vec<String> {
         self.embedding_inputs.lock().unwrap().clone()
     }
+
+    fn summary_calls(&self) -> Vec<SummaryCall> {
+        self.summary_calls.lock().unwrap().clone()
+    }
 }
 
 impl RagEmbeddingRuntime for FakeEmbeddingRuntime {
@@ -1376,6 +1565,32 @@ impl RagEmbeddingRuntime for FakeEmbeddingRuntime {
                 return Err(self.fail_after_message.clone());
             }
             self.result.lock().unwrap().clone()
+        })
+    }
+}
+
+impl RagTreeSummaryRuntime for FakeEmbeddingRuntime {
+    fn summarize_tree<'a>(
+        &'a self,
+        call: RagTreeSummaryCall,
+    ) -> Pin<Box<dyn Future<Output = Result<RagTreeSummaryResult, String>> + Send + 'a>> {
+        Box::pin(async move {
+            self.summary_calls.lock().unwrap().push(SummaryCall {
+                model_code: call.model_code.clone(),
+                prompt: call.prompt,
+            });
+            let summary_text = self
+                .summary_outputs
+                .lock()
+                .unwrap()
+                .pop_front()
+                .unwrap_or_else(|| Err("fake summary output missing".into()))?;
+            Ok(RagTreeSummaryResult {
+                model_code: call
+                    .model_code
+                    .unwrap_or_else(|| "workspace-default-summary".into()),
+                summary_text,
+            })
         })
     }
 }
@@ -1409,6 +1624,33 @@ impl RagDocumentSourceRuntime for FakeEmbeddingRuntime {
             document.document_uri = call.document_uri;
             Ok(document)
         })
+    }
+}
+
+#[derive(Clone)]
+struct LlmSummaryTestRegistry;
+
+impl RagStrategyRegistry for LlmSummaryTestRegistry {
+    fn resolve_stage(&self, strategy_id: &str) -> StrategyRegistration {
+        if strategy_id == "RAG_TREE_LLM_SUMMARY_V1" {
+            return StrategyRegistration {
+                strategy_id: strategy_id.into(),
+                status: StrategyRegistrationStatus::Enabled,
+            };
+        }
+        DefaultRagStrategyRegistry::default().resolve_stage(strategy_id)
+    }
+
+    fn resolve_payload_strategy(&self, strategy_id: &str) -> StrategyRegistration {
+        DefaultRagStrategyRegistry::default().resolve_payload_strategy(strategy_id)
+    }
+
+    fn resolve_retriever(&self, strategy_id: &str) -> StrategyRegistration {
+        DefaultRagStrategyRegistry::default().resolve_retriever(strategy_id)
+    }
+
+    fn resolve_policy(&self, strategy_id: &str) -> StrategyRegistration {
+        DefaultRagStrategyRegistry::default().resolve_policy(strategy_id)
     }
 }
 
@@ -1452,6 +1694,12 @@ fn memory_request(source_version: &str) -> RagIngestRequest {
             }
         }),
     }
+}
+
+fn memory_markdown_tree_request(source_version: &str) -> RagIngestRequest {
+    let mut request = memory_request(source_version);
+    request.payload["text"] = json!("# RAG MVP\nIntro.\n\n## Write Path\nPersist synchronously.");
+    request
 }
 
 fn skill_request(source_version: &str) -> RagIngestRequest {
@@ -1916,6 +2164,86 @@ fn missing_persist_dag() -> Value {
     value
 }
 
+fn llm_summary_tree_config(summary_config: Option<Value>) -> Value {
+    let mut summarize_tree_node = json!({
+        "nodeId": "summarize-tree",
+        "stageType": "SUMMARIZE_TREE",
+        "strategyId": "RAG_TREE_LLM_SUMMARY_V1"
+    });
+    if let Some(config) = summary_config {
+        summarize_tree_node["config"] = config;
+    }
+    json!({
+        "sourceInputPolicy": {
+            "supportedSourceTypes": ["MEMORY_CARD"]
+        },
+        "pipeline": {
+            "mode": "DAG",
+            "nodes": [
+                {
+                    "nodeId": "validate-source",
+                    "stageType": "VALIDATE_SOURCE",
+                    "strategyId": "RAG_VALIDATE_SOURCE"
+                },
+                {
+                    "nodeId": "prepare-payload",
+                    "stageType": "PREPARE_PAYLOAD",
+                    "strategyId": "RAG_TEXT_CONTRACT_PAYLOAD_V1"
+                },
+                {
+                    "nodeId": "split-text",
+                    "stageType": "SPLIT_TEXT",
+                    "strategyId": "RAG_SPLIT_MARKDOWN_HEADING_V1",
+                    "config": {
+                        "splitter": {
+                            "headingDepth": 6,
+                            "includeHeadingInIndexText": true
+                        }
+                    }
+                },
+                {
+                    "nodeId": "extract-tree",
+                    "stageType": "EXTRACT_TREE",
+                    "strategyId": "RAG_MARKDOWN_TREE_EXTRACT_V1"
+                },
+                summarize_tree_node,
+                {
+                    "nodeId": "fulltext-index",
+                    "stageType": "FULLTEXT_INDEX",
+                    "strategyId": "RAG_FULLTEXT_INDEX"
+                },
+                {
+                    "nodeId": "vector-index",
+                    "stageType": "VECTOR_INDEX",
+                    "strategyId": "RAG_VECTOR_INDEX"
+                },
+                {
+                    "nodeId": "persist-tree",
+                    "stageType": "PERSIST_TREE",
+                    "strategyId": "RAG_PERSIST_TREE_GRAPH_V1"
+                },
+                {
+                    "nodeId": "persist-source",
+                    "stageType": "PERSIST_SOURCE",
+                    "strategyId": "RAG_PERSIST_SOURCE"
+                }
+            ],
+            "edges": [
+                { "from": "validate-source", "to": "prepare-payload" },
+                { "from": "prepare-payload", "to": "split-text" },
+                { "from": "split-text", "to": "extract-tree" },
+                { "from": "split-text", "to": "fulltext-index" },
+                { "from": "split-text", "to": "vector-index" },
+                { "from": "extract-tree", "to": "summarize-tree" },
+                { "from": "summarize-tree", "to": "persist-tree" },
+                { "from": "fulltext-index", "to": "persist-source" },
+                { "from": "vector-index", "to": "persist-source" },
+                { "from": "persist-tree", "to": "persist-source" }
+            ]
+        }
+    })
+}
+
 fn insert_pipeline_only_ingest_profile(database_url: &str, profile_id: &str) {
     let connection = Connection::open(database_url).unwrap();
     let config = json!({
@@ -2061,6 +2389,27 @@ fn insert_tree_pipeline_ingest_profile(database_url: &str, profile_id: &str) {
             ]
         }
     });
+    connection
+        .execute(
+            "INSERT INTO rag_profiles (
+                profile_id, profile_type, status, primary_corpus_id, corpus_ids_json,
+                required_source_version, config_json, filters_json, degrade_policy,
+                created_at, updated_at
+            )
+            VALUES (?1, 'INGEST', 'enabled', 'memory-card', '[\"memory-card\"]',
+                NULL, ?2, '{}', 'FAIL_FAST', 1, 1)",
+            params![profile_id, config.to_string()],
+        )
+        .unwrap();
+}
+
+fn insert_llm_summary_tree_ingest_profile(
+    database_url: &str,
+    profile_id: &str,
+    summary_config: Option<Value>,
+) {
+    let connection = Connection::open(database_url).unwrap();
+    let config = llm_summary_tree_config(summary_config);
     connection
         .execute(
             "INSERT INTO rag_profiles (

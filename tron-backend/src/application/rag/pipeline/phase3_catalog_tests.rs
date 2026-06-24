@@ -38,6 +38,25 @@ fn rag_pipeline_catalog_exposes_phase3_advanced_stage_contracts() {
         .expect("ingest catalog should expose SUMMARIZE_TREE");
     assert_eq!(summarize_tree.input_artifact_keys, vec!["tree.extracted"]);
     assert_eq!(summarize_tree.output_artifact_keys, vec!["tree.summarized"]);
+    let llm_summary = summarize_tree
+        .strategies
+        .iter()
+        .find(|strategy| strategy.strategy_id == "RAG_TREE_LLM_SUMMARY_V1")
+        .expect("SUMMARIZE_TREE should expose the LLM summary strategy");
+    assert_eq!(
+        llm_summary.config_schema,
+        json!({
+            "type": "object",
+            "required": ["modelCode"],
+            "properties": {
+                "modelCode": {
+                    "type": "string",
+                    "minLength": 1
+                }
+            },
+            "additionalProperties": false
+        })
+    );
     let tree_vector = ingest
         .stages
         .iter()
