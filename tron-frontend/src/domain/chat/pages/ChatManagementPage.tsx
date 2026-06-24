@@ -670,6 +670,14 @@ function terminalAguiEvent(events: TranscriptAguiEvent[]) {
   return null;
 }
 
+function latestAguiRunCode(events: TranscriptAguiEvent[]) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const runCode = aguiEventRunCode(events[index]);
+    if (runCode) return runCode;
+  }
+  return "";
+}
+
 function formatAguiDuration(milliseconds: number) {
   if (milliseconds < 1000) return "<1s";
   const totalSeconds = Math.max(1, Math.round(milliseconds / 1000));
@@ -2955,11 +2963,22 @@ function AguiRunWorkRail({
   const debugEvents = events.filter((event) => shouldShowAguiEventType(aguiEventType(event), preferences));
   const terminalEvent = terminalAguiEvent(events);
   const terminalRunCode = terminalEvent ? aguiEventRunCode(terminalEvent) : "";
-  const [expanded, setExpanded] = useState(true);
+  const currentRunCode = latestAguiRunCode(events);
+  const collapsedTerminalRunCodeRef = useRef(terminalRunCode);
+  const [expanded, setExpanded] = useState(() => !terminalRunCode);
 
   useEffect(() => {
-    setExpanded(!terminalRunCode);
-  }, [terminalRunCode]);
+    if (!currentRunCode) return;
+    if (terminalRunCode) {
+      if (collapsedTerminalRunCodeRef.current === terminalRunCode) return;
+      collapsedTerminalRunCodeRef.current = terminalRunCode;
+      setExpanded(false);
+      return;
+    }
+    if (collapsedTerminalRunCodeRef.current === currentRunCode) return;
+    collapsedTerminalRunCodeRef.current = "";
+    setExpanded(true);
+  }, [currentRunCode, terminalRunCode]);
 
   if (!terminalEvent && !displayUserCards.length && !debugEvents.length) return null;
 
