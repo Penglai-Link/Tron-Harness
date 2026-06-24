@@ -158,8 +158,13 @@ app-clean: fe-clean
 	rm -rf $(BACKEND_FRONTEND_DIR)
 	mkdir -p $(BACKEND_FRONTEND_DIR)
 
-ELECTRON_DIR := src-electron
+ELECTRON_DIR := electron
 ELECTRON_NPM := npm
+ELECTRON_INSTALL_ENV = $(if $(strip $(ELECTRON_MIRROR)),ELECTRON_MIRROR=$(ELECTRON_MIRROR))
+HOST_EXE_SUFFIX := $(if $(filter Windows_NT,$(OS)),.exe,)
+BACKEND_RELEASE_BINARY := tron-backend$(HOST_EXE_SUFFIX)
+BACKEND_RELEASE_PATH := $(BACKEND_DIR)/target/release/$(BACKEND_RELEASE_BINARY)
+DESKTOP_SIDECAR_PATH := $(ELECTRON_DIR)/resources/binaries/$(BACKEND_RELEASE_BINARY)
 
 .PHONY: desktop-build
 desktop-build: desktop-clean app-build
@@ -168,9 +173,10 @@ desktop-build: desktop-clean app-build
 	cp -R $(BACKEND_FRONTEND_DIR)/. $(ELECTRON_DIR)/resources/frontend/
 	mkdir -p $(ELECTRON_DIR)/resources/binaries
 	cargo build --manifest-path $(BACKEND_MANIFEST) --release
-	cp tron-backend/target/release/tron-backend $(ELECTRON_DIR)/resources/binaries/tron-backend || true
-	cp tron-backend/target/release/tron-backend.exe $(ELECTRON_DIR)/resources/binaries/tron-backend.exe || true
-	cd $(ELECTRON_DIR) && $(ELECTRON_NPM) install
+	test -f $(BACKEND_RELEASE_PATH)
+	cp $(BACKEND_RELEASE_PATH) $(DESKTOP_SIDECAR_PATH)
+	cd $(ELECTRON_DIR) && $(ELECTRON_INSTALL_ENV) $(ELECTRON_NPM) install
+	cd $(ELECTRON_DIR) && $(ELECTRON_INSTALL_ENV) $(ELECTRON_NPM) run -s ensure-electron
 	cd $(ELECTRON_DIR) && $(ELECTRON_NPM) run -s build
 
 .PHONY: desktop-dev

@@ -123,3 +123,54 @@ fn make_be_clean_removes_backend_tmp_scratch_files() {
         "make be-clean must remove /tmp/tron* scratch files"
     );
 }
+
+#[test]
+fn desktop_targets_use_current_electron_directory() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("tron-backend must live under the repository root");
+
+    let makefile = fs::read_to_string(repo_root.join("Makefile"))
+        .expect("Makefile should be readable from the repository root");
+
+    assert!(
+        makefile.contains("ELECTRON_DIR := electron"),
+        "desktop targets must use the repository's electron directory",
+    );
+    assert!(
+        !makefile.contains("ELECTRON_DIR := src-electron"),
+        "desktop targets must not recreate the old src-electron directory",
+    );
+}
+
+#[test]
+fn desktop_build_copies_only_current_platform_sidecar() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("tron-backend must live under the repository root");
+
+    let makefile = fs::read_to_string(repo_root.join("Makefile"))
+        .expect("Makefile should be readable from the repository root");
+
+    for required in [
+        "HOST_EXE_SUFFIX := $(if $(filter Windows_NT,$(OS)),.exe,)",
+        "BACKEND_RELEASE_BINARY := tron-backend$(HOST_EXE_SUFFIX)",
+        "BACKEND_RELEASE_PATH := $(BACKEND_DIR)/target/release/$(BACKEND_RELEASE_BINARY)",
+        "DESKTOP_SIDECAR_PATH := $(ELECTRON_DIR)/resources/binaries/$(BACKEND_RELEASE_BINARY)",
+        "ELECTRON_INSTALL_ENV = $(if $(strip $(ELECTRON_MIRROR)),ELECTRON_MIRROR=$(ELECTRON_MIRROR))",
+        "test -f $(BACKEND_RELEASE_PATH)",
+        "cp $(BACKEND_RELEASE_PATH) $(DESKTOP_SIDECAR_PATH)",
+        "cd $(ELECTRON_DIR) && $(ELECTRON_INSTALL_ENV) $(ELECTRON_NPM) install",
+        "cd $(ELECTRON_DIR) && $(ELECTRON_INSTALL_ENV) $(ELECTRON_NPM) run -s ensure-electron",
+    ] {
+        assert!(
+            makefile.contains(required),
+            "desktop-build must use platform-specific sidecar handling via `{required}`",
+        );
+    }
+
+    assert!(
+        !makefile.contains("tron-backend.exe $(ELECTRON_DIR)/resources/binaries/tron-backend.exe || true"),
+        "desktop-build must not unconditionally copy the Windows sidecar on non-Windows hosts",
+    );
+}

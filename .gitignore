@@ -30,11 +30,6 @@ src-tauri/bundle/
 src-tauri/frontend/
 src-tauri/binaries/
 
-# Electron desktop build artifacts (desktop-build / desktop-dev)
-src-electron/dist/
-src-electron/resources/frontend/
-src-electron/resources/binaries/
-
 # Archives
 *.tar.gz
 *.tar
