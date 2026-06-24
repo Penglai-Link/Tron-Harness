@@ -2227,7 +2227,6 @@ function SessionSidebar({
     cancelInlineRename();
   }
 
-  const collapsedSessions = groups.flatMap((group) => group.sessions);
   const activeGroups = useMemo(
     () => groups.filter((group) => sourceTabForGroup(group) === activeSourceTab),
     [activeSourceTab, groups],
@@ -2347,13 +2346,13 @@ function SessionSidebar({
           </div>
           <div className="mx-auto mt-4 h-px w-6 bg-[rgba(15,23,42,0.06)]" />
           <div className="mt-3 flex flex-1 flex-col items-center gap-1 overflow-y-auto">
-            {collapsedSessions.map((session) => (
+            {activeFlatSessions.map((session) => (
               <button
                 className={iconButtonClass(activeSessionCode === session.sessionCode)}
                 key={session.sessionCode}
                 type="button"
                 aria-label={`Open ${session.title}`}
-                onClick={() => onSessionSelect(session, sourceTabsBySessionCode.get(session.sessionCode))}
+                onClick={() => onSessionSelect(session, activeSourceTab)}
                 onMouseEnter={(event) => showCollapsedTooltip(event.currentTarget, session)}
                 onMouseLeave={hideCollapsedTooltip}
                 onFocus={(event) => showCollapsedTooltip(event.currentTarget, session)}
