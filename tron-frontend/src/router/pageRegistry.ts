@@ -24,7 +24,7 @@ export const routePages: Record<string, RoutePageComponent> = {
   "automations.detail": lazy(() => import("@/domain/automation/pages/AutomationDetailsPage").then((module) => ({ default: module.AutomationDetailsPage }))),
   "automations.index": lazy(() => import("@/domain/automation/pages/AutomationsPage").then((module) => ({ default: module.AutomationsPage }))),
   "automations.new": lazy(() => import("@/domain/automation/pages/CreateAutomationPage").then((module) => ({ default: module.CreateAutomationPage }))),
-  "chats.index": lazy(() => import("@/domain/chat/pages/ChatManagementPage").then((module) => ({ default: module.ChatManagementPage }))),
+  "chats.index": lazy(() => import("@/domain/chat/pages/Index")),
   "chats.execution": lazy(() => import("@/domain/chat/pages/ChatSessionExecutionPage").then((module) => ({ default: module.ChatSessionExecutionPage }))),
   "chats.reasoning": lazy(() => import("@/domain/chat/pages/ChatSessionReasoningPage").then((module) => ({ default: module.ChatSessionReasoningPage }))),
   "dashboard.index": lazy(() => import("@/domain/dashboard/pages/DashboardPage").then((module) => ({ default: module.DashboardPage }))),
