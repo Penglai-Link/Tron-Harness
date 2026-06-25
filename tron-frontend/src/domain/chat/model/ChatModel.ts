@@ -116,6 +116,15 @@ export interface ChatSendResult {
   messages: ChatMessage[];
 }
 
+export interface ChatMessageAttachment {
+  id: string;
+  kind: "inspection";
+  imageUrl?: string | null;
+  metadata: Record<string, unknown>;
+  summary: string;
+  title: string;
+}
+
 export interface SendChatMessageInput {
   content: string;
   workspaceCode: string;

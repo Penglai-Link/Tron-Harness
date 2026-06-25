@@ -35,6 +35,8 @@ import {
   UserRound,
   Wrench,
   type LucideIcon,
+  X,
+  MessageCircleMore,
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
@@ -96,12 +98,17 @@ import type {
   ChatSession,
   ChatSessionGroup,
   ChatSessionTodo,
+  ChatMessageAttachment,
   ChatTokenEstimateSnapshot,
   ChatTokenUsage,
   ChatUsageAuditSnapshot,
   SendChatMessageInput,
 } from "@/domain/chat/model";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useInspection } from "../hooks/useInspection";
+import DraggleLine from "@/shared/ui/DraggleLine";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 function formatTime(value: string) {
   const date = new Date(value);
@@ -193,6 +200,39 @@ const defaultChatSessionSourceTab: ChatSessionSourceTab = "chat";
 const chatSessionSourceTabStorageKey = "tron.chat.activeSourceTab";
 const emptyLiveAguiEvents: ChatAguiStreamEvent[] = [];
 const emptyLiveAguiAnchorMessageCodes: Record<string, string> = {};
+
+function ChatInspectionAttachmentChip({
+  attachment,
+  onRemove,
+}: {
+  attachment: ChatMessageAttachment;
+  onRemove: () => void;
+}) {
+  return (
+
+    <div className="group relative">
+      <Button variant="outline" size="sm" className="hover:bg-background!">
+        <MessageCircleMore />
+        <p className="text-sm">注释</p>
+      </Button>
+      <Button variant="outline" onClick={onRemove} size="sm" className="cursor-pointer rounded-full absolute right-[2px] top-[2px] w-6 h-6 hidden group-hover:flex"><X size={2} /></Button>
+      <Card size="sm" className="pointer-events-none absolute hidden bottom-[calc(100%+0.5rem)] left-0 z-20 group-hover:block --card-spacing:--spacing(4)">
+        <CardContent className="space-x-1 flex item-center">
+          <div className="w-6 h-6 rounded-sm overflow-hidden flex-none">
+            {attachment.imageUrl ? (
+              <img
+                alt="Inspection attachment preview"
+                className="object-cover w-full h-full"
+                src={attachment.imageUrl}
+              />
+            ) : null}
+          </div>
+          <p className="max-w-20 truncate whitespace-nowrap text-[var(--color-on-surface)]">{attachment.summary}</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 function normalizedSessionSource(value: string | null | undefined) {
   return value?.trim().toLowerCase() ?? "";
@@ -2470,15 +2510,7 @@ function SessionSidebar({
           </div>
         </>
       )}
-      <button
-        className="absolute right-[-22px] top-1/2 z-10 inline-flex h-11 w-6 -translate-y-1/2 items-center justify-center rounded-l-none rounded-r-full border-0 bg-[var(--color-surface-container-lowest)] p-0 text-[var(--color-on-surface-variant)] shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-2"
-        type="button"
-        aria-label={collapsed ? "Expand sessions" : "Collapse sessions"}
-        aria-pressed={collapsed}
-        onClick={onCollapseToggle}
-      >
-        {collapsed ? <ChevronRight size={15} strokeWidth={2.4} /> : <ChevronLeft size={15} strokeWidth={2.4} />}
-      </button>
+      <DraggleLine onClick={onCollapseToggle} className="absolute right-0 top-0 h-full z-10 " />
     </aside>
   );
 }
@@ -3531,7 +3563,7 @@ export function ChatManagementPage() {
       <Tabs defaultValue="1" className="w-full h-full">
         <TabsList className="mx-4 my-2">
           <TabsTrigger value="1">Run Context</TabsTrigger>
-          <TabsTrigger value="2">Analytics</TabsTrigger>
+          <TabsTrigger value="2">页面</TabsTrigger>
         </TabsList>
         <TabsContent value="1">
           <div className="m-4">
@@ -3561,7 +3593,15 @@ export function ChatManagementPage() {
           </div>
         </TabsContent>
         <TabsContent value="2">
-          <PageView url="https://www.baidu.com" />
+          <PageView
+            url="https://www.baidu.com"
+            onInspectionConfirm={(result) => {
+              setInspectionAttachments((current) => [
+                ...current,
+                createInspectionAttachment(result),
+              ]);
+            }}
+          />
         </TabsContent>
       </Tabs>
     );
@@ -3595,31 +3635,46 @@ export function ChatManagementPage() {
     recentTurnLimit: aguiWorkReplayPreferences.recentTurnLimit,
   }), [aguiDebugPreferences, aguiWorkReplayPreferences.recentTurnLimit]);
   const transcriptFooterAddon = useMemo(() => (
-    <div className="flex min-w-0 max-w-full items-center gap-1">
-      {agentSelectionLocked ? null : (
-        <div className="min-w-0 max-w-[9.5rem] shrink">
-          <ChatAgentSelector
-            locked={agentSelectionLocked}
-            loading={agentsLoading}
-            agents={chatAgents}
-            selectedAgentCode={selectedAgentCode}
-            onSelect={handleAgentSelect}
+    <div className="flex min-w-0 max-w-full flex-col items-start gap-2">
+      {inspectionAttachments.length ? (
+        <div className="flex max-w-full flex-wrap gap-2">
+          {inspectionAttachments.map((attachment) => (
+            <ChatInspectionAttachmentChip
+              attachment={attachment}
+              key={attachment.id}
+              onRemove={() => {
+                setInspectionAttachments((current) => current.filter((item) => item.id !== attachment.id));
+              }}
+            />
+          ))}
+        </div>
+      ) : null}
+      <div className="flex min-w-0 max-w-full items-center gap-1">
+        {agentSelectionLocked ? null : (
+          <div className="min-w-0 max-w-[9.5rem] shrink">
+            <ChatAgentSelector
+              locked={agentSelectionLocked}
+              loading={agentsLoading}
+              agents={chatAgents}
+              selectedAgentCode={selectedAgentCode}
+              onSelect={handleAgentSelect}
+            />
+          </div>
+        )}
+        <div
+          className={cn(
+            "min-w-0 max-w-full",
+            agentSelectionLocked ? "w-[min(100%,16rem)]" : "w-[min(100%,14rem)]",
+          )}
+        >
+          <ChatModelSelector
+            emptyLabel={modelEmptyLabel}
+            loading={modelsLoading}
+            models={agentScopedModels}
+            selectedModelCode={selectedModelCode}
+            onSelect={handleModelSelect}
           />
         </div>
-      )}
-      <div
-        className={cn(
-          "min-w-0 max-w-full",
-          agentSelectionLocked ? "w-[min(100%,16rem)]" : "w-[min(100%,14rem)]",
-        )}
-      >
-        <ChatModelSelector
-          emptyLabel={modelEmptyLabel}
-          loading={modelsLoading}
-          models={agentScopedModels}
-          selectedModelCode={selectedModelCode}
-          onSelect={handleModelSelect}
-        />
       </div>
     </div>
   ), [
@@ -3627,6 +3682,7 @@ export function ChatManagementPage() {
     agentSelectionLocked,
     agentsLoading,
     chatAgents,
+    inspectionAttachments,
     modelEmptyLabel,
     modelsLoading,
     selectedAgentCode,

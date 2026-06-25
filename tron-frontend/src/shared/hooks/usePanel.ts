@@ -12,7 +12,7 @@ export function usePanel() {
     }, [location]);
 
     const panelResize = useCallback((panelSize: PanelSize) => {
-        if (panelSize.inPixels < 200 && !panelRef.current?.isCollapsed()) {
+        if (panelSize.inPixels < 500 && !panelRef.current?.isCollapsed()) {
             panelRef.current?.collapse()
         }
     }, []);

@@ -67,6 +67,7 @@ import type {
 } from "@/shared/types/WorkspaceSpace";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { usePanel } from "../hooks/usePanel";
+import DraggleLine from "../ui/DraggleLine";
 
 
 interface TronShellProps {
@@ -905,15 +906,7 @@ export function TronShell({
             <div className={cn("h-full overflow-y-auto py-4", sidebarCollapsed ? "px-2" : "px-3")}>
               {renderSidebarContent()}
             </div>
-            <button
-              className="absolute right-[-22px] top-1/2 z-10 inline-flex h-11 w-6 -translate-y-1/2 items-center justify-center rounded-l-none rounded-r-full border-0 bg-[var(--color-elevated-surface)] p-0 text-[var(--color-on-surface-variant)] shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-2"
-              type="button"
-              aria-label={sidebarCollapsed ? t("shell:aria.expandSidebar") : t("shell:aria.collapseSidebar")}
-              aria-pressed={sidebarCollapsed}
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            >
-              {sidebarCollapsed ? <ChevronRight size={15} strokeWidth={2.4} aria-hidden="true" /> : <ChevronLeft size={15} strokeWidth={2.4} aria-hidden="true" />}
-            </button>
+            <DraggleLine onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="absolute right-0 top-0 h-full z-10 " />
           </aside>
 
           {sidebarTooltip && sidebarCollapsed ? (
