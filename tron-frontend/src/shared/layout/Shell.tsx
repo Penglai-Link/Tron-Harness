@@ -110,7 +110,6 @@ export function useConsoleShellConfig(config: ConsoleShellConfig) {
     }
 
     shellConfigController.setConfig(config);
-    return () => shellConfigController.resetConfig();
   }, [
     config.contentClassName,
     config.rightPanel,
@@ -118,6 +117,14 @@ export function useConsoleShellConfig(config: ConsoleShellConfig) {
     config.topbarActions,
     shellConfigController,
   ]);
+
+  useEffect(() => {
+    if (!shellConfigController) {
+      return;
+    }
+
+    return () => shellConfigController.resetConfig();
+  }, [shellConfigController]);
 }
 
 export function useOpenRightSidebar() {
@@ -341,8 +348,6 @@ export function TronShell({
       searchPlaceholder,
       topbarActions,
     });
-
-    return () => shellConfigController.resetConfig();
   }, [
     contentClassName,
     rightPanel,
@@ -351,6 +356,14 @@ export function TronShell({
     shellFrameMounted,
     topbarActions,
   ]);
+
+  useEffect(() => {
+    if (!shellFrameMounted || !shellConfigController) {
+      return;
+    }
+
+    return () => shellConfigController.resetConfig();
+  }, [shellConfigController, shellFrameMounted]);
 
   useEffect(() => {
     setMobileSidebarOpen(false);

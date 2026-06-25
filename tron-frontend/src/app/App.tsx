@@ -193,6 +193,18 @@ function AppRoutePage() {
   const blocksAdministrationRoute = isAdministrationRoute(pathname) && !isAdmin;
   const blockedAdministrationToastPath = useRef<string | null>(null);
   const [pageShellConfig, setPageShellConfig] = useState<ConsoleShellConfig>({});
+  const routeContent = useMemo(() => {
+    if (!resolved) {
+      return null;
+    }
+
+    const { Component } = resolved;
+    return (
+      <SuspendedRoute>
+        <Component key={routeRenderKey} />
+      </SuspendedRoute>
+    );
+  }, [resolved, routeRenderKey]);
   const shellConfigController = useMemo(() => ({
     resetConfig: () => {
       setPageShellConfig((current) => (isConsoleShellConfigEmpty(current) ? current : {}));
@@ -227,7 +239,7 @@ function AppRoutePage() {
   }
 
   if (resolved) {
-    const { Component, route } = resolved;
+    const { route } = resolved;
     const effectiveShellConfig = {
       ...route.shellConfig,
       ...pageShellConfig,
@@ -240,9 +252,7 @@ function AppRoutePage() {
           items={settingsNavigation}
           roleCodes={session?.user.roleCodes}
         >
-          <SuspendedRoute>
-            <Component key={routeRenderKey} />
-          </SuspendedRoute>
+          {routeContent}
         </SettingsShell>
       );
     }
@@ -257,9 +267,7 @@ function AppRoutePage() {
           topbarActions={effectiveShellConfig.topbarActions}
           userMenuContent={<AuthUserMenuPanel />}
         >
-          <SuspendedRoute>
-            <Component key={routeRenderKey} />
-          </SuspendedRoute>
+          {routeContent}
         </TronShell>
       </ConsoleShellConfigContext.Provider>
     );

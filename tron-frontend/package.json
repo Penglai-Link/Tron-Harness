@@ -14,7 +14,9 @@
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {
+    "@base-ui/react": "^1.6.0",
     "@chenglou/pretext": "^0.0.6",
+    "@fontsource-variable/geist": "^5.2.9",
     "@fontsource-variable/inter": "^5.2.8",
     "@radix-ui/react-slot": "^1.2.3",
     "@tron/chat-core": "workspace:*",

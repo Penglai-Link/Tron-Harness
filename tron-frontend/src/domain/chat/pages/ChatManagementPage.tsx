@@ -100,6 +100,7 @@ import type {
   ChatUsageAuditSnapshot,
   SendChatMessageInput,
 } from "@/domain/chat/model";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function formatTime(value: string) {
   const date = new Date(value);
@@ -1815,8 +1816,8 @@ function RightContextSidebar({
                 : latestCompactionStatus?.error
                   ? t("chat.shortTermMemory.loadFailed")
                   : latestCompaction
-                ? t("chat.shortTermMemory.checkpointReady")
-                : t("chat.shortTermMemory.noCheckpoint")}
+                    ? t("chat.shortTermMemory.checkpointReady")
+                    : t("chat.shortTermMemory.noCheckpoint")}
             </span>
             <button
               aria-label={t("chat.shortTermMemory.createCheckpoint")}
@@ -3055,6 +3056,21 @@ export function ChatManagementPage() {
   const shortTermMemoryTodos = shortTermMemoryTodosState.data;
   const latestCompaction = latestCompactionState.data;
   const activeGoal = activeGoalState.data;
+  const shortTermMemoryTodosStatus = useMemo<QueryStatus>(() => ({
+    loading: shortTermMemoryTodosState.loading,
+    error: shortTermMemoryTodosState.error,
+    retry: shortTermMemoryTodosState.retry,
+  }), [shortTermMemoryTodosState.error, shortTermMemoryTodosState.loading, shortTermMemoryTodosState.retry]);
+  const latestCompactionStatus = useMemo<QueryStatus>(() => ({
+    loading: latestCompactionState.loading,
+    error: latestCompactionState.error,
+    retry: latestCompactionState.retry,
+  }), [latestCompactionState.error, latestCompactionState.loading, latestCompactionState.retry]);
+  const goalStatus = useMemo<QueryStatus>(() => ({
+    loading: activeGoalState.loading,
+    error: activeGoalState.error,
+    retry: activeGoalState.retry,
+  }), [activeGoalState.error, activeGoalState.loading, activeGoalState.retry]);
   const aguiEvents = useChatAguiEvents(activeSession?.sessionCode ?? "");
   const aguiProtocolEvents = useChatAguiProtocolEvents(activeSession?.sessionCode ?? "", activeChatReplayRefreshKey);
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
@@ -3512,29 +3528,40 @@ export function ChatManagementPage() {
   const rightPanel = useMemo(() => {
     if (!hasActiveSession) return undefined;
     return (
-      <RightContextSidebar
-        events={aguiEvents}
-        goal={activeGoal}
-        goalBusy={Boolean(activeSession?.sessionCode && goalActionSessionCode === activeSession.sessionCode)}
-        goalStatus={activeGoalState}
-        latestCompaction={latestCompaction}
-        latestCompactionStatus={latestCompactionState}
-        latestRequestEstimate={activeSession ? latestRequestEstimatesBySessionCode[activeSession.sessionCode] ?? null : null}
-        latestUsageAudit={activeSession ? latestUsageAuditsBySessionCode[activeSession.sessionCode] ?? null : null}
-        messages={visibleMessages}
-        model={selectedMainAgentModel}
-        onCancelGoal={handleCancelGoal}
-        compactionBusy={Boolean(activeSession?.sessionCode && compactingSessionCode === activeSession.sessionCode)}
-        onCreateCompaction={handleCreateCompaction}
-        onClearGoal={handleClearGoal}
-        onPauseGoal={handlePauseGoal}
-        onResumeGoal={handleResumeGoal}
-        onSetGoal={handleSetGoal}
-        selectedModel={selectedModel}
-        session={activeSession}
-        todos={shortTermMemoryTodos}
-        todosStatus={shortTermMemoryTodosState}
-      />
+      <div>
+        <Tabs defaultValue="overview" className="w-full">
+          <TabsList>
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          </TabsList>
+          <TabsContent value="overview">
+            <RightContextSidebar
+              events={aguiEvents}
+              goal={activeGoal}
+              goalBusy={Boolean(activeSession?.sessionCode && goalActionSessionCode === activeSession.sessionCode)}
+              goalStatus={goalStatus}
+              latestCompaction={latestCompaction}
+              latestCompactionStatus={latestCompactionStatus}
+              latestRequestEstimate={activeSession ? latestRequestEstimatesBySessionCode[activeSession.sessionCode] ?? null : null}
+              latestUsageAudit={activeSession ? latestUsageAuditsBySessionCode[activeSession.sessionCode] ?? null : null}
+              messages={visibleMessages}
+              model={selectedMainAgentModel}
+              onCancelGoal={handleCancelGoal}
+              compactionBusy={Boolean(activeSession?.sessionCode && compactingSessionCode === activeSession.sessionCode)}
+              onCreateCompaction={handleCreateCompaction}
+              onClearGoal={handleClearGoal}
+              onPauseGoal={handlePauseGoal}
+              onResumeGoal={handleResumeGoal}
+              onSetGoal={handleSetGoal}
+              selectedModel={selectedModel}
+              session={activeSession}
+              todos={shortTermMemoryTodos}
+              todosStatus={shortTermMemoryTodosStatus}
+            />
+          </TabsContent>
+        </Tabs>
+
+      </div>
     );
   }, [
     activeSession,
@@ -3545,6 +3572,7 @@ export function ChatManagementPage() {
     aguiEvents,
     compactingSessionCode,
     goalActionSessionCode,
+    goalStatus,
     hasActiveSession,
     latestCompaction,
     latestCompactionState.error,
