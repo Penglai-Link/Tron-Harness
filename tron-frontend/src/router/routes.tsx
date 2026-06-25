@@ -45,6 +45,7 @@ export const appRoutes: AppRoute[] = [
   { pageId: "chats.execution", route: "/chats/8842-alpha?variant=execution", activeNav: "Chats", title: "Chat Session Detail", archetype: "chat", shellConfig: { contentClassName: "!h-[calc(100vh-3.5rem)] !overflow-hidden !p-0", searchPlaceholder: "Search tasks..." } },
   { pageId: "automations.new", route: "/automations/new", activeNav: "Automations", title: "Create Automation", archetype: "form", shellConfig: { searchPlaceholder: "Search automations..." } },
   { pageId: "automations.detail", route: "/automations/detail", activeNav: "Automations", title: "Automation Detail", archetype: "detail", shellConfig: { searchPlaceholder: "Search automations..." } },
+  { pageId: "automations.executions", route: "/automations/executions", activeNav: "Automations", title: "Automation Executions", archetype: "data-table", shellConfig: { searchPlaceholder: "Search automations..." } },
   { pageId: "prompts.new", route: "/prompts/new", activeNav: "Prompts", title: "Create New Prompt", archetype: "form-inspector", shellConfig: { searchPlaceholder: "Search prompts..." } },
   { pageId: "skills.bind", route: "/skills/bind", activeNav: "Skills", title: "Bind Skill", archetype: "form-inspector", shellConfig: { searchPlaceholder: "Search installed skills..." } },
   { pageId: "tasks.new", route: "/tasks/new", activeNav: "Tasks", title: "Create Task", archetype: "form", shellConfig: { searchPlaceholder: "Search tasks..." } },

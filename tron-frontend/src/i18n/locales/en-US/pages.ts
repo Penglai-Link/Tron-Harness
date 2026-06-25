@@ -925,6 +925,7 @@ export const pages = {
       },
     },
   },
+  "Execution instances": "Execution instances",
   settingsTools: {
     catalog: {
       domains: {

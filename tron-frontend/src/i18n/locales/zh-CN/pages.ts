@@ -947,6 +947,7 @@ export const pages = {
   "Deleting...": "删除中...",
   "Detail": "详情",
   "Edit": "编辑",
+  "Execution instances": "执行实例",
   "Execution {{code}} deleted": "执行记录 {{code}} 已删除",
   "Execution could not be deleted": "执行记录删除失败",
   "Execution history refreshed": "执行历史已刷新",

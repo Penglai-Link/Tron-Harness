@@ -5,7 +5,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   useNavigate,
   useSearchParams,
@@ -13,66 +12,49 @@ import {
 import {
   Archive,
   Edit3,
-  ExternalLink,
+  ListChecks,
   Maximize2,
-  MoreHorizontal,
   Pause,
   Play,
-  RefreshCcw,
   Save,
   StepForward,
-  Trash2,
   X,
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import {
-  ConfirmDialog,
-  DataTable,
   DetailField,
   Field,
-  InspectorPanel,
   MarkdownContent,
   OptionSelect,
   PageHeader,
-  SelectInput,
   SurfaceCard,
-  TablePagination,
   TextArea,
   TextInput,
   useToast,
-  useConsoleShellConfig,
-  useDismissibleLayer,
   useLocaleText,
 } from "@/shared";
 
 import {
   archiveAutomation,
-  deleteAutomationExecution,
   executeAutomation,
   restoreAutomation,
   updateAutomation,
   updateAutomationStatus,
 } from "@/domain/automation/api";
-import {
-  getAutomationExecutionStatusTone,
-} from "@/domain/automation/constants";
+import { getAutomationStatusTone } from "@/domain/automation/constants";
 import {
   useAutomationDetail,
-  useAutomationExecutions,
 } from "@/domain/automation/hooks";
 import {
   archiveMockAutomation,
-  deleteMockAutomationExecution,
   executeMockAutomation,
   restoreMockAutomation,
   updateMockAutomation,
   updateMockAutomationStatus,
 } from "@/domain/automation/mock/data";
 import type {
-  AutomationExecutionListItem,
-  AutomationDetailData,
   AutomationOperationalStatus,
 } from "@/domain/automation/model";
 import { fetchWorkspaceSystemAgents } from "@/domain/agent/api/agentManagementApi";
@@ -91,20 +73,6 @@ import {
   type AutomationModelOption,
 } from "./automationExecutionOptions";
 
-interface AutomationSubtask {
-  progress: number;
-  status: string;
-  taskCode: string;
-  title: string;
-}
-
-interface ExecutionRowMenuState {
-  executionCode: string;
-  left: number;
-  top: number;
-  triggerElement: HTMLElement;
-}
-
 function formatTimestamp(value?: string | null) {
   if (!value) return "Not available";
   return new Intl.DateTimeFormat("en-US", {
@@ -121,60 +89,9 @@ function ReadValue({ children }: { children: ReactNode }) {
   );
 }
 
-function ProgressBar({ value }: { value: number }) {
-  return (
-    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
-      <div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
-    </div>
-  );
-}
-
-function resolveSubtasks(automation: AutomationDetailData & { subtasks?: unknown }): AutomationSubtask[] {
-  if (!Array.isArray(automation.subtasks)) {
-    return [];
-  }
-
-  return automation.subtasks
-    .filter((entry) => {
-      return Boolean(
-        typeof entry === "object"
-        && entry !== null
-        && "taskCode" in entry
-        && "title" in entry
-      );
-    })
-    .map((entry) => {
-      const candidate = entry as Record<string, unknown>;
-      return {
-        progress: Number(candidate.progress ?? 0),
-        status: String(candidate.status ?? ""),
-        taskCode: String(candidate.taskCode ?? ""),
-        title: String(candidate.title ?? ""),
-      };
-    });
-}
-
-function statusLabel(status: string) {
-  return status || "Unknown";
-}
-
-function executionPageBounds(page: number, pageSize: number, total: number, visible: number) {
-  if (!total || !visible) {
-    return { end: 0, start: 0 };
-  }
-  const start = (page - 1) * pageSize + 1;
-  return {
-    end: start + visible - 1,
-    start,
-  };
-}
-
-function chatSessionDetailHref(sessionCode: string) {
-  const params = new URLSearchParams({
-    sessionCode,
-    sourceTab: "automation",
-  });
-  return `/chats?${params.toString()}`;
+function automationExecutionsHref(automationCode: string) {
+  const params = new URLSearchParams({ automationCode });
+  return `/automations/executions?${params.toString()}`;
 }
 
 export function AutomationDetailsPage() {
@@ -183,20 +100,6 @@ export function AutomationDetailsPage() {
   const pt = useLocaleText();
   const automationCode = searchParams.get("automationCode") ?? "";
   const { automation, refresh, setAutomation } = useAutomationDetail(automationCode);
-  const [executionCurrent, setExecutionCurrent] = useState(1);
-  const [executionSize, setExecutionSize] = useState(15);
-  const {
-    loading: executionsLoading,
-    page: executionPage,
-    refresh: refreshExecutions,
-  } = useAutomationExecutions(automationCode, { current: executionCurrent, size: executionSize });
-  const executionPageState = executionPage ?? {
-    current: 1,
-    records: [] as AutomationExecutionListItem[],
-    size: 15,
-    total: 0,
-  };
-  const executionPageRecords = Array.isArray(executionPageState.records) ? executionPageState.records : [];
   const toast = useToast();
   const dataSource = getServiceDataSource("automation");
   const [name, setName] = useState(automation.name);
@@ -208,9 +111,6 @@ export function AutomationDetailsPage() {
   const [statusBusy, setStatusBusy] = useState(false);
   const [executionBusy, setExecutionBusy] = useState(false);
   const [archiveBusy, setArchiveBusy] = useState(false);
-  const [executionRowBusyKey, setExecutionRowBusyKey] = useState("");
-  const [openExecutionRowMenu, setOpenExecutionRowMenu] = useState<ExecutionRowMenuState | null>(null);
-  const [deleteTargetExecution, setDeleteTargetExecution] = useState<AutomationExecutionListItem | null>(null);
   const [promptFullscreenOpen, setPromptFullscreenOpen] = useState(false);
   const [agentOptions, setAgentOptions] = useState<AutomationAgentOption[]>([mainAutomationAgentOption]);
   const [workspaceModelOptions, setWorkspaceModelOptions] = useState<Awaited<ReturnType<typeof fetchWorkspaceSelectOptions>>>([]);
@@ -218,7 +118,6 @@ export function AutomationDetailsPage() {
   const [selectedModelOptionCode, setSelectedModelOptionCode] = useState(optionCodeForAutomationModel(automation.agentCode, automation.modelCode));
   const [executionOptionsLoading, setExecutionOptionsLoading] = useState(false);
   const automationRef = useRef(automation);
-  const executionRowMenuRef = useRef<HTMLDivElement | null>(null);
   automationRef.current = automation;
   const archived = automation.status === "Archived" || Boolean(automation.archivedAt);
   const selectedAgent = useMemo(() => {
@@ -358,90 +257,12 @@ export function AutomationDetailsPage() {
     };
   }, [promptFullscreenOpen]);
 
-  useEffect(() => {
-    setExecutionCurrent(1);
-  }, [automationCode]);
-
-  useEffect(() => {
-    setOpenExecutionRowMenu(null);
-  }, [automationCode, executionCurrent, executionSize]);
-
-  useDismissibleLayer({
-    onDismiss: () => setOpenExecutionRowMenu(null),
-    open: openExecutionRowMenu !== null,
-    popupRef: executionRowMenuRef,
-    triggerElement: openExecutionRowMenu?.triggerElement,
-  });
-
   const detailDirty = name !== automation.name
     || description !== (automation.description ?? "")
     || cronExpression !== automation.cronExpression
     || prompt !== automation.prompt
     || selectedAgentCode !== (automation.agentCode || mainAutomationAgentOption.agentCode)
     || selectedModelCode !== automation.modelCode;
-  const executionPageCount = Math.max(1, Math.ceil(executionPageState.total / executionPageState.size));
-  const executionBounds = executionPageBounds(
-    executionPageState.current,
-    executionPageState.size,
-    executionPageState.total,
-    executionPageRecords.length,
-  );
-  const subtasks = useMemo(() => resolveSubtasks(automation), [automation]);
-  const executionInitialLoading = executionsLoading && executionPageState.total === 0;
-  const openExecutionMenuRow = openExecutionRowMenu
-    ? executionPageRecords.find((item) => item.executionCode === openExecutionRowMenu.executionCode) ?? null
-    : null;
-  const rightPanel = useMemo(() => (
-    <InspectorPanel title="Automation Details">
-      <div className="space-y-5">
-        <div className="space-y-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Latest execution rollup</p>
-          <DetailField
-            label="Last result"
-            value={automation.lastExecutionStatus ? <Badge tone={getAutomationExecutionStatusTone(automation.lastExecutionStatus)}>{automation.lastExecutionStatus}</Badge> : "Never executed"}
-          />
-          <DetailField label="Summary" value={<ReadValue>{automation.lastExecutionSummary}</ReadValue>} />
-          <DetailField label="Execution code" value={<ReadValue>{automation.lastExecutionCode}</ReadValue>} />
-          <DetailField label="Last started" value={formatTimestamp(automation.lastStartedAt)} />
-          <DetailField label="Last finished" value={formatTimestamp(automation.lastFinishedAt)} />
-          <DetailField label="Next run" value={formatTimestamp(automation.nextRunAt)} />
-        </div>
-        <div className="space-y-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Metadata</p>
-          <DetailField label="Automation code" value={<ReadValue>{automation.automationCode}</ReadValue>} />
-          <DetailField label="Agent" value={<ReadValue>{automation.agentCode}</ReadValue>} />
-          <DetailField label="Model" value={<ReadValue>{automation.modelCode}</ReadValue>} />
-          <DetailField label="Timezone" value={<ReadValue>{automation.timezone}</ReadValue>} />
-          <DetailField label="Created" value={formatTimestamp(automation.createdAt)} />
-          <DetailField label="Updated" value={formatTimestamp(automation.updatedAt)} />
-          <DetailField label="Archived at" value={formatTimestamp(automation.archivedAt)} />
-          <DetailField label="Previous status" value={<ReadValue>{automation.previousStatus}</ReadValue>} />
-        </div>
-        {subtasks.length ? (
-          <div className="space-y-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Subtasks</p>
-            <div className="space-y-2">
-              {subtasks.map((item) => (
-                <div className="rounded-lg border border-[var(--color-outline-variant)] p-3" key={item.taskCode}>
-                  <div className="text-xs font-mono text-[var(--color-on-surface-variant)]">{item.taskCode}</div>
-                  <div className="mt-1 text-sm font-medium">{item.title}</div>
-                  <div className="mt-2 flex items-center justify-between gap-3">
-                    <span className="text-xs text-[var(--color-on-surface-variant)]">{statusLabel(item.status)}</span>
-                    <span className="text-xs text-[var(--color-on-surface-variant)]">{item.progress}%</span>
-                  </div>
-                  <div className="mt-2"><ProgressBar value={item.progress} /></div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-[var(--color-on-surface-variant)]">No active subtasks.</p>
-        )}
-      </div>
-    </InspectorPanel>
-  ), [automation, subtasks]);
-
-  useConsoleShellConfig({ rightPanel });
 
   function resetDraft() {
     setName(automation.name);
@@ -532,7 +353,7 @@ export function AutomationDetailsPage() {
       const lifecycle = dataSource === "api"
         ? await restoreAutomation(automation.automationCode)
         : restoreMockAutomation(automation.automationCode);
-      await Promise.all([refresh(), refreshExecutions()]);
+      await refresh();
       setAutomation({
         ...automationRef.current,
         archivedAt: lifecycle.archivedAt,
@@ -556,80 +377,11 @@ export function AutomationDetailsPage() {
         ? await executeAutomation(automation.automationCode)
         : executeMockAutomation(automation.automationCode);
       setAutomation(updated);
-      refreshExecutions();
       toast.success(pt("Manual execution recorded for {{code}}", { code: updated.automationCode }));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : pt("Automation execution could not be recorded"));
     } finally {
       setExecutionBusy(false);
-    }
-  }
-
-  function handleRefreshExecutions() {
-    refreshExecutions();
-    toast.success(pt("Execution history refreshed"));
-  }
-
-  function toggleExecutionRowMenu(row: AutomationExecutionListItem, trigger: HTMLButtonElement) {
-    if (executionRowBusyKey === `delete:${row.executionCode}`) return;
-    if (openExecutionRowMenu?.executionCode === row.executionCode) {
-      setOpenExecutionRowMenu(null);
-      return;
-    }
-
-    const menuWidth = 184;
-    const menuHeight = 112;
-    const rect = trigger.getBoundingClientRect();
-    const left = Math.min(
-      Math.max(12, rect.right - menuWidth),
-      window.innerWidth - menuWidth - 12,
-    );
-    const top = Math.min(
-      Math.max(12, rect.bottom + 8),
-      window.innerHeight - menuHeight - 12,
-    );
-
-    setOpenExecutionRowMenu({
-      executionCode: row.executionCode,
-      left,
-      top,
-      triggerElement: trigger,
-    });
-  }
-
-  function handleOpenExecutionSession(row: AutomationExecutionListItem) {
-    if (!row.sessionCode) return;
-    setOpenExecutionRowMenu(null);
-    navigate(chatSessionDetailHref(row.sessionCode));
-  }
-
-  function requestDeleteExecution(row: AutomationExecutionListItem) {
-    setOpenExecutionRowMenu(null);
-    setDeleteTargetExecution(row);
-  }
-
-  async function confirmDeleteExecution() {
-    const target = deleteTargetExecution;
-    if (!target || executionRowBusyKey) return;
-    const busyKey = `delete:${target.executionCode}`;
-    setExecutionRowBusyKey(busyKey);
-
-    try {
-      const deleted = dataSource === "api"
-        ? await deleteAutomationExecution(target.automationCode, target.executionCode)
-        : deleteMockAutomationExecution(target.automationCode, target.executionCode);
-      setDeleteTargetExecution(null);
-      await refresh();
-      if (executionPageRecords.length === 1 && executionCurrent > 1) {
-        setExecutionCurrent((current) => Math.max(1, current - 1));
-      } else {
-        refreshExecutions();
-      }
-      toast.success(pt("Execution {{code}} deleted", { code: deleted.executionCode }));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : pt("Execution could not be deleted"));
-    } finally {
-      setExecutionRowBusyKey("");
     }
   }
 
@@ -667,14 +419,9 @@ export function AutomationDetailsPage() {
                 {pt("Pause")}
               </Button>
             </div>
-            <Button variant="secondary" onClick={() => {
-              refresh();
-              refreshExecutions();
-              toast.success(pt("Automation detail refreshed"));
-            }}
-            >
-              <RefreshCcw size={15} aria-hidden="true" />
-              {pt("Refresh")}
+            <Button variant="secondary" onClick={() => navigate(automationExecutionsHref(automation.automationCode || automationCode))}>
+              <ListChecks size={15} aria-hidden="true" />
+              {pt("Execution instances")}
             </Button>
             <Button disabled={executionBusy || archived} variant="secondary" onClick={handleExecute}>
               <Play size={15} aria-hidden="true" />
@@ -792,192 +539,27 @@ export function AutomationDetailsPage() {
           </div>
         </SurfaceCard>
         <SurfaceCard>
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-[var(--color-on-surface)]">Execution instances</h2>
-            </div>
-            <Button
-              aria-busy={executionsLoading}
-              disabled={executionsLoading}
-              size="sm"
-              type="button"
-              variant="secondary"
-              onClick={handleRefreshExecutions}
-            >
-              <RefreshCcw className={executionsLoading ? "animate-spin" : undefined} size={14} aria-hidden="true" />
-              {pt("Refresh executions")}
-            </Button>
+          <div className="mb-4">
+            <h2 className="text-lg font-semibold text-[var(--color-on-surface)]">Metadata</h2>
           </div>
-          {executionInitialLoading ? (
-            <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)]">
-              <div className="border-b border-[var(--color-outline-variant)] px-5 py-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                Loading execution history...
-              </div>
-              <div className="flex min-h-48 items-center justify-center px-5 py-8">
-                <div className="h-1.5 w-32 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
-                  <div className="h-full w-1/2 animate-pulse rounded-full bg-[var(--color-primary)]" />
-                </div>
-              </div>
-            </div>
-          ) : (
-              <DataTable<AutomationExecutionListItem>
-                variant="embedded"
-                emptyState="No execution history has been recorded yet."
-                rowKey={(row) => row.executionCode}
-                rows={executionPageRecords}
-                tableClassName="min-w-[980px]"
-              pagination={(
-                <TablePagination
-                  endItem={executionBounds.end}
-                  itemLabel="executions"
-                  page={executionPageState.current}
-                  pageCount={executionPageCount}
-                  pageSize={executionPageState.size}
-                  startItem={executionBounds.start}
-                  totalItems={executionPageState.total}
-                  onPageChange={(page) => setExecutionCurrent(Math.min(executionPageCount, Math.max(1, page)))}
-                  onPageSizeChange={(pageSize) => {
-                    setExecutionCurrent(1);
-                    setExecutionSize(pageSize);
-                  }}
-                />
-              )}
-              columns={[
-                {
-                  header: "Execution",
-                  id: "execution",
-                  render: (row) => (
-                    <div className="space-y-1">
-                      <p className="font-mono text-[13px] text-[var(--color-on-surface)]">{row.executionCode}</p>
-                      <p className="text-xs text-[var(--color-on-surface-variant)]">{formatTimestamp(row.createdAt)}</p>
-                      <p className="text-xs text-[var(--color-on-surface-variant)]">
-                        {row.sessionCode ?? pt("No linked session")}
-                      </p>
-                    </div>
-                  ),
-                },
-                {
-                  header: "Trigger",
-                  id: "trigger",
-                  render: (row) => (
-                    <Badge tone={row.triggerSource === "Manual" ? "accent" : "neutral"}>
-                      {row.triggerSource}
-                    </Badge>
-                  ),
-                },
-                {
-                  header: "Status",
-                  id: "status",
-                  render: (row) => (
-                    <Badge tone={getAutomationExecutionStatusTone(row.status)}>
-                      {row.status}
-                    </Badge>
-                  ),
-                },
-                {
-                  header: "Started",
-                  id: "started",
-                  render: (row) => formatTimestamp(row.startedAt),
-                },
-                {
-                  header: "Finished",
-                  id: "finished",
-                  render: (row) => formatTimestamp(row.finishedAt),
-                },
-                {
-                  header: "Summary",
-                  id: "summary",
-                  render: (row) => (
-                    <span
-                      className="line-clamp-4 max-w-[28rem] whitespace-pre-wrap text-sm leading-5 text-[var(--color-on-surface-variant)]"
-                      title={row.summary ?? undefined}
-                    >
-                      {row.summary ?? "No summary"}
-                    </span>
-                  ),
-                },
-                {
-                  header: "",
-                  id: "actions",
-                  align: "right",
-                  render: (row) => {
-                    const menuOpen = openExecutionRowMenu?.executionCode === row.executionCode;
-                    const busy = executionRowBusyKey === `delete:${row.executionCode}`;
-
-                    return (
-                      <Button
-                        aria-expanded={menuOpen}
-                        aria-haspopup="menu"
-                        aria-label={pt("Open actions for {{code}}", { code: row.executionCode })}
-                        disabled={busy}
-                        size="icon"
-                        type="button"
-                        variant="ghost"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          toggleExecutionRowMenu(row, event.currentTarget);
-                        }}
-                      >
-                        <MoreHorizontal size={16} aria-hidden="true" />
-                      </Button>
-                    );
-                  },
-                },
-              ]}
+          <div className="grid gap-4 lg:grid-cols-3">
+            <DetailField label="Automation code" value={<ReadValue>{automation.automationCode}</ReadValue>} />
+            <DetailField label="Record ID" value={<ReadValue>{automation.id}</ReadValue>} />
+            <DetailField
+              label="Status"
+              value={<Badge tone={getAutomationStatusTone(automation.status)}>{automation.status}</Badge>}
             />
-          )}
+            <DetailField label="Workspace" value={<ReadValue>{automation.workspaceCode}</ReadValue>} />
+            <DetailField label="Agent code" value={<ReadValue>{automation.agentCode}</ReadValue>} />
+            <DetailField label="Model code" value={<ReadValue>{automation.modelCode}</ReadValue>} />
+            <DetailField label="Timezone" value={<ReadValue>{automation.timezone}</ReadValue>} />
+            <DetailField label="Created" value={formatTimestamp(automation.createdAt)} />
+            <DetailField label="Updated" value={formatTimestamp(automation.updatedAt)} />
+            <DetailField label="Archived at" value={formatTimestamp(automation.archivedAt)} />
+            <DetailField label="Previous status" value={<ReadValue>{automation.previousStatus}</ReadValue>} />
+          </div>
         </SurfaceCard>
       </div>
-      {openExecutionRowMenu && openExecutionMenuRow
-        ? createPortal(
-          <div
-            ref={executionRowMenuRef}
-            style={{ left: openExecutionRowMenu.left, top: openExecutionRowMenu.top }}
-            className="fixed z-[80] w-48 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-2 text-left text-sm shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
-            role="menu"
-            aria-label={pt("Actions for {{code}}", { code: openExecutionMenuRow.executionCode })}
-          >
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={!openExecutionMenuRow.sessionCode}
-              onClick={() => handleOpenExecutionSession(openExecutionMenuRow)}
-            >
-              <ExternalLink size={14} aria-hidden="true" />
-              {pt("Open session")}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[var(--color-error)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={executionRowBusyKey === `delete:${openExecutionMenuRow.executionCode}`}
-              onClick={() => requestDeleteExecution(openExecutionMenuRow)}
-            >
-              <Trash2 size={14} aria-hidden="true" />
-              {pt("Delete")}
-            </button>
-          </div>,
-          document.body,
-        )
-        : null}
-      <ConfirmDialog
-        ariaLabel={pt("Delete execution")}
-        cancelText={pt("Cancel")}
-        confirmText={executionRowBusyKey ? pt("Deleting...") : pt("Delete")}
-        description={deleteTargetExecution
-          ? pt("This will remove execution {{code}} from the history table.", { code: deleteTargetExecution.executionCode })
-          : undefined}
-        open={Boolean(deleteTargetExecution)}
-        pending={Boolean(executionRowBusyKey)}
-        title={pt("Delete execution")}
-        onCancel={() => {
-          if (!executionRowBusyKey) setDeleteTargetExecution(null);
-        }}
-        onConfirm={() => {
-          void confirmDeleteExecution();
-        }}
-      />
       {promptFullscreenOpen ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
           <div

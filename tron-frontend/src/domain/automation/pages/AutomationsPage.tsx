@@ -85,6 +85,11 @@ function automationDescriptionText(row: AutomationListItem, fallback: string) {
   return row.description?.trim() || fallback;
 }
 
+function automationExecutionsHref(automationCode: string) {
+  const params = new URLSearchParams({ automationCode });
+  return `/automations/executions?${params.toString()}`;
+}
+
 interface RowMenuState {
   automationCode: string;
   left: number;
@@ -172,7 +177,7 @@ export function AutomationsPage() {
     }
 
     const menuWidth = 176;
-    const estimatedMenuHeight = row.status === "Archived" ? 112 : 160;
+    const estimatedMenuHeight = row.status === "Archived" ? 112 : 196;
     const rect = trigger.getBoundingClientRect();
     const left = Math.min(
       Math.max(12, rect.right - menuWidth),
@@ -465,6 +470,17 @@ export function AutomationsPage() {
                 {pt("Run")}
               </button>
             ) : null}
+            <button
+              type="button"
+              role="menuitem"
+              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]"
+              onClick={() => {
+                setOpenRowMenu(null);
+                navigate(automationExecutionsHref(openMenuRow.automationCode));
+              }}
+            >
+              {pt("Execution instances")}
+            </button>
             {openMenuRow.status !== "Archived" ? (
               <button
                 type="button"

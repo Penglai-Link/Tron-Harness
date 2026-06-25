@@ -30,7 +30,6 @@ import type {
   KanbanColumn,
   TaskListItem,
   TaskPriority,
-  TaskSourceType,
   TaskStatus,
   TaskType,
 } from "@/domain/task/model";
@@ -51,6 +50,7 @@ const BOARD_BASE_COLUMN_WIDTH = 320;
 const BOARD_BASE_GAP = 16;
 const BOARD_BASE_COLUMN_PADDING = 12;
 const BOARD_MIN_SCALE = 0.5;
+const ROOT_PARENT_TASK_FILTER = "__ROOT__";
 const BOARD_SCALE_PRESETS: Array<{ label: string; value: Exclude<BoardScalePreset, "fit"> }> = [
   { label: "100%", value: "100" },
   { label: "90%", value: "90" },
@@ -74,22 +74,17 @@ function clampBoardScale(value: number) {
   return Math.min(1, Math.max(BOARD_MIN_SCALE, value));
 }
 
-function ProgressBar({ value }: { value: number }) {
+function ProgressBar({ className, value }: { className?: string; value: number }) {
   return (
-    <div className="h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
+    <div className={cn("h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]", className)}>
       <div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
     </div>
   );
 }
 
-function taskTypeTone(taskType: TaskType) {
-  if (taskType === "Bug") return "error";
-  return "accent";
-}
-
-function sourceTypeTone(sourceType: TaskSourceType) {
-  if (sourceType === "Internal") return "neutral";
-  return "success";
+function taskTypeMarkerClass(taskType: TaskType) {
+  if (taskType === "Bug") return "bg-[var(--color-error)]";
+  return "bg-[var(--color-primary)]";
 }
 
 function taskPriorityTone(priority: TaskPriority) {
@@ -209,14 +204,17 @@ function KanbanCard({
       onDragStart={onDragStart}
       onClick={onSelect}
     >
-      <div className={cn("flex items-center justify-between gap-2", dense ? "mb-1" : compact ? "mb-1.5" : "mb-2")}>
-        <span className="min-w-0 truncate font-mono text-[11px] text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
-        <Badge tone={taskPriorityTone(task.priority)}>{task.priority}</Badge>
+      <div className={cn("flex min-w-0 items-center justify-between gap-2", dense ? "mb-1" : compact ? "mb-1.5" : "mb-2")}>
+        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
+        <Badge className="max-w-[5.5rem] shrink-0 truncate whitespace-nowrap px-2 text-[11px]" title={task.priority} tone={taskPriorityTone(task.priority)}>{task.priority}</Badge>
       </div>
-      <h3 className={cn("font-medium leading-5", dense ? "mb-1.5 text-[12px]" : compact ? "mb-2 text-[13px]" : "mb-3 text-sm")}>{task.title}</h3>
-      <div className={cn("flex flex-wrap", dense ? "mb-1.5 gap-1" : compact ? "mb-2 gap-1" : "mb-3 gap-1.5")}>
-        <Badge tone={taskTypeTone(task.taskType)}>{task.taskType}</Badge>
-        <Badge tone={sourceTypeTone(task.sourceType)}>{task.sourceType}</Badge>
+      <div className={cn("flex min-w-0 items-start gap-2", dense ? "mb-1.5" : compact ? "mb-2" : "mb-3")}>
+        <span
+          aria-label={task.taskType}
+          className={cn("mt-1 h-3 w-1 shrink-0 rounded-full", taskTypeMarkerClass(task.taskType))}
+          title={task.taskType}
+        />
+        <h3 className={cn("min-w-0 flex-1 font-medium leading-5", dense ? "text-[12px]" : compact ? "text-[13px]" : "text-sm")}>{task.title}</h3>
       </div>
       <ProgressBar value={task.progress} />
       <div className={cn("flex items-center justify-between gap-2", dense ? "mt-2" : compact ? "mt-2.5" : "mt-3")}>
@@ -260,6 +258,7 @@ export function TasksKanbanPage() {
   }, [searchInput]);
 
   const taskQuery = useMemo(() => ({
+    parentTaskCode: ROOT_PARENT_TASK_FILTER,
     priority: priority || undefined,
     search: debouncedSearch,
     taskType,
@@ -273,6 +272,12 @@ export function TasksKanbanPage() {
   }, [columns]);
 
   const displayedColumns = optimisticColumns ?? columns;
+  const rootTaskColumns = useMemo(() => (
+    displayedColumns.map((column) => ({
+      ...column,
+      tasks: column.tasks.filter((task) => !task.parentTaskCode),
+    }))
+  ), [displayedColumns]);
 
   useEffect(() => {
     setSelectedTaskCode(null);
@@ -449,7 +454,7 @@ export function TasksKanbanPage() {
           </div>
         </SurfaceCard>
         <div className="flex min-h-0 flex-1 overflow-x-auto pb-4" ref={boardViewportRef} style={{ gap: `${boardLayout.columnGap}px` }}>
-          {displayedColumns.map((column) => (
+          {rootTaskColumns.map((column) => (
             <section
               aria-label={`${column.title} task column`}
               className={cn(
