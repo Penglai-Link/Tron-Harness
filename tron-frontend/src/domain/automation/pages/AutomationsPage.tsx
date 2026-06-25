@@ -125,6 +125,17 @@ export function AutomationsPage() {
     dateStyle: "medium",
     timeStyle: "short",
   }) : pt(fallback));
+  const formatSuccessRate = (row: AutomationListItem) => {
+    if (!row.executionTotalCount || row.executionSuccessRate === null) return pt("No runs");
+    return `${formatNumber(Math.round(row.executionSuccessRate * 100))}%`;
+  };
+  const formatSuccessRateTitle = (row: AutomationListItem) => {
+    if (!row.executionTotalCount) return pt("No completed executions");
+    return pt("{{success}}/{{total}} successful executions", {
+      success: formatNumber(row.executionSuccessCount),
+      total: formatNumber(row.executionTotalCount),
+    });
+  };
   const openMenuRow = openRowMenu
     ? page.records.find((item) => item.automationCode === openRowMenu.automationCode) ?? null
     : null;
@@ -276,7 +287,7 @@ export function AutomationsPage() {
         onRowClick={(row) => navigate(`/automations/detail?automationCode=${encodeURIComponent(row.automationCode)}`)}
         rows={page.records}
         rowKey={(row) => row.automationCode}
-        tableClassName="min-w-[960px] table-fixed"
+        tableClassName="min-w-full table-fixed [&_td]:px-3 [&_th]:px-3"
         toolbar={
           <>
             <SearchField
@@ -317,9 +328,9 @@ export function AutomationsPage() {
         )}
         columns={[
           {
-            header: pt("Automation"),
+            header: pt("Name"),
             id: "name",
-            width: "17%",
+            width: "16%",
             render: (row) => (
               <p className="min-w-0 truncate font-medium text-[var(--color-on-surface)]" title={row.name}>{row.name}</p>
             ),
@@ -328,7 +339,7 @@ export function AutomationsPage() {
             cellClassName: "min-w-0",
             header: pt("Description"),
             id: "description",
-            width: "20%",
+            width: "17%",
             render: (row) => {
               const description = automationDescriptionText(row, pt("No description"));
 
@@ -343,7 +354,7 @@ export function AutomationsPage() {
             cellClassName: "min-w-0",
             header: pt("Schedule"),
             id: "schedule",
-            width: "20%",
+            width: "17%",
             render: (row) => (
               <div className="min-w-0 space-y-1">
                 <p className="truncate font-mono text-[13px] text-[var(--color-on-surface)]" title={row.cronExpression}>{row.cronExpression}</p>
@@ -352,9 +363,27 @@ export function AutomationsPage() {
             ),
           },
           {
+            cellClassName: "min-w-0",
+            header: pt("Success rate"),
+            id: "success-rate",
+            width: "11%",
+            render: (row) => (
+              <div className="min-w-0" title={formatSuccessRateTitle(row)}>
+                <p className="truncate text-sm font-medium text-[var(--color-on-surface)]">
+                  {formatSuccessRate(row)}
+                </p>
+                {row.executionTotalCount ? (
+                  <p className="truncate text-xs text-[var(--color-on-surface-variant)]">
+                    {formatNumber(row.executionSuccessCount)} / {formatNumber(row.executionTotalCount)}
+                  </p>
+                ) : null}
+              </div>
+            ),
+          },
+          {
             header: pt("Latest result"),
             id: "latest",
-            width: "15%",
+            width: "12%",
             render: (row) => (
               <div>
                 {row.lastExecutionStatus ? (
@@ -370,7 +399,7 @@ export function AutomationsPage() {
           {
             header: pt("Status"),
             id: "status",
-            width: "12%",
+            width: "9%",
             render: (row) => (
               <Badge tone={getAutomationStatusTone(row.status)}>{pt(row.status)}</Badge>
             ),
@@ -387,7 +416,7 @@ export function AutomationsPage() {
             align: "right",
             header: pt("Actions"),
             id: "actions",
-            width: "4%",
+            width: "6%",
             render: (row) => {
               const isMenuOpen = openRowMenu?.automationCode === row.automationCode;
               const isBusy = rowBusyKey.includes(`:${row.automationCode}`);

@@ -140,6 +140,89 @@ async fn automation_options_and_empty_workspace_list() {
 }
 
 #[tokio::test]
+async fn automation_list_reports_execution_success_rate() {
+    let database_path = database_path("list-success-rate");
+    let config = prepared_config(config_for_path(database_path));
+    let database_url = config.database_url.clone();
+    let mut repository =
+        SqliteAutomationRepository::connect(&database_url).expect("automation repo should connect");
+    let now = "2026-06-24T12:00:00Z".to_string();
+    let automation = Automation {
+        id: SnowflakeId::new(734_600_000_000_300_001),
+        automation_code: "AUT-SUCCESS-RATE".into(),
+        workspace_code: "TRON_CORE".into(),
+        name: "Success rate".into(),
+        description: None,
+        agent_code: "main-agent".into(),
+        model_code: None,
+        prompt_text: "Track execution stats.".into(),
+        cron_expression: "0 8 * * *".into(),
+        scheduler_expression: "0 0 8 * * * *".into(),
+        timezone: "UTC".into(),
+        status: AutomationStatus::Paused,
+        previous_status: None,
+        last_execution_status: None,
+        last_execution_code: None,
+        last_execution_summary: None,
+        last_started_at: None,
+        last_finished_at: None,
+        created_at: now.clone(),
+        updated_at: now.clone(),
+        archived_at: None,
+    };
+    repository
+        .create_automation(&automation)
+        .expect("automation should be inserted");
+    for status in [
+        AutomationExecutionStatus::Success,
+        AutomationExecutionStatus::Success,
+        AutomationExecutionStatus::Failed,
+        AutomationExecutionStatus::Running,
+    ] {
+        repository
+            .record_execution(
+                &automation,
+                &AutomationExecutionDraft {
+                    automation_code: automation.automation_code.clone(),
+                    workspace_code: automation.workspace_code.clone(),
+                    session_code: None,
+                    trigger_source: AutomationTriggerSource::Manual,
+                    status,
+                    summary: None,
+                    scheduled_at: None,
+                    started_at: now.clone(),
+                    finished_at: Some(now.clone()),
+                    created_at: now.clone(),
+                },
+            )
+            .expect("execution should record");
+    }
+
+    let router = app_with_config(config);
+    let response = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/automations?workspaceCode=TRON_CORE",
+        None,
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    let item = body["data"]["records"]
+        .as_array()
+        .expect("records should be array")
+        .iter()
+        .find(|item| item["automationCode"] == "AUT-SUCCESS-RATE")
+        .expect("automation should be listed");
+    assert_eq!(item["executionSuccessCount"], 2);
+    assert_eq!(item["executionTotalCount"], 3);
+    let rate = item["executionSuccessRate"]
+        .as_f64()
+        .expect("success rate should be numeric");
+    assert!((rate - (2.0 / 3.0)).abs() < f64::EPSILON);
+}
+
+#[tokio::test]
 async fn automation_list_stays_workspace_scoped_and_hides_archived_by_default() {
     let database_path = database_path("list-filters");
     let config = prepared_config(config_for_path(database_path));

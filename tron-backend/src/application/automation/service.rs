@@ -15,9 +15,10 @@ use crate::{
         automation::{
             Automation, AutomationDetail, AutomationError, AutomationExecutionDraft,
             AutomationExecutionListItem, AutomationExecutionListQuery, AutomationExecutionRecord,
-            AutomationExecutionStatus, AutomationLifecycleResult, AutomationListItem,
-            AutomationListQuery, AutomationOptions, AutomationStatus, AutomationTriggerSource,
-            PagedAutomationRecords, automation_execution_status_to_storage, automation_options,
+            AutomationExecutionStats, AutomationExecutionStatus, AutomationLifecycleResult,
+            AutomationListItem, AutomationListQuery, AutomationOptions, AutomationStatus,
+            AutomationTriggerSource, PagedAutomationRecords,
+            automation_execution_status_to_storage, automation_options,
         },
         workspace::{WorkspaceError, WorkspaceStatus},
     },
@@ -64,6 +65,10 @@ pub struct UpdateAutomationStatusCommand {
 
 pub trait AutomationRepository: Send {
     fn list_automations(&mut self) -> Result<Vec<Automation>, AutomationError>;
+    fn execution_stats(
+        &mut self,
+        automation_codes: &[String],
+    ) -> Result<BTreeMap<String, AutomationExecutionStats>, AutomationError>;
     fn next_id(&mut self) -> Result<i64, AutomationError>;
     fn create_automation(&mut self, automation: &Automation) -> Result<(), AutomationError>;
     fn update_automation(&mut self, automation: &Automation) -> Result<(), AutomationError>;
@@ -201,7 +206,7 @@ impl AutomationService {
             .unwrap_or("")
             .to_lowercase();
         let status = query.status;
-        let mut records = self
+        let filtered_automations = self
             .all_automations()?
             .into_iter()
             .filter(|automation| automation.workspace_code == workspace_code)
@@ -225,24 +230,48 @@ impl AutomationService {
                 .to_lowercase()
                 .contains(&search)
             })
-            .map(|automation| AutomationListItem {
-                automation_code: automation.automation_code,
-                workspace_code: automation.workspace_code,
-                name: automation.name,
-                description: automation.description,
-                agent_code: automation.agent_code,
-                model_code: automation.model_code,
-                cron_expression: automation.cron_expression,
-                timezone: automation.timezone,
-                status: automation.status,
-                last_execution_status: automation.last_execution_status,
-                last_execution_summary: automation.last_execution_summary,
-                last_execution_code: automation.last_execution_code,
-                last_started_at: automation.last_started_at,
-                last_finished_at: automation.last_finished_at,
-                next_run_at: next_run_preview(&automation.scheduler_expression, automation.status),
-                updated_at: automation.updated_at,
-                archived_at: automation.archived_at,
+            .collect::<Vec<_>>();
+        let automation_codes = filtered_automations
+            .iter()
+            .map(|automation| automation.automation_code.clone())
+            .collect::<Vec<_>>();
+        let stats_by_code = self
+            .repository
+            .lock()
+            .expect("automation repository mutex poisoned")
+            .execution_stats(&automation_codes)?;
+        let mut records = filtered_automations
+            .into_iter()
+            .map(|automation| {
+                let stats = stats_by_code
+                    .get(&automation.automation_code)
+                    .copied()
+                    .unwrap_or_default();
+                AutomationListItem {
+                    automation_code: automation.automation_code,
+                    workspace_code: automation.workspace_code,
+                    name: automation.name,
+                    description: automation.description,
+                    agent_code: automation.agent_code,
+                    model_code: automation.model_code,
+                    cron_expression: automation.cron_expression,
+                    timezone: automation.timezone,
+                    status: automation.status,
+                    last_execution_status: automation.last_execution_status,
+                    last_execution_summary: automation.last_execution_summary,
+                    last_execution_code: automation.last_execution_code,
+                    last_started_at: automation.last_started_at,
+                    last_finished_at: automation.last_finished_at,
+                    next_run_at: next_run_preview(
+                        &automation.scheduler_expression,
+                        automation.status,
+                    ),
+                    execution_success_count: stats.success_count,
+                    execution_total_count: stats.total_count,
+                    execution_success_rate: stats.success_rate(),
+                    updated_at: automation.updated_at,
+                    archived_at: automation.archived_at,
+                }
             })
             .collect::<Vec<_>>();
         records.sort_by(|left, right| right.updated_at.cmp(&left.updated_at));

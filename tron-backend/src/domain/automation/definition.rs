@@ -68,6 +68,22 @@ pub struct AutomationExecutionRecord {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct AutomationExecutionStats {
+    pub success_count: u64,
+    pub total_count: u64,
+}
+
+impl AutomationExecutionStats {
+    pub fn success_rate(self) -> Option<f64> {
+        if self.total_count == 0 {
+            None
+        } else {
+            Some(self.success_count as f64 / self.total_count as f64)
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AutomationExecutionDraft {
     pub automation_code: String,
@@ -109,6 +125,9 @@ pub struct AutomationListItem {
     pub last_started_at: Option<String>,
     pub last_finished_at: Option<String>,
     pub next_run_at: Option<String>,
+    pub execution_success_count: u64,
+    pub execution_total_count: u64,
+    pub execution_success_rate: Option<f64>,
     pub updated_at: String,
     pub archived_at: Option<String>,
 }

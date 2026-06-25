@@ -189,6 +189,13 @@ let executionRecords: AutomationExecutionListItem[] = [
   },
 ];
 
+const TERMINAL_EXECUTION_STATUSES = new Set<AutomationExecutionStatus>([
+  "Canceled",
+  "Failed",
+  "Skipped",
+  "Success",
+]);
+
 export function getAutomationOptions() {
   return automationOptions;
 }
@@ -526,12 +533,22 @@ function requireAutomation(automationCode: string) {
 }
 
 function toListItem(automation: AutomationSeed): AutomationListItem {
+  const terminalExecutions = executionRecords.filter((execution) => (
+    execution.automationCode === automation.automationCode
+      && TERMINAL_EXECUTION_STATUSES.has(execution.status)
+  ));
+  const successCount = terminalExecutions.filter((execution) => execution.status === "Success").length;
+  const totalCount = terminalExecutions.length;
+
   return {
     agentCode: automation.agentCode,
     archivedAt: automation.archivedAt,
     automationCode: automation.automationCode,
     cronExpression: automation.cronExpression,
     description: automation.description,
+    executionSuccessCount: successCount,
+    executionSuccessRate: totalCount ? successCount / totalCount : null,
+    executionTotalCount: totalCount,
     lastExecutionCode: automation.lastExecutionCode,
     lastExecutionStatus: automation.lastExecutionStatus,
     lastExecutionSummary: automation.lastExecutionSummary,

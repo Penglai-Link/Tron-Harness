@@ -137,15 +137,16 @@ export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true
   mockDataRef.current = mockData;
   selectRef.current = select;
 
+  const paramsKey = JSON.stringify(params ?? {});
+  const request = useMemo(() => resolveEndpoint(endpoint, params), [endpoint, paramsKey]);
+  const initialRefreshKey = shouldUseMockData ? refreshKey : undefined;
   const initialValue = useMemo(
     () => (shouldUseMockData ? mockDataRef.current() : apiInitialDataRef.current?.()) as T,
-    [refreshKey, shouldUseMockData, ...deps],
+    [endpoint, initialRefreshKey, paramsKey, shouldUseMockData, ...deps],
   );
   const [data, setData] = useState<T>(initialValue);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const paramsKey = JSON.stringify(params ?? {});
-  const request = useMemo(() => resolveEndpoint(endpoint, params), [endpoint, paramsKey]);
   const retry = useCallback(() => setRetryKey((value) => value + 1), []);
 
   useEffect(() => {

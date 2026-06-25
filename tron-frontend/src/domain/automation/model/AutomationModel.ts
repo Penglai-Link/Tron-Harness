@@ -22,6 +22,9 @@ export interface AutomationListItem {
   automationCode: string;
   cronExpression: string;
   description: string | null;
+  executionSuccessCount: number;
+  executionSuccessRate: number | null;
+  executionTotalCount: number;
   lastExecutionCode: string | null;
   lastExecutionStatus: AutomationExecutionStatus | null;
   lastExecutionSummary: string | null;

@@ -1,16 +1,18 @@
 use std::{fs, path::Path};
 
 use chrono::{DateTime, TimeZone, Utc};
-use rusqlite::{Connection, OptionalExtension, Row, Transaction, TransactionBehavior, params};
+use rusqlite::{
+    Connection, OptionalExtension, Row, Transaction, TransactionBehavior, params, params_from_iter,
+};
 
 use crate::{
     application::automation::AutomationRepository,
     domain::automation::{
         Automation, AutomationError, AutomationExecutionDraft, AutomationExecutionRecord,
-        AutomationExecutionStatus, automation_execution_status_from_storage,
-        automation_execution_status_to_storage, automation_status_from_storage,
-        automation_status_to_storage, automation_trigger_source_from_storage,
-        automation_trigger_source_to_storage,
+        AutomationExecutionStats, AutomationExecutionStatus,
+        automation_execution_status_from_storage, automation_execution_status_to_storage,
+        automation_status_from_storage, automation_status_to_storage,
+        automation_trigger_source_from_storage, automation_trigger_source_to_storage,
     },
     shared::id::SnowflakeId,
 };
@@ -85,6 +87,46 @@ impl AutomationRepository for SqliteAutomationRepository {
             .query_map([], row_to_automation)
             .map_err(storage_error)?
             .collect::<Result<Vec<_>, _>>()
+            .map_err(storage_error)
+    }
+
+    fn execution_stats(
+        &mut self,
+        automation_codes: &[String],
+    ) -> Result<std::collections::BTreeMap<String, AutomationExecutionStats>, AutomationError> {
+        if automation_codes.is_empty() {
+            return Ok(std::collections::BTreeMap::new());
+        }
+        let placeholders = std::iter::repeat_n("?", automation_codes.len())
+            .collect::<Vec<_>>()
+            .join(", ");
+        let query = format!(
+            "SELECT automation_code,
+                    SUM(CASE WHEN status IN ('Success', 'Failed', 'Canceled', 'Skipped') THEN 1 ELSE 0 END) AS total_count,
+                    SUM(CASE WHEN status = 'Success' THEN 1 ELSE 0 END) AS success_count
+             FROM automation_execution_records
+             WHERE automation_code IN ({placeholders})
+             GROUP BY automation_code"
+        );
+        let mut statement = self.connection.prepare(&query).map_err(storage_error)?;
+        statement
+            .query_map(
+                params_from_iter(automation_codes.iter().map(String::as_str)),
+                |row| {
+                    let automation_code: String = row.get(0)?;
+                    let total_count: i64 = row.get(1)?;
+                    let success_count: i64 = row.get(2)?;
+                    Ok((
+                        automation_code,
+                        AutomationExecutionStats {
+                            success_count: success_count.max(0) as u64,
+                            total_count: total_count.max(0) as u64,
+                        },
+                    ))
+                },
+            )
+            .map_err(storage_error)?
+            .collect::<Result<std::collections::BTreeMap<_, _>, _>>()
             .map_err(storage_error)
     }
 
