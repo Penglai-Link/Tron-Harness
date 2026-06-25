@@ -20,6 +20,7 @@
     "directories": {
       "output": "dist"
     },
+    "electronDist": "node_modules/electron/dist",
     "files": [
       "main/**/*",
       "preload/**/*",

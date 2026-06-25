@@ -41,3 +41,4 @@ Pagable response body format:
 If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
 
 <!-- 2026-06-24: During browser testing, clicking "New session" could briefly leave the URL sessionCode ahead of the header/active chat session; verify route and active-session synchronization before relying on the URL alone. -->
+<!-- Note: desktop-build runs ensure-electron before electron-builder; set build.electronDist so electron-builder reuses node_modules/electron/dist instead of downloading Electron again. -->
