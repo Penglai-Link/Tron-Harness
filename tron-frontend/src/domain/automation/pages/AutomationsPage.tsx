@@ -287,7 +287,7 @@ export function AutomationsPage() {
         onRowClick={(row) => navigate(`/automations/detail?automationCode=${encodeURIComponent(row.automationCode)}`)}
         rows={page.records}
         rowKey={(row) => row.automationCode}
-        tableClassName="min-w-full table-fixed [&_td]:px-3 [&_th]:px-3"
+        tableClassName="min-w-[1080px] table-fixed [&_td]:px-3 [&_th]:px-3"
         toolbar={
           <>
             <SearchField
@@ -330,7 +330,7 @@ export function AutomationsPage() {
           {
             header: pt("Name"),
             id: "name",
-            width: "16%",
+            width: "15%",
             render: (row) => (
               <p className="min-w-0 truncate font-medium text-[var(--color-on-surface)]" title={row.name}>{row.name}</p>
             ),
@@ -407,7 +407,7 @@ export function AutomationsPage() {
           {
             header: pt("Updated"),
             id: "updated",
-            width: "12%",
+            width: "11%",
             render: (row) => (
               <span className="text-sm text-[var(--color-on-surface-variant)]">{formatTimestamp(row.updatedAt)}</span>
             ),
@@ -416,7 +416,7 @@ export function AutomationsPage() {
             align: "right",
             header: pt("Actions"),
             id: "actions",
-            width: "6%",
+            width: "8%",
             render: (row) => {
               const isMenuOpen = openRowMenu?.automationCode === row.automationCode;
               const isBusy = rowBusyKey.includes(`:${row.automationCode}`);
