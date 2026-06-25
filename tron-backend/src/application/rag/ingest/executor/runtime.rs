@@ -243,7 +243,9 @@ where
                 .resolve_project_doc_markdown(call)
                 .await?
         } else {
-            self.embedding_runtime.resolve_project_doc_file(call).await?
+            self.embedding_runtime
+                .resolve_project_doc_file(call)
+                .await?
         };
         bundle.append(
             request,
@@ -449,6 +451,10 @@ where
         let prepared = bundle.prepared_payload()?.clone();
         let vector_result = bundle.vector_result()?.clone();
         let tree_result = bundle.tree_persist_result().ok().cloned();
+        let mut warnings = vector_result.warnings.clone();
+        if let Some(tree_result) = &tree_result {
+            warnings.extend(tree_result.warnings.clone());
+        }
         let source_status = if vector_result.fatal_error.is_some() {
             "FAILED"
         } else {
@@ -477,7 +483,7 @@ where
                 .as_ref()
                 .map(|result| result.tree_nodes.clone())
                 .unwrap_or_default(),
-            warnings: vector_result.warnings.clone(),
+            warnings: warnings.clone(),
             workspace_code: request.workspace_code.clone(),
             user_code: request.access_context.user_code.clone(),
             agent_code: request.access_context.agent_code.clone(),
@@ -487,7 +493,7 @@ where
             text_unit_count,
             fulltext_status: "INDEXED".into(),
             embedding_status: vector_result.embedding_status,
-            warnings: vector_result.warnings,
+            warnings,
             fatal_error: vector_result.fatal_error,
         };
         bundle.append(

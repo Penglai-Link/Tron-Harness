@@ -245,7 +245,7 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await splitStrategySelect.selectOption("RAG_SPLIT_PLAIN_TEXT_V1");
   await expect(page.getByLabel(label.splitterType)).toHaveValue("plainText");
   await page.getByLabel(/EXTRACT_TREE (strategy ID|策略标识)/).selectOption("RAG_MARKDOWN_TREE_EXTRACT_V1");
-  await page.getByLabel(/SUMMARIZE_TREE (strategy ID|策略标识)/).selectOption("RAG_TREE_EXTRACTIVE_SUMMARY_V1");
+  await page.getByLabel(/SUMMARIZE_TREE (strategy ID|策略标识)/).selectOption("RAG_TREE_LLM_SUMMARY_V1");
   await page.getByLabel(/TREE_FULLTEXT_INDEX (strategy ID|策略标识)/).selectOption("RAG_TREE_FULLTEXT_INDEX");
   await page.getByLabel(/TREE_VECTOR_INDEX (strategy ID|策略标识)/).selectOption("RAG_TREE_VECTOR_INDEX");
   await page.getByLabel(/PERSIST_TREE (strategy ID|策略标识)/).selectOption("RAG_PERSIST_TREE_GRAPH_V1");
@@ -272,7 +272,6 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   const summarizeStrategySelect = page.getByLabel(/SUMMARIZE_TREE (strategy ID|策略标识)/);
   await expect(summarizeStrategySelect).toContainText("RAG_TREE_LLM_SUMMARY_V1");
   await summarizeStrategySelect.selectOption("RAG_TREE_LLM_SUMMARY_V1");
-  await page.getByLabel(label.treeSummaryModelCode).fill("summary-model-alpha");
   await page.getByLabel(label.vectorStrategy).selectOption("RAG_VECTOR_INDEX");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
@@ -300,7 +299,7 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
           expect.objectContaining({ nodeId: "prepare-payload", stageType: "PREPARE_PAYLOAD", strategyId: "RAG_TEXT_CONTRACT_PAYLOAD_V1" }),
           expect.objectContaining({ nodeId: "split-text", stageType: "SPLIT_TEXT", strategyId: "RAG_SPLIT_PLAIN_TEXT_V1" }),
           expect.objectContaining({ nodeId: "extract-tree", stageType: "EXTRACT_TREE", strategyId: "RAG_MARKDOWN_TREE_EXTRACT_V1" }),
-          expect.objectContaining({ nodeId: "summarize-tree", stageType: "SUMMARIZE_TREE", strategyId: "RAG_TREE_EXTRACTIVE_SUMMARY_V1" }),
+          expect.objectContaining({ nodeId: "summarize-tree", stageType: "SUMMARIZE_TREE", strategyId: "RAG_TREE_LLM_SUMMARY_V1" }),
           expect.objectContaining({ nodeId: "tree-fulltext-index", stageType: "TREE_FULLTEXT_INDEX", strategyId: "RAG_TREE_FULLTEXT_INDEX" }),
           expect.objectContaining({ nodeId: "tree-vector-index", stageType: "TREE_VECTOR_INDEX", strategyId: "RAG_TREE_VECTOR_INDEX" }),
           expect.objectContaining({ nodeId: "persist-tree", stageType: "PERSIST_TREE", strategyId: "RAG_PERSIST_TREE_GRAPH_V1" }),
@@ -326,7 +325,7 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
       nodes: expect.arrayContaining([
         expect.objectContaining({ enabled: true, nodeId: "prepare-payload", stageType: "PREPARE_PAYLOAD", strategyId: "RAG_TEXT_CONTRACT_PAYLOAD_V1" }),
         expect.objectContaining({ enabled: true, nodeId: "split-text", stageType: "SPLIT_TEXT", strategyId: "RAG_SPLIT_PLAIN_TEXT_V1" }),
-        expect.objectContaining({ enabled: true, nodeId: "summarize-tree", stageType: "SUMMARIZE_TREE", strategyId: "RAG_TREE_EXTRACTIVE_SUMMARY_V1" }),
+        expect.objectContaining({ enabled: true, nodeId: "summarize-tree", stageType: "SUMMARIZE_TREE", strategyId: "RAG_TREE_LLM_SUMMARY_V1" }),
         expect.objectContaining({ enabled: true, nodeId: "tree-fulltext-index", stageType: "TREE_FULLTEXT_INDEX", strategyId: "RAG_TREE_FULLTEXT_INDEX" }),
         expect.objectContaining({ enabled: true, nodeId: "tree-vector-index", stageType: "TREE_VECTOR_INDEX", strategyId: "RAG_TREE_VECTOR_INDEX" }),
         expect.objectContaining({ enabled: true, nodeId: "persist-tree", stageType: "PERSIST_TREE", strategyId: "RAG_PERSIST_TREE_GRAPH_V1" }),
@@ -349,6 +348,12 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
     }),
     strategyId: "RAG_SPLIT_PLAIN_TEXT_V1",
   }));
+  const createSummaryNode = pipelineNode(createBody, "SUMMARIZE_TREE");
+  expect(createSummaryNode).toEqual(expect.objectContaining({
+    config: expect.any(Object),
+    strategyId: "RAG_TREE_LLM_SUMMARY_V1",
+  }));
+  expect(createSummaryNode?.config as Record<string, unknown>).not.toHaveProperty("modelCode");
   expect(createBody).not.toHaveProperty("pipelineStages");
 
   const updateBodies = requestBodies(requests, "/api/v1/rag/profiles/support-notes-ingest-v1", "PUT");
@@ -377,11 +382,10 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
     strategyId: "RAG_SPLIT_MARKDOWN_HEADING_V1",
   }));
   expect(pipelineNode(updateBody, "SUMMARIZE_TREE")).toEqual(expect.objectContaining({
-    config: expect.objectContaining({
-      modelCode: "summary-model-alpha",
-    }),
+    config: expect.any(Object),
     strategyId: "RAG_TREE_LLM_SUMMARY_V1",
   }));
+  expect(pipelineNode(updateBody, "SUMMARIZE_TREE")?.config as Record<string, unknown>).not.toHaveProperty("modelCode");
   expect(updateBody).not.toHaveProperty("pipelineStages");
 });
 

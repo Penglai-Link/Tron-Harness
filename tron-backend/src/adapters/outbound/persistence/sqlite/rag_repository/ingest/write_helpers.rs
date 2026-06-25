@@ -65,24 +65,44 @@ fn persist_warnings(
     plan: &SqliteRagCorpusPlan,
     command: &RagPersistIngestCommand,
 ) -> Result<(), RagError> {
+    if command.warnings.is_empty() {
+        return Ok(());
+    }
     let diagnostics_table = plan
         .diagnostics_table
         .as_deref()
         .ok_or(RagError::StorageBindingInvalid)?;
-    let diagnostics_table = quote_identifier(diagnostics_table)?;
+    let columns = diagnostics_columns(tx, diagnostics_table)?;
+    let quoted_diagnostics_table = quote_identifier(diagnostics_table)?;
     let now = now_millis();
     for warning in &command.warnings {
-        let record_code = format!(
-            "{}:{}:{}:{}:{}:{}",
-            command.corpus_id,
-            command.profile_id,
-            command.source_code,
-            command.source_version,
-            command.scope.scope_type,
-            warning.stage_id
-        );
-        let sql = format!(
-            "INSERT INTO {diagnostics_table} (
+        if columns.contains("record_type") {
+            persist_modern_warning(tx, &quoted_diagnostics_table, command, warning, now)?;
+        } else {
+            persist_legacy_warning(tx, &quoted_diagnostics_table, command, warning, now)?;
+        }
+    }
+    Ok(())
+}
+
+fn persist_modern_warning(
+    tx: &Transaction<'_>,
+    diagnostics_table: &str,
+    command: &RagPersistIngestCommand,
+    warning: &RagIngestWarning,
+    now: i64,
+) -> Result<(), RagError> {
+    let record_code = format!(
+        "{}:{}:{}:{}:{}:{}",
+        command.corpus_id,
+        command.profile_id,
+        command.source_code,
+        command.source_version,
+        command.scope.scope_type,
+        warning.stage_id
+    );
+    let sql = format!(
+        "INSERT INTO {diagnostics_table} (
                 record_type, record_code, corpus_id, profile_id, source_code, source_version,
                 scope_type, scope_code, workspace_code, user_code, agent_code, stage_id,
                 message, payload_json, created_at
@@ -92,27 +112,95 @@ fn persist_warnings(
                 message = excluded.message,
                 payload_json = excluded.payload_json,
                 created_at = excluded.created_at"
-        );
-        tx.execute(
-            &sql,
-            params![
-                record_code,
-                command.corpus_id,
-                command.profile_id,
-                command.source_code,
-                command.source_version,
-                command.scope.scope_type,
-                command.scope.scope_code,
-                command.workspace_code,
-                command.user_code,
-                command.agent_code,
-                warning.stage_id,
-                warning.message,
-                json_string(&serde_json::json!({ "code": warning.code }))?,
-                now,
-            ],
-        )
-        .map_err(storage_error)?;
-    }
+    );
+    tx.execute(
+        &sql,
+        params![
+            record_code,
+            command.corpus_id,
+            command.profile_id,
+            command.source_code,
+            command.source_version,
+            command.scope.scope_type,
+            command.scope.scope_code,
+            command.workspace_code,
+            command.user_code,
+            command.agent_code,
+            warning.stage_id,
+            warning.message,
+            json_string(&serde_json::json!({ "code": warning.code }))?,
+            now,
+        ],
+    )
+    .map_err(storage_error)?;
     Ok(())
+}
+
+fn persist_legacy_warning(
+    tx: &Transaction<'_>,
+    diagnostics_table: &str,
+    command: &RagPersistIngestCommand,
+    warning: &RagIngestWarning,
+    now: i64,
+) -> Result<(), RagError> {
+    let delete_sql = format!(
+        "DELETE FROM {diagnostics_table}
+         WHERE source_code = ?1 AND source_version = ?2 AND scope_type = ?3
+           AND scope_code = ?4 AND stage = ?5"
+    );
+    tx.execute(
+        &delete_sql,
+        params![
+            command.source_code,
+            command.source_version,
+            command.scope.scope_type,
+            command.scope.scope_code,
+            warning.stage_id,
+        ],
+    )
+    .map_err(storage_error)?;
+
+    let insert_sql = format!(
+        "INSERT INTO {diagnostics_table} (
+            source_code, source_version, scope_type, scope_code, stage, status,
+            message, details_json, created_at, updated_at
+        )
+        VALUES (?1, ?2, ?3, ?4, ?5, 'WARNING', ?6, ?7, ?8, ?9)"
+    );
+    tx.execute(
+        &insert_sql,
+        params![
+            command.source_code,
+            command.source_version,
+            command.scope.scope_type,
+            command.scope.scope_code,
+            warning.stage_id,
+            warning.message,
+            json_string(&serde_json::json!({ "code": warning.code }))?,
+            now,
+            now,
+        ],
+    )
+    .map_err(storage_error)?;
+    Ok(())
+}
+
+fn diagnostics_columns(
+    tx: &Transaction<'_>,
+    diagnostics_table: &str,
+) -> Result<BTreeSet<String>, RagError> {
+    let table = quote_identifier(diagnostics_table)?;
+    let mut statement = tx
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .map_err(storage_error)?;
+    let rows = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(storage_error)?;
+    let columns = rows
+        .collect::<Result<BTreeSet<_>, _>>()
+        .map_err(storage_error)?;
+    if columns.is_empty() {
+        return Err(RagError::StorageBindingInvalid);
+    }
+    Ok(columns)
 }

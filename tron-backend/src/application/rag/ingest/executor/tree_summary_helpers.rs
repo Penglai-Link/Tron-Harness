@@ -210,31 +210,103 @@ fn llm_tree_summary_prompt(
     child_summaries: &[(&str, &str)],
     direct_text_units: &[String],
 ) -> String {
+    if child_summaries.is_empty() {
+        return llm_text_block_summary_prompt(title, direct_text_units);
+    }
+    llm_header_summary_prompt(title, child_summaries, direct_text_units)
+}
+
+fn llm_text_block_summary_prompt(title: &str, direct_text_units: &[String]) -> String {
+    let text = direct_text_units
+        .iter()
+        .map(|text| text.trim())
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n\n");
     let mut prompt = String::new();
-    prompt.push_str("Summarize this RAG tree node. Return only the summary text.\n");
-    prompt.push_str("Node title:\n");
+    prompt.push_str(
+        "你是一个技术文档分析专家。请严格遵循以下规则，为提供的Markdown文本块生成摘要和关键词。\n",
+    );
+    prompt.push_str("# 原始文本\n");
+    prompt.push_str(&text);
+    prompt.push_str("\n# 标题\n");
     prompt.push_str(title.trim());
-    prompt.push('\n');
-    if !child_summaries.is_empty() {
-        prompt.push_str("\nChild summaries:\n");
-        for (child_title, child_summary) in child_summaries {
-            prompt.push_str("- ");
-            prompt.push_str(child_title.trim());
-            prompt.push_str(": ");
-            prompt.push_str(child_summary.trim());
-            prompt.push('\n');
-        }
+    prompt.push_str("\n\n");
+    prompt.push_str("# 生成要求\n");
+    prompt.push_str("1. **摘要**：必须严格按照以下字段和顺序生成，每个字段一行：\n");
+    prompt.push_str("- Title: [标题]\n");
+    prompt.push_str("- CoreConcept: [指出核心概念或操作]\n");
+    prompt.push_str("- Purpose: [说明目的或功能]\n");
+    prompt.push_str("- KeyAttributes: [列出关键参数、步骤或配置]\n");
+    prompt.push_str("     - 1: [关键参数、步骤或配置]\n");
+    prompt.push_str("     - 2: [关键参数、步骤或配置]\n");
+    prompt.push_str("     - [……]\n");
+    prompt.push_str("- Outcome: [描述结果或状态]\n\n");
+    prompt.push_str("# 内容要求\n");
+    prompt.push_str("摘要必须语言精炼，直接陈述客观事实，术语应与子模块摘要保持一致，避免“本文介绍”、“非常重要”等主观评价。\n\n");
+    prompt.push_str("# 开始生成");
+    prompt
+}
+
+fn llm_header_summary_prompt(
+    title: &str,
+    child_summaries: &[(&str, &str)],
+    direct_text_units: &[String],
+) -> String {
+    let mut prompt = String::new();
+    prompt.push_str("你是一个经验丰富的技术文档架构师，擅长从结构化的技术要点中提炼核心思想，并撰写精准、简洁的概要总结。\n\n");
+    prompt.push_str("### 核心任务\n");
+    prompt
+        .push_str("你的任务是基于提供的多个子模块摘要，为它们的父级模块撰写一段高度概括的摘要\n\n");
+    prompt.push_str("### 输入信息\n");
+    prompt.push_str("以下是你需要分析的子模块摘要信息（每个子摘要均包含Title、CoreConcept、Purpose、KeyAttributes和Outcome字段）：\n");
+    for (child_title, child_summary) in child_summaries {
+        prompt.push_str("- 子模块标题: ");
+        prompt.push_str(child_title.trim());
+        prompt.push('\n');
+        prompt.push_str(child_summary.trim());
+        prompt.push_str("\n\n");
     }
     if !direct_text_units.is_empty() {
-        prompt.push_str("\nDirect text units:\n");
-        for (index, text) in direct_text_units.iter().enumerate() {
-            prompt.push_str("[");
-            prompt.push_str(&(index + 1).to_string());
-            prompt.push_str("]\n");
-            prompt.push_str(text);
-            prompt.push('\n');
-        }
+        prompt.push_str("此外，父级标题下还有以下补充原始文本，请仅在与父级模块相关时纳入归纳：\n");
+        prompt.push_str(
+            &direct_text_units
+                .iter()
+                .map(|text| text.trim())
+                .filter(|text| !text.is_empty())
+                .collect::<Vec<_>>()
+                .join("\n\n"),
+        );
+        prompt.push_str("\n\n");
     }
+    prompt.push_str("### 标题\n");
+    prompt.push_str(title.trim());
+    prompt.push_str("\n\n");
+    prompt.push_str("### 处理指令\n");
+    prompt.push_str("请按照以下逻辑顺序处理信息并撰写摘要：\n");
+    prompt.push_str("1.分析范畴：通读所有子模块的CoreConcept和Title，识别并定义它们共同所属的总体技术领域或主题范畴。\n");
+    prompt.push_str("2.提炼目标：基于所有子模块的Purpose，总结出该父级模块旨在解决的顶层问题或希望达成的整体目标。\n");
+    prompt.push_str("3.归纳内容：从每个子模块的Title和KeyAttributes中，提取出其最核心的规则或功能点，用简洁的条目式列表进行概括。\n");
+    prompt.push_str("4.总结价值：综合所有子模块的Outcome，阐述遵循此模块规范能为项目或团队带来的整体价值与核心收益。\n\n");
+    prompt.push_str("### 输出格式\n");
+    prompt.push_str("你的回答必须**严格遵循**以下格式和顺序，包含五个明确的部分：\n");
+    prompt.push_str("- Title: [标题]\n");
+    prompt.push_str("- ModuleScope: [用一句高度概括的话描述本模块所涵盖的总体领域。]\n");
+    prompt.push_str("- Purpose: [清晰、直接地阐述本模块要解决的核心问题或达成的最终目的。]\n");
+    prompt.push_str("- ConstituentParts: [列出包含的核心子模块或功能点]\n");
+    prompt.push_str("     - 1: [从子模块摘要提炼的核心点，如“1: 文件风格,统一各类文件的基础格式（缩进、编码、换行符等）”。]\n");
+    prompt.push_str("     - 2: [同上格式，提炼另一个子模块核心点。]\n");
+    prompt.push_str("     - [……]\n");
+    prompt.push_str(
+        "- Outcome: [总结模块被有效实施后，为代码库、团队协作或软件质量带来的关键提升。]\n\n",
+    );
+    prompt.push_str("### 风格与要求\n");
+    prompt.push_str("- **语言**：使用简洁、专业、客观的书面语，避免口语化、比喻或模糊表述，避免“本文介绍”、“非常重要”等主观评价\n");
+    prompt.push_str(
+        "- **聚焦**：摘要应基于提供的子模块信息进行提炼，不引入外部知识或进行过度延伸。\n",
+    );
+    prompt.push_str("- **一致性**：术语应与子模块摘要保持一致。\n");
+    prompt.push_str("### 开始生成");
     prompt
 }
 

@@ -1,3 +1,7 @@
+use std::time::Duration;
+
+use tokio::time::timeout;
+
 impl<R, S, E> RagIngestService<R, S, E>
 where
     R: RagIngestRepository + RagConfigRepository,
@@ -44,11 +48,14 @@ where
         let tree_extracted = store.get::<Value>("tree.extracted")?.clone();
         let extracted_nodes = tree_extracted_nodes(&tree_extracted)?;
         let children_by_parent = tree_parent_child_edges(&tree_extracted, &extracted_nodes)?;
-        let tree_nodes = match node.strategy_id.as_str() {
-            "RAG_TREE_EXTRACTIVE_SUMMARY_V1" => extracted_nodes
-                .iter()
-                .map(|tree_node| extractive_summary_tree_node(request, &prepared, tree_node))
-                .collect::<Vec<_>>(),
+        let (tree_nodes, warnings) = match node.strategy_id.as_str() {
+            "RAG_TREE_EXTRACTIVE_SUMMARY_V1" => {
+                let tree_nodes = extracted_nodes
+                    .iter()
+                    .map(|tree_node| extractive_summary_tree_node(request, &prepared, tree_node))
+                    .collect::<Vec<_>>();
+                (tree_nodes, Vec::new())
+            }
             "RAG_TREE_LLM_SUMMARY_V1" => {
                 self.execute_llm_summarize_tree(
                     request,
@@ -68,7 +75,7 @@ where
             RagArtifactPayload::TreeSummaryResult(RagTreeIndexArtifact {
                 tree_nodes,
                 embedding_status: "PENDING".into(),
-                warnings: Vec::new(),
+                warnings,
                 fatal_error: None,
             }),
             json!({ "nodeCount": count }),
@@ -90,12 +97,33 @@ where
         prepared: &PreparedIngestPayload,
         tree_nodes: &[TreeExtractedNode],
         children_by_parent: &BTreeMap<String, Vec<&TreeExtractedNode>>,
-    ) -> Result<Vec<RagTreeNodeWrite>, RagError> {
-        let model_code = llm_summary_model_code(node)?;
+    ) -> Result<(Vec<RagTreeNodeWrite>, Vec<RagIngestWarning>), RagError> {
+        let summary_config = llm_summary_config(node)?;
+        let tree_summary_runtime = self
+            .tree_summary_runtime
+            .as_ref()
+            .ok_or(RagError::IngestStageFailed)?;
         let mut summaries: BTreeMap<String, String> = BTreeMap::new();
         let mut tree_nodes_by_code: BTreeMap<String, RagTreeNodeWrite> = BTreeMap::new();
+        let mut warnings = Vec::new();
+        let mut fallback_reason: Option<&'static str> = None;
         let ordered_nodes = tree_summary_post_order(tree_nodes, children_by_parent)?;
         for tree_node in ordered_nodes {
+            if fallback_reason.is_some() {
+                let fallback_node = llm_fallback_summary_tree_node(
+                    request,
+                    prepared,
+                    tree_node,
+                    "LLM_SUMMARY_SKIPPED_AFTER_FAILURE",
+                );
+                summaries.insert(
+                    fallback_node.tree_node_code.clone(),
+                    fallback_node.summary_text.clone(),
+                );
+                tree_nodes_by_code.insert(fallback_node.tree_node_code.clone(), fallback_node);
+                continue;
+            }
+
             let child_summaries = children_by_parent
                 .get(&tree_node.tree_node_code)
                 .into_iter()
@@ -109,21 +137,72 @@ where
             let direct_text_units = direct_text_units(prepared, tree_node, children_by_parent);
             let prompt =
                 llm_tree_summary_prompt(&tree_node.title, &child_summaries, &direct_text_units);
-            let result = self
-                .tree_summary_runtime
-                .as_ref()
-                .ok_or(RagError::IngestStageFailed)?
-                .summarize_tree(RagTreeSummaryCall {
-                    workspace_code: request.workspace_code.clone(),
-                    model_code: Some(model_code.clone()),
-                    prompt,
-                })
-                .await
-                .map_err(|_| RagError::IngestStageFailed)?;
+            let prompt = truncate_tree_summary_prompt(prompt, summary_config.max_prompt_chars);
+            let summary_call = tree_summary_runtime.summarize_tree(RagTreeSummaryCall {
+                workspace_code: request.workspace_code.clone(),
+                model_code: summary_config.model_code.clone(),
+                prompt,
+            });
+            let result = if let Some(timeout_seconds) = summary_config.timeout_seconds {
+                match timeout(Duration::from_secs(timeout_seconds), summary_call).await {
+                    Ok(result) => result,
+                    Err(_) => {
+                        fallback_reason = Some("LLM_SUMMARY_TIMEOUT");
+                        warnings.push(llm_summary_fallback_warning("LLM_SUMMARY_TIMEOUT"));
+                        let fallback_node = llm_fallback_summary_tree_node(
+                            request,
+                            prepared,
+                            tree_node,
+                            "LLM_SUMMARY_TIMEOUT",
+                        );
+                        summaries.insert(
+                            fallback_node.tree_node_code.clone(),
+                            fallback_node.summary_text.clone(),
+                        );
+                        tree_nodes_by_code
+                            .insert(fallback_node.tree_node_code.clone(), fallback_node);
+                        continue;
+                    }
+                }
+            } else {
+                summary_call.await
+            };
+            let result = match result {
+                Ok(result) if !result.summary_text.trim().is_empty() => result,
+                Ok(_) => {
+                    fallback_reason = Some("LLM_SUMMARY_EMPTY_RESPONSE");
+                    warnings.push(llm_summary_fallback_warning("LLM_SUMMARY_EMPTY_RESPONSE"));
+                    let fallback_node = llm_fallback_summary_tree_node(
+                        request,
+                        prepared,
+                        tree_node,
+                        "LLM_SUMMARY_EMPTY_RESPONSE",
+                    );
+                    summaries.insert(
+                        fallback_node.tree_node_code.clone(),
+                        fallback_node.summary_text.clone(),
+                    );
+                    tree_nodes_by_code.insert(fallback_node.tree_node_code.clone(), fallback_node);
+                    continue;
+                }
+                Err(_) => {
+                    fallback_reason = Some("LLM_SUMMARY_PROVIDER_ERROR");
+                    warnings.push(llm_summary_fallback_warning("LLM_SUMMARY_PROVIDER_ERROR"));
+                    let fallback_node = llm_fallback_summary_tree_node(
+                        request,
+                        prepared,
+                        tree_node,
+                        "LLM_SUMMARY_PROVIDER_ERROR",
+                    );
+                    summaries.insert(
+                        fallback_node.tree_node_code.clone(),
+                        fallback_node.summary_text.clone(),
+                    );
+                    tree_nodes_by_code.insert(fallback_node.tree_node_code.clone(), fallback_node);
+                    continue;
+                }
+            };
             let summary_text = result.summary_text.trim().to_string();
-            if summary_text.is_empty() {
-                return Err(RagError::IngestStageFailed);
-            }
             let tree_node = llm_summary_tree_node(
                 request,
                 prepared,
@@ -134,10 +213,13 @@ where
             summaries.insert(tree_node.tree_node_code.clone(), summary_text);
             tree_nodes_by_code.insert(tree_node.tree_node_code.clone(), tree_node);
         }
-        Ok(tree_nodes
-            .iter()
-            .filter_map(|tree_node| tree_nodes_by_code.remove(&tree_node.tree_node_code))
-            .collect())
+        Ok((
+            tree_nodes
+                .iter()
+                .filter_map(|tree_node| tree_nodes_by_code.remove(&tree_node.tree_node_code))
+                .collect(),
+            warnings,
+        ))
     }
 
     fn execute_tree_fulltext_index_stage(
@@ -293,15 +375,28 @@ where
     }
 }
 
-fn llm_summary_model_code(node: &CompiledRagPipelineNode) -> Result<String, RagError> {
-    node.config
-        .as_ref()
-        .and_then(|config| config.get("modelCode"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .ok_or(RagError::IngestProfileInvalid)
+fn llm_fallback_summary_tree_node(
+    request: &RagIngestRequest,
+    prepared: &PreparedIngestPayload,
+    tree_node: &TreeExtractedNode,
+    reason: &str,
+) -> RagTreeNodeWrite {
+    let mut node = extractive_summary_tree_node(request, prepared, tree_node);
+    node.metadata = json!({
+        "summaryStrategy": "RAG_TREE_LLM_SUMMARY_V1",
+        "summaryFallbackStrategy": "EXTRACTIVE_DETERMINISTIC_V1",
+        "summaryFallbackReason": reason,
+        "summaryStatus": "FALLBACK_EXTRACTIVE"
+    });
+    node
+}
+
+fn llm_summary_fallback_warning(reason: &str) -> RagIngestWarning {
+    RagIngestWarning {
+        stage_id: "summarizeTree".into(),
+        code: "RAG_TREE_LLM_SUMMARY_FALLBACK".into(),
+        message: format!("LLM tree summary fell back to extractive summary: {reason}"),
+    }
 }
 
 fn merge_tree_fulltext_status(target: &mut RagTreeIndexArtifact, fulltext: &RagTreeIndexArtifact) {

@@ -47,11 +47,19 @@ fn rag_pipeline_catalog_exposes_phase3_advanced_stage_contracts() {
         llm_summary.config_schema,
         json!({
             "type": "object",
-            "required": ["modelCode"],
             "properties": {
                 "modelCode": {
                     "type": "string",
                     "minLength": 1
+                },
+                "timeoutSeconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "maxPromptChars": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 12000
                 }
             },
             "additionalProperties": false

@@ -4,8 +4,8 @@ use rusqlite::{Transaction, params};
 
 use crate::{
     application::rag::{
-        RagConfigRepository, RagIngestRepository, RagPersistIngestCommand, RagTextUnitWrite,
-        RagTreeNodeWrite,
+        RagConfigRepository, RagIngestRepository, RagIngestWarning, RagPersistIngestCommand,
+        RagTextUnitWrite, RagTreeNodeWrite,
     },
     domain::rag::{RagCorpusRecord, RagError},
 };

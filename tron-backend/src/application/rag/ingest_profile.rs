@@ -2,6 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
+mod summary_tree_config;
+
 use crate::domain::rag::{RagCorpusRecord, RagError, RagProfileRecord, RagProfileType, RagStatus};
 
 use super::{
@@ -9,6 +11,7 @@ use super::{
     RagStrategyRegistry, StrategyRegistrationStatus, execution_stage_for_stage_type,
     stage_type_for_execution_stage, validate_pipeline,
 };
+use summary_tree_config::validate_summary_tree_config;
 
 const DEFAULT_PROJECT_DOC_RESOLVER_MAX_BYTES: usize = 1_048_576;
 const DEFAULT_MARKDOWN_HEADING_DEPTH: usize = 6;
@@ -434,27 +437,6 @@ fn include_heading_in_index_text(
                 .and_then(Value::as_bool)
         })
         .unwrap_or(split_strategy_id == "RAG_SPLIT_MARKDOWN_HEADING_V1")
-}
-
-fn validate_summary_tree_config(stages: &serde_json::Map<String, Value>) -> Result<(), RagError> {
-    if optional_stage_strategy_id(stages, "summarizeTree")?.as_deref()
-        != Some("RAG_TREE_LLM_SUMMARY_V1")
-    {
-        return Ok(());
-    }
-    let config = stage_config(stages, "summarizeTree")
-        .and_then(Value::as_object)
-        .ok_or(RagError::IngestProfileInvalid)?;
-    if config.keys().any(|key| key != "modelCode") {
-        return Err(RagError::IngestProfileInvalid);
-    }
-    config
-        .get("modelCode")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(|_| ())
-        .ok_or(RagError::IngestProfileInvalid)
 }
 
 fn document_formats(

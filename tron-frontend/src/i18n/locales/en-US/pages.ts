@@ -678,7 +678,7 @@ export const pages = {
           status: "Only Ready profiles are saved as runtime-available RAG profiles.",
           strategy: "Execution strategy for this stage. Selecting a strategy fills recommended defaults below.",
           supportedSourceTypes: "Source types accepted by this profile. Separate multiple values with commas, such as PROJECT_DOC_REF, MEMORY_CARD, or SKILL.",
-          treeSummaryModelCode: "Model code used by the LLM tree summary stage. Required when SUMMARIZE_TREE uses RAG_TREE_LLM_SUMMARY_V1.",
+          treeSummaryModelCode: "Optional model code used by the LLM tree summary stage. Leave empty to use the workspace default LLM model.",
         },
         retrieval: {
           contextStrategy: "Strategy used to assemble context packs from retrieval results. At least one strategy must be enabled for workbench and API calls.",
@@ -788,7 +788,6 @@ export const pages = {
           splitterTypeRequired: "Splitter type is required.",
           strategyRequired: "Strategy ID is required.",
           summarizeTreeDependency: "summarizeTree requires extractTree.",
-          treeSummaryModelCodeRequired: "Tree summary model code is required for LLM summary.",
           treeFulltextDependency: "treeFulltextIndex requires summarizeTree.",
           treeVectorDependency: "treeVectorIndex requires summarizeTree.",
         },

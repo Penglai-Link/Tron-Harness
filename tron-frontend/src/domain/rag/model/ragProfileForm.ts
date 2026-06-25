@@ -628,9 +628,10 @@ export function buildIngestProfileRecordFromForm(
     }
 
     if (stageId === "summarizeTree" && strategyId === treeLlmSummaryStrategyId) {
+      const treeSummaryModelCode = trimOrUndefined(form.treeSummaryModelCode);
       accumulator[stageId] = {
         config: {
-          modelCode: form.treeSummaryModelCode.trim(),
+          ...(treeSummaryModelCode ? { modelCode: treeSummaryModelCode } : {}),
         },
         strategyId,
       };
@@ -933,13 +934,6 @@ export function validateIngestProfileForm(
     if (effectiveSplitterType.trim() === "markdownHeading" && (headingDepth === undefined || headingDepth < 1 || headingDepth > 6)) {
       errors.splitTextHeadingDepth = ragProfileFormT("errors.headingDepthRange", "Heading depth must be between 1 and 6.");
     }
-  }
-
-  if (
-    enabledStages.some((stage) => stage.id === "summarizeTree" && stage.strategyId.trim() === treeLlmSummaryStrategyId)
-    && !trimOrUndefined(form.treeSummaryModelCode)
-  ) {
-    errors.treeSummaryModelCode = ragProfileFormT("errors.treeSummaryModelCodeRequired", "Tree summary model code is required for LLM summary.");
   }
 
   if (splitCommaSeparatedTokens(form.supportedSourceTypesText).length === 0) {

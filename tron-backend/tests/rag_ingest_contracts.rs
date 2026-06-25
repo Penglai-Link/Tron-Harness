@@ -364,6 +364,16 @@ async fn llm_summary_tree_ingest_summarizes_bottom_up_with_configured_model() {
             .all(|call| call.model_code == Some("summary-model-alpha".into()))
     );
     assert!(
+        summary_calls
+            .iter()
+            .all(|call| call.thinking_enabled == Some(false))
+    );
+    assert!(
+        summary_calls
+            .iter()
+            .all(|call| call.max_tokens == Some(256))
+    );
+    assert!(
         summary_calls[0]
             .prompt
             .contains("## Write Path\nPersist synchronously.")
@@ -404,7 +414,7 @@ async fn llm_summary_tree_ingest_summarizes_bottom_up_with_configured_model() {
 }
 
 #[tokio::test]
-async fn llm_summary_tree_empty_response_fails_fast_without_partial_tree_persist() {
+async fn llm_summary_tree_empty_response_falls_back_to_extractive_without_partial_failure() {
     let database_path = temp_database_path("rag-ingest-llm-summary-tree-empty");
     let database_url = database_path.to_string_lossy().to_string();
     let repository = CapturingIngestRepository::connect(&database_url);
@@ -425,18 +435,43 @@ async fn llm_summary_tree_empty_response_fails_fast_without_partial_tree_persist
     let mut request = memory_markdown_tree_request("v1");
     request.ingest_profile_id = "memory-card-llm-summary-tree-empty-v1".into();
 
-    let error = service.ingest(request).await.unwrap_err();
+    let result = service.ingest(request).await.unwrap();
 
-    assert_eq!(error, RagError::IngestStageFailed);
-    assert_eq!(runtime.summary_calls().len(), 1);
-    assert!(
-        persisted_commands.lock().unwrap().is_empty(),
-        "failing summary must not persist a partial tree"
+    assert_eq!(result.status, "ACTIVE");
+    assert_eq!(result.warnings.len(), 1);
+    assert_eq!(
+        result.warnings[0]["code"],
+        json!("RAG_TREE_LLM_SUMMARY_FALLBACK")
     );
+    assert_eq!(runtime.summary_calls().len(), 1);
+    let commands = persisted_commands.lock().unwrap();
+    let tree_nodes = &commands
+        .first()
+        .expect("fallback summary should persist the source")
+        .tree_nodes;
+    assert_eq!(tree_nodes.len(), 3);
+    assert!(tree_nodes.iter().all(|node| {
+        node.metadata["summaryStrategy"] == json!("RAG_TREE_LLM_SUMMARY_V1")
+            && node.metadata["summaryFallbackStrategy"] == json!("EXTRACTIVE_DETERMINISTIC_V1")
+            && node.metadata["summaryStatus"] == json!("FALLBACK_EXTRACTIVE")
+    }));
+    assert_eq!(
+        tree_nodes[0].metadata["summaryFallbackReason"],
+        json!("LLM_SUMMARY_SKIPPED_AFTER_FAILURE")
+    );
+    assert_eq!(
+        tree_nodes
+            .iter()
+            .find(|node| node.title == "Write Path")
+            .expect("leaf node should be present")
+            .metadata["summaryFallbackReason"],
+        json!("LLM_SUMMARY_EMPTY_RESPONSE")
+    );
+    drop(commands);
     let connection = Connection::open(&database_url).unwrap();
     assert_eq!(
         query_i64(&connection, "SELECT COUNT(*) FROM rag_memory_text_units"),
-        0
+        2
     );
 }
 
@@ -1357,7 +1392,7 @@ fn ingest_profile_compiler_rejects_invalid_dag_contracts() {
 }
 
 #[test]
-fn ingest_profile_compiler_requires_llm_summary_model_code() {
+fn ingest_profile_compiler_allows_default_llm_summary_model() {
     let repository = SqliteRagRepository::connect(":memory:").unwrap();
     let corpus = repository.get_corpus("memory-card").unwrap().unwrap();
     let registry = LlmSummaryTestRegistry;
@@ -1366,15 +1401,20 @@ fn ingest_profile_compiler_requires_llm_summary_model_code() {
         ("missing-model", None),
         ("empty-model", Some(json!({ "modelCode": " " }))),
     ] {
+        let compiled = compile_ingest_profile(
+            &ingest_profile(name, llm_summary_tree_config(summary_config)),
+            &corpus,
+            &registry,
+        )
+        .expect("LLM summary profile should compile with the default text model");
         assert_eq!(
-            compile_ingest_profile(
-                &ingest_profile(name, llm_summary_tree_config(summary_config)),
-                &corpus,
-                &registry,
-            )
-            .unwrap_err(),
-            RagError::IngestProfileInvalid,
-            "{name} should require a non-empty modelCode",
+            compiled
+                .stage_metadata
+                .get("summarizeTree")
+                .expect("summary stage metadata should compile")
+                .strategy_id,
+            "RAG_TREE_LLM_SUMMARY_V1",
+            "{name} should use the LLM summary strategy",
         );
     }
 
@@ -1509,6 +1549,8 @@ fn summarize_tree_executor_consumes_tree_extracted_artifact_contract() {
 struct SummaryCall {
     model_code: Option<String>,
     prompt: String,
+    thinking_enabled: Option<bool>,
+    max_tokens: Option<u32>,
 }
 
 #[derive(Clone)]
@@ -1654,6 +1696,8 @@ impl RagTreeSummaryRuntime for FakeEmbeddingRuntime {
             self.summary_calls.lock().unwrap().push(SummaryCall {
                 model_code: call.model_code.clone(),
                 prompt: call.prompt,
+                thinking_enabled: call.thinking_enabled,
+                max_tokens: call.max_tokens,
             });
             let summary_text = self
                 .summary_outputs

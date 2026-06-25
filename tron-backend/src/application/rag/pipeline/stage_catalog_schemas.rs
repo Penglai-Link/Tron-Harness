@@ -135,11 +135,19 @@ fn strategy_config_schema(strategy_id: &str) -> Value {
         }),
         "RAG_TREE_LLM_SUMMARY_V1" => json!({
             "type": "object",
-            "required": ["modelCode"],
             "properties": {
                 "modelCode": {
                     "type": "string",
                     "minLength": 1
+                },
+                "timeoutSeconds": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "maxPromptChars": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "default": 12000
                 }
             },
             "additionalProperties": false
