@@ -951,7 +951,7 @@ export function TronShell({
                     <ResizableHandle withHandle className="hidden lg:flex" />
                     <ResizablePanel panelRef={panelRef} id="resize-panel" collapsible={true} defaultSize="0%" maxSize={700} onResize={panelResize}>
                       <aside
-                        className="relative z-10 hidden h-[calc(100vh-3.5rem)] overflow-y-auto bg-[var(--color-elevated-surface)] px-5 py-6 lg:block"
+                        className="relative z-10 hidden h-[calc(100vh-3.5rem)] overflow-y-auto bg-[var(--color-elevated-surface)] lg:block"
                         data-testid="tron-right-sidebar"
                       >
                         {rightPanel}

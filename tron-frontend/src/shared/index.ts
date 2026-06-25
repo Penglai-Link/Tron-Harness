@@ -24,6 +24,7 @@ export * from "./ui/MarkdownContent";
 export * from "./ui/MultiSelectDropdown";
 export * from "./ui/OptionSelect";
 export * from "./ui/PixelBlast";
+export * from "./ui/page-view/Index";
 export * from "./ui/SearchField";
 export * from "./ui/TablePagination";
 export * from "./ui/Tabs";

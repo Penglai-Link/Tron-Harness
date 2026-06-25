@@ -670,8 +670,8 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
   const renderEmbeddedFrame = !isDesktopHost;
 
   return (
-    <section className="overflow-hidden">
-      <div className="flex h-14 items-center justify-between bg-[var(--color-elevated-surface-strong)] px-4">
+    <section className="overflow-hidden h-full flex flex-col">
+      <div className="flex h-14 border-b border-b-gray-200  items-center justify-between bg-[var(--color-elevated-surface-strong)] px-4">
         <div className="flex items-center gap-5 text-[var(--color-on-surface-variant)]">
           <button
             aria-label="Go back"
@@ -743,9 +743,8 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
           <button
             aria-label={injectionEnabled ? "Disable inspection" : "Enable inspection"}
             aria-pressed={injectionEnabled}
-            className={`inline-flex items-center justify-center transition-colors hover:text-[var(--color-on-surface)] gap-1 ${
-              injectionEnabled ? "text-[var(--color-on-surface)]" : "text-[var(--color-on-surface-variant)]"
-            }`}
+            className={`inline-flex items-center justify-center transition-colors hover:text-[var(--color-on-surface)] gap-1 ${injectionEnabled ? "text-[var(--color-on-surface)]" : "text-[var(--color-on-surface-variant)]"
+              }`}
             type="button"
             onClick={handleInjectionToggle}
           >
@@ -754,7 +753,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
         </div>
       </div>
       {unsupportedPageActive ? (
-        <div className="flex min-h-[560px] items-center justify-center bg-[var(--color-elevated-surface-strong)] text-[var(--color-on-surface-variant)]">
+        <div className="flex min-h-[560px] flex-auto items-center justify-center bg-[var(--color-elevated-surface-strong)] text-[var(--color-on-surface-variant)]">
           <div className="flex max-w-[420px] flex-col items-center gap-4 text-center">
             <ExternalLink className="size-8" />
             <div className="space-y-1">
@@ -784,15 +783,15 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
           referrerPolicy="no-referrer"
           sandbox="allow-forms allow-modals allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
           title={`Tron target ${pageId}`}
-          className="block min-h-[560px] bg-[var(--color-elevated-surface-strong)]"
+          className="block min-h-[560px] flex-auto bg-[var(--color-elevated-surface-strong)]"
         />
       ) : (
         <div
           ref={targetViewportRef}
           aria-label={`Tron target ${pageId}`}
-          className="block min-h-[560px] bg-[var(--color-elevated-surface-strong)]"
+          className="block min-h-[560px] flex-auto bg-[var(--color-elevated-surface-strong)]"
         >
-          <div className="flex min-h-[560px] items-center justify-center text-[var(--color-on-surface-variant)]">
+          <div className="flex min-h-[560px] flex-auto items-center justify-center text-[var(--color-on-surface-variant)]">
             <p className="text-sm text-[var(--color-on-surface)]">目标页面正在当前窗口中加载</p>
           </div>
         </div>

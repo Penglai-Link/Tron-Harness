@@ -45,6 +45,7 @@ import {
   useConsoleShellConfig,
   useDismissibleLayer,
   useToast,
+  PageView,
 } from "@/shared";
 import { cn } from "@/shared/lib/utils";
 import {
@@ -1662,7 +1663,6 @@ function RightContextSidebar({
 
   return (
     <section className="space-y-4">
-      <h2 className="text-xl font-semibold">Run Context</h2>
       <div className="space-y-5 text-sm">
         <ContextBlock title="Last Request Context">
           <ContextRow label="model" value={modelLabel} />
@@ -3528,13 +3528,13 @@ export function ChatManagementPage() {
   const rightPanel = useMemo(() => {
     if (!hasActiveSession) return undefined;
     return (
-      <div>
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-          </TabsList>
-          <TabsContent value="overview">
+      <Tabs defaultValue="1" className="w-full h-full">
+        <TabsList className="mx-4 my-2">
+          <TabsTrigger value="1">Run Context</TabsTrigger>
+          <TabsTrigger value="2">Analytics</TabsTrigger>
+        </TabsList>
+        <TabsContent value="1">
+          <div className="m-4">
             <RightContextSidebar
               events={aguiEvents}
               goal={activeGoal}
@@ -3558,10 +3558,12 @@ export function ChatManagementPage() {
               todos={shortTermMemoryTodos}
               todosStatus={shortTermMemoryTodosStatus}
             />
-          </TabsContent>
-        </Tabs>
-
-      </div>
+          </div>
+        </TabsContent>
+        <TabsContent value="2">
+          <PageView url="https://www.baidu.com" />
+        </TabsContent>
+      </Tabs>
     );
   }, [
     activeSession,
