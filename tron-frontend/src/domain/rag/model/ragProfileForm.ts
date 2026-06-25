@@ -36,6 +36,7 @@ export const mineruParseStrategyId = "RAG_PARSE_MINERU_DOCUMENT";
 export const legacySplitTextStrategyId = "RAG_SPLIT_TEXT";
 export const splitMarkdownHeadingStrategyId = "RAG_SPLIT_MARKDOWN_HEADING_V1";
 export const splitPlainTextStrategyId = "RAG_SPLIT_PLAIN_TEXT_V1";
+export const treeLlmSummaryStrategyId = "RAG_TREE_LLM_SUMMARY_V1";
 const defaultMineruDocumentFormats = ["PDF", "DOCX"];
 const defaultDocumentReferenceMaxBytes = "52428800";
 const initialIngestArtifactKeys = new Set(["request.payload", "request.accessContext"]);
@@ -81,6 +82,7 @@ export interface RagIngestProfileFormState {
   splitTextType: string;
   status: RagProfileStatus;
   supportedSourceTypesText: string;
+  treeSummaryModelCode: string;
 }
 
 export interface RagRetrievalRouteFormRow {
@@ -128,6 +130,7 @@ export interface RagIngestProfileFormErrors {
   splitTextType?: string;
   stageRows?: Partial<Record<RagIngestStageId, { strategyId?: string }>>;
   supportedSourceTypesText?: string;
+  treeSummaryModelCode?: string;
 }
 
 export interface RagRetrievalProfileFormErrors {
@@ -474,6 +477,7 @@ export function buildIngestProfileFormState(existing?: IngestProfileRecord): Rag
     const parseDocumentStrategyId = existing.config.stages.parseDocument?.strategyId;
     const splitTextConfig = existing.config.stages.splitText?.config;
     const splitTextStrategyId = existing.config.stages.splitText?.strategyId ?? "";
+    const summarizeTreeConfig = existing.config.stages.summarizeTree?.config;
     const splitterConfig = splitTextConfig && typeof splitTextConfig === "object" && "splitter" in splitTextConfig
       ? splitTextConfig.splitter as Record<string, unknown>
       : undefined;
@@ -504,6 +508,7 @@ export function buildIngestProfileFormState(existing?: IngestProfileRecord): Rag
       splitTextType: splitterTypeForStrategy(splitTextStrategyId, storedSplitterType),
       status: existing.status,
       supportedSourceTypesText: existing.config.sourceInputPolicy.supportedSourceTypes.join(", "),
+      treeSummaryModelCode: typeof summarizeTreeConfig?.modelCode === "string" ? summarizeTreeConfig.modelCode : "",
     };
   }
 
@@ -526,6 +531,7 @@ export function buildIngestProfileFormState(existing?: IngestProfileRecord): Rag
     splitTextType: "plainText",
     status: "Ready",
     supportedSourceTypesText: "",
+    treeSummaryModelCode: "",
   };
 }
 
@@ -615,6 +621,16 @@ export function buildIngestProfileRecordFromForm(
             ...(overlapTokens !== undefined ? { overlapTokens } : {}),
             ...(headingDepth !== undefined ? { headingDepth } : {}),
           },
+        },
+        strategyId,
+      };
+      return accumulator;
+    }
+
+    if (stageId === "summarizeTree" && strategyId === treeLlmSummaryStrategyId) {
+      accumulator[stageId] = {
+        config: {
+          modelCode: form.treeSummaryModelCode.trim(),
         },
         strategyId,
       };
@@ -917,6 +933,13 @@ export function validateIngestProfileForm(
     if (effectiveSplitterType.trim() === "markdownHeading" && (headingDepth === undefined || headingDepth < 1 || headingDepth > 6)) {
       errors.splitTextHeadingDepth = ragProfileFormT("errors.headingDepthRange", "Heading depth must be between 1 and 6.");
     }
+  }
+
+  if (
+    enabledStages.some((stage) => stage.id === "summarizeTree" && stage.strategyId.trim() === treeLlmSummaryStrategyId)
+    && !trimOrUndefined(form.treeSummaryModelCode)
+  ) {
+    errors.treeSummaryModelCode = ragProfileFormT("errors.treeSummaryModelCodeRequired", "Tree summary model code is required for LLM summary.");
   }
 
   if (splitCommaSeparatedTokens(form.supportedSourceTypesText).length === 0) {

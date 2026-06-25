@@ -485,7 +485,7 @@ function createSeedProfileCatalog(corpora: RagCatalogCorpusApi[]): RagProfileCat
       preparePayload: ["RAG_TEXT_CONTRACT_PAYLOAD_V1", "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1"],
       resolveSource: ["PROJECT_DOC_RESOLVE_SOURCE"],
       splitText: ["RAG_SPLIT_PLAIN_TEXT_V1", "RAG_SPLIT_MARKDOWN_HEADING_V1", "RAG_SPLIT_TEXT"],
-      summarizeTree: ["RAG_TREE_EXTRACTIVE_SUMMARY_V1"],
+      summarizeTree: ["RAG_TREE_EXTRACTIVE_SUMMARY_V1", "RAG_TREE_LLM_SUMMARY_V1"],
       treeFulltextIndex: ["RAG_TREE_FULLTEXT_INDEX"],
       treeVectorIndex: ["RAG_TREE_VECTOR_INDEX"],
       validateSource: ["RAG_VALIDATE_SOURCE"],
@@ -605,7 +605,15 @@ function createSeedPipelineCatalog(profileType: "INGEST" | "RETRIEVAL"): RagPipe
           mustRunBeforeStageTypes: ["SUMMARIZE_TREE"],
           mustRunAfterStageTypes: ["SPLIT_TEXT"],
         }),
-        stage("SUMMARIZE_TREE", ["tree.extracted"], ["tree.summarized"], [createStrategy("RAG_TREE_EXTRACTIVE_SUMMARY_V1")], {
+        stage("SUMMARIZE_TREE", ["tree.extracted"], ["tree.summarized"], [
+          createStrategy("RAG_TREE_EXTRACTIVE_SUMMARY_V1"),
+          createStrategy("RAG_TREE_LLM_SUMMARY_V1", {
+            modelCode: {
+              minLength: 1,
+              type: "string",
+            },
+          }),
+        ], {
           mustRunBeforeStageTypes: ["TREE_FULLTEXT_INDEX", "TREE_VECTOR_INDEX"],
           mustRunAfterStageTypes: ["EXTRACT_TREE"],
         }),

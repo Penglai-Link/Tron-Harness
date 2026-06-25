@@ -723,6 +723,11 @@ const ragMockStrategyRegistry: RagMockStrategyRegistry = {
     },
     {
       status: "Enabled",
+      strategyId: "RAG_TREE_LLM_SUMMARY_V1",
+      supportedStageIds: ["summarizeTree"],
+    },
+    {
+      status: "Enabled",
       strategyId: "RAG_FULLTEXT_INDEX",
       supportedStageIds: ["fulltextIndex"],
     },

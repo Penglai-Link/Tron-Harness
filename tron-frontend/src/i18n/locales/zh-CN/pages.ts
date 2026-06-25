@@ -644,6 +644,7 @@ export const pages = {
         strategy: "策略",
         supportedFormats: "支持格式",
         supportedSourceTypes: "支持来源类型",
+        treeSummaryModelCode: "结构树摘要模型编码",
         topicPolicy: "主题策略",
         unsupportedFormatPolicy: "不支持格式策略",
         value: "值",
@@ -677,6 +678,7 @@ export const pages = {
           status: "只有 Ready 配置会作为运行时可用的 RAG 配置保存。",
           strategy: "该阶段的执行策略。选择策略会填充下方推荐默认值。",
           supportedSourceTypes: "该配置接受的来源类型，多个值用逗号分隔，例如 PROJECT_DOC_REF、MEMORY_CARD 或 SKILL。",
+          treeSummaryModelCode: "LLM 结构树摘要阶段使用的模型编码。SUMMARIZE_TREE 使用 RAG_TREE_LLM_SUMMARY_V1 时必填。",
         },
         retrieval: {
           contextStrategy: "用于从检索结果组装上下文包的策略。工作台和 API 调用至少需要启用一个策略。",
@@ -786,6 +788,7 @@ export const pages = {
           splitterTypeRequired: "切分器类型不能为空。",
           strategyRequired: "策略标识不能为空。",
           summarizeTreeDependency: "summarizeTree 需要 extractTree。",
+          treeSummaryModelCodeRequired: "LLM 摘要需要填写结构树摘要模型编码。",
           treeFulltextDependency: "treeFulltextIndex 需要 summarizeTree。",
           treeVectorDependency: "treeVectorIndex 需要 summarizeTree。",
         },

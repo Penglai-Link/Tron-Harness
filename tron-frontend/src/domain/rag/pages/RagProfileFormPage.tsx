@@ -90,6 +90,7 @@ import {
   listProfileStatuses,
   listRetrievalFilterFieldOptions,
   mineruParseStrategyId,
+  treeLlmSummaryStrategyId,
   type RagIngestProfileFormErrors,
   type RagIngestProfileFormState,
   type RagRetrievalFilterFormRow,
@@ -401,6 +402,7 @@ const ingestFieldHints = {
   status: "Only Ready profiles are saved as runtime-available RAG profiles.",
   strategy: "Execution strategy for this stage. Selecting a strategy fills recommended defaults below.",
   supportedSourceTypes: "Source types accepted by this profile. Separate multiple values with commas, such as PROJECT_DOC_REF, MEMORY_CARD, or SKILL.",
+  treeSummaryModelCode: "Model code used by the LLM tree summary stage. Required when SUMMARIZE_TREE uses RAG_TREE_LLM_SUMMARY_V1.",
 } satisfies Record<string, string>;
 
 const retrievalFieldHints = {
@@ -519,6 +521,19 @@ function applyIngestTemplateToForm(
       };
     }),
   };
+
+  const summarizeTreeNode = nodesByStageId.summarizeTree;
+  const summarizeTreeConfig = summarizeTreeNode?.config;
+  if (
+    summarizeTreeNode?.strategyId === treeLlmSummaryStrategyId
+    && summarizeTreeConfig
+    && typeof summarizeTreeConfig.modelCode === "string"
+  ) {
+    nextForm = {
+      ...nextForm,
+      treeSummaryModelCode: summarizeTreeConfig.modelCode,
+    };
+  }
 
   template.pipeline.nodes.forEach((node) => {
     const stageId = ingestStageTypeToStageId(node.stageType);
@@ -1598,6 +1613,17 @@ export function RagIngestProfileFormPage() {
                         />
                       </Field>
                     </>
+                  ) : null}
+
+                  {stage.id === "summarizeTree" && stage.strategyId.trim() === treeLlmSummaryStrategyId ? (
+                    <Field label={pageT("fields.treeSummaryModelCode", "Tree summary model code")} error={errors.treeSummaryModelCode} hint={ingestHintT("treeSummaryModelCode")}>
+                      <TextInput
+                        aria-label={pageT("fields.treeSummaryModelCode", "Tree summary model code")}
+                        className="font-mono"
+                        value={form.treeSummaryModelCode}
+                        onChange={(event) => updateForm("treeSummaryModelCode", event.target.value)}
+                      />
+                    </Field>
                   ) : null}
 
                   {stage.id === "vectorIndex" ? (
