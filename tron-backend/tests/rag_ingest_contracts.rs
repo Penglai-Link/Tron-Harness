@@ -364,16 +364,6 @@ async fn llm_summary_tree_ingest_summarizes_bottom_up_with_configured_model() {
             .all(|call| call.model_code == Some("summary-model-alpha".into()))
     );
     assert!(
-        summary_calls
-            .iter()
-            .all(|call| call.thinking_enabled == Some(false))
-    );
-    assert!(
-        summary_calls
-            .iter()
-            .all(|call| call.max_tokens == Some(256))
-    );
-    assert!(
         summary_calls[0]
             .prompt
             .contains("## Write Path\nPersist synchronously.")
@@ -1549,8 +1539,6 @@ fn summarize_tree_executor_consumes_tree_extracted_artifact_contract() {
 struct SummaryCall {
     model_code: Option<String>,
     prompt: String,
-    thinking_enabled: Option<bool>,
-    max_tokens: Option<u32>,
 }
 
 #[derive(Clone)]
@@ -1696,8 +1684,6 @@ impl RagTreeSummaryRuntime for FakeEmbeddingRuntime {
             self.summary_calls.lock().unwrap().push(SummaryCall {
                 model_code: call.model_code.clone(),
                 prompt: call.prompt,
-                thinking_enabled: call.thinking_enabled,
-                max_tokens: call.max_tokens,
             });
             let summary_text = self
                 .summary_outputs
