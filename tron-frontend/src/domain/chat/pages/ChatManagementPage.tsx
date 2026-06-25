@@ -3129,6 +3129,7 @@ export function ChatManagementPage() {
   const [deleteTargetSession, setDeleteTargetSession] = useState<ChatSession | null>(null);
   const [unseenSessionCodes, setUnseenSessionCodes] = useState<Set<string>>(() => new Set());
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [inspectionAttachments, setInspectionAttachments] = useState<ChatMessageAttachment[]>([]);
   const activeSessionCodeRef = useRef("");
   const modelSelectionSessionRef = useRef("");
   const streamAbortControllerRef = useRef<AbortController | null>(null);
@@ -3163,6 +3164,7 @@ export function ChatManagementPage() {
     ? "No text model"
     : `No models for ${selectedAgent?.name ?? effectiveAgentCode}`;
   const currentUserDisplayName = authSession?.user.displayName ?? "";
+  const { createInspectionAttachment } = useInspection()
 
   const replaceChatSearchParams = useCallback((update: (next: URLSearchParams) => void) => {
     const currentSearch = typeof window === "undefined"
