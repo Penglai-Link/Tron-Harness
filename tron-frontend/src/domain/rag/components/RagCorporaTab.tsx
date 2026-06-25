@@ -2,6 +2,7 @@ import {
   Search,
   Sparkles,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   DataTable,
@@ -9,6 +10,7 @@ import {
   SurfaceCard,
   TablePagination,
   TextInput,
+  useLocaleFormatters,
   useTablePagination,
 } from "@/shared";
 import { Badge } from "@/shared/ui/Badge";
@@ -39,6 +41,12 @@ export function RagCorporaTab({
   onQueryChange: (value: string) => void;
   onStatusFilterChange: (value: string) => void;
 }) {
+  const { t } = useTranslation(["pages"]);
+  const { formatNumber } = useLocaleFormatters();
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:rag.corpora.${key}`, { defaultValue, ...options })
+  );
+
   return (
     <div>
       <SurfaceCard>
@@ -47,7 +55,7 @@ export function RagCorporaTab({
             <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
             <TextInput
               className="w-full pl-9"
-              placeholder="搜索语料库、编码或描述..."
+              placeholder={pageT("searchPlaceholder", "Search corpora, codes, or descriptions...")}
               type="search"
               value={query}
               onChange={(event) => onQueryChange(event.target.value)}
@@ -60,29 +68,29 @@ export function RagCorporaTab({
           >
             {["All", "Active", "Indexing", "Warning", "Reserved"].map((status) => (
               <option key={status} value={status}>
-                {status === "All" ? "全部状态" : formatRagStatusLabel(status)}
+                {status === "All" ? pageT("filters.allStatuses", "All statuses") : formatRagStatusLabel(status, t)}
               </option>
             ))}
           </SelectInput>
           <Button className="justify-self-start md:justify-self-end" size="sm" variant="secondary" onClick={onCreateCorpus}>
             <Sparkles size={17} aria-hidden="true" />
-            新建语料库
+            {pageT("actions.newCorpus", "New corpus")}
           </Button>
         </div>
       </SurfaceCard>
 
       <SurfaceCard className="mt-5 p-0">
         <DataTable
-          title="语料库列表"
+          title={pageT("table.title", "Corpus list")}
           rows={corpusPagination.visibleItems}
           rowKey={(corpus) => corpus.code}
           onRowClick={onEditCorpus}
-          pagination={<TablePagination itemLabel="语料库" {...corpusPagination.paginationProps} />}
-          toolbar={<span className="text-[13px] text-[var(--color-on-surface-variant)]">当前显示 {filteredCount} 个语料库</span>}
+          pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "corpora")} {...corpusPagination.paginationProps} />}
+          toolbar={<span className="text-[13px] text-[var(--color-on-surface-variant)]">{pageT("table.visible", "{{count}} corpora visible", { count: formatNumber(filteredCount) })}</span>}
           columns={[
             {
               id: "corpus",
-              header: "语料库",
+              header: pageT("table.columns.corpus", "Corpus"),
               render: (corpus) => (
                 <div>
                   <p className="font-medium">{corpus.name}</p>
@@ -92,17 +100,17 @@ export function RagCorporaTab({
             },
             {
               id: "description",
-              header: "描述",
+              header: pageT("table.columns.description", "Description"),
               render: (corpus) => (
                 <p className="line-clamp-3 text-[13px] text-[var(--color-on-surface-variant)]">
-                  {corpus.description || "暂无描述"}
+                  {corpus.description || pageT("table.noDescription", "No description")}
                 </p>
               ),
             },
             {
               id: "status",
-              header: "状态",
-              render: (corpus) => <Badge tone={statusTone(corpus.status)}>{formatRagStatusLabel(corpus.status)}</Badge>,
+              header: pageT("table.columns.status", "Status"),
+              render: (corpus) => <Badge tone={statusTone(corpus.status)}>{formatRagStatusLabel(corpus.status, t)}</Badge>,
             },
           ]}
         />

@@ -1,3 +1,5 @@
+import { i18n } from "@/i18n";
+
 export type RagTab = "corpora" | "profiles" | "workbench" | "data" | "diagnostics";
 export type DataView = "sources" | "textUnits" | "warnings" | "traces";
 export type BadgeTone = "neutral" | "accent" | "success" | "warning" | "error";
@@ -299,31 +301,39 @@ export interface TraceRecord {
 }
 
 export const ragTabs = [
-  { label: "语料库", value: "corpora" },
-  { label: "配置档案", value: "profiles" },
-  { label: "调试台", value: "workbench" },
-  { label: "数据", value: "data" },
-  { label: "诊断", value: "diagnostics" },
+  { label: "Corpora", value: "corpora" },
+  { label: "Profiles", value: "profiles" },
+  { label: "Workbench", value: "workbench" },
+  { label: "Data", value: "data" },
+  { label: "Diagnostics", value: "diagnostics" },
 ] as const;
 
 export const dataViews = [
-  { label: "来源", value: "sources" },
-  { label: "文本单元", value: "textUnits" },
-  { label: "告警", value: "warnings" },
-  { label: "检索追踪", value: "traces" },
+  { label: "Sources", value: "sources" },
+  { label: "Text units", value: "textUnits" },
+  { label: "Warnings", value: "warnings" },
+  { label: "Retrieval traces", value: "traces" },
 ] as const;
 
 export const pipelineStages = ["source", "parse", "normalize", "split", "extractTree", "summarizeTree", "persist", "fulltextIndex", "vectorIndex", "treeFulltextIndex", "treeVectorIndex"] as const;
 
 const storageSegmentOrder: RagStorageSegmentKey[] = ["source", "textUnit", "fulltext", "vector", "tree", "diagnostics"];
 const storageSegmentLabels: Record<RagStorageSegmentKey, string> = {
-  diagnostics: "诊断",
-  fulltext: "全文",
-  source: "来源",
-  textUnit: "文本单元",
-  tree: "摘要树",
-  vector: "向量",
+  diagnostics: "Diagnostics",
+  fulltext: "Fulltext",
+  source: "Source",
+  textUnit: "Text unit",
+  tree: "Summary tree",
+  vector: "Vector",
 };
+
+function ragModelT(key: string, defaultValue: string) {
+  return String(i18n.t(`pages:rag.model.${key}`, { defaultValue }));
+}
+
+function formatRagStorageSegmentLabel(segmentKey: RagStorageSegmentKey) {
+  return ragModelT(`segments.${segmentKey}`, storageSegmentLabels[segmentKey]);
+}
 
 export function isTargetedStorageBinding(binding: unknown): binding is RagTargetedStorageBinding {
   if (!binding || typeof binding !== "object") return false;
@@ -339,17 +349,17 @@ export function normalizeRagStorageBinding(binding: RagStorageBinding): RagTarge
 }
 
 export function formatRagStorageTarget(target?: RagStorageTargetBinding) {
-  if (!target) return "未绑定";
+  if (!target) return ragModelT("targets.unbound", "Unbound");
   if (target.backend === "GRAPH") {
-    return `graph.${target.namespace ?? target.nodeLabel ?? "未绑定"}/${target.nodeLabel ?? "节点"}`;
+    return `graph.${target.namespace ?? target.nodeLabel ?? ragModelT("targets.unboundValue", "unbound")}/${target.nodeLabel ?? ragModelT("targets.node", "node")}`;
   }
-  return `sqlite.${target.table ?? "未绑定"}`;
+  return `sqlite.${target.table ?? ragModelT("targets.unboundValue", "unbound")}`;
 }
 
 export function formatRagStorageBinding(binding: RagStorageBinding) {
   const normalizedBinding = normalizeRagStorageBinding(binding);
   const targetMap = new Map(normalizedBinding.targets.map((target) => [target.id, target]));
   return storageSegmentOrder
-    .map((segmentKey) => `${storageSegmentLabels[segmentKey]}=${formatRagStorageTarget(targetMap.get(normalizedBinding.bindings[segmentKey] ?? ""))}`)
+    .map((segmentKey) => `${formatRagStorageSegmentLabel(segmentKey)}=${formatRagStorageTarget(targetMap.get(normalizedBinding.bindings[segmentKey] ?? ""))}`)
     .join(" | ");
 }

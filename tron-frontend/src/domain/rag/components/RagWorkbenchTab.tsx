@@ -7,6 +7,7 @@ import {
   Search,
   Upload,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   Field,
@@ -17,6 +18,7 @@ import {
   ToggleSwitch,
 } from "@/shared";
 import { Button } from "@/shared/ui/Button";
+import { i18n } from "@/i18n";
 
 import {
   formatRagStatusLabel,
@@ -79,45 +81,45 @@ type WorkbenchScopeType = "AGENT" | "SPACE" | "USER";
 
 const workbenchPanels: Array<{ label: string; summary: string; value: WorkbenchPanel }> = [
   {
-    label: "写入请求",
-    summary: "把来源载荷写入选中的语料库。",
+    label: "Ingest request",
+    summary: "Write a source payload into the selected corpus.",
     value: "ingest",
   },
   {
-    label: "检索测试",
-    summary: "使用查询字段和筛选条件运行检索配置。",
+    label: "Retrieval test",
+    summary: "Run a retrieval profile with query fields and filters.",
     value: "retrieval",
   },
 ];
 const workbenchScopeOptions: Array<{ label: string; value: WorkbenchScopeType }> = [
-  { label: "工作区", value: "SPACE" },
-  { label: "用户", value: "USER" },
-  { label: "智能体", value: "AGENT" },
+  { label: "Workspace", value: "SPACE" },
+  { label: "User", value: "USER" },
+  { label: "Agent", value: "AGENT" },
 ];
 
 const workbenchFieldHints = {
-  businessField: "写入 payload.domainFields 的业务字段，来自当前语料库字段映射。",
-  businessValue: "业务字段对应的值，会按语料库筛选结构中的类型进行转换。",
-  contextStrategy: "检索结果组装上下文包时使用的策略，来自当前检索配置。",
-  corpus: "本次写入请求要写入的目标语料库。",
-  documentFormat: "文档解析格式，例如 PDF、DOCX 或 MARKDOWN。需要与写入配置的解析策略匹配。",
-  documentUri: "文档来源地址。项目文档通常使用 project-doc:// 开头。",
-  filterField: "本次检索请求附加的筛选字段，来自检索配置绑定语料库的筛选结构。",
-  filterOperator: "筛选字段的比较方式，例如 eq 表示等于，in 表示属于列表。",
-  filterValue: "筛选字段的查询值。in 操作符可使用逗号分隔多个值。",
-  ingestProfile: "本次写入使用的配置，决定来源契约、解析、切分和索引策略。",
-  language: "写入 metadata.language 的语言标记，默认 zh-CN。",
-  limit: "本次检索最多返回的命中数量。",
-  metadataSourcePath: "写入 metadata.sourcePath 的来源路径，便于追踪文档在项目中的位置。",
-  query: "本次检索测试的自然语言查询内容。",
-  retrievalProfile: "本次检索使用的配置，决定路由、融合、去重和上下文策略。",
-  returnField: "要求检索结果额外返回的字段，来自语料库字段映射。",
-  scopeType: "请求目标作用域。系统会根据类型自动填充作用域编码。",
-  sourceCode: "本次写入来源的唯一编码。同一编码和版本会用于幂等更新。",
-  sourceText: "直接文本写入时使用的正文内容。文档引用写入会改用文档地址和格式。",
-  sourceType: "来源类型，必须符合所选写入配置的输入契约。",
-  sourceVersion: "来源版本，通常为 v1；当写入配置要求固定版本时不可编辑。",
-  tokenBudget: "上下文包可使用的最大令牌预算，影响返回给模型的内容长度。",
+  businessField: "Business field written to payload.domainFields, sourced from the current corpus field mapping.",
+  businessValue: "Value for the business field. It is converted with the corpus filter schema type.",
+  contextStrategy: "Strategy used to assemble the context pack from retrieval results.",
+  corpus: "Target corpus for this ingest request.",
+  documentFormat: "Document parse format, such as PDF, DOCX, or MARKDOWN. It must match the ingest parse strategy.",
+  documentUri: "Document source URI. Project documents usually start with project-doc://.",
+  filterField: "Additional filter field for this retrieval request, sourced from the profile-bound corpus filter schema.",
+  filterOperator: "Filter comparison operator, such as eq for equals or in for list membership.",
+  filterValue: "Filter query value. Use comma-separated values for the in operator.",
+  ingestProfile: "Profile used for this ingest request. It controls source contract, parsing, splitting, and indexing.",
+  language: "Language tag written to metadata.language. Defaults to zh-CN.",
+  limit: "Maximum hits returned by this retrieval request.",
+  metadataSourcePath: "Path written to metadata.sourcePath so the document can be traced in the project.",
+  query: "Natural-language query for this retrieval test.",
+  retrievalProfile: "Profile used for this retrieval request. It controls routes, fusion, deduplication, and context strategy.",
+  returnField: "Extra field requested in retrieval results, sourced from corpus field mapping.",
+  scopeType: "Target request scope. The scope code is filled automatically from the selected type.",
+  sourceCode: "Unique source code for this ingest request. The same code and version support idempotent updates.",
+  sourceText: "Body text for direct text ingest. Document reference ingest uses document URI and format instead.",
+  sourceType: "Source type. It must satisfy the selected ingest profile input contract.",
+  sourceVersion: "Source version, usually v1. It cannot be edited when the ingest profile requires a fixed version.",
+  tokenBudget: "Maximum token budget for the context pack returned to the model.",
 } satisfies Record<string, string>;
 
 const workbenchFilterOperators = ["eq", "in", "gt", "gte", "lt", "lte"] as const;
@@ -160,7 +162,10 @@ function buildDefaultPayloadForm(corpusId: string, profile?: RagIngestProfileRec
     sourceCode,
     sourceType,
     sourceVersion,
-    text: `${corpusId || "RAG"} 的调试台写入示例。`,
+    text: i18n.t("pages:rag.workbench.defaults.sampleText", {
+      corpusId: corpusId || "RAG",
+      defaultValue: "{{corpusId}} workbench ingest sample.",
+    }),
   };
 }
 
@@ -198,7 +203,9 @@ function buildPayloadFromForm(
 }
 
 function readErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "RAG 调试台请求失败。";
+  return error instanceof Error ? error.message : i18n.t("pages:rag.workbench.errors.requestFailed", {
+    defaultValue: "RAG workbench request failed.",
+  });
 }
 
 const workbenchAgentCode = "AGENT_CODEX";
@@ -224,7 +231,7 @@ function buildTargetScope(scopeType: WorkbenchScopeType, userCode: string, works
 }
 
 function formatScore(score: number | undefined) {
-  return Number.isFinite(score) ? score!.toFixed(3) : "暂无";
+  return Number.isFinite(score) ? score!.toFixed(3) : i18n.t("pages:rag.common.none", { defaultValue: "None" });
 }
 
 function parseCommaSeparatedValues(value: string) {
@@ -267,7 +274,10 @@ function parseFilterValue(value: string, valueType: "boolean" | "integer" | "str
   if (valueType === "integer") {
     const parsed = Number.parseInt(trimmed, 10);
     if (!Number.isFinite(parsed)) {
-      throw new Error(`筛选字段 ${field} 必须是整数。`);
+      throw new Error(i18n.t("pages:rag.workbench.errors.integerField", {
+        defaultValue: "Filter field {{field}} must be an integer.",
+        field,
+      }));
     }
     return parsed;
   }
@@ -275,7 +285,10 @@ function parseFilterValue(value: string, valueType: "boolean" | "integer" | "str
     const normalized = trimmed.toLowerCase();
     if (["true", "1", "yes"].includes(normalized)) return true;
     if (["false", "0", "no"].includes(normalized)) return false;
-    throw new Error(`筛选字段 ${field} 必须是 true 或 false。`);
+    throw new Error(i18n.t("pages:rag.workbench.errors.booleanField", {
+      defaultValue: "Filter field {{field}} must be true or false.",
+      field,
+    }));
   }
   return trimmed;
 }
@@ -338,7 +351,10 @@ function buildDomainFields(
     const rawValue = row.value.trim();
     if (!field && !rawValue) return;
     if (!field || !rawValue) {
-      throw new Error(`业务属性 ${index + 1} 必须填写字段和值。`);
+      throw new Error(i18n.t("pages:rag.workbench.errors.businessAttributeRequired", {
+        defaultValue: "Business attribute {{index}} must include both field and value.",
+        index: index + 1,
+      }));
     }
     const valueType = fieldSchema[field]?.type ?? "string";
     domainFields[field] = parseFilterValue(rawValue, valueType, field);
@@ -377,7 +393,7 @@ function treeHitMetadataRows(hit: RagSearchHitApi) {
 }
 
 function formatArtifactKeys(keys: string[] | undefined) {
-  return keys && keys.length > 0 ? keys.join(", ") : "无";
+  return keys && keys.length > 0 ? keys.join(", ") : i18n.t("pages:rag.common.none", { defaultValue: "None" });
 }
 
 function StageResultsList({
@@ -387,6 +403,11 @@ function StageResultsList({
   results?: RagIngestResponseApi["stageResults"];
   title: string;
 }) {
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:rag.workbench.${key}`, { defaultValue, ...options })
+  );
+
   if (!results || results.length === 0) return null;
   const warningCount = results.reduce((count, result) => count + (result.warnings?.length ?? 0), 0);
   const totalDurationMs = results.reduce((duration, result) => duration + (result.durationMs ?? 0), 0);
@@ -404,14 +425,14 @@ function StageResultsList({
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 text-[12px] text-[var(--color-on-surface-variant)]">
-            {results.length} 个阶段 · {totalDurationMs}ms
+            {pageT("stageResults.stageDuration", "{{count}} stages · {{duration}}ms", { count: results.length, duration: totalDurationMs })}
           </span>
           {warningCount > 0 ? (
             <span className="rounded-full border border-[var(--color-warning)]/30 px-2.5 py-1 text-[12px] text-[var(--color-warning)]">
-              {warningCount} 个告警
+              {pageT("stageResults.warningCount", "{{count}} warnings", { count: warningCount })}
             </span>
           ) : null}
-          <span className="text-[12px] text-[var(--color-on-surface-variant)]">展开查看</span>
+          <span className="text-[12px] text-[var(--color-on-surface-variant)]">{pageT("stageResults.expand", "Expand")}</span>
         </div>
       </summary>
       <div className="space-y-3 border-t border-[var(--color-outline-variant)] p-3">
@@ -430,22 +451,22 @@ function StageResultsList({
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">
-                  {formatRagStatusLabel(result.status)} · {result.durationMs ?? 0}ms
+                  {formatRagStatusLabel(result.status, t)} · {result.durationMs ?? 0}ms
                 </span>
               </div>
               <dl className="mt-3 grid gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3 sm:grid-cols-2">
                 <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">输入产物</dt>
+                  <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("stageResults.inputArtifacts", "Input artifacts")}</dt>
                   <dd className="mt-1 break-all font-mono text-[12px]">{formatArtifactKeys(result.inputArtifactKeys)}</dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">输出产物</dt>
+                  <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("stageResults.outputArtifacts", "Output artifacts")}</dt>
                   <dd className="mt-1 break-all font-mono text-[12px]">{formatArtifactKeys(result.outputArtifactKeys)}</dd>
                 </div>
               </dl>
               {warnings.length > 0 ? (
                 <p className="mt-3 text-[12px] text-[var(--color-warning)]">
-                  告警：{warnings.join(", ")}
+                  {pageT("stageResults.warnings", "Warnings: {{warnings}}", { warnings: warnings.join(", ") })}
                 </p>
               ) : null}
             </article>
@@ -482,6 +503,13 @@ export function RagWorkbenchTab({
   onNotice: (notice: string) => void;
   onTraceEnabledChange: (checked: boolean) => void;
 }) {
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:rag.workbench.${key}`, { defaultValue, ...options })
+  );
+  const hintT = (key: keyof typeof workbenchFieldHints) => (
+    pageT(`hints.${key}`, workbenchFieldHints[key])
+  );
   const visibleCorpora = corpora.filter((corpus) => corpus.status !== "Reserved");
   const ingestProfiles = profiles.filter((profile): profile is RagIngestProfileRecord => profile.type === "Ingest");
   const retrievalProfiles = profiles.filter((profile): profile is RagRetrievalProfileRecord => (
@@ -496,7 +524,7 @@ export function RagWorkbenchTab({
   ));
   const [businessAttributeRows, setBusinessAttributeRows] = useState<WorkbenchBusinessAttributeRow[]>([]);
   const [retrievalProfileId, setRetrievalProfileId] = useState(retrievalProfiles[0]?.id ?? "");
-  const [query, setQuery] = useState("RAG 上下文包应该如何遵守 tokenBudget？");
+  const [query, setQuery] = useState(() => pageT("defaults.query", "How should the RAG context pack respect tokenBudget?"));
   const [contextStrategy, setContextStrategy] = useState(retrievalProfiles[0]?.config.contextStrategies[0] ?? "DOC_QA_CONTEXT_PACK");
   const [returnFieldRows, setReturnFieldRows] = useState<WorkbenchReturnFieldRow[]>([]);
   const [filterRows, setFilterRows] = useState<WorkbenchFilterRow[]>([]);
@@ -596,7 +624,7 @@ export function RagWorkbenchTab({
       const rawValue = row.value.trim();
       if (!field && !operator && !rawValue) return;
       if (!field || !operator || !rawValue) {
-        throw new Error(`筛选条件 ${index + 1} 必须填写字段、操作符和值。`);
+        throw new Error(pageT("errors.filterRequired", "Filter {{index}} must include field, operator, and value.", { index: index + 1 }));
       }
 
       const schema = filterFieldSchema[field];
@@ -605,7 +633,7 @@ export function RagWorkbenchTab({
         ? parseCommaSeparatedValues(rawValue).map((item) => parseFilterValue(item, valueType, field))
         : parseFilterValue(rawValue, valueType, field);
       if (operator === "in" && Array.isArray(value) && value.length === 0) {
-        throw new Error(`筛选条件 ${index + 1} 至少需要一个值。`);
+        throw new Error(pageT("errors.filterValueRequired", "Filter {{index}} needs at least one value.", { index: index + 1 }));
       }
       appendFilter(filters, field, { op: operator, value });
     });
@@ -625,19 +653,19 @@ export function RagWorkbenchTab({
     }
     const payload = buildPayloadFromForm(sourcePayloadForm, usesDocumentPayload, domainFields);
     if (!sourcePayloadForm.sourceCode.trim() || !sourcePayloadForm.sourceType.trim() || !sourcePayloadForm.sourceVersion.trim()) {
-      const message = "来源编码、类型和版本不能为空。";
+      const message = pageT("errors.sourceIdentityRequired", "Source code, type, and version are required.");
       setIngestFeedback(message);
       onNotice(message);
       return;
     }
     if (usesDocumentPayload && (!sourcePayloadForm.documentUri.trim() || !sourcePayloadForm.documentFormat.trim())) {
-      const message = "文档地址和格式不能为空。";
+      const message = pageT("errors.documentRequired", "Document URI and format are required.");
       setIngestFeedback(message);
       onNotice(message);
       return;
     }
     if (!usesDocumentPayload && !sourcePayloadForm.text.trim()) {
-      const message = "文本内容不能为空。";
+      const message = pageT("errors.sourceTextRequired", "Source text is required.");
       setIngestFeedback(message);
       onNotice(message);
       return;
@@ -657,7 +685,7 @@ export function RagWorkbenchTab({
         targetScope,
       });
       setIngestResult(result);
-      const message = `${result.sourceCode || corpusId} 写入完成。`;
+      const message = pageT("messages.ingestCompleted", "{{code}} ingest completed.", { code: result.sourceCode || corpusId });
       setIngestFeedback(message);
       onNotice(message);
     } catch (error) {
@@ -703,7 +731,7 @@ export function RagWorkbenchTab({
       });
       setSearchResult(result);
       const hitCount = result.hits?.length ?? 0;
-      const message = `检索返回 ${hitCount} 条命中。`;
+      const message = pageT("messages.searchCompleted", "Retrieval returned {{count}} hits.", { count: hitCount });
       setSearchFeedback(message);
       onNotice(message);
     } catch (error) {
@@ -721,7 +749,7 @@ export function RagWorkbenchTab({
   return (
     <div className="grid gap-5">
       <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-1">
-        <div className="grid gap-1 sm:grid-cols-2" role="tablist" aria-label="调试台模式">
+        <div className="grid gap-1 sm:grid-cols-2" role="tablist" aria-label={pageT("tabs.ariaLabel", "Workbench mode")}>
           {workbenchPanels.map((panel) => {
             const selected = activeWorkbenchPanel === panel.value;
             return (
@@ -739,8 +767,8 @@ export function RagWorkbenchTab({
                 type="button"
                 onClick={() => setActiveWorkbenchPanel(panel.value)}
               >
-                <span className="block font-medium">{panel.label}</span>
-                <span className="mt-1 block text-[13px] text-[var(--color-on-surface-variant)]">{panel.summary}</span>
+                <span className="block font-medium">{pageT(`tabs.${panel.value}.label`, panel.label)}</span>
+                <span className="mt-1 block text-[13px] text-[var(--color-on-surface-variant)]">{pageT(`tabs.${panel.value}.summary`, panel.summary)}</span>
               </button>
             );
           })}
@@ -756,12 +784,12 @@ export function RagWorkbenchTab({
         >
         <SectionTitle
           icon={<Upload size={17} aria-hidden="true" />}
-          title="写入请求"
+          title={pageT("ingest.title", "Ingest request")}
         />
         <div className="mt-4 grid gap-3">
-          <Field label="语料库" hint={workbenchFieldHints.corpus}>
+          <Field label={pageT("fields.corpus", "Corpus")} hint={hintT("corpus")}>
             <SelectInput
-              aria-label="语料库"
+              aria-label={pageT("fields.corpus", "Corpus")}
               value={corpusId}
               onChange={(event) => {
                 setCorpusId(event.target.value);
@@ -774,9 +802,9 @@ export function RagWorkbenchTab({
               ))}
             </SelectInput>
           </Field>
-          <Field label="写入配置" hint={workbenchFieldHints.ingestProfile}>
+          <Field label={pageT("fields.ingestProfile", "Ingest profile")} hint={hintT("ingestProfile")}>
             <SelectInput
-              aria-label="写入配置"
+              aria-label={pageT("fields.ingestProfile", "Ingest profile")}
               value={ingestProfileId}
               onChange={(event) => {
                 setIngestProfileId(event.target.value);
@@ -789,28 +817,28 @@ export function RagWorkbenchTab({
               ))}
             </SelectInput>
           </Field>
-          <Field label="作用域类型" hint={workbenchFieldHints.scopeType}>
+          <Field label={pageT("fields.scopeType", "Scope type")} hint={hintT("scopeType")}>
             <SelectInput
-              aria-label="作用域类型"
+              aria-label={pageT("fields.scopeType", "Scope type")}
               value={targetScopeType}
               onChange={(event) => setTargetScopeType(event.target.value as WorkbenchScopeType)}
             >
               {workbenchScopeOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
+                <option key={option.value} value={option.value}>{pageT(`scope.${option.value}`, option.label)}</option>
               ))}
             </SelectInput>
             <p className="mt-1 text-[12px] text-[var(--color-on-surface-variant)]">
-              作用域编码会自动解析：<span className="font-mono">{targetScope.scopeCode}</span>
+              {pageT("scope.resolvedCode", "Scope code is resolved automatically:")} <span className="font-mono">{targetScope.scopeCode}</span>
             </p>
           </Field>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="来源编码" hint={workbenchFieldHints.sourceCode}>
-              <TextInput aria-label="来源编码" value={sourcePayloadForm.sourceCode} onChange={(event) => updateSourcePayloadForm({ sourceCode: event.target.value })} />
+            <Field label={pageT("fields.sourceCode", "Source code")} hint={hintT("sourceCode")}>
+              <TextInput aria-label={pageT("fields.sourceCode", "Source code")} value={sourcePayloadForm.sourceCode} onChange={(event) => updateSourcePayloadForm({ sourceCode: event.target.value })} />
             </Field>
-            <Field label="来源类型" hint={workbenchFieldHints.sourceType}>
+            <Field label={pageT("fields.sourceType", "Source type")} hint={hintT("sourceType")}>
               {sourceTypeOptions.length > 0 ? (
                 <SelectInput
-                  aria-label="来源类型"
+                  aria-label={pageT("fields.sourceType", "Source type")}
                   value={sourcePayloadForm.sourceType}
                   onChange={(event) => updateSourcePayloadForm({ sourceType: event.target.value })}
                 >
@@ -819,27 +847,27 @@ export function RagWorkbenchTab({
                   ))}
                 </SelectInput>
               ) : (
-                <TextInput aria-label="来源类型" value={sourcePayloadForm.sourceType} onChange={(event) => updateSourcePayloadForm({ sourceType: event.target.value })} />
+                <TextInput aria-label={pageT("fields.sourceType", "Source type")} value={sourcePayloadForm.sourceType} onChange={(event) => updateSourcePayloadForm({ sourceType: event.target.value })} />
               )}
             </Field>
-            <Field label="来源版本" hint={workbenchFieldHints.sourceVersion}>
+            <Field label={pageT("fields.sourceVersion", "Source version")} hint={hintT("sourceVersion")}>
               <TextInput
-                aria-label="来源版本"
+                aria-label={pageT("fields.sourceVersion", "Source version")}
                 disabled={Boolean(requiredSourceVersion)}
                 value={sourcePayloadForm.sourceVersion}
                 onChange={(event) => updateSourcePayloadForm({ sourceVersion: event.target.value })}
               />
             </Field>
-            <Field label="语言" hint={workbenchFieldHints.language}>
-              <TextInput aria-label="语言" value={sourcePayloadForm.language} onChange={(event) => updateSourcePayloadForm({ language: event.target.value })} />
+            <Field label={pageT("fields.language", "Language")} hint={hintT("language")}>
+              <TextInput aria-label={pageT("fields.language", "Language")} value={sourcePayloadForm.language} onChange={(event) => updateSourcePayloadForm({ language: event.target.value })} />
             </Field>
           </div>
-          <Field label="元数据来源路径" hint={workbenchFieldHints.metadataSourcePath}>
-            <TextInput aria-label="元数据来源路径" value={sourcePayloadForm.metadataSourcePath} onChange={(event) => updateSourcePayloadForm({ metadataSourcePath: event.target.value })} />
+          <Field label={pageT("fields.metadataSourcePath", "Metadata source path")} hint={hintT("metadataSourcePath")}>
+            <TextInput aria-label={pageT("fields.metadataSourcePath", "Metadata source path")} value={sourcePayloadForm.metadataSourcePath} onChange={(event) => updateSourcePayloadForm({ metadataSourcePath: event.target.value })} />
           </Field>
           <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">业务属性</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("businessAttributes.title", "Business attributes")}</p>
               <Button
                 disabled={businessFieldOptions.length === 0}
                 size="sm"
@@ -847,30 +875,30 @@ export function RagWorkbenchTab({
                 variant="secondary"
                 onClick={() => setBusinessAttributeRows((current) => [...current, createWorkbenchBusinessAttributeRow(current.length)])}
               >
-                添加业务属性
+                {pageT("businessAttributes.add", "Add business attribute")}
               </Button>
             </div>
             {businessAttributeRows.length > 0 ? (
               <div className="mt-3 grid gap-3">
                 {businessAttributeRows.map((row, index) => (
                   <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" key={row.formId}>
-                    <Field label={`业务属性 ${index + 1} 字段`} hint={workbenchFieldHints.businessField}>
+                    <Field label={pageT("businessAttributes.fieldLabel", "Business attribute {{index}} field", { index: index + 1 })} hint={hintT("businessField")}>
                       <SelectInput
-                        aria-label={`业务属性 ${index + 1} 字段`}
+                        aria-label={pageT("businessAttributes.fieldLabel", "Business attribute {{index}} field", { index: index + 1 })}
                         value={row.field}
                         onChange={(event) => setBusinessAttributeRows((current) => current.map((item) => (
                           item.formId === row.formId ? { ...item, field: event.target.value } : item
                         )))}
                       >
-                        <option value="">选择字段</option>
+                        <option value="">{pageT("fields.selectField", "Select field")}</option>
                         {businessFieldOptions.map((option) => (
                           <option key={option.field} value={option.field}>{option.field}</option>
                         ))}
                       </SelectInput>
                     </Field>
-                    <Field label={`业务属性 ${index + 1} 值`} hint={workbenchFieldHints.businessValue}>
+                    <Field label={pageT("businessAttributes.valueLabel", "Business attribute {{index}} value", { index: index + 1 })} hint={hintT("businessValue")}>
                       <TextInput
-                        aria-label={`业务属性 ${index + 1} 值`}
+                        aria-label={pageT("businessAttributes.valueLabel", "Business attribute {{index}} value", { index: index + 1 })}
                         value={row.value}
                         onChange={(event) => setBusinessAttributeRows((current) => current.map((item) => (
                           item.formId === row.formId ? { ...item, value: event.target.value } : item
@@ -878,14 +906,14 @@ export function RagWorkbenchTab({
                       />
                     </Field>
                     <Button
-                      aria-label={`移除业务属性 ${index + 1}`}
+                      aria-label={pageT("businessAttributes.removeAria", "Remove business attribute {{index}}", { index: index + 1 })}
                       className="self-end"
                       size="sm"
                       type="button"
                       variant="ghost"
                       onClick={() => setBusinessAttributeRows((current) => current.filter((item) => item.formId !== row.formId))}
                     >
-                      移除
+                      {pageT("actions.remove", "Remove")}
                     </Button>
                   </div>
                 ))}
@@ -894,35 +922,35 @@ export function RagWorkbenchTab({
           </div>
           {usesDocumentPayload ? (
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="文档地址" hint={workbenchFieldHints.documentUri}>
-                <TextInput aria-label="文档地址" value={sourcePayloadForm.documentUri} onChange={(event) => updateSourcePayloadForm({ documentUri: event.target.value })} />
+              <Field label={pageT("fields.documentUri", "Document URI")} hint={hintT("documentUri")}>
+                <TextInput aria-label={pageT("fields.documentUri", "Document URI")} value={sourcePayloadForm.documentUri} onChange={(event) => updateSourcePayloadForm({ documentUri: event.target.value })} />
               </Field>
-              <Field label="文档格式" hint={workbenchFieldHints.documentFormat}>
-                <TextInput aria-label="文档格式" value={sourcePayloadForm.documentFormat} onChange={(event) => updateSourcePayloadForm({ documentFormat: event.target.value })} />
+              <Field label={pageT("fields.documentFormat", "Document format")} hint={hintT("documentFormat")}>
+                <TextInput aria-label={pageT("fields.documentFormat", "Document format")} value={sourcePayloadForm.documentFormat} onChange={(event) => updateSourcePayloadForm({ documentFormat: event.target.value })} />
               </Field>
             </div>
           ) : (
-            <Field label="文本内容" hint={workbenchFieldHints.sourceText}>
-              <TextArea aria-label="文本内容" className="min-h-28" value={sourcePayloadForm.text} onChange={(event) => updateSourcePayloadForm({ text: event.target.value })} />
+            <Field label={pageT("fields.sourceText", "Source text")} hint={hintT("sourceText")}>
+              <TextArea aria-label={pageT("fields.sourceText", "Source text")} className="min-h-28" value={sourcePayloadForm.text} onChange={(event) => updateSourcePayloadForm({ text: event.target.value })} />
             </Field>
           )}
           <Button disabled={ingestLoading || !corpusId || !ingestProfileId} onClick={handleIngestSubmit}>
-            {ingestLoading ? "正在提交写入..." : "提交写入"}
+            {ingestLoading ? pageT("actions.submittingIngest", "Submitting ingest...") : pageT("actions.submitIngest", "Submit ingest")}
           </Button>
         </div>
         {ingestResult ? (
           <div className="mt-5 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">写入结果</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("ingest.resultTitle", "Ingest result")}</p>
             <div className="mt-3 grid gap-2 text-sm">
-              <InspectorRow label="状态" value={formatRagStatusLabel(ingestResult.status ?? "unknown")} />
-              <InspectorRow label="来源编码" value={ingestResult.sourceCode ?? sourcePayloadForm.sourceCode} />
-              <InspectorRow label="文本单元" value={String(ingestResult.textUnitCount ?? 0)} />
-              <InspectorRow label="全文索引" value={formatRagStatusLabel(ingestResult.fulltextStatus ?? "not started")} />
-              <InspectorRow label="向量索引" value={formatRagStatusLabel(ingestResult.embeddingStatus ?? "not started")} />
+              <InspectorRow label={pageT("result.status", "Status")} value={formatRagStatusLabel(ingestResult.status ?? "unknown", t)} />
+              <InspectorRow label={pageT("result.sourceCode", "Source code")} value={ingestResult.sourceCode ?? sourcePayloadForm.sourceCode} />
+              <InspectorRow label={pageT("result.textUnits", "Text units")} value={String(ingestResult.textUnitCount ?? 0)} />
+              <InspectorRow label={pageT("result.fulltextIndex", "Fulltext index")} value={formatRagStatusLabel(ingestResult.fulltextStatus ?? "not started", t)} />
+              <InspectorRow label={pageT("result.vectorIndex", "Vector index")} value={formatRagStatusLabel(ingestResult.embeddingStatus ?? "not started", t)} />
             </div>
           </div>
         ) : null}
-        <StageResultsList results={ingestResult?.stageResults} title="写入阶段结果" />
+        <StageResultsList results={ingestResult?.stageResults} title={pageT("stageResults.ingestTitle", "Ingest stage results")} />
         {ingestFeedback ? (
           <p className="mt-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3 text-sm text-[var(--color-on-surface)]">
             {ingestFeedback}
@@ -939,12 +967,12 @@ export function RagWorkbenchTab({
         >
         <SectionTitle
           icon={<Search size={17} aria-hidden="true" />}
-          title="检索测试"
+          title={pageT("retrieval.title", "Retrieval test")}
         />
         <div className="mt-4 grid gap-3">
-          <Field label="检索配置" hint={workbenchFieldHints.retrievalProfile}>
+          <Field label={pageT("fields.retrievalProfile", "Retrieval profile")} hint={hintT("retrievalProfile")}>
             <SelectInput
-              aria-label="检索配置"
+              aria-label={pageT("fields.retrievalProfile", "Retrieval profile")}
               value={retrievalProfileId}
               onChange={(event) => {
                 setRetrievalProfileId(event.target.value);
@@ -958,11 +986,11 @@ export function RagWorkbenchTab({
               ))}
             </SelectInput>
           </Field>
-          <Field label="查询" hint={workbenchFieldHints.query}>
-            <TextArea aria-label="查询" className="min-h-24" value={query} onChange={(event) => setQuery(event.target.value)} />
+          <Field label={pageT("fields.query", "Query")} hint={hintT("query")}>
+            <TextArea aria-label={pageT("fields.query", "Query")} className="min-h-24" value={query} onChange={(event) => setQuery(event.target.value)} />
           </Field>
-          <Field label="上下文策略" hint={workbenchFieldHints.contextStrategy}>
-            <SelectInput aria-label="上下文策略" value={contextStrategy} onChange={(event) => setContextStrategy(event.target.value)}>
+          <Field label={pageT("fields.contextStrategy", "Context strategy")} hint={hintT("contextStrategy")}>
+            <SelectInput aria-label={pageT("fields.contextStrategy", "Context strategy")} value={contextStrategy} onChange={(event) => setContextStrategy(event.target.value)}>
               {contextStrategyOptions.map((strategy) => (
                 <option key={strategy} value={strategy}>{strategy}</option>
               ))}
@@ -970,7 +998,7 @@ export function RagWorkbenchTab({
           </Field>
           <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">查询字段</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("returnFields.title", "Return fields")}</p>
               <Button
                 disabled={returnFieldOptions.length === 0}
                 size="sm"
@@ -978,36 +1006,36 @@ export function RagWorkbenchTab({
                 variant="secondary"
                 onClick={() => setReturnFieldRows((current) => [...current, createWorkbenchReturnFieldRow(current.length)])}
               >
-                添加查询字段
+                {pageT("returnFields.add", "Add return field")}
               </Button>
             </div>
             {returnFieldRows.length > 0 ? (
               <div className="mt-3 grid gap-3">
                 {returnFieldRows.map((row, index) => (
                   <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_auto]" key={row.formId}>
-                    <Field label={`查询字段 ${index + 1}`} hint={workbenchFieldHints.returnField}>
+                    <Field label={pageT("returnFields.label", "Return field {{index}}", { index: index + 1 })} hint={hintT("returnField")}>
                       <SelectInput
-                        aria-label={`查询字段 ${index + 1}`}
+                        aria-label={pageT("returnFields.label", "Return field {{index}}", { index: index + 1 })}
                         value={row.field}
                         onChange={(event) => setReturnFieldRows((current) => current.map((item) => (
                           item.formId === row.formId ? { ...item, field: event.target.value } : item
                         )))}
                       >
-                        <option value="">选择字段</option>
+                        <option value="">{pageT("fields.selectField", "Select field")}</option>
                         {returnFieldOptions.map((option) => (
                           <option key={option.field} value={option.field}>{option.field}</option>
                         ))}
                       </SelectInput>
                     </Field>
                     <Button
-                      aria-label={`移除返回字段 ${index + 1}`}
+                      aria-label={pageT("returnFields.removeAria", "Remove return field {{index}}", { index: index + 1 })}
                       className="self-end"
                       size="sm"
                       type="button"
                       variant="ghost"
                       onClick={() => setReturnFieldRows((current) => current.filter((item) => item.formId !== row.formId))}
                     >
-                      移除
+                      {pageT("actions.remove", "Remove")}
                     </Button>
                   </div>
                 ))}
@@ -1016,14 +1044,14 @@ export function RagWorkbenchTab({
           </div>
           <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">筛选条件</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("filters.title", "Filters")}</p>
               <Button
                 size="sm"
                 type="button"
                 variant="secondary"
                 onClick={() => setFilterRows((current) => [...current, createWorkbenchFilterRow(current.length)])}
               >
-                添加筛选条件
+                {pageT("filters.add", "Add filter")}
               </Button>
             </div>
             {filterRows.length > 0 ? (
@@ -1033,23 +1061,23 @@ export function RagWorkbenchTab({
                   const operators = selectedField?.operators?.length ? selectedField.operators : [...workbenchFilterOperators];
                   return (
                     <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)_auto]" key={row.formId}>
-                      <Field label={`筛选条件 ${index + 1} 字段`} hint={workbenchFieldHints.filterField}>
+                      <Field label={pageT("filters.fieldLabel", "Filter {{index}} field", { index: index + 1 })} hint={hintT("filterField")}>
                         <SelectInput
-                          aria-label={`筛选条件 ${index + 1} 字段`}
+                          aria-label={pageT("filters.fieldLabel", "Filter {{index}} field", { index: index + 1 })}
                           value={row.field}
                           onChange={(event) => setFilterRows((current) => current.map((item) => (
                             item.formId === row.formId ? { ...item, field: event.target.value } : item
                           )))}
                         >
-                          <option value="">选择字段</option>
+                          <option value="">{pageT("fields.selectField", "Select field")}</option>
                           {filterFieldOptions.map((option) => (
                             <option key={option.field} value={option.field}>{option.field}</option>
                           ))}
                         </SelectInput>
                       </Field>
-                      <Field label={`筛选条件 ${index + 1} 操作符`} hint={workbenchFieldHints.filterOperator}>
+                      <Field label={pageT("filters.operatorLabel", "Filter {{index}} operator", { index: index + 1 })} hint={hintT("filterOperator")}>
                         <SelectInput
-                          aria-label={`筛选条件 ${index + 1} 操作符`}
+                          aria-label={pageT("filters.operatorLabel", "Filter {{index}} operator", { index: index + 1 })}
                           value={row.operator}
                           onChange={(event) => setFilterRows((current) => current.map((item) => (
                             item.formId === row.formId ? { ...item, operator: event.target.value } : item
@@ -1060,9 +1088,9 @@ export function RagWorkbenchTab({
                           ))}
                         </SelectInput>
                       </Field>
-                      <Field label={`筛选条件 ${index + 1} 值`} hint={workbenchFieldHints.filterValue}>
+                      <Field label={pageT("filters.valueLabel", "Filter {{index}} value", { index: index + 1 })} hint={hintT("filterValue")}>
                         <TextInput
-                          aria-label={`筛选条件 ${index + 1} 值`}
+                          aria-label={pageT("filters.valueLabel", "Filter {{index}} value", { index: index + 1 })}
                           value={row.value}
                           onChange={(event) => setFilterRows((current) => current.map((item) => (
                             item.formId === row.formId ? { ...item, value: event.target.value } : item
@@ -1070,14 +1098,14 @@ export function RagWorkbenchTab({
                         />
                       </Field>
                       <Button
-                        aria-label={`移除筛选条件 ${index + 1}`}
+                        aria-label={pageT("filters.removeAria", "Remove filter {{index}}", { index: index + 1 })}
                         className="self-end"
                         size="sm"
                         type="button"
                         variant="ghost"
                         onClick={() => setFilterRows((current) => current.filter((item) => item.formId !== row.formId))}
                       >
-                        移除
+                        {pageT("actions.remove", "Remove")}
                       </Button>
                     </div>
                   );
@@ -1086,27 +1114,27 @@ export function RagWorkbenchTab({
             ) : null}
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="返回数量" hint={workbenchFieldHints.limit}>
-              <TextInput aria-label="返回数量" type="number" value={limit} onChange={(event) => setLimit(event.target.value)} />
+            <Field label={pageT("fields.limit", "Limit")} hint={hintT("limit")}>
+              <TextInput aria-label={pageT("fields.limit", "Limit")} type="number" value={limit} onChange={(event) => setLimit(event.target.value)} />
             </Field>
-            <Field label="令牌预算" hint={workbenchFieldHints.tokenBudget}>
-              <TextInput aria-label="令牌预算" type="number" value={tokenBudget} onChange={(event) => setTokenBudget(event.target.value)} />
+            <Field label={pageT("fields.tokenBudget", "Token budget")} hint={hintT("tokenBudget")}>
+              <TextInput aria-label={pageT("fields.tokenBudget", "Token budget")} type="number" value={tokenBudget} onChange={(event) => setTokenBudget(event.target.value)} />
             </Field>
           </div>
-          <ToggleSwitch checked={traceEnabled} label="启用追踪" onCheckedChange={onTraceEnabledChange} />
+          <ToggleSwitch checked={traceEnabled} label={pageT("fields.traceEnabled", "Enable tracing")} onCheckedChange={onTraceEnabledChange} />
           <Button disabled={searchLoading || retrievalProfileDetailLoading || !retrievalProfileId || !query.trim()} onClick={handleSearchSubmit}>
-            {searchLoading ? "正在检索..." : "执行检索"}
+            {searchLoading ? pageT("actions.searching", "Searching...") : pageT("actions.runSearch", "Run retrieval")}
           </Button>
         </div>
         <div className="mt-5 grid gap-3">
-          <PreviewLine title="首条命中" value={searchResult?.hits?.[0]?.title ?? searchResult?.hits?.[0]?.sourceCode ?? "等待中"} />
-          <PreviewLine title="上下文包" value={String(searchResult?.contextPack?.tokenCount ?? 0)} />
-          <PreviewLine title="追踪编码" value={searchResult?.traceCode ?? (traceEnabled ? "开启" : "关闭")} />
+          <PreviewLine title={pageT("preview.firstHit", "First hit")} value={searchResult?.hits?.[0]?.title ?? searchResult?.hits?.[0]?.sourceCode ?? pageT("preview.waiting", "Waiting")} />
+          <PreviewLine title={pageT("preview.contextPack", "Context pack")} value={String(searchResult?.contextPack?.tokenCount ?? 0)} />
+          <PreviewLine title={pageT("preview.traceCode", "Trace code")} value={searchResult?.traceCode ?? (traceEnabled ? pageT("preview.enabled", "Enabled") : pageT("preview.disabled", "Disabled"))} />
         </div>
-        <StageResultsList results={searchResult?.stageResults} title="检索阶段结果" />
+        <StageResultsList results={searchResult?.stageResults} title={pageT("stageResults.retrievalTitle", "Retrieval stage results")} />
         {searchHits.length > 0 ? (
           <div className="mt-5 space-y-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">检索结果</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("results.title", "Retrieval results")}</p>
             {searchHits.map((hit, index) => {
               const returnedFields = selectedReturnFields
                 .map((field) => [field, hit[field]] as const)
@@ -1120,14 +1148,14 @@ export function RagWorkbenchTab({
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-medium text-[var(--color-on-surface)]">
-                        {hit.title ?? hit.sourceCode ?? `命中 ${index + 1}`}
+                        {hit.title ?? hit.sourceCode ?? pageT("results.hitFallback", "Hit {{index}}", { index: index + 1 })}
                       </p>
                       <p className="mt-1 break-all font-mono text-[12px] text-[var(--color-on-surface-variant)]">
                         {[hit.corpusId, hit.sourceCode, hit.sourceVersion].filter(Boolean).join(" · ")}
                       </p>
                     </div>
                     <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">
-                      得分 {formatScore(hit.score)}
+                      {pageT("results.score", "Score {{score}}", { score: formatScore(hit.score) })}
                     </span>
                   </div>
                   {returnedFields.length > 0 ? (
@@ -1162,7 +1190,7 @@ export function RagWorkbenchTab({
         ) : null}
         {contextPackItems.length > 0 ? (
           <div className="mt-5 space-y-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">上下文包条目</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("contextItems.title", "Context pack items")}</p>
             {contextPackItems.map((item, index) => (
               <article
                 className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm"
@@ -1170,10 +1198,10 @@ export function RagWorkbenchTab({
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="break-all font-mono text-[12px] text-[var(--color-on-surface-variant)]">
-                    {item.sourceCode ?? `上下文条目 ${index + 1}`}
+                    {item.sourceCode ?? pageT("contextItems.itemFallback", "Context item {{index}}", { index: index + 1 })}
                   </p>
                   <span className="font-mono text-[12px] text-[var(--color-on-surface-variant)]">
-                    {item.tokens ?? 0} 令牌
+                    {pageT("contextItems.tokens", "{{count}} tokens", { count: item.tokens ?? 0 })}
                   </span>
                 </div>
                 {item.text ? (

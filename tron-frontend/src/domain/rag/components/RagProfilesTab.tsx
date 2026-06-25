@@ -8,6 +8,7 @@ import {
   FolderSync,
   Search,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { SurfaceCard } from "@/shared";
 import { Badge } from "@/shared/ui/Badge";
@@ -26,9 +27,9 @@ import {
   statusTone,
 } from "@/domain/rag/components/RagShared";
 
-const profileTabs: Array<{ label: string; value: RagProfileType }> = [
-  { label: "写入配置", value: "Ingest" },
-  { label: "检索配置", value: "Retrieval" },
+const profileTabs: Array<{ value: RagProfileType }> = [
+  { value: "Ingest" },
+  { value: "Retrieval" },
 ];
 
 const profileTypeStorageKey = "tron.rag.profiles.profileType";
@@ -68,7 +69,11 @@ export function RagProfilesTab({
   profiles: ProfileRecord[];
 }) {
   const navigate = useNavigate();
+  const { t } = useTranslation(["pages"]);
   const [searchParams, setSearchParams] = useSearchParams();
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:rag.profiles.${key}`, { defaultValue, ...options })
+  );
   const requestedProfileType = profileTypeFromValue(searchParams.get("profileType"));
   const [rememberedProfileType, setRememberedProfileType] = useState<RagProfileType>(() => readRememberedProfileType());
   const activeProfileType = requestedProfileType ?? rememberedProfileType;
@@ -79,7 +84,7 @@ export function RagProfilesTab({
   const addPath = activeProfileType === "Ingest"
     ? `/rag/profiles/ingest/new?returnProfileType=${activeProfileTypeSearch}`
     : `/rag/profiles/retrieval/new?returnProfileType=${activeProfileTypeSearch}`;
-  const addLabel = activeProfileType === "Ingest" ? "新增写入配置" : "新增检索配置";
+  const addLabel = activeProfileType === "Ingest" ? pageT("actions.newIngest", "New ingest profile") : pageT("actions.newRetrieval", "New retrieval profile");
   const icon = activeProfileType === "Ingest"
     ? <FolderSync size={17} aria-hidden="true" />
     : <Search size={17} aria-hidden="true" />;
@@ -122,7 +127,7 @@ export function RagProfilesTab({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <SectionTitle
           icon={icon}
-          title="配置档案"
+          title={pageT("title", "Profiles")}
         />
         <Button onClick={openAddProfile}>
           {addLabel}
@@ -147,7 +152,7 @@ export function RagProfilesTab({
                 onClick={() => setActiveProfileType(tab.value)}
               >
                 <span className="flex items-center justify-between gap-3">
-                  <span className="font-medium">{tab.label}</span>
+                  <span className="font-medium">{pageT(`tabs.${tab.value}`, tab.value === "Ingest" ? "Ingest profiles" : "Retrieval profiles")}</span>
                   <span className="rounded-full border border-[var(--color-outline-variant)] px-2 py-0.5 font-mono text-[12px]">
                     {count}
                   </span>
@@ -160,10 +165,10 @@ export function RagProfilesTab({
 
       <div className="mt-5 overflow-x-auto rounded-2xl border border-[var(--color-outline-variant)]">
         <div className="grid min-w-[780px] grid-cols-[minmax(220px,1.1fr)_minmax(180px,0.8fr)_minmax(220px,1fr)_minmax(160px,0.7fr)] gap-4 bg-[var(--color-surface-container-low)] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-          <span>配置</span>
-          <span>语料库</span>
-          <span>{activeProfileType === "Ingest" ? "流水线" : "路由"}</span>
-          <span>{activeProfileType === "Ingest" ? "输入契约" : "检索策略"}</span>
+          <span>{pageT("table.columns.profile", "Profile")}</span>
+          <span>{pageT("table.columns.corpus", "Corpus")}</span>
+          <span>{activeProfileType === "Ingest" ? pageT("table.columns.pipeline", "Pipeline") : pageT("table.columns.routes", "Routes")}</span>
+          <span>{activeProfileType === "Ingest" ? pageT("table.columns.inputContract", "Input contract") : pageT("table.columns.retrievalPolicy", "Retrieval policy")}</span>
         </div>
 
         {visibleProfiles.length > 0 ? visibleProfiles.map((profile) => (
@@ -174,7 +179,7 @@ export function RagProfilesTab({
           />
         )) : (
           <div className="min-w-[780px] px-4 py-8 text-center text-sm text-[var(--color-on-surface-variant)]">
-            暂无{activeProfileType === "Ingest" ? "写入" : "检索"}配置。
+            {activeProfileType === "Ingest" ? pageT("empty.ingest", "No ingest profiles.") : pageT("empty.retrieval", "No retrieval profiles.")}
           </div>
         )}
       </div>
@@ -189,6 +194,11 @@ function ProfileRow({
   onEdit: () => void;
   profile: ProfileRecord;
 }) {
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:rag.profiles.${key}`, { defaultValue, ...options })
+  );
+
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
@@ -198,7 +208,7 @@ function ProfileRow({
 
   return (
     <div
-      aria-label={`编辑 ${profile.id}`}
+      aria-label={pageT("row.editAria", "Edit {{id}}", { id: profile.id })}
       className="grid min-w-[780px] cursor-pointer grid-cols-[minmax(220px,1.1fr)_minmax(180px,0.8fr)_minmax(220px,1fr)_minmax(160px,0.7fr)] gap-4 border-t border-[var(--color-outline-variant)] px-4 py-4 text-sm hover:bg-[var(--color-hover-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-elevated-surface)]"
       role="button"
       tabIndex={0}
@@ -208,7 +218,7 @@ function ProfileRow({
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <p className="truncate font-medium">{profile.id}</p>
-          <Badge tone={statusTone(profile.status)}>{formatRagStatusLabel(profile.status)}</Badge>
+          <Badge tone={statusTone(profile.status)}>{formatRagStatusLabel(profile.status, t)}</Badge>
         </div>
         {profile.description ? (
           <p className="mt-1 line-clamp-2 text-[13px] text-[var(--color-on-surface-variant)]">{profile.description}</p>
@@ -216,10 +226,10 @@ function ProfileRow({
       </div>
 
       <div className="grid content-start gap-2">
-        <Pill>{profile.primaryCorpusId || "未设置主语料库"}</Pill>
+        <Pill>{profile.primaryCorpusId || pageT("row.noPrimaryCorpus", "No primary corpus")}</Pill>
         {profile.type === "Retrieval" && profile.corpusIds.length > 1 ? (
           <span className="text-[12px] text-[var(--color-on-surface-variant)]">
-            {profile.corpusIds.length} 个语料库
+            {pageT("row.corpusCount", "{{count}} corpora", { count: profile.corpusIds.length })}
           </span>
         ) : null}
       </div>
@@ -232,13 +242,17 @@ function ProfileRow({
 }
 
 function IngestProfileSummary({ profile }: { profile: IngestProfileRecord }) {
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:rag.profiles.${key}`, { defaultValue, ...options })
+  );
   const enabledStages = profile.config.dag.nodes;
-  const payloadStrategy = profile.config.stages.preparePayload?.strategyId || profile.strategy || "未设置";
+  const payloadStrategy = profile.config.stages.preparePayload?.strategyId || profile.strategy || pageT("row.notSet", "Not set");
   return (
     <div className="grid content-start gap-2">
       <span className="font-mono text-[12px]">{payloadStrategy}</span>
       <span className="text-[12px] text-[var(--color-on-surface-variant)]">
-        {enabledStages.length} 个阶段 · {profile.config.dag.edges.length} 条边
+        {pageT("row.stageEdgeCount", "{{stages}} stages · {{edges}} edges", { edges: profile.config.dag.edges.length, stages: enabledStages.length })}
       </span>
       <div className="flex flex-wrap gap-1.5">
         {enabledStages.slice(0, 4).map((stage) => <Pill key={stage}>{stage}</Pill>)}
@@ -248,11 +262,15 @@ function IngestProfileSummary({ profile }: { profile: IngestProfileRecord }) {
 }
 
 function RetrievalProfileSummary({ profile }: { profile: RetrievalProfileRecord }) {
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:rag.profiles.${key}`, { defaultValue, ...options })
+  );
   const enabledRoutes = profile.config.routesConfig.filter((route) => route.enabled);
   return (
     <div className="grid content-start gap-2">
       <span className="text-[12px] text-[var(--color-on-surface-variant)]">
-        {enabledRoutes.length} 条已启用路由
+        {pageT("row.enabledRoutes", "{{count}} enabled routes", { count: enabledRoutes.length })}
       </span>
       <div className="flex flex-wrap gap-1.5">
         {enabledRoutes.slice(0, 4).map((route) => (
@@ -264,23 +282,30 @@ function RetrievalProfileSummary({ profile }: { profile: RetrievalProfileRecord 
 }
 
 function IngestContractSummary({ profile }: { profile: IngestProfileRecord }) {
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string) => t(`pages:rag.profiles.${key}`, { defaultValue });
   const sourceTypes = profile.config.sourceInputPolicy.supportedSourceTypes;
   return (
     <div className="grid content-start gap-1.5 text-[13px]">
-      <span>来源版本 {profile.config.requiredSourceVersion || "未设置"}</span>
+      <span>{pageT("row.sourceVersion", "Source version")} {profile.config.requiredSourceVersion || pageT("row.notSet", "Not set")}</span>
       <span className="text-[var(--color-on-surface-variant)]">
-        {sourceTypes.length > 0 ? sourceTypes.join(", ") : "未设置来源类型"}
+        {sourceTypes.length > 0 ? sourceTypes.join(", ") : pageT("row.noSourceTypes", "No source types")}
       </span>
     </div>
   );
 }
 
 function RetrievalPolicySummary({ profile }: { profile: RetrievalProfileRecord }) {
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:rag.profiles.${key}`, { defaultValue, ...options })
+  );
+
   return (
     <div className="grid content-start gap-1.5 text-[13px]">
-      <span>{profile.config.fusionPolicy || "未设置融合策略"}</span>
+      <span>{profile.config.fusionPolicy || pageT("row.noFusionPolicy", "No fusion policy")}</span>
       <span className="text-[var(--color-on-surface-variant)]">
-        {profile.config.contextStrategies.length} 个上下文策略
+        {pageT("row.contextStrategyCount", "{{count}} context strategies", { count: profile.config.contextStrategies.length })}
       </span>
     </div>
   );

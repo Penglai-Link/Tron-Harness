@@ -1,8 +1,10 @@
 import {
   DataTable,
   TablePagination,
+  useLocaleFormatters,
   useTablePagination,
 } from "@/shared";
+import { useTranslation } from "react-i18next";
 import { Badge } from "@/shared/ui/Badge";
 
 import type {
@@ -17,17 +19,21 @@ import {
 } from "@/domain/rag/components/RagShared";
 
 export function SourceDataTable({ pagination, onSelectSource }: { pagination: ReturnType<typeof useTablePagination<SourceRecord>>; onSelectSource: (source: SourceRecord) => void }) {
+  const { t } = useTranslation("pages");
+  const { formatNumber } = useLocaleFormatters();
+  const tableT = (key: string, defaultValue: string) => t(`rag.dataTables.sources.${key}`, { defaultValue });
+
   return (
     <DataTable
-      title="来源"
+      title={tableT("title", "Sources")}
       rows={pagination.visibleItems}
       rowKey={(source) => source.code}
       onRowClick={onSelectSource}
-      pagination={<TablePagination itemLabel="来源" {...pagination.paginationProps} />}
+      pagination={<TablePagination itemLabel={tableT("itemLabel", "sources")} {...pagination.paginationProps} />}
       columns={[
         {
           id: "source",
-          header: "来源",
+          header: tableT("columns.source", "Source"),
           render: (source) => (
             <div>
               <p className="font-medium">{source.sourceType}</p>
@@ -35,66 +41,77 @@ export function SourceDataTable({ pagination, onSelectSource }: { pagination: Re
             </div>
           ),
         },
-        { id: "corpus", header: "语料库", render: (source) => source.corpus },
-        { id: "owner", header: "归属", render: (source) => source.owner },
-        { id: "units", header: "单元数", align: "right", render: (source) => source.textUnits.toLocaleString("zh-CN") },
-        { id: "indexed", header: "索引时间", render: (source) => source.indexedAt },
-        { id: "status", header: "状态", render: (source) => <Badge tone={statusTone(source.status)}>{formatRagStatusLabel(source.status)}</Badge> },
+        { id: "corpus", header: tableT("columns.corpus", "Corpus"), render: (source) => source.corpus },
+        { id: "owner", header: tableT("columns.owner", "Owner"), render: (source) => source.owner },
+        { id: "units", header: tableT("columns.units", "Units"), align: "right", render: (source) => formatNumber(source.textUnits) },
+        { id: "indexed", header: tableT("columns.indexed", "Indexed"), render: (source) => source.indexedAt },
+        { id: "status", header: tableT("columns.status", "Status"), render: (source) => <Badge tone={statusTone(source.status)}>{formatRagStatusLabel(source.status, t)}</Badge> },
       ]}
     />
   );
 }
 
 export function TextUnitDataTable({ pagination }: { pagination: ReturnType<typeof useTablePagination<TextUnitRecord>> }) {
+  const { t } = useTranslation("pages");
+  const { formatNumber } = useLocaleFormatters();
+  const tableT = (key: string, defaultValue: string) => t(`rag.dataTables.textUnits.${key}`, { defaultValue });
+
   return (
     <DataTable
-      title="文本单元"
+      title={tableT("title", "Text units")}
       rows={pagination.visibleItems}
       rowKey={(unit) => unit.id}
-      pagination={<TablePagination itemLabel="文本单元" {...pagination.paginationProps} />}
+      pagination={<TablePagination itemLabel={tableT("itemLabel", "text units")} {...pagination.paginationProps} />}
       columns={[
-        { id: "id", header: "标识", render: (unit) => <span className="font-mono text-[13px]">{unit.id}</span> },
-        { id: "source", header: "来源", render: (unit) => <span className="break-all">{unit.source}</span> },
-        { id: "preview", header: "预览", render: (unit) => <span className="text-[var(--color-on-surface-variant)]">{unit.preview}</span> },
-        { id: "tokens", header: "令牌数", align: "right", render: (unit) => unit.tokens.toLocaleString("zh-CN") },
-        { id: "status", header: "向量状态", render: (unit) => <Badge tone={statusTone(unit.embeddingStatus)}>{formatRagStatusLabel(unit.embeddingStatus)}</Badge> },
+        { id: "id", header: tableT("columns.id", "ID"), render: (unit) => <span className="font-mono text-[13px]">{unit.id}</span> },
+        { id: "source", header: tableT("columns.source", "Source"), render: (unit) => <span className="break-all">{unit.source}</span> },
+        { id: "preview", header: tableT("columns.preview", "Preview"), render: (unit) => <span className="text-[var(--color-on-surface-variant)]">{unit.preview}</span> },
+        { id: "tokens", header: tableT("columns.tokens", "Tokens"), align: "right", render: (unit) => formatNumber(unit.tokens) },
+        { id: "status", header: tableT("columns.vectorStatus", "Vector status"), render: (unit) => <Badge tone={statusTone(unit.embeddingStatus)}>{formatRagStatusLabel(unit.embeddingStatus, t)}</Badge> },
       ]}
     />
   );
 }
 
 export function WarningDataTable({ pagination }: { pagination: ReturnType<typeof useTablePagination<WarningRecord>> }) {
+  const { t } = useTranslation("pages");
+  const tableT = (key: string, defaultValue: string) => t(`rag.dataTables.warnings.${key}`, { defaultValue });
+
   return (
     <DataTable
-      title="告警"
+      title={tableT("title", "Warnings")}
       rows={pagination.visibleItems}
       rowKey={(warning) => `${warning.source}-${warning.stage}-${warning.age}`}
-      pagination={<TablePagination itemLabel="告警" {...pagination.paginationProps} />}
+      pagination={<TablePagination itemLabel={tableT("itemLabel", "warnings")} {...pagination.paginationProps} />}
       columns={[
-        { id: "severity", header: "级别", render: (warning) => <Badge tone={statusTone(warning.severity)}>{formatRagStatusLabel(warning.severity)}</Badge> },
-        { id: "source", header: "来源", render: (warning) => <span className="break-all">{warning.source}</span> },
-        { id: "stage", header: "阶段", render: (warning) => warning.stage },
-        { id: "message", header: "消息", render: (warning) => <span className="text-[var(--color-on-surface-variant)]">{warning.message}</span> },
-        { id: "age", header: "时间", align: "right", render: (warning) => warning.age },
+        { id: "severity", header: tableT("columns.severity", "Severity"), render: (warning) => <Badge tone={statusTone(warning.severity)}>{formatRagStatusLabel(warning.severity, t)}</Badge> },
+        { id: "source", header: tableT("columns.source", "Source"), render: (warning) => <span className="break-all">{warning.source}</span> },
+        { id: "stage", header: tableT("columns.stage", "Stage"), render: (warning) => warning.stage },
+        { id: "message", header: tableT("columns.message", "Message"), render: (warning) => <span className="text-[var(--color-on-surface-variant)]">{warning.message}</span> },
+        { id: "age", header: tableT("columns.age", "Age"), align: "right", render: (warning) => warning.age },
       ]}
     />
   );
 }
 
 export function TraceDataTable({ pagination }: { pagination: ReturnType<typeof useTablePagination<TraceRecord>> }) {
+  const { t } = useTranslation("pages");
+  const { formatNumber } = useLocaleFormatters();
+  const tableT = (key: string, defaultValue: string) => t(`rag.dataTables.traces.${key}`, { defaultValue });
+
   return (
     <DataTable
-      title="检索追踪"
+      title={tableT("title", "Retrieval traces")}
       rows={pagination.visibleItems}
       rowKey={(trace) => trace.id}
-      pagination={<TablePagination itemLabel="追踪记录" {...pagination.paginationProps} />}
+      pagination={<TablePagination itemLabel={tableT("itemLabel", "traces")} {...pagination.paginationProps} />}
       columns={[
-        { id: "id", header: "追踪", render: (trace) => <span className="font-mono text-[13px]">{trace.id}</span> },
-        { id: "query", header: "查询", render: (trace) => trace.query },
-        { id: "profile", header: "配置", render: (trace) => trace.profile },
-        { id: "route", header: "路由", render: (trace) => trace.route },
-        { id: "hits", header: "命中数", align: "right", render: (trace) => trace.hits.toLocaleString("zh-CN") },
-        { id: "tokens", header: "令牌数", align: "right", render: (trace) => trace.tokens.toLocaleString("zh-CN") },
+        { id: "id", header: tableT("columns.id", "Trace"), render: (trace) => <span className="font-mono text-[13px]">{trace.id}</span> },
+        { id: "query", header: tableT("columns.query", "Query"), render: (trace) => trace.query },
+        { id: "profile", header: tableT("columns.profile", "Profile"), render: (trace) => trace.profile },
+        { id: "route", header: tableT("columns.route", "Route"), render: (trace) => trace.route },
+        { id: "hits", header: tableT("columns.hits", "Hits"), align: "right", render: (trace) => formatNumber(trace.hits) },
+        { id: "tokens", header: tableT("columns.tokens", "Tokens"), align: "right", render: (trace) => formatNumber(trace.tokens) },
       ]}
     />
   );

@@ -19,6 +19,7 @@ import {
   formatRagStorageBinding,
   normalizeRagStorageBinding,
 } from "@/domain/rag/model/RagModel";
+import { i18n } from "@/i18n";
 
 export type RagCorpusFormMode = "create" | "edit";
 export type RagEditableStorageSegmentKey = Exclude<RagStorageSegmentKey, "diagnostics">;
@@ -102,6 +103,10 @@ interface RagContractFieldDefinition {
 }
 
 type RagFieldMappingSegment = "source" | "textUnit";
+
+function ragCorpusFormT(key: string, defaultValue: string, options?: Record<string, unknown>) {
+  return String(i18n.t(`pages:rag.corpusForm.model.${key}`, { defaultValue, ...options }));
+}
 
 const baseSourceContractFieldDefinitions: RagContractFieldDefinition[] = [
   { column: "source_code", logicalName: "sourceCode" },
@@ -429,8 +434,8 @@ function createStorageTargetOptionLabel(target: RagStorageTargetFormState, visib
   const physicalTarget = buildStorageTargetBinding(target);
   void visibleIndex;
   return physicalTarget.backend === "GRAPH"
-    ? `${physicalTarget.namespace ?? "未绑定"}/${physicalTarget.nodeLabel ?? "节点"}`
-    : `${physicalTarget.table ?? "未绑定"}`;
+    ? `${physicalTarget.namespace ?? ragCorpusFormT("labels.unbound", "Unbound")}/${physicalTarget.nodeLabel ?? ragCorpusFormT("labels.node", "Node")}`
+    : `${physicalTarget.table ?? ragCorpusFormT("labels.unbound", "Unbound")}`;
 }
 
 export function splitListInput(value: string) {
@@ -572,7 +577,10 @@ export function getGraphCapabilityClosureError(form: RagCorpusFormState) {
   });
 
   if (hasGraphBoundNonDiagnosticsSegment) return undefined;
-  return "启用图能力时，至少需要一个非诊断业务分段绑定到 GRAPH 存储目标。";
+  return ragCorpusFormT(
+    "graphCapabilityRequiresTarget",
+    "Graph capability requires at least one non-diagnostic business segment bound to a GRAPH storage target.",
+  );
 }
 
 export const emptyRagCorpusForm: RagCorpusFormState = {
@@ -742,18 +750,22 @@ function validateStorageTarget(target: RagStorageTargetFormState, label: string)
 
   if (target.backend === "GRAPH") {
     if (!target.namespace.trim()) {
-      errors.namespace = `${label} 的图命名空间不能为空。`;
+      errors.namespace = ragCorpusFormT("storageTarget.namespaceRequired", "{{label}} graph namespace is required.", { label });
     }
     if (!target.nodeLabel.trim()) {
-      errors.nodeLabel = `${label} 的节点标签不能为空。`;
+      errors.nodeLabel = ragCorpusFormT("storageTarget.nodeLabelRequired", "{{label}} node label is required.", { label });
     }
     return errors;
   }
 
   if (!target.table.trim()) {
-    errors.table = `${label} 使用 SQLite 存储时表名不能为空。`;
+    errors.table = ragCorpusFormT("storageTarget.tableRequired", "{{label}} SQLite table name is required.", { label });
   } else if (!validSqliteIdentifier(target.table)) {
-    errors.table = `${label} 的表名必须以 rag_ 开头，并且只能使用小写字母、数字或下划线。`;
+    errors.table = ragCorpusFormT(
+      "storageTarget.tableInvalid",
+      "{{label}} table name must start with rag_ and use only lowercase letters, numbers, or underscores.",
+      { label },
+    );
   }
 
   return errors;
@@ -780,22 +792,25 @@ export function validateRagCorpusForm(
     .some((existingCode) => existingCode === normalizedCode && existingCode !== normalizedCurrentCode);
 
   if (!code) {
-    errors.code = "语料库编码不能为空。";
+    errors.code = ragCorpusFormT("errors.codeRequired", "Corpus code is required.");
   } else if (mode === "create" && duplicateCode) {
-    errors.code = "语料库编码必须唯一。";
+    errors.code = ragCorpusFormT("errors.codeUnique", "Corpus code must be unique.");
   }
 
-  if (!form.name.trim()) errors.name = "语料库名称不能为空。";
+  if (!form.name.trim()) errors.name = ragCorpusFormT("errors.nameRequired", "Corpus name is required.");
 
   if (!form.storageTargets.length) {
-    errors.storageBinding = "至少需要一个存储目标。";
+    errors.storageBinding = ragCorpusFormT("errors.storageTargetRequired", "At least one storage target is required.");
   }
 
   const seenTargetIds = new Set<string>();
   const targetErrors: Record<string, RagStorageTargetFormErrors> = {};
 
   form.storageTargets.forEach((target, index) => {
-    const nextErrors = validateStorageTarget(target, `存储目标 ${index + 1}`);
+    const nextErrors = validateStorageTarget(
+      target,
+      ragCorpusFormT("storageTarget.label", "Storage target {{index}}", { index: index + 1 }),
+    );
     const targetId = target.id.trim();
 
     if (targetId) seenTargetIds.add(targetId);
@@ -810,29 +825,40 @@ export function validateRagCorpusForm(
   }
 
   const segmentLabels: Record<RagEditableStorageSegmentKey, string> = {
-    fulltext: "全文索引",
-    source: "来源",
-    textUnit: "文本单元",
-    tree: "摘要树",
-    vector: "向量",
+    fulltext: ragCorpusFormT("segments.fulltext", "Full-text index"),
+    source: ragCorpusFormT("segments.source", "Source"),
+    textUnit: ragCorpusFormT("segments.textUnit", "Text unit"),
+    tree: ragCorpusFormT("segments.tree", "Summary tree"),
+    vector: ragCorpusFormT("segments.vector", "Vector"),
   };
   const segmentBindingErrors: Partial<Record<RagEditableStorageSegmentKey, string>> = {};
 
   editableStorageSegmentOrder.forEach((segmentKey) => {
     const targetId = form.segmentBindings[segmentKey].trim();
     if (!targetId) {
-      segmentBindingErrors[segmentKey] = `${segmentLabels[segmentKey]}的存储目标不能为空。`;
+      segmentBindingErrors[segmentKey] = ragCorpusFormT(
+        "segmentBinding.targetRequired",
+        "{{segment}} storage target is required.",
+        { segment: segmentLabels[segmentKey] },
+      );
       return;
     }
     if (!seenTargetIds.has(targetId)) {
-      segmentBindingErrors[segmentKey] = `${segmentLabels[segmentKey]}的存储目标必须引用已存在的存储目标。`;
+      segmentBindingErrors[segmentKey] = ragCorpusFormT(
+        "segmentBinding.targetExisting",
+        "{{segment}} storage target must reference an existing storage target.",
+        { segment: segmentLabels[segmentKey] },
+      );
     }
   });
 
   if (Object.keys(segmentBindingErrors).length > 0) {
     errors.segmentBindings = segmentBindingErrors;
     if (!errors.storageBinding) {
-      errors.storageBinding = "每个业务分段都必须绑定到一个存储目标。";
+      errors.storageBinding = ragCorpusFormT(
+        "errors.segmentBindingsRequired",
+        "Every business segment must be bound to a storage target.",
+      );
     }
   }
 
@@ -846,46 +872,66 @@ export function validateRagCorpusForm(
     .filter(([, option]) => option.columns.size > 1)
     .map(([logicalName]) => logicalName);
   if (conflictingLogicalFieldNames.length) {
-    const conflictMessage = "字段映射的逻辑名在来源和文本单元映射中必须解析到同一个物理列。";
+    const conflictMessage = ragCorpusFormT(
+      "errors.fieldMappingConflict",
+      "Field mapping logical names must resolve to the same physical column across source and text unit mappings.",
+    );
     errors.sourceMappings = errors.sourceMappings ?? conflictMessage;
     errors.textUnitMappings = errors.textUnitMappings ?? conflictMessage;
   }
 
   if (!form.filterFields.some((row) => row.name.trim())) {
-    errors.filterFields = "至少需要一个筛选 schema 字段。";
+    errors.filterFields = ragCorpusFormT("errors.filterFieldRequired", "At least one filter schema field is required.");
   } else if (form.filterFields.some((row) => row.name.trim() && !resolveFilterFieldColumn(form, row.name))) {
-    errors.filterFields = "筛选字段名必须引用已映射字段。";
+    errors.filterFields = ragCorpusFormT("errors.filterFieldMapped", "Filter field names must reference mapped fields.");
   } else if (form.filterFields.some((row) => {
     const column = resolveFilterFieldColumn(form, row.name);
     return column ? !selectedFilterColumnExists(form, column) : false;
   })) {
-    errors.filterFields = "筛选字段必须解析到某个已绑定存储目标中的列。";
+    errors.filterFields = ragCorpusFormT(
+      "errors.filterFieldColumnBound",
+      "Filter fields must resolve to columns in a bound storage target.",
+    );
   }
 
   const sourceTarget = resolveStorageTarget(form.storageTargets, form.segmentBindings, "source");
   const missingSourceContractFields = missingContractFieldNames(form.sourceMappings);
   if (missingSourceContractFields.length) {
-    errors.sourceMappings = `来源映射必须保留契约字段：${missingSourceContractFields.join(", ")}。`;
+    errors.sourceMappings = ragCorpusFormT(
+      "errors.sourceContractFields",
+      "Source mappings must retain contract fields: {{fields}}.",
+      { fields: missingSourceContractFields.join(", ") },
+    );
   } else if (duplicateLogicalNames(form.sourceMappings).length) {
-    errors.sourceMappings = "来源映射的逻辑名必须唯一。";
+    errors.sourceMappings = ragCorpusFormT("errors.sourceLogicalNamesUnique", "Source mapping logical names must be unique.");
   } else if (
     sourceTarget
     && form.sourceMappings.some((row) => row.column.trim() && !knownOrUnregisteredTargetHasColumn(sourceTarget, row.column))
   ) {
-    errors.sourceMappings = "来源映射列必须存在于已绑定的来源存储目标中。";
+    errors.sourceMappings = ragCorpusFormT(
+      "errors.sourceColumnsExist",
+      "Source mapping columns must exist in the bound source storage target.",
+    );
   }
 
   const textUnitTarget = resolveStorageTarget(form.storageTargets, form.segmentBindings, "textUnit");
   const missingTextUnitContractFields = missingContractFieldNames(form.textUnitMappings);
   if (missingTextUnitContractFields.length) {
-    errors.textUnitMappings = `文本单元映射必须保留契约字段：${missingTextUnitContractFields.join(", ")}。`;
+    errors.textUnitMappings = ragCorpusFormT(
+      "errors.textUnitContractFields",
+      "Text unit mappings must retain contract fields: {{fields}}.",
+      { fields: missingTextUnitContractFields.join(", ") },
+    );
   } else if (duplicateLogicalNames(form.textUnitMappings).length) {
-    errors.textUnitMappings = "文本单元映射的逻辑名必须唯一。";
+    errors.textUnitMappings = ragCorpusFormT("errors.textUnitLogicalNamesUnique", "Text unit mapping logical names must be unique.");
   } else if (
     textUnitTarget
     && form.textUnitMappings.some((row) => row.column.trim() && !knownOrUnregisteredTargetHasColumn(textUnitTarget, row.column))
   ) {
-    errors.textUnitMappings = "文本单元映射列必须存在于已绑定的文本单元存储目标中。";
+    errors.textUnitMappings = ragCorpusFormT(
+      "errors.textUnitColumnsExist",
+      "Text unit mapping columns must exist in the bound text unit storage target.",
+    );
   }
 
   return errors;
@@ -948,7 +994,7 @@ export function buildRagCorpusConfigFromForm(form: RagCorpusFormState): RagCorpu
       vector: form.vectorEnabled,
     },
     corpusId: form.code.trim(),
-    description: form.description.trim() || "浏览器本地模拟语料库记录。",
+    description: form.description.trim() || ragCorpusFormT("mock.description", "Browser-local mock corpus record."),
     displayName: form.name.trim(),
     fieldMapping,
     filterSchema: filterSchemaFromRows(form.filterFields, (logicalName) => resolveFilterFieldColumn(form, logicalName)),
@@ -978,12 +1024,12 @@ export function buildCorpusRecordFromForm(form: RagCorpusFormState, existing?: C
     config,
     description: config.description,
     filters: Object.keys(config.filterSchema.fields),
-    fulltextHealth: existing?.fulltextHealth ?? "健康",
+    fulltextHealth: existing?.fulltextHealth ?? ragCorpusFormT("mock.healthy", "Healthy"),
     ingestProfile: existing?.ingestProfile ?? form.ingestProfile.trim(),
-    lastIndexed: existing?.lastIndexed ?? "浏览器本地",
+    lastIndexed: existing?.lastIndexed ?? ragCorpusFormT("mock.browserLocal", "Browser local"),
     name: config.displayName,
     retrievalProfile: existing?.retrievalProfile ?? form.retrievalProfile.trim(),
-    scope: existing?.scope ?? "工作区",
+    scope: existing?.scope ?? ragCorpusFormT("mock.workspace", "Workspace"),
     sources: existing?.sources ?? 0,
     status: form.reservedEnabled ? "Reserved" : (existing?.status === "Indexing" ? "Indexing" : "Active"),
     storageBinding: formatRagStorageBinding(config.storageBinding),

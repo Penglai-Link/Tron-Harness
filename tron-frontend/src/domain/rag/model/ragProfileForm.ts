@@ -11,6 +11,7 @@ import type {
   RagRetrievalRouteType,
   RetrievalProfileRecord,
 } from "@/domain/rag/model/RagModel";
+import { i18n } from "@/i18n";
 
 const defaultIngestStageOrder: RagIngestStageId[] = [
   "validateSource",
@@ -56,6 +57,10 @@ const ingestStageTypesById: Record<RagIngestStageId, string> = {
 const ingestStageIdsByType = Object.fromEntries(
   Object.entries(ingestStageTypesById).map(([stageId, stageType]) => [stageType, stageId]),
 ) as Record<string, RagIngestStageId>;
+
+function ragProfileFormT(key: string, defaultValue: string, options?: Record<string, unknown>) {
+  return String(i18n.t(`pages:rag.profileForm.model.${key}`, { defaultValue, ...options }));
+}
 
 export interface RagIngestProfileFormState {
   description: string;
@@ -811,61 +816,71 @@ export function validateIngestProfileForm(
   const errors: RagIngestProfileFormErrors = {};
   const normalizedId = form.id.trim();
   if (!normalizedId) {
-    errors.id = "配置标识不能为空。";
+    errors.id = ragProfileFormT("errors.idRequired", "Profile ID is required.");
   } else if (existingIds.some((existingId) => existingId === normalizedId && existingId !== currentProfileId)) {
-    errors.id = "配置标识必须唯一。";
+    errors.id = ragProfileFormT("errors.idUnique", "Profile ID must be unique.");
   }
 
   if (!form.primaryCorpusId.trim()) {
-    errors.primaryCorpusId = "主语料库不能为空。";
+    errors.primaryCorpusId = ragProfileFormT("errors.primaryCorpusRequired", "Primary corpus is required.");
   }
 
   if (form.status !== "Ready") {
-    errors.status = "当前 RAG 运行时只允许保存就绪状态的配置。";
+    errors.status = ragProfileFormT("errors.readyStatusOnly", "The current RAG runtime only allows saving Ready profiles.");
   }
 
   const enabledStages = form.pipelineStages.filter((stage) => stage.enabled);
   if (enabledStages.length === 0) {
-    errors.pipeline = "至少需要启用一个流水线阶段。";
+    errors.pipeline = ragProfileFormT("errors.pipelineStageRequired", "At least one pipeline stage must be enabled.");
   } else if (pipelineCatalog?.stages.length) {
     const enabledStageIds = new Set(enabledStages.map((stage) => stage.id));
     const missingRequiredStages = requiredIngestStageIds(pipelineCatalog).filter((stageId) => !enabledStageIds.has(stageId));
     if (missingRequiredStages.length > 0) {
-      errors.pipeline = `必需阶段必须保持启用：${missingRequiredStages.join(", ")}。`;
+      errors.pipeline = ragProfileFormT(
+        "errors.requiredStagesEnabled",
+        "Required stages must stay enabled: {{stages}}.",
+        { stages: missingRequiredStages.join(", ") },
+      );
     }
   } else {
     const enabledStageIds = new Set(enabledStages.map((stage) => stage.id));
     if (!enabledStageIds.has("preparePayload") || !enabledStageIds.has("persistSource")) {
-      errors.pipeline = "preparePayload 和 persistSource 必须同时启用。";
+      errors.pipeline = ragProfileFormT(
+        "errors.preparePersistTogether",
+        "preparePayload and persistSource must be enabled together.",
+      );
     } else if (!enabledStageIds.has("splitText") || !enabledStageIds.has("fulltextIndex") || !enabledStageIds.has("vectorIndex")) {
-      errors.pipeline = "persistSource 需要 splitText、fulltextIndex 和 vectorIndex。";
+      errors.pipeline = ragProfileFormT(
+        "errors.persistSourceDependencies",
+        "persistSource requires splitText, fulltextIndex, and vectorIndex.",
+      );
     } else if (enabledStageIds.has("resolveSource") && !enabledStageIds.has("validateSource")) {
-      errors.pipeline = "resolveSource 需要 validateSource。";
+      errors.pipeline = ragProfileFormT("errors.resolveSourceDependency", "resolveSource requires validateSource.");
     } else if (enabledStageIds.has("parseDocument") && !enabledStageIds.has("resolveSource")) {
-      errors.pipeline = "parseDocument 需要 resolveSource。";
+      errors.pipeline = ragProfileFormT("errors.parseDocumentDependency", "parseDocument requires resolveSource.");
     } else if (enabledStageIds.has("extractTree") && !enabledStageIds.has("splitText")) {
-      errors.pipeline = "extractTree 需要 splitText。";
+      errors.pipeline = ragProfileFormT("errors.extractTreeDependency", "extractTree requires splitText.");
     } else if (enabledStageIds.has("summarizeTree") && !enabledStageIds.has("extractTree")) {
-      errors.pipeline = "summarizeTree 需要 extractTree。";
+      errors.pipeline = ragProfileFormT("errors.summarizeTreeDependency", "summarizeTree requires extractTree.");
     } else if (enabledStageIds.has("treeFulltextIndex") && !enabledStageIds.has("summarizeTree")) {
-      errors.pipeline = "treeFulltextIndex 需要 summarizeTree。";
+      errors.pipeline = ragProfileFormT("errors.treeFulltextDependency", "treeFulltextIndex requires summarizeTree.");
     } else if (enabledStageIds.has("treeVectorIndex") && !enabledStageIds.has("summarizeTree")) {
-      errors.pipeline = "treeVectorIndex 需要 summarizeTree。";
+      errors.pipeline = ragProfileFormT("errors.treeVectorDependency", "treeVectorIndex requires summarizeTree.");
     } else if (enabledStageIds.has("persistTree") && !enabledStageIds.has("extractTree")) {
-      errors.pipeline = "persistTree 需要 extractTree。";
+      errors.pipeline = ragProfileFormT("errors.persistTreeDependency", "persistTree requires extractTree.");
     }
   }
 
   const stageRows: NonNullable<RagIngestProfileFormErrors["stageRows"]> = {};
   enabledStages.forEach((stage) => {
     if (!stage.strategyId.trim()) {
-      stageRows[stage.id] = { strategyId: "策略标识不能为空。" };
+      stageRows[stage.id] = { strategyId: ragProfileFormT("errors.strategyRequired", "Strategy ID is required.") };
       return;
     }
 
     const allowedStrategies = allowedStageStrategies?.[stage.id];
     if (allowedStrategies && !allowedStrategies.includes(stage.strategyId.trim())) {
-      stageRows[stage.id] = { strategyId: "请选择可用的阶段策略。" };
+      stageRows[stage.id] = { strategyId: ragProfileFormT("errors.availableStageStrategy", "Select an available stage strategy.") };
     }
   });
   if (Object.keys(stageRows).length > 0) {
@@ -875,12 +890,12 @@ export function validateIngestProfileForm(
   if (enabledStages.some((stage) => stage.id === "resolveSource")) {
     const maxBytes = parseOptionalInteger(form.resolveSourceMaxBytes);
     if (trimOrUndefined(form.resolveSourceMaxBytes) && (maxBytes === undefined || maxBytes <= 0)) {
-      errors.resolveSourceMaxBytes = "最大字节数必须是正整数。";
+      errors.resolveSourceMaxBytes = ragProfileFormT("errors.maxBytesPositive", "Maximum bytes must be a positive integer.");
     }
   }
 
   if (enabledStages.some((stage) => stage.id === "parseDocument") && !trimOrUndefined(form.parseDocumentFormat)) {
-    errors.parseDocumentFormat = "文档格式不能为空。";
+    errors.parseDocumentFormat = ragProfileFormT("errors.documentFormatRequired", "Document format is required.");
   }
 
   if (enabledStages.some((stage) => stage.id === "splitText")) {
@@ -891,21 +906,21 @@ export function validateIngestProfileForm(
     const effectiveSplitterType = splitterTypeForStrategy(splitTextStage?.strategyId ?? "", form.splitTextType);
 
     if (!trimOrUndefined(effectiveSplitterType)) {
-      errors.splitTextType = "切分器类型不能为空。";
+      errors.splitTextType = ragProfileFormT("errors.splitterTypeRequired", "Splitter type is required.");
     }
     if (maxTokens === undefined || maxTokens <= 0) {
-      errors.splitTextMaxTokens = "最大令牌数必须是正整数。";
+      errors.splitTextMaxTokens = ragProfileFormT("errors.maxTokensPositive", "Maximum tokens must be a positive integer.");
     }
     if (overlapTokens === undefined || overlapTokens < 0) {
-      errors.splitTextOverlapTokens = "重叠令牌数必须大于等于 0。";
+      errors.splitTextOverlapTokens = ragProfileFormT("errors.overlapTokensNonNegative", "Overlap tokens must be greater than or equal to 0.");
     }
     if (effectiveSplitterType.trim() === "markdownHeading" && (headingDepth === undefined || headingDepth < 1 || headingDepth > 6)) {
-      errors.splitTextHeadingDepth = "标题深度必须在 1 到 6 之间。";
+      errors.splitTextHeadingDepth = ragProfileFormT("errors.headingDepthRange", "Heading depth must be between 1 and 6.");
     }
   }
 
   if (splitCommaSeparatedTokens(form.supportedSourceTypesText).length === 0) {
-    errors.supportedSourceTypesText = "支持的来源类型不能为空。";
+    errors.supportedSourceTypesText = ragProfileFormT("errors.sourceTypesRequired", "Supported source types are required.");
   }
 
   return errors;
@@ -938,21 +953,21 @@ export function validateRetrievalProfileForm(
   const errors: RagRetrievalProfileFormErrors = {};
   const normalizedId = form.id.trim();
   if (!normalizedId) {
-    errors.id = "配置标识不能为空。";
+    errors.id = ragProfileFormT("errors.idRequired", "Profile ID is required.");
   } else if (existingIds.some((existingId) => existingId === normalizedId && existingId !== currentProfileId)) {
-    errors.id = "配置标识必须唯一。";
+    errors.id = ragProfileFormT("errors.idUnique", "Profile ID must be unique.");
   }
 
   if (!form.primaryCorpusId.trim()) {
-    errors.primaryCorpusId = "主语料库不能为空。";
+    errors.primaryCorpusId = ragProfileFormT("errors.primaryCorpusRequired", "Primary corpus is required.");
   }
 
   if (form.status !== "Ready") {
-    errors.status = "当前 RAG 运行时只允许保存就绪状态的配置。";
+    errors.status = ragProfileFormT("errors.readyStatusOnly", "The current RAG runtime only allows saving Ready profiles.");
   }
 
   if (form.contextStrategies.length === 0) {
-    errors.contextStrategies = "至少需要启用一个上下文策略。";
+    errors.contextStrategies = ragProfileFormT("errors.contextStrategyRequired", "At least one context strategy must be enabled.");
   }
 
   const corporaByCode = new Set(corpora.map((corpus) => corpus.code));
@@ -962,17 +977,17 @@ export function validateRetrievalProfileForm(
   form.routes.forEach((route) => {
     const rowError: NonNullable<RagRetrievalProfileFormErrors["routeRows"]>[string] = {};
     if (!route.corpusId.trim()) {
-      rowError.corpusId = "路由语料库不能为空。";
+      rowError.corpusId = ragProfileFormT("errors.routeCorpusRequired", "Route corpus is required.");
     } else if (!corporaByCode.has(route.corpusId.trim())) {
-      rowError.corpusId = "路由语料库必须匹配已存在的语料库。";
+      rowError.corpusId = ragProfileFormT("errors.routeCorpusExisting", "Route corpus must match an existing corpus.");
     }
 
     if (!route.strategyId.trim()) {
-      rowError.strategyId = "策略标识不能为空。";
+      rowError.strategyId = ragProfileFormT("errors.strategyRequired", "Strategy ID is required.");
     } else {
       const routeOptions = allowedRouteStrategies?.[route.formId];
       if (routeOptions && !routeOptions.includes(route.strategyId.trim())) {
-        rowError.strategyId = "请选择可用的路由策略。";
+        rowError.strategyId = ragProfileFormT("errors.availableRouteStrategy", "Select an available route strategy.");
       }
     }
 
@@ -982,11 +997,14 @@ export function validateRetrievalProfileForm(
   });
 
   if (enabledRoutes.length === 0) {
-    errors.routes = "至少需要启用一条路由。";
+    errors.routes = ragProfileFormT("errors.routeRequired", "At least one route must be enabled.");
   }
 
   if (form.primaryCorpusId.trim() && !enabledRoutes.some((route) => route.corpusId.trim() === form.primaryCorpusId.trim())) {
-    errors.routes = errors.routes ?? "主语料库必须出现在至少一条已启用路由中。";
+    errors.routes = errors.routes ?? ragProfileFormT(
+      "errors.primaryCorpusInRoutes",
+      "Primary corpus must appear in at least one enabled route.",
+    );
   }
 
   if (Object.keys(routeRows).length > 0) {
@@ -994,7 +1012,10 @@ export function validateRetrievalProfileForm(
   }
 
   if (form.graphExpansionPolicy.trim() && !enabledRoutes.some((route) => inferRetrievalRouteType(route.strategyId) === "GRAPH")) {
-    errors.graphExpansionPolicy = "图扩展需要至少启用一个图策略。";
+    errors.graphExpansionPolicy = ragProfileFormT(
+      "errors.graphExpansionRequiresGraph",
+      "Graph expansion requires at least one enabled graph strategy.",
+    );
   }
 
   const availableFields = new Set(listRetrievalFilterFieldOptions(corpora, form.routes));
@@ -1002,17 +1023,20 @@ export function validateRetrievalProfileForm(
   form.filters.forEach((filter) => {
     const rowError: NonNullable<RagRetrievalProfileFormErrors["filterRows"]>[string] = {};
     if (!filter.field.trim()) {
-      rowError.field = "筛选字段不能为空。";
+      rowError.field = ragProfileFormT("errors.filterFieldRequired", "Filter field is required.");
     } else if (!availableFields.has(filter.field.trim())) {
-      rowError.field = "筛选字段必须属于已选择路由语料库之一。";
+      rowError.field = ragProfileFormT(
+        "errors.filterFieldInRoutes",
+        "Filter field must belong to one of the selected route corpora.",
+      );
     }
 
     if (!filter.operator.trim()) {
-      rowError.operator = "筛选操作符不能为空。";
+      rowError.operator = ragProfileFormT("errors.filterOperatorRequired", "Filter operator is required.");
     }
 
     if (!filter.value.trim()) {
-      rowError.value = "筛选值不能为空。";
+      rowError.value = ragProfileFormT("errors.filterValueRequired", "Filter value is required.");
     }
 
     if (Object.keys(rowError).length > 0) {
@@ -1022,7 +1046,10 @@ export function validateRetrievalProfileForm(
 
   if (Object.keys(filterRows).length > 0) {
     errors.filterRows = filterRows;
-    errors.filters = "每条筛选条件都必须解析到字段、操作符和值。";
+    errors.filters = ragProfileFormT(
+      "errors.filtersComplete",
+      "Each filter condition must resolve to a field, operator, and value.",
+    );
   }
 
   return errors;

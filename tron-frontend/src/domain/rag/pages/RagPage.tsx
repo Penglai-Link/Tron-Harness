@@ -7,6 +7,7 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
+import { useTranslation } from "react-i18next";
 
 import {
   PageHeader,
@@ -39,6 +40,7 @@ import {
 export function RagPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { t } = useTranslation("pages");
   const { session } = useAuthSession();
   const workspaceSpaces = useWorkspaceSpaces();
   const { corpora: corpusRecords } = useRagCorpora();
@@ -52,6 +54,13 @@ export function RagPage() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [traceEnabled, setTraceEnabled] = useState(true);
   const [notice, setNotice] = useState("");
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`rag.${key}`, { defaultValue, ...options })
+  );
+  const translatedRagTabs = useMemo(() => ragTabs.map((tab) => ({
+    ...tab,
+    label: pageT(`tabs.${tab.value}`, tab.label),
+  })), [t]);
 
   const activeWorkspaceCode = workspaceSpaces.selectedSecondarySpace?.workspaceCode
     ?? workspaceSpaces.selectedPrimarySpace?.workspaceCode
@@ -114,15 +123,15 @@ export function RagPage() {
   const warningPagination = useTablePagination(filteredWarnings, 10);
   const tracePagination = useTablePagination(filteredTraces, 10);
 
-  useConsoleShellConfig({ searchPlaceholder: "搜索知识库语料、配置档案和来源..." });
+  useConsoleShellConfig({ searchPlaceholder: pageT("search.placeholder", "Search RAG corpora, profiles, and sources...") });
 
   return (
     <>
-      <PageHeader title="知识检索管理" />
+      <PageHeader title={pageT("title", "RAG Management")} />
 
       <div className="mb-5 flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <SegmentedTabs
-          items={ragTabs}
+          items={translatedRagTabs}
           value={activeTab}
           onValueChange={(value) => {
             setActiveTab(value as RagTab);
@@ -133,7 +142,9 @@ export function RagPage() {
               nextParams.set("tab", value);
             }
             setSearchParams(nextParams, { replace: true });
-            setNotice(`知识检索标签已切换到 ${ragTabs.find((tab) => tab.value === value)?.label ?? value}。`);
+            setNotice(pageT("messages.tabChanged", "RAG tab switched to {{label}}.", {
+              label: translatedRagTabs.find((tab) => tab.value === value)?.label ?? value,
+            }));
           }}
         />
       </div>
@@ -178,7 +189,7 @@ export function RagPage() {
           onDataViewChange={setDataView}
           onQueryChange={setQuery}
           onSelectSource={(source) => {
-            setNotice(`已选择来源：${source.code}。`);
+            setNotice(pageT("messages.sourceSelected", "Source selected: {{code}}.", { code: source.code }));
           }}
         />
       ) : null}

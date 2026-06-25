@@ -3,6 +3,7 @@ import {
   RefreshCcw,
   Settings2,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import {
   Field,
@@ -19,61 +20,72 @@ import {
 } from "@/domain/rag/components/RagShared";
 
 export function RagDiagnosticsTab({ onNotice }: { onNotice: (notice: string) => void }) {
+  const { t } = useTranslation("pages");
+  const pageT = (key: string, defaultValue: string) => t(`rag.diagnostics.${key}`, { defaultValue });
+
   return (
     <div className="grid gap-5 xl:grid-cols-3">
       <SurfaceCard>
         <SectionTitle
           icon={<Settings2 size={17} aria-hidden="true" />}
-          title="调试配置"
+          title={pageT("config.title", "Debug profile")}
         />
         <div className="mt-4 grid gap-3">
-          <Field label="配置标识">
+          <Field label={pageT("config.profileId", "Profile ID")}>
             <SelectInput defaultValue="project-doc-related-v1">
-              <option value="project-doc-related-v1">项目文档相关性配置</option>
-              <option value="memory-related-v1">记忆相关性配置</option>
-              <option value="skill-related-v1">技能相关性配置</option>
+              <option value="project-doc-related-v1">{pageT("config.options.projectDoc", "Project document relevance profile")}</option>
+              <option value="memory-related-v1">{pageT("config.options.memory", "Memory relevance profile")}</option>
+              <option value="skill-related-v1">{pageT("config.options.skill", "Skill relevance profile")}</option>
             </SelectInput>
           </Field>
-          <Button variant="secondary" onClick={() => onNotice("配置调试响应预览已刷新。")}>
-            加载配置
+          <Button variant="secondary" onClick={() => onNotice(pageT("messages.configLoaded", "Profile debug preview refreshed."))}>
+            {pageT("config.load", "Load profile")}
           </Button>
         </div>
-        <DiagnosticPreview rows={[["路由", "全文、向量"], ["策略", "文档问答上下文包"], ["告警", "2"]]} />
+        <DiagnosticPreview rows={[
+          [pageT("preview.route", "Route"), pageT("preview.fulltextVector", "Fulltext, vector")],
+          [pageT("preview.strategy", "Strategy"), pageT("preview.docQaPack", "Document QA context pack")],
+          [pageT("preview.warnings", "Warnings"), "2"],
+        ]} />
       </SurfaceCard>
 
       <SurfaceCard>
         <SectionTitle
           icon={<FileArchive size={17} aria-hidden="true" />}
-          title="调试来源"
+          title={pageT("source.title", "Debug source")}
         />
         <div className="mt-4 grid gap-3">
-          <Field label="来源编码">
+          <Field label={pageT("source.sourceCode", "Source code")}>
             <TextInput defaultValue="docs/features/rag-search-context-pack" />
           </Field>
-          <Button variant="secondary" onClick={() => onNotice("来源调试响应预览已刷新。")}>
-            加载来源
+          <Button variant="secondary" onClick={() => onNotice(pageT("messages.sourceLoaded", "Source debug preview refreshed."))}>
+            {pageT("source.load", "Load source")}
           </Button>
         </div>
-        <DiagnosticPreview rows={[["状态", "活跃"], ["文本单元", "348"], ["上次索引", "8 分钟前"]]} />
+        <DiagnosticPreview rows={[
+          [pageT("preview.status", "Status"), pageT("preview.active", "Active")],
+          [pageT("preview.textUnits", "Text units"), "348"],
+          [pageT("preview.lastIndexed", "Last indexed"), pageT("preview.eightMinutesAgo", "8 minutes ago")],
+        ]} />
       </SurfaceCard>
 
       <SurfaceCard>
         <SectionTitle
           icon={<RefreshCcw size={17} aria-hidden="true" />}
-          title="重试索引"
+          title={pageT("retry.title", "Retry indexing")}
         />
         <div className="mt-4 grid gap-3">
-          <Field label="阶段">
+          <Field label={pageT("retry.stage", "Stage")}>
             <SelectInput defaultValue="vectorIndex">
-              <option value="fulltextIndex">全文索引</option>
-              <option value="vectorIndex">向量索引</option>
+              <option value="fulltextIndex">{pageT("retry.options.fulltextIndex", "Fulltext index")}</option>
+              <option value="vectorIndex">{pageT("retry.options.vectorIndex", "Vector index")}</option>
             </SelectInput>
           </Field>
-          <Field label="原因">
-            <TextArea className="min-h-24" defaultValue="配置校验通过后，补齐缺失的向量索引。" />
+          <Field label={pageT("retry.reason", "Reason")}>
+            <TextArea className="min-h-24" defaultValue={pageT("retry.defaultReason", "Backfill missing vector indexes after profile validation passes.")} />
           </Field>
-          <Button onClick={() => onNotice("索引重试请求已加入队列。")}>
-            加入重试队列
+          <Button onClick={() => onNotice(pageT("messages.retryQueued", "Index retry request queued."))}>
+            {pageT("retry.queue", "Queue retry")}
           </Button>
         </div>
       </SurfaceCard>
