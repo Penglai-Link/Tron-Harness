@@ -1010,7 +1010,7 @@
       borderRadius: "50%",
       background: "#9b9b9b",
       color: "#ffffff",
-      cursor: "pointer",
+      cursor: "not-allowed",
       fontFamily: "inherit",
       transition: "background 120ms ease, transform 120ms ease",
     });
@@ -1020,16 +1020,38 @@
       "mix-blend-mode": "normal",
     });
 
+    const updateConfirmButtonState = () => {
+      const hasContent = Boolean(input.value.trim());
+      confirmButton.disabled = !hasContent;
+      confirmButton.setAttribute("aria-disabled", String(!hasContent));
+      confirmButton.style.background = hasContent ? "#111111" : "#9b9b9b";
+      confirmButton.style.cursor = hasContent ? "pointer" : "not-allowed";
+      confirmButton.style.pointerEvents = hasContent ? "auto" : "none";
+    };
+
     confirmButton.addEventListener("pointerenter", () => {
+      if (confirmButton.disabled) {
+        return;
+      }
       confirmButton.style.setProperty("background", "#7f7f7f", "important");
     });
     confirmButton.addEventListener("pointerleave", () => {
-      confirmButton.style.setProperty("background", "#9b9b9b", "important");
+      confirmButton.style.setProperty(
+        "background",
+        confirmButton.disabled ? "#9b9b9b" : "#111111",
+        "important",
+      );
     });
     confirmButton.addEventListener("pointerdown", () => {
+      if (confirmButton.disabled) {
+        return;
+      }
       confirmButton.style.transform = "scale(0.96)";
     });
     confirmButton.addEventListener("pointerup", () => {
+      if (confirmButton.disabled) {
+        return;
+      }
       confirmButton.style.transform = "scale(1)";
     });
 
@@ -1544,21 +1566,42 @@
       setAdvancedVisible(advancedVisible);
     });
 
-    const submit = async () => {
+    const submit = async (options = {}) => {
+      if (!input.value.trim()) {
+        return;
+      }
+
       const payload = getElementPayload(element, input.value.trim(), readBasicInfo());
+      payload.submitMode = options.submitMode === "compose" ? "compose" : "send";
       safePost("tron:node-inspected", payload);
+
+      if (options.exitInspector) {
+        safePost("tron:inspection-exited", { reason: payload.submitMode }, { force: true });
+        injectionEnabled = false;
+        applyInspectorState();
+        return;
+      }
+
       clearSelection();
     };
 
     confirmButton.addEventListener("click", () => {
-      void submit();
+      if (confirmButton.disabled) {
+        return;
+      }
+      void submit({ exitInspector: true, submitMode: "send" });
     });
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        void submit();
+        if (event.metaKey) {
+          void submit({ submitMode: "compose" });
+          return;
+        }
+        void submit({ exitInspector: true, submitMode: "send" });
       }
     });
+    input.addEventListener("input", updateConfirmButtonState);
 
     topRow.append(toggleButton, input, confirmButton);
     panel.append(topRow, advancedBody);
@@ -1572,6 +1615,7 @@
       "background": "#ffffff",
       "opacity": "1",
     });
+    updateConfirmButtonState();
     applyPanelPosition(false);
     setTimeout(() => input.focus(), 0);
   };

@@ -48,6 +48,7 @@ import {
   useDismissibleLayer,
   useToast,
   PageView,
+  type TargetPageFrameInspectionResult,
 } from "@/shared";
 import { cn } from "@/shared/lib/utils";
 import {
@@ -247,6 +248,19 @@ function parseChatSessionSourceTab(value: string | null | undefined): ChatSessio
 function writeStoredChatSessionSourceTab(sourceTab: ChatSessionSourceTab) {
   if (typeof window === "undefined") return;
   window.sessionStorage.setItem(chatSessionSourceTabStorageKey, sourceTab);
+}
+
+function readInspectionString(dom: Record<string, unknown>, key: string) {
+  const value = dom[key];
+  return typeof value === "string" ? value : "";
+}
+
+function inspectionSubmitMode(result: TargetPageFrameInspectionResult) {
+  return readInspectionString(result.dom, "submitMode") === "compose" ? "compose" : "send";
+}
+
+function inspectionMessageContent(result: TargetPageFrameInspectionResult) {
+  return result.remark.trim() || readInspectionString(result.dom, "remark").trim();
 }
 
 function sourceTabFromValues(
@@ -3598,6 +3612,11 @@ export function ChatManagementPage() {
           <PageView
             url="https://www.baidu.com"
             onInspectionConfirm={(result) => {
+              if (inspectionSubmitMode(result) === "send") {
+                void handleSend(inspectionMessageContent(result));
+                return;
+              }
+
               setInspectionAttachments((current) => [
                 ...current,
                 createInspectionAttachment(result),
@@ -3618,6 +3637,7 @@ export function ChatManagementPage() {
     goalActionSessionCode,
     goalStatus,
     hasActiveSession,
+    handleSend,
     latestCompaction,
     latestCompactionState.error,
     latestCompactionState.loading,
@@ -3822,10 +3842,10 @@ export function ChatManagementPage() {
     });
   }
 
-  async function handleSend() {
+  async function handleSend(contentOverride?: string) {
     if (sending) return;
     if (!activeSession) return;
-    const content = composer.trim();
+    const content = (contentOverride ?? composer).trim();
     if (!content) {
       toast.warning("Message content is required", { title: "Nothing to send" });
       return;
@@ -3880,7 +3900,9 @@ export function ChatManagementPage() {
     };
     setSending(true);
     setRunningSessionCode(sendingSessionCode);
-    setComposer("");
+    if (contentOverride === undefined) {
+      setComposer("");
+    }
     if (activeSessionCodeRef.current === sendingSessionCode) {
       setVisibleMessages((current) => [
         ...current,
