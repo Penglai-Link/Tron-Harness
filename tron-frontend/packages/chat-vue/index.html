@@ -10,13 +10,16 @@
     <button style="position: absolute">切换主题</button>
     <script src="./test/index.ts" type="module"></script>
     <script>
-      // 切换主题
+      document.documentElement.dataset.theme = "light";
+      document.documentElement.style.colorScheme = "light";
+
       document.querySelector("button").addEventListener("click", () => {
-        const currentTheme =
-          document.documentElement.getAttribute("data-theme");
+        const currentTheme = document.documentElement.dataset.theme;
         const newTheme =
           currentTheme === "matrix-dark" ? "light" : "matrix-dark";
-        document.documentElement.setAttribute("data-theme", newTheme);
+        document.documentElement.dataset.theme = newTheme;
+        document.documentElement.style.colorScheme =
+          newTheme === "light" ? "light" : "dark";
       });
     </script>
   </body>

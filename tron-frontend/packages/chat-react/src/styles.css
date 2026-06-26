@@ -378,21 +378,7 @@
   font-size: 14px;
   line-height: 1.7;
   white-space: pre-wrap;
-}
-
-.tron-chat__markdown :where(p, ul, ol, blockquote, pre) {
-  margin: 0 0 10px;
-}
-
-.tron-chat__markdown
-  :where(
-    p:last-child,
-    ul:last-child,
-    ol:last-child,
-    blockquote:last-child,
-    pre:last-child
-  ) {
-  margin-bottom: 0;
+  word-break: break-all;
 }
 
 .tron-chat__rail {

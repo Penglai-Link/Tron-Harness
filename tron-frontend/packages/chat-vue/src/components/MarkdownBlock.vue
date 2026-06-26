@@ -1,16 +1,28 @@
 <script setup lang="ts">
-import { renderMarkdownHtml } from "../utils";
+import { computed } from "vue";
+import "github-markdown-css";
+import MarkdownIt from "markdown-it";
 
-const props = withDefaults(defineProps<{
-  content?: string;
-}>(), {
-  content: "",
+// 初始化 markdown-it，并配置代码高亮
+const md = new MarkdownIt({
+  html: true,
+  linkify: true,
+  typographer: true,
 });
+
+const props = withDefaults(
+  defineProps<{
+    content?: string;
+  }>(),
+  {
+    content: "",
+  },
+);
+
+const compiledMarkdown = computed(() => md.render(props.content));
 </script>
 
 <template>
-  <div
-    class="tron-chat__markdown tron-chat__message-body"
-    v-html="renderMarkdownHtml(props.content)"
-  />
+  <div class="markdown-body" v-html="compiledMarkdown" />
 </template>
+<style scoped></style>

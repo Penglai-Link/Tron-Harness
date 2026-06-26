@@ -46,6 +46,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import "github-markdown-css";
 
 function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
@@ -79,8 +80,8 @@ async function copyPlainText(value: string) {
 
 function MarkdownBlock({ content }: { content: string }) {
   return (
-    <div className="tron-chat__markdown tron-chat__message-body">
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+    <div className="markdown-body">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} >
         {content || "Waiting for assistant output..."}
       </ReactMarkdown>
     </div>
