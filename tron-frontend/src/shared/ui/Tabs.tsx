@@ -45,7 +45,7 @@ interface InspectorPanelProps {
 
 export function InspectorPanel({ children, title }: InspectorPanelProps) {
   return (
-    <section className="space-y-4">
+    <section className="space-y-4 m-4">
       <div>
         <h2 className="text-xl font-semibold">{title}</h2>
       </div>
