@@ -183,6 +183,9 @@ export function TronShell({
   const dataSource = getServiceDataSource("admin");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
+
+
+
   const [sidebarTooltip, setSidebarTooltip] = useState<{ label: string; top: number } | null>(null);
   const [topbarToolsMenuOpen, setTopbarToolsMenuOpen] = useState(false);
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
@@ -200,7 +203,16 @@ export function TronShell({
   const topbarToolsMenuContainerRef = useRef<HTMLDivElement | null>(null);
   const [expandedWorkspaceCodes, setExpandedWorkspaceCodes] = useState<string[]>([]);
 
-  const { panelRef, panelResize } = usePanel()
+  const {
+    panelRef,
+    rightDragglePanelOpen,
+    changeDragglePane,
+    panelResize,
+    bindRightPanelHandleRef,
+    handleRightPanelPointerDown,
+    handleRightPanelPointerMove,
+    handleRightPanelPointerEnd,
+  } = usePanel()
 
   const visibleNavigation = useMemo(
     () => tronNavigation.filter((section) => {
@@ -759,19 +771,34 @@ export function TronShell({
                   ) : null}
                 </div>
                 {hasRightPanel ? (
-                  <Button
-                    className="lg:hidden"
-                    size="icon"
-                    type="button"
-                    variant="ghost"
-                    aria-controls="tron-mobile-right-sidebar"
-                    aria-expanded={rightDrawerOpen}
-                    aria-label={rightDrawerOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
-                    data-testid="tron-mobile-right-sidebar-toggle"
-                    onClick={rightDrawerOpen ? closeRightDrawer : openRightDrawer}
-                  >
-                    {rightDrawerOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
-                  </Button>
+                  <>
+                    <Button
+                      className="lg:hidden"
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                      aria-controls="tron-mobile-right-sidebar"
+                      aria-expanded={rightDrawerOpen}
+                      aria-label={rightDrawerOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
+                      data-testid="tron-mobile-right-sidebar-toggle"
+                      onClick={rightDrawerOpen ? closeRightDrawer : openRightDrawer}
+                    >
+                      {rightDrawerOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
+                    </Button>
+                    <Button
+                      className="hidden lg:flex"
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                      aria-controls="tron-mobile-right-sidebar"
+                      aria-expanded={rightDragglePanelOpen}
+                      aria-label={rightDragglePanelOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
+                      data-testid="tron-mobile-right-sidebar-toggle"
+                      onClick={changeDragglePane}
+                    >
+                      {rightDragglePanelOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
+                    </Button>
+                  </>
                 ) : null}
               </div>
             </div>
@@ -939,20 +966,24 @@ export function TronShell({
                 <ResizablePanel defaultSize="100%">
                   <main className={cn("relative z-0 min-w-0 overflow-x-hidden px-6 py-6 h-[calc(100vh-3.5rem)] overflow-y-auto", contentClassName)}>{children}</main>
                 </ResizablePanel>
-                {
-                  hasRightPanel && <>
-                    <ResizableHandle withHandle className="hidden lg:flex" />
-                    <ResizablePanel panelRef={panelRef} id="resize-panel" collapsible={true} defaultSize="0%" maxSize={700} onResize={panelResize}>
-                      <aside
-                        className="relative z-10 hidden h-[calc(100vh-3.5rem)] overflow-y-auto bg-[var(--color-elevated-surface)] lg:block"
-                        data-testid="tron-right-sidebar"
-                      >
-                        {rightPanel}
-                      </aside>
-                    </ResizablePanel>
-                  </>
-                }
-
+                <ResizableHandle
+                  elementRef={bindRightPanelHandleRef}
+                  withHandle
+                  disabled={!rightDragglePanelOpen}
+                  className={cn("hidden lg:flex", !rightDragglePanelOpen && "pointer-events-none opacity-0")}
+                  onPointerDown={handleRightPanelPointerDown}
+                  onPointerMove={handleRightPanelPointerMove}
+                  onPointerUp={handleRightPanelPointerEnd}
+                  onPointerCancel={handleRightPanelPointerEnd}
+                />
+                <ResizablePanel panelRef={panelRef} id="resize-panel" collapsible={true} collapsedSize={0} defaultSize="0%" minSize={300} maxSize={700} onResize={panelResize}>
+                  <aside
+                    className="relative z-10 hidden h-[calc(100vh-3.5rem)] overflow-y-auto bg-[var(--color-elevated-surface)] lg:block"
+                    data-testid="tron-right-sidebar"
+                  >
+                    {rightPanel}
+                  </aside>
+                </ResizablePanel>
               </ResizablePanelGroup>
             </div>
           </section>
