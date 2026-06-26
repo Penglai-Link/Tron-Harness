@@ -46,7 +46,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import "github-markdown-css";
+import "github-markdown-css/github-markdown.css";
 
 function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");

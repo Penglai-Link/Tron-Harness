@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import "github-markdown-css";
+import "github-markdown-css/github-markdown.css";
 import MarkdownIt from "markdown-it";
 
 // 初始化 markdown-it，并配置代码高亮
