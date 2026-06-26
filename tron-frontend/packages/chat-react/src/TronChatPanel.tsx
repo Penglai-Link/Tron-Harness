@@ -847,26 +847,26 @@ export function TronChatPanel({
                         onEditMessage={onEditMessage}
                       />
                       {showAgui &&
-                      message.messageCode ===
+                        message.messageCode ===
                         presentation.waitingForModelAnchorMessageCode ? (
                         <WaitingRail />
                       ) : null}
                       {showAgui
                         ? (
-                            presentation.workRailsByMessageCode.get(
-                              message.messageCode,
-                            ) ?? []
-                          ).map((run) => (
-                            <AguiRunWorkRail
-                              debugEvents={(
-                                presentation.debugEventsByRunCode.get(
-                                  run.runCode,
-                                ) ?? []
-                              ).map(describeDebugEvent)}
-                              events={run.events as ChatAguiStreamEvent[]}
-                              key={run.runCode}
-                            />
-                          ))
+                          presentation.workRailsByMessageCode.get(
+                            message.messageCode,
+                          ) ?? []
+                        ).map((run) => (
+                          <AguiRunWorkRail
+                            debugEvents={(
+                              presentation.debugEventsByRunCode.get(
+                                run.runCode,
+                              ) ?? []
+                            ).map(describeDebugEvent)}
+                            events={run.events as ChatAguiStreamEvent[]}
+                            key={run.runCode}
+                          />
+                        ))
                         : null}
                     </Fragment>
                   ))
