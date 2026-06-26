@@ -113,6 +113,7 @@ impl ChatService {
                 system_model_id: system_model_id.clone(),
                 limits: None,
                 tools: tools.clone(),
+                attachments: Vec::new(),
                 transcript_input_kind: Some("CONTINUATION".into()),
                 transcript_input_metadata: Some(json!({
                     "goalCode": decision.goal_code,
@@ -137,6 +138,7 @@ impl ChatService {
                 channel,
                 "Assistant",
                 &run.final_output,
+                Vec::new(),
                 run.token_usage,
             )?;
             let updated_at = current_timestamp();

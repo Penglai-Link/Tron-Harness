@@ -12,6 +12,9 @@ use crate::{
 
 pub fn chat_error_response(error: ChatError) -> Response {
     let (status, code, message) = match error {
+        ChatError::AttachmentInvalid(message) => {
+            (StatusCode::BAD_REQUEST, "CHAT_ATTACHMENT_INVALID", message)
+        }
         ChatError::MessageRequired => (
             StatusCode::BAD_REQUEST,
             "CHAT_MESSAGE_REQUIRED",

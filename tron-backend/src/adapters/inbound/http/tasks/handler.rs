@@ -137,6 +137,7 @@ pub async fn execute_task(
         system_model_id: task.model_code.clone(),
         limits: None,
         tools: Vec::new(),
+        attachments: Vec::new(),
     };
     let runtime = match resolve_chat_agent_runtime(&state, &session, &request) {
         Ok(runtime) => runtime,

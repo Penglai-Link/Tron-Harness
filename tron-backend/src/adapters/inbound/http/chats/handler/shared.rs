@@ -78,6 +78,7 @@ impl ChatStreamCompletion {
 
 pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
     match error {
+        ChatSendError::Chat(ChatError::AttachmentInvalid(_)) => "CHAT_ATTACHMENT_INVALID",
         ChatSendError::Chat(ChatError::MessageRequired) => "CHAT_MESSAGE_REQUIRED",
         ChatSendError::Chat(ChatError::SessionNotFound) => "CHAT_SESSION_NOT_FOUND",
         ChatSendError::Chat(ChatError::SessionTitleRequired) => "CHAT_SESSION_TITLE_REQUIRED",
@@ -90,6 +91,7 @@ pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
 
 pub(crate) fn chat_send_error_message(error: ChatSendError) -> String {
     match error {
+        ChatSendError::Chat(ChatError::AttachmentInvalid(message)) => message,
         ChatSendError::Chat(ChatError::MessageRequired) => "message content is required".into(),
         ChatSendError::Chat(ChatError::SessionNotFound) => "chat session was not found".into(),
         ChatSendError::Chat(ChatError::SessionTitleRequired) => "session title is required".into(),

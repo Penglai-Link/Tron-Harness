@@ -457,6 +457,7 @@ fn map_send_request(
         system_model_id: request.system_model_id,
         limits: request.limits,
         tools: request.tools,
+        attachments: request.attachments,
     }
 }
 

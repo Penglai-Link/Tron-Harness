@@ -220,6 +220,8 @@ impl ShortTermMemoryService {
         let tool_schema_token_estimate = estimate_tool_schema_tokens(&context.tools);
         let mut full_prepared = assemble_context(
             &memory.prompt_prefix,
+            memory.current_input_message.as_ref(),
+            Some(&context.run_code),
             checkpoint.clone(),
             family_context.clone(),
             &todos,
@@ -287,6 +289,8 @@ impl ShortTermMemoryService {
                 let full_estimated_tokens = full_prepared.estimated_tokens;
                 let mut tail_prepared = assemble_context(
                     &memory.prompt_prefix,
+                    memory.current_input_message.as_ref(),
+                    Some(&context.run_code),
                     checkpoint,
                     family_context,
                     &todos,

@@ -29,7 +29,11 @@ interface AguiProtocolEvent {
   data: ChatAguiStreamEvent;
 }
 
-export function useChatMessageListBySession(sessionCode: string, refreshKey = 0) {
+interface ChatMessageListQueryOptions {
+  suppressErrorToast?: boolean;
+}
+
+export function useChatMessageListBySession(sessionCode: string, refreshKey = 0, options: ChatMessageListQueryOptions = {}) {
   return useServiceQuery<ChatMessage[]>({
     apiInitialData: () => [],
     domain: "chat",
@@ -39,6 +43,7 @@ export function useChatMessageListBySession(sessionCode: string, refreshKey = 0)
     deps: [sessionCode],
     params: { sessionCode },
     refreshKey,
+    suppressErrorToast: options.suppressErrorToast,
   });
 }
 

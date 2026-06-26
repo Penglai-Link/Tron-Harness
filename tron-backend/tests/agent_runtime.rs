@@ -637,6 +637,7 @@ fn auto_compaction_fixture(
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -758,6 +759,7 @@ async fn react_agent_recovers_context_overflow_with_checkpoint_retry() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -879,6 +881,7 @@ async fn react_agent_auto_compaction_calls_model_and_pins_current_input() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -1182,6 +1185,7 @@ async fn react_agent_persists_failed_tool_observation_in_short_term_memory() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -1546,6 +1550,7 @@ async fn react_agent_externalizes_parallel_tool_outputs_with_unique_sequences() 
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -2124,6 +2129,7 @@ async fn react_agent_records_stm_tool_failed_for_missing_and_unauthorized_tools(
             input_kind: "USER_PROMPT".into(),
             input_metadata: None,
             prompt_prefix: vec![AgentMessage::system("system seed")],
+            current_input_message: None,
             agent_code: Some("main-agent".into()),
             todo_enabled: false,
         });
@@ -2302,6 +2308,7 @@ async fn react_agent_marks_short_term_memory_run_failed_when_prepare_persistence
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: Vec::new(),
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });

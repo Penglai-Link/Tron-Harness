@@ -1,12 +1,14 @@
 use std::{
     env, fs,
     path::PathBuf,
+    sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use tron_backend::{application::short_term_memory::ShortTermMemoryConfig, config::AppConfig};
 
 const APPLICATION_VARIABLE_CRYPTO_KEY_BASE64: &str = "sbxNdQm4XiwQyfXNEtjZCQ==";
+static TEMP_CONFIG_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[test]
 fn application_yaml_uses_home_storage_defaults() {
@@ -326,5 +328,9 @@ fn temp_config_path() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("system time should be after epoch")
         .as_nanos();
-    env::temp_dir().join(format!("tron-config-{suffix}.yaml"))
+    let counter = TEMP_CONFIG_COUNTER.fetch_add(1, Ordering::Relaxed);
+    env::temp_dir().join(format!(
+        "tron-config-{}-{suffix}-{counter}.yaml",
+        std::process::id()
+    ))
 }

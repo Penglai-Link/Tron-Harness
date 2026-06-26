@@ -136,6 +136,7 @@ pub(super) fn transcript_part_from_agent_part(
         AgentMessagePart::Reasoning { .. }
         | AgentMessagePart::ToolResult { .. }
         | AgentMessagePart::Context { .. }
+        | AgentMessagePart::Image { .. }
         | AgentMessagePart::CompactionCheckpoint { .. } => None,
     }
 }

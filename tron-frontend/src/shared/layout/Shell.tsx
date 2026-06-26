@@ -133,6 +133,7 @@ export function useOpenRightSidebar() {
 
   return useCallback(() => {
     setRightSidebarCollapsed(false);
+    window.dispatchEvent(new Event("tron:open-right-sidebar"));
   }, [setRightSidebarCollapsed]);
 }
 
@@ -204,6 +205,7 @@ export function TronShell({
   const [expandedWorkspaceCodes, setExpandedWorkspaceCodes] = useState<string[]>([]);
 
   const {
+    expandPanel,
     panelRef,
     rightDragglePanelOpen,
     changeDragglePane,
@@ -398,6 +400,14 @@ export function TronShell({
       setRightDrawerOpen(false);
     }
   }, [hasRightPanel]);
+
+  useEffect(() => {
+    if (!hasRightPanel || rightSidebarCollapsed) {
+      return;
+    }
+
+    window.requestAnimationFrame(expandPanel);
+  }, [expandPanel, hasRightPanel, rightPanel, rightSidebarCollapsed]);
 
   useEffect(() => {
     if (!mobileSidebarOpen && !rightDrawerOpen) {
@@ -966,24 +976,28 @@ export function TronShell({
                 <ResizablePanel defaultSize="100%">
                   <main className={cn("relative z-0 min-w-0 overflow-x-hidden px-6 py-6 h-[calc(100vh-3.5rem)] overflow-y-auto", contentClassName)}>{children}</main>
                 </ResizablePanel>
-                <ResizableHandle
-                  elementRef={bindRightPanelHandleRef}
-                  withHandle
-                  disabled={!rightDragglePanelOpen}
-                  className={cn("hidden lg:flex", !rightDragglePanelOpen && "pointer-events-none opacity-0")}
-                  onPointerDown={handleRightPanelPointerDown}
-                  onPointerMove={handleRightPanelPointerMove}
-                  onPointerUp={handleRightPanelPointerEnd}
-                  onPointerCancel={handleRightPanelPointerEnd}
-                />
-                <ResizablePanel panelRef={panelRef} id="resize-panel" collapsible={true} collapsedSize={0} defaultSize="0%" minSize={400} maxSize="80%" onResize={panelResize}>
-                  <aside
-                    className="relative z-10 hidden h-[calc(100vh-3.5rem)] overflow-y-auto bg-[var(--color-elevated-surface)] lg:block"
-                    data-testid="tron-right-sidebar"
-                  >
-                    {rightPanel}
-                  </aside>
-                </ResizablePanel>
+                {hasRightPanel ? (
+                  <>
+                    <ResizableHandle
+                      elementRef={bindRightPanelHandleRef}
+                      withHandle
+                      disabled={!rightDragglePanelOpen}
+                      className={cn("hidden lg:flex", !rightDragglePanelOpen && "pointer-events-none opacity-0")}
+                      onPointerDown={handleRightPanelPointerDown}
+                      onPointerMove={handleRightPanelPointerMove}
+                      onPointerUp={handleRightPanelPointerEnd}
+                      onPointerCancel={handleRightPanelPointerEnd}
+                    />
+                    <ResizablePanel panelRef={panelRef} id="resize-panel" collapsible={true} collapsedSize={0} defaultSize="0%" minSize={300} maxSize={700} onResize={panelResize}>
+                      <aside
+                        className="relative z-10 hidden h-[calc(100vh-3.5rem)] overflow-y-auto bg-[var(--color-elevated-surface)] lg:block"
+                        data-testid="tron-right-sidebar"
+                      >
+                        {rightPanel}
+                      </aside>
+                    </ResizablePanel>
+                  </>
+                ) : null}
               </ResizablePanelGroup>
             </div>
           </section>

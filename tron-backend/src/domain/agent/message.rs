@@ -40,6 +40,10 @@ pub enum AgentMessagePart {
         #[serde(skip_serializing_if = "Option::is_none")]
         metadata: Option<Value>,
     },
+    Image {
+        mime_type: String,
+        data: String,
+    },
     CompactionCheckpoint {
         summary: String,
         recent: String,
@@ -193,6 +197,12 @@ impl AgentMessage {
         })
     }
 
+    pub fn has_image_parts(&self) -> bool {
+        self.parts
+            .iter()
+            .any(|part| matches!(part, AgentMessagePart::Image { .. }))
+    }
+
     fn text(role: impl Into<String>, content: impl Into<String>) -> Self {
         Self::new(
             role,
@@ -209,7 +219,10 @@ impl AgentMessagePart {
             Self::Text { text } | Self::ReasoningSummary { text } | Self::Context { text, .. } => {
                 Some(text.clone())
             }
-            Self::Reasoning { .. } | Self::ToolCall { .. } | Self::ToolResult { .. } => None,
+            Self::Reasoning { .. }
+            | Self::ToolCall { .. }
+            | Self::ToolResult { .. }
+            | Self::Image { .. } => None,
             Self::CompactionCheckpoint {
                 summary, recent, ..
             } => Some(render_compaction_checkpoint(summary, recent)),
@@ -219,6 +232,7 @@ impl AgentMessagePart {
     pub fn render_output_text(&self) -> Option<String> {
         match self {
             Self::Text { text } => Some(text.clone()),
+            Self::Image { .. } => None,
             _ => None,
         }
     }
@@ -228,7 +242,7 @@ impl AgentMessagePart {
             Self::Text { text } | Self::ReasoningSummary { text } | Self::Context { text, .. } => {
                 Some(text.clone())
             }
-            Self::Reasoning { .. } => None,
+            Self::Reasoning { .. } | Self::Image { .. } => None,
             Self::ToolCall {
                 tool_name, input, ..
             } => Some(format!("tool_call:{tool_name}\nargs:\n{input}")),

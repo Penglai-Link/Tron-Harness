@@ -14,6 +14,15 @@ export function usePanel() {
 
     const location = useLocation();
 
+    const expandPanel = useCallback(() => {
+        const panelElement = document.getElementById("resize-panel");
+        const groupWidth = panelElement?.parentElement?.getBoundingClientRect().width || window.innerWidth;
+        const targetPixels = Math.min(680, Math.max(520, groupWidth * 0.42));
+
+        panelRef.current?.expand()
+        panelRef.current?.resize(`${targetPixels}px`)
+    }, []);
+
     useEffect(() => {
         panelRef.current?.collapse()
         setRightDragglePanelOpen(false)
@@ -21,6 +30,15 @@ export function usePanel() {
         rightPanelCollapseRequestedRef.current = false
         rightPanelHandleRef.current = null
     }, [location]);
+
+    useEffect(() => {
+        const handleOpenRightSidebar = () => {
+            window.requestAnimationFrame(expandPanel)
+        };
+
+        window.addEventListener("tron:open-right-sidebar", handleOpenRightSidebar);
+        return () => window.removeEventListener("tron:open-right-sidebar", handleOpenRightSidebar);
+    }, [expandPanel]);
 
     const panelResize = useCallback((panelSize: PanelSize) => {
         if (panelRef.current?.isCollapsed()) {
@@ -101,6 +119,7 @@ export function usePanel() {
     }
 
     return {
+        expandPanel,
         panelRef,
         rightDragglePanelOpen,
         setRightDragglePanelOpen,

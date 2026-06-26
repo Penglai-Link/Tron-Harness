@@ -145,74 +145,79 @@ export function AutomationExecutionsPage() {
     ? executionPageRecords.find((item) => item.executionCode === selectedExecutionCode) ?? null
     : null;
   const selectedSessionCode = selectedExecution?.sessionCode ?? "";
-  const transcriptMessages = useChatMessageListBySession(selectedSessionCode);
+  const transcriptMessages = useChatMessageListBySession(selectedSessionCode, 0, { suppressErrorToast: true });
 
   const rightPanel = useMemo(() => {
     if (!selectedExecution) return undefined;
 
     return (
-      <InspectorPanel title="Session transcript">
-        <div className="space-y-4">
-          <div className="space-y-3">
-            <DetailField label="Execution" value={selectedExecution.executionCode} />
-            <DetailField label="Session" value={selectedExecution.sessionCode ?? pt("No linked session")} />
-            <DetailField label="Status" value={<Badge tone={getAutomationExecutionStatusTone(selectedExecution.status)}>{selectedExecution.status}</Badge>} />
-            <DetailField label="Started" value={formatTimestamp(selectedExecution.startedAt)} />
-          </div>
-          {selectedSessionCode ? (
-            <>
-              <div className="flex items-center justify-between gap-2 border-t border-[var(--color-outline-variant)] pt-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                  Conversation
-                </p>
-                <Button size="sm" type="button" variant="ghost" onClick={() => navigate(chatSessionDetailHref(selectedSessionCode))}>
-                  <ExternalLink size={14} aria-hidden="true" />
-                  {pt("Open session")}
-                </Button>
-              </div>
-              <div className="max-h-[calc(100vh-19rem)] space-y-3 overflow-y-auto pr-1">
-                {transcriptMessages.length ? transcriptMessages.map((message) => (
-                  <article
-                    className={cn(
-                      "rounded-xl border p-3",
-                      message.role === "ASSISTANT"
-                        ? "border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)]"
-                        : "border-[var(--color-primary)]/30 bg-[var(--color-primary-container)]/25",
-                    )}
-                    key={message.messageCode}
-                  >
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-[var(--color-on-surface)]">
-                        {chatRoleLabel(message.role)}
-                      </span>
-                      <span className="truncate text-[11px] text-[var(--color-on-surface-variant)]" title={formatTimestamp(message.createdAt)}>
-                        {formatTimestamp(message.createdAt)}
-                      </span>
-                    </div>
-                    <MarkdownContent
-                      ariaLabel={`${chatRoleLabel(message.role)} message`}
-                      className="max-w-none text-sm leading-5"
-                      content={message.content || "No content"}
-                    />
-                  </article>
-                )) : (
-                  <div className="rounded-xl border border-dashed border-[var(--color-outline-variant)] p-4 text-sm text-[var(--color-on-surface-variant)]">
-                    No messages found for this session.
-                  </div>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="rounded-xl border border-dashed border-[var(--color-outline-variant)] p-4 text-sm text-[var(--color-on-surface-variant)]">
-              This execution does not have a linked session.
+      <div className="min-h-full px-5 py-5">
+        <InspectorPanel title="Session detail">
+          <div className="space-y-5">
+            <div className="space-y-3">
+              <DetailField label="Execution" value={selectedExecution.executionCode} />
+              <DetailField label="Session" value={selectedExecution.sessionCode ?? pt("No linked session")} />
             </div>
-          )}
-        </div>
-      </InspectorPanel>
+            {selectedSessionCode ? (
+              <>
+                <div className="flex items-center justify-between gap-2 border-t border-[var(--color-outline-variant)] pt-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
+                    Conversation
+                  </p>
+                  <Button size="sm" type="button" variant="ghost" onClick={() => navigate(chatSessionDetailHref(selectedSessionCode))}>
+                    <ExternalLink size={14} aria-hidden="true" />
+                    {pt("Open session")}
+                  </Button>
+                </div>
+                <div className="max-h-[calc(100vh-21rem)] space-y-3 overflow-y-auto pr-1">
+                  {transcriptMessages.length ? transcriptMessages.map((message) => (
+                    <article
+                      className={cn(
+                        "rounded-xl border p-3",
+                        message.role === "ASSISTANT"
+                          ? "border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)]"
+                          : "border-[var(--color-primary)]/30 bg-[var(--color-primary-container)]/25",
+                      )}
+                      key={message.messageCode}
+                    >
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-[var(--color-on-surface)]">
+                          {chatRoleLabel(message.role)}
+                        </span>
+                        <span className="truncate text-[11px] text-[var(--color-on-surface-variant)]" title={formatTimestamp(message.createdAt)}>
+                          {formatTimestamp(message.createdAt)}
+                        </span>
+                      </div>
+                      <MarkdownContent
+                        ariaLabel={`${chatRoleLabel(message.role)} message`}
+                        className="max-w-none text-sm leading-5"
+                        content={message.content || "No content"}
+                      />
+                    </article>
+                  )) : (
+                    <div className="rounded-xl border border-dashed border-[var(--color-outline-variant)] p-4 text-sm text-[var(--color-on-surface-variant)]">
+                      No messages found for this session.
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="rounded-xl border border-dashed border-[var(--color-outline-variant)] p-4 text-sm text-[var(--color-on-surface-variant)]">
+                This execution does not have a linked session.
+              </div>
+            )}
+          </div>
+        </InspectorPanel>
+      </div>
     );
   }, [navigate, pt, selectedExecution, selectedSessionCode, transcriptMessages]);
 
   useConsoleShellConfig({ rightPanel });
+
+  useEffect(() => {
+    if (!selectedExecution) return;
+    openRightSidebar();
+  }, [openRightSidebar, selectedExecution]);
 
   useEffect(() => {
     setExecutionCurrent(1);
@@ -272,7 +277,6 @@ export function AutomationExecutionsPage() {
   function handleExecutionRowClick(row: AutomationExecutionListItem) {
     setOpenExecutionRowMenu(null);
     setSelectedExecutionCode(row.executionCode);
-    openRightSidebar();
   }
 
   function requestDeleteExecution(row: AutomationExecutionListItem) {

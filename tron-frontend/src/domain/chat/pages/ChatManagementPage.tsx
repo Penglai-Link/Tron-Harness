@@ -3861,6 +3861,10 @@ export function ChatManagementPage() {
       taskCode: activeSession.taskCode,
       workspaceCode: activeSession.workspaceCode,
     };
+    const pendingInspectionAttachments = inspectionAttachments;
+    if (pendingInspectionAttachments.length) {
+      sendInput.attachments = pendingInspectionAttachments;
+    }
     if (selectedModel.source === "system-agent") {
       sendInput.systemModelId = selectedModel.modelName;
     } else {
@@ -3880,6 +3884,7 @@ export function ChatManagementPage() {
       actor: "User",
       channel: activeSession.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
       content,
+      attachments: pendingInspectionAttachments,
       createdAt: optimisticCreatedAt,
       id: -sendStartedAt,
       messageCode: optimisticUserCode,
@@ -3903,6 +3908,7 @@ export function ChatManagementPage() {
     if (contentOverride === undefined) {
       setComposer("");
     }
+    setInspectionAttachments([]);
     if (activeSessionCodeRef.current === sendingSessionCode) {
       setVisibleMessages((current) => [
         ...current,
@@ -4047,6 +4053,9 @@ export function ChatManagementPage() {
       }
       const rawMessage = error instanceof Error ? error.message : "Chat send failed";
       const toastMessage = chatSendErrorToastMessage(rawMessage);
+      if (pendingInspectionAttachments.length) {
+        setInspectionAttachments((current) => [...pendingInspectionAttachments, ...current]);
+      }
       if (activeSessionCodeRef.current === sendingSessionCode) {
         setVisibleMessages((current) => current.filter((item) => (
           item.messageCode !== optimisticAssistantCode || Boolean(item.content.trim())

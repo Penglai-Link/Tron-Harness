@@ -46,6 +46,7 @@ interface ServiceQueryOptions<T> {
   deps?: DependencyList;
   refreshKey?: unknown;
   select?: (payload: unknown) => T;
+  suppressErrorToast?: boolean;
 }
 
 export interface ServiceQueryState<T> {
@@ -123,7 +124,7 @@ function resolveEndpoint(endpoint: string, params?: EndpointParams) {
   };
 }
 
-export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true, endpoint, mockData, params, deps = [], refreshKey = 0, select = selectApiData<T> }: ServiceQueryOptions<T>): ServiceQueryState<T> {
+export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true, endpoint, mockData, params, deps = [], refreshKey = 0, select = selectApiData<T>, suppressErrorToast = false }: ServiceQueryOptions<T>): ServiceQueryState<T> {
   const toast = useToast();
   const dataSource = getServiceDataSource(domain);
   const shouldUseMockData = dataSource === "mock";
@@ -194,6 +195,7 @@ export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true
           : `[services] API request failed for ${domain}.`;
         setError(error instanceof Error ? error : new Error(message));
         setLoading(false);
+        if (suppressErrorToast) return;
         const toastKey = `${request.method} ${request.url}: ${message}`;
         if (lastFailureToastKey.current === toastKey) return;
         lastFailureToastKey.current = toastKey;
@@ -203,7 +205,7 @@ export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true
       });
 
     return () => controller.abort();
-  }, [dataSource, domain, enabled, refreshKey, request.method, request.url, retryKey, toast]);
+  }, [dataSource, domain, enabled, refreshKey, request.method, request.url, retryKey, suppressErrorToast, toast]);
 
   return { data, loading, error, retry };
 }

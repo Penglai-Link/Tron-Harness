@@ -168,6 +168,7 @@ fn service(label: &str) -> ShortTermMemoryService {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: true,
     });

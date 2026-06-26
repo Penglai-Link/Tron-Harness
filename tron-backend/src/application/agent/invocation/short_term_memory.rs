@@ -16,6 +16,7 @@ impl AgentInvocationService {
         agent_code: &str,
         prompt: &str,
         prompt_prefix_messages: Vec<AgentMessage>,
+        user_prompt_message: Option<AgentMessage>,
         input_kind: Option<&str>,
         input_metadata: Option<serde_json::Value>,
     ) -> Result<(), AgentInvocationError> {
@@ -33,9 +34,9 @@ impl AgentInvocationService {
             .record_invocation_input(context, prompt, input_kind, input_metadata.clone())
             .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))?;
         context.messages = prompt_prefix_messages;
-        if let Some(message) = runtime_input_context_message(input_kind, prompt, &input_metadata) {
-            context.messages.push(message);
-        }
+        let current_input_message =
+            runtime_input_context_message(input_kind, prompt, &input_metadata)
+                .or(user_prompt_message);
         context.short_term_memory = Some(AgentShortTermMemoryRunContext {
             session_code: requested_conversation_code
                 .expect("conversation code should be present")
@@ -44,6 +45,7 @@ impl AgentInvocationService {
             input_kind: input_kind.to_string(),
             input_metadata,
             prompt_prefix: context.messages.clone(),
+            current_input_message,
             agent_code: Some(agent_code.to_string()),
             todo_enabled: resolve_todo_enabled(context),
         });

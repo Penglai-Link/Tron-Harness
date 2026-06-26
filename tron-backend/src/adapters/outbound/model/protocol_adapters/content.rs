@@ -18,7 +18,7 @@ pub(super) fn chat_message_json(message: &AgentMessage) -> Value {
     {
         Value::Null
     } else {
-        json!(content)
+        chat_content_json(message, &content)
     };
     if message.role == "assistant" {
         let tool_calls = message
@@ -39,6 +39,40 @@ pub(super) fn chat_message_json(message: &AgentMessage) -> Value {
         payload["content"] = json!(message.first_tool_output().unwrap_or_default());
     }
     payload
+}
+
+fn chat_content_json(message: &AgentMessage, content: &str) -> Value {
+    let image_parts = message
+        .parts
+        .iter()
+        .filter_map(image_data_url)
+        .collect::<Vec<_>>();
+    if message.role != "user" || image_parts.is_empty() {
+        return json!(content);
+    }
+    let mut parts = Vec::new();
+    if !content.trim().is_empty() {
+        parts.push(json!({
+            "type": "text",
+            "text": content,
+        }));
+    }
+    parts.extend(image_parts.into_iter().map(|url| {
+        json!({
+            "type": "image_url",
+            "image_url": {
+                "url": url,
+            },
+        })
+    }));
+    Value::Array(parts)
+}
+
+fn image_data_url(part: &AgentMessagePart) -> Option<String> {
+    let AgentMessagePart::Image { mime_type, data } = part else {
+        return None;
+    };
+    Some(format!("data:{mime_type};base64,{data}"))
 }
 
 pub(super) fn responses_instructions_text(messages: &[AgentMessage]) -> Option<String> {

@@ -50,6 +50,7 @@ export interface ChatMessage {
   channel: ChatMessageChannel;
   actor: string;
   content: string;
+  attachments?: ChatMessageAttachment[];
   inputTokens?: number | null;
   outputTokens?: number | null;
   totalTokens?: number | null;
@@ -121,7 +122,6 @@ export interface ChatMessageAttachment {
   imageUrl?: string | null;
   metadata: Record<string, unknown>;
   summary: string;
-  title: string;
 }
 
 export interface SendChatMessageInput {
@@ -132,6 +132,7 @@ export interface SendChatMessageInput {
   agentCode?: string | null;
   modelCode?: string | null;
   systemModelId?: string | null;
+  attachments?: ChatMessageAttachment[];
 }
 
 export type ChatSessionTodoStatus = "pending" | "in_progress" | "completed" | "cancelled";

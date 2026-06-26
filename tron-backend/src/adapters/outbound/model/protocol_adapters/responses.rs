@@ -97,7 +97,10 @@ fn responses_input_value(messages: &[crate::domain::agent::AgentMessage]) -> Val
         .iter()
         .filter(|message| !matches!(message.role.as_str(), "system" | "developer"))
         .collect::<Vec<_>>();
-    if input_messages.len() == 1 && input_messages[0].role == "user" {
+    if input_messages.len() == 1
+        && input_messages[0].role == "user"
+        && !input_messages[0].has_image_parts()
+    {
         return json!(input_messages[0].text_content());
     }
     Value::Array(

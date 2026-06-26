@@ -82,6 +82,7 @@ fn transcript_service_records_todos_and_compaction() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: true,
     });
@@ -411,6 +412,7 @@ fn transcript_service_records_todos_and_compaction() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: true,
     });
@@ -471,6 +473,7 @@ fn transcript_service_records_todos_and_compaction() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: true,
     });
@@ -751,6 +754,7 @@ fn family_snapshot_failure_is_bounded_and_does_not_fail_run_completion() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: true,
     });
@@ -861,6 +865,7 @@ fn family_context_deduplicates_sessions_across_families_and_counts_wrapper_budge
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -895,6 +900,7 @@ fn family_context_deduplicates_sessions_across_families_and_counts_wrapper_budge
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -1768,6 +1774,7 @@ fn message_with_event_transaction_rolls_back_on_event_insert_failure() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -1851,6 +1858,7 @@ fn context_epoch_revision_is_unique_under_concurrent_prepare() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -2075,6 +2083,7 @@ fn assistant_response_persists_reasoning_summary_and_enforces_raw_reasoning_poli
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -2119,6 +2128,7 @@ fn assistant_response_persists_reasoning_summary_and_enforces_raw_reasoning_poli
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -2304,6 +2314,7 @@ fn model_response_usage_audit_persists_when_visible_parts_are_empty() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -2419,6 +2430,7 @@ fn prepare_model_context_enforces_part_visibility_replay_policy() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -2499,6 +2511,7 @@ fn prepare_model_context_replays_only_messages_after_v2_checkpoint_source_end_se
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -2556,6 +2569,7 @@ fn manual_compaction_conflicts_when_session_has_active_run() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -2624,6 +2638,7 @@ fn repository_compaction_write_rechecks_active_run_inside_transaction() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -2750,6 +2765,7 @@ fn run_lifecycle_uses_sqlite_session_lease() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -2771,6 +2787,7 @@ fn run_lifecycle_uses_sqlite_session_lease() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -2825,6 +2842,7 @@ fn tool_output_externalization_persists_full_metadata_and_cleans_orphan_on_db_fa
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -3007,6 +3025,7 @@ fn tool_output_orphan_sweep_deletes_unreferenced_artifacts_and_keeps_referenced_
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -3082,6 +3101,7 @@ fn working_state_budget_prioritizes_goal_before_todos() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: true,
     });
@@ -3145,6 +3165,7 @@ fn prepared_context_hash_includes_recent_transcript_delta_for_stateful_responses
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("stable seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -3228,6 +3249,7 @@ fn history_retention_preserves_current_user_input_when_single_turn_exceeds_budge
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -3271,6 +3293,7 @@ fn full_context_preserves_tool_call_result_structure_when_single_turn_exceeds_bu
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -3370,6 +3393,7 @@ fn model_compaction_keeps_current_tool_pair_as_raw_tail() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -4440,6 +4464,7 @@ fn tool_schema_tokens_participate_in_context_budget() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -4502,6 +4527,7 @@ fn model_compaction_preserves_current_user_input_after_auto_retry() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -4650,6 +4676,7 @@ fn delete_session_removes_short_term_memory_rows() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: true,
     });
@@ -4732,6 +4759,7 @@ fn event_log_payload_is_bounded_before_persistence() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -4818,6 +4846,7 @@ fn lifecycle_only_event_log_keeps_projections_and_run_events() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: true,
     });
@@ -5057,6 +5086,7 @@ fn concurrent_append_allocates_unique_session_sequence_values() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -5161,6 +5191,7 @@ fn attach_short_term_memory(
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix,
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -5348,6 +5379,7 @@ fn record_reasoning_tool_turn(
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });

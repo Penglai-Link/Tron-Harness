@@ -1,0 +1,89 @@
+use serde_json::{Value, json};
+
+use crate::domain::{
+    agent::{AgentMessage, AgentMessagePart},
+    chat::ChatMessageAttachment,
+};
+
+pub(super) fn user_prompt_message(
+    prompt: String,
+    attachments: &[ChatMessageAttachment],
+) -> AgentMessage {
+    if attachments.is_empty() {
+        return AgentMessage::user(prompt);
+    }
+    let mut parts = vec![AgentMessagePart::Text { text: prompt }];
+    for attachment in attachments {
+        parts.push(AgentMessagePart::Context {
+            kind: "page_comment".into(),
+            text: page_comment_context_text(attachment),
+            metadata: Some(redacted_attachment_metadata(&attachment.metadata)),
+        });
+        if let Some((mime_type, data)) = image_part_from_attachment(attachment) {
+            parts.push(AgentMessagePart::Image { mime_type, data });
+        }
+    }
+    AgentMessage::new("user", parts)
+}
+
+fn page_comment_context_text(attachment: &ChatMessageAttachment) -> String {
+    let metadata = redacted_attachment_metadata(&attachment.metadata);
+    format!(
+        "<page-comment id=\"{}\" kind=\"{}\">\nSummary: {}\nMetadata: {}\n</page-comment>",
+        attachment.id, attachment.kind, attachment.summary, metadata
+    )
+}
+
+fn redacted_attachment_metadata(metadata: &Value) -> Value {
+    let mut value = metadata.clone();
+    redact_attachment_metadata_value(&mut value);
+    value
+}
+
+fn redact_attachment_metadata_value(value: &mut Value) {
+    match value {
+        Value::Object(object) => {
+            for (key, value) in object.iter_mut() {
+                if key == "dataUrl"
+                    && value
+                        .as_str()
+                        .is_some_and(|text| text.starts_with("data:image/"))
+                {
+                    *value = json!("[image omitted; sent as image part]");
+                } else {
+                    redact_attachment_metadata_value(value);
+                }
+            }
+        }
+        Value::Array(items) => {
+            items.iter_mut().for_each(redact_attachment_metadata_value);
+        }
+        _ => {}
+    }
+}
+
+fn image_part_from_attachment(attachment: &ChatMessageAttachment) -> Option<(String, String)> {
+    let data_url = attachment.image_url.as_deref().or_else(|| {
+        attachment
+            .metadata
+            .get("dom")
+            .and_then(|dom| dom.get("annotationImage"))
+            .and_then(|image| image.get("dataUrl"))
+            .and_then(Value::as_str)
+    })?;
+    let (header, data) = data_url.split_once(',')?;
+    let mime_type = header
+        .strip_prefix("data:")
+        .and_then(|value| value.strip_suffix(";base64"))?;
+    if !matches!(
+        mime_type,
+        "image/png" | "image/jpeg" | "image/webp" | "image/gif"
+    ) {
+        return None;
+    }
+    let data = data.trim();
+    if data.is_empty() {
+        return None;
+    }
+    Some((mime_type.to_string(), data.to_string()))
+}

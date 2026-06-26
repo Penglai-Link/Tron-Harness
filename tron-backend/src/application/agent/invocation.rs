@@ -1,4 +1,5 @@
 mod agui_warning;
+mod attachments;
 mod helpers;
 mod short_term_memory;
 
@@ -32,6 +33,7 @@ use super::{
     tool_record_to_effective_tool,
 };
 use agui_warning::{McpWarningPublishContext, publish_mcp_runtime_warnings};
+use attachments::user_prompt_message;
 use helpers::{
     agent_kind_for_runtime, is_internal_agent, is_main_agent, map_agent_error, map_mcp_error,
     normalize_optional, required_runtime_command_name, runtime_type_label, safe_preview,
@@ -150,6 +152,7 @@ impl AgentInvocationService {
             model: requested_model,
             limits: requested_limits,
             tools: requested_tools,
+            attachments: requested_attachments,
             transcript_input_kind,
             transcript_input_metadata,
         } = command;
@@ -339,7 +342,8 @@ impl AgentInvocationService {
             )));
         }
         let prompt_prefix_messages = messages.clone();
-        messages.push(AgentMessage::user(prompt.clone()));
+        let user_prompt_message = user_prompt_message(prompt.clone(), &requested_attachments);
+        messages.push(user_prompt_message.clone());
         let local_directory = app.as_ref().map(|app| app.local_directory.clone());
         let branch_name = app.as_ref().and_then(|app| app.default_branch.clone());
         let repository_url = app.as_ref().and_then(|app| app.repository_url.clone());
@@ -394,6 +398,7 @@ impl AgentInvocationService {
             &resolved_agent.agent_code,
             &prompt,
             prompt_prefix_messages,
+            Some(user_prompt_message),
             transcript_input_kind.as_deref(),
             transcript_input_metadata,
         )?;

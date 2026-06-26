@@ -1,9 +1,12 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::domain::agent::{
-    AgentModelConfig, AgentRunLimits, EffectiveTool, ModelTokenUsage, TokenEstimateSnapshot,
-    TokenUsageAuditSnapshot,
+use crate::domain::{
+    agent::{
+        AgentModelConfig, AgentRunLimits, EffectiveTool, ModelTokenUsage, TokenEstimateSnapshot,
+        TokenUsageAuditSnapshot,
+    },
+    chat::ChatMessageAttachment,
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -24,6 +27,8 @@ pub struct AgentInvocationCommand {
     pub limits: Option<AgentRunLimits>,
     #[serde(default)]
     pub tools: Vec<EffectiveTool>,
+    #[serde(default)]
+    pub attachments: Vec<ChatMessageAttachment>,
     #[serde(skip)]
     pub transcript_input_kind: Option<String>,
     #[serde(skip)]

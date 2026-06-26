@@ -1,6 +1,5 @@
-use std::{fs, path::Path};
-
 use rusqlite::{Connection, OptionalExtension, Row, params};
+use std::{fs, path::Path};
 
 use crate::{
     application::chat::ChatRepository,
@@ -11,11 +10,13 @@ use crate::{
     shared::time::{timestamp_from_millis, timestamp_to_millis},
 };
 
+use super::chat_message_attachments::{attachments_from_storage, attachments_to_storage};
 use super::migrations::{
-    CHAT_MANAGEMENT_MIGRATION, CHAT_MESSAGE_TOKEN_USAGE_MIGRATION,
-    CHAT_SESSION_AGENT_CODE_MIGRATION, CHAT_SESSION_LEGACY_SOURCE_MIGRATION,
-    CHAT_SESSION_SOURCE_MIGRATION, CHAT_SESSION_SYSTEM_AGENT_SESSION_ID_MIGRATION,
-    CHAT_SESSION_VISIBILITY_MIGRATION, CONVERSATION_RUNTIME_SESSIONS_MIGRATION,
+    CHAT_MANAGEMENT_MIGRATION, CHAT_MESSAGE_ATTACHMENTS_MIGRATION,
+    CHAT_MESSAGE_TOKEN_USAGE_MIGRATION, CHAT_SESSION_AGENT_CODE_MIGRATION,
+    CHAT_SESSION_LEGACY_SOURCE_MIGRATION, CHAT_SESSION_SOURCE_MIGRATION,
+    CHAT_SESSION_SYSTEM_AGENT_SESSION_ID_MIGRATION, CHAT_SESSION_VISIBILITY_MIGRATION,
+    CONVERSATION_RUNTIME_SESSIONS_MIGRATION,
 };
 
 pub struct SqliteChatRepository {
@@ -73,6 +74,12 @@ impl SqliteChatRepository {
             repository
                 .connection
                 .execute_batch(CHAT_MESSAGE_TOKEN_USAGE_MIGRATION)
+                .map_err(storage_error)?;
+        }
+        if !column_exists(&repository.connection, "chat_messages", "attachments_json")? {
+            repository
+                .connection
+                .execute_batch(CHAT_MESSAGE_ATTACHMENTS_MIGRATION)
                 .map_err(storage_error)?;
         }
         if !table_exists(&repository.connection, "conversation_runtime_sessions")? {
@@ -320,8 +327,8 @@ impl ChatRepository for SqliteChatRepository {
     fn create_message(&mut self, message: &ChatMessage) -> Result<(), ChatError> {
         self.connection
             .execute(
-                "INSERT INTO chat_messages (id, message_code, session_code, run_code, role, channel, actor, content, input_tokens, output_tokens, total_tokens, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                "INSERT INTO chat_messages (id, message_code, session_code, run_code, role, channel, actor, content, attachments_json, input_tokens, output_tokens, total_tokens, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
                 params![
                     message.id,
                     message.message_code,
@@ -331,6 +338,7 @@ impl ChatRepository for SqliteChatRepository {
                     message_channel_to_storage(message.channel),
                     message.actor,
                     message.content,
+                    attachments_to_storage(&message.attachments)?,
                     message.input_tokens,
                     message.output_tokens,
                     message.total_tokens,
@@ -345,7 +353,7 @@ impl ChatRepository for SqliteChatRepository {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT id, message_code, session_code, run_code, role, channel, actor, content, input_tokens, output_tokens, total_tokens, created_at
+                "SELECT id, message_code, session_code, run_code, role, channel, actor, content, attachments_json, input_tokens, output_tokens, total_tokens, created_at
                  FROM chat_messages
                  WHERE session_code = ?1
                  ORDER BY created_at ASC, id ASC",
@@ -385,6 +393,7 @@ fn row_to_session(row: &Row<'_>) -> rusqlite::Result<ChatSession> {
 fn row_to_message(row: &Row<'_>) -> rusqlite::Result<ChatMessage> {
     let role: String = row.get(4)?;
     let channel: String = row.get(5)?;
+    let attachments_json: Option<String> = row.get(8)?;
     Ok(ChatMessage {
         id: row.get(0)?,
         message_code: row.get(1)?,
@@ -394,13 +403,14 @@ fn row_to_message(row: &Row<'_>) -> rusqlite::Result<ChatMessage> {
         channel: message_channel_from_storage(&channel).map_err(chat_mapping_error)?,
         actor: row.get(6)?,
         content: row.get(7)?,
-        input_tokens: row.get(8)?,
-        output_tokens: row.get(9)?,
-        total_tokens: row.get(10)?,
-        created_at: timestamp_from_millis(row.get(11)?),
+        attachments: attachments_from_storage(attachments_json.as_deref())
+            .map_err(chat_mapping_error)?,
+        input_tokens: row.get(9)?,
+        output_tokens: row.get(10)?,
+        total_tokens: row.get(11)?,
+        created_at: timestamp_from_millis(row.get(12)?),
     })
 }
-
 fn column_exists(
     connection: &Connection,
     table_name: &str,

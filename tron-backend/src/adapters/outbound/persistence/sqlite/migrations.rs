@@ -75,6 +75,8 @@ pub(super) const AGENT_RUNTIME_EVENT_REPLAY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260530_0026_create_agent_runtime_event_replay.sql");
 pub(super) const CHAT_MESSAGE_TOKEN_USAGE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260528_0021_add_chat_message_token_usage.sql");
+pub(super) const CHAT_MESSAGE_ATTACHMENTS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260625_0001_add_chat_message_attachments.sql");
 pub(super) const AGENT_MANAGEMENT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260529_0022_create_agent_management.sql");
 pub(super) const RAG_FOUNDATION_MIGRATION: &str =

@@ -73,6 +73,8 @@ pub struct AgentShortTermMemoryRunContext {
     pub input_metadata: Option<Value>,
     pub prompt_prefix: Vec<AgentMessage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_input_message: Option<AgentMessage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_code: Option<String>,
     #[serde(default)]
     pub todo_enabled: bool,

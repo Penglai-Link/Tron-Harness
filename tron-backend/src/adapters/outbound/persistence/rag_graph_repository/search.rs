@@ -19,8 +19,7 @@ use super::{
     filters::{append_graph_filters, graph_filter},
     model::{
         graph_hit_to_row, graph_node_json, graph_properties_json, graph_segment_for_retriever,
-        graph_target_for_retriever, map_graph_error, optional_graph_target_for_segment,
-        prop_i64,
+        graph_target_for_retriever, map_graph_error, optional_graph_target_for_segment, prop_i64,
     },
     tree_rows::{
         covered_text_unit_codes_from_row, graph_text_unit_hit_to_tree_row, graph_tree_hit_to_row,
@@ -160,14 +159,11 @@ impl GraphBackedRagRepository {
                 .search(&scope, prepared_query)
                 .map_err(map_graph_error)?;
             sort_tree_hits(&mut hits, &policy);
-            tree_rows.extend(
-                hits.into_iter().map(|hit| {
-                    let mut row =
-                        graph_tree_hit_to_row(corpus, hit.node, hit.score, &query.retriever);
-                    apply_tree_policy_to_row(&mut row, &policy);
-                    row
-                }),
-            );
+            tree_rows.extend(hits.into_iter().map(|hit| {
+                let mut row = graph_tree_hit_to_row(corpus, hit.node, hit.score, &query.retriever);
+                apply_tree_policy_to_row(&mut row, &policy);
+                row
+            }));
         }
         tree_rows.sort_by(|left, right| {
             right

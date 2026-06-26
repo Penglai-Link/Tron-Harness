@@ -1,3 +1,4 @@
+mod attachments;
 mod dto;
 mod goal_loop;
 mod port;

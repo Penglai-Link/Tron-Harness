@@ -4,6 +4,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -66,10 +67,25 @@ pub struct ChatMessage {
     pub channel: ChatMessageChannel,
     pub actor: String,
     pub content: String,
+    #[serde(default)]
+    pub attachments: Vec<ChatMessageAttachment>,
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
     pub total_tokens: Option<u32>,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatMessageAttachment {
+    pub id: String,
+    pub kind: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    pub summary: String,
+    pub image_url: Option<String>,
+    #[serde(default)]
+    pub metadata: Value,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -84,6 +100,7 @@ pub struct ChatSessionGroup {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChatError {
+    AttachmentInvalid(String),
     MessageRequired,
     SessionNotFound,
     SessionTitleRequired,
@@ -95,6 +112,7 @@ pub enum ChatError {
 impl Display for ChatError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
+            Self::AttachmentInvalid(message) => write!(f, "chat attachment is invalid: {message}"),
             Self::MessageRequired => f.write_str("chat message content is required"),
             Self::SessionNotFound => f.write_str("chat session was not found"),
             Self::SessionTitleRequired => f.write_str("chat session title is required"),

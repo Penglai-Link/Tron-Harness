@@ -4,7 +4,7 @@ use crate::{
     application::agent::AgentInvocationResult,
     domain::{
         agent::{AgentRunLimits, EffectiveTool},
-        chat::{ChatMessage, ChatSession, ChatSessionSourceType},
+        chat::{ChatMessage, ChatMessageAttachment, ChatSession, ChatSessionSourceType},
     },
 };
 
@@ -47,6 +47,8 @@ pub struct SendChatMessageCommand {
     pub limits: Option<AgentRunLimits>,
     #[serde(default)]
     pub tools: Vec<EffectiveTool>,
+    #[serde(default)]
+    pub attachments: Vec<ChatMessageAttachment>,
 }
 
 #[derive(Debug, Clone, Serialize)]

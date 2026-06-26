@@ -383,7 +383,7 @@ pub(crate) fn responses_input_item_json(message: &AgentMessage) -> Value {
         "user" | "assistant" => json!({
             "type": "message",
             "role": message.role.as_str(),
-            "content": message.plain_text_content(),
+            "content": responses_message_content(message),
         }),
         "tool" => match message.parts.iter().find_map(tool_result_part) {
             Some((Some(call_id), output)) => {
@@ -405,6 +405,37 @@ pub(crate) fn responses_input_item_json(message: &AgentMessage) -> Value {
             "content": message.plain_text_content(),
         }),
     }
+}
+
+fn responses_message_content(message: &AgentMessage) -> Value {
+    let image_parts = message
+        .parts
+        .iter()
+        .filter_map(responses_image_content_part)
+        .collect::<Vec<_>>();
+    if message.role != "user" || image_parts.is_empty() {
+        return json!(message.plain_text_content());
+    }
+    let mut content = Vec::new();
+    let text = message.plain_text_content();
+    if !text.trim().is_empty() {
+        content.push(json!({
+            "type": "input_text",
+            "text": text,
+        }));
+    }
+    content.extend(image_parts);
+    Value::Array(content)
+}
+
+fn responses_image_content_part(part: &AgentMessagePart) -> Option<Value> {
+    let AgentMessagePart::Image { mime_type, data } = part else {
+        return None;
+    };
+    Some(json!({
+        "type": "input_image",
+        "image_url": format!("data:{mime_type};base64,{data}"),
+    }))
 }
 
 fn tool_result_part(part: &AgentMessagePart) -> Option<(Option<&str>, &str)> {

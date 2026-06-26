@@ -19,8 +19,8 @@ use crate::{
     },
     domain::agent::{AgentModelConfig, ModelTokenUsage},
     domain::chat::{
-        ChatError, ChatMessage, ChatMessageChannel, ChatMessageRole, ChatSession, ChatSessionGroup,
-        ChatSessionSourceType, ChatSessionStatus,
+        ChatError, ChatMessage, ChatMessageAttachment, ChatMessageChannel, ChatMessageRole,
+        ChatSession, ChatSessionGroup, ChatSessionSourceType, ChatSessionStatus,
     },
     shared::{
         id::{SnowflakeIdProvider, SnowflakedSnowflakeIdProvider},
@@ -28,7 +28,10 @@ use crate::{
     },
 };
 
-use super::title::{DEFAULT_MANUAL_SESSION_TITLE, should_generate_manual_session_title};
+use super::{
+    attachments::normalize_chat_attachments,
+    title::{DEFAULT_MANUAL_SESSION_TITLE, should_generate_manual_session_title},
+};
 
 const MAIN_AGENT_CODE: &str = "main-agent";
 const MAIN_RUNTIME_ADAPTER_KEY: &str = "REACT";
@@ -252,6 +255,8 @@ impl ChatService {
     ) -> Result<ChatSendResult, ChatSendError> {
         let content = normalized_required(command.content)
             .ok_or(ChatSendError::Chat(ChatError::MessageRequired))?;
+        let attachments =
+            normalize_chat_attachments(command.attachments).map_err(ChatSendError::Chat)?;
         let session = self
             .repository()
             .get_session(session_code)
@@ -287,6 +292,7 @@ impl ChatService {
             channel,
             "User",
             &content,
+            attachments.clone(),
             None,
         )?;
         let app_code_for_invocation = command.app_code.or(session.app_code.clone());
@@ -308,6 +314,7 @@ impl ChatService {
             system_model_id: system_model_id_for_invocation.clone(),
             limits: limits_for_invocation,
             tools: tools_for_invocation.clone(),
+            attachments,
             transcript_input_kind: None,
             transcript_input_metadata: None,
         };
@@ -329,6 +336,7 @@ impl ChatService {
             channel,
             "Assistant",
             &run.final_output,
+            Vec::new(),
             run.token_usage,
         )?;
         let mut result_messages = vec![user_message, assistant_message];
@@ -405,6 +413,7 @@ impl ChatService {
         channel: ChatMessageChannel,
         actor: &str,
         content: &str,
+        attachments: Vec<ChatMessageAttachment>,
         token_usage: Option<ModelTokenUsage>,
     ) -> Result<ChatMessage, ChatSendError> {
         let id = self
@@ -421,6 +430,7 @@ impl ChatService {
             channel,
             actor: actor.into(),
             content: content.into(),
+            attachments,
             input_tokens: token_usage.map(|usage| usage.input_tokens),
             output_tokens: token_usage.map(|usage| usage.output_tokens),
             total_tokens: token_usage.map(|usage| usage.total_tokens),
