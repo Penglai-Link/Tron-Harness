@@ -3,10 +3,11 @@ use crate::{
     shared::time::current_timestamp,
 };
 
+const COMPACTION_RENDER_MAX_CHARS: usize = 2_000;
+
 pub(super) fn compaction_transcript_summary(
     head_messages: &[(ShortTermMemoryMessage, Vec<ShortTermMemoryPart>)],
     tail_messages: &[(ShortTermMemoryMessage, Vec<ShortTermMemoryPart>)],
-    tool_output_max_chars: usize,
     reasoning_summary_replay_enabled: bool,
 ) -> (String, String) {
     let summary_lines = head_messages
@@ -15,12 +16,7 @@ pub(super) fn compaction_transcript_summary(
             let rendered = parts
                 .iter()
                 .filter_map(|part| {
-                    render_compaction_part(
-                        message,
-                        part,
-                        tool_output_max_chars,
-                        reasoning_summary_replay_enabled,
-                    )
+                    render_compaction_part(message, part, reasoning_summary_replay_enabled)
                 })
                 .collect::<Vec<_>>();
             if rendered.is_empty() {
@@ -47,12 +43,7 @@ pub(super) fn compaction_transcript_summary(
             let rendered = parts
                 .iter()
                 .filter_map(|part| {
-                    render_compaction_part(
-                        message,
-                        part,
-                        tool_output_max_chars,
-                        reasoning_summary_replay_enabled,
-                    )
+                    render_compaction_part(message, part, reasoning_summary_replay_enabled)
                 })
                 .collect::<Vec<_>>();
             if rendered.is_empty() {
@@ -72,7 +63,6 @@ pub(super) fn compaction_transcript_summary(
 fn render_compaction_part(
     message: &ShortTermMemoryMessage,
     part: &ShortTermMemoryPart,
-    tool_output_max_chars: usize,
     reasoning_summary_replay_enabled: bool,
 ) -> Option<String> {
     match part.part_type.as_str() {
@@ -81,7 +71,7 @@ fn render_compaction_part(
                 "[{} {}]: {}",
                 message.role,
                 message.message_code,
-                truncate_chars(text, tool_output_max_chars)
+                truncate_chars(text, COMPACTION_RENDER_MAX_CHARS)
             )
         }),
         "reasoning" => None,
@@ -91,7 +81,7 @@ fn render_compaction_part(
                     "[Assistant reasoning summary {}/{}]: {}",
                     message.message_code,
                     part.part_code,
-                    truncate_chars(text, tool_output_max_chars)
+                    truncate_chars(text, COMPACTION_RENDER_MAX_CHARS)
                 )
             })
         }
@@ -111,7 +101,7 @@ fn render_compaction_part(
                         .get("input")
                         .map(|value| value.to_string())
                         .unwrap_or_else(|| "{}".into()),
-                    tool_output_max_chars,
+                    COMPACTION_RENDER_MAX_CHARS,
                 )
             ))
         }
@@ -142,7 +132,7 @@ fn render_compaction_part(
                     part.part_code,
                     truncate_chars(
                         part.content_text.as_deref().unwrap_or_default(),
-                        tool_output_max_chars
+                        COMPACTION_RENDER_MAX_CHARS
                     )
                 ))
             }
@@ -169,7 +159,7 @@ fn render_compaction_part(
                 part.part_type,
                 message.message_code,
                 part.part_code,
-                truncate_chars(text, tool_output_max_chars)
+                truncate_chars(text, COMPACTION_RENDER_MAX_CHARS)
             )
         }),
     }

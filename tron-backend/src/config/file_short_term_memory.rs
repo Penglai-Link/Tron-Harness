@@ -80,12 +80,6 @@ impl ContextBudgetConfig {
             self.family_context_hard_cap_tokens = max_tokens;
             self.blocks.session_family_context.max_tokens = Some(max_tokens);
         }
-        if let Some(value) = overrides.protocol_overhead_reserve_tokens {
-            self.protocol_overhead_reserve_tokens = value;
-        }
-        if let Some(value) = overrides.safety_margin_tokens {
-            self.safety_margin_tokens = value;
-        }
         if let Some(value) = overrides.family_context_max_chars {
             self.family_context_max_chars = value.max(1);
         }
@@ -150,67 +144,27 @@ impl ContextBlockBudgets {
         if let Some(value) = overrides.current_session_working_state {
             self.current_session_working_state.apply_overrides(value);
         }
-        if let Some(value) = overrides.current_session_recent_transcript {
-            self.current_session_recent_transcript
-                .apply_overrides(value);
-        }
     }
 }
 
 impl ContextBlockBudgetConfig {
     fn apply_overrides(&mut self, overrides: ContextBlockBudgetFileConfig) {
-        if let Some(value) = overrides.enabled {
-            self.enabled = value;
-        }
         if let Some(value) = overrides.max_ratio_bps {
             self.max_ratio_bps = Some(value.min(10_000));
         }
         if let Some(value) = overrides.max_tokens {
             self.max_tokens = Some(value.max(1));
         }
-        if let Some(value) = overrides.min_tokens {
-            self.min_tokens = value;
-        }
-        if let Some(value) = overrides.priority {
-            self.priority = value;
-        }
-        if let Some(value) = overrides.allow_borrow_unused_budget {
-            self.allow_borrow_unused_budget = value;
-        }
     }
 }
 
 impl CompactionPolicyConfig {
     fn apply_overrides(&mut self, overrides: CompactionPolicyFileConfig) {
-        if let Some(value) = overrides.auto_enabled {
-            self.auto_enabled = value;
+        if let Some(value) = overrides.trigger_ratio_bps {
+            self.trigger_ratio_bps = value.min(10_000);
         }
-        if let Some(value) = overrides.max_recent_turns {
-            self.max_recent_turns = value.max(1);
-        }
-        if let Some(value) = overrides.keep_recent_tokens {
-            self.keep_recent_tokens = value.max(1);
-        }
-        if let Some(value) = overrides.reserved_tokens {
-            self.reserved_tokens = value;
-        }
-        if let Some(value) = overrides.summary_max_tokens {
-            self.summary_max_tokens = value.max(1);
-        }
-        if let Some(value) = overrides.tool_output_max_chars {
-            self.tool_output_max_chars = value.max(1);
-        }
-        if let Some(value) = overrides.overflow_retry_limit {
-            self.overflow_retry_limit = value;
-        }
-        if let Some(value) = overrides.reasoning_inclusion {
-            self.reasoning_inclusion = value;
-        }
-        if let Some(value) = overrides.tool_result_policy {
-            self.tool_result_policy = value;
-        }
-        if let Some(value) = overrides.file_policy {
-            self.file_policy = value;
+        if let Some(value) = overrides.retained_history_ratio_bps {
+            self.retained_history_ratio_bps = value.min(10_000);
         }
     }
 }
@@ -233,7 +187,7 @@ impl GoalLoopConfig {
 }
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct ShortTermMemoryFileConfig {
     tool_output: Option<ToolOutputFileConfig>,
     event_log: Option<EventLogFileConfig>,
@@ -244,7 +198,7 @@ pub(super) struct ShortTermMemoryFileConfig {
 }
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct EventLogFileConfig {
     mode: Option<String>,
     retention_days: Option<u32>,
@@ -255,48 +209,41 @@ struct EventLogFileConfig {
 }
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ToolOutputFileConfig {
     root: Option<String>,
     externalize_above_bytes: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ContextBudgetFileConfig {
     default_context_window_tokens: Option<u32>,
     family_context_max_ratio_bps: Option<u32>,
     family_context_hard_cap_tokens: Option<u32>,
-    protocol_overhead_reserve_tokens: Option<u32>,
-    safety_margin_tokens: Option<u32>,
     family_context_max_chars: Option<usize>,
     reasoning_summary_replay_enabled: Option<bool>,
     blocks: Option<ContextBlockBudgetsFileConfig>,
 }
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ContextBlockBudgetsFileConfig {
     seed_prompt_prefix: Option<ContextBlockBudgetFileConfig>,
     current_session_checkpoint: Option<ContextBlockBudgetFileConfig>,
     session_family_context: Option<ContextBlockBudgetFileConfig>,
     current_session_working_state: Option<ContextBlockBudgetFileConfig>,
-    current_session_recent_transcript: Option<ContextBlockBudgetFileConfig>,
 }
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ContextBlockBudgetFileConfig {
-    enabled: Option<bool>,
     max_ratio_bps: Option<u32>,
     max_tokens: Option<u32>,
-    min_tokens: Option<u32>,
-    priority: Option<u8>,
-    allow_borrow_unused_budget: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct FamilyLoadFileConfig {
     default_max_snapshots: Option<usize>,
     default_max_sessions: Option<usize>,
@@ -310,22 +257,14 @@ struct FamilyLoadFileConfig {
 }
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CompactionPolicyFileConfig {
-    auto_enabled: Option<bool>,
-    max_recent_turns: Option<usize>,
-    keep_recent_tokens: Option<u32>,
-    reserved_tokens: Option<u32>,
-    summary_max_tokens: Option<u32>,
-    tool_output_max_chars: Option<usize>,
-    overflow_retry_limit: Option<u32>,
-    reasoning_inclusion: Option<String>,
-    tool_result_policy: Option<String>,
-    file_policy: Option<String>,
+    trigger_ratio_bps: Option<u32>,
+    retained_history_ratio_bps: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct GoalLoopFileConfig {
     max_runs: Option<u32>,
     max_consecutive_judge_failures: Option<u32>,

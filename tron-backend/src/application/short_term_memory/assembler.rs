@@ -7,7 +7,7 @@ use crate::domain::{
 };
 use sha2::{Digest, Sha256};
 
-use super::{ModelContextBudgetPlan, PreparedModelContext};
+use super::{ContextBudgetBreakdown, ModelContextBudgetPlan, PreparedModelContext};
 
 pub(super) const DEFAULT_TODO_MAX_ITEMS: usize = 50;
 pub(super) const DEFAULT_TODO_MAX_CONTEXT_CHARS: usize = 4_000;
@@ -24,25 +24,33 @@ pub(super) fn assemble_context(
     reasoning_summary_replay_enabled: bool,
 ) -> PreparedModelContext {
     let mut messages = prompt_prefix.to_vec();
+    let prompt_prefix_tokens = estimate_messages_tokens(&messages);
     let rebased = checkpoint.is_some();
+    let mut checkpoint_tokens = 0;
     if let Some(checkpoint) = checkpoint {
         if budget_plan.block_budgets.current_session_checkpoint.enabled {
-            messages.push(truncate_checkpoint_message(
+            let checkpoint_message = truncate_checkpoint_message(
                 checkpoint,
                 budget_plan
                     .block_budgets
                     .current_session_checkpoint
                     .effective_limit_tokens,
-            ));
+            );
+            checkpoint_tokens = estimate_messages_tokens(std::slice::from_ref(&checkpoint_message));
+            messages.push(checkpoint_message);
         }
     }
+    let mut session_family_context_tokens = 0;
     if let Some(family_context) = family_context {
+        session_family_context_tokens =
+            estimate_messages_tokens(std::slice::from_ref(&family_context));
         messages.push(family_context);
     }
     let working_state_limit = budget_plan
         .block_budgets
         .current_session_working_state
         .effective_limit_tokens;
+    let mut working_state_tokens = 0;
     if budget_plan
         .block_budgets
         .current_session_working_state
@@ -50,11 +58,17 @@ pub(super) fn assemble_context(
         && let Some(working_state) =
             working_state_message(active_goal, todos, todo_enabled, working_state_limit)
     {
+        working_state_tokens = estimate_messages_tokens(std::slice::from_ref(&working_state));
         messages.push(working_state);
     }
-    messages.extend(recent.into_iter().filter_map(|entry| {
-        transcript_message_to_agent_message(entry, reasoning_summary_replay_enabled)
-    }));
+    let recent_messages = recent
+        .into_iter()
+        .filter_map(|entry| {
+            transcript_message_to_agent_message(entry, reasoning_summary_replay_enabled)
+        })
+        .collect::<Vec<_>>();
+    let recent_transcript_tokens = estimate_messages_tokens(&recent_messages);
+    messages.extend(recent_messages);
     let context_hash = Some(hash_context_messages(&messages));
     let estimated_tokens = estimate_messages_tokens(&messages);
     PreparedModelContext {
@@ -65,12 +79,47 @@ pub(super) fn assemble_context(
         estimated_tokens,
         message_token_estimate: estimated_tokens,
         tool_schema_token_estimate: 0,
+        budget_breakdown: Some(ContextBudgetBreakdown {
+            prompt_prefix_tokens,
+            checkpoint_tokens,
+            session_family_context_tokens,
+            working_state_tokens,
+            recent_transcript_tokens,
+            raw_tail_transcript_tokens: recent_transcript_tokens,
+            compressed_history_tokens: 0,
+            tool_schema_tokens: 0,
+            estimated_input_tokens: estimated_tokens,
+            prompt_prefix_budget_tokens: Some(
+                budget_plan
+                    .block_budgets
+                    .seed_prompt_prefix
+                    .effective_limit_tokens,
+            ),
+            effective_input_budget: Some(budget_plan.effective_input_budget),
+            context_window_limit: Some(budget_plan.model_context_window),
+            output_token_reserve: Some(budget_plan.output_token_reserve),
+            compaction_trigger_ratio_bps: None,
+            compaction_trigger_tokens: None,
+            compaction_trigger_reached: false,
+            input_budget_exceeded: estimated_tokens > budget_plan.effective_input_budget,
+            retained_history_ratio_bps: None,
+            effective_retained_history_tokens: None,
+            current_session_history_budget_tokens: None,
+            history_source_message_count: None,
+            raw_tail_message_count: None,
+            compressed_history_message_count: None,
+            raw_tail_start_seq: None,
+        }),
+        over_budget_reason: None,
         context_window_limit: Some(budget_plan.model_context_window),
         effective_input_budget: Some(budget_plan.effective_input_budget),
         output_token_reserve: Some(budget_plan.output_token_reserve),
-        protocol_overhead_reserve: Some(budget_plan.protocol_overhead_reserve),
-        safety_margin_tokens: Some(budget_plan.safety_margin_tokens),
         over_budget: estimated_tokens > budget_plan.effective_input_budget,
+        compaction_trigger_reached: false,
+        compaction_required: false,
+        compaction_tail_start_seq: None,
+        compaction_trigger_tokens: None,
+        effective_retained_history_tokens: None,
     }
 }
 
@@ -248,22 +297,26 @@ pub(super) fn checkpoint_message_from_parts(
         .iter()
         .find(|part| part.part_type == "compaction_summary")
         .map(|part| {
-            let recent = part
-                .content_json
-                .as_ref()
-                .and_then(|value| value.get("recent"))
-                .and_then(|value| value.as_str())
-                .unwrap_or_default();
+            let content_json = part.content_json.as_ref();
+            let coverage = content_json
+                .and_then(|value| value.get("coverage"))
+                .and_then(|value| value.as_str());
+            let recent = if coverage == Some("head_only_tail_replayed") {
+                ""
+            } else {
+                content_json
+                    .and_then(|value| value.get("recent"))
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default()
+            };
             checkpoint_message(
                 part.content_text.as_deref().unwrap_or_default(),
                 &filter_reasoning_summary_lines(recent, reasoning_summary_replay_enabled),
-                part.content_json
-                    .as_ref()
+                content_json
                     .and_then(|value| value.get("sourceStartSeq"))
                     .and_then(|value| value.as_i64())
                     .unwrap_or_default(),
-                part.content_json
-                    .as_ref()
+                content_json
                     .and_then(|value| value.get("sourceEndSeq"))
                     .and_then(|value| value.as_i64())
                     .unwrap_or_default(),
@@ -334,28 +387,33 @@ fn transcript_part_to_agent_part(
             text: part.content_text.unwrap_or_default(),
             metadata: part.content_json,
         }),
-        "compaction_summary" => Some(AgentMessagePart::CompactionCheckpoint {
-            summary: part.content_text.unwrap_or_default(),
-            recent: part
-                .content_json
-                .as_ref()
-                .and_then(|value| value.get("recent"))
-                .and_then(|value| value.as_str())
-                .unwrap_or_default()
-                .to_string(),
-            source_start_seq: part
-                .content_json
-                .as_ref()
-                .and_then(|value| value.get("sourceStartSeq"))
-                .and_then(|value| value.as_i64())
-                .unwrap_or_default(),
-            source_end_seq: part
-                .content_json
-                .as_ref()
-                .and_then(|value| value.get("sourceEndSeq"))
-                .and_then(|value| value.as_i64())
-                .unwrap_or_default(),
-        }),
+        "compaction_summary" => {
+            let content_json = part.content_json.as_ref();
+            let coverage = content_json
+                .and_then(|value| value.get("coverage"))
+                .and_then(|value| value.as_str());
+            let recent = if coverage == Some("head_only_tail_replayed") {
+                String::new()
+            } else {
+                content_json
+                    .and_then(|value| value.get("recent"))
+                    .and_then(|value| value.as_str())
+                    .unwrap_or_default()
+                    .to_string()
+            };
+            Some(AgentMessagePart::CompactionCheckpoint {
+                summary: part.content_text.unwrap_or_default(),
+                recent,
+                source_start_seq: content_json
+                    .and_then(|value| value.get("sourceStartSeq"))
+                    .and_then(|value| value.as_i64())
+                    .unwrap_or_default(),
+                source_end_seq: content_json
+                    .and_then(|value| value.get("sourceEndSeq"))
+                    .and_then(|value| value.as_i64())
+                    .unwrap_or_default(),
+            })
+        }
         _ => None,
     }
 }

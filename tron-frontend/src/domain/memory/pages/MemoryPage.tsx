@@ -333,13 +333,15 @@ function EmptyResults({
   activeTarget: MemorySearchTarget;
   query: string;
 }) {
+  const trimmedQuery = query.trim();
+
   return (
     <section className="rounded-xl border border-dashed border-[var(--color-outline-variant)] px-5 py-8 text-sm leading-6 text-[var(--color-on-surface-variant)]">
       <p className="font-medium text-[var(--color-on-surface)]">No memories found</p>
       <p className="mt-1">
-        {query
-          ? `No mock memories in ${activeTarget.label} match "${query}".`
-          : `No mock memories are available in ${activeTarget.label} with the current filters.`}
+        {trimmedQuery
+          ? `No memories in ${activeTarget.label} match "${trimmedQuery}".`
+          : `No memories in ${activeTarget.label} match the current filters.`}
       </p>
     </section>
   );

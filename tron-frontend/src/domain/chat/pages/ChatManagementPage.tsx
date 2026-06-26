@@ -443,10 +443,9 @@ function normalizeUsageEstimate(parsed: Partial<ChatTokenEstimateSnapshot> | nul
     modelProtocol: parsed.modelProtocol ?? "",
     outputTokenReserve: tokenField(parsed.outputTokenReserve),
     overBudget: Boolean(parsed.overBudget),
+    compactionTriggerReached: Boolean(parsed.compactionTriggerReached),
     partCount: tokenField(parsed.partCount) ?? 0,
-    protocolOverheadReserve: tokenField(parsed.protocolOverheadReserve),
     rebased: Boolean(parsed.rebased),
-    safetyMarginTokens: tokenField(parsed.safetyMarginTokens),
     toolSchemaTokenEstimate: parsed.toolSchemaTokenEstimate,
     usageConfidence: parsed.usageConfidence ?? "estimated",
     usageSource: parsed.usageSource ?? "local_estimate",
@@ -584,6 +583,7 @@ function formatContextWindowValue(windowTokens: number | null, usedTokens: numbe
 function formatEstimateStatus(estimate: ChatTokenEstimateSnapshot | null) {
   if (!estimate) return "unavailable";
   if (estimate.overBudget) return "over budget";
+  if (estimate.compactionTriggerReached) return "compaction threshold";
   return estimate.rebased ? "rebased" : "prepared";
 }
 

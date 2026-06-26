@@ -496,6 +496,19 @@ test("AC-RCS-04: graph and memory inspectors render in shell right sidebar and p
   await expect(rightSidebar(page).getByText("Project Alpha requires strict adherence to security protocols outlined in doc-4A.")).toBeVisible();
 });
 
+test("memory empty state uses neutral copy", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await seedWorkspaceSelection(page);
+  await routeAuthApi(page);
+  await signIn(page, "/memory");
+
+  await page.getByLabel("Search memories").fill("zz-empty-memory-copy");
+
+  await expect(page.getByText("No memories found")).toBeVisible();
+  await expect(page.getByText('No memories in Tron Core match "zz-empty-memory-copy".', { exact: true })).toBeVisible();
+  await expect(page.getByText(/mock memories/i)).toHaveCount(0);
+});
+
 test("AC-RCS-05: management inspectors render in shell right sidebar and preserve page actions", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await seedWorkspaceSelection(page);

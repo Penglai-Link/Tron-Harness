@@ -7,6 +7,7 @@ use crate::domain::short_term_memory::{
 use super::{
     CompactionContextPolicy, CreateCompactionCommand, ModelCompactionFailure,
     PreparedCompactionInput, ShortTermMemoryService,
+    service_compaction_model::DEFAULT_COMPACTION_OUTPUT_MAX_TOKENS,
     service_compaction_summary::{redact_todo_sections, truncate_chars},
 };
 
@@ -47,6 +48,8 @@ impl ShortTermMemoryService {
         context_window_tokens: Option<u32>,
         max_output_tokens: Option<u32>,
         pinned_run_code: Option<&str>,
+        tail_start_seq: Option<i64>,
+        retained_history_tokens: Option<u32>,
     ) -> Result<PreparedCompactionInput, ShortTermMemoryError> {
         self.prepare_model_compaction_input_with_trigger(
             CreateCompactionCommand {
@@ -63,6 +66,8 @@ impl ShortTermMemoryService {
             context_window_tokens,
             max_output_tokens,
             pinned_run_code,
+            tail_start_seq,
+            retained_history_tokens,
         )
     }
 
@@ -74,6 +79,8 @@ impl ShortTermMemoryService {
         context_window_tokens: Option<u32>,
         max_output_tokens: Option<u32>,
         pinned_run_code: Option<&str>,
+        tail_start_seq: Option<i64>,
+        retained_history_tokens: Option<u32>,
     ) -> Result<PreparedCompactionInput, ShortTermMemoryError> {
         self.prepare_model_compaction_input_with_trigger(
             CreateCompactionCommand {
@@ -90,11 +97,13 @@ impl ShortTermMemoryService {
             context_window_tokens,
             max_output_tokens,
             pinned_run_code,
+            tail_start_seq,
+            retained_history_tokens,
         )
     }
 
     pub fn overflow_retry_limit(&self) -> u32 {
-        self.config.compaction.overflow_retry_limit
+        1
     }
 
     pub(super) fn checkpoint_replay_min_seq(compaction: Option<&ShortTermMemoryCompaction>) -> i64 {
@@ -106,18 +115,11 @@ impl ShortTermMemoryService {
         context_window_tokens: Option<u32>,
         max_output_tokens: Option<u32>,
     ) -> u32 {
+        let output_reserve = max_output_tokens.or(Some(DEFAULT_COMPACTION_OUTPUT_MAX_TOKENS));
         let budget_plan = self
             .config
-            .model_context_budget_plan(context_window_tokens, max_output_tokens);
-        let effective_reserved = self
-            .config
-            .compaction
-            .reserved_tokens
-            .min(budget_plan.effective_input_budget / 5);
-        budget_plan
-            .effective_input_budget
-            .saturating_sub(self.config.compaction.summary_max_tokens)
-            .saturating_sub(effective_reserved)
+            .model_context_budget_plan(context_window_tokens, output_reserve);
+        budget_plan.effective_input_budget
     }
 
     pub fn record_compaction_failed(
@@ -154,6 +156,10 @@ fn checkpoint_replay_min_seq(compaction: Option<&ShortTermMemoryCompaction>) -> 
                 && item.coverage.as_deref() == Some("full_source_includes_tail")
             {
                 item.source_end_seq.saturating_add(1)
+            } else if item.selector_version >= 3
+                && item.coverage.as_deref() == Some("head_only_tail_replayed")
+            {
+                item.tail_start_seq
             } else {
                 item.tail_start_seq
             }
@@ -170,19 +176,30 @@ pub(super) fn previous_checkpoint_context_from_parts(
         .find(|part| part.part_type == "compaction_summary")
         .and_then(|part| part.content_text.as_deref())
         .unwrap_or_default();
-    let recent = parts
+    let summary_coverage = parts
         .iter()
-        .find(|part| part.part_type == "compaction_recent")
-        .and_then(|part| part.content_text.as_deref())
-        .or_else(|| {
-            parts
-                .iter()
-                .find(|part| part.part_type == "compaction_summary")
-                .and_then(|part| part.content_json.as_ref())
-                .and_then(|value| value.get("recent"))
-                .and_then(|value| value.as_str())
-        })
-        .unwrap_or_default();
+        .find(|part| part.part_type == "compaction_summary")
+        .and_then(|part| part.content_json.as_ref())
+        .and_then(|value| value.get("coverage"))
+        .and_then(|value| value.as_str());
+    let include_recent = summary_coverage != Some("head_only_tail_replayed");
+    let recent = if include_recent {
+        parts
+            .iter()
+            .find(|part| part.part_type == "compaction_recent")
+            .and_then(|part| part.content_text.as_deref())
+            .or_else(|| {
+                parts
+                    .iter()
+                    .find(|part| part.part_type == "compaction_summary")
+                    .and_then(|part| part.content_json.as_ref())
+                    .and_then(|value| value.get("recent"))
+                    .and_then(|value| value.as_str())
+            })
+            .unwrap_or_default()
+    } else {
+        ""
+    };
     let summary = if todo_enabled {
         summary.trim().to_string()
     } else {

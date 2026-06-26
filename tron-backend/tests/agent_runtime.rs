@@ -593,28 +593,15 @@ fn auto_compaction_fixture(
     let repository = SqliteShortTermMemoryRepository::connect(&database_url)
         .expect("short-term memory repository should connect");
     let mut config = ShortTermMemoryConfig::default();
-    config.context.protocol_overhead_reserve_tokens = 0;
-    config.context.safety_margin_tokens = 0;
     config
         .context
         .blocks
         .current_session_checkpoint
         .max_ratio_bps = None;
-    config.context.blocks.current_session_checkpoint.max_tokens = Some(50);
-    config
-        .context
-        .blocks
-        .current_session_recent_transcript
-        .max_ratio_bps = None;
-    config
-        .context
-        .blocks
-        .current_session_recent_transcript
-        .max_tokens = Some(5_000);
-    config.compaction.keep_recent_tokens = 2_000;
-    config.compaction.reserved_tokens = 0;
-    config.compaction.summary_max_tokens = 50;
-    config.compaction.tool_output_max_chars = 64;
+    config.context.blocks.current_session_checkpoint.max_tokens = Some(300);
+    config.compaction.trigger_ratio_bps = 4_000;
+    config.compaction.retained_history_ratio_bps = 2_000;
+
     let short_term_memory = ShortTermMemoryService::with_id_provider(
         repository,
         config,
@@ -623,20 +610,23 @@ fn auto_compaction_fixture(
     let mut old_context = base_context(&format!("RUN-{label}-OLD"));
     old_context.conversation_code = Some(session.session_code.clone());
     old_context.workspace_code = session.workspace_code.clone();
-    short_term_memory
-        .record_user_input(
-            &old_context,
-            &format!("old auto context {}", "A".repeat(4_000)),
-        )
-        .expect("old input should be recorded");
+    for index in 0..5 {
+        old_context.run_code = format!("RUN-AUTO-OLD-{index}");
+        short_term_memory
+            .record_user_input(
+                &old_context,
+                &format!("old auto context {index} {}", "A".repeat(2_500)),
+            )
+            .expect("old input should be recorded");
+    }
 
     let mut context = base_context(&format!("RUN-{label}-CURRENT"));
     context.conversation_code = Some(session.session_code.clone());
     context.workspace_code = session.workspace_code.clone();
-    context.model.context_window_tokens = Some(1_200);
+    context.model.context_window_tokens = Some(8_000);
     context.model.max_tokens = Some(0);
     context.tools.clear();
-    let current_prompt = format!("current auto input stays raw {}", "B".repeat(500));
+    let current_prompt = format!("current auto input stays raw {}", "B".repeat(200));
     context.messages = vec![AgentMessage::user(current_prompt.clone())];
     let input_code = short_term_memory
         .record_user_input(&context, &current_prompt)
@@ -646,10 +636,7 @@ fn auto_compaction_fixture(
         input_code,
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
-        prompt_prefix: vec![AgentMessage::system(format!(
-            "large stable prefix {}",
-            "P".repeat(3_400)
-        ))],
+        prompt_prefix: vec![AgentMessage::system("system seed")],
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -741,11 +728,26 @@ async fn react_agent_recovers_context_overflow_with_checkpoint_retry() {
         .expect("session should be created");
     let repository = SqliteShortTermMemoryRepository::connect(&database_url)
         .expect("short-term memory repository should connect");
-    let short_term_memory =
-        ShortTermMemoryService::new(repository, ShortTermMemoryConfig::default());
+    let config = ShortTermMemoryConfig::default();
+
+    let short_term_memory = ShortTermMemoryService::new(repository, config);
+    let mut old_context = base_context("RUN-OVERFLOW-OLD");
+    old_context.conversation_code = Some(session.session_code.clone());
+    old_context.workspace_code = session.workspace_code.clone();
+    for index in 0..5 {
+        old_context.run_code = format!("RUN-OVERFLOW-OLD-{index}");
+        short_term_memory
+            .record_user_input(
+                &old_context,
+                &format!("old overflow context {index} {}", "x".repeat(1_500)),
+            )
+            .expect("old input should be recorded");
+    }
     let mut context = base_context("RUN-OVERFLOW-RECOVERY");
     context.conversation_code = Some(session.session_code.clone());
     context.workspace_code = session.workspace_code.clone();
+    context.model.context_window_tokens = Some(8_000);
+    context.model.max_tokens = Some(0);
     context.messages = vec![AgentMessage::user("trigger overflow recovery")];
     let input_code = short_term_memory
         .record_user_input(&context, "trigger overflow recovery")
@@ -804,6 +806,9 @@ async fn react_agent_recovers_context_overflow_with_checkpoint_retry() {
     assert!(compaction_metadata.contains("OVERFLOW_CHECKPOINT"));
     assert!(compaction_metadata.contains("provider_context_overflow"));
     assert!(compaction_metadata.contains("\"compactionMode\":\"model\""));
+    assert!(compaction_metadata.contains("\"coverage\":\"head_only_tail_replayed\""));
+    assert!(compaction_metadata.contains("\"retainedHistoryRatioBps\":2000"));
+    assert!(compaction_metadata.contains("\"effectiveRetainedHistoryTokens\""));
 }
 
 #[tokio::test]
@@ -829,28 +834,15 @@ async fn react_agent_auto_compaction_calls_model_and_pins_current_input() {
     let repository = SqliteShortTermMemoryRepository::connect(&database_url)
         .expect("short-term memory repository should connect");
     let mut config = ShortTermMemoryConfig::default();
-    config.context.protocol_overhead_reserve_tokens = 0;
-    config.context.safety_margin_tokens = 0;
     config
         .context
         .blocks
         .current_session_checkpoint
         .max_ratio_bps = None;
-    config.context.blocks.current_session_checkpoint.max_tokens = Some(50);
-    config
-        .context
-        .blocks
-        .current_session_recent_transcript
-        .max_ratio_bps = None;
-    config
-        .context
-        .blocks
-        .current_session_recent_transcript
-        .max_tokens = Some(5_000);
-    config.compaction.keep_recent_tokens = 2_000;
-    config.compaction.reserved_tokens = 0;
-    config.compaction.summary_max_tokens = 50;
-    config.compaction.tool_output_max_chars = 64;
+    config.context.blocks.current_session_checkpoint.max_tokens = Some(300);
+    config.compaction.trigger_ratio_bps = 4_000;
+    config.compaction.retained_history_ratio_bps = 2_000;
+
     let short_term_memory = ShortTermMemoryService::with_id_provider(
         repository,
         config,
@@ -860,17 +852,20 @@ async fn react_agent_auto_compaction_calls_model_and_pins_current_input() {
     let mut old_context = base_context("RUN-AUTO-OLD");
     old_context.conversation_code = Some(session.session_code.clone());
     old_context.workspace_code = session.workspace_code.clone();
-    short_term_memory
-        .record_user_input(
-            &old_context,
-            &format!("old auto context {}", "A".repeat(4_000)),
-        )
-        .expect("old input should be recorded");
+    for index in 0..5 {
+        old_context.run_code = format!("RUN-AUTO-OLD-{index}");
+        short_term_memory
+            .record_user_input(
+                &old_context,
+                &format!("old auto context {index} {}", "A".repeat(2_500)),
+            )
+            .expect("old input should be recorded");
+    }
 
     let mut context = base_context("RUN-AUTO-CURRENT");
     context.conversation_code = Some(session.session_code.clone());
     context.workspace_code = session.workspace_code.clone();
-    context.model.context_window_tokens = Some(1_200);
+    context.model.context_window_tokens = Some(8_000);
     context.model.max_tokens = Some(0);
     context.tools.clear();
     let current_prompt = format!("current auto input stays raw {}", "B".repeat(500));
@@ -883,10 +878,7 @@ async fn react_agent_auto_compaction_calls_model_and_pins_current_input() {
         input_code,
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
-        prompt_prefix: vec![AgentMessage::system(format!(
-            "large stable prefix {}",
-            "P".repeat(3_400)
-        ))],
+        prompt_prefix: vec![AgentMessage::system("system seed")],
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
     });
@@ -915,7 +907,7 @@ async fn react_agent_auto_compaction_calls_model_and_pins_current_input() {
     assert_eq!(requests.len(), 2);
     assert!(requests[0].1.tools.is_empty());
     assert_eq!(requests[0].0.temperature, Some(0.0));
-    assert_eq!(requests[0].0.max_tokens, Some(50));
+    assert_eq!(requests[0].0.max_tokens, Some(4_096));
     let final_request_text = requests[1]
         .1
         .messages
@@ -944,6 +936,10 @@ async fn react_agent_auto_compaction_calls_model_and_pins_current_input() {
         .expect("model checkpoint should be persisted");
     assert!(summary.contains("MODEL AUTO SUMMARY"));
     assert!(metadata.contains("\"compactionMode\":\"model\""));
+    assert!(metadata.contains("\"coverage\":\"head_only_tail_replayed\""));
+    assert!(metadata.contains("\"selectorVersion\":4"));
+    assert!(metadata.contains("\"retainedHistoryRatioBps\":2000"));
+    assert!(metadata.contains("\"effectiveRetainedHistoryTokens\""));
     assert!(metadata.contains("\"pinnedStartSeq\""));
 }
 

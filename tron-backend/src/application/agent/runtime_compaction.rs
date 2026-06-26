@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use crate::{
     application::short_term_memory::{
         CompactionContextPolicy, ModelCompactionFailure, PreparedCompactionInput,
-        ShortTermMemoryService,
+        PreparedModelContext, ShortTermMemoryService,
     },
     domain::agent::{AgentError, AgentModelConfig, AgentRunContext},
 };
@@ -17,6 +17,7 @@ impl ReactAgent {
     pub(super) async fn try_auto_context_compaction(
         &self,
         context: &AgentRunContext,
+        prepared_context: &PreparedModelContext,
     ) -> Result<bool, AgentError> {
         let Some(short_term_memory) = self.short_term_memory.as_ref() else {
             return Ok(false);
@@ -24,19 +25,21 @@ impl ReactAgent {
         let Some(memory) = context.short_term_memory.as_ref() else {
             return Ok(false);
         };
+        let model = short_term_memory.compaction_model_config(&context.model);
         let input = short_term_memory
             .prepare_automatic_model_compaction_input(
                 &memory.session_code,
-                "auto_over_budget",
+                "auto_compaction_trigger",
                 CompactionContextPolicy {
                     todo_enabled: memory.todo_enabled,
                 },
-                context.model.context_window_tokens,
-                context.model.max_tokens,
+                model.context_window_tokens,
+                model.max_tokens,
                 Some(&context.run_code),
+                prepared_context.compaction_tail_start_seq,
+                prepared_context.effective_retained_history_tokens,
             )
             .map_err(short_term_memory_error)?;
-        let model = short_term_memory.compaction_model_config(&context.model);
         self.run_model_compaction(short_term_memory, input, &model)
             .await?;
         Ok(true)
@@ -45,6 +48,7 @@ impl ReactAgent {
     pub(super) async fn try_recover_context_overflow(
         &self,
         context: &AgentRunContext,
+        prepared_context: &PreparedModelContext,
         message: &str,
         output_started: &Arc<Mutex<bool>>,
         overflow_retries: &mut u32,
@@ -68,6 +72,7 @@ impl ReactAgent {
             return Ok(false);
         }
         *overflow_retries = overflow_retries.saturating_add(1);
+        let model = short_term_memory.compaction_model_config(&context.model);
         let input = short_term_memory
             .prepare_overflow_model_compaction_input(
                 &memory.session_code,
@@ -75,14 +80,15 @@ impl ReactAgent {
                 CompactionContextPolicy {
                     todo_enabled: memory.todo_enabled,
                 },
-                context.model.context_window_tokens,
-                context.model.max_tokens,
+                model.context_window_tokens,
+                model.max_tokens,
                 Some(&context.run_code),
+                prepared_context.compaction_tail_start_seq,
+                prepared_context.effective_retained_history_tokens,
             )
             .map_err(|error| {
                 AgentError::ModelFailure(format!("{message}; overflow compaction failed: {error}"))
             })?;
-        let model = short_term_memory.compaction_model_config(&context.model);
         self.run_model_compaction(short_term_memory, input, &model)
             .await
             .map_err(|error| {

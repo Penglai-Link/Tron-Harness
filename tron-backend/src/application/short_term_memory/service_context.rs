@@ -146,6 +146,8 @@ impl ShortTermMemoryService {
                 "checkpointCode": facts.checkpoint_code,
                 "estimatedTokens": facts.estimated_tokens,
                 "usageEstimate": facts.usage_estimate,
+                "budgetBreakdown": facts.budget_breakdown,
+                "overBudgetReason": facts.over_budget_reason,
             }),
             None,
         )

@@ -1,17 +1,17 @@
+use serde::Serialize;
+
 const DEFAULT_TOOL_OUTPUT_ROOT: &str = "~/.tron/artifacts/short-term-memory/tool-results";
 const DEFAULT_TOOL_OUTPUT_EXTERNALIZE_BYTES: usize = 32_768;
 const DEFAULT_CONTEXT_WINDOW_TOKENS: u32 = 32_000;
 const DEFAULT_FAMILY_CONTEXT_MAX_RATIO_BPS: u32 = 1_000;
 const DEFAULT_FAMILY_CONTEXT_HARD_CAP_TOKENS: u32 = 12_000;
-const DEFAULT_PROTOCOL_OVERHEAD_RESERVE_TOKENS: u32 = 512;
-const DEFAULT_SAFETY_MARGIN_TOKENS: u32 = 256;
 const DEFAULT_FAMILY_CONTEXT_MAX_CHARS: usize = 6_000;
+const DEFAULT_SEED_PROMPT_PREFIX_MAX_RATIO_BPS: u32 = 5_000;
+const DEFAULT_SEED_PROMPT_PREFIX_HARD_CAP_TOKENS: u32 = 16_000;
 const DEFAULT_CHECKPOINT_CONTEXT_MAX_RATIO_BPS: u32 = 2_000;
 const DEFAULT_CHECKPOINT_CONTEXT_HARD_CAP_TOKENS: u32 = 6_000;
 const DEFAULT_WORKING_STATE_CONTEXT_MAX_RATIO_BPS: u32 = 1_000;
 const DEFAULT_WORKING_STATE_CONTEXT_HARD_CAP_TOKENS: u32 = 2_000;
-const DEFAULT_RECENT_TRANSCRIPT_MAX_RATIO_BPS: u32 = 5_000;
-const DEFAULT_RECENT_TRANSCRIPT_HARD_CAP_TOKENS: u32 = 8_000;
 const DEFAULT_MAX_FAMILY_SNAPSHOTS: usize = 3;
 const DEFAULT_MAX_FAMILY_SESSIONS: usize = 3;
 const DEFAULT_SNAPSHOT_MAX_CHARS: usize = 2_000;
@@ -21,10 +21,8 @@ const DEFAULT_REQUIREMENT_WEIGHT_BPS: u32 = 2_500;
 const DEFAULT_WORKSPACE_CHAT_WEIGHT_BPS: u32 = 1_000;
 const DEFAULT_WORKSPACE_HEARTBEAT_WEIGHT_BPS: u32 = 1_000;
 const DEFAULT_OTHER_WEIGHT_BPS: u32 = 500;
-const DEFAULT_COMPACTION_RESERVED_TOKENS: u32 = 20_000;
-const DEFAULT_COMPACTION_SUMMARY_MAX_TOKENS: u32 = 4_096;
-const DEFAULT_COMPACTION_TOOL_OUTPUT_MAX_CHARS: usize = 2_000;
-const DEFAULT_COMPACTION_OVERFLOW_RETRY_LIMIT: u32 = 1;
+pub(super) const DEFAULT_COMPACTION_TRIGGER_RATIO_BPS: u32 = 8_000;
+pub(super) const DEFAULT_COMPACTION_RETAINED_HISTORY_RATIO_BPS: u32 = 2_000;
 const DEFAULT_GOAL_MAX_CONSECUTIVE_JUDGE_FAILURES: u32 = 3;
 const DEFAULT_GOAL_JUDGE_INPUT_MAX_CHARS: usize = 12_000;
 const DEFAULT_GOAL_JUDGE_OUTPUT_MAX_TOKENS: u32 = 1_024;
@@ -64,8 +62,6 @@ pub struct ContextBudgetConfig {
     pub default_context_window_tokens: u32,
     pub family_context_max_ratio_bps: u32,
     pub family_context_hard_cap_tokens: u32,
-    pub protocol_overhead_reserve_tokens: u32,
-    pub safety_margin_tokens: u32,
     pub family_context_max_chars: usize,
     pub reasoning_summary_replay_enabled: bool,
     pub blocks: ContextBlockBudgets,
@@ -77,17 +73,12 @@ pub struct ContextBlockBudgets {
     pub current_session_checkpoint: ContextBlockBudgetConfig,
     pub session_family_context: ContextBlockBudgetConfig,
     pub current_session_working_state: ContextBlockBudgetConfig,
-    pub current_session_recent_transcript: ContextBlockBudgetConfig,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct ContextBlockBudgetConfig {
-    pub enabled: bool,
     pub max_ratio_bps: Option<u32>,
     pub max_tokens: Option<u32>,
-    pub min_tokens: u32,
-    pub priority: u8,
-    pub allow_borrow_unused_budget: bool,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
@@ -106,15 +97,8 @@ pub struct FamilyLoadConfig {
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct CompactionPolicyConfig {
     pub auto_enabled: bool,
-    pub max_recent_turns: usize,
-    pub keep_recent_tokens: u32,
-    pub reserved_tokens: u32,
-    pub summary_max_tokens: u32,
-    pub tool_output_max_chars: usize,
-    pub overflow_retry_limit: u32,
-    pub reasoning_inclusion: String,
-    pub tool_result_policy: String,
-    pub file_policy: String,
+    pub trigger_ratio_bps: u32,
+    pub retained_history_ratio_bps: u32,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
@@ -129,8 +113,6 @@ pub struct GoalLoopConfig {
 pub struct ModelContextBudgetPlan {
     pub model_context_window: u32,
     pub output_token_reserve: u32,
-    pub protocol_overhead_reserve: u32,
-    pub safety_margin_tokens: u32,
     pub effective_input_budget: u32,
     pub block_budgets: ContextBlockBudgetPlans,
 }
@@ -141,7 +123,7 @@ pub struct ContextBlockBudgetPlans {
     pub current_session_checkpoint: ContextBlockBudgetPlan,
     pub session_family_context: ContextBlockBudgetPlan,
     pub current_session_working_state: ContextBlockBudgetPlan,
-    pub current_session_recent_transcript: ContextBlockBudgetPlan,
+    pub current_session_history: ContextBlockBudgetPlan,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
@@ -172,8 +154,6 @@ impl Default for ShortTermMemoryConfig {
                 default_context_window_tokens: DEFAULT_CONTEXT_WINDOW_TOKENS,
                 family_context_max_ratio_bps: DEFAULT_FAMILY_CONTEXT_MAX_RATIO_BPS,
                 family_context_hard_cap_tokens: DEFAULT_FAMILY_CONTEXT_HARD_CAP_TOKENS,
-                protocol_overhead_reserve_tokens: DEFAULT_PROTOCOL_OVERHEAD_RESERVE_TOKENS,
-                safety_margin_tokens: DEFAULT_SAFETY_MARGIN_TOKENS,
                 family_context_max_chars: DEFAULT_FAMILY_CONTEXT_MAX_CHARS,
                 reasoning_summary_replay_enabled: false,
                 blocks: ContextBlockBudgets::default(),
@@ -191,15 +171,8 @@ impl Default for ShortTermMemoryConfig {
             },
             compaction: CompactionPolicyConfig {
                 auto_enabled: true,
-                max_recent_turns: 12,
-                keep_recent_tokens: DEFAULT_RECENT_TRANSCRIPT_HARD_CAP_TOKENS,
-                reserved_tokens: DEFAULT_COMPACTION_RESERVED_TOKENS,
-                summary_max_tokens: DEFAULT_COMPACTION_SUMMARY_MAX_TOKENS,
-                tool_output_max_chars: DEFAULT_COMPACTION_TOOL_OUTPUT_MAX_CHARS,
-                overflow_retry_limit: DEFAULT_COMPACTION_OVERFLOW_RETRY_LIMIT,
-                reasoning_inclusion: "summary_only".into(),
-                tool_result_policy: "truncate".into(),
-                file_policy: "placeholder".into(),
+                trigger_ratio_bps: DEFAULT_COMPACTION_TRIGGER_RATIO_BPS,
+                retained_history_ratio_bps: DEFAULT_COMPACTION_RETAINED_HISTORY_RATIO_BPS,
             },
             goal_loop: GoalLoopConfig {
                 max_runs: 20,
@@ -215,44 +188,20 @@ impl Default for ContextBlockBudgets {
     fn default() -> Self {
         Self {
             seed_prompt_prefix: ContextBlockBudgetConfig {
-                enabled: true,
-                max_ratio_bps: None,
-                max_tokens: None,
-                min_tokens: 1,
-                priority: 100,
-                allow_borrow_unused_budget: false,
+                max_ratio_bps: Some(DEFAULT_SEED_PROMPT_PREFIX_MAX_RATIO_BPS),
+                max_tokens: Some(DEFAULT_SEED_PROMPT_PREFIX_HARD_CAP_TOKENS),
             },
             current_session_checkpoint: ContextBlockBudgetConfig {
-                enabled: true,
                 max_ratio_bps: Some(DEFAULT_CHECKPOINT_CONTEXT_MAX_RATIO_BPS),
                 max_tokens: Some(DEFAULT_CHECKPOINT_CONTEXT_HARD_CAP_TOKENS),
-                min_tokens: 0,
-                priority: 80,
-                allow_borrow_unused_budget: false,
             },
             session_family_context: ContextBlockBudgetConfig {
-                enabled: true,
                 max_ratio_bps: Some(DEFAULT_FAMILY_CONTEXT_MAX_RATIO_BPS),
                 max_tokens: Some(DEFAULT_FAMILY_CONTEXT_HARD_CAP_TOKENS),
-                min_tokens: 0,
-                priority: 40,
-                allow_borrow_unused_budget: false,
             },
             current_session_working_state: ContextBlockBudgetConfig {
-                enabled: true,
                 max_ratio_bps: Some(DEFAULT_WORKING_STATE_CONTEXT_MAX_RATIO_BPS),
                 max_tokens: Some(DEFAULT_WORKING_STATE_CONTEXT_HARD_CAP_TOKENS),
-                min_tokens: 0,
-                priority: 70,
-                allow_borrow_unused_budget: false,
-            },
-            current_session_recent_transcript: ContextBlockBudgetConfig {
-                enabled: true,
-                max_ratio_bps: Some(DEFAULT_RECENT_TRANSCRIPT_MAX_RATIO_BPS),
-                max_tokens: Some(DEFAULT_RECENT_TRANSCRIPT_HARD_CAP_TOKENS),
-                min_tokens: 1,
-                priority: 60,
-                allow_borrow_unused_budget: true,
             },
         }
     }
@@ -267,15 +216,10 @@ impl ShortTermMemoryConfig {
         let model_context_window =
             context_window_tokens.unwrap_or(self.context.default_context_window_tokens);
         let output_token_reserve = max_output_tokens.unwrap_or(0);
-        let effective_input_budget = model_context_window
-            .saturating_sub(output_token_reserve)
-            .saturating_sub(self.context.protocol_overhead_reserve_tokens)
-            .saturating_sub(self.context.safety_margin_tokens);
+        let effective_input_budget = model_context_window.saturating_sub(output_token_reserve);
         ModelContextBudgetPlan {
             model_context_window,
             output_token_reserve,
-            protocol_overhead_reserve: self.context.protocol_overhead_reserve_tokens,
-            safety_margin_tokens: self.context.safety_margin_tokens,
             effective_input_budget,
             block_budgets: ContextBlockBudgetPlans {
                 seed_prompt_prefix: block_plan(
@@ -298,11 +242,13 @@ impl ShortTermMemoryConfig {
                     &self.context.blocks.current_session_working_state,
                     effective_input_budget,
                 ),
-                current_session_recent_transcript: block_plan(
-                    "current_session_recent_transcript",
-                    &self.context.blocks.current_session_recent_transcript,
-                    effective_input_budget,
-                ),
+                current_session_history: ContextBlockBudgetPlan {
+                    block_kind: "current_session_history",
+                    enabled: true,
+                    effective_limit_tokens: effective_input_budget,
+                    priority: 60,
+                    allow_borrow_unused_budget: true,
+                },
             },
         }
     }
@@ -313,15 +259,6 @@ fn block_plan(
     config: &ContextBlockBudgetConfig,
     effective_input_budget: u32,
 ) -> ContextBlockBudgetPlan {
-    if !config.enabled {
-        return ContextBlockBudgetPlan {
-            block_kind,
-            enabled: false,
-            effective_limit_tokens: 0,
-            priority: config.priority,
-            allow_borrow_unused_budget: config.allow_borrow_unused_budget,
-        };
-    }
     let ratio_cap = config
         .max_ratio_bps
         .map(|ratio| effective_input_budget.saturating_mul(ratio.min(10_000)) / 10_000);
@@ -331,14 +268,12 @@ fn block_plan(
         (None, Some(max_tokens)) => max_tokens,
         (None, None) => effective_input_budget,
     }
-    .max(config.min_tokens)
-    .min(effective_input_budget.max(config.min_tokens));
+    .min(effective_input_budget);
     ContextBlockBudgetPlan {
         block_kind,
         enabled: true,
         effective_limit_tokens,
-        priority: config.priority,
-        allow_borrow_unused_budget: config.allow_borrow_unused_budget,
+        priority: 0,
+        allow_borrow_unused_budget: false,
     }
 }
-use serde::Serialize;

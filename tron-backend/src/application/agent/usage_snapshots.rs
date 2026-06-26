@@ -27,8 +27,6 @@ pub(crate) fn request_estimate_snapshot(
             .or(context.model.context_window_tokens),
         effective_input_budget: prepared_context.effective_input_budget,
         output_token_reserve: prepared_context.output_token_reserve,
-        protocol_overhead_reserve: prepared_context.protocol_overhead_reserve,
-        safety_margin_tokens: prepared_context.safety_margin_tokens,
         message_count: request.messages.len() as u32,
         part_count: request
             .messages
@@ -37,6 +35,7 @@ pub(crate) fn request_estimate_snapshot(
             .sum(),
         rebased: prepared_context.rebased,
         over_budget: prepared_context.over_budget,
+        compaction_trigger_reached: prepared_context.compaction_trigger_reached,
         checkpoint_code: prepared_context.checkpoint_code.clone(),
         model_code: context.model.model_code.clone(),
         model_name: context.model.model_name.clone(),

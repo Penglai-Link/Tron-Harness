@@ -1,8 +1,8 @@
 mod assembler;
 mod config;
 mod dto;
+mod history_retention;
 mod port;
-mod selector;
 mod service;
 mod service_access;
 mod service_compaction;
@@ -29,12 +29,12 @@ pub use config::{
     ShortTermMemoryConfig, ToolOutputConfig,
 };
 pub use dto::{
-    AddGoalCriterionCommand, CompactionContextPolicy, CreateCompactionCommand, GoalJudgeFailure,
-    GoalJudgeOutput, GoalLoopDecision, GoalSessionCommand, ModelCompactionFailure,
-    ModelCompactionOutput, ModelRequestTranscriptFacts, ModelResponseTranscriptFacts,
-    PreparedCompactionInput, PreparedGoalJudgeInput, PreparedModelContext,
-    RemoveGoalCriterionCommand, ReplaceTodosCommand, SetGoalCommand, TodoUpdateItem,
-    ToolTranscriptStatus,
+    AddGoalCriterionCommand, CompactionContextPolicy, ContextBudgetBreakdown,
+    CreateCompactionCommand, GoalJudgeFailure, GoalJudgeOutput, GoalLoopDecision,
+    GoalSessionCommand, ModelCompactionFailure, ModelCompactionOutput, ModelRequestTranscriptFacts,
+    ModelResponseTranscriptFacts, PreparedCompactionInput, PreparedGoalJudgeInput,
+    PreparedModelContext, RemoveGoalCriterionCommand, ReplaceTodosCommand, SetGoalCommand,
+    TodoUpdateItem, ToolTranscriptStatus,
 };
 pub use port::ShortTermMemoryRepository;
 pub use service::ShortTermMemoryService;

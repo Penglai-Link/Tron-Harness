@@ -212,9 +212,7 @@ impl AgentMessagePart {
             Self::Reasoning { .. } | Self::ToolCall { .. } | Self::ToolResult { .. } => None,
             Self::CompactionCheckpoint {
                 summary, recent, ..
-            } => Some(format!(
-                "Conversation checkpoint:\n{summary}\n\nRecent retained context:\n{recent}"
-            )),
+            } => Some(render_compaction_checkpoint(summary, recent)),
         }
     }
 
@@ -255,11 +253,16 @@ impl AgentMessagePart {
             }
             Self::CompactionCheckpoint {
                 summary, recent, ..
-            } => Some(format!(
-                "Conversation checkpoint:\n{summary}\n\nRecent retained context:\n{recent}"
-            )),
+            } => Some(render_compaction_checkpoint(summary, recent)),
         }
     }
+}
+
+fn render_compaction_checkpoint(summary: &str, recent: &str) -> String {
+    if recent.trim().is_empty() {
+        return format!("Conversation checkpoint:\n{summary}");
+    }
+    format!("Conversation checkpoint:\n{summary}\n\nRecent retained context:\n{recent}")
 }
 
 fn tool_name_from_observation_text(content: &str) -> String {

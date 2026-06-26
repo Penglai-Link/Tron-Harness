@@ -71,12 +71,11 @@ export interface ChatTokenEstimateSnapshot {
   contextWindowLimit?: number | null;
   effectiveInputBudget?: number | null;
   outputTokenReserve?: number | null;
-  protocolOverheadReserve?: number | null;
-  safetyMarginTokens?: number | null;
   messageCount: number;
   partCount: number;
   rebased: boolean;
   overBudget: boolean;
+  compactionTriggerReached: boolean;
   checkpointCode?: string | null;
   modelCode: string;
   modelName: string;

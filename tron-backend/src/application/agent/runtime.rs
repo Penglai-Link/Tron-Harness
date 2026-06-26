@@ -6,7 +6,8 @@ use std::{
 
 use crate::{
     application::short_term_memory::{
-        ModelRequestTranscriptFacts, ModelResponseTranscriptFacts, ShortTermMemoryService,
+        ModelRequestTranscriptFacts, ModelResponseTranscriptFacts, PreparedModelContext,
+        ShortTermMemoryService,
     },
     domain::agent::{
         AgentError, AgentMessage, AgentModelConfig, AgentModelProtocol, AgentRunContext,
@@ -41,7 +42,7 @@ pub type ModelStreamSink = Arc<dyn Fn(ModelStreamEvent) + Send + Sync>;
 fn model_request_facts(
     request: &ModelRequest,
     context: &AgentRunContext,
-    prepared_context: &crate::application::short_term_memory::PreparedModelContext,
+    prepared_context: &PreparedModelContext,
     usage_estimate: crate::domain::agent::TokenEstimateSnapshot,
 ) -> ModelRequestTranscriptFacts {
     ModelRequestTranscriptFacts {
@@ -58,8 +59,25 @@ fn model_request_facts(
         previous_response_id_present: request.previous_response_id.is_some(),
         context_window_estimate: context.model.context_window_tokens,
         checkpoint_code: prepared_context.checkpoint_code.clone(),
+        budget_breakdown: prepared_context.budget_breakdown.clone(),
+        over_budget_reason: prepared_context.over_budget_reason.clone(),
         usage_estimate: Some(usage_estimate),
     }
+}
+
+fn prepared_context_event_payload(
+    prepared_context: &PreparedModelContext,
+) -> Vec<(String, String)> {
+    let mut payload = Vec::new();
+    if let Some(breakdown) = prepared_context.budget_breakdown.as_ref()
+        && let Ok(value) = serde_json::to_string(breakdown)
+    {
+        payload.push(("budgetBreakdown".to_string(), value));
+    }
+    if let Some(reason) = prepared_context.over_budget_reason.as_ref() {
+        payload.push(("overBudgetReason".to_string(), reason.clone()));
+    }
+    payload
 }
 
 fn request_message_part_count(messages: &[AgentMessage]) -> usize {
@@ -211,7 +229,7 @@ impl ReactAgent {
                     short_term_memory.prepare_model_context(context),
                 )?
             } else {
-                crate::application::short_term_memory::PreparedModelContext {
+                PreparedModelContext {
                     messages: context.messages.clone(),
                     rebased: false,
                     context_hash: None,
@@ -219,25 +237,49 @@ impl ReactAgent {
                     estimated_tokens: 0,
                     message_token_estimate: 0,
                     tool_schema_token_estimate: estimate_tool_schema_tokens(&context.tools),
+                    budget_breakdown: None,
+                    over_budget_reason: None,
                     context_window_limit: context.model.context_window_tokens,
                     effective_input_budget: None,
                     output_token_reserve: context.model.max_tokens,
-                    protocol_overhead_reserve: None,
-                    safety_margin_tokens: None,
                     over_budget: false,
+                    compaction_trigger_reached: false,
+                    compaction_required: false,
+                    compaction_tail_start_seq: None,
+                    compaction_trigger_tokens: None,
+                    effective_retained_history_tokens: None,
                 }
             };
+            if prepared_context.compaction_required
+                && prepared_context.compaction_trigger_reached
+                && self
+                    .try_auto_context_compaction(context, &prepared_context)
+                    .await?
+            {
+                continue;
+            }
             if prepared_context.over_budget {
-                if self.try_auto_context_compaction(context).await? {
-                    continue;
-                }
-                self.publish(
+                let failure_reason = prepared_context
+                    .over_budget_reason
+                    .as_deref()
+                    .unwrap_or("context_budget_exceeded");
+                let mut payload = prepared_context_event_payload(&prepared_context);
+                payload.push((
+                    "failureCode".to_string(),
+                    "context_budget_exceeded".to_string(),
+                ));
+                self.publish_with_payload(
                     &context,
                     "agent.run.failed",
                     BusOutcome::Failure,
-                    Some("context_budget_exceeded"),
+                    Some(failure_reason),
+                    payload,
                 )?;
-                self.record_short_term_memory_failure(context, "context_budget_exceeded")?;
+                if let Some(short_term_memory) = self.short_term_memory.as_ref() {
+                    short_term_memory
+                        .record_run_failed_with_budget(context, failure_reason, &prepared_context)
+                        .map_err(short_term_memory_error)?;
+                }
                 return Err(AgentError::InvalidConfiguration(
                     "short-term memory context exceeded budget".into(),
                 ));
@@ -255,7 +297,11 @@ impl ReactAgent {
                 "agent.model.requested",
                 BusOutcome::Started,
                 Some("model_requested"),
-                usage_event_payload("usage_estimate_json", &request_estimate),
+                {
+                    let mut payload = usage_event_payload("usage_estimate_json", &request_estimate);
+                    payload.extend(prepared_context_event_payload(&prepared_context));
+                    payload
+                },
             )?;
             if let Some(short_term_memory) = self.short_term_memory.as_ref() {
                 record_failure_on_short_term_memory_error(
@@ -293,6 +339,7 @@ impl ReactAgent {
                     match self
                         .try_recover_context_overflow(
                             context,
+                            &prepared_context,
                             &message,
                             &output_started,
                             &mut overflow_retries,

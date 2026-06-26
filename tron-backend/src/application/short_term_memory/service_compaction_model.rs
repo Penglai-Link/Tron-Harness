@@ -17,12 +17,14 @@ use crate::{
 use super::{
     CompactionContextPolicy, CreateCompactionCommand, ModelCompactionFailure,
     ModelCompactionOutput, PreparedCompactionInput, ShortTermMemoryService,
-    selector::RecentTranscriptSelector,
+    history_retention::{select_history_from_tail_start, select_retained_history},
     service_compaction::previous_checkpoint_context_from_parts,
     service_compaction_prompt::{CompactionPromptParts, hash_prompt, render_compaction_prompt},
     service_compaction_summary::compaction_transcript_summary,
     service_parts::estimate_text_tokens,
 };
+
+pub(super) const DEFAULT_COMPACTION_OUTPUT_MAX_TOKENS: u32 = 4_096;
 
 impl ShortTermMemoryService {
     pub fn prepare_manual_model_compaction_input(
@@ -44,6 +46,8 @@ impl ShortTermMemoryService {
             context_window_tokens,
             max_output_tokens,
             None,
+            None,
+            None,
         )
     }
 
@@ -58,6 +62,8 @@ impl ShortTermMemoryService {
         context_window_tokens: Option<u32>,
         max_output_tokens: Option<u32>,
         pinned_run_code: Option<&str>,
+        requested_tail_start_seq: Option<i64>,
+        requested_retained_history_tokens: Option<u32>,
     ) -> Result<PreparedCompactionInput, ShortTermMemoryError> {
         let session_code = command.session_code.trim();
         let workspace_code = self.ensure_session(session_code)?;
@@ -78,36 +84,82 @@ impl ShortTermMemoryService {
         let messages = self
             .repository()
             .list_messages_after_seq(session_code, min_seq)?;
-        let pinned_start_seq = pinned_run_code.and_then(|run_code| {
+        let effective_max_output_tokens =
+            max_output_tokens.or(Some(DEFAULT_COMPACTION_OUTPUT_MAX_TOKENS));
+        let budget_plan = self
+            .config
+            .model_context_budget_plan(context_window_tokens, effective_max_output_tokens);
+        let head_only_tail_replayed = matches!(strategy, "AUTO_CHECKPOINT" | "OVERFLOW_CHECKPOINT");
+        let retained_history_tokens = requested_retained_history_tokens.unwrap_or_else(|| {
+            budget_plan.effective_input_budget.saturating_mul(
+                self.config
+                    .compaction
+                    .retained_history_ratio_bps
+                    .min(10_000),
+            ) / 10_000
+        });
+        let selection = if let Some(tail_start_seq) = requested_tail_start_seq {
+            select_history_from_tail_start(
+                messages.clone(),
+                tail_start_seq,
+                pinned_run_code,
+                self.config.context.reasoning_summary_replay_enabled,
+            )
+        } else {
+            select_retained_history(
+                messages.clone(),
+                retained_history_tokens,
+                pinned_run_code,
+                self.config.context.reasoning_summary_replay_enabled,
+            )
+        };
+        let source_start_seq = selection.source_start_seq;
+        let selection_source_end_seq = selection.source_end_seq;
+        let head_messages = selection.head_messages.clone();
+        if head_only_tail_replayed && head_messages.is_empty() {
+            return Err(ShortTermMemoryError::ContextBudgetExceeded);
+        }
+        let head_end_seq = head_messages
+            .last()
+            .map(|(message, _)| message.seq)
+            .unwrap_or_else(|| selection.tail_start_seq.saturating_sub(1));
+        let tail_start_seq = if head_only_tail_replayed {
+            head_end_seq.saturating_add(1)
+        } else {
+            selection.tail_start_seq
+        };
+        let tail_messages = if head_only_tail_replayed && tail_start_seq < selection.tail_start_seq
+        {
             messages
                 .iter()
-                .filter(|(message, _)| message.run_code.as_deref() == Some(run_code))
-                .map(|(message, _)| message.seq)
-                .min()
-        });
-        let messages_to_compact = messages
-            .into_iter()
-            .filter(|(message, _)| {
-                pinned_start_seq
-                    .map(|pinned_seq| message.seq < pinned_seq)
-                    .unwrap_or(true)
-            })
-            .collect::<Vec<_>>();
-        let selector = RecentTranscriptSelector::new(
-            &self.config.compaction,
-            self.config.compaction.keep_recent_tokens,
-            self.config.context.reasoning_summary_replay_enabled,
-        );
-        let selection = selector.select(messages_to_compact);
-        let source_start_seq = selection.source_start_seq;
-        let source_end_seq = selection.source_end_seq;
-        let tail_start_seq = selection.tail_start_seq;
+                .filter(|(message, _)| message.seq >= tail_start_seq)
+                .cloned()
+                .collect::<Vec<_>>()
+        } else {
+            selection.tail_messages.clone()
+        };
+        let coverage = if head_only_tail_replayed {
+            "head_only_tail_replayed"
+        } else {
+            "full_source_includes_tail"
+        };
+        let selector_version = if head_only_tail_replayed { 4 } else { 2 };
+        let source_end_seq = if head_only_tail_replayed {
+            head_end_seq
+        } else {
+            selection_source_end_seq
+        };
         let (history_to_compact, recent) = compaction_transcript_summary(
-            &selection.head_messages,
-            &selection.tail_messages,
-            self.config.compaction.tool_output_max_chars,
+            &head_messages,
+            &tail_messages,
             self.config.context.reasoning_summary_replay_enabled,
         );
+        let tail_token_estimate =
+            if head_only_tail_replayed && tail_start_seq < selection.tail_start_seq {
+                estimate_text_tokens(&recent)
+            } else {
+                selection.tail_token_estimate
+            };
         let prompt = render_compaction_prompt(CompactionPromptParts {
             previous_checkpoint: previous_checkpoint_context.as_deref(),
             history_to_compact: &history_to_compact,
@@ -118,7 +170,7 @@ impl ShortTermMemoryService {
         let prompt_hash = hash_prompt(&prompt);
         let compaction_input_token_estimate = estimate_text_tokens(&prompt);
         let max_input_tokens =
-            self.compaction_input_budget(context_window_tokens, max_output_tokens);
+            self.compaction_input_budget(context_window_tokens, effective_max_output_tokens);
 
         let input = PreparedCompactionInput {
             session_code: session_code.to_string(),
@@ -134,18 +186,25 @@ impl ShortTermMemoryService {
                 .as_ref()
                 .map(|item| item.checkpoint_message_code.clone()),
             previous_checkpoint_included_recent: previous_checkpoint_context.is_some(),
+            coverage: coverage.to_string(),
+            selector_version,
+            selection_source_end_seq,
+            trigger_ratio_bps: self.config.compaction.trigger_ratio_bps,
+            retained_history_ratio_bps: self.config.compaction.retained_history_ratio_bps,
+            effective_retained_history_tokens: retained_history_tokens,
             source_start_seq,
             source_end_seq,
             tail_start_seq,
-            source_message_count: selection.source_message_count,
+            source_message_count: head_messages.len(),
+            selection_source_message_count: selection.source_message_count,
             source_token_estimate: estimate_text_tokens(&history_to_compact),
-            tail_token_estimate: selection.tail_token_estimate,
+            tail_token_estimate,
             compaction_input_token_estimate,
             max_input_tokens,
             recent,
             prompt,
             prompt_hash,
-            pinned_start_seq,
+            pinned_start_seq: selection.pinned_start_seq,
         };
 
         self.append_event(
@@ -161,20 +220,23 @@ impl ShortTermMemoryService {
                 "reason": input.reason,
                 "sourceStartSeq": input.source_start_seq,
                 "sourceEndSeq": input.source_end_seq,
+                "selectionSourceEndSeq": input.selection_source_end_seq,
                 "tailStartSeq": input.tail_start_seq,
                 "pinnedStartSeq": input.pinned_start_seq,
                 "sourceMessageCount": input.source_message_count,
+                "selectionSourceMessageCount": input.selection_source_message_count,
                 "sourceTokenEstimate": input.source_token_estimate,
                 "tailTokenEstimate": input.tail_token_estimate,
                 "compactionInputTokenEstimate": input.compaction_input_token_estimate,
                 "maxInputTokens": input.max_input_tokens,
-                "summaryMaxTokens": self.config.compaction.summary_max_tokens,
-                "keepRecentTokens": self.config.compaction.keep_recent_tokens,
-                "maxRecentTurns": self.config.compaction.max_recent_turns,
-                "toolOutputMaxChars": self.config.compaction.tool_output_max_chars,
+                "triggerRatioBps": input.trigger_ratio_bps,
+                "retainedHistoryRatioBps": input.retained_history_ratio_bps,
+                "effectiveRetainedHistoryTokens": input.effective_retained_history_tokens,
                 "previousCheckpointMessageCode": input.previous_checkpoint_message_code,
                 "promptHash": input.prompt_hash,
                 "compactionMode": "model",
+                "selectorVersion": input.selector_version,
+                "coverage": input.coverage,
             }),
             None,
         )?;
@@ -195,7 +257,11 @@ impl ShortTermMemoryService {
 
     pub fn compaction_model_config(&self, base: &AgentModelConfig) -> AgentModelConfig {
         let mut config = base.clone();
-        config.max_tokens = Some(self.config.compaction.summary_max_tokens);
+        config.max_tokens = Some(
+            base.max_tokens
+                .filter(|tokens| *tokens > 0)
+                .unwrap_or(DEFAULT_COMPACTION_OUTPUT_MAX_TOKENS),
+        );
         config.temperature = Some(0.0);
         config.top_p = Some(1.0);
         config.thinking_enabled = false;
@@ -285,18 +351,20 @@ impl ShortTermMemoryService {
             "previousCheckpointIncludedRecent": input.previous_checkpoint_included_recent,
             "sourceStartSeq": input.source_start_seq,
             "sourceEndSeq": input.source_end_seq,
+            "selectionSourceEndSeq": input.selection_source_end_seq,
             "tailStartSeq": input.tail_start_seq,
             "pinnedStartSeq": input.pinned_start_seq,
             "sourceMessageCount": input.source_message_count,
+            "selectionSourceMessageCount": input.selection_source_message_count,
             "sourceTokenEstimate": input.source_token_estimate,
             "tailTokenEstimate": input.tail_token_estimate,
             "compactionInputTokenEstimate": input.compaction_input_token_estimate,
             "summaryTokenEstimate": summary_token_estimate,
-            "selectorVersion": 2,
-            "coverage": "full_source_includes_tail",
-            "keepRecentTokens": self.config.compaction.keep_recent_tokens,
-            "maxRecentTurns": self.config.compaction.max_recent_turns,
-            "toolOutputMaxChars": self.config.compaction.tool_output_max_chars,
+            "selectorVersion": input.selector_version,
+            "coverage": input.coverage,
+            "triggerRatioBps": input.trigger_ratio_bps,
+            "retainedHistoryRatioBps": input.retained_history_ratio_bps,
+            "effectiveRetainedHistoryTokens": input.effective_retained_history_tokens,
         });
         let token_usage = output.token_usage;
         let message = ShortTermMemoryMessage {
@@ -340,9 +408,13 @@ impl ShortTermMemoryService {
                 "recent": input.recent,
                 "sourceStartSeq": input.source_start_seq,
                 "sourceEndSeq": input.source_end_seq,
+                "selectionSourceEndSeq": input.selection_source_end_seq,
                 "tailStartSeq": input.tail_start_seq,
-                "selectorVersion": 2,
-                "coverage": "full_source_includes_tail",
+                "selectorVersion": input.selector_version,
+                "coverage": input.coverage,
+                "triggerRatioBps": input.trigger_ratio_bps,
+                "retainedHistoryRatioBps": input.retained_history_ratio_bps,
+                "effectiveRetainedHistoryTokens": input.effective_retained_history_tokens,
                 "compactionMode": "model",
                 "promptHash": input.prompt_hash,
             })),
@@ -363,14 +435,13 @@ impl ShortTermMemoryService {
             content_text: Some(input.recent.clone()),
             content_json: Some(json!({
                 "sourceStartSeq": input.tail_start_seq,
-                "sourceEndSeq": input.source_end_seq,
+                "sourceEndSeq": input.selection_source_end_seq,
+                "selectionSourceEndSeq": input.selection_source_end_seq,
+                "coverage": input.coverage,
                 "policy": {
-                    "maxRecentTurns": self.config.compaction.max_recent_turns,
-                    "keepRecentTokens": self.config.compaction.keep_recent_tokens,
-                    "toolOutputMaxChars": self.config.compaction.tool_output_max_chars,
-                    "filePolicy": self.config.compaction.file_policy,
-                    "toolResultPolicy": self.config.compaction.tool_result_policy,
-                    "reasoningInclusion": self.config.compaction.reasoning_inclusion,
+                    "triggerRatioBps": input.trigger_ratio_bps,
+                    "retainedHistoryRatioBps": input.retained_history_ratio_bps,
+                    "effectiveRetainedHistoryTokens": input.effective_retained_history_tokens,
                     "reasoningSummaryReplayEnabled": self.config.context.reasoning_summary_replay_enabled,
                 }
             })),
@@ -386,8 +457,8 @@ impl ShortTermMemoryService {
             source_start_seq: input.source_start_seq,
             source_end_seq: input.source_end_seq,
             tail_start_seq: input.tail_start_seq,
-            selector_version: 2,
-            coverage: Some("full_source_includes_tail".into()),
+            selector_version: input.selector_version,
+            coverage: Some(input.coverage.clone()),
             summary_token_estimate,
             created_at: now,
         };
@@ -434,8 +505,6 @@ fn compaction_usage_estimate(
         context_window_limit: model.context_window_tokens,
         effective_input_budget: Some(input.max_input_tokens),
         output_token_reserve: model.max_tokens,
-        protocol_overhead_reserve: None,
-        safety_margin_tokens: None,
         message_count: 2,
         part_count: 2,
         rebased: false,
@@ -446,6 +515,7 @@ fn compaction_usage_estimate(
         model_protocol: model_protocol.to_string(),
         usage_source: "local_estimate".into(),
         usage_confidence: "estimated".into(),
+        compaction_trigger_reached: false,
     }
 }
 

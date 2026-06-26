@@ -17,8 +17,8 @@ use crate::{
 };
 
 use super::{
-    ModelResponseTranscriptFacts, PreparedModelContext, ShortTermMemoryConfig,
-    ShortTermMemoryRepository, selector::RecentTranscriptSelector,
+    ModelContextBudgetPlan, ModelResponseTranscriptFacts, PreparedModelContext,
+    ShortTermMemoryConfig, ShortTermMemoryRepository, history_retention::select_retained_history,
     service_parts::transcript_part_from_agent_part,
 };
 
@@ -127,6 +127,34 @@ impl ShortTermMemoryService {
         )
     }
 
+    pub fn record_run_failed_with_budget(
+        &self,
+        context: &AgentRunContext,
+        reason: &str,
+        prepared_context: &PreparedModelContext,
+    ) -> Result<(), ShortTermMemoryError> {
+        let Some(memory) = context.short_term_memory.as_ref() else {
+            return Ok(());
+        };
+        self.append_run_lifecycle_event(
+            &memory.session_code,
+            &context.workspace_code,
+            Some(&context.run_code),
+            Some(&memory.input_code),
+            None,
+            None,
+            "agent.run.failed",
+            "RUNTIME",
+            json!({
+                "runCode": context.run_code,
+                "reason": reason,
+                "budgetBreakdown": prepared_context.budget_breakdown.as_ref(),
+                "overBudgetReason": prepared_context.over_budget_reason.as_deref(),
+            }),
+            None,
+        )
+    }
+
     pub fn prepare_model_context(
         &self,
         context: &AgentRunContext,
@@ -140,12 +168,17 @@ impl ShortTermMemoryService {
                 estimated_tokens: estimate_messages_tokens(&context.messages),
                 message_token_estimate: estimate_messages_tokens(&context.messages),
                 tool_schema_token_estimate: 0,
+                budget_breakdown: None,
+                over_budget_reason: None,
                 context_window_limit: context.model.context_window_tokens,
                 effective_input_budget: None,
                 output_token_reserve: context.model.max_tokens,
-                protocol_overhead_reserve: None,
-                safety_margin_tokens: None,
                 over_budget: false,
+                compaction_trigger_reached: false,
+                compaction_required: false,
+                compaction_tail_start_seq: None,
+                compaction_trigger_tokens: None,
+                effective_retained_history_tokens: None,
             });
         };
         let budget_plan = self.config.model_context_budget_plan(
@@ -178,67 +211,157 @@ impl ShortTermMemoryService {
             Vec::new()
         };
         drop(repository);
-        let keep_recent_tokens = self.config.compaction.keep_recent_tokens.min(
-            budget_plan
-                .block_budgets
-                .current_session_recent_transcript
-                .effective_limit_tokens,
-        );
-        let selector = RecentTranscriptSelector::new(
-            &self.config.compaction,
-            keep_recent_tokens,
-            self.config.context.reasoning_summary_replay_enabled,
-        );
-        let selection = selector.select(recent_source);
         let family_context = self.load_session_family_context(
             &memory.session_code,
             &budget_plan,
             memory.todo_enabled,
         )?;
         let active_goal = self.load_active_goal_for_context(&memory.session_code)?;
-        let mut prepared = assemble_context(
+        let tool_schema_token_estimate = estimate_tool_schema_tokens(&context.tools);
+        let mut full_prepared = assemble_context(
             &memory.prompt_prefix,
-            checkpoint,
-            family_context,
+            checkpoint.clone(),
+            family_context.clone(),
             &todos,
             active_goal.as_ref(),
-            selection.tail_messages,
+            recent_source.clone(),
             memory.todo_enabled,
             &budget_plan,
             self.config.context.reasoning_summary_replay_enabled,
         );
-        let tool_schema_token_estimate = estimate_tool_schema_tokens(&context.tools);
-        prepared.estimated_tokens = prepared
-            .estimated_tokens
-            .saturating_add(tool_schema_token_estimate);
-        prepared.tool_schema_token_estimate = tool_schema_token_estimate;
-        prepared.context_window_limit = Some(budget_plan.model_context_window);
-        prepared.effective_input_budget = Some(budget_plan.effective_input_budget);
-        prepared.output_token_reserve = Some(budget_plan.output_token_reserve);
-        prepared.protocol_overhead_reserve = Some(budget_plan.protocol_overhead_reserve);
-        prepared.safety_margin_tokens = Some(budget_plan.safety_margin_tokens);
-        prepared.over_budget = prepared.estimated_tokens > budget_plan.effective_input_budget;
-        prepared.checkpoint_code = checkpoint_code;
-        if prepared.over_budget && self.config.compaction.auto_enabled {
-            self.append_event(
-                &memory.session_code,
-                &context.workspace_code,
+        apply_request_budget_fields(
+            &mut full_prepared,
+            &budget_plan,
+            &self.config,
+            tool_schema_token_estimate,
+        );
+        full_prepared.checkpoint_code = checkpoint_code.clone();
+        let full_history_tokens = full_prepared
+            .budget_breakdown
+            .as_ref()
+            .map(|breakdown| breakdown.recent_transcript_tokens);
+        annotate_compaction_budget(
+            &mut full_prepared,
+            &budget_plan,
+            &self.config,
+            recent_source.len(),
+            recent_source.len(),
+            0,
+            None,
+            full_history_tokens,
+        );
+
+        if self.config.compaction.auto_enabled
+            && full_prepared.compaction_trigger_reached
+            && !prompt_prefix_budget_exceeded(&full_prepared)
+        {
+            let history_budget_tokens = current_session_history_budget_tokens(&full_prepared);
+            let retained_history_tokens = history_budget_tokens.saturating_mul(
+                self.config
+                    .compaction
+                    .retained_history_ratio_bps
+                    .min(10_000),
+            ) / 10_000;
+            let selection = select_retained_history(
+                recent_source.clone(),
+                retained_history_tokens,
                 Some(&context.run_code),
-                Some(&memory.input_code),
-                None,
-                None,
-                "agent.context.compaction_requested",
-                "RUNTIME",
-                json!({
-                    "estimatedTokens": prepared.estimated_tokens,
-                    "toolSchemaTokenEstimate": tool_schema_token_estimate,
-                    "maxOutputTokens": context.model.max_tokens,
-                    "compactionMode": "model",
-                }),
-                None,
-            )?;
-            return Ok(prepared);
+                self.config.context.reasoning_summary_replay_enabled,
+            );
+            if selection.head_messages.is_empty() {
+                if let Some(breakdown) = full_prepared.budget_breakdown.as_mut() {
+                    breakdown.current_session_history_budget_tokens = Some(history_budget_tokens);
+                    breakdown.effective_retained_history_tokens = Some(retained_history_tokens);
+                    breakdown.raw_tail_transcript_tokens = selection.tail_token_estimate;
+                    breakdown.compressed_history_tokens = 0;
+                    breakdown.history_source_message_count = Some(selection.source_message_count);
+                    breakdown.raw_tail_message_count = Some(selection.tail_messages.len());
+                    breakdown.compressed_history_message_count = Some(0);
+                    breakdown.raw_tail_start_seq = Some(selection.tail_start_seq);
+                }
+                refresh_over_budget_reason(&mut full_prepared);
+            } else {
+                let selected_tail_message_count = selection.tail_messages.len();
+                let compressed_history_message_count = selection.head_messages.len();
+                let tail_start_seq = selection.tail_start_seq;
+                let full_estimated_tokens = full_prepared.estimated_tokens;
+                let mut tail_prepared = assemble_context(
+                    &memory.prompt_prefix,
+                    checkpoint,
+                    family_context,
+                    &todos,
+                    active_goal.as_ref(),
+                    selection.tail_messages,
+                    memory.todo_enabled,
+                    &budget_plan,
+                    self.config.context.reasoning_summary_replay_enabled,
+                );
+                apply_request_budget_fields(
+                    &mut tail_prepared,
+                    &budget_plan,
+                    &self.config,
+                    tool_schema_token_estimate,
+                );
+                tail_prepared.checkpoint_code = checkpoint_code;
+                tail_prepared.compaction_required = true;
+                tail_prepared.compaction_tail_start_seq = Some(tail_start_seq);
+                annotate_compaction_budget(
+                    &mut tail_prepared,
+                    &budget_plan,
+                    &self.config,
+                    selection.source_message_count,
+                    selected_tail_message_count,
+                    compressed_history_message_count,
+                    Some(tail_start_seq),
+                    full_history_tokens,
+                );
+                tail_prepared.compaction_trigger_reached = true;
+                if let Some(breakdown) = tail_prepared.budget_breakdown.as_mut() {
+                    breakdown.compaction_trigger_reached = true;
+                }
+                self.append_event(
+                    &memory.session_code,
+                    &context.workspace_code,
+                    Some(&context.run_code),
+                    Some(&memory.input_code),
+                    None,
+                    None,
+                    "agent.context.compaction_requested",
+                    "RUNTIME",
+                    json!({
+                        "estimatedTokens": tail_prepared.estimated_tokens,
+                        "fullEstimatedTokens": full_estimated_tokens,
+                        "toolSchemaTokenEstimate": tool_schema_token_estimate,
+                        "maxOutputTokens": context.model.max_tokens,
+                        "triggerEstimateMode": "input_threshold",
+                        "triggerRatioBps": self.config.compaction.trigger_ratio_bps,
+                        "triggerTokens": tail_prepared.compaction_trigger_tokens,
+                        "compactionTriggerReached": tail_prepared.compaction_trigger_reached,
+                        "retainedHistoryRatioBps": self.config.compaction.retained_history_ratio_bps,
+                        "effectiveRetainedHistoryTokens": tail_prepared.effective_retained_history_tokens,
+                        "tailStartSeq": tail_start_seq,
+                        "rawTailStartSeq": tail_start_seq,
+                        "pinnedStartSeq": selection.pinned_start_seq,
+                        "compressedHistoryMessageCount": compressed_history_message_count,
+                        "rawTailMessageCount": selected_tail_message_count,
+                        "historySourceMessageCount": selection.source_message_count,
+                        "historyRetention": {
+                            "rawTailStartSeq": tail_start_seq,
+                            "pinnedStartSeq": selection.pinned_start_seq,
+                            "rawTailMessageCount": selected_tail_message_count,
+                            "compressedHistoryMessageCount": compressed_history_message_count,
+                            "historySourceMessageCount": selection.source_message_count,
+                        },
+                        "budgetBreakdown": tail_prepared.budget_breakdown.as_ref(),
+                        "overBudgetReason": tail_prepared.over_budget_reason.as_deref(),
+                        "compactionMode": "model",
+                    }),
+                    None,
+                )?;
+                return Ok(tail_prepared);
+            }
         }
+        let prepared = full_prepared;
         self.record_context_epoch(
             context,
             &budget_plan,
@@ -276,6 +399,8 @@ impl ShortTermMemoryService {
                 "toolSchemaTokenEstimate": tool_schema_token_estimate,
                 "rebased": prepared.rebased,
                 "overBudget": prepared.over_budget,
+                "budgetBreakdown": prepared.budget_breakdown.as_ref(),
+                "overBudgetReason": prepared.over_budget_reason.as_deref(),
             }),
             None,
         )?;
@@ -309,13 +434,12 @@ impl ShortTermMemoryService {
             .iter()
             .enumerate()
             .filter_map(|(index, part)| {
-                let include_raw_reasoning = self.config.compaction.reasoning_inclusion == "raw";
                 transcript_part_from_agent_part(
                     &memory.session_code,
                     &context.workspace_code,
                     (index + 1) as i64,
                     part,
-                    include_raw_reasoning,
+                    false,
                 )
             })
             .collect::<Vec<_>>();
@@ -478,4 +602,156 @@ fn estimate_tool_schema_tokens(tools: &[crate::domain::agent::EffectiveTool]) ->
         .ok()
         .map(|text| ((text.len() as u32).saturating_add(3)) / 4)
         .unwrap_or(0)
+}
+
+fn apply_request_budget_fields(
+    prepared: &mut PreparedModelContext,
+    budget_plan: &ModelContextBudgetPlan,
+    config: &ShortTermMemoryConfig,
+    tool_schema_token_estimate: u32,
+) {
+    prepared.estimated_tokens = prepared
+        .message_token_estimate
+        .saturating_add(tool_schema_token_estimate);
+    prepared.tool_schema_token_estimate = tool_schema_token_estimate;
+    prepared.context_window_limit = Some(budget_plan.model_context_window);
+    prepared.effective_input_budget = Some(budget_plan.effective_input_budget);
+    prepared.output_token_reserve = Some(budget_plan.output_token_reserve);
+    let trigger_tokens = compaction_trigger_tokens(budget_plan, Some(config));
+    prepared.compaction_trigger_tokens = Some(trigger_tokens);
+    prepared.compaction_trigger_reached = prepared.estimated_tokens >= trigger_tokens;
+    let input_budget_exceeded = prepared.estimated_tokens > budget_plan.effective_input_budget;
+    prepared.over_budget = input_budget_exceeded || prompt_prefix_budget_exceeded(prepared);
+    if let Some(breakdown) = prepared.budget_breakdown.as_mut() {
+        breakdown.tool_schema_tokens = tool_schema_token_estimate;
+        breakdown.estimated_input_tokens = prepared.estimated_tokens;
+        breakdown.effective_input_budget = Some(budget_plan.effective_input_budget);
+        breakdown.context_window_limit = Some(budget_plan.model_context_window);
+        breakdown.output_token_reserve = Some(budget_plan.output_token_reserve);
+        breakdown.prompt_prefix_budget_tokens = Some(
+            budget_plan
+                .block_budgets
+                .seed_prompt_prefix
+                .effective_limit_tokens,
+        );
+        breakdown.compaction_trigger_ratio_bps = Some(config.compaction.trigger_ratio_bps);
+        breakdown.compaction_trigger_tokens = Some(trigger_tokens);
+        breakdown.compaction_trigger_reached = prepared.compaction_trigger_reached;
+        breakdown.input_budget_exceeded = input_budget_exceeded;
+    }
+    refresh_over_budget_reason(prepared);
+}
+
+fn annotate_compaction_budget(
+    prepared: &mut PreparedModelContext,
+    budget_plan: &ModelContextBudgetPlan,
+    config: &ShortTermMemoryConfig,
+    selection_source_message_count: usize,
+    raw_tail_message_count: usize,
+    compressed_history_message_count: usize,
+    tail_start_seq: Option<i64>,
+    source_history_token_estimate: Option<u32>,
+) {
+    let raw_tail_tokens = prepared
+        .budget_breakdown
+        .as_ref()
+        .map(|breakdown| breakdown.recent_transcript_tokens)
+        .unwrap_or(0);
+    let history_budget_tokens = current_session_history_budget_tokens(prepared);
+    let retained_history_tokens = history_budget_tokens
+        .saturating_mul(config.compaction.retained_history_ratio_bps.min(10_000))
+        / 10_000;
+    let trigger_tokens = compaction_trigger_tokens(budget_plan, Some(config));
+    prepared.compaction_trigger_tokens = Some(trigger_tokens);
+    prepared.compaction_trigger_reached = prepared.estimated_tokens >= trigger_tokens;
+    prepared.effective_retained_history_tokens = Some(retained_history_tokens);
+    let input_budget_exceeded = prepared.estimated_tokens > budget_plan.effective_input_budget;
+    prepared.over_budget = input_budget_exceeded || prompt_prefix_budget_exceeded(prepared);
+    if let Some(breakdown) = prepared.budget_breakdown.as_mut() {
+        breakdown.raw_tail_transcript_tokens = raw_tail_tokens;
+        breakdown.compressed_history_tokens = if compressed_history_message_count > 0 {
+            source_history_token_estimate
+                .unwrap_or(breakdown.recent_transcript_tokens)
+                .saturating_sub(raw_tail_tokens)
+        } else {
+            0
+        };
+        breakdown.compaction_trigger_ratio_bps = Some(config.compaction.trigger_ratio_bps);
+        breakdown.compaction_trigger_tokens = Some(trigger_tokens);
+        breakdown.compaction_trigger_reached = prepared.compaction_trigger_reached;
+        breakdown.input_budget_exceeded = input_budget_exceeded;
+        breakdown.retained_history_ratio_bps = Some(config.compaction.retained_history_ratio_bps);
+        breakdown.effective_retained_history_tokens = Some(retained_history_tokens);
+        breakdown.current_session_history_budget_tokens = Some(history_budget_tokens);
+        breakdown.history_source_message_count = Some(selection_source_message_count);
+        breakdown.raw_tail_message_count = Some(raw_tail_message_count);
+        breakdown.compressed_history_message_count = Some(compressed_history_message_count);
+        breakdown.raw_tail_start_seq = tail_start_seq;
+    }
+    refresh_over_budget_reason(prepared);
+}
+
+fn refresh_over_budget_reason(prepared: &mut PreparedModelContext) {
+    if !prepared.over_budget {
+        prepared.over_budget_reason = None;
+        return;
+    }
+    let Some(breakdown) = prepared.budget_breakdown.as_ref() else {
+        prepared.over_budget_reason = Some("NON_COMPRESSIBLE_CONTEXT_OVER_EFFECTIVE_BUDGET".into());
+        return;
+    };
+    if prompt_prefix_budget_exceeded(prepared) {
+        prepared.over_budget_reason = Some("SEED_PROMPT_PREFIX_OVER_BUDGET".into());
+        return;
+    }
+    let compressed_history_message_count = breakdown.compressed_history_message_count.unwrap_or(0);
+    prepared.over_budget_reason = Some(
+        if breakdown.input_budget_exceeded {
+            if compressed_history_message_count > 0 {
+                "COMPRESSED_HISTORY_OVER_EFFECTIVE_BUDGET"
+            } else {
+                "NON_COMPRESSIBLE_CONTEXT_OVER_EFFECTIVE_BUDGET"
+            }
+        } else {
+            "NON_COMPRESSIBLE_CONTEXT_OVER_EFFECTIVE_BUDGET"
+        }
+        .to_string(),
+    );
+}
+
+fn compaction_trigger_tokens(
+    budget_plan: &ModelContextBudgetPlan,
+    config: Option<&ShortTermMemoryConfig>,
+) -> u32 {
+    let ratio = config
+        .map(|config| config.compaction.trigger_ratio_bps)
+        .unwrap_or(10_000)
+        .min(10_000);
+    budget_plan.effective_input_budget.saturating_mul(ratio) / 10_000
+}
+
+fn prompt_prefix_budget_exceeded(prepared: &PreparedModelContext) -> bool {
+    prepared
+        .budget_breakdown
+        .as_ref()
+        .and_then(|breakdown| {
+            breakdown
+                .prompt_prefix_budget_tokens
+                .map(|limit| breakdown.prompt_prefix_tokens > limit)
+        })
+        .unwrap_or(false)
+}
+
+fn current_session_history_budget_tokens(prepared: &PreparedModelContext) -> u32 {
+    let Some(breakdown) = prepared.budget_breakdown.as_ref() else {
+        return prepared.effective_input_budget.unwrap_or(0);
+    };
+    let effective_input_budget = breakdown.effective_input_budget.unwrap_or(0);
+    let fixed_tokens = breakdown
+        .prompt_prefix_tokens
+        .saturating_add(breakdown.checkpoint_tokens)
+        .saturating_add(breakdown.session_family_context_tokens)
+        .saturating_add(breakdown.working_state_tokens)
+        .saturating_add(breakdown.tool_schema_tokens);
+    effective_input_budget.saturating_sub(fixed_tokens)
 }

@@ -4,7 +4,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use tron_backend::config::AppConfig;
+use tron_backend::{application::short_term_memory::ShortTermMemoryConfig, config::AppConfig};
 
 const APPLICATION_VARIABLE_CRYPTO_KEY_BASE64: &str = "sbxNdQm4XiwQyfXNEtjZCQ==";
 
@@ -24,6 +24,24 @@ fn application_yaml_uses_home_storage_defaults() {
         config.variable_crypto.key_base64,
         APPLICATION_VARIABLE_CRYPTO_KEY_BASE64
     );
+    assert_eq!(
+        config
+            .short_term_memory
+            .context
+            .blocks
+            .seed_prompt_prefix
+            .max_ratio_bps,
+        Some(5000)
+    );
+    assert_eq!(
+        config
+            .short_term_memory
+            .context
+            .blocks
+            .seed_prompt_prefix
+            .max_tokens,
+        Some(16000)
+    );
     assert!(
         !config
             .short_term_memory
@@ -34,6 +52,14 @@ fn application_yaml_uses_home_storage_defaults() {
     assert_eq!(config.short_term_memory.event_log.retention_days, 5);
     assert_eq!(config.short_term_memory.event_log.max_payload_bytes, 8192);
     assert!(config.short_term_memory.event_log.cleanup_on_startup);
+    assert_eq!(config.short_term_memory.compaction.trigger_ratio_bps, 8000);
+    assert_eq!(
+        config
+            .short_term_memory
+            .compaction
+            .retained_history_ratio_bps,
+        2000
+    );
 }
 
 #[test]
@@ -112,18 +138,17 @@ shortTermMemory:
     defaultContextWindowTokens: 16000
     familyContextMaxRatioBps: 750
     familyContextHardCapTokens: 2000
-    protocolOverheadReserveTokens: 256
-    safetyMarginTokens: 128
     familyContextMaxChars: 1200
     reasoningSummaryReplayEnabled: true
     blocks:
+      seedPromptPrefix:
+        maxRatioBps: 2500
+        maxTokens: 700
       currentSessionCheckpoint:
         maxRatioBps: 1250
         maxTokens: 900
       currentSessionWorkingState:
         maxTokens: 300
-      currentSessionRecentTranscript:
-        allowBorrowUnusedBudget: false
   familyLoad:
     defaultMaxSnapshots: 2
     defaultMaxSessions: 4
@@ -135,16 +160,8 @@ shortTermMemory:
     workspaceHeartbeatWeightBps: 250
     otherWeightBps: 100
   compaction:
-    autoEnabled: false
-    maxRecentTurns: 6
-    keepRecentTokens: 3000
-    reservedTokens: 500
-    summaryMaxTokens: 700
-    toolOutputMaxChars: 256
-    overflowRetryLimit: 0
-    reasoningInclusion: none
-    toolResultPolicy: placeholder
-    filePolicy: metadata
+    triggerRatioBps: 7500
+    retainedHistoryRatioBps: 1250
   goalLoop:
     maxRuns: 7
     maxConsecutiveJudgeFailures: 2
@@ -178,6 +195,15 @@ shortTermMemory:
         config
             .short_term_memory
             .context
+            .blocks
+            .seed_prompt_prefix
+            .max_tokens,
+        Some(700)
+    );
+    assert_eq!(
+        config
+            .short_term_memory
+            .context
             .family_context_max_ratio_bps,
         750
     );
@@ -202,13 +228,60 @@ shortTermMemory:
             .max_tokens,
         Some(900)
     );
-    assert!(!config.short_term_memory.compaction.auto_enabled);
-    assert_eq!(config.short_term_memory.compaction.max_recent_turns, 6);
+    assert!(config.short_term_memory.compaction.auto_enabled);
+    assert_eq!(config.short_term_memory.compaction.trigger_ratio_bps, 7500);
+    assert_eq!(
+        config
+            .short_term_memory
+            .compaction
+            .retained_history_ratio_bps,
+        1250
+    );
     assert_eq!(config.short_term_memory.goal_loop.max_runs, 7);
     assert_eq!(
         config.short_term_memory.goal_loop.judge_output_max_tokens,
         512
     );
+}
+
+#[test]
+fn short_term_memory_block_ratios_use_effective_input_budget() {
+    let config = ShortTermMemoryConfig::default();
+
+    let plan = config.model_context_budget_plan(Some(2_000), Some(500));
+
+    assert_eq!(plan.effective_input_budget, 1_500);
+    assert_eq!(
+        plan.block_budgets
+            .current_session_checkpoint
+            .effective_limit_tokens,
+        300
+    );
+    assert_eq!(
+        plan.block_budgets
+            .session_family_context
+            .effective_limit_tokens,
+        150
+    );
+}
+
+#[test]
+fn short_term_memory_yaml_rejects_removed_compaction_fields() {
+    let config_path = temp_config_path();
+    fs::write(
+        &config_path,
+        r#"
+shortTermMemory:
+  compaction:
+    maxRecentTurns: 12
+"#,
+    )
+    .expect("temp config should be written");
+
+    let result = AppConfig::from_yaml_file(&config_path);
+
+    fs::remove_file(&config_path).expect("temp config should be removed");
+    assert!(result.is_err());
 }
 
 fn database_url_expected_from_environment() -> PathBuf {
