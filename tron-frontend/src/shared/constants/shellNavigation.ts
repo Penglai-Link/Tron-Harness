@@ -25,7 +25,6 @@ export const tronNavigation: TronNavSection[] = [
     translationKey: "shell:nav.sections.core",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, translationKey: "shell:nav.items.dashboard" },
-      { label: "Desktop Test", href: "/desktop/target", icon: Gauge, translationKey: "shell:nav.items.desktopTest" },
       { label: "Apps", href: "/apps", icon: FolderGit2, translationKey: "shell:nav.items.apps" },
       { label: "Tasks", href: "/tasks", icon: ListTodo, translationKey: "shell:nav.items.tasks" },
       { label: "Automations", href: "/automations", icon: AlarmClock, translationKey: "shell:nav.items.automations" },
