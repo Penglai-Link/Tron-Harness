@@ -2208,8 +2208,7 @@ fn insert_tree_scope_corpus(database_url: &str, corpus_id: &str, tree_table: &st
                     "fulltext": true,
                     "vector": true,
                     "tree": true,
-                    "graph": false,
-                    "reserved": false
+                    "graph": false
                 })
                 .to_string(),
                 json!({

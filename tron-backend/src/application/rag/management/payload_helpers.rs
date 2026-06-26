@@ -10,10 +10,6 @@ fn capabilities_from_value(value: &Value) -> RagCorpusCapabilitiesPayload {
             .unwrap_or(false),
         tree: value.get("tree").and_then(Value::as_bool).unwrap_or(false),
         graph: value.get("graph").and_then(Value::as_bool).unwrap_or(false),
-        reserved: value
-            .get("reserved")
-            .and_then(Value::as_bool)
-            .unwrap_or(false),
     }
 }
 
@@ -39,7 +35,6 @@ fn capabilities_value(
         "vector": capabilities.vector,
         "tree": capabilities.tree,
         "graph": capabilities.graph,
-        "reserved": capabilities.reserved,
         "metadataGroups": metadata_groups,
     })
 }

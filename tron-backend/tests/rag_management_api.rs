@@ -112,8 +112,7 @@ async fn corpus_management_routes_require_auth_and_expose_targeted_projection() 
             "capabilities": {
                 "fulltext": true,
                 "vector": true,
-                "graph": true,
-                "reserved": false
+                "graph": true
             },
             "fieldMapping": {
                 "source": {
@@ -1491,8 +1490,7 @@ fn team_playbook_sqlite_request() -> Value {
             "fulltext": true,
             "vector": true,
             "tree": true,
-            "graph": false,
-            "reserved": false
+            "graph": false
         },
         "metadataGroups": [
             {
@@ -1663,8 +1661,7 @@ fn team_playbook_graph_request() -> Value {
         "capabilities": {
             "fulltext": true,
             "vector": true,
-            "graph": true,
-            "reserved": false
+            "graph": true
         },
         "filterSchema": {
             "fields": {
@@ -1969,8 +1966,7 @@ fn ui_tree_corpus_request() -> Value {
             "fulltext": true,
             "vector": true,
             "tree": true,
-            "graph": false,
-            "reserved": false
+            "graph": false
         },
         "filterSchema": { "fields": {} },
         "fieldMapping": {

@@ -8,6 +8,7 @@ import {
   formatRagStorageBinding,
   type CorpusRecord,
   type IngestProfileRecord,
+  type RagCorpusConfig,
   type RagIngestStageId,
   type ProfileRecord,
   type RagCorpusCapabilities,
@@ -356,18 +357,24 @@ function normalizeCorpusCapabilities(value: RagCorpusSummaryApi["capabilities"])
   return {
     fulltext: Boolean(record.fulltext),
     graph: Boolean(record.graph),
-    reserved: Boolean(record.reserved),
     tree: Boolean(record.tree),
     vector: Boolean(record.vector),
   };
 }
 
-function normalizeCorpusStatus(status: string, capabilities: RagCorpusCapabilities): CorpusRecord["status"] {
+function normalizeCorpusStatus(status: string): CorpusRecord["status"] {
   const normalized = status.trim().toLowerCase();
-  if (normalized === "reserved" || capabilities.reserved) return "Reserved";
+  if (normalized === "reserved") return "Reserved";
+  if (normalized === "disabled") return "Disabled";
   if (normalized === "indexing") return "Indexing";
   if (normalized === "warning") return "Warning";
   return "Active";
+}
+
+function normalizeCorpusStatusCode(status: string): RagCorpusConfig["status"] {
+  const normalized = status.trim().toLowerCase();
+  if (normalized === "reserved" || normalized === "disabled") return normalized;
+  return "enabled";
 }
 
 function defaultProfileStatus(value: string): RagProfileStatus {
@@ -553,7 +560,7 @@ export function mapRagCorpusSummaryToRecord(payload: RagCorpusSummaryApi): Corpu
     retrievalProfile: readString(payload.retrievalProfileId),
     scope: "management",
     sources: 0,
-    status: normalizeCorpusStatus(readString(payload.status), capabilities),
+    status: normalizeCorpusStatus(readString(payload.status)),
     storageBinding: readString(payload.storageSummary) || "API managed",
     strategies: [
       capabilities.fulltext ? "FULLTEXT" : "",
@@ -580,7 +587,7 @@ export function mapRagCorpusDetailToRecord(payload: RagCorpusDetailApi): CorpusR
           displayName: readString(payload.displayName) || payload.corpusId,
           fieldMapping: payload.fieldMapping ?? fallbackCorpusFieldMapping(),
           filterSchema: payload.filterSchema ?? fallbackCorpusFilterSchema(),
-          status: capabilities.reserved ? "reserved" : "enabled",
+          status: normalizeCorpusStatusCode(readString(payload.status)),
           storageBinding: payload.storageBinding,
         }
       : undefined,

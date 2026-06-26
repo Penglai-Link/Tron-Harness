@@ -12,7 +12,6 @@ export type RagFilterFieldType = "string" | "integer" | "boolean";
 export interface RagCorpusCapabilities {
   fulltext: boolean;
   graph: boolean;
-  reserved: boolean;
   tree: boolean;
   vector: boolean;
 }
@@ -80,7 +79,7 @@ export interface CorpusRecord {
   retrievalProfile: string;
   scope: string;
   sources: number;
-  status: "Active" | "Indexing" | "Warning" | "Reserved";
+  status: "Active" | "Disabled" | "Indexing" | "Warning" | "Reserved";
   storageBinding: string;
   strategies: string[];
   textUnits: number;

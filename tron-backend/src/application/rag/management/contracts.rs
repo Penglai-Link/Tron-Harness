@@ -119,7 +119,6 @@ pub struct RagCorpusCapabilitiesPayload {
     #[serde(default)]
     pub tree: bool,
     pub graph: bool,
-    pub reserved: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

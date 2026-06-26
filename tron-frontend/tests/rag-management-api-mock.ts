@@ -38,7 +38,6 @@ type RagCorpusDetailApi = {
   capabilities: {
     fulltext: boolean;
     graph: boolean;
-    reserved: boolean;
     tree: boolean;
     vector: boolean;
   };
@@ -268,7 +267,6 @@ function createProjectDocCorpus(): RagCorpusDetailApi {
     capabilities: {
       fulltext: true,
       graph: false,
-      reserved: false,
       tree: true,
       vector: true,
     },
@@ -341,7 +339,6 @@ function createMemoryCardCorpus(): RagCorpusDetailApi {
     capabilities: {
       fulltext: true,
       graph: false,
-      reserved: false,
       tree: true,
       vector: true,
     },
@@ -409,7 +406,6 @@ function createSupportTreeGraphCorpus(): RagCorpusDetailApi {
     capabilities: {
       fulltext: true,
       graph: true,
-      reserved: false,
       tree: true,
       vector: true,
     },
@@ -1036,14 +1032,12 @@ function upsertCorpus(payload: unknown, state: RagManagementState, runtimeProjec
       ? {
           fulltext: Boolean(record.capabilities.fulltext),
           graph: Boolean(record.capabilities.graph),
-          reserved: Boolean(record.capabilities.reserved),
           tree: Boolean(record.capabilities.tree),
           vector: Boolean(record.capabilities.vector),
         }
       : {
           fulltext: true,
           graph: false,
-          reserved: false,
           tree: true,
           vector: true,
         },

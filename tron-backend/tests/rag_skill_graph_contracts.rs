@@ -130,7 +130,7 @@ fn graph_backed_repository_dispatches_by_backend_before_layout() {
              VALUES (
                 'graph-backend-custom', 'Graph Backend Custom', 'enabled',
                 'Dispatch fixture.',
-                '{\"fulltext\":true,\"vector\":false,\"graph\":true,\"reserved\":false}',
+                '{\"fulltext\":true,\"vector\":false,\"graph\":true}',
                 '{\"fields\":{\"scopeType\":{\"type\":\"string\",\"column\":\"scope_type\"}}}',
                 '{\"source\":{\"sourceCode\":\"source_code\",\"sourceVersion\":\"source_version\",\"scopeType\":\"scope_type\",\"scopeCode\":\"scope_code\"},\"textUnit\":{\"text\":\"text\"}}',
                 '{\"mode\":\"TARGETED\",\"bindings\":{\"source\":\"graph-backend-store\",\"textUnit\":\"graph-backend-store\",\"fulltext\":\"graph-backend-store\",\"vector\":\"graph-backend-store\"},\"targets\":[{\"id\":\"graph-backend-store\",\"backend\":\"GRAPH\",\"layout\":\"GRAPH_SINGLE_NODE\",\"namespace\":\"rag_backend_dispatch\",\"nodeLabel\":\"RagBackendDispatch\",\"codeStrategy\":\"CORPUS_SOURCE_VERSION_SCOPE_HASH\"}]}',
@@ -2175,8 +2175,7 @@ fn enable_skill_graph_tree_with_sqlite_text_units(database_url: &str) {
                     "fulltext": true,
                     "vector": true,
                     "tree": true,
-                    "graph": true,
-                    "reserved": false
+                    "graph": true
                 })
                 .to_string(),
                 sqlite_field_mapping_json,
@@ -2237,8 +2236,7 @@ fn insert_ui_tree_graph_live_corpus(database_url: &str) {
                     "fulltext": true,
                     "vector": true,
                     "tree": true,
-                    "graph": true,
-                    "reserved": false
+                    "graph": true
                 })
                 .to_string(),
                 json!({
@@ -2339,8 +2337,7 @@ fn enable_skill_graph_tree_with_ui_sqlite_segments(database_url: &str) {
                     "fulltext": true,
                     "vector": true,
                     "tree": true,
-                    "graph": true,
-                    "reserved": false
+                    "graph": true
                 })
                 .to_string(),
                 json!({
@@ -2446,8 +2443,7 @@ fn enable_skill_graph_tree_with_graph_text_units(database_url: &str) {
                     "fulltext": true,
                     "vector": true,
                     "tree": true,
-                    "graph": true,
-                    "reserved": false
+                    "graph": true
                 })
                 .to_string(),
                 json!({

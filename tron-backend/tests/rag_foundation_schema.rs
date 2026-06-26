@@ -40,7 +40,7 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
     assert_eq!(
         repository.seeded_corpus_statuses().unwrap(),
         BTreeMap::from([
-            ("code-graph".to_string(), "reserved".to_string()),
+            ("code-graph".to_string(), "disabled".to_string()),
             ("memory-card".to_string(), "enabled".to_string()),
             ("project-doc".to_string(), "enabled".to_string()),
             ("skill".to_string(), "enabled".to_string()),
@@ -55,7 +55,7 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
     assert_eq!(
         repository.seeded_corpus_statuses().unwrap(),
         BTreeMap::from([
-            ("code-graph".to_string(), "reserved".to_string()),
+            ("code-graph".to_string(), "disabled".to_string()),
             ("memory-card".to_string(), "enabled".to_string()),
             ("project-doc".to_string(), "enabled".to_string()),
             ("skill".to_string(), "enabled".to_string()),
@@ -93,7 +93,7 @@ fn extension_indexes_use_configured_enabled_corpus_text_unit_tables() {
              )
              VALUES (
                 'custom-corpus', 'Custom Corpus', 'enabled', 'Custom test corpus.',
-                '{\"fulltext\":true,\"vector\":true,\"reserved\":false}',
+                '{\"fulltext\":true,\"vector\":true}',
                 '{\"fields\":{\"scopeType\":{\"type\":\"string\",\"column\":\"scope_type\"}}}',
                 '{\"source\":{\"sourceCode\":\"source_code\",\"sourceVersion\":\"source_version\",\"scopeType\":\"scope_type\",\"scopeCode\":\"scope_code\"},\"textUnit\":{\"text\":\"text\"}}',
                 '{\"mode\":\"TARGETED\",\"bindings\":{\"source\":\"custom-store\",\"textUnit\":\"custom-store\",\"fulltext\":\"custom-store\",\"vector\":\"custom-store\",\"diagnostics\":\"diagnostics-store\"},\"targets\":[{\"id\":\"custom-store\",\"backend\":\"SQLITE\",\"layout\":\"TABLE\",\"table\":\"rag_custom_text_units\"},{\"id\":\"diagnostics-store\",\"backend\":\"SQLITE\",\"layout\":\"TABLE\",\"table\":\"rag_diagnostics\"}]}',

@@ -51,6 +51,7 @@ export const pages = {
     status: {
       active: "活跃",
       completed: "已完成",
+      disabled: "已禁用",
       draft: "草稿",
       failed: "失败",
       high: "高",
@@ -417,8 +418,9 @@ export const pages = {
     },
     corpusForm: {
       actions: {
+        advancedStorageSettings: "高级存储设置",
         addFilterField: "添加筛选字段",
-        addStorageTarget: "添加存储目标",
+        addStorageTarget: "添加自定义存储",
         backToList: "返回列表",
         cancel: "取消",
         save: "保存",
@@ -427,7 +429,6 @@ export const pages = {
       capabilities: {
         fulltext: "启用全文索引",
         graph: "启用图能力",
-        reserved: "保留语料库",
         tree: "启用摘要树",
         vector: "启用向量索引",
       },
@@ -459,6 +460,26 @@ export const pages = {
         boolean: "布尔",
         integer: "整数",
         string: "字符串",
+      },
+      fieldConfig: {
+        addSourceField: "添加来源字段",
+        addTextUnitField: "添加文本单元字段",
+        configure: "配置字段",
+        customCount: "自定义字段 {{count}}",
+        customFields: "自定义字段",
+        filterCount: "筛选字段 {{count}}",
+        filterPanelCount: "{{count}} 个筛选字段",
+        filtersTab: "筛选字段",
+        hide: "收起字段配置",
+        mappingCounts: "{{custom}} 个自定义字段 · {{system}} 个系统字段",
+        noCustomFields: "暂无自定义字段。",
+        noFilterFields: "暂无筛选字段。",
+        sourceSystemCount: "来源系统字段 {{count}}",
+        sourceTab: "来源字段",
+        systemFields: "系统字段",
+        tabsAria: "字段配置标签页",
+        textUnitSystemCount: "文本单元系统字段 {{count}}",
+        textUnitTab: "文本单元字段",
       },
       hints: {
         code: "API 参数和配置引用使用的稳定语料库编码，创建后不可修改。",
@@ -564,10 +585,11 @@ export const pages = {
       sections: {
         basicInfo: "基本信息",
         capabilities: "能力",
+        fieldConfig: "字段配置",
         fieldMapping: "字段映射",
         filterSchema: "筛选 schema",
-        payloadPreview: "后端 payload 预览",
         segmentBindings: "分段绑定",
+        status: "状态",
         storageBinding: "存储绑定",
         storageTargets: "存储目标",
       },
@@ -595,6 +617,11 @@ export const pages = {
         select: "选择存储目标",
         sqlite: "本地表存储",
         tableAria: "存储目标 {{index}} 表",
+      },
+      storageSummary: {
+        customTitle: "已配置自定义存储",
+        defaultTitle: "默认存储已就绪",
+        targetCount: "{{count}} 个目标",
       },
       title: {
         create: "新建语料库",

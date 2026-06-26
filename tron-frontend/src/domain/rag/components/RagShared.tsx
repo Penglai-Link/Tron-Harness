@@ -37,6 +37,7 @@ export function formatRagStatusLabel(status: string, t?: TFunction) {
   const statusLabels: Record<string, string> = {
     Active: "Active",
     COMPLETED: "Completed",
+    Disabled: "Disabled",
     Draft: "Draft",
     FAILED: "Failed",
     High: "High",

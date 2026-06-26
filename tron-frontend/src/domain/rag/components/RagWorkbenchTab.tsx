@@ -510,7 +510,7 @@ export function RagWorkbenchTab({
   const hintT = (key: keyof typeof workbenchFieldHints) => (
     pageT(`hints.${key}`, workbenchFieldHints[key])
   );
-  const visibleCorpora = corpora.filter((corpus) => corpus.status !== "Reserved");
+  const visibleCorpora = corpora.filter((corpus) => corpus.status !== "Reserved" && corpus.status !== "Disabled");
   const ingestProfiles = profiles.filter((profile): profile is RagIngestProfileRecord => profile.type === "Ingest");
   const retrievalProfiles = profiles.filter((profile): profile is RagRetrievalProfileRecord => (
     profile.type === "Retrieval" && profile.status !== "Draft"

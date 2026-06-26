@@ -104,16 +104,16 @@ export const corpora: CorpusRecord[] = [
   },
   {
     code: "code-graph",
-    description: "Reserved corpus for code entity retrieval once semantic projection is available.",
+    description: "Code graph corpus for code entity retrieval once semantic projection is available.",
     filters: ["repository", "language", "symbolType"],
-    fulltextHealth: "Reserved",
+    fulltextHealth: "Not enabled",
     ingestProfile: "",
     lastIndexed: "Not enabled",
     name: "Code Graph",
-    retrievalProfile: "code-graph-reserved-v1",
+    retrievalProfile: "code-graph-preview-v1",
     scope: "repository",
     sources: 0,
-    status: "Reserved",
+    status: "Disabled",
     storageBinding: "graph.code_graph",
     strategies: ["GRAPH", "SUMMARY_TREE"],
     textUnits: 0,
@@ -124,10 +124,11 @@ export const corpora: CorpusRecord[] = [
 
 export const RAG_MOCK_CORPORA_STORAGE_KEY = "tron.rag.mock.corpora";
 
-const corpusStatuses = new Set<CorpusRecord["status"]>(["Active", "Indexing", "Warning", "Reserved"]);
+const corpusStatuses = new Set<CorpusRecord["status"]>(["Active", "Disabled", "Indexing", "Warning", "Reserved"]);
 
 const statusToCode: Record<CorpusRecord["status"], RagCorpusStatusCode> = {
   Active: "enabled",
+  Disabled: "disabled",
   Indexing: "enabled",
   Reserved: "reserved",
   Warning: "enabled",
@@ -519,8 +520,7 @@ export function buildDefaultRagCorpusConfig(corpus: CorpusRecord): RagCorpusConf
     capabilities: {
       fulltext: corpus.strategies.includes("FULLTEXT"),
       graph: corpus.strategies.some((strategy) => strategy.includes("GRAPH")),
-      reserved: corpus.status === "Reserved",
-      tree: corpus.status !== "Reserved" || corpus.strategies.some((strategy) => strategy.includes("TREE") || strategy.includes("SUMMARY_TREE")),
+      tree: corpus.strategies.some((strategy) => strategy.includes("TREE") || strategy.includes("SUMMARY_TREE")),
       vector: corpus.strategies.some((strategy) => strategy.includes("VECTOR")),
     },
     corpusId: corpus.code,
@@ -1349,8 +1349,8 @@ const seedProfiles: ProfileRecord[] = [
       rerankEnabled: false,
       topicPolicy: "NONE",
     }),
-    description: "Reserved profile placeholder until code graph semantic projection is implemented.",
-    id: "code-graph-reserved-v1",
+    description: "Code graph preview profile until semantic projection is implemented.",
+    id: "code-graph-preview-v1",
     primaryCorpusId: "code-graph",
     status: "Draft",
     type: "Retrieval",

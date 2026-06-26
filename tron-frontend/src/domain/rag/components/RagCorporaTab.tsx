@@ -66,7 +66,7 @@ export function RagCorporaTab({
             value={statusFilter}
             onChange={(event) => onStatusFilterChange(event.target.value)}
           >
-            {["All", "Active", "Indexing", "Warning", "Reserved"].map((status) => (
+            {["All", "Active", "Indexing", "Warning", "Disabled"].map((status) => (
               <option key={status} value={status}>
                 {status === "All" ? pageT("filters.allStatuses", "All statuses") : formatRagStatusLabel(status, t)}
               </option>

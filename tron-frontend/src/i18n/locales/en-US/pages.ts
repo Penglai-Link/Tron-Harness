@@ -51,6 +51,7 @@ export const pages = {
     status: {
       active: "Active",
       completed: "Completed",
+      disabled: "Disabled",
       draft: "Draft",
       failed: "Failed",
       high: "High",
@@ -417,8 +418,9 @@ export const pages = {
     },
     corpusForm: {
       actions: {
+        advancedStorageSettings: "Advanced storage settings",
         addFilterField: "Add filter field",
-        addStorageTarget: "Add storage target",
+        addStorageTarget: "Add custom storage",
         backToList: "Back to list",
         cancel: "Cancel",
         save: "Save",
@@ -427,7 +429,6 @@ export const pages = {
       capabilities: {
         fulltext: "Enable fulltext index",
         graph: "Enable graph capability",
-        reserved: "Reserved corpus",
         tree: "Enable summary tree",
         vector: "Enable vector index",
       },
@@ -459,6 +460,26 @@ export const pages = {
         boolean: "Boolean",
         integer: "Integer",
         string: "String",
+      },
+      fieldConfig: {
+        addSourceField: "Add source field",
+        addTextUnitField: "Add text unit field",
+        configure: "Configure fields",
+        customCount: "Custom fields {{count}}",
+        customFields: "Custom fields",
+        filterCount: "Filter fields {{count}}",
+        filterPanelCount: "{{count}} filter fields",
+        filtersTab: "Filter fields",
+        hide: "Hide field configuration",
+        mappingCounts: "{{custom}} custom fields · {{system}} system fields",
+        noCustomFields: "No custom fields.",
+        noFilterFields: "No filter fields.",
+        sourceSystemCount: "Source system fields {{count}}",
+        sourceTab: "Source fields",
+        systemFields: "System fields",
+        tabsAria: "Field configuration tabs",
+        textUnitSystemCount: "Text unit system fields {{count}}",
+        textUnitTab: "Text unit fields",
       },
       hints: {
         code: "Stable corpus code used in API parameters and profile references. It cannot be changed after creation.",
@@ -564,10 +585,11 @@ export const pages = {
       sections: {
         basicInfo: "Basic information",
         capabilities: "Capabilities",
+        fieldConfig: "Field configuration",
         fieldMapping: "Field mapping",
         filterSchema: "Filter schema",
-        payloadPreview: "Backend payload preview",
         segmentBindings: "Segment bindings",
+        status: "Status",
         storageBinding: "Storage binding",
         storageTargets: "Storage targets",
       },
@@ -595,6 +617,11 @@ export const pages = {
         select: "Select storage target",
         sqlite: "Local table storage",
         tableAria: "Storage target {{index}} table",
+      },
+      storageSummary: {
+        customTitle: "Custom storage configured",
+        defaultTitle: "Default storage is ready",
+        targetCount: "{{count}} targets",
       },
       title: {
         create: "New corpus",
