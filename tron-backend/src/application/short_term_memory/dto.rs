@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 use crate::domain::agent::{
@@ -175,6 +175,7 @@ pub struct PreparedGoalJudgeInput {
     pub workspace_code: String,
     pub goal_code: String,
     pub run_code: String,
+    pub input_code: Option<String>,
     pub expected_revision: i64,
     pub runs_used_after_judge: u32,
     pub max_runs: u32,
@@ -192,9 +193,9 @@ pub struct PreparedGoalJudgeInput {
 pub struct GoalJudgeOutput {
     pub verdict: String,
     pub reason: String,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_string_list")]
     pub completion_evidence: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_string_list")]
     pub missing_evidence: Vec<String>,
     #[serde(default)]
     pub required_user_input: Option<String>,
@@ -202,6 +203,37 @@ pub struct GoalJudgeOutput {
     pub next_step_hint: Option<String>,
     #[serde(default)]
     pub continuation_prompt: Option<String>,
+}
+
+fn deserialize_optional_string_list<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let Some(value) = Option::<Value>::deserialize(deserializer)? else {
+        return Ok(Vec::new());
+    };
+    match value {
+        Value::String(item) => Ok(normalized_string_list(vec![item])),
+        Value::Array(items) => items
+            .into_iter()
+            .map(|item| match item {
+                Value::String(value) => Ok(value),
+                _ => Err(serde::de::Error::custom("evidence items must be strings")),
+            })
+            .collect::<Result<Vec<_>, _>>()
+            .map(normalized_string_list),
+        _ => Err(serde::de::Error::custom(
+            "evidence must be a string or string array",
+        )),
+    }
+}
+
+fn normalized_string_list(items: Vec<String>) -> Vec<String> {
+    items
+        .into_iter()
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
+        .collect()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

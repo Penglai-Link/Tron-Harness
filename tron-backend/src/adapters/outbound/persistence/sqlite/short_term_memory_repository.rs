@@ -540,6 +540,13 @@ impl ShortTermMemoryRepository for SqliteShortTermMemoryRepository {
         repository_goal::list_goal_events(&self.connection, goal_code, limit)
     }
 
+    fn append_goal_event(
+        &mut self,
+        event: &ShortTermMemoryGoalEvent,
+    ) -> Result<(), ShortTermMemoryError> {
+        repository_goal::append_goal_event(&mut self.connection, event)
+    }
+
     fn create_goal(
         &mut self,
         goal: &ShortTermMemoryGoal,

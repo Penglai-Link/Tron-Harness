@@ -167,6 +167,10 @@ pub trait ShortTermMemoryRepository: Send {
         goal_code: &str,
         limit: usize,
     ) -> Result<Vec<ShortTermMemoryGoalEvent>, ShortTermMemoryError>;
+    fn append_goal_event(
+        &mut self,
+        event: &ShortTermMemoryGoalEvent,
+    ) -> Result<(), ShortTermMemoryError>;
     fn create_goal(
         &mut self,
         goal: &ShortTermMemoryGoal,

@@ -24,6 +24,7 @@ const DEFAULT_OTHER_WEIGHT_BPS: u32 = 500;
 pub(super) const DEFAULT_COMPACTION_TRIGGER_RATIO_BPS: u32 = 8_000;
 pub(super) const DEFAULT_COMPACTION_RETAINED_HISTORY_RATIO_BPS: u32 = 2_000;
 const DEFAULT_GOAL_MAX_CONSECUTIVE_JUDGE_FAILURES: u32 = 3;
+const DEFAULT_GOAL_JUDGE_MAX_ATTEMPTS_PER_RUN: u32 = 2;
 const DEFAULT_GOAL_JUDGE_INPUT_MAX_CHARS: usize = 12_000;
 const DEFAULT_GOAL_JUDGE_OUTPUT_MAX_TOKENS: u32 = 1_024;
 const DEFAULT_EVENT_LOG_RETENTION_DAYS: u32 = 5;
@@ -105,6 +106,7 @@ pub struct CompactionPolicyConfig {
 pub struct GoalLoopConfig {
     pub max_runs: u32,
     pub max_consecutive_judge_failures: u32,
+    pub judge_max_attempts_per_run: u32,
     pub judge_input_max_chars: usize,
     pub judge_output_max_tokens: u32,
 }
@@ -177,6 +179,7 @@ impl Default for ShortTermMemoryConfig {
             goal_loop: GoalLoopConfig {
                 max_runs: 20,
                 max_consecutive_judge_failures: DEFAULT_GOAL_MAX_CONSECUTIVE_JUDGE_FAILURES,
+                judge_max_attempts_per_run: DEFAULT_GOAL_JUDGE_MAX_ATTEMPTS_PER_RUN,
                 judge_input_max_chars: DEFAULT_GOAL_JUDGE_INPUT_MAX_CHARS,
                 judge_output_max_tokens: DEFAULT_GOAL_JUDGE_OUTPUT_MAX_TOKENS,
             },

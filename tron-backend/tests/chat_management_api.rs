@@ -1,15 +1,17 @@
 mod common;
 
 use std::{
+    collections::VecDeque,
     convert::Infallible,
     path::PathBuf,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use axum::{
     Json, Router,
     body::{Body, to_bytes},
+    extract::State,
     http::{Method, Request, StatusCode, header},
     response::{
         IntoResponse, Response,
@@ -37,6 +39,11 @@ struct AgentModelMockServer {
     _task: JoinHandle<()>,
 }
 
+#[derive(Clone)]
+struct ScriptedAgentModelMockState {
+    responses: Arc<Mutex<VecDeque<String>>>,
+}
+
 async fn agent_model_mock_server() -> AgentModelMockServer {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -45,6 +52,30 @@ async fn agent_model_mock_server() -> AgentModelMockServer {
         .local_addr()
         .expect("agent mock server should expose address");
     let app = Router::new().route("/v1/chat/completions", post(agent_chat_completion));
+    let task = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("agent mock server should stay available");
+    });
+    AgentModelMockServer {
+        base_url: format!("http://{address}/v1"),
+        _task: task,
+    }
+}
+
+async fn scripted_agent_model_mock_server(responses: Vec<String>) -> AgentModelMockServer {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("agent mock server should bind");
+    let address = listener
+        .local_addr()
+        .expect("agent mock server should expose address");
+    let state = ScriptedAgentModelMockState {
+        responses: Arc::new(Mutex::new(VecDeque::from(responses))),
+    };
+    let app = Router::new()
+        .route("/v1/chat/completions", post(scripted_agent_chat_completion))
+        .with_state(state);
     let task = tokio::spawn(async move {
         axum::serve(listener, app)
             .await
@@ -105,6 +136,28 @@ async fn agent_chat_completion(Json(payload): Json<Value>) -> Response {
             "message": {
                 "role": "assistant",
                 "content": format!("chat reply: {prompt}")
+            }
+        }]
+    }))
+    .into_response()
+}
+
+async fn scripted_agent_chat_completion(
+    State(state): State<ScriptedAgentModelMockState>,
+    Json(payload): Json<Value>,
+) -> Response {
+    assert_ne!(payload["stream"].as_bool(), Some(true));
+    let content = state
+        .responses
+        .lock()
+        .expect("scripted mock responses should lock")
+        .pop_front()
+        .expect("scripted mock response should exist");
+    Json(json!({
+        "choices": [{
+            "message": {
+                "role": "assistant",
+                "content": content
             }
         }]
     }))
@@ -422,6 +475,283 @@ async fn chat_send_persists_messages_and_invokes_agent_run() {
     assert_eq!(history["data"]["total"], json!(1));
     assert_eq!(history["data"]["records"][0]["runCode"], json!(run_code));
     assert!(!sent.to_string().contains("sk-chat-api"));
+}
+
+#[tokio::test]
+async fn chat_goal_judge_failure_retries_without_business_continuation() {
+    let database_url = temp_database_url("chat-goal-judge-failure-no-continuation");
+    let app = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
+    let server = agent_model_mock_server().await;
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
+
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Goal judge failure"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let goal_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions/set-goal",
+        Some(json!({
+            "sessionCode": session_code,
+            "objective": "Finish the one business run, then judge it.",
+            "maxRuns": 5,
+            "criteria": []
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(goal_response.status(), StatusCode::OK);
+    let goal_payload = response_json(goal_response).await;
+    let goal_code = goal_payload["data"]["goal"]["goalCode"]
+        .as_str()
+        .expect("goal code should be returned")
+        .to_string();
+
+    let send_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "run once and let judge fail",
+            "workspaceCode": "TRON_CORE",
+            "modelCode": model_code
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(send_response.status(), StatusCode::OK);
+    let sent = response_json(send_response).await;
+    let messages = sent["data"]["messages"]
+        .as_array()
+        .expect("messages should be an array");
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[0]["role"], json!("USER"));
+    assert_eq!(messages[1]["role"], json!("ASSISTANT"));
+    assert_eq!(
+        messages[1]["content"],
+        json!("chat reply: run once and let judge fail")
+    );
+
+    let connection = Connection::open(&database_url).expect("goal judge db should reopen");
+    let run_count = connection
+        .query_row(
+            "SELECT count(*) FROM agent_runs WHERE conversation_code = ?1",
+            [session_code.as_str()],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("agent run count should query");
+    assert_eq!(run_count, 1);
+
+    let persisted_message_count = connection
+        .query_row(
+            "SELECT count(*) FROM chat_messages WHERE session_code = ?1",
+            [session_code.as_str()],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("chat message count should query");
+    assert_eq!(persisted_message_count, 2);
+
+    let mut statement = connection
+        .prepare(
+            "SELECT event_kind
+             FROM agent_session_goal_events
+             WHERE goal_code = ?1
+             ORDER BY event_seq ASC",
+        )
+        .expect("goal event query should prepare");
+    let event_kinds = statement
+        .query_map([goal_code.as_str()], |row| row.get::<_, String>(0))
+        .expect("goal event query should run")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("goal event rows should map");
+    assert_eq!(
+        event_kinds,
+        vec![
+            "GOAL_SET".to_string(),
+            "GOAL_JUDGE_STARTED".to_string(),
+            "GOAL_JUDGE_ATTEMPT_FAILED".to_string(),
+            "GOAL_JUDGE_ATTEMPT_FAILED".to_string(),
+            "JUDGE_FAILED".to_string(),
+        ]
+    );
+
+    let (runs_used, consecutive_failures, last_verdict): (i64, i64, String) = connection
+        .query_row(
+            "SELECT runs_used, consecutive_judge_failures, last_verdict
+             FROM agent_session_goals
+             WHERE goal_code = ?1",
+            [goal_code.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("goal state should query");
+    assert_eq!(runs_used, 1);
+    assert_eq!(consecutive_failures, 1);
+    assert_eq!(last_verdict, "JUDGE_FAILED");
+}
+
+#[tokio::test]
+async fn chat_goal_judge_retry_can_complete_without_business_continuation() {
+    let database_url = temp_database_url("chat-goal-judge-retry-completed");
+    let app = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
+    let server = scripted_agent_model_mock_server(vec![
+        "chat reply: finish requested work".to_string(),
+        "not valid judge json".to_string(),
+        r#"{"verdict":"COMPLETED","reason":"The business run finished the requested work.","completionEvidence":"assistant produced the final response","missingEvidence":[],"requiredUserInput":null,"nextStepHint":null,"continuationPrompt":null}"#
+            .to_string(),
+    ])
+    .await;
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
+
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Goal judge retry completed"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let goal_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions/set-goal",
+        Some(json!({
+            "sessionCode": session_code,
+            "objective": "Complete after one business run.",
+            "maxRuns": 5,
+            "criteria": []
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(goal_response.status(), StatusCode::OK);
+    let goal_payload = response_json(goal_response).await;
+    let goal_code = goal_payload["data"]["goal"]["goalCode"]
+        .as_str()
+        .expect("goal code should be returned")
+        .to_string();
+
+    let send_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "finish requested work",
+            "workspaceCode": "TRON_CORE",
+            "modelCode": model_code
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(send_response.status(), StatusCode::OK);
+    let sent = response_json(send_response).await;
+    let messages = sent["data"]["messages"]
+        .as_array()
+        .expect("messages should be an array");
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[0]["role"], json!("USER"));
+    assert_eq!(messages[1]["role"], json!("ASSISTANT"));
+    assert_eq!(
+        messages[1]["content"],
+        json!("chat reply: finish requested work")
+    );
+
+    let connection = Connection::open(&database_url).expect("goal judge db should reopen");
+    let run_count = connection
+        .query_row(
+            "SELECT count(*) FROM agent_runs WHERE conversation_code = ?1",
+            [session_code.as_str()],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("agent run count should query");
+    assert_eq!(run_count, 1);
+
+    let persisted_message_count = connection
+        .query_row(
+            "SELECT count(*) FROM chat_messages WHERE session_code = ?1",
+            [session_code.as_str()],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("chat message count should query");
+    assert_eq!(persisted_message_count, 2);
+
+    let mut statement = connection
+        .prepare(
+            "SELECT event_kind
+             FROM agent_session_goal_events
+             WHERE goal_code = ?1
+             ORDER BY event_seq ASC",
+        )
+        .expect("goal event query should prepare");
+    let event_kinds = statement
+        .query_map([goal_code.as_str()], |row| row.get::<_, String>(0))
+        .expect("goal event query should run")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("goal event rows should map");
+    assert_eq!(
+        event_kinds,
+        vec![
+            "GOAL_SET".to_string(),
+            "GOAL_JUDGE_STARTED".to_string(),
+            "GOAL_JUDGE_ATTEMPT_FAILED".to_string(),
+            "GOAL_COMPLETED".to_string(),
+        ]
+    );
+
+    let (status, runs_used, consecutive_failures, last_verdict): (String, i64, i64, String) =
+        connection
+            .query_row(
+                "SELECT status, runs_used, consecutive_judge_failures, last_verdict
+             FROM agent_session_goals
+             WHERE goal_code = ?1",
+                [goal_code.as_str()],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("goal state should query");
+    assert_eq!(status, "COMPLETED");
+    assert_eq!(runs_used, 1);
+    assert_eq!(consecutive_failures, 0);
+    assert_eq!(last_verdict, "COMPLETED");
 }
 
 #[tokio::test]

@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use crate::{
     domain::{
         agent::{AgentMessage, AgentModelConfig, ModelFinish, ModelRequest, ModelResponse},
-        short_term_memory::ShortTermMemoryError,
+        short_term_memory::{ShortTermMemoryError, ShortTermMemoryGoal},
     },
     shared::time::current_timestamp,
 };
@@ -39,6 +39,7 @@ impl ShortTermMemoryService {
         let inputs = self
             .repository()
             .list_inputs_for_run(session_code, run_code)?;
+        let input_code = inputs.first().map(|input| input.input_code.clone());
         let messages = self
             .repository()
             .list_messages_for_run(session_code, run_code)?;
@@ -77,6 +78,7 @@ impl ShortTermMemoryService {
             workspace_code: view.goal.workspace_code.clone(),
             goal_code: view.goal.goal_code,
             run_code: run_code.to_string(),
+            input_code,
             expected_revision,
             runs_used_after_judge,
             max_runs: view.goal.max_runs,
@@ -100,11 +102,37 @@ impl ShortTermMemoryService {
         config
     }
 
+    pub fn goal_judge_max_attempts_per_run(&self) -> u32 {
+        self.config.goal_loop.judge_max_attempts_per_run.max(1)
+    }
+
     pub fn goal_judge_model_request(&self, input: &PreparedGoalJudgeInput) -> ModelRequest {
         ModelRequest {
             messages: vec![
                 AgentMessage::system(goal_judge_system_prompt()),
                 AgentMessage::user(input.prompt.clone()),
+            ],
+            tools: Vec::new(),
+            system_agent_session_id: None,
+            response_input_items: None,
+            previous_response_id: None,
+        }
+    }
+
+    pub fn goal_judge_model_retry_request(
+        &self,
+        input: &PreparedGoalJudgeInput,
+        failure: &GoalJudgeFailure,
+    ) -> ModelRequest {
+        ModelRequest {
+            messages: vec![
+                AgentMessage::system(goal_judge_retry_system_prompt()),
+                AgentMessage::user(format!(
+                    "Previous judge attempt failed with {error_code}: {message}\n\nRe-evaluate the same judge input below and return only a valid JSON object.\n\n{prompt}",
+                    error_code = failure.error_code,
+                    message = failure.message,
+                    prompt = input.prompt,
+                )),
             ],
             tools: Vec::new(),
             system_agent_session_id: None,
@@ -150,6 +178,63 @@ impl ShortTermMemoryService {
         Ok(output)
     }
 
+    pub fn record_goal_judge_started(
+        &self,
+        input: &PreparedGoalJudgeInput,
+        model: &AgentModelConfig,
+    ) -> Result<(), ShortTermMemoryError> {
+        let view = match self.repository().get_goal(&input.goal_code)? {
+            Some(view) if view.goal.status == "ACTIVE" => view,
+            _ => return Ok(()),
+        };
+        let event = self.new_goal_judge_event(
+            &view.goal,
+            input,
+            "GOAL_JUDGE_STARTED",
+            Some("Goal judge started"),
+            Some(json!({
+                "runCode": input.run_code,
+                "judgeInput": input.input_preview,
+                "judgeInputHash": input.prompt_hash,
+                "inputTokenEstimate": input.input_token_estimate,
+                "model": model_audit(model),
+            })),
+        )?;
+        self.repository().append_goal_event(&event)
+    }
+
+    pub fn record_goal_judge_attempt_failed(
+        &self,
+        input: &PreparedGoalJudgeInput,
+        attempt: u32,
+        max_attempts: u32,
+        failure: &GoalJudgeFailure,
+        model: &AgentModelConfig,
+    ) -> Result<(), ShortTermMemoryError> {
+        let view = match self.repository().get_goal(&input.goal_code)? {
+            Some(view) if view.goal.status == "ACTIVE" => view,
+            _ => return Ok(()),
+        };
+        let event = self.new_goal_judge_event(
+            &view.goal,
+            input,
+            "GOAL_JUDGE_ATTEMPT_FAILED",
+            Some(failure.message.as_str()),
+            Some(json!({
+                "attempt": attempt,
+                "maxAttempts": max_attempts,
+                "failure": {
+                    "errorCode": failure.error_code,
+                    "message": failure.message,
+                },
+                "runCode": input.run_code,
+                "judgeInputHash": input.prompt_hash,
+                "model": model_audit(model),
+            })),
+        )?;
+        self.repository().append_goal_event(&event)
+    }
+
     pub fn record_goal_judge_failure(
         &self,
         input: PreparedGoalJudgeInput,
@@ -172,6 +257,7 @@ impl ShortTermMemoryService {
         view.goal.runs_used = input.runs_used_after_judge;
         view.goal.revision = input.expected_revision.saturating_add(1);
         view.goal.last_run_code = Some(input.run_code.clone());
+        view.goal.last_input_code = input.input_code.clone();
         view.goal.updated_at = now.clone();
         view.goal.consecutive_judge_failures =
             view.goal.consecutive_judge_failures.saturating_add(1);
@@ -180,33 +266,28 @@ impl ShortTermMemoryService {
 
         let threshold_reached = view.goal.consecutive_judge_failures
             >= self.config.goal_loop.max_consecutive_judge_failures;
-        let mut continuation_prompt = None;
-        let event_kind = if threshold_reached {
+        let budget_exhausted = view.goal.runs_used >= view.goal.max_runs;
+        if threshold_reached {
             view.goal.status = "PAUSED".into();
             view.goal.paused_at = Some(now);
-            view.goal.last_verdict = Some("SKIPPED".into());
             view.goal.last_reason = Some("judge_unavailable".into());
-            "JUDGE_FAILED"
-        } else if view.goal.runs_used >= view.goal.max_runs {
+        } else if budget_exhausted {
             view.goal.status = "PAUSED".into();
             view.goal.paused_at = Some(now);
-            view.goal.last_verdict = Some("SKIPPED".into());
             view.goal.last_reason = Some("Goal run budget was exhausted".into());
-            "BUDGET_EXHAUSTED"
-        } else {
-            continuation_prompt = Some(fallback_continuation_prompt());
-            "JUDGE_FAILED"
-        };
+        }
         let event = self.new_goal_event(
             &view.goal,
-            event_kind,
+            "JUDGE_FAILED",
             view.goal.last_reason.as_deref(),
             Some(json!({
                 "failure": {
                     "errorCode": failure.error_code,
                     "message": failure.message,
                 },
-                "judgeFailureFallback": continuation_prompt.is_some(),
+                "judgeFailureFallback": false,
+                "thresholdReached": threshold_reached,
+                "budgetExhausted": budget_exhausted,
                 "runCode": input.run_code,
                 "runsUsed": view.goal.runs_used,
                 "maxRuns": view.goal.max_runs,
@@ -231,7 +312,7 @@ impl ShortTermMemoryService {
                 .goal
                 .last_reason
                 .unwrap_or_else(|| "goal judge failed".into()),
-            continuation_prompt,
+            continuation_prompt: None,
         })
     }
 
@@ -258,6 +339,7 @@ impl ShortTermMemoryService {
         view.goal.runs_used = input.runs_used_after_judge;
         view.goal.revision = input.expected_revision.saturating_add(1);
         view.goal.last_run_code = Some(input.run_code.clone());
+        view.goal.last_input_code = input.input_code.clone();
         view.goal.updated_at = now.clone();
         view.goal.last_verdict = Some(output.verdict.clone());
         view.goal.last_reason = Some(output.reason.clone());
@@ -350,10 +432,29 @@ impl ShortTermMemoryService {
             continuation_prompt,
         })
     }
+
+    fn new_goal_judge_event(
+        &self,
+        goal: &ShortTermMemoryGoal,
+        input: &PreparedGoalJudgeInput,
+        event_kind: &str,
+        summary: Option<&str>,
+        payload_json: Option<Value>,
+    ) -> Result<crate::domain::short_term_memory::ShortTermMemoryGoalEvent, ShortTermMemoryError>
+    {
+        let mut goal = goal.clone();
+        goal.last_run_code = Some(input.run_code.clone());
+        goal.last_input_code = input.input_code.clone();
+        self.new_goal_event(&goal, event_kind, summary, payload_json)
+    }
 }
 
 fn goal_judge_system_prompt() -> &'static str {
     "You are the goal-loop judge for a coding agent session. Decide whether the active goal is complete, blocked, needs user input, or should continue. Use the structured evidence, not language-specific completion keywords. Return only one JSON object with fields: verdict, reason, completionEvidence, missingEvidence, requiredUserInput, nextStepHint, continuationPrompt. Valid verdicts are CONTINUE, COMPLETED, BLOCKED, NEEDS_USER_INPUT. If verdict is CONTINUE, continuationPrompt is required and must give the next agent run precise guidance. If verdict is not CONTINUE, continuationPrompt must be null."
+}
+
+fn goal_judge_retry_system_prompt() -> &'static str {
+    "You are retrying a failed goal-loop judge attempt. Do not call tools. Return only one strict JSON object with exactly these camelCase fields: verdict, reason, completionEvidence, missingEvidence, requiredUserInput, nextStepHint, continuationPrompt. completionEvidence and missingEvidence may be arrays of strings. Valid verdicts are CONTINUE, COMPLETED, BLOCKED, NEEDS_USER_INPUT. If verdict is CONTINUE, continuationPrompt is required. If verdict is not CONTINUE, continuationPrompt must be null."
 }
 
 fn validate_goal_judge_output(output: &GoalJudgeOutput) -> Result<(), GoalJudgeFailure> {
@@ -372,7 +473,14 @@ fn validate_goal_judge_output(output: &GoalJudgeOutput) -> Result<(), GoalJudgeF
                 });
             }
         }
-        "COMPLETED" | "BLOCKED" | "NEEDS_USER_INPUT" => {}
+        "COMPLETED" | "BLOCKED" | "NEEDS_USER_INPUT" => {
+            if output.continuation_prompt.is_some() {
+                return Err(GoalJudgeFailure {
+                    error_code: "GOAL_JUDGE_MODEL_SCHEMA_INVALID".into(),
+                    message: "non-CONTINUE verdict requires null continuationPrompt".into(),
+                });
+            }
+        }
         _ => {
             return Err(GoalJudgeFailure {
                 error_code: "GOAL_JUDGE_MODEL_SCHEMA_INVALID".into(),
@@ -407,11 +515,6 @@ fn normalize_optional(value: Option<String>) -> Option<String> {
     value
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-}
-
-fn fallback_continuation_prompt() -> String {
-    "[Continuing toward the active session goal]\nThe goal judge failed temporarily. Continue with the next concrete step based on current working state. Do not repeat completed work. If the goal is already complete, report completion with evidence."
-        .into()
 }
 
 fn model_audit(model: &AgentModelConfig) -> Value {

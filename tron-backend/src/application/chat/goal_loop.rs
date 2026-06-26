@@ -52,32 +52,74 @@ impl ChatService {
                 break;
             };
             let judge_model = short_term_memory.goal_judge_model_config(&resolved_model);
-            let judge_request = short_term_memory.goal_judge_model_request(&judge_input);
-            let decision = match agent
-                .generate_stateless_model(&judge_model, &judge_request)
-                .await
-            {
-                Ok(response) => match short_term_memory.model_goal_judge_output(&response) {
-                    Ok(output) => short_term_memory
-                        .commit_goal_judge_decision(judge_input, output, &judge_model, &response)
-                        .map_err(|error| {
-                            ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
-                                error.to_string(),
-                            ))
-                        })?,
-                    Err(failure) => short_term_memory
-                        .record_goal_judge_failure(judge_input, failure, &judge_model)
-                        .map_err(|error| {
-                            ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
-                                error.to_string(),
-                            ))
-                        })?,
-                },
-                Err(error) => {
-                    let failure = GoalJudgeFailure {
+            short_term_memory
+                .record_goal_judge_started(&judge_input, &judge_model)
+                .map_err(|error| {
+                    ChatSendError::Agent(AgentInvocationError::RuntimeFailed(error.to_string()))
+                })?;
+            let max_attempts = short_term_memory.goal_judge_max_attempts_per_run();
+            let mut decision = None;
+            let mut last_failure = None;
+            for attempt in 1..=max_attempts {
+                let judge_request = if attempt == 1 {
+                    short_term_memory.goal_judge_model_request(&judge_input)
+                } else {
+                    let failure = last_failure.as_ref().ok_or_else(|| {
+                        ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+                            "goal judge retry missing previous failure".into(),
+                        ))
+                    })?;
+                    short_term_memory.goal_judge_model_retry_request(&judge_input, failure)
+                };
+                let attempt_failure = match agent
+                    .generate_stateless_model(&judge_model, &judge_request)
+                    .await
+                {
+                    Ok(response) => match short_term_memory.model_goal_judge_output(&response) {
+                        Ok(output) => {
+                            decision = Some(
+                                short_term_memory
+                                    .commit_goal_judge_decision(
+                                        judge_input.clone(),
+                                        output,
+                                        &judge_model,
+                                        &response,
+                                    )
+                                    .map_err(|error| {
+                                        ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+                                            error.to_string(),
+                                        ))
+                                    })?,
+                            );
+                            break;
+                        }
+                        Err(failure) => failure,
+                    },
+                    Err(error) => GoalJudgeFailure {
                         error_code: "GOAL_JUDGE_MODEL_REQUEST_FAILED".into(),
                         message: error.message(),
-                    };
+                    },
+                };
+                short_term_memory
+                    .record_goal_judge_attempt_failed(
+                        &judge_input,
+                        attempt,
+                        max_attempts,
+                        &attempt_failure,
+                        &judge_model,
+                    )
+                    .map_err(|error| {
+                        ChatSendError::Agent(AgentInvocationError::RuntimeFailed(error.to_string()))
+                    })?;
+                last_failure = Some(attempt_failure);
+            }
+            let decision = match decision {
+                Some(decision) => decision,
+                None => {
+                    let failure = last_failure.unwrap_or_else(|| GoalJudgeFailure {
+                        error_code: "GOAL_JUDGE_MODEL_UNKNOWN_FAILURE".into(),
+                        message: "goal judge did not produce a decision".into(),
+                    });
                     short_term_memory
                         .record_goal_judge_failure(judge_input, failure, &judge_model)
                         .map_err(|error| {
@@ -119,7 +161,7 @@ impl ChatService {
                     "goalCode": decision.goal_code,
                     "source": "GOAL_LOOP",
                     "previousVerdict": decision.verdict,
-                    "judgeFailureFallback": decision.verdict == "JUDGE_FAILED",
+                    "judgeFailureFallback": false,
                 })),
             };
             let run = agent

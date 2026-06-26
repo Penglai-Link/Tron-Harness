@@ -1,10 +1,13 @@
 mod assembler;
+#[cfg(test)]
+mod assembler_tests;
 mod config;
 mod dto;
 mod history_retention;
 mod port;
 mod service;
 mod service_access;
+mod service_budget;
 mod service_compaction;
 mod service_compaction_model;
 mod service_compaction_prompt;

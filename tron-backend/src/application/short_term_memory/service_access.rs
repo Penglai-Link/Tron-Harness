@@ -24,4 +24,13 @@ impl ShortTermMemoryService {
             .lock()
             .expect("short-term memory repository mutex poisoned")
     }
+
+    pub(super) fn ensure_session(
+        &self,
+        session_code: &str,
+    ) -> Result<String, ShortTermMemoryError> {
+        self.repository()
+            .session_workspace(session_code.trim())?
+            .ok_or(ShortTermMemoryError::SessionNotFound)
+    }
 }

@@ -6,13 +6,11 @@ use std::{
 
 use crate::{
     application::short_term_memory::{
-        ModelRequestTranscriptFacts, ModelResponseTranscriptFacts, PreparedModelContext,
-        ShortTermMemoryService,
+        ModelResponseTranscriptFacts, PreparedModelContext, ShortTermMemoryService,
     },
     domain::agent::{
-        AgentError, AgentMessage, AgentModelConfig, AgentModelProtocol, AgentRunContext,
-        AgentRunResult, EffectiveTool, ModelRequest, ModelResponse, ModelStreamEvent,
-        ModelStreamEventKind, ModelTokenUsage, ToolRegistry,
+        AgentError, AgentModelConfig, AgentRunContext, AgentRunResult, ModelRequest, ModelResponse,
+        ModelStreamEvent, ModelStreamEventKind, ModelTokenUsage, ToolRegistry,
     },
     shared::event_bus::{BusEventDraft, BusOutcome, BusRequestRef, EventBusHandle, PublishOutcome},
 };
@@ -31,73 +29,19 @@ mod runtime_helpers;
 #[path = "runtime_compaction.rs"]
 mod runtime_compaction;
 
+#[path = "runtime_model_request.rs"]
+mod runtime_model_request;
+
 use runtime_helpers::{
-    agent_kind_label, compact_event_payload_value, compact_event_value, hash_text,
+    agent_kind_label, compact_event_payload_value, compact_event_value,
     model_stream_delta_payloads, record_failure_on_short_term_memory_error,
     short_term_memory_error, validate_context,
 };
+use runtime_model_request::{
+    estimate_tool_schema_tokens, model_request_facts, prepared_context_event_payload,
+};
 
 pub type ModelStreamSink = Arc<dyn Fn(ModelStreamEvent) + Send + Sync>;
-
-fn model_request_facts(
-    request: &ModelRequest,
-    context: &AgentRunContext,
-    prepared_context: &PreparedModelContext,
-    usage_estimate: crate::domain::agent::TokenEstimateSnapshot,
-) -> ModelRequestTranscriptFacts {
-    ModelRequestTranscriptFacts {
-        message_count: request.messages.len(),
-        part_count: request_message_part_count(&request.messages),
-        estimated_tokens: prepared_context.estimated_tokens,
-        message_hashes: request
-            .messages
-            .iter()
-            .map(|message| hash_text(&message.text_content()))
-            .collect(),
-        tool_schema_token_estimate: estimate_tool_schema_tokens(&request.tools),
-        protocol: protocol_code(context.model.protocol).into(),
-        previous_response_id_present: request.previous_response_id.is_some(),
-        context_window_estimate: context.model.context_window_tokens,
-        checkpoint_code: prepared_context.checkpoint_code.clone(),
-        budget_breakdown: prepared_context.budget_breakdown.clone(),
-        over_budget_reason: prepared_context.over_budget_reason.clone(),
-        usage_estimate: Some(usage_estimate),
-    }
-}
-
-fn prepared_context_event_payload(
-    prepared_context: &PreparedModelContext,
-) -> Vec<(String, String)> {
-    let mut payload = Vec::new();
-    if let Some(breakdown) = prepared_context.budget_breakdown.as_ref()
-        && let Ok(value) = serde_json::to_string(breakdown)
-    {
-        payload.push(("budgetBreakdown".to_string(), value));
-    }
-    if let Some(reason) = prepared_context.over_budget_reason.as_ref() {
-        payload.push(("overBudgetReason".to_string(), reason.clone()));
-    }
-    payload
-}
-
-fn request_message_part_count(messages: &[AgentMessage]) -> usize {
-    messages.iter().map(|message| message.parts.len()).sum()
-}
-
-fn estimate_tool_schema_tokens(tools: &[EffectiveTool]) -> u32 {
-    serde_json::to_string(tools)
-        .ok()
-        .map(|text| ((text.len() as u32).saturating_add(3)) / 4)
-        .unwrap_or(0)
-}
-
-fn protocol_code(protocol: AgentModelProtocol) -> &'static str {
-    match protocol {
-        AgentModelProtocol::ChatCompletions => "chatCompletions",
-        AgentModelProtocol::Responses => "responses",
-        AgentModelProtocol::Embeddings => "embeddings",
-    }
-}
 
 pub trait ModelClient: Send + Sync {
     fn generate<'a>(

@@ -3,7 +3,8 @@ use crate::{
     application::{
         chat::ChatRepository,
         short_term_memory::{
-            SetGoalCommand, ShortTermMemoryConfig, ShortTermMemoryService, TodoUpdateItem,
+            GoalJudgeFailure, SetGoalCommand, ShortTermMemoryConfig, ShortTermMemoryService,
+            TodoUpdateItem,
         },
     },
     domain::agent::{
@@ -14,6 +15,7 @@ use crate::{
     shared::{id::FixedSnowflakeIdProvider, time::current_timestamp},
 };
 
+use rusqlite::Connection;
 use std::sync::Arc;
 
 #[test]
@@ -55,6 +57,19 @@ fn llm_goal_judge_requires_continuation_prompt_for_continue() {
 }
 
 #[test]
+fn llm_goal_judge_rejects_continuation_prompt_for_non_continue() {
+    let service = service("goal-judge-non-continue-prompt");
+    let response = ModelResponse::final_output(
+        r#"{"verdict":"COMPLETED","reason":"done","completionEvidence":[],"missingEvidence":[],"requiredUserInput":null,"nextStepHint":null,"continuationPrompt":"Keep going anyway."}"#,
+    );
+
+    let failure = service
+        .model_goal_judge_output(&response)
+        .expect_err("non-CONTINUE prompt should fail");
+    assert_eq!(failure.error_code, "GOAL_JUDGE_MODEL_SCHEMA_INVALID");
+}
+
+#[test]
 fn llm_goal_judge_parses_completed_json() {
     let service = service("goal-judge-completed");
     let response = ModelResponse::final_output(
@@ -68,6 +83,144 @@ fn llm_goal_judge_parses_completed_json() {
         .expect("completed JSON should parse");
     assert_eq!(output.verdict, "COMPLETED");
     assert_eq!(output.continuation_prompt, None);
+}
+
+#[test]
+fn llm_goal_judge_normalizes_string_evidence() {
+    let service = service("goal-judge-string-evidence");
+    let response = ModelResponse::final_output(
+        r#"{"verdict":"COMPLETED","reason":"all done","completionEvidence":"final answer explains the completed work","missingEvidence":"  ","requiredUserInput":null,"nextStepHint":null,"continuationPrompt":null}"#,
+    );
+
+    let output = service
+        .model_goal_judge_output(&response)
+        .expect("string evidence should parse");
+    assert_eq!(
+        output.completion_evidence,
+        vec!["final answer explains the completed work".to_string()]
+    );
+    assert!(output.missing_evidence.is_empty());
+}
+
+#[test]
+fn llm_goal_judge_failure_does_not_create_fallback_continuation() {
+    let service = service("goal-judge-failure-no-fallback");
+    let input = service
+        .prepare_goal_judge_input("SESSION-1", "RUN-1", "继续执行", 1)
+        .expect("judge input should prepare")
+        .expect("active goal should exist");
+    let decision = service
+        .record_goal_judge_failure(
+            input,
+            GoalJudgeFailure {
+                error_code: "GOAL_JUDGE_MODEL_INVALID_JSON".into(),
+                message: "invalid JSON".into(),
+            },
+            &model_config(),
+        )
+        .expect("judge failure should record");
+
+    assert_eq!(decision.verdict, "JUDGE_FAILED");
+    assert_eq!(decision.continuation_prompt, None);
+    let goal = service
+        .get_active_goal("SESSION-1")
+        .expect("goal lookup should work")
+        .expect("active goal should remain visible");
+    assert_eq!(goal.goal.status, "ACTIVE");
+    assert_eq!(goal.goal.runs_used, 1);
+    assert_eq!(goal.goal.consecutive_judge_failures, 1);
+    assert_eq!(goal.goal.last_verdict.as_deref(), Some("JUDGE_FAILED"));
+}
+
+#[test]
+fn llm_goal_judge_attempt_events_do_not_increment_runs_used() {
+    let (service, database_url) = service_with_database_url("goal-judge-attempt-events");
+    let input = service
+        .prepare_goal_judge_input("SESSION-1", "RUN-1", "继续执行", 1)
+        .expect("judge input should prepare")
+        .expect("active goal should exist");
+    let model = model_config();
+    let failure = GoalJudgeFailure {
+        error_code: "GOAL_JUDGE_MODEL_INVALID_JSON".into(),
+        message: "invalid JSON".into(),
+    };
+
+    service
+        .record_goal_judge_started(&input, &model)
+        .expect("judge start event should record");
+    service
+        .record_goal_judge_attempt_failed(&input, 1, 2, &failure, &model)
+        .expect("judge attempt failure event should record");
+
+    let goal = service
+        .get_active_goal("SESSION-1")
+        .expect("goal lookup should work")
+        .expect("active goal should remain visible");
+    assert_eq!(goal.goal.runs_used, 0);
+    assert_eq!(goal.goal.last_verdict, None);
+    assert_eq!(goal.goal.consecutive_judge_failures, 0);
+
+    let connection = Connection::open(database_url).expect("test database should open");
+    let mut statement = connection
+        .prepare(
+            "SELECT event_kind
+             FROM agent_session_goal_events
+             WHERE goal_code = ?1
+             ORDER BY event_seq ASC",
+        )
+        .expect("goal event query should prepare");
+    let event_kinds = statement
+        .query_map([input.goal_code.as_str()], |row| row.get::<_, String>(0))
+        .expect("goal event query should run")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("goal event rows should map");
+    assert_eq!(
+        event_kinds,
+        vec![
+            "GOAL_SET".to_string(),
+            "GOAL_JUDGE_STARTED".to_string(),
+            "GOAL_JUDGE_ATTEMPT_FAILED".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn llm_goal_judge_pauses_after_consecutive_failures() {
+    let service = service("goal-judge-failure-threshold");
+    let mut last_decision = None;
+    for run_index in 1..=3 {
+        let run_code = format!("RUN-{run_index}");
+        let input = service
+            .prepare_goal_judge_input("SESSION-1", &run_code, "继续执行", 1)
+            .expect("judge input should prepare")
+            .expect("active goal should exist until threshold");
+        last_decision = Some(
+            service
+                .record_goal_judge_failure(
+                    input,
+                    GoalJudgeFailure {
+                        error_code: "GOAL_JUDGE_MODEL_INVALID_JSON".into(),
+                        message: format!("invalid JSON attempt {run_index}"),
+                    },
+                    &model_config(),
+                )
+                .expect("judge failure should record"),
+        );
+    }
+
+    let decision = last_decision.expect("decision should exist");
+    assert_eq!(decision.verdict, "JUDGE_FAILED");
+    assert_eq!(decision.reason, "judge_unavailable");
+    assert_eq!(decision.continuation_prompt, None);
+    let goal = service
+        .get_active_goal("SESSION-1")
+        .expect("goal lookup should work")
+        .expect("paused goal remains visible");
+    assert_eq!(goal.goal.status, "PAUSED");
+    assert_eq!(goal.goal.runs_used, 3);
+    assert_eq!(goal.goal.consecutive_judge_failures, 3);
+    assert_eq!(goal.goal.last_verdict.as_deref(), Some("JUDGE_FAILED"));
+    assert_eq!(goal.goal.last_reason.as_deref(), Some("judge_unavailable"));
 }
 
 #[test]
@@ -121,6 +274,10 @@ fn llm_goal_judge_stops_repeated_no_progress_continue() {
 }
 
 fn service(label: &str) -> ShortTermMemoryService {
+    service_with_database_url(label).0
+}
+
+fn service_with_database_url(label: &str) -> (ShortTermMemoryService, String) {
     let database_url = temp_database_url(label);
     crate::adapters::outbound::persistence::SqliteChatRepository::connect(&database_url)
         .expect("chat repository should connect")
@@ -187,7 +344,7 @@ fn service(label: &str) -> ShortTermMemoryService {
             }],
         )
         .expect("todo should update");
-    service
+    (service, database_url)
 }
 
 fn base_context() -> AgentRunContext {

@@ -177,6 +177,9 @@ impl GoalLoopConfig {
         if let Some(value) = overrides.max_consecutive_judge_failures {
             self.max_consecutive_judge_failures = value.max(1);
         }
+        if let Some(value) = overrides.judge_max_attempts_per_run {
+            self.judge_max_attempts_per_run = value.max(1);
+        }
         if let Some(value) = overrides.judge_input_max_chars {
             self.judge_input_max_chars = value.max(1);
         }
@@ -268,6 +271,7 @@ struct CompactionPolicyFileConfig {
 struct GoalLoopFileConfig {
     max_runs: Option<u32>,
     max_consecutive_judge_failures: Option<u32>,
+    judge_max_attempts_per_run: Option<u32>,
     judge_input_max_chars: Option<usize>,
     judge_output_max_tokens: Option<u32>,
 }

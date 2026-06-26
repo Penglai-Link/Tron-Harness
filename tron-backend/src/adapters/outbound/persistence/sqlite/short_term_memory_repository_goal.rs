@@ -126,6 +126,20 @@ pub(super) fn create_goal(
     Ok(ShortTermMemoryGoalView { goal, criteria })
 }
 
+pub(super) fn append_goal_event(
+    connection: &mut Connection,
+    event: &ShortTermMemoryGoalEvent,
+) -> Result<(), ShortTermMemoryError> {
+    let tx = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(storage_error)?;
+    let mut event = event.clone();
+    assign_goal_event_storage_fields(&tx, &mut event)?;
+    insert_goal_event(&tx, &event)?;
+    tx.commit().map_err(storage_error)?;
+    Ok(())
+}
+
 pub(super) fn update_goal(
     connection: &mut Connection,
     goal: &ShortTermMemoryGoal,

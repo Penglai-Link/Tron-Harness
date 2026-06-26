@@ -406,6 +406,13 @@ impl ShortTermMemoryRepository for ContextEpochFailingRepository {
         Ok(Vec::new())
     }
 
+    fn append_goal_event(
+        &mut self,
+        _event: &ShortTermMemoryGoalEvent,
+    ) -> Result<(), ShortTermMemoryError> {
+        Ok(())
+    }
+
     fn create_goal(
         &mut self,
         _goal: &ShortTermMemoryGoal,
