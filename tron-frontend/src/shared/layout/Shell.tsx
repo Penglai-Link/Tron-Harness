@@ -988,7 +988,7 @@ export function TronShell({
                       onPointerUp={handleRightPanelPointerEnd}
                       onPointerCancel={handleRightPanelPointerEnd}
                     />
-                    <ResizablePanel panelRef={panelRef} id="resize-panel" collapsible={true} collapsedSize={0} defaultSize="0%" minSize={300} maxSize={700} onResize={panelResize}>
+                    <ResizablePanel panelRef={panelRef} id="resize-panel" collapsible={true} collapsedSize={0} defaultSize="0%" minSize={400} maxSize="80%" onResize={panelResize}>
                       <aside
                         className="relative z-10 hidden h-[calc(100vh-3.5rem)] overflow-y-auto bg-[var(--color-elevated-surface)] lg:block"
                         data-testid="tron-right-sidebar"

@@ -3613,7 +3613,7 @@ export function ChatManagementPage() {
             url="https://www.baidu.com"
             onInspectionConfirm={(result) => {
               if (inspectionSubmitMode(result) === "send") {
-                void handleSend(inspectionMessageContent(result));
+                void handleSend(inspectionMessageContent(result), [createInspectionAttachment(result)]);
                 return;
               }
 
@@ -3842,7 +3842,7 @@ export function ChatManagementPage() {
     });
   }
 
-  async function handleSend(contentOverride?: string) {
+  async function handleSend(contentOverride?: string, attachmentOverride?: ChatMessageAttachment[]) {
     if (sending) return;
     if (!activeSession) return;
     const content = (contentOverride ?? composer).trim();
@@ -3861,7 +3861,7 @@ export function ChatManagementPage() {
       taskCode: activeSession.taskCode,
       workspaceCode: activeSession.workspaceCode,
     };
-    const pendingInspectionAttachments = inspectionAttachments;
+    const pendingInspectionAttachments = attachmentOverride ?? inspectionAttachments;
     if (pendingInspectionAttachments.length) {
       sendInput.attachments = pendingInspectionAttachments;
     }
@@ -3908,7 +3908,9 @@ export function ChatManagementPage() {
     if (contentOverride === undefined) {
       setComposer("");
     }
-    setInspectionAttachments([]);
+    if (attachmentOverride === undefined) {
+      setInspectionAttachments([]);
+    }
     if (activeSessionCodeRef.current === sendingSessionCode) {
       setVisibleMessages((current) => [
         ...current,
