@@ -84,6 +84,10 @@ function isAdministrationRoute(pathname: string) {
   return pathname === "/admin" || pathname.startsWith("/admin/");
 }
 
+function routeRenderKeyForLocation(pathname: string, search: string, pageId?: string) {
+  return pageId === "chats.index" ? pathname : `${pathname}${search}`;
+}
+
 function isConsoleShellConfigEqual(left: ConsoleShellConfig, right: ConsoleShellConfig) {
   return (
     left.contentClassName === right.contentClassName
@@ -188,7 +192,7 @@ function AppRoutePage() {
   const { session } = useAuthSession();
   const toast = useToast();
   const resolved = resolveAppRoute(pathname, search);
-  const routeRenderKey = `${pathname}${search}`;
+  const routeRenderKey = routeRenderKeyForLocation(pathname, search, resolved?.route.pageId);
   const isAdmin = session?.user.roleCodes.includes("ADMIN") ?? false;
   const blocksAdministrationRoute = isAdministrationRoute(pathname) && !isAdmin;
   const blockedAdministrationToastPath = useRef<string | null>(null);
