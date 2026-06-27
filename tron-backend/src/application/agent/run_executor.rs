@@ -7,10 +7,10 @@ use super::{
     RuntimeAdapterSelection,
 };
 
-const MAX_ORCHESTRATOR_RETRIES: u32 = 3;
+const MAX_AGENT_RUN_RETRIES: u32 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RunLifecycleState {
+pub enum AgentRunLifecycleState {
     Created,
     Running,
     Completed,
@@ -20,21 +20,21 @@ pub enum RunLifecycleState {
 }
 
 #[derive(Debug, Clone)]
-pub struct OrchestratedRunResult {
+pub struct AgentRunExecutionResult {
     pub run: AgentRunResult,
     pub runtime_adapter_key: String,
-    pub lifecycle_state: RunLifecycleState,
-    pub lifecycle_trace: Vec<RunLifecycleState>,
+    pub lifecycle_state: AgentRunLifecycleState,
+    pub lifecycle_trace: Vec<AgentRunLifecycleState>,
     pub attempts: u32,
     pub resumed: bool,
 }
 
 #[derive(Clone)]
-pub struct AgentOrchestrator {
+pub struct AgentRunExecutor {
     runtime_registry: AgentRuntimeRegistry,
 }
 
-impl AgentOrchestrator {
+impl AgentRunExecutor {
     pub fn new(runtime_registry: AgentRuntimeRegistry) -> Self {
         Self { runtime_registry }
     }
@@ -49,7 +49,7 @@ impl AgentOrchestrator {
         context: AgentRunContext,
         requested_session_id: Option<String>,
         sink: Option<ModelStreamSink>,
-    ) -> Result<OrchestratedRunResult, AgentInvocationError> {
+    ) -> Result<AgentRunExecutionResult, AgentInvocationError> {
         let runtime = self.resolve_runtime(selection);
         self.execute_with_runtime(runtime, context, requested_session_id, sink)
             .await
@@ -61,16 +61,16 @@ impl AgentOrchestrator {
         context: AgentRunContext,
         requested_session_id: Option<String>,
         sink: Option<ModelStreamSink>,
-    ) -> Result<OrchestratedRunResult, AgentInvocationError> {
+    ) -> Result<AgentRunExecutionResult, AgentInvocationError> {
         let runtime_adapter_key = runtime.key().code().to_string();
         let retry_budget = max_retry_budget(&context);
         let resumed = requested_session_id.is_some() && runtime.capabilities().supports_resume;
         let mut attempts = 0;
-        let mut lifecycle_trace = vec![RunLifecycleState::Created];
+        let mut lifecycle_trace = vec![AgentRunLifecycleState::Created];
 
         loop {
             attempts += 1;
-            lifecycle_trace.push(RunLifecycleState::Running);
+            lifecycle_trace.push(AgentRunLifecycleState::Running);
             let run_future = match requested_session_id.as_deref() {
                 Some(session_id) if runtime.capabilities().supports_resume => {
                     runtime.resume(session_id, context.clone(), sink.clone())
@@ -80,11 +80,11 @@ impl AgentOrchestrator {
 
             match run_future.await {
                 Ok(run) => {
-                    lifecycle_trace.push(RunLifecycleState::Completed);
-                    return Ok(OrchestratedRunResult {
+                    lifecycle_trace.push(AgentRunLifecycleState::Completed);
+                    return Ok(AgentRunExecutionResult {
                         run,
                         runtime_adapter_key,
-                        lifecycle_state: RunLifecycleState::Completed,
+                        lifecycle_state: AgentRunLifecycleState::Completed,
                         lifecycle_trace,
                         attempts,
                         resumed,
@@ -94,7 +94,7 @@ impl AgentOrchestrator {
                     if attempts <= retry_budget && is_retryable_error(&error) {
                         continue;
                     }
-                    lifecycle_trace.push(RunLifecycleState::Failed);
+                    lifecycle_trace.push(AgentRunLifecycleState::Failed);
                     return Err(error);
                 }
             }
@@ -107,7 +107,7 @@ fn max_retry_budget(context: &AgentRunContext) -> u32 {
         .model
         .max_retries
         .unwrap_or(0)
-        .min(MAX_ORCHESTRATOR_RETRIES)
+        .min(MAX_AGENT_RUN_RETRIES)
 }
 
 fn is_retryable_error(error: &AgentInvocationError) -> bool {
@@ -131,8 +131,8 @@ mod tests {
     };
 
     use super::{
-        AgentInvocationError, AgentOrchestrator, AgentRunContext, AgentRunResult, AgentRuntime,
-        ModelStreamSink, OrchestratedRunResult, RunLifecycleState,
+        AgentInvocationError, AgentRunExecutor, AgentRunContext, AgentRunResult, AgentRuntime,
+        ModelStreamSink, AgentRunExecutionResult, AgentRunLifecycleState,
     };
 
     #[derive(Clone)]
@@ -254,8 +254,8 @@ mod tests {
         }
     }
 
-    fn orchestrator() -> AgentOrchestrator {
-        AgentOrchestrator::new(super::AgentRuntimeRegistry::new(
+    fn run_executor() -> AgentRunExecutor {
+        AgentRunExecutor::new(super::AgentRuntimeRegistry::new(
             std::sync::Arc::new(NoopModelClient),
             std::sync::Arc::new(crate::domain::agent::ToolRegistry::default()),
             crate::shared::event_bus::EventBusHandle::disabled(),
@@ -345,14 +345,14 @@ mod tests {
     }
 
     fn assert_success(
-        result: Result<OrchestratedRunResult, AgentInvocationError>,
-    ) -> OrchestratedRunResult {
-        result.expect("orchestrator run should succeed")
+        result: Result<AgentRunExecutionResult, AgentInvocationError>,
+    ) -> AgentRunExecutionResult {
+        result.expect("agent run execution should succeed")
     }
 
     #[tokio::test]
     async fn uses_resume_when_runtime_supports_resume() {
-        let orchestrator = orchestrator();
+        let executor = run_executor();
         let runtime = std::sync::Arc::new(FakeRuntime::new(
             RuntimeAdapterKey::CodexExec,
             runtime_caps(true, false),
@@ -361,19 +361,19 @@ mod tests {
         ));
 
         let result = assert_success(
-            orchestrator
+            executor
                 .execute_with_runtime(runtime.clone(), context(0), Some("thr-1".into()), None)
                 .await,
         );
 
         assert_eq!(result.runtime_adapter_key, "CODEX_EXEC");
-        assert_eq!(result.lifecycle_state, RunLifecycleState::Completed);
+        assert_eq!(result.lifecycle_state, AgentRunLifecycleState::Completed);
         assert_eq!(
             result.lifecycle_trace,
             vec![
-                RunLifecycleState::Created,
-                RunLifecycleState::Running,
-                RunLifecycleState::Completed,
+                AgentRunLifecycleState::Created,
+                AgentRunLifecycleState::Running,
+                AgentRunLifecycleState::Completed,
             ]
         );
         assert_eq!(result.attempts, 1);
@@ -383,7 +383,7 @@ mod tests {
 
     #[tokio::test]
     async fn falls_back_to_start_when_resume_is_not_supported() {
-        let orchestrator = orchestrator();
+        let executor = run_executor();
         let runtime = std::sync::Arc::new(FakeRuntime::new(
             RuntimeAdapterKey::React,
             runtime_caps(false, false),
@@ -392,19 +392,19 @@ mod tests {
         ));
 
         let result = assert_success(
-            orchestrator
+            executor
                 .execute_with_runtime(runtime.clone(), context(0), Some("thr-1".into()), None)
                 .await,
         );
 
         assert_eq!(result.runtime_adapter_key, "REACT");
-        assert_eq!(result.lifecycle_state, RunLifecycleState::Completed);
+        assert_eq!(result.lifecycle_state, AgentRunLifecycleState::Completed);
         assert_eq!(
             result.lifecycle_trace,
             vec![
-                RunLifecycleState::Created,
-                RunLifecycleState::Running,
-                RunLifecycleState::Completed,
+                AgentRunLifecycleState::Created,
+                AgentRunLifecycleState::Running,
+                AgentRunLifecycleState::Completed,
             ]
         );
         assert!(!result.resumed);
@@ -413,7 +413,7 @@ mod tests {
 
     #[tokio::test]
     async fn retries_retryable_failures_within_budget() {
-        let orchestrator = orchestrator();
+        let executor = run_executor();
         let runtime = std::sync::Arc::new(FakeRuntime::new(
             RuntimeAdapterKey::OpenCodeRun,
             runtime_caps(false, false),
@@ -425,7 +425,7 @@ mod tests {
         ));
 
         let result = assert_success(
-            orchestrator
+            executor
                 .execute_with_runtime(runtime.clone(), context(1), None, None)
                 .await,
         );
@@ -435,10 +435,10 @@ mod tests {
         assert_eq!(
             result.lifecycle_trace,
             vec![
-                RunLifecycleState::Created,
-                RunLifecycleState::Running,
-                RunLifecycleState::Running,
-                RunLifecycleState::Completed,
+                AgentRunLifecycleState::Created,
+                AgentRunLifecycleState::Running,
+                AgentRunLifecycleState::Running,
+                AgentRunLifecycleState::Completed,
             ]
         );
         assert_eq!(result.run.final_output, "retried");
@@ -447,7 +447,7 @@ mod tests {
 
     #[tokio::test]
     async fn slow_runtime_completes_without_cancel_when_supported() {
-        let orchestrator = orchestrator();
+        let executor = run_executor();
         let runtime = std::sync::Arc::new(FakeRuntime::new(
             RuntimeAdapterKey::OpenCodeServe,
             runtime_caps(false, true),
@@ -456,11 +456,11 @@ mod tests {
         ));
 
         let result = assert_success(
-            orchestrator
+            executor
                 .execute_with_runtime(runtime.clone(), context(0), None, None)
                 .await,
         );
-        assert_eq!(result.lifecycle_state, RunLifecycleState::Completed);
+        assert_eq!(result.lifecycle_state, AgentRunLifecycleState::Completed);
         assert_eq!(runtime.calls(), vec!["start"]);
     }
 }

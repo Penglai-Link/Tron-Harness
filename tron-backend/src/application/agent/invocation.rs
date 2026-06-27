@@ -27,7 +27,7 @@ use crate::{
 
 use super::{
     AgentInvocationCommand, AgentInvocationError, AgentInvocationResult, AgentManagementService,
-    AgentOrchestrator, AgentRunHistoryService, AgentRuntimeRegistry, BusinessToolCatalog,
+    AgentRunExecutor, AgentRunHistoryService, AgentRuntimeRegistry, BusinessToolCatalog,
     ModelClient, ModelStreamSink, ResolvedAgentRuntime, RuntimeAdapterSelection,
     build_domain_discovery_guidance, discovery_expand_tool_definition,
     tool_record_to_effective_tool,
@@ -356,7 +356,7 @@ impl AgentInvocationService {
             self.runtime_http_client.clone(),
         )
         .with_short_term_memory(self.short_term_memory.clone());
-        let orchestrator = AgentOrchestrator::new(runtime_registry);
+        let executor = AgentRunExecutor::new(runtime_registry);
         let runtime_selection =
             runtime_selection_for_agent(&resolved_agent, local_directory.clone())?;
         let requested_system_agent_session_id =
@@ -406,7 +406,7 @@ impl AgentInvocationService {
         let conversation_code = context.conversation_code.clone();
         let workspace_code = context.workspace_code.clone();
 
-        let result = orchestrator
+        let result = executor
             .execute_with_selection(
                 runtime_selection,
                 context,
