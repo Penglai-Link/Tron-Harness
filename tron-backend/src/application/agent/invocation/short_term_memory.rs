@@ -1,56 +1,54 @@
 use crate::{
-    application::agent::{AgentInvocationError, RuntimeAdapterSelection},
+    application::{
+        agent::{AgentInvocationError, RuntimeAdapterSelection},
+        short_term_memory::ShortTermMemoryService,
+    },
     domain::agent::{
         AgentMessage, AgentRunContext, AgentShortTermMemoryRunContext, ToolExposureMode,
     },
 };
 
-use super::AgentInvocationService;
-
-impl AgentInvocationService {
-    pub(super) fn activate_short_term_memory(
-        &self,
-        context: &mut AgentRunContext,
-        runtime_selection: &RuntimeAdapterSelection,
-        requested_conversation_code: Option<&str>,
-        agent_code: &str,
-        prompt: &str,
-        prompt_prefix_messages: Vec<AgentMessage>,
-        user_prompt_message: Option<AgentMessage>,
-        input_kind: Option<&str>,
-        input_metadata: Option<serde_json::Value>,
-    ) -> Result<(), AgentInvocationError> {
-        if !matches!(runtime_selection, RuntimeAdapterSelection::React)
-            || requested_conversation_code.is_none()
-        {
-            return Ok(());
-        }
-        let Some(short_term_memory) = self.short_term_memory.as_ref() else {
-            return Ok(());
-        };
-
-        let input_kind = input_kind.unwrap_or("USER_PROMPT");
-        let input_code = short_term_memory
-            .record_invocation_input(context, prompt, input_kind, input_metadata.clone())
-            .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))?;
-        context.messages = prompt_prefix_messages;
-        let current_input_message =
-            runtime_input_context_message(input_kind, prompt, &input_metadata)
-                .or(user_prompt_message);
-        context.short_term_memory = Some(AgentShortTermMemoryRunContext {
-            session_code: requested_conversation_code
-                .expect("conversation code should be present")
-                .to_string(),
-            input_code,
-            input_kind: input_kind.to_string(),
-            input_metadata,
-            prompt_prefix: context.messages.clone(),
-            current_input_message,
-            agent_code: Some(agent_code.to_string()),
-            todo_enabled: resolve_todo_enabled(context),
-        });
-        Ok(())
+pub(super) fn activate_short_term_memory(
+    short_term_memory: Option<&ShortTermMemoryService>,
+    context: &mut AgentRunContext,
+    runtime_selection: &RuntimeAdapterSelection,
+    requested_conversation_code: Option<&str>,
+    agent_code: &str,
+    prompt: &str,
+    prompt_prefix_messages: Vec<AgentMessage>,
+    user_prompt_message: Option<AgentMessage>,
+    input_kind: Option<&str>,
+    input_metadata: Option<serde_json::Value>,
+) -> Result<(), AgentInvocationError> {
+    if !matches!(runtime_selection, RuntimeAdapterSelection::React)
+        || requested_conversation_code.is_none()
+    {
+        return Ok(());
     }
+    let Some(short_term_memory) = short_term_memory else {
+        return Ok(());
+    };
+
+    let input_kind = input_kind.unwrap_or("USER_PROMPT");
+    let input_code = short_term_memory
+        .record_invocation_input(context, prompt, input_kind, input_metadata.clone())
+        .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))?;
+    context.messages = prompt_prefix_messages;
+    let current_input_message =
+        runtime_input_context_message(input_kind, prompt, &input_metadata).or(user_prompt_message);
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: requested_conversation_code
+            .expect("conversation code should be present")
+            .to_string(),
+        input_code,
+        input_kind: input_kind.to_string(),
+        input_metadata,
+        prompt_prefix: context.messages.clone(),
+        current_input_message,
+        agent_code: Some(agent_code.to_string()),
+        todo_enabled: resolve_todo_enabled(context),
+    });
+    Ok(())
 }
 
 fn runtime_input_context_message(

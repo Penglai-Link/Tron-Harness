@@ -8,10 +8,10 @@ mod history;
 mod invocation;
 mod management;
 mod port;
+mod run_executor;
 mod runtime;
 mod runtime_adapter;
 mod runtime_capability;
-mod run_executor;
 mod system_agent_model_probe;
 mod system_cli_output_parser;
 mod tool_catalog;
@@ -35,12 +35,12 @@ pub use management::{
     UpdateWorkspaceInternalAgentPolicyCommand,
 };
 pub use port::AgentRunHistoryRepository;
+pub use run_executor::{AgentRunExecutionResult, AgentRunExecutor, AgentRunLifecycleState};
 pub use runtime::{ModelClient, ModelStreamSink, ReactAgentBuilder};
 pub use runtime_adapter::{
     AgentRuntime, AgentRuntimeRegistry, RuntimeAdapterDescriptor, RuntimeAdapterKey,
     RuntimeAdapterSelection, RuntimeAdapterStage, RuntimeCapabilities, runtime_adapter_descriptors,
 };
-pub use run_executor::{AgentRunExecutionResult, AgentRunExecutor, AgentRunLifecycleState};
 pub use tool_catalog::BusinessToolCatalog;
 pub(crate) use turn_state::{TurnStateAdapter, TurnStateKind};
 pub(crate) use usage_snapshots::{

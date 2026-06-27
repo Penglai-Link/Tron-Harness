@@ -131,8 +131,8 @@ mod tests {
     };
 
     use super::{
-        AgentInvocationError, AgentRunExecutor, AgentRunContext, AgentRunResult, AgentRuntime,
-        ModelStreamSink, AgentRunExecutionResult, AgentRunLifecycleState,
+        AgentInvocationError, AgentRunContext, AgentRunExecutionResult, AgentRunExecutor,
+        AgentRunLifecycleState, AgentRunResult, AgentRuntime, ModelStreamSink,
     };
 
     #[derive(Clone)]

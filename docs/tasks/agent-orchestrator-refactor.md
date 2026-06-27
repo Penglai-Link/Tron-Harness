@@ -5,21 +5,21 @@ Implement phases 1-3 of the agent orchestration refactor: rename the current sin
 
 ## Acceptance Criteria
 - [x] Current single-run `AgentOrchestrator` is renamed to `AgentRunExecutor` with matching result and lifecycle type names.
-- [ ] Single agent run context and runtime selection construction is reusable outside `AgentInvocationService`.
+- [x] Single agent run context and runtime selection construction is reusable outside `AgentInvocationService`.
 - [ ] A top-level `AgentOrchestrator` exists and preserves current single-agent behavior.
 - [ ] Backend checks and relevant tests pass through Makefile targets.
 
 ## Overall Status
 - status: running
-- process: 25%
-- current_step: 2
+- process: 55%
+- current_step: 3
 
 ## Steps
 | step | description | status | note |
 | --- | --- | --- | --- |
-| 1 | Rename current single-run orchestrator to `AgentRunExecutor` | finished | commit: pending |
-| 2 | Extract reusable agent run context construction | running | commit: pending |
-| 3 | Add top-level `AgentOrchestrator` facade | notrun | commit: pending |
+| 1 | Rename current single-run orchestrator to `AgentRunExecutor` | finished | commit: e84c5e9 |
+| 2 | Extract reusable agent run context construction | finished | commit: pending |
+| 3 | Add top-level `AgentOrchestrator` facade | running | commit: pending |
 | 4 | Validate with Makefile backend checks and tests | notrun | commit: pending |
 
 ## Update Log
@@ -28,3 +28,4 @@ Implement phases 1-3 of the agent orchestration refactor: rename the current sin
 | 2026-06-27 11:25:53 +0800 | notrun | 0% | task initialized |
 | 2026-06-27 11:25:53 +0800 | running | 5% | started implementation and verified clean git workspace |
 | 2026-06-27 11:25:53 +0800 | running | 25% | renamed the single-run executor and verified with `make be-check` |
+| 2026-06-27 11:25:53 +0800 | running | 55% | extracted `AgentRunContextBuilder` and verified with `make be-check` |
