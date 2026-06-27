@@ -120,6 +120,14 @@ function formatTime(value: string) {
   }).format(date);
 }
 
+function useStableCallback<TArgs extends unknown[], TResult>(
+  callback: (...args: TArgs) => TResult,
+): (...args: TArgs) => TResult {
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
+  return useCallback((...args: TArgs) => callbackRef.current(...args), []);
+}
+
 const chatSessionModelSelectionStorageKey = "tron.chat.session.model.selection";
 
 function readChatSessionModelSelections() {
@@ -3572,6 +3580,13 @@ export function ChatManagementPage() {
       || shouldPollActiveChatData
     )
   );
+  const handleCancelGoalForRightPanel = useStableCallback(handleCancelGoal);
+  const handleClearGoalForRightPanel = useStableCallback(handleClearGoal);
+  const handleCreateCompactionForRightPanel = useStableCallback(handleCreateCompaction);
+  const handlePauseGoalForRightPanel = useStableCallback(handlePauseGoal);
+  const handleResumeGoalForRightPanel = useStableCallback(handleResumeGoal);
+  const handleSendForRightPanel = useStableCallback(handleSend);
+  const handleSetGoalForRightPanel = useStableCallback(handleSetGoal);
 
   const rightPanel = useMemo(() => {
     if (!hasActiveSession) return undefined;
@@ -3594,13 +3609,13 @@ export function ChatManagementPage() {
               latestUsageAudit={activeSession ? latestUsageAuditsBySessionCode[activeSession.sessionCode] ?? null : null}
               messages={visibleMessages}
               model={selectedMainAgentModel}
-              onCancelGoal={handleCancelGoal}
+              onCancelGoal={handleCancelGoalForRightPanel}
               compactionBusy={Boolean(activeSession?.sessionCode && compactingSessionCode === activeSession.sessionCode)}
-              onCreateCompaction={handleCreateCompaction}
-              onClearGoal={handleClearGoal}
-              onPauseGoal={handlePauseGoal}
-              onResumeGoal={handleResumeGoal}
-              onSetGoal={handleSetGoal}
+              onCreateCompaction={handleCreateCompactionForRightPanel}
+              onClearGoal={handleClearGoalForRightPanel}
+              onPauseGoal={handlePauseGoalForRightPanel}
+              onResumeGoal={handleResumeGoalForRightPanel}
+              onSetGoal={handleSetGoalForRightPanel}
               selectedModel={selectedModel}
               session={activeSession}
               todos={shortTermMemoryTodos}
@@ -3613,7 +3628,7 @@ export function ChatManagementPage() {
             url="https://www.baidu.com"
             onInspectionConfirm={(result) => {
               if (inspectionSubmitMode(result) === "send") {
-                void handleSend(inspectionMessageContent(result), [createInspectionAttachment(result)]);
+                void handleSendForRightPanel(inspectionMessageContent(result), [createInspectionAttachment(result)]);
                 return;
               }
 
@@ -3629,27 +3644,27 @@ export function ChatManagementPage() {
   }, [
     activeSession,
     activeGoal,
-    activeGoalState.error,
-    activeGoalState.loading,
-    activeGoalState.retry,
     aguiEvents,
     compactingSessionCode,
+    createInspectionAttachment,
     goalActionSessionCode,
     goalStatus,
     hasActiveSession,
-    handleSend,
+    handleCancelGoalForRightPanel,
+    handleClearGoalForRightPanel,
+    handleCreateCompactionForRightPanel,
+    handlePauseGoalForRightPanel,
+    handleResumeGoalForRightPanel,
+    handleSendForRightPanel,
+    handleSetGoalForRightPanel,
     latestCompaction,
-    latestCompactionState.error,
-    latestCompactionState.loading,
-    latestCompactionState.retry,
+    latestCompactionStatus,
     latestRequestEstimatesBySessionCode,
     latestUsageAuditsBySessionCode,
     selectedMainAgentModel,
     selectedModel,
     shortTermMemoryTodos,
-    shortTermMemoryTodosState.error,
-    shortTermMemoryTodosState.loading,
-    shortTermMemoryTodosState.retry,
+    shortTermMemoryTodosStatus,
     visibleMessages,
   ]);
   const transcriptDebugOptions = useMemo(() => ({
