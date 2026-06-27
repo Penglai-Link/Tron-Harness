@@ -1,4 +1,4 @@
-import { Bot, Grip, Minus, X, Plus } from "lucide-react";
+import { Bot, Grip, Maximize2, Minus, X, Plus } from "lucide-react";
 import {
   clampFloatingStateToViewport,
   defaultFloatingState,
@@ -283,6 +283,21 @@ export function TronChatWindow({
                 onClick={() => panelProps.onNewSession?.()}
               >
                 <Plus size={16} />
+              </button>
+              <button
+                className="tron-chat-window__control"
+                type="button"
+                title={visibleState.collapsed ? "Expand chat" : "Collapse chat"}
+                aria-label={visibleState.collapsed ? "Expand chat" : "Collapse chat"}
+                onClick={() =>
+                  applyState(
+                    reduceFloatingState(visibleState, {
+                      type: "toggle-collapsed",
+                    }),
+                  )
+                }
+              >
+                {visibleState.collapsed ? <Maximize2 size={16} /> : <Minus size={16} />}
               </button>
               <button
                 className="tron-chat-window__control"

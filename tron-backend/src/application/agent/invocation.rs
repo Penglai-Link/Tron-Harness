@@ -146,10 +146,13 @@ impl AgentInvocationService {
         let executor = AgentRunExecutor::new(runtime_registry);
         let orchestrator = AgentOrchestrator::new(self.run_context_builder(), executor);
         let AgentOrchestrationRun {
+            execution_mode: _execution_mode,
+            plan_steps: _plan_steps,
+            collaboration: _collaboration,
             metadata,
             execution,
         } = orchestrator
-            .execute_single_agent(command, user_code, locale, sink)
+            .execute(command, user_code, locale, sink)
             .await?;
         let AgentRunExecutionMetadata {
             run_code,

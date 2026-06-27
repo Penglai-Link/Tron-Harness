@@ -1,4 +1,5 @@
 mod agui;
+mod collaboration;
 mod context;
 mod error;
 mod history;
@@ -12,6 +13,11 @@ mod tool;
 
 pub use agui::{
     AgentAguiEvent, AgentAguiEventSnapshot, AgentAguiProtocolEvent, AgentAguiStreamState,
+};
+pub use collaboration::{
+    AgentAssignment, AgentExecutionMode, AgentRunPlanStep, CollaborationArtifact,
+    CollaborationDecision, CollaborationRun, CollaborationRunStatus, CollaborationStep,
+    CollaborationStepExecutionMode, CollaborationStepStatus, HandoffContext,
 };
 pub use context::{
     AgentExecutionScope, AgentRunContext, AgentRunLimits, AgentShortTermMemoryRunContext,

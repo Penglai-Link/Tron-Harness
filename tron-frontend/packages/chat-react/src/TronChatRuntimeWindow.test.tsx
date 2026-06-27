@@ -4,6 +4,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ChatAdapter, ChatSession } from "@tron/chat-core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ensureTestLocalStorage } from "./testLocalStorage";
 import { TronChatRuntimeWindow } from "./TronChatRuntimeWindow";
 
 afterEach(() => {
@@ -12,6 +13,7 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  ensureTestLocalStorage();
   Object.defineProperty(HTMLElement.prototype, "scrollTo", {
     configurable: true,
     value: vi.fn(),

@@ -5,9 +5,11 @@ import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { defaultFloatingState } from "@tron/chat-core";
+import { ensureTestLocalStorage } from "./testLocalStorage";
 import { TronChatWindow } from "./TronChatWindow";
 
 beforeEach(() => {
+  ensureTestLocalStorage();
   Object.defineProperty(HTMLElement.prototype, "setPointerCapture", {
     configurable: true,
     value: vi.fn(),
@@ -54,7 +56,7 @@ describe("TronChatWindow", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Collapse chat" }));
 
-    expect(screen.getByRole("button", { name: "Collapse chat" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Expand chat" })).toBeTruthy();
     expect(window.localStorage.getItem("tron.chat.window.test.uncontrolled")).toContain("\"collapsed\":true");
   });
 
