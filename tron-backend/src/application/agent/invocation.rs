@@ -22,7 +22,8 @@ use crate::{
 
 use super::{
     AgentInvocationCommand, AgentInvocationError, AgentInvocationResult, AgentManagementService,
-    AgentRunExecutor, AgentRunHistoryService, AgentRuntimeRegistry, ModelClient, ModelStreamSink,
+    AgentOrchestrationRun, AgentOrchestrator, AgentRunExecutionMetadata, AgentRunExecutor,
+    AgentRunHistoryService, AgentRuntimeRegistry, ModelClient, ModelStreamSink,
 };
 use helpers::safe_preview;
 pub(crate) use run_context_builder::{AgentRunContextBuilder, PreparedAgentRun};
@@ -135,23 +136,6 @@ impl AgentInvocationService {
         locale: Option<String>,
         sink: Option<ModelStreamSink>,
     ) -> Result<AgentInvocationResult, AgentInvocationError> {
-        let prepared = self
-            .run_context_builder()
-            .prepare(command, user_code, locale)
-            .await?;
-        let PreparedAgentRun {
-            run_code,
-            conversation_code,
-            workspace_code,
-            user_code,
-            app_code,
-            task_code,
-            model_code,
-            requested_system_agent_session_id,
-            runtime_selection,
-            context,
-        } = prepared;
-        let started_at = context.started_at.clone();
         let runtime_registry = AgentRuntimeRegistry::new(
             self.model_client.clone(),
             self.tool_registry.clone(),
@@ -160,16 +144,25 @@ impl AgentInvocationService {
         )
         .with_short_term_memory(self.short_term_memory.clone());
         let executor = AgentRunExecutor::new(runtime_registry);
-        let result = executor
-            .execute_with_selection(
-                runtime_selection,
-                context,
-                requested_system_agent_session_id.clone(),
-                sink,
-            )
-            .await;
+        let orchestrator = AgentOrchestrator::new(self.run_context_builder(), executor);
+        let AgentOrchestrationRun {
+            metadata,
+            execution,
+        } = orchestrator
+            .execute_single_agent(command, user_code, locale, sink)
+            .await?;
+        let AgentRunExecutionMetadata {
+            run_code,
+            conversation_code,
+            workspace_code,
+            user_code,
+            app_code,
+            task_code,
+            model_code,
+            started_at,
+        } = metadata;
 
-        match result {
+        match execution {
             Ok(orchestrated) => {
                 let result = orchestrated.run;
                 let finished_at = current_timestamp();

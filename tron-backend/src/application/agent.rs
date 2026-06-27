@@ -7,6 +7,7 @@ mod error;
 mod history;
 mod invocation;
 mod management;
+mod orchestrator;
 mod port;
 mod run_executor;
 mod runtime;
@@ -27,13 +28,17 @@ pub use canonical_event::CanonicalRuntimeEvent;
 pub use dto::{AgentInvocationCommand, AgentInvocationResult};
 pub use error::AgentInvocationError;
 pub use history::AgentRunHistoryService;
-pub(crate) use invocation::build_system_runtime_model_config;
 pub use invocation::{AgentInvocationService, generate_agent_run_code};
+pub(crate) use invocation::{
+    AgentRunContextBuilder, PreparedAgentRun, build_system_runtime_model_config,
+};
 pub use management::{
     AgentManagementRepository, AgentManagementService, ResolvedAgentRuntime,
     UpdatePlatformMainAgentCommand, UpdateWorkspaceInternalAgentMcpPolicyCommand,
     UpdateWorkspaceInternalAgentPolicyCommand,
 };
+pub use orchestrator::AgentOrchestrator;
+pub(crate) use orchestrator::{AgentOrchestrationRun, AgentRunExecutionMetadata};
 pub use port::AgentRunHistoryRepository;
 pub use run_executor::{AgentRunExecutionResult, AgentRunExecutor, AgentRunLifecycleState};
 pub use runtime::{ModelClient, ModelStreamSink, ReactAgentBuilder};
