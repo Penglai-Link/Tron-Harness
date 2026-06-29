@@ -136,8 +136,8 @@ function GraphInspector({ onClose, selected }: { onClose: () => void; selected: 
     <InspectorPanel title="Node Inspector">
       <div className="flex items-start justify-between border-b border-[var(--color-outline-variant)] p-4">
         <div>
-          <h2 className="text-xl font-semibold">{selected.label}</h2>
-          <p className="text-[12px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{selected.type} Node</p>
+          <h2 className="text-xl font-semibold">{selected?.label}</h2>
+          <p className="text-[12px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{selected?.type} Node</p>
         </div>
         <Button size="icon" variant="ghost" onClick={onClose}><X size={16} /></Button>
       </div>
@@ -145,7 +145,7 @@ function GraphInspector({ onClose, selected }: { onClose: () => void; selected: 
         <section>
           <h3 className="mb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Properties</h3>
           <div className="overflow-hidden rounded-lg border border-[var(--color-outline-variant)]">
-            {Object.entries(selected.properties).map(([key, value]) => (
+            {Object.entries(selected?.properties || {}).map(([key, value]) => (
               <div className="flex justify-between gap-3 border-b border-[var(--color-outline-variant)] px-3 py-2 text-sm last:border-0" key={key}>
                 <span className="text-[var(--color-on-surface-variant)]">{key}</span>
                 <span className="text-right font-medium">{value}</span>
@@ -154,9 +154,9 @@ function GraphInspector({ onClose, selected }: { onClose: () => void; selected: 
           </div>
         </section>
         <section>
-          <h3 className="mb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Relationships ({selected.relationships.length})</h3>
+          <h3 className="mb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Relationships ({selected?.relationships.length})</h3>
           <div className="space-y-2">
-            {selected.relationships.map((relationship) => (
+            {selected?.relationships.map((relationship) => (
               <div className="rounded-lg border border-[var(--color-outline-variant)] p-3 text-sm" key={`${relationship.label}-${relationship.target}`}>
                 <p className="text-[var(--color-on-surface-variant)]">{relationship.label}</p>
                 <p className="font-medium">{relationship.target}</p>
@@ -164,7 +164,7 @@ function GraphInspector({ onClose, selected }: { onClose: () => void; selected: 
             ))}
           </div>
         </section>
-        <Button className="w-full" onClick={() => setNotice(`Editing ${selected.label}`)}>Edit Entity</Button>
+        <Button className="w-full" onClick={() => setNotice(`Editing ${selected?.label}`)}>Edit Entity</Button>
         <Notice value={notice} />
       </div>
     </InspectorPanel>
