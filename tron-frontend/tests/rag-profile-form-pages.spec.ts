@@ -1,6 +1,7 @@
 import {
   expect,
   test,
+  type Locator,
   type Page,
 } from "@playwright/test";
 import {
@@ -68,6 +69,40 @@ function notifications(page: Page, message: string | RegExp) {
   return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
 }
 
+async function chooseSelectOption(page: Page, control: Locator, value: string) {
+  await control.click();
+  await expect(control).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("option", { name: value, exact: true }).click();
+  await expect(control).toHaveAttribute("aria-expanded", "false");
+  await expect(control).toContainText(value);
+}
+
+async function expectSelectedOption(control: Locator, value: string) {
+  await expect(control).toContainText(value);
+}
+
+async function closeSelect(page: Page, control: Locator) {
+  await page.keyboard.press("Escape");
+  await expect(control).toHaveAttribute("aria-expanded", "false");
+}
+
+async function expectSelectOptionAvailable(page: Page, control: Locator, value: string) {
+  await control.click();
+  await expect(control).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("option", { name: value, exact: true })).toBeVisible();
+  await closeSelect(page, control);
+}
+
+async function expectSelectOptionUnavailable(page: Page, control: Locator, name: string | RegExp) {
+  await control.click();
+  await expect(control).toHaveAttribute("aria-expanded", "true");
+  const option = typeof name === "string"
+    ? page.getByRole("option", { name, exact: true })
+    : page.getByRole("option", { name });
+  await expect(option).toHaveCount(0);
+  await closeSelect(page, control);
+}
+
 function requestBodies(requests: CapturedRequest[], pathname: string, method: string) {
   return requests
     .filter((request) => request.pathname === pathname && request.method === method)
@@ -112,7 +147,7 @@ async function expectAdvancedNodeConfigClosed(page: Page, stageId: string) {
 
 async function expectNoStageStrategyPlaceholder(page: Page, stageId: string, labelPattern: RegExp) {
   await openAdvancedNodeConfig(page, stageId);
-  await expect(page.getByLabel(labelPattern)).not.toContainText(/Select stage strategy|选择阶段策略/i);
+  await expectSelectOptionUnavailable(page, page.getByLabel(labelPattern), /Select stage strategy|选择阶段策略/i);
 }
 
 async function openRetrievalAdvancedSettings(page: Page) {
@@ -232,7 +267,7 @@ test("pipeline flow draws connected edges for serial and parallel branches", asy
   await expect(page.getByRole("heading", { name: /Write pipeline|写入流水线/i })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Advanced pipeline settings|高级流水线设置/i })).toHaveCount(0);
   await expect(page.getByText(/Pipeline flow|流水线流向/i)).toBeVisible();
-  await page.getByLabel(label.primaryCorpus).selectOption("project-doc");
+  await chooseSelectOption(page, page.getByLabel(label.primaryCorpus), "project-doc");
   await expect(page.getByTestId("advanced-node-controls")).not.toHaveAttribute("open", "");
 
   const flow = page.getByTestId("pipeline-flow");
@@ -296,47 +331,47 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await expect(page.getByRole("heading", { name: "Stage Bindings" })).toHaveCount(0);
 
   await page.getByLabel(label.profileId).fill("support-notes-ingest-v1");
-  await page.getByLabel(label.primaryCorpus).selectOption("project-doc");
+  await chooseSelectOption(page, page.getByLabel(label.primaryCorpus), "project-doc");
   await page.getByLabel(label.description).fill("Ingest support notes and incident runbooks.");
   await expectNoStageStrategyPlaceholder(page, "validateSource", /VALIDATE_SOURCE (strategy ID|策略标识)/);
   await expectNoStageStrategyPlaceholder(page, "preparePayload", /PREPARE_PAYLOAD (strategy ID|策略标识)/);
-  await page.getByLabel(/PREPARE_PAYLOAD (strategy ID|策略标识)/).selectOption("RAG_TEXT_CONTRACT_PAYLOAD_V1");
+  await chooseSelectOption(page, page.getByLabel(/PREPARE_PAYLOAD (strategy ID|策略标识)/), "RAG_TEXT_CONTRACT_PAYLOAD_V1");
   await expectNoStageStrategyPlaceholder(page, "resolveSource", /RESOLVE_SOURCE (strategy ID|策略标识)/);
   await openAdvancedNodeConfig(page, "splitText");
   await expectAdvancedNodeConfigClosed(page, "preparePayload");
   const splitStrategySelect = page.getByLabel(label.splitStrategy);
-  await expect(splitStrategySelect).not.toContainText(/Select stage strategy|选择阶段策略/i);
-  await expect(splitStrategySelect).toContainText("RAG_SPLIT_PLAIN_TEXT_V1");
-  await expect(splitStrategySelect).toContainText("RAG_SPLIT_MARKDOWN_HEADING_V1");
-  await expect(splitStrategySelect).toContainText("RAG_SPLIT_TEXT");
-  await splitStrategySelect.selectOption("RAG_SPLIT_MARKDOWN_HEADING_V1");
-  await expect(page.getByLabel(label.splitterType)).toHaveValue("markdownHeading");
+  await expectSelectOptionUnavailable(page, splitStrategySelect, /Select stage strategy|选择阶段策略/i);
+  await expectSelectOptionAvailable(page, splitStrategySelect, "RAG_SPLIT_PLAIN_TEXT_V1");
+  await expectSelectOptionAvailable(page, splitStrategySelect, "RAG_SPLIT_MARKDOWN_HEADING_V1");
+  await expectSelectOptionAvailable(page, splitStrategySelect, "RAG_SPLIT_TEXT");
+  await chooseSelectOption(page, splitStrategySelect, "RAG_SPLIT_MARKDOWN_HEADING_V1");
+  await expectSelectedOption(page.getByLabel(label.splitterType), "markdownHeading");
   await expect(page.getByLabel(label.maxTokens)).toHaveValue("800");
   await expect(page.getByLabel(label.overlapTokens)).toHaveValue("80");
-  await expect(page.getByLabel(label.headingDepth)).toHaveValue("6");
-  await splitStrategySelect.selectOption("RAG_SPLIT_PLAIN_TEXT_V1");
-  await expect(page.getByLabel(label.splitterType)).toHaveValue("plainText");
+  await expectSelectedOption(page.getByLabel(label.headingDepth), "6");
+  await chooseSelectOption(page, splitStrategySelect, "RAG_SPLIT_PLAIN_TEXT_V1");
+  await expectSelectedOption(page.getByLabel(label.splitterType), "plainText");
   await expectNoStageStrategyPlaceholder(page, "parseDocument", /PARSE_DOCUMENT (strategy ID|策略标识)/);
   await expectNoStageStrategyPlaceholder(page, "fulltextIndex", /(^|[^_])FULLTEXT_INDEX (strategy ID|策略标识)/);
   await expectNoStageStrategyPlaceholder(page, "vectorIndex", label.vectorStrategy);
   await openAdvancedNodeConfig(page, "extractTree");
-  await expect(page.getByLabel(/EXTRACT_TREE (strategy ID|策略标识)/)).not.toContainText(/Select stage strategy|选择阶段策略/i);
-  await page.getByLabel(/EXTRACT_TREE (strategy ID|策略标识)/).selectOption("RAG_MARKDOWN_TREE_EXTRACT_V1");
+  await expectSelectOptionUnavailable(page, page.getByLabel(/EXTRACT_TREE (strategy ID|策略标识)/), /Select stage strategy|选择阶段策略/i);
+  await chooseSelectOption(page, page.getByLabel(/EXTRACT_TREE (strategy ID|策略标识)/), "RAG_MARKDOWN_TREE_EXTRACT_V1");
   await openAdvancedNodeConfig(page, "summarizeTree");
-  await expect(page.getByLabel(/SUMMARIZE_TREE (strategy ID|策略标识)/)).not.toContainText(/Select stage strategy|选择阶段策略/i);
-  await page.getByLabel(/SUMMARIZE_TREE (strategy ID|策略标识)/).selectOption("RAG_TREE_LLM_SUMMARY_V1");
+  await expectSelectOptionUnavailable(page, page.getByLabel(/SUMMARIZE_TREE (strategy ID|策略标识)/), /Select stage strategy|选择阶段策略/i);
+  await chooseSelectOption(page, page.getByLabel(/SUMMARIZE_TREE (strategy ID|策略标识)/), "RAG_TREE_LLM_SUMMARY_V1");
   await openAdvancedNodeConfig(page, "treeFulltextIndex");
-  await expect(page.getByLabel(/TREE_FULLTEXT_INDEX (strategy ID|策略标识)/)).not.toContainText(/Select stage strategy|选择阶段策略/i);
-  await page.getByLabel(/TREE_FULLTEXT_INDEX (strategy ID|策略标识)/).selectOption("RAG_TREE_FULLTEXT_INDEX");
+  await expectSelectOptionUnavailable(page, page.getByLabel(/TREE_FULLTEXT_INDEX (strategy ID|策略标识)/), /Select stage strategy|选择阶段策略/i);
+  await chooseSelectOption(page, page.getByLabel(/TREE_FULLTEXT_INDEX (strategy ID|策略标识)/), "RAG_TREE_FULLTEXT_INDEX");
   await openAdvancedNodeConfig(page, "treeVectorIndex");
-  await expect(page.getByLabel(/TREE_VECTOR_INDEX (strategy ID|策略标识)/)).not.toContainText(/Select stage strategy|选择阶段策略/i);
-  await page.getByLabel(/TREE_VECTOR_INDEX (strategy ID|策略标识)/).selectOption("RAG_TREE_VECTOR_INDEX");
+  await expectSelectOptionUnavailable(page, page.getByLabel(/TREE_VECTOR_INDEX (strategy ID|策略标识)/), /Select stage strategy|选择阶段策略/i);
+  await chooseSelectOption(page, page.getByLabel(/TREE_VECTOR_INDEX (strategy ID|策略标识)/), "RAG_TREE_VECTOR_INDEX");
   await openAdvancedNodeConfig(page, "persistTree");
-  await expect(page.getByLabel(/PERSIST_TREE (strategy ID|策略标识)/)).not.toContainText(/Select stage strategy|选择阶段策略/i);
-  await page.getByLabel(/PERSIST_TREE (strategy ID|策略标识)/).selectOption("RAG_PERSIST_TREE_GRAPH_V1");
+  await expectSelectOptionUnavailable(page, page.getByLabel(/PERSIST_TREE (strategy ID|策略标识)/), /Select stage strategy|选择阶段策略/i);
+  await chooseSelectOption(page, page.getByLabel(/PERSIST_TREE (strategy ID|策略标识)/), "RAG_PERSIST_TREE_GRAPH_V1");
   await openAdvancedNodeConfig(page, "persistSource");
-  await expect(page.getByLabel(/PERSIST_SOURCE (strategy ID|策略标识)/)).not.toContainText(/Select stage strategy|选择阶段策略/i);
-  await page.getByLabel(/PERSIST_SOURCE (strategy ID|策略标识)/).selectOption("RAG_PERSIST_SOURCE");
+  await expectSelectOptionUnavailable(page, page.getByLabel(/PERSIST_SOURCE (strategy ID|策略标识)/), /Select stage strategy|选择阶段策略/i);
+  await chooseSelectOption(page, page.getByLabel(/PERSIST_SOURCE (strategy ID|策略标识)/), "RAG_PERSIST_SOURCE");
   await page.getByLabel(label.supportedSourceTypes).fill("RUNBOOK, INCIDENT_NOTE");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
@@ -353,21 +388,21 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
 
   await page.getByLabel(label.description).fill("Ingest support notes, incident runbooks, and QA handbooks.");
   await openAdvancedNodeConfig(page, "splitText");
-  await page.getByLabel(label.splitStrategy).selectOption("RAG_SPLIT_MARKDOWN_HEADING_V1");
-  await expect(page.getByLabel(label.splitterType)).toHaveValue("markdownHeading");
-  await expect(page.getByLabel(label.headingDepth)).toHaveValue("6");
+  await chooseSelectOption(page, page.getByLabel(label.splitStrategy), "RAG_SPLIT_MARKDOWN_HEADING_V1");
+  await expectSelectedOption(page.getByLabel(label.splitterType), "markdownHeading");
+  await expectSelectedOption(page.getByLabel(label.headingDepth), "6");
   await openAdvancedNodeConfig(page, "summarizeTree");
   const summarizeStrategySelect = page.getByLabel(/SUMMARIZE_TREE (strategy ID|策略标识)/);
-  await expect(summarizeStrategySelect).toContainText("RAG_TREE_LLM_SUMMARY_V1");
-  await summarizeStrategySelect.selectOption("RAG_TREE_LLM_SUMMARY_V1");
+  await expectSelectOptionAvailable(page, summarizeStrategySelect, "RAG_TREE_LLM_SUMMARY_V1");
+  await chooseSelectOption(page, summarizeStrategySelect, "RAG_TREE_LLM_SUMMARY_V1");
   await openAdvancedNodeConfig(page, "vectorIndex");
-  await page.getByLabel(label.vectorStrategy).selectOption("RAG_VECTOR_INDEX");
+  await chooseSelectOption(page, page.getByLabel(label.vectorStrategy), "RAG_VECTOR_INDEX");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
   await expect(page).toHaveURL(/\/rag\?tab=profiles(&profileType=ingest)?$/);
   await expect(notifications(page, /support-notes-ingest-v1 (saved|已保存)/)).toBeVisible();
   await page.getByRole("tab", { name: /Workbench|调试台/ }).click();
-  await expect(page.getByLabel(label.ingestProfile)).toContainText("support-notes-ingest-v1");
+  await expectSelectOptionAvailable(page, page.getByLabel(label.ingestProfile), "support-notes-ingest-v1");
 
   expect(requests.some((request) => request.pathname === "/api/v1/rag/profiles" && request.method === "GET")).toBeTruthy();
   expect(requests.some((request) => request.pathname === "/api/v1/rag/profiles/catalog" && request.method === "GET")).toBeTruthy();
@@ -486,11 +521,11 @@ test("preserves legacy split strategy when editing existing ingest profiles", as
   await expect(page.getByRole("heading", { name: /Edit ingest profile|编辑写入配置/i })).toBeVisible();
   await openAdvancedNodeConfig(page, "splitText");
   const splitStrategySelect = page.getByLabel(label.splitStrategy);
-  await expect(splitStrategySelect).toContainText("RAG_SPLIT_PLAIN_TEXT_V1");
-  await expect(splitStrategySelect).toContainText("RAG_SPLIT_MARKDOWN_HEADING_V1");
-  await expect(splitStrategySelect).toContainText("RAG_SPLIT_TEXT");
-  await expect(splitStrategySelect).toHaveValue("RAG_SPLIT_TEXT");
-  await expect(page.getByLabel(label.splitterType)).toHaveValue("plainText");
+  await expectSelectOptionAvailable(page, splitStrategySelect, "RAG_SPLIT_PLAIN_TEXT_V1");
+  await expectSelectOptionAvailable(page, splitStrategySelect, "RAG_SPLIT_MARKDOWN_HEADING_V1");
+  await expectSelectOptionAvailable(page, splitStrategySelect, "RAG_SPLIT_TEXT");
+  await expectSelectedOption(splitStrategySelect, "RAG_SPLIT_TEXT");
+  await expectSelectedOption(page.getByLabel(label.splitterType), "plainText");
 
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
@@ -540,13 +575,13 @@ test("retrieval profile keeps summary tree route types", async ({ page }) => {
   await expect(page.getByRole("heading", { name: headingName.newRetrievalProfile })).toBeVisible();
 
   await page.getByLabel(label.profileId).fill("project-doc-tree-related-v1");
-  await page.getByLabel(label.primaryCorpus).selectOption("project-doc");
+  await chooseSelectOption(page, page.getByLabel(label.primaryCorpus), "project-doc");
   await page.getByLabel(label.description).fill("Search project documentation summary tree nodes.");
-  await page.getByLabel(routeCorpusLabel(1)).selectOption("project-doc");
-  await page.getByLabel(routeStrategyLabel(1)).selectOption("TREE_FULLTEXT_V1");
+  await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(1)), "project-doc");
+  await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(1)), "TREE_FULLTEXT_V1");
   await page.getByRole("button", { name: buttonName.addRoute }).click();
-  await page.getByLabel(routeCorpusLabel(2)).selectOption("project-doc");
-  await page.getByLabel(routeStrategyLabel(2)).selectOption("TREE_VECTOR_V1");
+  await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(2)), "project-doc");
+  await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(2)), "TREE_VECTOR_V1");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
   await expect(page).toHaveURL(/\/rag\?tab=profiles/);
@@ -591,15 +626,15 @@ test("API catalog exposes summary tree strategies for graph tree corpora", async
   }));
 
   await page.getByLabel(label.profileId).fill("support-tree-graph-related-v1");
-  await page.getByLabel(label.primaryCorpus).selectOption("support-tree-graph");
+  await chooseSelectOption(page, page.getByLabel(label.primaryCorpus), "support-tree-graph");
   await page.getByLabel(label.description).fill("Search support summary tree graph nodes.");
-  await page.getByLabel(routeCorpusLabel(1)).selectOption("support-tree-graph");
-  await expect(page.getByLabel(routeStrategyLabel(1))).toContainText("TREE_FULLTEXT_V1");
-  await page.getByLabel(routeStrategyLabel(1)).selectOption("TREE_FULLTEXT_V1");
+  await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(1)), "support-tree-graph");
+  await expectSelectOptionAvailable(page, page.getByLabel(routeStrategyLabel(1)), "TREE_FULLTEXT_V1");
+  await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(1)), "TREE_FULLTEXT_V1");
   await page.getByRole("button", { name: buttonName.addRoute }).click();
-  await page.getByLabel(routeCorpusLabel(2)).selectOption("support-tree-graph");
-  await expect(page.getByLabel(routeStrategyLabel(2))).toContainText("TREE_VECTOR_V1");
-  await page.getByLabel(routeStrategyLabel(2)).selectOption("TREE_VECTOR_V1");
+  await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(2)), "support-tree-graph");
+  await expectSelectOptionAvailable(page, page.getByLabel(routeStrategyLabel(2)), "TREE_VECTOR_V1");
+  await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(2)), "TREE_VECTOR_V1");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
   await expect(page).toHaveURL(/\/rag\?tab=profiles&profileType=retrieval$/);
@@ -645,24 +680,24 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
   await expect(page.getByRole("heading", { name: /Verification result|Verify Result|校验结果/i })).toHaveCount(0);
 
   await page.getByLabel(label.profileId).fill("support-fusion-v1");
-  await page.getByLabel(/Status|状态/).selectOption("Ready");
-  await page.getByLabel(label.primaryCorpus).selectOption("memory-card");
+  await chooseSelectOption(page, page.getByLabel(/Status|状态/), "Ready");
+  await chooseSelectOption(page, page.getByLabel(label.primaryCorpus), "memory-card");
   await page.getByLabel(label.description).fill("Fuse memory and project documentation support answers.");
-  await page.getByLabel(routeCorpusLabel(1)).selectOption("memory-card");
-  await page.getByLabel(routeStrategyLabel(1)).selectOption("FULLTEXT_SQLITE_FTS5_SIMPLE_V1");
+  await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(1)), "memory-card");
+  await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(1)), "FULLTEXT_SQLITE_FTS5_SIMPLE_V1");
   await page.getByRole("button", { name: buttonName.addRoute }).click();
-  await page.getByLabel(routeCorpusLabel(2)).selectOption("project-doc");
-  await page.getByLabel(routeStrategyLabel(2)).selectOption("VECTOR_SQLITE_VEC0_COSINE_V1");
+  await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(2)), "project-doc");
+  await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(2)), "VECTOR_SQLITE_VEC0_COSINE_V1");
   await page.getByRole("button", { name: buttonName.addRoute }).click();
-  await page.getByLabel(routeCorpusLabel(3)).selectOption("project-doc");
-  await page.getByLabel(routeStrategyLabel(3)).selectOption("TREE_FULLTEXT_V1");
+  await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(3)), "project-doc");
+  await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(3)), "TREE_FULLTEXT_V1");
   await page.getByRole("button", { name: buttonName.addRoute }).click();
-  await page.getByLabel(routeCorpusLabel(4)).selectOption("project-doc");
-  await page.getByLabel(routeStrategyLabel(4)).selectOption("TREE_VECTOR_V1");
+  await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(4)), "project-doc");
+  await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(4)), "TREE_VECTOR_V1");
   await openRetrievalFilters(page);
   await page.getByRole("button", { name: buttonName.addFilter }).click();
-  await page.getByLabel(/Filter 1 field|筛选条件 1 字段/).selectOption("scopeCode");
-  await page.getByLabel(/Filter 1 operator|筛选条件 1 操作符/).selectOption("eq");
+  await chooseSelectOption(page, page.getByLabel(/Filter 1 field|筛选条件 1 字段/), "scopeCode");
+  await chooseSelectOption(page, page.getByLabel(/Filter 1 operator|筛选条件 1 操作符/), "eq");
   await page.getByLabel(/Filter 1 value|筛选条件 1 值/).fill("TRON_CORE");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
@@ -672,21 +707,21 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
 
   await page.getByRole("button", { name: /Edit support-fusion-v1|编辑 support-fusion-v1/ }).click();
   await expect(page).toHaveURL(/\/rag\/profiles\/retrieval\/support-fusion-v1\/edit(\?.*)?$/);
-  await expect(page.getByLabel(routeCorpusLabel(1))).toHaveValue("memory-card");
-  await expect(page.getByLabel(routeCorpusLabel(2))).toHaveValue("project-doc");
+  await expectSelectedOption(page.getByLabel(routeCorpusLabel(1)), "memory-card");
+  await expectSelectedOption(page.getByLabel(routeCorpusLabel(2)), "project-doc");
   await openRetrievalFilters(page);
   await expect(page.getByLabel(/Filter 1 value|筛选条件 1 值/)).toHaveValue("TRON_CORE");
 
   await page.getByLabel(label.description).fill("Fuse memory, documentation, and curated support signals.");
   await openRetrievalAdvancedSettings(page);
-  await page.getByLabel(label.topicPolicy).selectOption("EMBEDDING_MMR_V1");
+  await chooseSelectOption(page, page.getByLabel(label.topicPolicy), "EMBEDDING_MMR_V1");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
   await expect(page).toHaveURL(/\/rag\?tab=profiles&profileType=retrieval$/);
   await expect(notifications(page, /support-fusion-v1 (saved|已保存)|配置已更新/)).toBeVisible();
   await page.getByRole("tab", { name: tabName.workbench }).click();
   await page.getByRole("tab", { name: tabName.retrievalTest }).click();
-  await expect(page.getByRole("combobox", { name: label.retrievalProfile })).toContainText("support-fusion-v1");
+  await expectSelectOptionAvailable(page, page.getByRole("combobox", { name: label.retrievalProfile }), "support-fusion-v1");
 
   const verifyBodies = requestBodies(requests, "/api/v1/rag/profiles/verify", "POST")
     .filter((body) => body.profileType === "RETRIEVAL");
@@ -753,19 +788,19 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
   await expect(page.getByLabel("Corpus", { exact: true })).toContainText("memory-card");
   await expect(page.getByLabel("Ingest profile", { exact: true })).toContainText("project-doc-ingest-v1");
 
-  await page.getByLabel("Corpus", { exact: true }).selectOption("project-doc");
-  await page.getByLabel("Ingest profile", { exact: true }).selectOption("project-doc-ingest-v1");
-  await expect(page.getByLabel("Scope type", { exact: true })).toHaveValue("SPACE");
+  await chooseSelectOption(page, page.getByLabel("Corpus", { exact: true }), "project-doc");
+  await chooseSelectOption(page, page.getByLabel("Ingest profile", { exact: true }), "project-doc-ingest-v1");
+  await expectSelectedOption(page.getByLabel("Scope type", { exact: true }), "SPACE");
   await page.getByLabel("Source code", { exact: true }).fill("docs/features/rag-storage-runtime-workbench");
-  await page.getByLabel("Source type", { exact: true }).selectOption("MARKDOWN");
+  await chooseSelectOption(page, page.getByLabel("Source type", { exact: true }), "MARKDOWN");
   await expect(page.getByLabel("Source version", { exact: true })).toHaveValue("v1");
   await page.getByLabel("Language", { exact: true }).fill("en-US");
   await page.getByLabel("Metadata source path", { exact: true }).fill("docs/features/rag-storage-runtime-workbench");
   await page.getByRole("button", { name: "Add business attribute" }).click();
-  await page.getByLabel("Business attribute 1 field", { exact: true }).selectOption("documentCode");
+  await chooseSelectOption(page, page.getByLabel("Business attribute 1 field", { exact: true }), "documentCode");
   await page.getByLabel("Business attribute 1 value", { exact: true }).fill("rag-storage-runtime-workbench");
   await page.getByRole("button", { name: "Add business attribute" }).click();
-  await page.getByLabel("Business attribute 2 field", { exact: true }).selectOption("repoCode");
+  await chooseSelectOption(page, page.getByLabel("Business attribute 2 field", { exact: true }), "repoCode");
   await page.getByLabel("Business attribute 2 value", { exact: true }).fill("tron");
   await page.getByLabel("Source text", { exact: true }).fill("Workbench ingest verifies backend runtime writes from the frontend.");
   await page.getByRole("button", { name: "Submit ingest" }).click();
@@ -791,16 +826,16 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
   await expect(page.getByText("Warnings: splitter used default overlap")).toBeVisible();
 
   await page.getByRole("tab", { name: tabName.retrievalTest }).click();
-  await page.getByRole("combobox", { name: label.retrievalProfile }).selectOption("project-doc-related-v1");
+  await chooseSelectOption(page, page.getByRole("combobox", { name: label.retrievalProfile }), "project-doc-related-v1");
   await page.getByLabel(label.query).fill("How does the runtime workbench call backend search?");
-  await page.getByLabel(label.contextStrategy).selectOption("DOC_QA_CONTEXT_PACK");
+  await chooseSelectOption(page, page.getByLabel(label.contextStrategy), "DOC_QA_CONTEXT_PACK");
   await page.getByRole("button", { name: "Add return field" }).click();
-  await page.getByLabel("Return field 1", { exact: true }).selectOption("documentCode");
+  await chooseSelectOption(page, page.getByLabel("Return field 1", { exact: true }), "documentCode");
   await page.getByRole("button", { name: "Add return field" }).click();
-  await page.getByLabel("Return field 2", { exact: true }).selectOption("repoCode");
+  await chooseSelectOption(page, page.getByLabel("Return field 2", { exact: true }), "repoCode");
   await page.getByRole("button", { name: buttonName.addFilter }).click();
-  await page.getByLabel("Filter 1 field", { exact: true }).selectOption("scopeCode");
-  await page.getByLabel("Filter 1 operator", { exact: true }).selectOption("eq");
+  await chooseSelectOption(page, page.getByLabel("Filter 1 field", { exact: true }), "scopeCode");
+  await chooseSelectOption(page, page.getByLabel("Filter 1 operator", { exact: true }), "eq");
   await page.getByLabel("Filter 1 value", { exact: true }).fill("TRON_CORE");
   await page.getByLabel(label.limit).fill("5");
   await page.getByLabel(label.tokenBudget).fill("2048");

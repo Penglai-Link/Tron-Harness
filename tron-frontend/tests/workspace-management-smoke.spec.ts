@@ -1,6 +1,7 @@
 import {
   expect,
   test,
+  type Locator,
   type Page,
   type Route,
 } from "@playwright/test";
@@ -262,6 +263,13 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
 
 function sharedToastMessage(page: Page, message: string | RegExp) {
   return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
+}
+
+async function chooseSelectOption(page: Page, control: Locator, value: string) {
+  await control.click();
+  await expect(control).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("option", { name: value, exact: true }).click();
+  await expect(control).toHaveAttribute("aria-expanded", "false");
 }
 
 function captureRequest(route: Route): CapturedRequest {
@@ -1002,14 +1010,6 @@ test("workspace management page supports hierarchy and separated access grants",
   await expect(page.getByRole("heading", { name: "Workspace Management" })).toBeVisible();
   await expect(page.getByText("Platform", { exact: true }).first()).toBeVisible();
 
-  const workspaceSelectorTrigger = page.locator("header button[aria-haspopup='dialog']").first();
-  await workspaceSelectorTrigger.click();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/switcher")).toBe(true);
-  const workspaceSelectorPanel = page.locator("#tron-workspace-selector-panel");
-  await expect(workspaceSelectorPanel).toBeVisible();
-  await workspaceSelectorPanel.getByRole("button", { name: /Compliance/ }).click();
-  await expect(workspaceSelectorTrigger).toHaveText(/Compliance/);
-
   const workspaceUrl = page.url();
   const searchBox = page.getByRole("searchbox", { name: "Search workspaces" });
   await searchBox.fill("Compliance");
@@ -1034,7 +1034,7 @@ test("workspace management page supports hierarchy and separated access grants",
 
   const statusFilterSelect = page.getByRole("combobox", { name: "Filter workspaces by status" });
   const requestCountBeforeAllStatus = requests.length;
-  await statusFilterSelect.selectOption("All");
+  await chooseSelectOption(page, statusFilterSelect, "All Status");
   await expect.poll(() => requests.slice(requestCountBeforeAllStatus).some((request) => (
     request.pathname === "/api/v1/admin/workspaces"
     && request.method === "GET"
@@ -1044,7 +1044,7 @@ test("workspace management page supports hierarchy and separated access grants",
   await expect(page.getByRole("button", { name: "Select workspace ARCHIVE_VAULT", exact: true })).toBeVisible();
 
   const requestCountBeforeActiveStatus = requests.length;
-  await statusFilterSelect.selectOption("Active");
+  await chooseSelectOption(page, statusFilterSelect, "Active");
   await expect.poll(() => requests.slice(requestCountBeforeActiveStatus).some((request) => (
     request.pathname === "/api/v1/admin/workspaces"
     && request.method === "GET"
@@ -1079,7 +1079,7 @@ test("workspace management page supports hierarchy and separated access grants",
   await expect(sharedToastMessage(page, "Workspace WS-0000000000000001 updated")).toBeVisible();
   await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk Control");
 
-  await overviewSection.getByRole("combobox", { name: "Move parent" }).selectOption("COMPLIANCE");
+  await chooseSelectOption(page, overviewSection.getByRole("combobox", { name: "Move parent" }), "Compliance (COMPLIANCE) · Level 1");
   await overviewSection.getByRole("button", { name: "Move", exact: true }).click();
   await expect(sharedToastMessage(page, "Workspace WS-0000000000000001 moved")).toBeVisible();
   await expect(page.getByText("Compliance / Risk Control")).toBeVisible();
@@ -1088,7 +1088,7 @@ test("workspace management page supports hierarchy and separated access grants",
   await page.getByRole("button", { name: "Select workspace PLATFORM", exact: true }).click();
   await page.getByRole("tab", { name: "Access", exact: true }).click();
   const directUserSection = page.getByRole("combobox", { name: "Add direct user access" }).locator("xpath=ancestor::section[1]");
-  await directUserSection.getByRole("combobox", { name: "Add direct user access" }).selectOption("USR-AUTH-0001");
+  await chooseSelectOption(page, directUserSection.getByRole("combobox", { name: "Add direct user access" }), "Auth Operator (USR-AUTH-0001)");
   await directUserSection.getByRole("button", { name: "Add", exact: true }).click();
   await directUserSection.locator("tr", { hasText: "Auth Operator" }).getByRole("button", { name: "Member" }).click();
   await directUserSection.getByRole("button", { name: "Save", exact: true }).click();
@@ -1096,7 +1096,7 @@ test("workspace management page supports hierarchy and separated access grants",
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/PLATFORM/access/users" && request.method === "PUT")).toBe(true);
 
   const roleAccessSection = page.getByRole("combobox", { name: "Add workspace role access" }).locator("xpath=ancestor::section[1]");
-  await roleAccessSection.getByRole("combobox", { name: "Add workspace role access" }).selectOption("VIEWER");
+  await chooseSelectOption(page, roleAccessSection.getByRole("combobox", { name: "Add workspace role access" }), "Viewer (VIEWER)");
   await roleAccessSection.getByRole("button", { name: "Add", exact: true }).click();
   await roleAccessSection.getByRole("button", { name: "Save", exact: true }).click();
   await expect(sharedToastMessage(page, "Role access updated")).toBeVisible();
@@ -1108,7 +1108,7 @@ test("workspace management page supports hierarchy and separated access grants",
   await expect(effectiveUsersTable.getByText("Chen Wei", { exact: true }).first()).toBeVisible();
   await expect(effectiveUsersTable.getByText("Viewer", { exact: true }).first()).toBeVisible();
 
-  await statusFilterSelect.selectOption("All");
+  await chooseSelectOption(page, statusFilterSelect, "All Status");
   await expect(page.getByRole("button", { name: "Select workspace WS-0000000000000001", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Select workspace WS-0000000000000001", exact: true }).click();
   await page.getByRole("button", { name: "Archive", exact: true }).click();

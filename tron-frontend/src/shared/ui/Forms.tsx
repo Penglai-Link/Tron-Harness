@@ -109,16 +109,35 @@ export const TextArea = forwardRef(function TextArea(
 
 
 
-export function SelectInput<Value, Multiple extends boolean | undefined = false>({ className, children, ...props }: SelectPrimitive.Root.Props<Value, Multiple> & { className?: string; }) {
+type SelectInputProps<Value, Multiple extends boolean | undefined = false> = SelectPrimitive.Root.Props<Value, Multiple> & {
+  "aria-describedby"?: string;
+  "aria-label"?: string;
+  className?: string;
+  id?: string;
+};
+
+export function SelectInput<Value, Multiple extends boolean | undefined = false>({
+  "aria-describedby": ariaDescribedBy,
+  "aria-label": ariaLabel,
+  className,
+  children,
+  id,
+  ...props
+}: SelectInputProps<Value, Multiple>) {
 
   return (
     <>
       <Select {...props}>
-        <SelectTrigger className={cn(
-          "h-10 min-w-0 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 text-sm text-[var(--color-on-surface)] outline-none transition-colors focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-focus-ring)]/20",
-          disabledControlClasses,
-          className,
-        )}>
+        <SelectTrigger
+          aria-describedby={ariaDescribedBy}
+          aria-label={ariaLabel}
+          className={cn(
+            "h-10 min-w-0 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 text-sm text-[var(--color-on-surface)] outline-none transition-colors focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-focus-ring)]/20",
+            disabledControlClasses,
+            className,
+          )}
+          id={id}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectPopup alignItemWithTrigger={false}>

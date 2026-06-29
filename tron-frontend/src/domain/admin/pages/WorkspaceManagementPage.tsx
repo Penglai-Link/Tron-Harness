@@ -1061,12 +1061,12 @@ export function WorkspaceManagementPage() {
                     <div className="flex flex-wrap items-end justify-between gap-4">
                       <div className="min-w-[16rem] flex-1">
                         <Field label={pt("Role Access")}>
-                          <SelectInput aria-label={pt("Add workspace role access")} value={nextRoleCode} onChange={(event) => setNextRoleCode(event.target.value as UserRoleCode | "")}>
-                            <option value="">{pt("Select a role")}</option>
+                          <SelectInput aria-label={pt("Add workspace role access")} value={nextRoleCode} onValueChange={(value) => setNextRoleCode(value as UserRoleCode | "")}>
+                            <SelectItem value="">{pt("Select a role")}</SelectItem>
                             {availableRoleOptions.map((roleCode) => (
-                              <option key={roleCode} value={roleCode}>
+                              <SelectItem key={roleCode} value={roleCode}>
                                 {pt("{{name}} ({{code}})", { code: roleCode, name: pt(getAdminUserRoleLabel(roleCode)) })}
-                              </option>
+                              </SelectItem>
                             ))}
                           </SelectInput>
                         </Field>
