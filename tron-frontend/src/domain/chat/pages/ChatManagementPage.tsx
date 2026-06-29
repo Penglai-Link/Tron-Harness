@@ -210,6 +210,10 @@ const chatSessionSourceTabStorageKey = "tron.chat.activeSourceTab";
 const emptyLiveAguiEvents: ChatAguiStreamEvent[] = [];
 const emptyLiveAguiAnchorMessageCodes: Record<string, string> = {};
 
+function isChatManagementPathname(pathname: string) {
+  return pathname === "/chats" || pathname.startsWith("/chats/");
+}
+
 function ChatInspectionAttachmentChip({
   attachment,
   onRemove,
@@ -3189,9 +3193,13 @@ export function ChatManagementPage() {
   const { createInspectionAttachment } = useInspection()
 
   const replaceChatSearchParams = useCallback((update: (next: URLSearchParams) => void) => {
+    const currentPathname = typeof window === "undefined" ? "/chats" : window.location.pathname;
     const currentSearch = typeof window === "undefined"
       ? currentSearchText
       : window.location.search.replace(/^\?/, "");
+    if (!isChatManagementPathname(currentPathname)) {
+      return;
+    }
     const next = new URLSearchParams(currentSearch);
     update(next);
     const nextSearch = next.toString();
@@ -3200,8 +3208,7 @@ export function ChatManagementPage() {
       return;
     }
     setCurrentSearchText(nextSearch);
-    const pathname = typeof window === "undefined" ? "/chats" : window.location.pathname;
-    navigate(`${pathname}${nextSearch ? `?${nextSearch}` : ""}`, { replace: true });
+    navigate(`${currentPathname}${nextSearch ? `?${nextSearch}` : ""}`, { replace: true });
   }, [currentSearchText, navigate]);
 
   useEffect(() => {
