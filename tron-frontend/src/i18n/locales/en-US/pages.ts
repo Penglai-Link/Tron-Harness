@@ -678,6 +678,8 @@ export const pages = {
       },
       filters: {
         add: "Add filter",
+        count: "{{count}} filters",
+        empty: "No profile filters. Add one only when every request should include the same fixed condition.",
         fieldAria: "Filter {{index}} field",
         operatorAria: "Filter {{index}} operator",
         removeAria: "Remove filter {{index}}",
@@ -729,28 +731,29 @@ export const pages = {
       ingest: {
         advancedNodes: {
           barrier: "Control barrier",
+          collapseConfig: "Collapse config",
+          configureConfig: "Configure",
           description: "Use these controls when the selected template needs a custom stage combination.",
+          enableFirst: "Enable first",
           enableNode: "Enable {{stage}} node",
           mustRunBefore: "Must run before {{stages}}",
           required: "Required",
           title: "Advanced node controls",
         },
-        developerContract: {
-          input: "Input:",
-          output: "Output:",
-          title: "Developer contract",
-        },
         inputContract: {
           description: "These fields define the inputs accepted by the workbench and ingest API for this profile.",
           title: "Input contract",
         },
+        pipelineSettings: {
+          advanced: "Advanced pipeline settings",
+          defaultPipeline: "Default write pipeline",
+          mode: "Write mode",
+          title: "Write pipeline",
+        },
         stageStrategies: {
-          empty: "Enable one or more stages above before configuring stage strategies.",
           noAvailableStrategy: "No available strategy for this stage and corpus.",
           noStrategy: "No supported strategy",
-          selectStrategy: "Select stage strategy",
           strategyAria: "{{stage}} strategy ID",
-          title: "Stage strategies",
         },
         summary: {
           enabledStages: "Enabled stages",
@@ -837,17 +840,19 @@ export const pages = {
         to: "Target node",
       },
       pipelineFlow: {
-        description: "Saved pipelines remain DAGs. Branches in the same column can run in parallel, and node cards show real outgoing edges.",
+        detailNodeId: "Node ID",
+        detailStageType: "Stage type",
+        detailStrategy: "Strategy",
+        diagramAria: "Pipeline DAG diagram",
         edgeDetails: "Edge details",
         empty: "Apply a template or enable nodes to preview the DAG.",
         enabledNodes: "{{count}} enabled nodes",
-        endpoint: "Endpoint",
-        level: "Level {{index}}",
-        parallel: "Parallel",
-        targetNodes: "Target nodes",
         title: "Pipeline flow",
       },
       retrieval: {
+        advancedSettings: {
+          title: "Advanced retrieval settings",
+        },
         contextStrategies: {
           enableLabel: "Enable context strategy {{strategy}}",
           title: "Context strategies",
@@ -940,15 +945,11 @@ export const pages = {
         title: "Validation summary",
       },
       values: {
+        enabled: "Enabled",
         noStrategy: "No strategy set",
         none: "None",
         notSet: "Not set",
-      },
-      verify: {
-        passed: "Backend verification passed.",
-        pending: "Backend verification runs before saving the profile.",
-        rejected: "The backend rejected this profile.",
-        title: "Verification result",
+        off: "Off",
       },
     },
   },

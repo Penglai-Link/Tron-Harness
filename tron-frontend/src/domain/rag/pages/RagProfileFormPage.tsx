@@ -58,7 +58,6 @@ import {
   verifyRagProfile,
   type RagManagementValidationIssue,
   type RagProfileCatalogNormalized,
-  type RagProfileVerifyResultApi,
   type RagRetrievalProfileHiddenFields,
 } from "@/domain/rag/api/ragManagementApi";
 import { formatRagStatusLabel } from "@/domain/rag/components/RagShared";
@@ -76,10 +75,8 @@ import {
   applyIngestStageStrategyDefaults,
   buildIngestPipelineFromForm,
   buildIngestProfileFormState,
-  buildIngestProfilePayloadPreview,
   buildIngestProfileRecordFromForm,
   buildRetrievalProfileFormState,
-  buildRetrievalProfilePayloadPreview,
   buildRetrievalProfileRecordFromForm,
   createRetrievalFilterFormRow,
   createRetrievalRouteFormRow,
@@ -232,6 +229,21 @@ function flattenIngestErrors(errors: RagIngestProfileFormErrors) {
   return messages;
 }
 
+function firstIngestAdvancedNodeError(errors: RagIngestProfileFormErrors): RagIngestStageId | null {
+  const stageRowId = Object.keys(errors.stageRows ?? {})[0] as RagIngestStageId | undefined;
+  if (stageRowId) return stageRowId;
+  if (errors.resolveSourceMaxBytes) return "resolveSource";
+  if (errors.parseDocumentFormat) return "parseDocument";
+  if (
+    errors.splitTextType
+    || errors.splitTextMaxTokens
+    || errors.splitTextOverlapTokens
+    || errors.splitTextHeadingDepth
+  ) return "splitText";
+  if (errors.treeSummaryModelCode) return "summarizeTree";
+  return null;
+}
+
 function flattenRetrievalErrors(errors: RagRetrievalProfileFormErrors) {
   const messages = Object.values(errors)
     .filter((value): value is string => typeof value === "string");
@@ -245,19 +257,6 @@ function flattenRetrievalErrors(errors: RagRetrievalProfileFormErrors) {
   });
 
   return messages;
-}
-
-function SummaryList({ rows }: { rows: Array<{ label: string; value: string }> }) {
-  return (
-    <div className="grid gap-2 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm">
-      {rows.map((row) => (
-        <div className="flex items-center justify-between gap-4" key={row.label}>
-          <span className="text-[var(--color-on-surface-variant)]">{row.label}</span>
-          <span className="text-right font-medium">{row.value}</span>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 function ValidationSummary({ errors }: { errors: string[] }) {
@@ -277,14 +276,6 @@ function ValidationSummary({ errors }: { errors: string[] }) {
   );
 }
 
-function JsonPreview({ value }: { value: unknown }) {
-  return (
-    <pre className="overflow-x-auto rounded-lg bg-[var(--color-elevated-surface)] p-3 text-[12px] leading-5 text-[var(--color-on-surface)]">
-      {JSON.stringify(value, null, 2)}
-    </pre>
-  );
-}
-
 function findPipelineStageDefinition(
   pipelineCatalog: RagPipelineCatalog | null,
   stageType: string,
@@ -296,10 +287,6 @@ function strategyOptionsForStage(stageDefinition?: RagPipelineStageDefinition) {
   if (!stageDefinition) return [];
   if (stageDefinition.allowedStrategies.length > 0) return stageDefinition.allowedStrategies;
   return stageDefinition.strategies.map((strategy) => strategy.strategyId);
-}
-
-function strategySchemaForNode(stageDefinition: RagPipelineStageDefinition | undefined, strategyId: string) {
-  return stageDefinition?.strategies.find((strategy) => strategy.strategyId === strategyId)?.configSchema ?? {};
 }
 
 function strategyDefinitionForNode(stageDefinition: RagPipelineStageDefinition | undefined, strategyId: string) {
@@ -432,6 +419,24 @@ function parseDocumentFormatHint(strategyId: string) {
     : ingestFieldHints.parseDocumentFormat;
 }
 
+function parseDocumentFormatOptions(strategyId: string) {
+  return strategyId.trim() === mineruParseStrategyId
+    ? ["PDF, DOCX", "PDF", "DOCX"]
+    : ["MARKDOWN"];
+}
+
+function optionsWithCurrentValue(options: string[], currentValue: string) {
+  const normalizedCurrentValue = currentValue.trim();
+  return normalizedCurrentValue && !options.includes(normalizedCurrentValue)
+    ? [normalizedCurrentValue, ...options]
+    : options;
+}
+
+const resolveSourceUriSchemeOptions = ["project-doc", "file, http, https", "file", "http", "https"];
+const unsupportedFormatPolicyOptions = ["FAIL_FAST", "SKIP"];
+const splitterTypeOptions = ["plainText", "markdownHeading"];
+const headingDepthOptions = ["1", "2", "3", "4", "5", "6"];
+
 function useProfileFormCopy() {
   const { t } = useTranslation("pages");
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
@@ -545,6 +550,158 @@ function applyIngestTemplateToForm(
   return nextForm;
 }
 
+function defaultSourceTypeForCorpus(corpusCode: string) {
+  const normalized = corpusCode.trim();
+  if (normalized === "project-doc") return "PROJECT_DOC_REF";
+  if (normalized === "skill" || normalized === "skill-graph") return "SKILL";
+  if (!normalized) return "";
+  return "MEMORY_CARD";
+}
+
+function listIngestStageStrategyOptions(
+  stageId: RagIngestStageId,
+  corpusCode: string,
+  isApiMode: boolean,
+  catalog: RagProfileCatalogNormalized | null,
+  pipelineCatalog: RagPipelineCatalog | null,
+) {
+  const normalizeStrategies = (strategyIds: string[]) => Array.from(new Set(strategyIds.map((strategyId) => strategyId.trim()).filter(Boolean)));
+  const fallbackStrategies = listRagMockIngestStageStrategies(stageId, corpusCode);
+  const catalogStrategies = catalog?.stageStrategiesByCorpus[corpusCode]?.[stageId] ?? [];
+  const pipelineStrategies = strategyOptionsForStage(findPipelineStageDefinition(pipelineCatalog, ingestStageIdToStageType(stageId)));
+
+  if (isApiMode && pipelineStrategies.length > 0) return normalizeStrategies(pipelineStrategies);
+  if (isApiMode && catalogStrategies.length > 0) return normalizeStrategies(catalogStrategies);
+  return normalizeStrategies(fallbackStrategies);
+}
+
+function preferredIngestStageStrategy(
+  stageId: RagIngestStageId,
+  corpusCode: string,
+  strategyOptions: string[],
+) {
+  const preferredByStage: Partial<Record<RagIngestStageId, string[]>> = {
+    extractTree: ["RAG_MARKDOWN_TREE_EXTRACT_V1"],
+    fulltextIndex: ["RAG_FULLTEXT_INDEX"],
+    parseDocument: ["RAG_PARSE_MARKDOWN_DOCUMENT"],
+    persistSource: ["RAG_PERSIST_SOURCE"],
+    persistTree: ["RAG_PERSIST_TREE_GRAPH_V1"],
+    preparePayload: ["RAG_TEXT_CONTRACT_PAYLOAD_V1", "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1"],
+    resolveSource: ["PROJECT_DOC_RESOLVE_SOURCE"],
+    splitText: corpusCode === "project-doc"
+      ? ["RAG_SPLIT_MARKDOWN_HEADING_V1", "RAG_SPLIT_TEXT", "RAG_SPLIT_PLAIN_TEXT_V1"]
+      : ["RAG_SPLIT_PLAIN_TEXT_V1", "RAG_SPLIT_TEXT", "RAG_SPLIT_MARKDOWN_HEADING_V1"],
+    summarizeTree: ["RAG_TREE_EXTRACTIVE_SUMMARY_V1", "RAG_TREE_LLM_SUMMARY_V1"],
+    treeFulltextIndex: ["RAG_TREE_FULLTEXT_INDEX"],
+    treeVectorIndex: ["RAG_TREE_VECTOR_INDEX"],
+    validateSource: ["RAG_VALIDATE_SOURCE"],
+    vectorIndex: ["RAG_VECTOR_INDEX"],
+  };
+
+  const preferred = preferredByStage[stageId]?.find((strategyId) => strategyOptions.includes(strategyId));
+  return preferred ?? strategyOptions[0] ?? "";
+}
+
+function applyDefaultIngestPipeline(
+  currentForm: RagIngestProfileFormState,
+  corpusCode: string,
+  corpusOptions: CorpusRecord[],
+  isApiMode: boolean,
+  catalog: RagProfileCatalogNormalized | null,
+  pipelineCatalog: RagPipelineCatalog | null,
+) {
+  const treeCapable = hasTreeCapableCorpus(corpusCode, corpusOptions);
+  const defaultStages: RagIngestStageId[] = ["preparePayload", "splitText", "fulltextIndex", "vectorIndex", "persistSource"];
+  if (treeCapable) {
+    defaultStages.splice(defaultStages.length - 1, 0, "extractTree", "summarizeTree", "treeFulltextIndex", "treeVectorIndex", "persistTree");
+  }
+  const defaultStageSet = new Set(defaultStages);
+  const stageStrategies = Object.fromEntries(
+    defaultStages.map((stageId) => {
+      const strategyOptions = listIngestStageStrategyOptions(stageId, corpusCode, isApiMode, catalog, pipelineCatalog);
+      return [stageId, preferredIngestStageStrategy(stageId, corpusCode, strategyOptions)];
+    }),
+  ) as Partial<Record<RagIngestStageId, string>>;
+
+  let nextForm: RagIngestProfileFormState = {
+    ...currentForm,
+    primaryCorpusId: corpusCode,
+    supportedSourceTypesText: currentForm.supportedSourceTypesText.trim()
+      ? currentForm.supportedSourceTypesText
+      : defaultSourceTypeForCorpus(corpusCode),
+    pipelineStages: currentForm.pipelineStages.map((stage) => {
+      const strategyId = stageStrategies[stage.id] ?? "";
+      return {
+        ...stage,
+        enabled: defaultStageSet.has(stage.id) && Boolean(strategyId),
+        strategyId: defaultStageSet.has(stage.id) ? strategyId : "",
+      };
+    }),
+  };
+
+  defaultStages.forEach((stageId) => {
+    const strategyId = stageStrategies[stageId];
+    if (strategyId) nextForm = applyIngestStageStrategyDefaults(nextForm, stageId, strategyId);
+  });
+
+  return nextForm;
+}
+
+function clearDisabledIngestStageConfig(
+  currentForm: RagIngestProfileFormState,
+  stageId: RagIngestStageId,
+) {
+  const nextForm: RagIngestProfileFormState = {
+    ...currentForm,
+    pipelineStages: currentForm.pipelineStages.map((stage) => (
+      stage.id === stageId ? { ...stage, enabled: false, strategyId: "" } : stage
+    )),
+  };
+
+  if (stageId === "resolveSource") {
+    return {
+      ...nextForm,
+      resolveSourceAllowedUriSchemesText: "",
+      resolveSourceMaxBytes: "",
+    };
+  }
+
+  if (stageId === "parseDocument") {
+    return {
+      ...nextForm,
+      parseDocumentFormat: "",
+      parseDocumentUnsupportedFormatPolicy: "",
+    };
+  }
+
+  if (stageId === "splitText") {
+    return {
+      ...nextForm,
+      splitTextHeadingDepth: "",
+      splitTextMaxTokens: "",
+      splitTextOverlapTokens: "",
+      splitTextType: "",
+    };
+  }
+
+  if (stageId === "summarizeTree") {
+    return {
+      ...nextForm,
+      treeSummaryModelCode: "",
+    };
+  }
+
+  if (stageId === "vectorIndex") {
+    return {
+      ...nextForm,
+      embeddingModelCode: "",
+      embeddingVersion: "",
+    };
+  }
+
+  return nextForm;
+}
+
 function PipelineEdgesTable({ edges }: { edges: Array<{ from: string; to: string }> }) {
   const { pageT } = useProfileFormCopy();
 
@@ -590,12 +747,14 @@ function PipelineEdgesCard({ edges }: { edges: Array<{ from: string; to: string 
 function IngestTemplateCard({
   graphBackedCorpus,
   onApply,
+  pipeline,
   pipelineCatalog,
   selectedTemplateId,
   templates,
 }: {
   graphBackedCorpus: boolean;
   onApply: (template: RagPipelineTemplate) => void;
+  pipeline: RagProfilePipeline;
   pipelineCatalog: RagPipelineCatalog | null;
   selectedTemplateId: string;
   templates: RagPipelineTemplate[];
@@ -665,6 +824,7 @@ function IngestTemplateCard({
           </div>
         )}
       </div>
+      <PipelineFlowCard pipeline={pipeline} pipelineCatalog={pipelineCatalog} />
     </SurfaceCard>
   );
 }
@@ -678,70 +838,118 @@ function PipelineFlowCard({
 }) {
   const { pageT } = useProfileFormCopy();
   const levels = pipelineExecutionLevels(pipeline);
-  const nodeCount = pipeline.nodes.filter((node) => node.enabled).length;
-  const enabledNodeIds = new Set(pipeline.nodes.filter((node) => node.enabled).map((node) => node.nodeId));
-  const outgoingTargets = pipeline.edges.reduce<Record<string, string[]>>((targetsByNode, edge) => {
-    if (!enabledNodeIds.has(edge.from) || !enabledNodeIds.has(edge.to)) return targetsByNode;
-    targetsByNode[edge.from] = [...(targetsByNode[edge.from] ?? []), edge.to];
-    return targetsByNode;
-  }, {});
+  const enabledNodes = pipeline.nodes.filter((node) => node.enabled);
+  const nodeCount = enabledNodes.length;
+  const enabledNodeIds = new Set(enabledNodes.map((node) => node.nodeId));
+  const visibleEdges = pipeline.edges.filter((edge) => enabledNodeIds.has(edge.from) && enabledNodeIds.has(edge.to));
+  const nodeWidth = 220;
+  const nodeHeight = 82;
+  const columnGap = 128;
+  const rowGap = 30;
+  const padding = 24;
+  const maxRows = Math.max(...levels.map((level) => level.length), 1);
+  const innerHeight = maxRows * nodeHeight + Math.max(0, maxRows - 1) * rowGap;
+  const svgWidth = Math.max(1, levels.length) * nodeWidth + Math.max(0, levels.length - 1) * columnGap + padding * 2;
+  const svgHeight = innerHeight + padding * 2;
+  const nodePositions = new Map<string, {
+    node: RagProfilePipeline["nodes"][number];
+    x: number;
+    y: number;
+  }>();
+
+  levels.forEach((level, levelIndex) => {
+    const levelHeight = level.length * nodeHeight + Math.max(0, level.length - 1) * rowGap;
+    const levelTop = padding + Math.max(0, (innerHeight - levelHeight) / 2);
+    level.forEach((node, nodeIndex) => {
+      nodePositions.set(node.nodeId, {
+        node,
+        x: padding + levelIndex * (nodeWidth + columnGap),
+        y: levelTop + nodeIndex * (nodeHeight + rowGap),
+      });
+    });
+  });
+
+  function edgePath(edge: { from: string; to: string }) {
+    const from = nodePositions.get(edge.from);
+    const to = nodePositions.get(edge.to);
+    if (!from || !to) return "";
+    const edgeOffset = 8;
+    const startX = from.x + nodeWidth + edgeOffset;
+    const startY = from.y + nodeHeight / 2;
+    const endX = to.x - edgeOffset;
+    const endY = to.y + nodeHeight / 2;
+    const midX = startX + Math.max(32, (endX - startX) / 2);
+    return `M ${startX} ${startY} H ${midX} V ${endY} H ${endX}`;
+  }
+
+  function nodeDetailTitle(node: RagProfilePipeline["nodes"][number]) {
+    return [
+      stageDisplayName(pipelineCatalog, node.stageType),
+      `${pageT("pipelineFlow.detailStageType", "Stage type")}: ${node.stageType}`,
+      `${pageT("pipelineFlow.detailNodeId", "Node ID")}: ${node.nodeId}`,
+      `${pageT("pipelineFlow.detailStrategy", "Strategy")}: ${node.strategyId || pageT("values.noStrategy", "No strategy set")}`,
+    ].join("\n");
+  }
 
   return (
-    <SurfaceCard data-testid="pipeline-flow">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold">{pageT("pipelineFlow.title", "Pipeline flow")}</h2>
-          <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-            {pageT("pipelineFlow.description", "Saved pipelines remain DAGs. Branches in the same column can run in parallel, and node cards show real outgoing edges.")}
-          </p>
-        </div>
-        <span className="rounded-full border border-[var(--color-outline-variant)] px-3 py-1 text-sm">{pageT("pipelineFlow.enabledNodes", "{{count}} enabled nodes", { count: nodeCount })}</span>
-      </div>
+    <details className="mt-6 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4" data-testid="pipeline-flow">
+      <summary className="cursor-pointer text-sm font-medium" data-testid="pipeline-flow-summary">
+        <span>{pageT("pipelineFlow.title", "Pipeline flow")}</span>
+        <span className="ml-3 rounded-full border border-[var(--color-outline-variant)] px-2 py-0.5 text-[12px] font-normal text-[var(--color-on-surface-variant)]">
+          {pageT("pipelineFlow.enabledNodes", "{{count}} enabled nodes", { count: nodeCount })}
+        </span>
+      </summary>
       {levels.length > 0 ? (
         <div className="mt-5 overflow-x-auto">
-          <div className="flex min-w-max items-stretch gap-3">
-            {levels.map((level, levelIndex) => (
-              <div className="grid min-w-56 gap-3" key={`level-${levelIndex}`}>
-                <div className="flex min-h-6 items-center justify-between gap-2">
-                  {level.length > 1 ? (
-                    <span className="w-fit rounded-full bg-[var(--color-surface-container-high)] px-2 py-0.5 text-[11px] uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                      {pageT("pipelineFlow.parallel", "Parallel")}
-                    </span>
-                  ) : (
-                    <span />
-                  )}
-                  <span className="font-mono text-[11px] text-[var(--color-on-surface-variant)]">
-                    {pageT("pipelineFlow.level", "Level {{index}}", { index: levelIndex + 1 })}
-                  </span>
-                </div>
-                {level.map((node) => {
-                  const targets = outgoingTargets[node.nodeId] ?? [];
-                  return (
-                    <div
-                      className="min-w-0 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3"
-                      data-testid={`pipeline-flow-node-${node.nodeId}`}
-                      key={node.nodeId}
-                    >
-                      <p className="font-medium">{stageDisplayName(pipelineCatalog, node.stageType)}</p>
-                      <p className="mt-1 break-all font-mono text-[11px] text-[var(--color-on-surface-variant)]">{node.strategyId || pageT("values.noStrategy", "No strategy set")}</p>
-                      <div className="mt-3 border-t border-[var(--color-outline-variant)] pt-2">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("pipelineFlow.targetNodes", "Target nodes")}</p>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {targets.length > 0 ? targets.map((target) => (
-                            <span className="rounded-full border border-[var(--color-outline-variant)] px-2 py-0.5 font-mono text-[11px] text-[var(--color-on-surface-variant)]" key={`${node.nodeId}-${target}`}>
-                              → {target}
-                            </span>
-                          )) : (
-                            <span className="rounded-full border border-[var(--color-outline-variant)] px-2 py-0.5 text-[11px] text-[var(--color-on-surface-variant)]">{pageT("pipelineFlow.endpoint", "Endpoint")}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+          <svg
+            aria-label={pageT("pipelineFlow.diagramAria", "Pipeline DAG diagram")}
+            className="min-w-max overflow-visible"
+            height={svgHeight}
+            role="img"
+            viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+            width={svgWidth}
+          >
+            <defs>
+              <marker id="pipeline-flow-arrow" markerHeight="8" markerWidth="8" orient="auto" refX="7" refY="4">
+                <path d="M 0 0 L 8 4 L 0 8 z" fill="var(--color-outline)" />
+              </marker>
+            </defs>
+            {visibleEdges.map((edge) => (
+              <path
+                d={edgePath(edge)}
+                data-testid={`pipeline-flow-edge-${edge.from}-${edge.to}`}
+                fill="none"
+                key={`${edge.from}-${edge.to}`}
+                markerEnd="url(#pipeline-flow-arrow)"
+                stroke="var(--color-outline)"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+              />
             ))}
-          </div>
+            {Array.from(nodePositions.values()).map(({ node, x, y }) => (
+              <g
+                aria-label={nodeDetailTitle(node)}
+                data-testid={`pipeline-flow-node-group-${node.nodeId}`}
+                key={node.nodeId}
+                tabIndex={0}
+              >
+                <title>{nodeDetailTitle(node)}</title>
+                <foreignObject height={nodeHeight} width={nodeWidth} x={x} y={y}>
+                  <div
+                    className="flex h-full min-w-0 flex-col justify-between rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-3 py-2.5 transition-colors hover:border-[var(--color-outline)]"
+                    data-testid={`pipeline-flow-node-${node.nodeId}`}
+                    title={nodeDetailTitle(node)}
+                  >
+                    <p className="truncate text-sm font-semibold">{stageDisplayName(pipelineCatalog, node.stageType)}</p>
+                    <p className="truncate border-t border-[var(--color-outline-variant)] pt-2 font-mono text-[11px] text-[var(--color-on-surface-variant)]">
+                      {node.nodeId}
+                    </p>
+                  </div>
+                </foreignObject>
+              </g>
+            ))}
+          </svg>
         </div>
       ) : (
         <p className="mt-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm text-[var(--color-on-surface-variant)]">
@@ -754,33 +962,7 @@ function PipelineFlowCard({
           <PipelineEdgesTable edges={pipeline.edges} />
         </div>
       </details>
-    </SurfaceCard>
-  );
-}
-
-function VerifyResultCard({ result }: { result: RagProfileVerifyResultApi | null }) {
-  const { pageT } = useProfileFormCopy();
-  const issues = normalizeRagValidationIssues(result?.errors);
-  return (
-    <SurfaceCard>
-      <h2 className="text-base font-semibold">{pageT("verify.title", "Verification result")}</h2>
-      <div className="mt-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm">
-        {result ? (
-          <>
-            <p className="font-medium">{result.valid === false || issues.length > 0 ? pageT("verify.rejected", "The backend rejected this profile.") : pageT("verify.passed", "Backend verification passed.")}</p>
-            {issues.length > 0 ? (
-              <div className="mt-3 grid gap-2 text-[var(--color-error)]">
-                {issues.map((issue, index) => (
-                  <p key={`${validationIssueField(issue)}-${index}`}>{validationIssueMessage(issue)}</p>
-                ))}
-              </div>
-            ) : null}
-          </>
-        ) : (
-          <p className="text-[var(--color-on-surface-variant)]">{pageT("verify.pending", "Backend verification runs before saving the profile.")}</p>
-        )}
-      </div>
-    </SurfaceCard>
+    </details>
   );
 }
 
@@ -920,24 +1102,6 @@ function defaultRetrievalHiddenFields(): RagRetrievalProfileHiddenFields {
     degradePolicy: "RESULT_LIST",
     requiredSourceVersion: "v1",
   };
-}
-
-function PayloadPreview({ payload }: { payload: unknown }) {
-  const { pageT } = useProfileFormCopy();
-
-  return (
-    <SurfaceCard>
-      <details>
-        <summary className="cursor-pointer text-base font-semibold">{pageT("payloadPreview.title", "Developer preview")}</summary>
-        <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
-          {pageT("payloadPreview.description", "This shows the full management payload sent to save and verify APIs.")}
-        </p>
-        <pre className="mt-4 overflow-x-auto rounded-xl bg-[var(--color-surface-container-low)] p-4 text-[13px] leading-6 text-[var(--color-on-surface)]">
-          {JSON.stringify(payload, null, 2)}
-        </pre>
-      </details>
-    </SurfaceCard>
-  );
 }
 
 function RetrievalFlowCard({ form }: { form: RagRetrievalProfileFormState }) {
@@ -1132,14 +1296,11 @@ export function RagIngestProfileFormPage() {
   const [form, setForm] = useState<RagIngestProfileFormState>(() => buildIngestProfileFormState());
   const [errors, setErrors] = useState<RagIngestProfileFormErrors>({});
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [verifyResult, setVerifyResult] = useState<RagProfileVerifyResultApi | null>(null);
+  const [advancedNodesOpen, setAdvancedNodesOpen] = useState(false);
+  const [expandedAdvancedNodeId, setExpandedAdvancedNodeId] = useState<RagIngestStageId | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const title = mode === "create" ? pageT("ingest.title.create", "New ingest profile") : pageT("ingest.title.edit", "Edit ingest profile");
   const returnPath = profileFormReturnPath("ingest", searchParams);
-  const payloadPreview = useMemo(
-    () => (isApiMode ? buildRagIngestProfileMutationPayload(form, pipelineCatalog) : buildIngestProfilePayloadPreview(form, pipelineCatalog)),
-    [form, isApiMode, pipelineCatalog],
-  );
   const validationMessages = useMemo(() => flattenIngestErrors(errors), [errors]);
   const profileRecords = useMemo(() => (isApiMode ? [] : getRagMockProfiles()), [isApiMode]);
   const existingIds = useMemo(() => profileRecords.map((profile) => profile.id), [profileRecords]);
@@ -1155,24 +1316,18 @@ export function RagIngestProfileFormPage() {
       .filter((stageId): stageId is RagIngestStageId => Boolean(stageId)),
     [pipelineCatalog],
   );
-  const enabledStages = useMemo(() => form.pipelineStages.filter((stage) => stage.enabled), [form.pipelineStages]);
   const ingestPipeline = useMemo(() => buildIngestPipelineFromForm(form, pipelineCatalog), [form, pipelineCatalog]);
   const ingestTemplates = pipelineCatalog?.templates ?? [];
   const allowedStageStrategies = useMemo(
     () => Object.fromEntries(
-      enabledStages.map((stage) => {
-        const fallbackStrategies = listRagMockIngestStageStrategies(stage.id, form.primaryCorpusId);
-        const catalogStrategies = catalog?.stageStrategiesByCorpus[form.primaryCorpusId]?.[stage.id] ?? [];
-        const pipelineStrategies = strategyOptionsForStage(findPipelineStageDefinition(pipelineCatalog, ingestStageIdToStageType(stage.id)));
-        return [stage.id, isApiMode && pipelineStrategies.length > 0
-          ? pipelineStrategies
-          : isApiMode && catalogStrategies.length > 0
-            ? catalogStrategies
-            : fallbackStrategies];
-      }),
+      form.pipelineStages.map((stage) => [
+        stage.id,
+        listIngestStageStrategyOptions(stage.id, form.primaryCorpusId, isApiMode, catalog, pipelineCatalog),
+      ]),
     ) as Partial<Record<RagIngestStageId, string[]>>,
-    [catalog?.stageStrategiesByCorpus, enabledStages, form.primaryCorpusId, isApiMode, pipelineCatalog],
+    [catalog, form.pipelineStages, form.primaryCorpusId, isApiMode, pipelineCatalog],
   );
+  const advancedNodeErrorId = useMemo(() => firstIngestAdvancedNodeError(errors), [errors]);
   const loading = isApiMode && (catalogLoading || (mode === "edit" && detailLoading && !existingProfile));
 
   useEffect(() => {
@@ -1224,11 +1379,15 @@ export function RagIngestProfileFormPage() {
     if (mode === "create") {
       setForm(buildIngestProfileFormState());
       setSelectedTemplateId("");
+      setAdvancedNodesOpen(false);
+      setExpandedAdvancedNodeId(null);
       return;
     }
     if (!existingProfile) return;
     setForm(buildIngestProfileFormState(existingProfile));
     setSelectedTemplateId("custom");
+    setAdvancedNodesOpen(false);
+    setExpandedAdvancedNodeId(null);
   }, [existingProfile, mode]);
 
   useEffect(() => {
@@ -1241,6 +1400,11 @@ export function RagIngestProfileFormPage() {
     setSelectedTemplateId(firstTemplate.templateId);
   }, [ingestTemplates, mode, selectedTemplateId]);
 
+  useEffect(() => {
+    if (errors.pipeline || advancedNodeErrorId) setAdvancedNodesOpen(true);
+    if (advancedNodeErrorId) setExpandedAdvancedNodeId(advancedNodeErrorId);
+  }, [advancedNodeErrorId, errors.pipeline]);
+
   function updateForm<K extends keyof RagIngestProfileFormState>(key: K, value: RagIngestProfileFormState[K]) {
     setForm((currentForm) => ({ ...currentForm, [key]: value }));
     setErrors((currentErrors) => {
@@ -1251,11 +1415,52 @@ export function RagIngestProfileFormPage() {
     });
   }
 
-  function updateStage(stageId: string, enabled: boolean) {
-    setForm((currentForm) => ({
-      ...currentForm,
-      pipelineStages: currentForm.pipelineStages.map((stage) => (stage.id === stageId ? { ...stage, enabled } : stage)),
-    }));
+  function updatePrimaryCorpus(corpusCode: string) {
+    setForm((currentForm) => {
+      const shouldApplyDefaultPipeline = mode === "create"
+        && currentForm.primaryCorpusId !== corpusCode
+        && currentForm.pipelineStages.every((stage) => !stage.enabled && !stage.strategyId.trim());
+      if (!shouldApplyDefaultPipeline) {
+        return {
+          ...currentForm,
+          primaryCorpusId: corpusCode,
+          supportedSourceTypesText: currentForm.supportedSourceTypesText.trim()
+            ? currentForm.supportedSourceTypesText
+            : defaultSourceTypeForCorpus(corpusCode),
+        };
+      }
+      return applyDefaultIngestPipeline(currentForm, corpusCode, corpusOptions, isApiMode, catalog, pipelineCatalog);
+    });
+    if (mode === "create" && corpusCode) setSelectedTemplateId("auto");
+    setErrors((currentErrors) => {
+      const nextErrors = { ...currentErrors };
+      delete nextErrors.primaryCorpusId;
+      delete nextErrors.supportedSourceTypesText;
+      delete nextErrors.pipeline;
+      delete nextErrors.stageRows;
+      return nextErrors;
+    });
+  }
+
+  function updateStage(stageId: RagIngestStageId, enabled: boolean) {
+    setForm((currentForm) => {
+      if (!enabled) return clearDisabledIngestStageConfig(currentForm, stageId);
+      const currentStage = currentForm.pipelineStages.find((stage) => stage.id === stageId);
+      const fallbackStrategyId = !currentStage?.strategyId.trim()
+        ? allowedStageStrategies[stageId]?.[0]
+        : "";
+      const nextForm = {
+        ...currentForm,
+        pipelineStages: currentForm.pipelineStages.map((stage) => (stage.id === stageId ? { ...stage, enabled } : stage)),
+      };
+      return fallbackStrategyId ? applyIngestStageStrategyDefaults(nextForm, stageId, fallbackStrategyId) : nextForm;
+    });
+    if (enabled) {
+      setExpandedAdvancedNodeId(stageId);
+      setAdvancedNodesOpen(true);
+    } else {
+      setExpandedAdvancedNodeId((current) => (current === stageId ? null : current));
+    }
     setSelectedTemplateId("custom");
     setErrors((currentErrors) => {
       const nextErrors = { ...currentErrors };
@@ -1295,7 +1500,6 @@ export function RagIngestProfileFormPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setVerifyResult(null);
     const nextErrors = validateIngestProfileForm(form, existingIds, existingProfile?.id, allowedStageStrategies, pipelineCatalog);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
@@ -1311,7 +1515,6 @@ export function RagIngestProfileFormPage() {
     try {
       const payload = buildRagIngestProfileMutationPayload(form, pipelineCatalog);
       const verification = await verifyRagProfile(payload);
-      setVerifyResult(verification);
       const issues = normalizeRagValidationIssues(verification.errors);
       if (verification.valid === false || issues.length > 0) {
         setErrors(mapIngestApiErrors(issues, form));
@@ -1422,72 +1625,16 @@ export function RagIngestProfileFormPage() {
               </SelectInput>
             </Field>
             <Field label={pageT("fields.primaryCorpus", "Primary corpus")} error={errors.primaryCorpusId} hint={ingestHintT("primaryCorpus")}>
-              <SelectInput aria-label={pageT("fields.primaryCorpus", "Primary corpus")} value={form.primaryCorpusId} onValueChange={(event) => updateForm("primaryCorpusId", event!)}>
+
+              <SelectInput aria-label={pageT("fields.primaryCorpus", "Primary corpus")} value={form.primaryCorpusId} onValueChange={(event) => updatePrimaryCorpus(event!)}>
                 <SelectItem value="">{pageT("fields.selectCorpus", "Select corpus")}</SelectItem>
                 {corpusOptions.map((corpus) => <SelectItem key={corpus.code} value={corpus.code}>{corpus.code}</SelectItem>)}
+
               </SelectInput>
             </Field>
             <Field label={pageT("fields.description", "Description")} hint={ingestHintT("description")}>
               <TextArea aria-label={pageT("fields.description", "Description")} className="min-h-28" value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
             </Field>
-          </div>
-        </SurfaceCard>
-
-        <IngestTemplateCard
-          graphBackedCorpus={graphBackedCorpus}
-          pipelineCatalog={pipelineCatalog}
-          selectedTemplateId={selectedTemplateId}
-          templates={ingestTemplates}
-          onApply={applyTemplate}
-        />
-
-        <PipelineFlowCard pipeline={ingestPipeline} pipelineCatalog={pipelineCatalog} />
-
-        <SurfaceCard>
-          <details>
-            <summary className="cursor-pointer text-base font-semibold">{pageT("ingest.advancedNodes.title", "Advanced node controls")}</summary>
-            <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
-              {pageT("ingest.advancedNodes.description", "Use these controls when the selected template needs a custom stage combination.")}
-            </p>
-            <div className="mt-4 grid gap-3">
-              {form.pipelineStages.map((stage) => {
-                const stageType = ingestStageIdToStageType(stage.id);
-                const stageDefinition = findPipelineStageDefinition(pipelineCatalog, stageType);
-                const required = requiredStageIds.includes(stage.id);
-                return (
-                  <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3" key={stage.id}>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{stageDisplayName(pipelineCatalog, stageType)}</span>
-                        {required ? (
-                          <span className="rounded-full bg-[var(--color-primary-container)] px-2 py-0.5 text-[11px] text-[var(--color-on-primary-container)]">{pageT("ingest.advancedNodes.required", "Required")}</span>
-                        ) : null}
-                        {stageDefinition?.orchestration?.actsAsBarrier ? (
-                          <span className="rounded-full bg-[var(--color-surface)] px-2 py-0.5 text-[11px] text-[var(--color-on-surface-variant)]">{pageT("ingest.advancedNodes.barrier", "Control barrier")}</span>
-                        ) : null}
-                      </div>
-                      <p className="mt-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">{ingestStageNodeId(stage.id)} · {stageType}</p>
-                      {(stageDefinition?.orchestration?.mustRunBeforeStageTypes.length ?? 0) > 0 ? (
-                        <p className="mt-1 text-[12px] text-[var(--color-on-surface-variant)]">
-                          {pageT("ingest.advancedNodes.mustRunBefore", "Must run before {{stages}}", { stages: stageDefinition?.orchestration?.mustRunBeforeStageTypes.join(", ") })}
-                        </p>
-                      ) : null}
-                    </div>
-                    <ToggleSwitch checked={stage.enabled} disabled={required} label={pageT("ingest.advancedNodes.enableNode", "Enable {{stage}} node", { stage: stageDisplayName(pipelineCatalog, stageType) })} onCheckedChange={(checked) => updateStage(stage.id, checked)} />
-                  </div>
-                );
-              })}
-              {errors.pipeline ? <p className="text-[12px] text-[var(--color-error)]">{errors.pipeline}</p> : null}
-            </div>
-          </details>
-        </SurfaceCard>
-
-        <SurfaceCard>
-          <h2 className="text-base font-semibold">{pageT("ingest.inputContract.title", "Input contract")}</h2>
-          <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-            {pageT("ingest.inputContract.description", "These fields define the inputs accepted by the workbench and ingest API for this profile.")}
-          </p>
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <Field label={pageT("fields.supportedSourceTypes", "Supported source types")} error={errors.supportedSourceTypesText} hint={ingestHintT("supportedSourceTypes")}>
               <TextInput aria-label={pageT("fields.supportedSourceTypes", "Supported source types")} className="font-mono" value={form.supportedSourceTypesText} onChange={(event) => updateForm("supportedSourceTypesText", event.target.value)} />
             </Field>
@@ -1497,196 +1644,254 @@ export function RagIngestProfileFormPage() {
           </div>
         </SurfaceCard>
 
+        <IngestTemplateCard
+          graphBackedCorpus={graphBackedCorpus}
+          pipeline={ingestPipeline}
+          pipelineCatalog={pipelineCatalog}
+          selectedTemplateId={selectedTemplateId}
+          templates={ingestTemplates}
+          onApply={applyTemplate}
+        />
+
         <SurfaceCard>
-          <h2 className="text-base font-semibold">{pageT("ingest.stageStrategies.title", "Stage strategies")}</h2>
-          <div className="mt-4 grid gap-4">
-            {enabledStages.length === 0 ? (
-              <p className="text-sm text-[var(--color-on-surface-variant)]">{pageT("ingest.stageStrategies.empty", "Enable one or more stages above before configuring stage strategies.")}</p>
-            ) : null}
-            {enabledStages.map((stage) => {
-              const stageType = ingestStageIdToStageType(stage.id);
-              const stageDefinition = findPipelineStageDefinition(pipelineCatalog, stageType);
-              const configSchema = strategySchemaForNode(stageDefinition, stage.strategyId);
-              return (
-                <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4" key={stage.id}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium">{stageDisplayName(pipelineCatalog, stageType)}</p>
-                      <p className="mt-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">{stageType}</p>
-                    </div>
-                    <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 font-mono text-[11px] text-[var(--color-on-surface-variant)]">{ingestStageNodeId(stage.id)}</span>
-                  </div>
-                  <div className="mt-3 grid gap-4 lg:grid-cols-2">
-                    <Field label={pageT("fields.strategy", "Strategy")} error={errors.stageRows?.[stage.id]?.strategyId} hint={ingestHintT("strategy")}>
-                      <SelectInput
-                        aria-label={pageT("ingest.stageStrategies.strategyAria", "{{stage}} strategy ID", { stage: stageType })}
-                        value={stage.strategyId}
-                        onValueChange={(event) => updateStageStrategy(stage.id, event!)}
-                      >
-                        <SelectItem value="">{(allowedStageStrategies[stage.id]?.length ?? 0) > 0 ? pageT("ingest.stageStrategies.selectStrategy", "Select stage strategy") : pageT("ingest.stageStrategies.noStrategy", "No supported strategy")}</SelectItem>
-                        {(allowedStageStrategies[stage.id] ?? []).map((strategyId) => (
-                          <SelectItem key={strategyId} value={strategyId}>{strategyOptionLabel(stageDefinition, strategyId)}</SelectItem>
-                        ))}
-                      </SelectInput>
-                    </Field>
 
-                    {stage.id === "resolveSource" ? (
-                      <>
-                        <Field label={pageT("fields.allowedUriSchemes", "Allowed URI schemes")} hint={ingestHintT("resolveSourceAllowedUriSchemes")}>
-                          <TextInput
-                            aria-label={pageT("fields.allowedUriSchemes", "Allowed URI schemes")}
-                            className="font-mono"
-                            value={form.resolveSourceAllowedUriSchemesText}
-                            onChange={(event) => updateForm("resolveSourceAllowedUriSchemesText", event.target.value)}
-                          />
-                        </Field>
-                        <Field label={pageT("fields.maxBytes", "Max bytes")} error={errors.resolveSourceMaxBytes} hint={ingestHintT("resolveSourceMaxBytes")}>
-                          <TextInput
-                            aria-label={pageT("fields.maxBytes", "Max bytes")}
-                            className="font-mono"
-                            value={form.resolveSourceMaxBytes}
-                            onChange={(event) => updateForm("resolveSourceMaxBytes", event.target.value)}
-                          />
-                        </Field>
-                      </>
-                    ) : null}
-
-                    {stage.id === "parseDocument" ? (
-                      <>
-                        <Field
-                          label={stage.strategyId.trim() === mineruParseStrategyId ? pageT("fields.supportedFormats", "Supported formats") : pageT("fields.documentFormat", "Document format")}
-                          error={errors.parseDocumentFormat}
-                          hint={parseDocumentFormatHint(stage.strategyId)}
+          <details
+            data-testid="advanced-node-controls"
+            open={advancedNodesOpen}
+            onToggle={(event) => setAdvancedNodesOpen(event.currentTarget.open)}
+          >
+            <summary className="cursor-pointer text-base font-semibold">{pageT("ingest.advancedNodes.title", "Advanced node controls")}</summary>
+            {advancedNodesOpen ? (
+              <>
+                {errors.pipeline ? <p className="mt-3 text-sm text-[var(--color-error)]">{errors.pipeline}</p> : null}
+              <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
+                {pageT("ingest.advancedNodes.description", "Use these controls when the selected template needs a custom stage combination.")}
+              </p>
+              <div className="mt-4 grid gap-3">
+                {form.pipelineStages.map((stage) => {
+                  const stageType = ingestStageIdToStageType(stage.id);
+                  const stageDefinition = findPipelineStageDefinition(pipelineCatalog, stageType);
+                  const canConfigure = stage.enabled;
+                  const expanded = canConfigure && expandedAdvancedNodeId === stage.id;
+                  const configPanelId = `advanced-node-config-${stage.id}`;
+                  const stageStrategyOptions = allowedStageStrategies[stage.id] ?? [];
+                  const required = requiredStageIds.includes(stage.id);
+                  return (
+                    <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3" data-testid={`advanced-node-${stage.id}`} key={stage.id}>
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <button
+                          aria-controls={configPanelId}
+                          aria-expanded={expanded}
+                          className={`min-w-0 flex-1 text-left ${canConfigure ? "" : "cursor-not-allowed opacity-65"}`}
+                          data-testid={`advanced-node-trigger-${stage.id}`}
+                          disabled={!canConfigure}
+                          type="button"
+                          onClick={() => {
+                            if (!canConfigure) return;
+                            setExpandedAdvancedNodeId((current) => (current === stage.id ? null : stage.id));
+                          }}
                         >
-                          <TextInput
-                            aria-label={stage.strategyId.trim() === mineruParseStrategyId ? pageT("fields.supportedFormats", "Supported formats") : pageT("fields.documentFormat", "Document format")}
-                            className="font-mono"
-                            value={form.parseDocumentFormat}
-                            onChange={(event) => updateForm("parseDocumentFormat", event.target.value)}
-                          />
-                        </Field>
-                        <Field label={pageT("fields.unsupportedFormatPolicy", "Unsupported format policy")} hint={ingestHintT("parseDocumentUnsupportedFormatPolicy")}>
-                          <TextInput
-                            aria-label={pageT("fields.unsupportedFormatPolicy", "Unsupported format policy")}
-                            className="font-mono"
-                            value={form.parseDocumentUnsupportedFormatPolicy}
-                            onChange={(event) => updateForm("parseDocumentUnsupportedFormatPolicy", event.target.value)}
-                          />
-                        </Field>
-                      </>
-                    ) : null}
-
-                    {stage.id === "splitText" ? (
-                      <>
-                        <Field label={pageT("fields.splitterType", "Splitter type")} error={errors.splitTextType} hint={ingestHintT("splitTextType")}>
-                          <TextInput
-                            aria-label={pageT("fields.splitterType", "Splitter type")}
-                            className="font-mono"
-                            value={form.splitTextType}
-                            onChange={(event) => updateForm("splitTextType", event.target.value)}
-                          />
-                        </Field>
-                        <Field label={pageT("fields.maxTokens", "Max tokens")} error={errors.splitTextMaxTokens} hint={ingestHintT("splitTextMaxTokens")}>
-                          <TextInput
-                            aria-label={pageT("fields.maxTokens", "Max tokens")}
-                            className="font-mono"
-                            value={form.splitTextMaxTokens}
-                            onChange={(event) => updateForm("splitTextMaxTokens", event.target.value)}
-                          />
-                        </Field>
-                        <Field label={pageT("fields.overlapTokens", "Overlap tokens")} error={errors.splitTextOverlapTokens} hint={ingestHintT("splitTextOverlapTokens")}>
-                          <TextInput
-                            aria-label={pageT("fields.overlapTokens", "Overlap tokens")}
-                            className="font-mono"
-                            value={form.splitTextOverlapTokens}
-                            onChange={(event) => updateForm("splitTextOverlapTokens", event.target.value)}
-                          />
-                        </Field>
-                        <Field label={pageT("fields.headingDepth", "Heading depth")} error={errors.splitTextHeadingDepth} hint={ingestHintT("splitTextHeadingDepth")}>
-                          <TextInput
-                            aria-label={pageT("fields.headingDepth", "Heading depth")}
-                            className="font-mono"
-                            value={form.splitTextHeadingDepth}
-                            onChange={(event) => updateForm("splitTextHeadingDepth", event.target.value)}
-                          />
-                        </Field>
-                      </>
-                    ) : null}
-
-                    {stage.id === "summarizeTree" && stage.strategyId.trim() === treeLlmSummaryStrategyId ? (
-                      <Field label={pageT("fields.treeSummaryModelCode", "Tree summary model code")} error={errors.treeSummaryModelCode} hint={ingestHintT("treeSummaryModelCode")}>
-                        <TextInput
-                          aria-label={pageT("fields.treeSummaryModelCode", "Tree summary model code")}
-                          className="font-mono"
-                          value={form.treeSummaryModelCode}
-                          onChange={(event) => updateForm("treeSummaryModelCode", event.target.value)}
-                        />
-                      </Field>
-                    ) : null}
-
-                    {stage.id === "vectorIndex" ? (
-                      <>
-                        <Field label={pageT("fields.embeddingModelCode", "Embedding model code")} hint={ingestHintT("embeddingModelCode")}>
-                          <TextInput
-                            aria-label={pageT("fields.embeddingModelCode", "Embedding model code")}
-                            className="font-mono"
-                            value={form.embeddingModelCode}
-                            onChange={(event) => updateForm("embeddingModelCode", event.target.value)}
-                          />
-                        </Field>
-                        <Field label={pageT("fields.embeddingVersion", "Embedding version")} hint={ingestHintT("embeddingVersion")}>
-                          <TextInput
-                            aria-label={pageT("fields.embeddingVersion", "Embedding version")}
-                            className="font-mono"
-                            value={form.embeddingVersion}
-                            onChange={(event) => updateForm("embeddingVersion", event.target.value)}
-                          />
-                        </Field>
-                      </>
-                    ) : null}
-                  </div>
-                  {(allowedStageStrategies[stage.id]?.length ?? 0) === 0 ? (
-                    <p className="mt-3 text-[12px] text-[var(--color-on-surface-variant)]">
-                      {pageT("ingest.stageStrategies.noAvailableStrategy", "No available strategy for this stage and corpus.")}
-                    </p>
-                  ) : null}
-                  <details className="mt-4 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface)] p-3">
-                    <summary className="cursor-pointer text-sm font-medium">{pageT("ingest.developerContract.title", "Developer contract")}</summary>
-                    <div className="mt-3 grid gap-3">
-                      <div className="grid gap-2 text-[12px] text-[var(--color-on-surface-variant)] lg:grid-cols-2">
-                        <p><span className="font-semibold">{pageT("ingest.developerContract.input", "Input:")}</span>{stageDefinition?.inputArtifactKeys.join(", ") || pageT("values.none", "None")}</p>
-                        <p><span className="font-semibold">{pageT("ingest.developerContract.output", "Output:")}</span>{stageDefinition?.outputArtifactKeys.join(", ") || pageT("values.none", "None")}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{stageDisplayName(pipelineCatalog, stageType)}</span>
+                            {required ? (
+                              <span className="rounded-full bg-[var(--color-primary-container)] px-2 py-0.5 text-[11px] text-[var(--color-on-primary-container)]">{pageT("ingest.advancedNodes.required", "Required")}</span>
+                            ) : null}
+                            {stageDefinition?.orchestration?.actsAsBarrier ? (
+                              <span className="rounded-full bg-[var(--color-surface)] px-2 py-0.5 text-[11px] text-[var(--color-on-surface-variant)]">{pageT("ingest.advancedNodes.barrier", "Control barrier")}</span>
+                            ) : null}
+                            <span className="rounded-full border border-[var(--color-outline-variant)] px-2 py-0.5 text-[11px] text-[var(--color-on-surface-variant)]">
+                              {!canConfigure
+                                ? pageT("ingest.advancedNodes.enableFirst", "Enable first")
+                                : expanded
+                                  ? pageT("ingest.advancedNodes.collapseConfig", "Collapse config")
+                                  : pageT("ingest.advancedNodes.configureConfig", "Configure")}
+                            </span>
+                          </div>
+                          <p className="mt-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">{ingestStageNodeId(stage.id)} · {stageType}</p>
+                          <p className="mt-1 truncate font-mono text-[12px] text-[var(--color-on-surface-variant)]">{stage.strategyId || pageT("values.noStrategy", "No strategy set")}</p>
+                          {(stageDefinition?.orchestration?.mustRunBeforeStageTypes.length ?? 0) > 0 ? (
+                            <p className="mt-1 text-[12px] text-[var(--color-on-surface-variant)]">
+                              {pageT("ingest.advancedNodes.mustRunBefore", "Must run before {{stages}}", { stages: stageDefinition?.orchestration?.mustRunBeforeStageTypes.join(", ") })}
+                            </p>
+                          ) : null}
+                        </button>
+                        <ToggleSwitch checked={stage.enabled} disabled={required} label={pageT("ingest.advancedNodes.enableNode", "Enable {{stage}} node", { stage: stageDisplayName(pipelineCatalog, stageType) })} onCheckedChange={(checked) => updateStage(stage.id, checked)} />
                       </div>
-                      <JsonPreview value={configSchema} />
+                      {expanded ? (
+                        <div className="mt-4 border-t border-[var(--color-outline-variant)] pt-4" data-testid={`advanced-node-config-${stage.id}`} id={configPanelId}>
+                          <div className="grid gap-4 lg:grid-cols-2">
+                            <Field label={pageT("fields.strategy", "Strategy")} error={errors.stageRows?.[stage.id]?.strategyId} hint={ingestHintT("strategy")}>
+                              <SelectInput
+                                aria-label={pageT("ingest.stageStrategies.strategyAria", "{{stage}} strategy ID", { stage: stageType })}
+                                value={stage.strategyId}
+                                onValueChange={(event) => updateStageStrategy(stage.id, event!)}
+                              >
+                                {stageStrategyOptions.length === 0 ? (
+                                  <SelectItem value="">{pageT("ingest.stageStrategies.noStrategy", "No supported strategy")}</SelectItem>
+                                ) : null}
+                                {stageStrategyOptions.map((strategyId) => (
+                                  <SelectItem key={strategyId} value={strategyId}>{strategyOptionLabel(stageDefinition, strategyId)}</SelectItem>
+                                ))}
+                              </SelectInput>
+                            </Field>
+
+                            {stage.id === "resolveSource" ? (
+                              <>
+                                <Field label={pageT("fields.allowedUriSchemes", "Allowed URI schemes")} hint={ingestHintT("resolveSourceAllowedUriSchemes")}>
+                                  <SelectInput
+                                    aria-label={pageT("fields.allowedUriSchemes", "Allowed URI schemes")}
+                                    className="font-mono"
+                                    value={form.resolveSourceAllowedUriSchemesText}
+                                    onValueChange={(event) => updateForm("resolveSourceAllowedUriSchemesText", event!)}
+                                  >
+                                    {optionsWithCurrentValue(resolveSourceUriSchemeOptions, form.resolveSourceAllowedUriSchemesText).map((scheme) => (
+                                      <SelectItem key={scheme} value={scheme}>{scheme}</SelectItem>
+                                    ))}
+                                  </SelectInput>
+                                </Field>
+                                <Field label={pageT("fields.maxBytes", "Max bytes")} error={errors.resolveSourceMaxBytes} hint={ingestHintT("resolveSourceMaxBytes")}>
+                                  <TextInput
+                                    aria-label={pageT("fields.maxBytes", "Max bytes")}
+                                    className="font-mono"
+                                    value={form.resolveSourceMaxBytes}
+                                    onChange={(event) => updateForm("resolveSourceMaxBytes", event.target.value)}
+                                  />
+                                </Field>
+                              </>
+                            ) : null}
+
+                            {stage.id === "parseDocument" ? (
+                              <>
+                                <Field
+                                  label={stage.strategyId.trim() === mineruParseStrategyId ? pageT("fields.supportedFormats", "Supported formats") : pageT("fields.documentFormat", "Document format")}
+                                  error={errors.parseDocumentFormat}
+                                  hint={parseDocumentFormatHint(stage.strategyId)}
+                                >
+                                  <SelectInput
+                                    aria-label={stage.strategyId.trim() === mineruParseStrategyId ? pageT("fields.supportedFormats", "Supported formats") : pageT("fields.documentFormat", "Document format")}
+                                    className="font-mono"
+                                    value={form.parseDocumentFormat}
+                                    onValueChange={(event) => updateForm("parseDocumentFormat", event!)}
+                                  >
+                                    {optionsWithCurrentValue(parseDocumentFormatOptions(stage.strategyId), form.parseDocumentFormat).map((format) => (
+                                      <SelectItem key={format} value={format}>{format}</SelectItem>
+                                    ))}
+                                  </SelectInput>
+                                </Field>
+                                <Field label={pageT("fields.unsupportedFormatPolicy", "Unsupported format policy")} hint={ingestHintT("parseDocumentUnsupportedFormatPolicy")}>
+                                  <SelectInput
+                                    aria-label={pageT("fields.unsupportedFormatPolicy", "Unsupported format policy")}
+                                    className="font-mono"
+                                    value={form.parseDocumentUnsupportedFormatPolicy}
+                                    onValueChange={(event) => updateForm("parseDocumentUnsupportedFormatPolicy", event!)}
+                                  >
+                                    {optionsWithCurrentValue(unsupportedFormatPolicyOptions, form.parseDocumentUnsupportedFormatPolicy).map((policy) => (
+                                      <SelectItem key={policy} value={policy}>{policy}</SelectItem>
+                                    ))}
+                                  </SelectInput>
+                                </Field>
+                              </>
+                            ) : null}
+
+                            {stage.id === "splitText" ? (
+                              <>
+                                <Field label={pageT("fields.splitterType", "Splitter type")} error={errors.splitTextType} hint={ingestHintT("splitTextType")}>
+                                  <SelectInput
+                                    aria-label={pageT("fields.splitterType", "Splitter type")}
+                                    className="font-mono"
+                                    value={form.splitTextType}
+                                    onValueChange={(event) => updateForm("splitTextType", event!)}
+                                  >
+                                    {optionsWithCurrentValue(splitterTypeOptions, form.splitTextType).map((splitterType) => (
+                                      <SelectItem key={splitterType} value={splitterType}>{splitterType}</SelectItem>
+                                    ))}
+                                  </SelectInput>
+                                </Field>
+                                <Field label={pageT("fields.maxTokens", "Max tokens")} error={errors.splitTextMaxTokens} hint={ingestHintT("splitTextMaxTokens")}>
+                                  <TextInput
+                                    aria-label={pageT("fields.maxTokens", "Max tokens")}
+                                    className="font-mono"
+                                    value={form.splitTextMaxTokens}
+                                    onChange={(event) => updateForm("splitTextMaxTokens", event.target.value)}
+                                  />
+                                </Field>
+                                <Field label={pageT("fields.overlapTokens", "Overlap tokens")} error={errors.splitTextOverlapTokens} hint={ingestHintT("splitTextOverlapTokens")}>
+                                  <TextInput
+                                    aria-label={pageT("fields.overlapTokens", "Overlap tokens")}
+                                    className="font-mono"
+                                    value={form.splitTextOverlapTokens}
+                                    onChange={(event) => updateForm("splitTextOverlapTokens", event.target.value)}
+                                  />
+                                </Field>
+                                <Field label={pageT("fields.headingDepth", "Heading depth")} error={errors.splitTextHeadingDepth} hint={ingestHintT("splitTextHeadingDepth")}>
+                                  <SelectInput
+                                    aria-label={pageT("fields.headingDepth", "Heading depth")}
+                                    className="font-mono"
+                                    value={form.splitTextHeadingDepth}
+                                    onValueChange={(event) => updateForm("splitTextHeadingDepth", event!)}
+                                  >
+                                    {optionsWithCurrentValue(headingDepthOptions, form.splitTextHeadingDepth).map((depth) => (
+                                      <SelectItem key={depth} value={depth}>{depth}</SelectItem>
+                                    ))}
+                                  </SelectInput>
+                                </Field>
+                              </>
+                            ) : null}
+
+                            {stage.id === "summarizeTree" && stage.strategyId.trim() === treeLlmSummaryStrategyId ? (
+                              <Field label={pageT("fields.treeSummaryModelCode", "Tree summary model code")} error={errors.treeSummaryModelCode} hint={ingestHintT("treeSummaryModelCode")}>
+                                <TextInput
+                                  aria-label={pageT("fields.treeSummaryModelCode", "Tree summary model code")}
+                                  className="font-mono"
+                                  value={form.treeSummaryModelCode}
+                                  onChange={(event) => updateForm("treeSummaryModelCode", event.target.value)}
+                                />
+                              </Field>
+                            ) : null}
+
+                            {stage.id === "vectorIndex" ? (
+                              <>
+                                <Field label={pageT("fields.embeddingModelCode", "Embedding model code")} hint={ingestHintT("embeddingModelCode")}>
+                                  <TextInput
+                                    aria-label={pageT("fields.embeddingModelCode", "Embedding model code")}
+                                    className="font-mono"
+                                    value={form.embeddingModelCode}
+                                    onChange={(event) => updateForm("embeddingModelCode", event.target.value)}
+                                  />
+                                </Field>
+                                <Field label={pageT("fields.embeddingVersion", "Embedding version")} hint={ingestHintT("embeddingVersion")}>
+                                  <TextInput
+                                    aria-label={pageT("fields.embeddingVersion", "Embedding version")}
+                                    className="font-mono"
+                                    value={form.embeddingVersion}
+                                    onChange={(event) => updateForm("embeddingVersion", event.target.value)}
+                                  />
+                                </Field>
+                              </>
+                            ) : null}
+                          </div>
+                          {stageStrategyOptions.length === 0 ? (
+                            <p className="mt-3 text-[12px] text-[var(--color-on-surface-variant)]">
+                              {pageT("ingest.stageStrategies.noAvailableStrategy", "No available strategy for this stage and corpus.")}
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </div>
-                  </details>
-                </div>
-              );
-            })}
-            {graphBackedCorpus ? (
-              <Field label={pageT("fields.graphWritePolicy", "Graph write policy")} hint={ingestHintT("graphWritePolicy")}>
-                <TextInput aria-label={pageT("fields.graphWritePolicy", "Graph write policy")} className="font-mono" value={form.graphWritePolicy} onChange={(event) => updateForm("graphWritePolicy", event.target.value)} />
-              </Field>
+                  );
+                })}
+                {graphBackedCorpus ? (
+                  <Field label={pageT("fields.graphWritePolicy", "Graph write policy")} hint={ingestHintT("graphWritePolicy")}>
+                    <TextInput aria-label={pageT("fields.graphWritePolicy", "Graph write policy")} className="font-mono" value={form.graphWritePolicy} onChange={(event) => updateForm("graphWritePolicy", event.target.value)} />
+                  </Field>
+                ) : null}
+              </div>
+              </>
+
             ) : null}
-          </div>
+          </details>
         </SurfaceCard>
 
-        <SurfaceCard>
-          <h2 className="text-base font-semibold">{pageT("ingest.summary.title", "Pipeline summary")}</h2>
-          <div className="mt-4">
-            <SummaryList rows={[
-              { label: pageT("fields.primaryCorpus", "Primary corpus"), value: form.primaryCorpusId || pageT("values.notSet", "Not set") },
-              { label: pageT("ingest.summary.enabledStages", "Enabled stages"), value: String(form.pipelineStages.filter((stage) => stage.enabled).length) },
-              {
-                label: pageT("ingest.summary.payloadStrategy", "Payload strategy"),
-                value: form.pipelineStages.find((stage) => stage.id === "preparePayload")?.strategyId || pageT("values.notSet", "Not set"),
-              },
-            ]} />
-          </div>
-        </SurfaceCard>
-
-        <PayloadPreview payload={payloadPreview} />
-        <VerifyResultCard result={verifyResult} />
         <ValidationSummary errors={validationMessages} />
       </form>
     </>
@@ -1710,7 +1915,8 @@ export function RagRetrievalProfileFormPage() {
   const [hiddenFields, setHiddenFields] = useState<RagRetrievalProfileHiddenFields>(() => defaultRetrievalHiddenFields());
   const [form, setForm] = useState<RagRetrievalProfileFormState>(() => buildRetrievalProfileFormState());
   const [errors, setErrors] = useState<RagRetrievalProfileFormErrors>({});
-  const [verifyResult, setVerifyResult] = useState<RagProfileVerifyResultApi | null>(null);
+  const [retrievalAdvancedOpen, setRetrievalAdvancedOpen] = useState(false);
+  const [retrievalFiltersOpen, setRetrievalFiltersOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const title = mode === "create" ? pageT("retrieval.title.create", "New retrieval profile") : pageT("retrieval.title.edit", "Edit retrieval profile");
   const returnPath = profileFormReturnPath("retrieval", searchParams);
@@ -1736,10 +1942,6 @@ export function RagRetrievalProfileFormPage() {
   const topicPolicyOptions = useMemo(
     () => (isApiMode ? catalog?.topicPolicyTypes ?? [] : listRagMockTopicPolicyTypes()),
     [catalog?.topicPolicyTypes, isApiMode],
-  );
-  const payloadPreview = useMemo(
-    () => (isApiMode ? buildRagRetrievalProfileMutationPayload(form, hiddenFields) : buildRetrievalProfilePayloadPreview(form)),
-    [form, hiddenFields, isApiMode],
   );
   const validationMessages = useMemo(() => flattenRetrievalErrors(errors), [errors]);
   const filterFieldOptions = useMemo(() => listRetrievalFilterFieldOptions(corpusOptions, form.routes), [corpusOptions, form.routes]);
@@ -1814,10 +2016,14 @@ export function RagRetrievalProfileFormPage() {
     if (mode === "create") {
       setForm(buildRetrievalProfileFormState());
       setHiddenFields(defaultRetrievalHiddenFields());
+      setRetrievalAdvancedOpen(false);
+      setRetrievalFiltersOpen(false);
       return;
     }
     if (!existingProfile) return;
     setForm(buildRetrievalProfileFormState(existingProfile));
+    setRetrievalAdvancedOpen(false);
+    setRetrievalFiltersOpen(false);
     if (isApiMode) {
       setHiddenFields({
         degradePolicy: typeof apiDetail?.degradePolicy === "string" && apiDetail.degradePolicy.trim()
@@ -1829,6 +2035,11 @@ export function RagRetrievalProfileFormPage() {
       });
     }
   }, [apiDetail?.degradePolicy, apiDetail?.profileId, apiDetail?.requiredSourceVersion, existingProfile, isApiMode, mode]);
+
+  useEffect(() => {
+    if (errors.contextStrategies || errors.graphExpansionPolicy) setRetrievalAdvancedOpen(true);
+    if (errors.filters || errors.filterRows) setRetrievalFiltersOpen(true);
+  }, [errors.contextStrategies, errors.filterRows, errors.filters, errors.graphExpansionPolicy]);
 
   function updateForm<K extends keyof RagRetrievalProfileFormState>(key: K, value: RagRetrievalProfileFormState[K]) {
     setForm((currentForm) => ({ ...currentForm, [key]: value }));
@@ -1918,6 +2129,7 @@ export function RagRetrievalProfileFormPage() {
   }
 
   function addFilter() {
+    setRetrievalFiltersOpen(true);
     setForm((currentForm) => ({
       ...currentForm,
       filters: [...currentForm.filters, createRetrievalFilterFormRow(currentForm.filters.length)],
@@ -1943,7 +2155,6 @@ export function RagRetrievalProfileFormPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setVerifyResult(null);
     const nextErrors = validateRetrievalProfileForm(form, existingIds, corpusOptions, existingProfile?.id, routeOptionsByFormId);
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
@@ -1959,7 +2170,6 @@ export function RagRetrievalProfileFormPage() {
     try {
       const payload = buildRagRetrievalProfileMutationPayload(form, hiddenFields);
       const verification = await verifyRagProfile(payload);
-      setVerifyResult(verification);
       const issues = normalizeRagValidationIssues(verification.errors);
       if (verification.valid === false || issues.length > 0) {
         setErrors(mapRetrievalApiErrors(issues, form));
@@ -2115,92 +2325,123 @@ export function RagRetrievalProfileFormPage() {
         <RetrievalFlowCard form={form} />
 
         <SurfaceCard>
-          <h2 className="text-base font-semibold">{pageT("retrieval.resultPolicy.title", "Result policy")}</h2>
-          <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            <Field label={pageT("fields.fusionPolicy", "Fusion policy")} hint={retrievalHintT("fusionPolicy")}>
-              <SelectInput aria-label={pageT("fields.fusionPolicy", "Fusion policy")} className="font-mono" value={form.fusionPolicy} onValueChange={(event) => updateForm("fusionPolicy", event!)}>
-                {fusionPolicyOptions.map((policy) => <SelectItem key={policy} value={policy}>{policy}</SelectItem>)}
-              </SelectInput>
-            </Field>
-            <Field label={pageT("fields.dedupPolicy", "Dedup policy")} hint={retrievalHintT("dedupPolicy")}>
-              <SelectInput aria-label={pageT("fields.dedupPolicy", "Dedup policy")} className="font-mono" value={form.dedupPolicy} onValueChange={(event) => updateForm("dedupPolicy", event!)}>
-                {dedupPolicyOptions.map((policy) => <SelectItem key={policy} value={policy}>{policy}</SelectItem>)}
-              </SelectInput>
-            </Field>
-            <Field label={pageT("fields.topicPolicy", "Topic policy")} hint={retrievalHintT("topicPolicy")}>
-              <SelectInput aria-label={pageT("fields.topicPolicy", "Topic policy")} className="font-mono" value={form.topicPolicy} onValueChange={(event) => updateForm("topicPolicy", event!)}>
-                {topicPolicyOptions.map((policy) => <SelectItem key={policy} value={policy}>{policy}</SelectItem>)}
-              </SelectInput>
-            </Field>
-            <Field label={pageT("fields.rerankModelCode", "Rerank model code")} hint={retrievalHintT("rerankModelCode")}>
-              <TextInput aria-label={pageT("fields.rerankModelCode", "Rerank model code")} className="font-mono" value={form.rerankModelCode} onChange={(event) => updateForm("rerankModelCode", event.target.value)} />
-            </Field>
-          </div>
-          <div className="mt-4">
-            <ToggleSwitch checked={form.rerankEnabled} label={pageT("fields.enableRerank", "Enable rerank")} onCheckedChange={(checked) => updateForm("rerankEnabled", checked)} />
-          </div>
-        </SurfaceCard>
 
-        <SurfaceCard>
-          <h2 className="text-base font-semibold">{pageT("retrieval.contextStrategies.title", "Context strategies")}</h2>
-          <div className="mt-4 grid gap-3">
-            {contextStrategyOptions.map((strategyId) => (
-              <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3" key={strategyId}>
-                <span className="font-mono text-sm">{strategyId}</span>
-                <ToggleSwitch
-                  checked={form.contextStrategies.includes(strategyId)}
-                  label={pageT("retrieval.contextStrategies.enableLabel", "Enable context strategy {{strategy}}", { strategy: strategyId })}
-                  onCheckedChange={(checked) => toggleContextStrategy(strategyId, checked)}
-                />
+          <details
+            data-testid="retrieval-advanced-settings"
+            open={retrievalAdvancedOpen}
+            onToggle={(event) => setRetrievalAdvancedOpen(event.currentTarget.open)}
+          >
+            <summary className="cursor-pointer text-base font-semibold">{pageT("retrieval.advancedSettings.title", "Advanced retrieval settings")}</summary>
+            {retrievalAdvancedOpen ? (
+              <div className="mt-4 grid gap-5">
+                <section>
+                  <h3 className="text-sm font-semibold">{pageT("retrieval.resultPolicy.title", "Result policy")}</h3>
+                  <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                    <Field label={pageT("fields.fusionPolicy", "Fusion policy")} hint={retrievalHintT("fusionPolicy")}>
+                      <SelectInput aria-label={pageT("fields.fusionPolicy", "Fusion policy")} className="font-mono" value={form.fusionPolicy} onValueChange={(event) => updateForm("fusionPolicy", event!)}>
+                        {fusionPolicyOptions.map((policy) => <SelectItem key={policy} value={policy}>{policy}</SelectItem>)}
+                      </SelectInput>
+                    </Field>
+                    <Field label={pageT("fields.dedupPolicy", "Dedup policy")} hint={retrievalHintT("dedupPolicy")}>
+                      <SelectInput aria-label={pageT("fields.dedupPolicy", "Dedup policy")} className="font-mono" value={form.dedupPolicy} onValueChange={(event) => updateForm("dedupPolicy", event!)}>
+                        {dedupPolicyOptions.map((policy) => <SelectItem key={policy} value={policy}>{policy}</SelectItem>)}
+                      </SelectInput>
+                    </Field>
+                    <Field label={pageT("fields.topicPolicy", "Topic policy")} hint={retrievalHintT("topicPolicy")}>
+                      <SelectInput aria-label={pageT("fields.topicPolicy", "Topic policy")} className="font-mono" value={form.topicPolicy} onValueChange={(event) => updateForm("topicPolicy", event!)}>
+                        {topicPolicyOptions.map((policy) => <SelectItem key={policy} value={policy}>{policy}</SelectItem>)}
+                      </SelectInput>
+                    </Field>
+                    <Field label={pageT("fields.rerankModelCode", "Rerank model code")} hint={retrievalHintT("rerankModelCode")}>
+                      <TextInput aria-label={pageT("fields.rerankModelCode", "Rerank model code")} className="font-mono" value={form.rerankModelCode} onChange={(event) => updateForm("rerankModelCode", event.target.value)} />
+                    </Field>
+                  </div>
+                  <div className="mt-4">
+                    <ToggleSwitch checked={form.rerankEnabled} label={pageT("fields.enableRerank", "Enable rerank")} onCheckedChange={(checked) => updateForm("rerankEnabled", checked)} />
+                  </div>
+                </section>
+
+
+                <section>
+                  <h3 className="text-sm font-semibold">{pageT("retrieval.contextStrategies.title", "Context strategies")}</h3>
+                  <div className="mt-3 grid gap-3">
+                    {contextStrategyOptions.map((strategyId) => (
+                      <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3" key={strategyId}>
+                        <span className="font-mono text-sm">{strategyId}</span>
+                        <ToggleSwitch
+                          checked={form.contextStrategies.includes(strategyId)}
+                          label={pageT("retrieval.contextStrategies.enableLabel", "Enable context strategy {{strategy}}", { strategy: strategyId })}
+                          onCheckedChange={(checked) => toggleContextStrategy(strategyId, checked)}
+                        />
+                      </div>
+                    ))}
+                    {errors.contextStrategies ? <p className="text-[12px] text-[var(--color-error)]">{errors.contextStrategies}</p> : null}
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="text-sm font-semibold">{pageT("retrieval.graphExpansion.title", "Graph expansion")}</h3>
+                  <div className="mt-3">
+                    <Field label={pageT("fields.graphExpansionPolicy", "Graph expansion policy")} error={errors.graphExpansionPolicy} hint={retrievalHintT("graphExpansionPolicy")}>
+                      <TextInput
+                        aria-label={pageT("fields.graphExpansionPolicy", "Graph expansion policy")}
+                        className="font-mono"
+                        placeholder={enabledGraphRouteExists ? "" : pageT("retrieval.graphExpansion.disabledPlaceholder", "Select an enabled graph strategy before using this policy")}
+                        value={form.graphExpansionPolicy}
+                        onChange={(event) => updateForm("graphExpansionPolicy", event.target.value)}
+                      />
+                    </Field>
+                  </div>
+                </section>
               </div>
-            ))}
-            {errors.contextStrategies ? <p className="text-[12px] text-[var(--color-error)]">{errors.contextStrategies}</p> : null}
-          </div>
+            ) : null}
+          </details>
         </SurfaceCard>
 
         <SurfaceCard>
-          <h2 className="text-base font-semibold">{pageT("retrieval.graphExpansion.title", "Graph expansion")}</h2>
-          <div className="mt-4">
-            <Field label={pageT("fields.graphExpansionPolicy", "Graph expansion policy")} error={errors.graphExpansionPolicy} hint={retrievalHintT("graphExpansionPolicy")}>
-              <TextInput
-                aria-label={pageT("fields.graphExpansionPolicy", "Graph expansion policy")}
-                className="font-mono"
-                placeholder={enabledGraphRouteExists ? "" : pageT("retrieval.graphExpansion.disabledPlaceholder", "Select an enabled graph strategy before using this policy")}
-                value={form.graphExpansionPolicy}
-                onChange={(event) => updateForm("graphExpansionPolicy", event.target.value)}
-              />
-            </Field>
-          </div>
+          <details
+            data-testid="retrieval-filters"
+            open={retrievalFiltersOpen}
+            onToggle={(event) => setRetrievalFiltersOpen(event.currentTarget.open)}
+          >
+            <summary className="cursor-pointer text-base font-semibold">
+              {pageT("filters.title", "Profile filters")}
+              <span className="ml-3 rounded-full border border-[var(--color-outline-variant)] px-2 py-0.5 text-[12px] font-normal text-[var(--color-on-surface-variant)]">
+                {pageT("filters.count", "{{count}} filters", { count: form.filters.length })}
+              </span>
+            </summary>
+            {retrievalFiltersOpen ? (
+              <div className="mt-4 grid gap-3">
+                <div className="flex justify-end">
+                  <Button type="button" variant="secondary" onClick={addFilter}>
+                    <Plus size={16} aria-hidden="true" />
+                    {pageT("filters.add", "Add filter")}
+                  </Button>
+                </div>
+                {form.filters.map((filter, index) => (
+                  <FilterRow
+                    canRemove={true}
+                    error={errors.filterRows?.[filter.formId]}
+                    fieldOptions={filterFieldOptions}
+                    index={index}
+                    key={filter.formId}
+                    operatorOptions={operatorOptions}
+                    row={filter}
+                    onRemove={() => removeFilter(filter.formId)}
+                    onUpdate={(patch) => updateFilter(filter.formId, patch)}
+                  />
+                ))}
+                {form.filters.length === 0 ? (
+                  <p className="rounded-xl border border-dashed border-[var(--color-outline-variant)] p-4 text-sm text-[var(--color-on-surface-variant)]">
+                    {pageT("filters.empty", "No profile filters. Add one only when every request should include the same fixed condition.")}
+                  </p>
+                ) : null}
+                {errors.filters ? <p className="text-[12px] text-[var(--color-error)]">{errors.filters}</p> : null}
+              </div>
+            ) : null}
+          </details>
         </SurfaceCard>
 
-        <SurfaceCard>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <h2 className="text-base font-semibold">{pageT("filters.title", "Profile filters")}</h2>
-            <Button type="button" variant="secondary" onClick={addFilter}>
-              <Plus size={16} aria-hidden="true" />
-              {pageT("filters.add", "Add filter")}
-            </Button>
-          </div>
-          <div className="mt-4 grid gap-3">
-            {form.filters.map((filter, index) => (
-              <FilterRow
-                canRemove={true}
-                error={errors.filterRows?.[filter.formId]}
-                fieldOptions={filterFieldOptions}
-                index={index}
-                key={filter.formId}
-                operatorOptions={operatorOptions}
-                row={filter}
-                onRemove={() => removeFilter(filter.formId)}
-                onUpdate={(patch) => updateFilter(filter.formId, patch)}
-              />
-            ))}
-            {errors.filters ? <p className="text-[12px] text-[var(--color-error)]">{errors.filters}</p> : null}
-          </div>
-        </SurfaceCard>
-
-        <PayloadPreview payload={payloadPreview} />
-        <VerifyResultCard result={verifyResult} />
         <ValidationSummary errors={validationMessages} />
       </form>
     </>

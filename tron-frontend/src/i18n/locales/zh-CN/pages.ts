@@ -678,6 +678,8 @@ export const pages = {
       },
       filters: {
         add: "添加筛选条件",
+        count: "{{count}} 个筛选",
+        empty: "暂无配置筛选条件。只有每次请求都需要携带同一个固定条件时才添加。",
         fieldAria: "筛选条件 {{index}} 字段",
         operatorAria: "筛选条件 {{index}} 操作符",
         removeAria: "移除筛选条件 {{index}}",
@@ -729,28 +731,29 @@ export const pages = {
       ingest: {
         advancedNodes: {
           barrier: "控制屏障",
+          collapseConfig: "收起配置",
+          configureConfig: "配置",
           description: "当所选模板需要自定义阶段组合时使用这些控制项。",
+          enableFirst: "先启用",
           enableNode: "启用 {{stage}} 节点",
           mustRunBefore: "必须先于 {{stages}} 运行",
           required: "必需",
           title: "高级节点控制",
         },
-        developerContract: {
-          input: "输入：",
-          output: "输出：",
-          title: "开发者契约",
-        },
         inputContract: {
           description: "这些字段定义工作台和写入 API 对该配置接受的输入。",
           title: "输入契约",
         },
+        pipelineSettings: {
+          advanced: "高级流水线设置",
+          defaultPipeline: "默认写入流水线",
+          mode: "写入方式",
+          title: "写入流水线",
+        },
         stageStrategies: {
-          empty: "先在上方启用一个或多个阶段，再配置阶段策略。",
           noAvailableStrategy: "该阶段和语料库暂无可用策略。",
           noStrategy: "暂无支持策略",
-          selectStrategy: "选择阶段策略",
           strategyAria: "{{stage}} 策略 ID",
-          title: "阶段策略",
         },
         summary: {
           enabledStages: "启用阶段",
@@ -837,17 +840,19 @@ export const pages = {
         to: "目标节点",
       },
       pipelineFlow: {
-        description: "保存后的流水线保持 DAG 结构。同一列的分支可并行运行，节点卡片展示真实出边。",
+        detailNodeId: "节点 ID",
+        detailStageType: "阶段类型",
+        detailStrategy: "策略",
+        diagramAria: "流水线 DAG 图",
         edgeDetails: "边详情",
         empty: "应用模板或启用节点后可预览 DAG。",
         enabledNodes: "{{count}} 个启用节点",
-        endpoint: "终点",
-        level: "第 {{index}} 层",
-        parallel: "并行",
-        targetNodes: "目标节点",
         title: "流水线流向",
       },
       retrieval: {
+        advancedSettings: {
+          title: "高级检索设置",
+        },
         contextStrategies: {
           enableLabel: "启用上下文策略 {{strategy}}",
           title: "上下文策略",
@@ -940,15 +945,11 @@ export const pages = {
         title: "校验摘要",
       },
       values: {
+        enabled: "已启用",
         noStrategy: "未设置策略",
         none: "无",
         notSet: "未设置",
-      },
-      verify: {
-        passed: "后端校验通过。",
-        pending: "保存配置前会运行后端校验。",
-        rejected: "后端拒绝了该配置。",
-        title: "校验结果",
+        off: "未开启",
       },
     },
   },

@@ -88,7 +88,45 @@ function pipelineNode(body: Record<string, unknown> | undefined, stageType: stri
 }
 
 async function openAdvancedNodeControls(page: Page) {
-  await page.locator("summary").filter({ hasText: /Advanced node controls|高级节点控制/i }).click();
+  const controls = page.getByTestId("advanced-node-controls");
+  await expect(controls).toBeVisible();
+  if ((await controls.getAttribute("open")) === null) await controls.locator("summary").click();
+  await expect(controls).toHaveAttribute("open", "");
+}
+
+async function openAdvancedNodeConfig(page: Page, stageId: string) {
+  await openAdvancedNodeControls(page);
+  const nodeCard = page.getByTestId(`advanced-node-${stageId}`);
+  const trigger = page.getByTestId(`advanced-node-trigger-${stageId}`);
+  if (await trigger.isDisabled()) {
+    const toggle = nodeCard.locator("button[aria-pressed]").first();
+    await toggle.click();
+  }
+  if (await trigger.getAttribute("aria-expanded") !== "true") await trigger.click();
+  await expect(page.getByTestId(`advanced-node-config-${stageId}`)).toBeVisible();
+}
+
+async function expectAdvancedNodeConfigClosed(page: Page, stageId: string) {
+  await expect(page.getByTestId(`advanced-node-config-${stageId}`)).toHaveCount(0);
+}
+
+async function expectNoStageStrategyPlaceholder(page: Page, stageId: string, labelPattern: RegExp) {
+  await openAdvancedNodeConfig(page, stageId);
+  await expect(page.getByLabel(labelPattern)).not.toContainText(/Select stage strategy|选择阶段策略/i);
+}
+
+async function openRetrievalAdvancedSettings(page: Page) {
+  const advanced = page.getByTestId("retrieval-advanced-settings");
+  await expect(advanced).toBeVisible();
+  if ((await advanced.getAttribute("open")) === null) await advanced.locator("summary").click();
+  await expect(advanced).toHaveAttribute("open", "");
+}
+
+async function openRetrievalFilters(page: Page) {
+  const filters = page.getByTestId("retrieval-filters");
+  await expect(filters).toBeVisible();
+  if ((await filters.getAttribute("open")) === null) await filters.locator("summary").click();
+  await expect(filters).toHaveAttribute("open", "");
 }
 
 function routeCorpusLabel(index: number) {
@@ -102,6 +140,7 @@ function routeStrategyLabel(index: number) {
 const label = {
   contextStrategy: /Context strategy|上下文策略/i,
   description: /Description|描述/i,
+  embeddingVersion: /Embedding version|嵌入版本/i,
   headingDepth: /Heading depth|标题深度/i,
   ingestProfile: /Ingest profile|写入配置/i,
   limit: /Limit|限制数量|返回数量/i,
@@ -183,26 +222,58 @@ test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem("tron.locale", "en-US"));
 });
 
-test("pipeline flow shows actual outgoing targets for parallel branches", async ({ page }) => {
+test("pipeline flow draws connected edges for serial and parallel branches", async ({ page }) => {
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
   await page.goto(`${frontendBaseUrl}/rag/profiles/ingest/new?returnProfileType=ingest`);
-  await expect(page.getByRole("heading", { name: /Pipeline flow|流水线流向/i })).toBeVisible();
-  await openAdvancedNodeControls(page);
-  await page.getByRole("button", { name: buttonName.enableSplitText }).click();
-  await page.getByRole("button", { name: buttonName.enableExtractTree }).click();
-  await page.getByRole("button", { name: buttonName.enableSummarizeTree }).click();
-  await page.getByRole("button", { name: buttonName.enableFulltextIndex }).click();
-  await page.getByRole("button", { name: buttonName.enableVectorIndex }).click();
-  await page.getByRole("button", { name: buttonName.enablePersistSource }).click();
+  const templateHeading = page.getByRole("heading", { name: /Pipeline templates|流水线模板/i });
+  await expect(templateHeading).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Write pipeline|写入流水线/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Advanced pipeline settings|高级流水线设置/i })).toHaveCount(0);
+  await expect(page.getByText(/Pipeline flow|流水线流向/i)).toBeVisible();
+  await page.getByLabel(label.primaryCorpus).selectOption("project-doc");
+  await expect(page.getByTestId("advanced-node-controls")).not.toHaveAttribute("open", "");
 
   const flow = page.getByTestId("pipeline-flow");
+  await expect(flow.locator("svg")).toBeHidden();
+  await flow.getByTestId("pipeline-flow-summary").click();
+  await expect(flow.locator("svg")).toBeVisible();
+  await expect(flow).not.toContainText("Level 1");
+  await expect(flow).not.toContainText("Parallel");
   const fulltextNode = flow.getByTestId("pipeline-flow-node-fulltext-index");
-  await expect(fulltextNode).toContainText("→ persist-source");
+  const fulltextNodeGroup = flow.getByTestId("pipeline-flow-node-group-fulltext-index");
+  await expect(fulltextNode).toContainText("Fulltext index");
+  await expect(fulltextNode).not.toContainText("RAG_FULLTEXT_INDEX");
+  await expect(fulltextNode).toHaveAttribute("title", /Strategy: RAG_FULLTEXT_INDEX/);
+  await expect(fulltextNodeGroup).toHaveAttribute("aria-label", /Strategy: RAG_FULLTEXT_INDEX/);
+  await expect(flow.getByTestId("pipeline-flow-edge-split-text-extract-tree")).toHaveCount(1);
+  await expect(flow.getByTestId("pipeline-flow-edge-split-text-fulltext-index")).toHaveCount(1);
+  await expect(flow.getByTestId("pipeline-flow-edge-fulltext-index-persist-source")).toHaveCount(1);
   await expect(fulltextNode).not.toContainText("summarize-tree");
-  await expect(flow.getByTestId("pipeline-flow-node-vector-index")).toContainText("→ persist-source");
-  await expect(flow.getByTestId("pipeline-flow-node-extract-tree")).toContainText("→ summarize-tree");
+  await expect(flow.getByTestId("pipeline-flow-edge-vector-index-persist-source")).toHaveCount(1);
+  await expect(flow.getByTestId("pipeline-flow-edge-extract-tree-summarize-tree")).toHaveCount(1);
+
+  await openAdvancedNodeControls(page);
+  const vectorToggle = page.getByRole("button", { name: buttonName.enableVectorIndex });
+  const vectorTrigger = page.getByTestId("advanced-node-trigger-vectorIndex");
+  await expect(vectorToggle).toHaveAttribute("aria-pressed", "true");
+  await vectorTrigger.click();
+  await page.getByLabel(label.embeddingVersion).fill("custom-v2");
+  await expect(page.getByLabel(label.embeddingVersion)).toHaveValue("custom-v2");
+  await vectorToggle.click();
+  await expect(vectorToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(vectorTrigger).toBeDisabled();
+  await expect(vectorTrigger).toContainText(/Enable first|先启用/i);
+  await expectAdvancedNodeConfigClosed(page, "vectorIndex");
+  await vectorToggle.click();
+  await expect(vectorToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(vectorTrigger).toBeEnabled();
+  await expect(page.getByTestId("advanced-node-config-vectorIndex")).toBeVisible();
+  await expect(page.getByLabel(label.embeddingVersion)).toHaveValue("v1");
+  await page.getByTestId("advanced-node-trigger-fulltextIndex").click();
+  await expect(page.getByTestId("advanced-node-config-fulltextIndex")).toBeVisible();
+  await expectAdvancedNodeConfigClosed(page, "vectorIndex");
 });
 
 test("creates and edits ingest profiles through management APIs", async ({ page }) => {
@@ -216,24 +287,25 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await page.getByRole("button", { name: buttonName.addIngestProfile }).click();
   await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/new(\?.*)?$/);
   await expect(page.getByRole("heading", { name: /(?:Create|New) Ingest Profile|新建写入配置/i })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Pipeline flow|流水线流向/i })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Stage (?:Config|strategies)|阶段策略/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Write pipeline|写入流水线/i })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: /Pipeline templates|流水线模板/i })).toBeVisible();
+  await expect(page.getByText(/Pipeline flow|流水线流向/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: /Advanced pipeline settings|高级流水线设置/i })).toHaveCount(0);
+  await expect(page.getByTestId("advanced-node-controls")).not.toHaveAttribute("open", "");
+  await expect(page.getByRole("heading", { name: /Stage (?:Config|strategies)|阶段策略/i })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Stage Bindings" })).toHaveCount(0);
 
   await page.getByLabel(label.profileId).fill("support-notes-ingest-v1");
   await page.getByLabel(label.primaryCorpus).selectOption("project-doc");
   await page.getByLabel(label.description).fill("Ingest support notes and incident runbooks.");
-  await openAdvancedNodeControls(page);
-  await page.getByRole("button", { name: buttonName.enablePreparePayload }).click();
-  await page.getByRole("button", { name: buttonName.enableSplitText }).click();
-  await page.getByRole("button", { name: buttonName.enableExtractTree }).click();
-  await page.getByRole("button", { name: buttonName.enableSummarizeTree }).click();
-  await page.getByRole("button", { name: buttonName.enableTreeFulltextIndex }).click();
-  await page.getByRole("button", { name: buttonName.enableTreeVectorIndex }).click();
-  await page.getByRole("button", { name: buttonName.enablePersistTree }).click();
-  await page.getByRole("button", { name: buttonName.enablePersistSource }).click();
+  await expectNoStageStrategyPlaceholder(page, "validateSource", /VALIDATE_SOURCE (strategy ID|策略标识)/);
+  await expectNoStageStrategyPlaceholder(page, "preparePayload", /PREPARE_PAYLOAD (strategy ID|策略标识)/);
   await page.getByLabel(/PREPARE_PAYLOAD (strategy ID|策略标识)/).selectOption("RAG_TEXT_CONTRACT_PAYLOAD_V1");
+  await expectNoStageStrategyPlaceholder(page, "resolveSource", /RESOLVE_SOURCE (strategy ID|策略标识)/);
+  await openAdvancedNodeConfig(page, "splitText");
+  await expectAdvancedNodeConfigClosed(page, "preparePayload");
   const splitStrategySelect = page.getByLabel(label.splitStrategy);
+  await expect(splitStrategySelect).not.toContainText(/Select stage strategy|选择阶段策略/i);
   await expect(splitStrategySelect).toContainText("RAG_SPLIT_PLAIN_TEXT_V1");
   await expect(splitStrategySelect).toContainText("RAG_SPLIT_MARKDOWN_HEADING_V1");
   await expect(splitStrategySelect).toContainText("RAG_SPLIT_TEXT");
@@ -244,11 +316,26 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await expect(page.getByLabel(label.headingDepth)).toHaveValue("6");
   await splitStrategySelect.selectOption("RAG_SPLIT_PLAIN_TEXT_V1");
   await expect(page.getByLabel(label.splitterType)).toHaveValue("plainText");
+  await expectNoStageStrategyPlaceholder(page, "parseDocument", /PARSE_DOCUMENT (strategy ID|策略标识)/);
+  await expectNoStageStrategyPlaceholder(page, "fulltextIndex", /(^|[^_])FULLTEXT_INDEX (strategy ID|策略标识)/);
+  await expectNoStageStrategyPlaceholder(page, "vectorIndex", label.vectorStrategy);
+  await openAdvancedNodeConfig(page, "extractTree");
+  await expect(page.getByLabel(/EXTRACT_TREE (strategy ID|策略标识)/)).not.toContainText(/Select stage strategy|选择阶段策略/i);
   await page.getByLabel(/EXTRACT_TREE (strategy ID|策略标识)/).selectOption("RAG_MARKDOWN_TREE_EXTRACT_V1");
+  await openAdvancedNodeConfig(page, "summarizeTree");
+  await expect(page.getByLabel(/SUMMARIZE_TREE (strategy ID|策略标识)/)).not.toContainText(/Select stage strategy|选择阶段策略/i);
   await page.getByLabel(/SUMMARIZE_TREE (strategy ID|策略标识)/).selectOption("RAG_TREE_LLM_SUMMARY_V1");
+  await openAdvancedNodeConfig(page, "treeFulltextIndex");
+  await expect(page.getByLabel(/TREE_FULLTEXT_INDEX (strategy ID|策略标识)/)).not.toContainText(/Select stage strategy|选择阶段策略/i);
   await page.getByLabel(/TREE_FULLTEXT_INDEX (strategy ID|策略标识)/).selectOption("RAG_TREE_FULLTEXT_INDEX");
+  await openAdvancedNodeConfig(page, "treeVectorIndex");
+  await expect(page.getByLabel(/TREE_VECTOR_INDEX (strategy ID|策略标识)/)).not.toContainText(/Select stage strategy|选择阶段策略/i);
   await page.getByLabel(/TREE_VECTOR_INDEX (strategy ID|策略标识)/).selectOption("RAG_TREE_VECTOR_INDEX");
+  await openAdvancedNodeConfig(page, "persistTree");
+  await expect(page.getByLabel(/PERSIST_TREE (strategy ID|策略标识)/)).not.toContainText(/Select stage strategy|选择阶段策略/i);
   await page.getByLabel(/PERSIST_TREE (strategy ID|策略标识)/).selectOption("RAG_PERSIST_TREE_GRAPH_V1");
+  await openAdvancedNodeConfig(page, "persistSource");
+  await expect(page.getByLabel(/PERSIST_SOURCE (strategy ID|策略标识)/)).not.toContainText(/Select stage strategy|选择阶段策略/i);
   await page.getByLabel(/PERSIST_SOURCE (strategy ID|策略标识)/).selectOption("RAG_PERSIST_SOURCE");
   await page.getByLabel(label.supportedSourceTypes).fill("RUNBOOK, INCIDENT_NOTE");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
@@ -261,17 +348,19 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/support-notes-ingest-v1\/edit(\?.*)?$/);
   await expect(page.getByLabel(label.profileId)).toBeDisabled();
   await expect(page.getByLabel(label.description)).toHaveValue("Ingest support notes and incident runbooks.");
-  await expect(page.getByRole("heading", { name: /Pipeline flow|流水线流向/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Write pipeline|写入流水线/i })).toHaveCount(0);
+  await expect(page.getByText(/Pipeline flow|流水线流向/i)).toBeVisible();
 
   await page.getByLabel(label.description).fill("Ingest support notes, incident runbooks, and QA handbooks.");
-  await openAdvancedNodeControls(page);
-  await page.getByRole("button", { name: buttonName.enableVectorIndex }).click();
+  await openAdvancedNodeConfig(page, "splitText");
   await page.getByLabel(label.splitStrategy).selectOption("RAG_SPLIT_MARKDOWN_HEADING_V1");
   await expect(page.getByLabel(label.splitterType)).toHaveValue("markdownHeading");
   await expect(page.getByLabel(label.headingDepth)).toHaveValue("6");
+  await openAdvancedNodeConfig(page, "summarizeTree");
   const summarizeStrategySelect = page.getByLabel(/SUMMARIZE_TREE (strategy ID|策略标识)/);
   await expect(summarizeStrategySelect).toContainText("RAG_TREE_LLM_SUMMARY_V1");
   await summarizeStrategySelect.selectOption("RAG_TREE_LLM_SUMMARY_V1");
+  await openAdvancedNodeConfig(page, "vectorIndex");
   await page.getByLabel(label.vectorStrategy).selectOption("RAG_VECTOR_INDEX");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
@@ -395,6 +484,7 @@ test("preserves legacy split strategy when editing existing ingest profiles", as
 
   await page.goto(`${frontendBaseUrl}/rag/profiles/ingest/project-doc-ingest-v1/edit`);
   await expect(page.getByRole("heading", { name: /Edit ingest profile|编辑写入配置/i })).toBeVisible();
+  await openAdvancedNodeConfig(page, "splitText");
   const splitStrategySelect = page.getByLabel(label.splitStrategy);
   await expect(splitStrategySelect).toContainText("RAG_SPLIT_PLAIN_TEXT_V1");
   await expect(splitStrategySelect).toContainText("RAG_SPLIT_MARKDOWN_HEADING_V1");
@@ -549,8 +639,10 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
   await expect(page.getByRole("heading", { name: headingName.newRetrievalProfile })).toBeVisible();
   await expect(page.getByRole("heading", { name: headingName.retrievalRoutes })).toBeVisible();
   await expect(page.getByRole("heading", { name: headingName.retrievalFlow })).toBeVisible();
-  await expect(page.getByText(/Backend payload preview|Developer preview|开发者预览/i)).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Verification result|Verify Result|校验结果/i })).toBeVisible();
+  await expect(page.getByText(/Backend payload preview|Developer preview|开发者预览/i)).toHaveCount(0);
+  await expect(page.getByTestId("retrieval-advanced-settings")).not.toHaveAttribute("open", "");
+  await expect(page.getByTestId("retrieval-filters")).not.toHaveAttribute("open", "");
+  await expect(page.getByRole("heading", { name: /Verification result|Verify Result|校验结果/i })).toHaveCount(0);
 
   await page.getByLabel(label.profileId).fill("support-fusion-v1");
   await page.getByLabel(/Status|状态/).selectOption("Ready");
@@ -567,6 +659,7 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
   await page.getByRole("button", { name: buttonName.addRoute }).click();
   await page.getByLabel(routeCorpusLabel(4)).selectOption("project-doc");
   await page.getByLabel(routeStrategyLabel(4)).selectOption("TREE_VECTOR_V1");
+  await openRetrievalFilters(page);
   await page.getByRole("button", { name: buttonName.addFilter }).click();
   await page.getByLabel(/Filter 1 field|筛选条件 1 字段/).selectOption("scopeCode");
   await page.getByLabel(/Filter 1 operator|筛选条件 1 操作符/).selectOption("eq");
@@ -581,9 +674,11 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
   await expect(page).toHaveURL(/\/rag\/profiles\/retrieval\/support-fusion-v1\/edit(\?.*)?$/);
   await expect(page.getByLabel(routeCorpusLabel(1))).toHaveValue("memory-card");
   await expect(page.getByLabel(routeCorpusLabel(2))).toHaveValue("project-doc");
+  await openRetrievalFilters(page);
   await expect(page.getByLabel(/Filter 1 value|筛选条件 1 值/)).toHaveValue("TRON_CORE");
 
   await page.getByLabel(label.description).fill("Fuse memory, documentation, and curated support signals.");
+  await openRetrievalAdvancedSettings(page);
   await page.getByLabel(label.topicPolicy).selectOption("EMBEDDING_MMR_V1");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
