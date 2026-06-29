@@ -18,6 +18,7 @@ import {
   DiagnosticPreview,
   SectionTitle,
 } from "@/domain/rag/components/RagShared";
+import { SelectItem } from "@/components/ui/select";
 
 export function RagDiagnosticsTab({ onNotice }: { onNotice: (notice: string) => void }) {
   const { t } = useTranslation("pages");
@@ -33,9 +34,9 @@ export function RagDiagnosticsTab({ onNotice }: { onNotice: (notice: string) => 
         <div className="mt-4 grid gap-3">
           <Field label={pageT("config.profileId", "Profile ID")}>
             <SelectInput defaultValue="project-doc-related-v1">
-              <option value="project-doc-related-v1">{pageT("config.options.projectDoc", "Project document relevance profile")}</option>
-              <option value="memory-related-v1">{pageT("config.options.memory", "Memory relevance profile")}</option>
-              <option value="skill-related-v1">{pageT("config.options.skill", "Skill relevance profile")}</option>
+              <SelectItem value="project-doc-related-v1">{pageT("config.options.projectDoc", "Project document relevance profile")}</SelectItem>
+              <SelectItem value="memory-related-v1">{pageT("config.options.memory", "Memory relevance profile")}</SelectItem>
+              <SelectItem value="skill-related-v1">{pageT("config.options.skill", "Skill relevance profile")}</SelectItem>
             </SelectInput>
           </Field>
           <Button variant="secondary" onClick={() => onNotice(pageT("messages.configLoaded", "Profile debug preview refreshed."))}>
@@ -77,8 +78,8 @@ export function RagDiagnosticsTab({ onNotice }: { onNotice: (notice: string) => 
         <div className="mt-4 grid gap-3">
           <Field label={pageT("retry.stage", "Stage")}>
             <SelectInput defaultValue="vectorIndex">
-              <option value="fulltextIndex">{pageT("retry.options.fulltextIndex", "Fulltext index")}</option>
-              <option value="vectorIndex">{pageT("retry.options.vectorIndex", "Vector index")}</option>
+              <SelectItem value="fulltextIndex">{pageT("retry.options.fulltextIndex", "Fulltext index")}</SelectItem>
+              <SelectItem value="vectorIndex">{pageT("retry.options.vectorIndex", "Vector index")}</SelectItem>
             </SelectInput>
           </Field>
           <Field label={pageT("retry.reason", "Reason")}>

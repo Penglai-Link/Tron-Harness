@@ -48,6 +48,7 @@ import type {
   TaskSourceType,
   TaskType,
 } from "@/domain/task/model";
+import { SelectItem } from "@/components/ui/select";
 
 function toggleCode(codes: string[], code: string) {
   return codes.includes(code) ? codes.filter((item) => item !== code) : [...codes, code];
@@ -252,20 +253,20 @@ export function CreateTaskPage() {
         </Field>
         <div className="grid gap-6 xl:grid-cols-2">
           <Field label="Priority">
-            <SelectInput aria-label="Priority" value={priority} onChange={(event) => setPriority(event.target.value as TaskPriority)}>
-              {options.priorities.map((item) => <option key={item}>{item}</option>)}
+            <SelectInput aria-label="Priority" value={priority} onValueChange={(event) => setPriority(event as TaskPriority)}>
+              {options.priorities.map((item) => <SelectItem key={item}>{item}</SelectItem>)}
             </SelectInput>
           </Field>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
           <Field label="Task Type">
-            <SelectInput aria-label="Task Type" value={taskType} onChange={(event) => setTaskType(event.target.value as TaskType)}>
-              {options.taskTypes.map((item) => <option key={item}>{item}</option>)}
+            <SelectInput aria-label="Task Type" value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
+              {options.taskTypes.map((item) => <SelectItem key={item}>{item}</SelectItem>)}
             </SelectInput>
           </Field>
           <Field label="Source Type">
-            <SelectInput aria-label="Source Type" value={sourceType} onChange={(event) => setSourceType(event.target.value as TaskSourceType)}>
-              {options.sourceTypes.map((item) => <option key={item}>{item}</option>)}
+            <SelectInput aria-label="Source Type" value={sourceType} onValueChange={(event) => setSourceType(event as TaskSourceType)}>
+              {options.sourceTypes.map((item) => <SelectItem key={item}>{item}</SelectItem>)}
             </SelectInput>
           </Field>
           <Field label="Source URL">

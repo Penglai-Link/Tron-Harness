@@ -58,6 +58,7 @@ import {
   platformMcpServerEnabledTone,
   platformMcpServerStateTone,
 } from "./mcpServerPageHelpers";
+import { SelectItem } from "@/components/ui/select";
 
 type StatusFilter = "all" | "enabled" | "disabled" | "healthy" | "unhealthy" | "never_checked";
 
@@ -325,14 +326,14 @@ export function PlatformMcpServersPage() {
                 aria-label={pageT("table.statusAria", "Filter MCP server status")}
                 className="w-full sm:w-48"
                 value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+                onValueChange={(event) => setStatusFilter(event as StatusFilter)}
               >
-                <option value="all">{pageT("table.status.all", "All statuses")}</option>
-                <option value="enabled">{pageT("table.status.enabled", "Enabled")}</option>
-                <option value="disabled">{pageT("table.status.disabled", "Disabled")}</option>
-                <option value="healthy">{pageT("table.status.healthy", "Healthy")}</option>
-                <option value="unhealthy">{pageT("table.status.unhealthy", "Unhealthy")}</option>
-                <option value="never_checked">{pageT("table.status.neverChecked", "Never checked")}</option>
+                <SelectItem value="all">{pageT("table.status.all", "All statuses")}</SelectItem>
+                <SelectItem value="enabled">{pageT("table.status.enabled", "Enabled")}</SelectItem>
+                <SelectItem value="disabled">{pageT("table.status.disabled", "Disabled")}</SelectItem>
+                <SelectItem value="healthy">{pageT("table.status.healthy", "Healthy")}</SelectItem>
+                <SelectItem value="unhealthy">{pageT("table.status.unhealthy", "Unhealthy")}</SelectItem>
+                <SelectItem value="never_checked">{pageT("table.status.neverChecked", "Never checked")}</SelectItem>
               </SelectInput>
             </>
           )}

@@ -1,3 +1,4 @@
+import { SelectItem } from "@/components/ui/select";
 import { SelectInput } from "@/shared/ui/Forms";
 
 export interface OptionSelectItem {
@@ -36,16 +37,16 @@ export function OptionSelect({
       disabled={disabled}
       id={id}
       value={value}
-      onChange={(event) => onChange(event.target.value)}
+      onValueChange={(event) => onChange(event!)}
     >
       {options.length ? options.map((option) => (
-        <option disabled={option.disabled} key={option.value} value={option.value}>
+        <SelectItem disabled={option.disabled} key={option.value} value={option.value}>
           {option.label}
-        </option>
+        </SelectItem>
       )) : (
-        <option value="">
+        <SelectItem value="">
           {loading ? loadingLabel : emptyLabel}
-        </option>
+        </SelectItem>
       )}
     </SelectInput>
   );

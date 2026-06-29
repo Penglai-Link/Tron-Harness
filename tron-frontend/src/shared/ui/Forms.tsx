@@ -10,6 +10,9 @@ import { cloneElement, forwardRef, isValidElement, useId } from "react";
 
 import { cn } from "@/shared/lib/utils";
 import { InfoTooltip } from "@/shared/ui/InfoTooltip";
+import { Select, SelectLabel, SelectPopup, SelectPrimitive, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 
 interface FieldProps {
   children: ReactNode;
@@ -75,7 +78,7 @@ export const TextInput = forwardRef(function TextInput(
   ref: ForwardedRef<HTMLInputElement>,
 ) {
   return (
-    <input
+    <Input
       ref={ref}
       className={cn(
         "h-10 min-w-0 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 text-sm text-[var(--color-on-surface)] outline-none transition-colors placeholder:text-[var(--color-outline)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-focus-ring)]/20",
@@ -92,7 +95,7 @@ export const TextArea = forwardRef(function TextArea(
   ref: ForwardedRef<HTMLTextAreaElement>,
 ) {
   return (
-    <textarea
+    <Textarea
       ref={ref}
       className={cn(
         "min-h-28 min-w-0 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm text-[var(--color-on-surface)] outline-none transition-colors placeholder:text-[var(--color-outline)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-focus-ring)]/20",
@@ -104,16 +107,25 @@ export const TextArea = forwardRef(function TextArea(
   );
 });
 
-export function SelectInput({ className, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
+
+
+export function SelectInput<Value, Multiple extends boolean | undefined = false>({ className, children, ...props }: SelectPrimitive.Root.Props<Value, Multiple> & { className?: string; }) {
+
   return (
-    <select
-      className={cn(
-        "h-10 min-w-0 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 text-sm text-[var(--color-on-surface)] outline-none transition-colors focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-focus-ring)]/20",
-        disabledControlClasses,
-        className,
-      )}
-      {...props}
-    />
+    <>
+      <Select {...props}>
+        <SelectTrigger className={cn(
+          "h-10 min-w-0 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 text-sm text-[var(--color-on-surface)] outline-none transition-colors focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-focus-ring)]/20",
+          disabledControlClasses,
+          className,
+        )}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectPopup alignItemWithTrigger={false}>
+          {children}
+        </SelectPopup>
+      </Select>
+    </>
   );
 }
 

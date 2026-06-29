@@ -42,6 +42,7 @@ import { updateTaskStatus } from "@/domain/task/api";
 import { updateMockTaskStatus } from "@/domain/task/mock/data";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { cn } from "@/shared/lib/utils";
+import { SelectItem } from "@/components/ui/select";
 
 type BoardScalePreset = "fit" | "100" | "90" | "80" | "70" | "60" | "50";
 
@@ -418,125 +419,125 @@ export function TasksKanbanPage() {
 
   return (
     <div className="flex min-h-[calc(100vh-6.5rem)] flex-col">
-        <PageHeader
-          title="Task Management"
-          actions={
-            <>
-              <SelectInput aria-label="Task board scale" className="w-[128px] bg-white" value={boardScalePreset} onChange={(event) => setBoardScalePreset(event.target.value as BoardScalePreset)}>
-                <option value="fit">{`Fit (${boardScalePercent}%)`}</option>
-                {BOARD_SCALE_PRESETS.map((preset) => <option key={preset.value} value={preset.value}>{preset.label}</option>)}
-              </SelectInput>
-              <Button variant="secondary" onClick={() => {
-                refresh();
-                toast.success("Task board refreshed");
-              }}><RefreshCcw size={16} aria-hidden="true" />Refresh</Button>
-              <Button onClick={() => navigate("/tasks/new")}><Plus size={16} aria-hidden="true" />New</Button>
-            </>
-          }
-        />
-        <SurfaceCard className="mb-4 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_180px_220px]">
-          <div className="grid gap-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Search</span>
-            <SearchField placeholder="Filter task code, title, or description..." value={searchInput} onChange={setSearchInput} />
-          </div>
-          <div className="grid gap-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Task Type</span>
-            <SelectInput aria-label="Task type filter" value={taskType} onChange={(event) => setTaskType(event.target.value as TaskType)}>
-              {options.taskTypes.map((item) => <option key={item} value={item}>{item}</option>)}
+      <PageHeader
+        title="Task Management"
+        actions={
+          <>
+            <SelectInput aria-label="Task board scale" className="w-[128px] bg-white" value={boardScalePreset} onValueChange={(event) => setBoardScalePreset(event as BoardScalePreset)}>
+              <SelectItem value="fit">{`Fit (${boardScalePercent}%)`}</SelectItem>
+              {BOARD_SCALE_PRESETS.map((preset) => <SelectItem key={preset.value} value={preset.value}>{preset.label}</SelectItem>)}
             </SelectInput>
-          </div>
-          <div className="grid gap-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Priority</span>
-            <SelectInput aria-label="Task priority filter" value={priority} onChange={(event) => setPriority(event.target.value)}>
-              <option value="">All priorities</option>
-              {options.priorities.map((item) => <option key={item} value={item}>{item}</option>)}
-            </SelectInput>
-          </div>
-        </SurfaceCard>
-        <div className="flex min-h-0 flex-1 overflow-x-auto pb-4" ref={boardViewportRef} style={{ gap: `${boardLayout.columnGap}px` }}>
-          {rootTaskColumns.map((column) => (
-            <section
-              aria-label={`${column.title} task column`}
-              className={cn(
-                "flex shrink-0 flex-col rounded-2xl bg-[var(--color-surface-container)] transition-[background-color,box-shadow,border-color] duration-150",
-                dragOverState?.status === column.status
-                  ? dragOverState.allowed
-                    ? "bg-[var(--color-primary)]/6 ring-1 ring-inset ring-[var(--color-primary)]/20"
-                    : "bg-[var(--color-error-container)]/40 ring-1 ring-inset ring-[var(--color-error)]/15"
-                  : "",
-              )}
-              data-task-kanban-column={column.status}
-              data-testid={`task-kanban-dropzone-${column.status}`}
-              key={column.status}
-              onDragLeave={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                  setDragOverState(null);
-                }
-              }}
+            <Button variant="secondary" onClick={() => {
+              refresh();
+              toast.success("Task board refreshed");
+            }}><RefreshCcw size={16} aria-hidden="true" />Refresh</Button>
+            <Button onClick={() => navigate("/tasks/new")}><Plus size={16} aria-hidden="true" />New</Button>
+          </>
+        }
+      />
+      <SurfaceCard className="mb-4 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_180px_220px]">
+        <div className="grid gap-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Search</span>
+          <SearchField placeholder="Filter task code, title, or description..." value={searchInput} onChange={setSearchInput} />
+        </div>
+        <div className="grid gap-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Task Type</span>
+          <SelectInput aria-label="Task type filter" value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
+            {options.taskTypes.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+          </SelectInput>
+        </div>
+        <div className="grid gap-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Priority</span>
+          <SelectInput aria-label="Task priority filter" value={priority} onValueChange={(event) => setPriority(event!)}>
+            <SelectItem value="">All priorities</SelectItem>
+            {options.priorities.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
+          </SelectInput>
+        </div>
+      </SurfaceCard>
+      <div className="flex min-h-0 flex-1 overflow-x-auto pb-4" ref={boardViewportRef} style={{ gap: `${boardLayout.columnGap}px` }}>
+        {rootTaskColumns.map((column) => (
+          <section
+            aria-label={`${column.title} task column`}
+            className={cn(
+              "flex shrink-0 flex-col rounded-2xl bg-[var(--color-surface-container)] transition-[background-color,box-shadow,border-color] duration-150",
+              dragOverState?.status === column.status
+                ? dragOverState.allowed
+                  ? "bg-[var(--color-primary)]/6 ring-1 ring-inset ring-[var(--color-primary)]/20"
+                  : "bg-[var(--color-error-container)]/40 ring-1 ring-inset ring-[var(--color-error)]/15"
+                : "",
+            )}
+            data-task-kanban-column={column.status}
+            data-testid={`task-kanban-dropzone-${column.status}`}
+            key={column.status}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setDragOverState(null);
+              }
+            }}
+            onDragOver={(event) => handleColumnDragOver(column.status, event)}
+            onDrop={(event) => handleColumnDrop(column.status, event)}
+            style={{
+              gap: `${boardLayout.columnGap}px`,
+              padding: `${boardLayout.columnPadding}px`,
+              width: `${boardLayout.columnWidth}px`,
+            }}
+          >
+            <div className="flex items-center justify-between border-b-2 border-[var(--color-outline-variant)] px-1 py-1">
+              <h2 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{column.title}</h2>
+              <span
+                className={cn(
+                  "rounded-full px-2.5 py-0.5 text-[11px] transition-colors",
+                  dragOverState?.status === column.status
+                    ? dragOverState.allowed
+                      ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]"
+                      : "bg-[var(--color-error-container)] text-[var(--color-on-error-container)]"
+                    : "bg-[var(--color-surface-container-high)]",
+                )}
+              >
+                {column.tasks.length}
+              </span>
+            </div>
+            <div
+              className="min-h-0 flex-1 space-y-3 overflow-y-auto"
               onDragOver={(event) => handleColumnDragOver(column.status, event)}
               onDrop={(event) => handleColumnDrop(column.status, event)}
-              style={{
-                gap: `${boardLayout.columnGap}px`,
-                padding: `${boardLayout.columnPadding}px`,
-                width: `${boardLayout.columnWidth}px`,
-              }}
             >
-              <div className="flex items-center justify-between border-b-2 border-[var(--color-outline-variant)] px-1 py-1">
-                <h2 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{column.title}</h2>
-                <span
+              {dragOverState?.status === column.status ? (
+                <div
                   className={cn(
-                    "rounded-full px-2.5 py-0.5 text-[11px] transition-colors",
-                    dragOverState?.status === column.status
-                      ? dragOverState.allowed
-                        ? "bg-[var(--color-primary)] text-[var(--color-on-primary)]"
-                        : "bg-[var(--color-error-container)] text-[var(--color-on-error-container)]"
-                      : "bg-[var(--color-surface-container-high)]",
+                    "rounded-xl border border-dashed px-3 py-2 text-[11px] font-medium transition-colors",
+                    dragOverState.allowed
+                      ? "border-[var(--color-primary)]/35 bg-[var(--color-elevated-surface-strong)] text-[var(--color-primary)]"
+                      : "border-[var(--color-error)]/30 bg-[var(--color-error-container)]/45 text-[var(--color-error)]",
                   )}
                 >
-                  {column.tasks.length}
-                </span>
-              </div>
-              <div
-                className="min-h-0 flex-1 space-y-3 overflow-y-auto"
-                onDragOver={(event) => handleColumnDragOver(column.status, event)}
-                onDrop={(event) => handleColumnDrop(column.status, event)}
-              >
-                {dragOverState?.status === column.status ? (
-                  <div
-                    className={cn(
-                      "rounded-xl border border-dashed px-3 py-2 text-[11px] font-medium transition-colors",
-                      dragOverState.allowed
-                        ? "border-[var(--color-primary)]/35 bg-[var(--color-elevated-surface-strong)] text-[var(--color-primary)]"
-                        : "border-[var(--color-error)]/30 bg-[var(--color-error-container)]/45 text-[var(--color-error)]",
-                    )}
-                  >
-                    {dragOverState.allowed
-                      ? `Release to move into ${column.title}`
-                      : `${draggedTask?.taskCode ?? "Task"} cannot move into ${column.title}`}
-                  </div>
-                ) : null}
-                {column.tasks.map((task) => (
-                  <KanbanCard
-                    key={task.taskCode}
-                    task={task}
-                    compact={boardLayout.compact}
-                    dense={boardLayout.dense}
-                    dragging={draggedTask?.taskCode === task.taskCode}
-                    pending={pendingTaskCode === task.taskCode}
-                    selected={selectedTaskCode === task.taskCode}
-                    onDragEnd={() => {
-                      clearDragState();
-                    }}
-                    onDragStart={(event) => handleCardDragStart(task, event)}
-                    onSelect={() => {
-                      setSelectedTaskCode(task.taskCode);
-                      navigate(`/tasks/detail?taskCode=${encodeURIComponent(task.taskCode)}`);
-                    }}
-                  />
-                ))}
-              </div>
-            </section>
-          ))}
+                  {dragOverState.allowed
+                    ? `Release to move into ${column.title}`
+                    : `${draggedTask?.taskCode ?? "Task"} cannot move into ${column.title}`}
+                </div>
+              ) : null}
+              {column.tasks.map((task) => (
+                <KanbanCard
+                  key={task.taskCode}
+                  task={task}
+                  compact={boardLayout.compact}
+                  dense={boardLayout.dense}
+                  dragging={draggedTask?.taskCode === task.taskCode}
+                  pending={pendingTaskCode === task.taskCode}
+                  selected={selectedTaskCode === task.taskCode}
+                  onDragEnd={() => {
+                    clearDragState();
+                  }}
+                  onDragStart={(event) => handleCardDragStart(task, event)}
+                  onSelect={() => {
+                    setSelectedTaskCode(task.taskCode);
+                    navigate(`/tasks/detail?taskCode=${encodeURIComponent(task.taskCode)}`);
+                  }}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   );

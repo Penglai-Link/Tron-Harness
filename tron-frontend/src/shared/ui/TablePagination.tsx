@@ -10,6 +10,7 @@ import {
   SelectInput,
   TextInput,
 } from "@/shared/ui/Forms";
+import { SelectItem } from "@/components/ui/select";
 
 const defaultPageSizeOptions = [15, 25, 50, 100] as const;
 
@@ -68,9 +69,9 @@ export function TablePagination({
             className="h-9 w-20"
             disabled={!onPageSizeChange}
             value={pageSize}
-            onChange={(event) => onPageSizeChange?.(Number(event.target.value))}
+            onValueChange={(event) => onPageSizeChange?.(Number(event))}
           >
-            {pageSizeOptions.map((item) => <option key={item} value={item}>{formatNumber(item)}</option>)}
+            {pageSizeOptions.map((item) => <SelectItem key={item} value={item}>{formatNumber(item)}</SelectItem>)}
           </SelectInput>
         </label>
         <Button size="icon" variant="secondary" aria-label={t("pagination.previousPage")} disabled={!canGoPrevious} onClick={() => onPageChange?.(page - 1)}>

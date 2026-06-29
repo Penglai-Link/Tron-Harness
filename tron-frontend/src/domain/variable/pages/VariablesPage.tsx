@@ -58,6 +58,7 @@ import {
   isWorkspaceVariableRemovable,
   matchesWorkspaceVariableSearch,
 } from "./workspaceVariablePageHelpers";
+import { SelectItem } from "@/components/ui/select";
 
 type VariableSourceFilter = VariableRecord["sourceKind"] | "All";
 type VariableSensitiveFilter = "All" | "Sensitive" | "Plain";
@@ -298,12 +299,12 @@ export function VariablesPage() {
                 aria-label="Filter variables by source"
                 className="w-full"
                 value={sourceFilter}
-                onChange={(event) => setSourceFilter(sourceFilterValue(event.target.value))}
+                onValueChange={(event) => setSourceFilter(sourceFilterValue(event!))}
               >
                 {variableSourceFilters.map((source) => (
-                  <option key={source} value={source}>
+                  <SelectItem key={source} value={source}>
                     {sourceFilterLabel(source)}
-                  </option>
+                  </SelectItem>
                 ))}
               </SelectInput>
             </Field>
@@ -312,12 +313,12 @@ export function VariablesPage() {
                 aria-label="Filter variables by sensitive data"
                 className="w-full"
                 value={sensitiveFilter}
-                onChange={(event) => setSensitiveFilter(sensitiveFilterValue(event.target.value))}
+                onValueChange={(event) => setSensitiveFilter(sensitiveFilterValue(event!))}
               >
                 {variableSensitiveFilters.map((filter) => (
-                  <option key={filter} value={filter}>
+                  <SelectItem key={filter} value={filter}>
                     {sensitiveFilterLabel(filter)}
-                  </option>
+                  </SelectItem>
                 ))}
               </SelectInput>
             </Field>

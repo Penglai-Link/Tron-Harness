@@ -48,6 +48,7 @@ import {
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 import { cn } from "@/shared/lib/utils";
+import { SelectItem } from "@/components/ui/select";
 
 const visibleTargetLimit = 4;
 
@@ -218,10 +219,10 @@ function MemoryFilterControls({
           aria-label="Filter memories by status"
           className="w-full"
           value={filters.status}
-          onChange={(event) => onFiltersChange({ ...filters, status: event.target.value as MemoryFilterState["status"] })}
+          onValueChange={(event) => onFiltersChange({ ...filters, status: event as MemoryFilterState["status"] })}
         >
           {memoryStatusOptions.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
+            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
           ))}
         </SelectInput>
       </Field>
@@ -230,10 +231,10 @@ function MemoryFilterControls({
           aria-label="Filter memories by review status"
           className="w-full"
           value={filters.reviewStatus}
-          onChange={(event) => onFiltersChange({ ...filters, reviewStatus: event.target.value as MemoryFilterState["reviewStatus"] })}
+          onValueChange={(event) => onFiltersChange({ ...filters, reviewStatus: event as MemoryFilterState["reviewStatus"] })}
         >
           {memoryReviewOptions.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
+            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
           ))}
         </SelectInput>
       </Field>
@@ -242,10 +243,10 @@ function MemoryFilterControls({
           aria-label="Filter memories by context use"
           className="w-full"
           value={filters.injectable}
-          onChange={(event) => onFiltersChange({ ...filters, injectable: event.target.value as MemoryFilterState["injectable"] })}
+          onValueChange={(event) => onFiltersChange({ ...filters, injectable: event as MemoryFilterState["injectable"] })}
         >
           {memoryInjectableOptions.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
+            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
           ))}
         </SelectInput>
       </Field>

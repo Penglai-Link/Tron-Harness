@@ -28,6 +28,7 @@ import {
   promptVisibilityOptions,
   promptWorkspaceTabs,
 } from "@/domain/prompt/constants";
+import { SelectItem } from "@/components/ui/select";
 
 function IconButton({ label, children, onClick }: { label: string; children: React.ReactNode; onClick?: () => void }) {
   return (
@@ -135,75 +136,75 @@ export function CreatePromptPage() {
           </div>
         </div>
       </SurfaceCard>
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="space-y-6">
-            <SurfaceCard>
-              <div className="grid gap-4 md:grid-cols-3">
-                <Field label="Prompt Name">
-                  <TextInput placeholder="e.g., Customer Support Response Generator" />
-                </Field>
-                <Field label="Category">
-                  <SelectInput defaultValue="System">
-                    <option>System</option>
-                    <option>Persona</option>
-                    <option>Tool</option>
-                  </SelectInput>
-                </Field>
-                <Field label="Visibility">
-                  <div className="flex h-10 items-center gap-4">
-                    {promptVisibilityOptions.map((item) => (
-                      <label className="flex items-center gap-2 text-sm" key={item}>
-                        <input checked={visibility === item} name="visibility" type="radio" onChange={() => setVisibility(item)} />
-                        {item}
-                      </label>
-                    ))}
-                  </div>
-                </Field>
-              </div>
-            </SurfaceCard>
-            <SurfaceCard>
-              <SectionTitle title="Prompt Template" />
-              <div className="grid grid-cols-[44px_1fr] overflow-hidden rounded-lg border border-[var(--color-outline-variant)]">
-                <div className="bg-[var(--color-surface-container-low)] py-3 text-center font-mono text-[12px] leading-6 text-[var(--color-on-surface-variant)]">1<br />2<br />3<br />4<br />5<br />6<br />7<br />8<br />9<br />10</div>
-                <TextArea className="min-h-[260px] rounded-none border-0 font-mono leading-6" defaultValue={"You are a Tron workspace agent.\n\nSummarize {{incident_summary}} for a {{customer_tier}} customer.\n\nReturn actions, risks, and required owner."} />
-              </div>
-            </SurfaceCard>
-          </div>
-          <div className="space-y-4">
-            <SurfaceCard>
-              <SectionTitle title="Model" icon={<SlidersHorizontal size={17} />} />
-              <Field label="Model">
-                <SelectInput defaultValue="GPT-4o">
-                  <option>GPT-4o</option>
-                  <option>Claude 3.5 Sonnet</option>
-                  <option>Llama 3 70B</option>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-6">
+          <SurfaceCard>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Field label="Prompt Name">
+                <TextInput placeholder="e.g., Customer Support Response Generator" />
+              </Field>
+              <Field label="Category">
+                <SelectInput defaultValue="System">
+                  <SelectItem>System</SelectItem>
+                  <SelectItem>Persona</SelectItem>
+                  <SelectItem>Tool</SelectItem>
                 </SelectInput>
               </Field>
-              <Field label={`Temperature ${temperature.toFixed(1)}`} hint="Precise to Creative">
-                <input className="accent-[var(--color-primary)]" type="range" min={0} max={2} step={0.1} value={temperature} onChange={(event) => setTemperature(Number(event.target.value))} />
+              <Field label="Visibility">
+                <div className="flex h-10 items-center gap-4">
+                  {promptVisibilityOptions.map((item) => (
+                    <label className="flex items-center gap-2 text-sm" key={item}>
+                      <input checked={visibility === item} name="visibility" type="radio" onChange={() => setVisibility(item)} />
+                      {item}
+                    </label>
+                  ))}
+                </div>
               </Field>
-              <KeyValue label="Input (Template)" value="~450" />
-              <KeyValue label="Max Output" value="2,048" />
-            </SurfaceCard>
-            <SurfaceCard>
-              <SectionTitle title="Detected Variables" icon={<Code2 size={17} />} />
-              <div className="space-y-2">
-                {variables.map((variable) => (
-                  <div className="rounded-lg border border-[var(--color-outline-variant)] p-3 text-sm" key={variable.name}>
-                    <div className="flex justify-between">
-                      <span className="font-mono">{variable.name}</span>
-                      <Badge tone="neutral">{variable.type}</Badge>
-                    </div>
-                    <TextInput className="mt-2 h-8 w-full" defaultValue={variable.sample} />
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4">
-                <Notice value={notice ? `${notice} Visibility: ${visibility}. Top tab: ${tab}.` : ""} />
-              </div>
-            </SurfaceCard>
-          </div>
+            </div>
+          </SurfaceCard>
+          <SurfaceCard>
+            <SectionTitle title="Prompt Template" />
+            <div className="grid grid-cols-[44px_1fr] overflow-hidden rounded-lg border border-[var(--color-outline-variant)]">
+              <div className="bg-[var(--color-surface-container-low)] py-3 text-center font-mono text-[12px] leading-6 text-[var(--color-on-surface-variant)]">1<br />2<br />3<br />4<br />5<br />6<br />7<br />8<br />9<br />10</div>
+              <TextArea className="min-h-[260px] rounded-none border-0 font-mono leading-6" defaultValue={"You are a Tron workspace agent.\n\nSummarize {{incident_summary}} for a {{customer_tier}} customer.\n\nReturn actions, risks, and required owner."} />
+            </div>
+          </SurfaceCard>
         </div>
+        <div className="space-y-4">
+          <SurfaceCard>
+            <SectionTitle title="Model" icon={<SlidersHorizontal size={17} />} />
+            <Field label="Model">
+              <SelectInput defaultValue="GPT-4o">
+                <SelectItem>GPT-4o</SelectItem>
+                <SelectItem>Claude 3.5 Sonnet</SelectItem>
+                <SelectItem>Llama 3 70B</SelectItem>
+              </SelectInput>
+            </Field>
+            <Field label={`Temperature ${temperature.toFixed(1)}`} hint="Precise to Creative">
+              <input className="accent-[var(--color-primary)]" type="range" min={0} max={2} step={0.1} value={temperature} onChange={(event) => setTemperature(Number(event.target.value))} />
+            </Field>
+            <KeyValue label="Input (Template)" value="~450" />
+            <KeyValue label="Max Output" value="2,048" />
+          </SurfaceCard>
+          <SurfaceCard>
+            <SectionTitle title="Detected Variables" icon={<Code2 size={17} />} />
+            <div className="space-y-2">
+              {variables.map((variable) => (
+                <div className="rounded-lg border border-[var(--color-outline-variant)] p-3 text-sm" key={variable.name}>
+                  <div className="flex justify-between">
+                    <span className="font-mono">{variable.name}</span>
+                    <Badge tone="neutral">{variable.type}</Badge>
+                  </div>
+                  <TextInput className="mt-2 h-8 w-full" defaultValue={variable.sample} />
+                </div>
+              ))}
+            </div>
+            <div className="mt-4">
+              <Notice value={notice ? `${notice} Visibility: ${visibility}. Top tab: ${tab}.` : ""} />
+            </div>
+          </SurfaceCard>
+        </div>
+      </div>
     </>
   );
 }

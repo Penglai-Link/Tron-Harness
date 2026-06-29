@@ -70,6 +70,7 @@ import {
   useTablePagination,
   useWorkspaceSpaces,
 } from "@/shared";
+import { SelectItem } from "@/components/ui/select";
 
 interface InternalAgentDraft {
   expandedDomainPersistenceMode: WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"];
@@ -756,76 +757,76 @@ export function WorkspaceAgentsPage() {
                   <SelectInput
                     disabled={internalBusy}
                     value={draft.mcpAccessMode}
-                    onChange={(event) => {
+                    onValueChange={(event) => {
                       setInternalDraft(agent.agentCode, {
-                        mcpAccessMode: event.target.value as WorkspaceInternalAgentRecord["mcpAccessMode"],
+                        mcpAccessMode: event as WorkspaceInternalAgentRecord["mcpAccessMode"],
                       });
                     }}
                   >
-                    <option value="disabled">
+                    <SelectItem value="disabled">
                       {internalPageT("modes.mcpDisabled", "Disabled")}
-                    </option>
-                    <option value="all_enabled_servers">
+                    </SelectItem>
+                    <SelectItem value="all_enabled_servers">
                       {internalPageT("modes.allEnabledServers", "All enabled servers")}
-                    </option>
-                    <option value="selected_servers">
+                    </SelectItem>
+                    <SelectItem value="selected_servers">
                       {internalPageT("modes.selectedServers", "Selected servers")}
-                    </option>
+                    </SelectItem>
                   </SelectInput>
                 </Field>
                 <Field label={fieldLabel("toolAssignmentMode", "Tool assignment mode")}>
                   <SelectInput
                     disabled={internalBusy}
                     value={draft.toolAssignmentMode}
-                    onChange={(event) => {
+                    onValueChange={(event) => {
                       setInternalDraft(agent.agentCode, {
-                        toolAssignmentMode: event.target.value as WorkspaceInternalAgentRecord["toolAssignmentMode"],
+                        toolAssignmentMode: event as WorkspaceInternalAgentRecord["toolAssignmentMode"],
                       });
                     }}
                   >
-                    <option value="all_platform_tools">
+                    <SelectItem value="all_platform_tools">
                       {internalPageT("modes.allTools", "All platform tools")}
-                    </option>
-                    <option value="selected_tools">
+                    </SelectItem>
+                    <SelectItem value="selected_tools">
                       {internalPageT("modes.selectedTools", "Selected tools")}
-                    </option>
+                    </SelectItem>
                   </SelectInput>
                 </Field>
                 <Field label={fieldLabel("toolExposureMode", "Tool exposure mode", "end")}>
                   <SelectInput
                     disabled={internalBusy}
                     value={draft.toolExposureMode}
-                    onChange={(event) => {
+                    onValueChange={(event) => {
                       setInternalDraft(agent.agentCode, {
-                        toolExposureMode: event.target.value as WorkspaceInternalAgentRecord["toolExposureMode"],
+                        toolExposureMode: event as WorkspaceInternalAgentRecord["toolExposureMode"],
                       });
                     }}
                   >
-                    <option value="direct_list">
+                    <SelectItem value="direct_list">
                       {internalPageT("modes.directList", "Direct list")}
-                    </option>
-                    <option value="domain_discovery">
+                    </SelectItem>
+                    <SelectItem value="domain_discovery">
                       {internalPageT("modes.domainDiscovery", "Domain discovery")}
-                    </option>
+                    </SelectItem>
                   </SelectInput>
                 </Field>
                 <Field label={fieldLabel("expandedDomainPersistenceMode", "Expanded domain persistence mode")}>
                   <SelectInput
                     disabled={internalBusy}
                     value={draft.expandedDomainPersistenceMode}
-                    onChange={(event) => {
+                    onValueChange={(event) => {
                       setInternalDraft(agent.agentCode, {
                         expandedDomainPersistenceMode:
-                          event.target.value as WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"],
+                          event as WorkspaceInternalAgentRecord["expandedDomainPersistenceMode"],
                       });
                     }}
                   >
-                    <option value="sticky_expanded">
+                    <SelectItem value="sticky_expanded">
                       {internalPageT("modes.stickyExpanded", "Sticky expanded")}
-                    </option>
-                    <option value="ephemeral_expanded">
+                    </SelectItem>
+                    <SelectItem value="ephemeral_expanded">
                       {internalPageT("modes.ephemeralExpanded", "Ephemeral expanded")}
-                    </option>
+                    </SelectItem>
                   </SelectInput>
                 </Field>
                 <Field label={fieldLabel("maxSteps", "Max steps")}>

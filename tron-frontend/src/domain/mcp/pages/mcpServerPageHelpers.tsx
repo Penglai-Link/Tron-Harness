@@ -19,6 +19,7 @@ import {
   TextInput,
 } from "@/shared";
 import { SegmentedTabs } from "@/shared/ui/Tabs";
+import { SelectItem } from "@/components/ui/select";
 
 export interface KeyValueRow {
   key: string;
@@ -282,8 +283,8 @@ export function PlatformMcpServerFormFields({
               <SelectInput
                 aria-label="Platform MCP auth kind"
                 value={form.authKind}
-                onChange={(event) => {
-                  const authKind = event.target.value as McpAuthKind;
+                onValueChange={(event) => {
+                  const authKind = event as McpAuthKind;
                   onChange({
                     ...form,
                     authKind,
@@ -291,8 +292,8 @@ export function PlatformMcpServerFormFields({
                   });
                 }}
               >
-                <option value="none">None</option>
-                <option value="bearer_static">Bearer static</option>
+                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="bearer_static">Bearer static</SelectItem>
               </SelectInput>
             </Field>
           </div>

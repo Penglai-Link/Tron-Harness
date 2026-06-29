@@ -82,6 +82,7 @@ import type {
   WorkspaceStatus,
 } from "@/domain/admin/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { SelectItem } from "@/components/ui/select";
 
 type WorkspaceStatusFilter = WorkspaceStatus | "All";
 type WorkspaceInspectorTab = "overview" | "access" | "create";
@@ -779,10 +780,10 @@ export function WorkspaceManagementPage() {
           </div>
           <div className="grid gap-3">
             <SearchField ariaLabel={pt("Search workspaces")} clearLabel={pt("Clear workspace search")} placeholder={pt("Filter workspaces...")} value={searchInput} onChange={setSearchInput} onClear={clearWorkspaceSearch} />
-            <SelectInput aria-label={pt("Filter workspaces by status")} value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as WorkspaceStatusFilter)}>
-              <option value="All">{pt("All Status")}</option>
+            <SelectInput aria-label={pt("Filter workspaces by status")} value={statusFilter} onValueChange={(event) => setStatusFilter(event as WorkspaceStatusFilter)}>
+              <SelectItem value="All">{pt("All Status")}</SelectItem>
               {adminUserStatusOptions.map((status) => (
-                <option key={status} value={status}>{pt(status)}</option>
+                <SelectItem key={status} value={status}>{pt(status)}</SelectItem>
               ))}
             </SelectInput>
           </div>
@@ -861,13 +862,13 @@ export function WorkspaceManagementPage() {
                       <SelectInput
                         className="w-full min-w-0"
                         value={createForm.parentWorkspaceCode}
-                        onChange={(event) => setCreateForm((current) => ({ ...current, parentWorkspaceCode: event.target.value }))}
+                        onValueChange={(event) => setCreateForm((current) => ({ ...current, parentWorkspaceCode: event! }))}
                       >
-                        <option value={ROOT_PARENT_VALUE}>{pt("Root workspace")}</option>
+                        <SelectItem value={ROOT_PARENT_VALUE}>{pt("Root workspace")}</SelectItem>
                         {createParentOptions.map((record) => (
-                          <option key={record.workspaceCode} value={record.workspaceCode}>
+                          <SelectItem key={record.workspaceCode} value={record.workspaceCode}>
                             {pt("{{name}} ({{code}}) · Level {{depth}}", { code: record.workspaceCode, depth: formatNumber(record.depth), name: record.name })}
-                          </option>
+                          </SelectItem>
                         ))}
                       </SelectInput>
                     </Field>
@@ -910,12 +911,12 @@ export function WorkspaceManagementPage() {
                       <TextInput className="w-full" value={detailForm.name} onChange={(event) => setDetailForm((current) => ({ ...current, name: event.target.value }))} />
                     </Field>
                     <Field label={pt("Move parent")} hint={pt("Resulting workspace depth: level {{depth}}.", { depth: formatNumber(movePreviewDepth) })}>
-                      <SelectInput className="w-full min-w-0" value={moveParentWorkspaceCode} onChange={(event) => setMoveParentWorkspaceCode(event.target.value)}>
-                        <option value={ROOT_PARENT_VALUE}>{pt("Root workspace")}</option>
+                      <SelectInput className="w-full min-w-0" value={moveParentWorkspaceCode} onValueChange={(event) => setMoveParentWorkspaceCode(event!)}>
+                        <SelectItem value={ROOT_PARENT_VALUE}>{pt("Root workspace")}</SelectItem>
                         {moveParentOptions.map((record) => (
-                          <option key={record.workspaceCode} value={record.workspaceCode}>
+                          <SelectItem key={record.workspaceCode} value={record.workspaceCode}>
                             {pt("{{name}} ({{code}}) · Level {{depth}}", { code: record.workspaceCode, depth: formatNumber(record.depth), name: record.name })}
-                          </option>
+                          </SelectItem>
                         ))}
                       </SelectInput>
                     </Field>
@@ -981,12 +982,12 @@ export function WorkspaceManagementPage() {
                     <div className="flex flex-wrap items-end justify-between gap-4">
                       <div className="min-w-[16rem] flex-1">
                         <Field label={pt("Direct User Access")}>
-                          <SelectInput aria-label={pt("Add direct user access")} value={nextDirectUserCode} onChange={(event) => setNextDirectUserCode(event.target.value)}>
-                            <option value="">{pt("Select a user")}</option>
+                          <SelectInput aria-label={pt("Add direct user access")} value={nextDirectUserCode} onValueChange={(event) => setNextDirectUserCode(event!)}>
+                            <SelectItem value="">{pt("Select a user")}</SelectItem>
                             {availableDirectUsers.map((user) => (
-                              <option key={user.userCode} value={user.userCode}>
+                              <SelectItem key={user.userCode} value={user.userCode}>
                                 {user.displayName} ({user.userCode})
-                              </option>
+                              </SelectItem>
                             ))}
                           </SelectInput>
                         </Field>

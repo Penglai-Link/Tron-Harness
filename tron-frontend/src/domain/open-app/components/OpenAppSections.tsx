@@ -29,6 +29,7 @@ import {
   KeyRound,
   ShieldCheck,
 } from "lucide-react";
+import { SelectItem } from "@/components/ui/select";
 
 export interface MetadataDraft {
   description: string;
@@ -325,16 +326,16 @@ export function OpenAppMetadataFormFields({
               aria-label={pageT("fields.status", "Status")}
               disabled={statusDisabled}
               value={draft.status}
-              onChange={(event) => (
+              onValueChange={(event) => (
                 onChange({
                   ...draft,
-                  status: event.target.value as OpenAppStatus,
+                  status: event as OpenAppStatus,
                 })
               )}
             >
-              <option value="Enabled">{pageT("status.enabled", "Enabled")}</option>
-              <option value="Disabled">{pageT("status.disabled", "Disabled")}</option>
-              <option value="Archived">{pageT("status.archived", "Archived")}</option>
+              <SelectItem value="Enabled">{pageT("status.enabled", "Enabled")}</SelectItem>
+              <SelectItem value="Disabled">{pageT("status.disabled", "Disabled")}</SelectItem>
+              <SelectItem value="Archived">{pageT("status.archived", "Archived")}</SelectItem>
             </SelectInput>
           </Field>
         ) : null}
@@ -674,16 +675,14 @@ function CapabilityGrantOperationCard({
 
   return (
     <div
-      className={`overflow-hidden rounded-2xl border bg-[var(--color-elevated-surface)] transition-[border-color,box-shadow] ${
-        selected
+      className={`overflow-hidden rounded-2xl border bg-[var(--color-elevated-surface)] transition-[border-color,box-shadow] ${selected
           ? "border-[var(--color-outline-variant)] shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
           : "border-[var(--color-card-border)]"
-      }`}
+        }`}
     >
       <div
-        className={`flex items-center justify-between gap-3 px-4 py-3 transition-colors ${
-          selected ? "bg-[var(--color-surface-container-low)]" : ""
-        }`}
+        className={`flex items-center justify-between gap-3 px-4 py-3 transition-colors ${selected ? "bg-[var(--color-surface-container-low)]" : ""
+          }`}
       >
         <input
           id={checkboxId}
@@ -707,9 +706,8 @@ function CapabilityGrantOperationCard({
             <span className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-medium text-[var(--color-on-surface)]">{operation.operationName}</span>
               <span
-                className={`font-mono text-[12px] ${
-                  selected ? "text-[var(--color-on-surface)]" : "text-[var(--color-on-surface-variant)]"
-                }`}
+                className={`font-mono text-[12px] ${selected ? "text-[var(--color-on-surface)]" : "text-[var(--color-on-surface-variant)]"
+                  }`}
               >
                 {operation.operationCode}
               </span>

@@ -21,6 +21,7 @@ import {
   formatRagStatusLabel,
   statusTone,
 } from "@/domain/rag/components/RagShared";
+import { SelectItem } from "@/components/ui/select";
 
 export function RagCorporaTab({
   corpusPagination,
@@ -64,12 +65,12 @@ export function RagCorporaTab({
           <SelectInput
             className="w-full"
             value={statusFilter}
-            onChange={(event) => onStatusFilterChange(event.target.value)}
+            onValueChange={(event) => onStatusFilterChange(event!)}
           >
             {["All", "Active", "Indexing", "Warning", "Disabled"].map((status) => (
-              <option key={status} value={status}>
+              <SelectItem key={status} value={status}>
                 {status === "All" ? pageT("filters.allStatuses", "All statuses") : formatRagStatusLabel(status, t)}
-              </option>
+              </SelectItem>
             ))}
           </SelectInput>
           <Button className="justify-self-start md:justify-self-end" size="sm" variant="secondary" onClick={onCreateCorpus}>

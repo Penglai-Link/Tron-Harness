@@ -41,6 +41,7 @@ import type {
   RagFilterFieldType,
   RetrievalProfileRecord as RagRetrievalProfileRecord,
 } from "@/domain/rag/model/RagModel";
+import { SelectItem } from "@/components/ui/select";
 
 type WorkbenchSourcePayloadForm = {
   documentFormat: string;
@@ -756,11 +757,10 @@ export function RagWorkbenchTab({
               <button
                 aria-controls={`rag-workbench-${panel.value}-panel`}
                 aria-selected={selected}
-                className={`rounded-xl px-4 py-3 text-left transition ${
-                  selected
-                    ? "bg-[var(--color-elevated-surface)] shadow-sm"
-                    : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-surface)]"
-                }`}
+                className={`rounded-xl px-4 py-3 text-left transition ${selected
+                  ? "bg-[var(--color-elevated-surface)] shadow-sm"
+                  : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-surface)]"
+                  }`}
                 id={`rag-workbench-${panel.value}-tab`}
                 key={panel.value}
                 role="tab"
@@ -776,450 +776,450 @@ export function RagWorkbenchTab({
       </div>
 
       {activeWorkbenchPanel === "ingest" ? (
-      <SurfaceCard>
-        <div
-          aria-labelledby="rag-workbench-ingest-tab"
-          id="rag-workbench-ingest-panel"
-          role="tabpanel"
-        >
-        <SectionTitle
-          icon={<Upload size={17} aria-hidden="true" />}
-          title={pageT("ingest.title", "Ingest request")}
-        />
-        <div className="mt-4 grid gap-3">
-          <Field label={pageT("fields.corpus", "Corpus")} hint={hintT("corpus")}>
-            <SelectInput
-              aria-label={pageT("fields.corpus", "Corpus")}
-              value={corpusId}
-              onChange={(event) => {
-                setCorpusId(event.target.value);
-                setBusinessAttributeRows([]);
-                setSourcePayloadEdited(false);
-              }}
-            >
-              {visibleCorpora.map((corpus) => (
-                <option key={corpus.code} value={corpus.code}>{corpus.code}</option>
-              ))}
-            </SelectInput>
-          </Field>
-          <Field label={pageT("fields.ingestProfile", "Ingest profile")} hint={hintT("ingestProfile")}>
-            <SelectInput
-              aria-label={pageT("fields.ingestProfile", "Ingest profile")}
-              value={ingestProfileId}
-              onChange={(event) => {
-                setIngestProfileId(event.target.value);
-                setBusinessAttributeRows([]);
-                setSourcePayloadEdited(false);
-              }}
-            >
-              {ingestProfiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>{profile.id}</option>
-              ))}
-            </SelectInput>
-          </Field>
-          <Field label={pageT("fields.scopeType", "Scope type")} hint={hintT("scopeType")}>
-            <SelectInput
-              aria-label={pageT("fields.scopeType", "Scope type")}
-              value={targetScopeType}
-              onChange={(event) => setTargetScopeType(event.target.value as WorkbenchScopeType)}
-            >
-              {workbenchScopeOptions.map((option) => (
-                <option key={option.value} value={option.value}>{pageT(`scope.${option.value}`, option.label)}</option>
-              ))}
-            </SelectInput>
-            <p className="mt-1 text-[12px] text-[var(--color-on-surface-variant)]">
-              {pageT("scope.resolvedCode", "Scope code is resolved automatically:")} <span className="font-mono">{targetScope.scopeCode}</span>
-            </p>
-          </Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label={pageT("fields.sourceCode", "Source code")} hint={hintT("sourceCode")}>
-              <TextInput aria-label={pageT("fields.sourceCode", "Source code")} value={sourcePayloadForm.sourceCode} onChange={(event) => updateSourcePayloadForm({ sourceCode: event.target.value })} />
-            </Field>
-            <Field label={pageT("fields.sourceType", "Source type")} hint={hintT("sourceType")}>
-              {sourceTypeOptions.length > 0 ? (
+        <SurfaceCard>
+          <div
+            aria-labelledby="rag-workbench-ingest-tab"
+            id="rag-workbench-ingest-panel"
+            role="tabpanel"
+          >
+            <SectionTitle
+              icon={<Upload size={17} aria-hidden="true" />}
+              title={pageT("ingest.title", "Ingest request")}
+            />
+            <div className="mt-4 grid gap-3">
+              <Field label={pageT("fields.corpus", "Corpus")} hint={hintT("corpus")}>
                 <SelectInput
-                  aria-label={pageT("fields.sourceType", "Source type")}
-                  value={sourcePayloadForm.sourceType}
-                  onChange={(event) => updateSourcePayloadForm({ sourceType: event.target.value })}
+                  aria-label={pageT("fields.corpus", "Corpus")}
+                  value={corpusId}
+                  onValueChange={(event) => {
+                    setCorpusId(event!);
+                    setBusinessAttributeRows([]);
+                    setSourcePayloadEdited(false);
+                  }}
                 >
-                  {sourceTypeOptions.map((sourceType) => (
-                    <option key={sourceType} value={sourceType}>{sourceType}</option>
+                  {visibleCorpora.map((corpus) => (
+                    <SelectItem key={corpus.code} value={corpus.code}>{corpus.code}</SelectItem>
                   ))}
                 </SelectInput>
+              </Field>
+              <Field label={pageT("fields.ingestProfile", "Ingest profile")} hint={hintT("ingestProfile")}>
+                <SelectInput
+                  aria-label={pageT("fields.ingestProfile", "Ingest profile")}
+                  value={ingestProfileId}
+                  onValueChange={(event) => {
+                    setIngestProfileId(event!);
+                    setBusinessAttributeRows([]);
+                    setSourcePayloadEdited(false);
+                  }}
+                >
+                  {ingestProfiles.map((profile) => (
+                    <SelectItem key={profile.id} value={profile.id}>{profile.id}</SelectItem>
+                  ))}
+                </SelectInput>
+              </Field>
+              <Field label={pageT("fields.scopeType", "Scope type")} hint={hintT("scopeType")}>
+                <SelectInput
+                  aria-label={pageT("fields.scopeType", "Scope type")}
+                  value={targetScopeType}
+                  onValueChange={(event) => setTargetScopeType(event!)}
+                >
+                  {workbenchScopeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>{pageT(`scope.${option.value}`, option.label)}</SelectItem>
+                  ))}
+                </SelectInput>
+                <p className="mt-1 text-[12px] text-[var(--color-on-surface-variant)]">
+                  {pageT("scope.resolvedCode", "Scope code is resolved automatically:")} <span className="font-mono">{targetScope.scopeCode}</span>
+                </p>
+              </Field>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={pageT("fields.sourceCode", "Source code")} hint={hintT("sourceCode")}>
+                  <TextInput aria-label={pageT("fields.sourceCode", "Source code")} value={sourcePayloadForm.sourceCode} onChange={(event) => updateSourcePayloadForm({ sourceCode: event.target.value })} />
+                </Field>
+                <Field label={pageT("fields.sourceType", "Source type")} hint={hintT("sourceType")}>
+                  {sourceTypeOptions.length > 0 ? (
+                    <SelectInput
+                      aria-label={pageT("fields.sourceType", "Source type")}
+                      value={sourcePayloadForm.sourceType}
+                      onValueChange={(event) => updateSourcePayloadForm({ sourceType: event! })}
+                    >
+                      {sourceTypeOptions.map((sourceType) => (
+                        <SelectItem key={sourceType} value={sourceType}>{sourceType}</SelectItem>
+                      ))}
+                    </SelectInput>
+                  ) : (
+                    <TextInput aria-label={pageT("fields.sourceType", "Source type")} value={sourcePayloadForm.sourceType} onChange={(event) => updateSourcePayloadForm({ sourceType: event.target.value })} />
+                  )}
+                </Field>
+                <Field label={pageT("fields.sourceVersion", "Source version")} hint={hintT("sourceVersion")}>
+                  <TextInput
+                    aria-label={pageT("fields.sourceVersion", "Source version")}
+                    disabled={Boolean(requiredSourceVersion)}
+                    value={sourcePayloadForm.sourceVersion}
+                    onChange={(event) => updateSourcePayloadForm({ sourceVersion: event.target.value })}
+                  />
+                </Field>
+                <Field label={pageT("fields.language", "Language")} hint={hintT("language")}>
+                  <TextInput aria-label={pageT("fields.language", "Language")} value={sourcePayloadForm.language} onChange={(event) => updateSourcePayloadForm({ language: event.target.value })} />
+                </Field>
+              </div>
+              <Field label={pageT("fields.metadataSourcePath", "Metadata source path")} hint={hintT("metadataSourcePath")}>
+                <TextInput aria-label={pageT("fields.metadataSourcePath", "Metadata source path")} value={sourcePayloadForm.metadataSourcePath} onChange={(event) => updateSourcePayloadForm({ metadataSourcePath: event.target.value })} />
+              </Field>
+              <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("businessAttributes.title", "Business attributes")}</p>
+                  <Button
+                    disabled={businessFieldOptions.length === 0}
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setBusinessAttributeRows((current) => [...current, createWorkbenchBusinessAttributeRow(current.length)])}
+                  >
+                    {pageT("businessAttributes.add", "Add business attribute")}
+                  </Button>
+                </div>
+                {businessAttributeRows.length > 0 ? (
+                  <div className="mt-3 grid gap-3">
+                    {businessAttributeRows.map((row, index) => (
+                      <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" key={row.formId}>
+                        <Field label={pageT("businessAttributes.fieldLabel", "Business attribute {{index}} field", { index: index + 1 })} hint={hintT("businessField")}>
+                          <SelectInput
+                            aria-label={pageT("businessAttributes.fieldLabel", "Business attribute {{index}} field", { index: index + 1 })}
+                            value={row.field}
+                            onValueChange={(event) => setBusinessAttributeRows((current) => current.map((item) => (
+                              item.formId === row.formId ? { ...item, field: event! } : item
+                            )))}
+                          >
+                            <SelectItem value="">{pageT("fields.selectField", "Select field")}</SelectItem>
+                            {businessFieldOptions.map((option) => (
+                              <SelectItem key={option.field} value={option.field}>{option.field}</SelectItem>
+                            ))}
+                          </SelectInput>
+                        </Field>
+                        <Field label={pageT("businessAttributes.valueLabel", "Business attribute {{index}} value", { index: index + 1 })} hint={hintT("businessValue")}>
+                          <TextInput
+                            aria-label={pageT("businessAttributes.valueLabel", "Business attribute {{index}} value", { index: index + 1 })}
+                            value={row.value}
+                            onChange={(event) => setBusinessAttributeRows((current) => current.map((item) => (
+                              item.formId === row.formId ? { ...item, value: event.target.value } : item
+                            )))}
+                          />
+                        </Field>
+                        <Button
+                          aria-label={pageT("businessAttributes.removeAria", "Remove business attribute {{index}}", { index: index + 1 })}
+                          className="self-end"
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setBusinessAttributeRows((current) => current.filter((item) => item.formId !== row.formId))}
+                        >
+                          {pageT("actions.remove", "Remove")}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              {usesDocumentPayload ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label={pageT("fields.documentUri", "Document URI")} hint={hintT("documentUri")}>
+                    <TextInput aria-label={pageT("fields.documentUri", "Document URI")} value={sourcePayloadForm.documentUri} onChange={(event) => updateSourcePayloadForm({ documentUri: event.target.value })} />
+                  </Field>
+                  <Field label={pageT("fields.documentFormat", "Document format")} hint={hintT("documentFormat")}>
+                    <TextInput aria-label={pageT("fields.documentFormat", "Document format")} value={sourcePayloadForm.documentFormat} onChange={(event) => updateSourcePayloadForm({ documentFormat: event.target.value })} />
+                  </Field>
+                </div>
               ) : (
-                <TextInput aria-label={pageT("fields.sourceType", "Source type")} value={sourcePayloadForm.sourceType} onChange={(event) => updateSourcePayloadForm({ sourceType: event.target.value })} />
+                <Field label={pageT("fields.sourceText", "Source text")} hint={hintT("sourceText")}>
+                  <TextArea aria-label={pageT("fields.sourceText", "Source text")} className="min-h-28" value={sourcePayloadForm.text} onChange={(event) => updateSourcePayloadForm({ text: event.target.value })} />
+                </Field>
               )}
-            </Field>
-            <Field label={pageT("fields.sourceVersion", "Source version")} hint={hintT("sourceVersion")}>
-              <TextInput
-                aria-label={pageT("fields.sourceVersion", "Source version")}
-                disabled={Boolean(requiredSourceVersion)}
-                value={sourcePayloadForm.sourceVersion}
-                onChange={(event) => updateSourcePayloadForm({ sourceVersion: event.target.value })}
-              />
-            </Field>
-            <Field label={pageT("fields.language", "Language")} hint={hintT("language")}>
-              <TextInput aria-label={pageT("fields.language", "Language")} value={sourcePayloadForm.language} onChange={(event) => updateSourcePayloadForm({ language: event.target.value })} />
-            </Field>
-          </div>
-          <Field label={pageT("fields.metadataSourcePath", "Metadata source path")} hint={hintT("metadataSourcePath")}>
-            <TextInput aria-label={pageT("fields.metadataSourcePath", "Metadata source path")} value={sourcePayloadForm.metadataSourcePath} onChange={(event) => updateSourcePayloadForm({ metadataSourcePath: event.target.value })} />
-          </Field>
-          <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("businessAttributes.title", "Business attributes")}</p>
-              <Button
-                disabled={businessFieldOptions.length === 0}
-                size="sm"
-                type="button"
-                variant="secondary"
-                onClick={() => setBusinessAttributeRows((current) => [...current, createWorkbenchBusinessAttributeRow(current.length)])}
-              >
-                {pageT("businessAttributes.add", "Add business attribute")}
+              <Button disabled={ingestLoading || !corpusId || !ingestProfileId} onClick={handleIngestSubmit}>
+                {ingestLoading ? pageT("actions.submittingIngest", "Submitting ingest...") : pageT("actions.submitIngest", "Submit ingest")}
               </Button>
             </div>
-            {businessAttributeRows.length > 0 ? (
-              <div className="mt-3 grid gap-3">
-                {businessAttributeRows.map((row, index) => (
-                  <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" key={row.formId}>
-                    <Field label={pageT("businessAttributes.fieldLabel", "Business attribute {{index}} field", { index: index + 1 })} hint={hintT("businessField")}>
-                      <SelectInput
-                        aria-label={pageT("businessAttributes.fieldLabel", "Business attribute {{index}} field", { index: index + 1 })}
-                        value={row.field}
-                        onChange={(event) => setBusinessAttributeRows((current) => current.map((item) => (
-                          item.formId === row.formId ? { ...item, field: event.target.value } : item
-                        )))}
-                      >
-                        <option value="">{pageT("fields.selectField", "Select field")}</option>
-                        {businessFieldOptions.map((option) => (
-                          <option key={option.field} value={option.field}>{option.field}</option>
-                        ))}
-                      </SelectInput>
-                    </Field>
-                    <Field label={pageT("businessAttributes.valueLabel", "Business attribute {{index}} value", { index: index + 1 })} hint={hintT("businessValue")}>
-                      <TextInput
-                        aria-label={pageT("businessAttributes.valueLabel", "Business attribute {{index}} value", { index: index + 1 })}
-                        value={row.value}
-                        onChange={(event) => setBusinessAttributeRows((current) => current.map((item) => (
-                          item.formId === row.formId ? { ...item, value: event.target.value } : item
-                        )))}
-                      />
-                    </Field>
-                    <Button
-                      aria-label={pageT("businessAttributes.removeAria", "Remove business attribute {{index}}", { index: index + 1 })}
-                      className="self-end"
-                      size="sm"
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setBusinessAttributeRows((current) => current.filter((item) => item.formId !== row.formId))}
-                    >
-                      {pageT("actions.remove", "Remove")}
-                    </Button>
-                  </div>
-                ))}
+            {ingestResult ? (
+              <div className="mt-5 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("ingest.resultTitle", "Ingest result")}</p>
+                <div className="mt-3 grid gap-2 text-sm">
+                  <InspectorRow label={pageT("result.status", "Status")} value={formatRagStatusLabel(ingestResult.status ?? "unknown", t)} />
+                  <InspectorRow label={pageT("result.sourceCode", "Source code")} value={ingestResult.sourceCode ?? sourcePayloadForm.sourceCode} />
+                  <InspectorRow label={pageT("result.textUnits", "Text units")} value={String(ingestResult.textUnitCount ?? 0)} />
+                  <InspectorRow label={pageT("result.fulltextIndex", "Fulltext index")} value={formatRagStatusLabel(ingestResult.fulltextStatus ?? "not started", t)} />
+                  <InspectorRow label={pageT("result.vectorIndex", "Vector index")} value={formatRagStatusLabel(ingestResult.embeddingStatus ?? "not started", t)} />
+                </div>
               </div>
             ) : null}
+            <StageResultsList results={ingestResult?.stageResults} title={pageT("stageResults.ingestTitle", "Ingest stage results")} />
+            {ingestFeedback ? (
+              <p className="mt-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3 text-sm text-[var(--color-on-surface)]">
+                {ingestFeedback}
+              </p>
+            ) : null}
           </div>
-          {usesDocumentPayload ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={pageT("fields.documentUri", "Document URI")} hint={hintT("documentUri")}>
-                <TextInput aria-label={pageT("fields.documentUri", "Document URI")} value={sourcePayloadForm.documentUri} onChange={(event) => updateSourcePayloadForm({ documentUri: event.target.value })} />
-              </Field>
-              <Field label={pageT("fields.documentFormat", "Document format")} hint={hintT("documentFormat")}>
-                <TextInput aria-label={pageT("fields.documentFormat", "Document format")} value={sourcePayloadForm.documentFormat} onChange={(event) => updateSourcePayloadForm({ documentFormat: event.target.value })} />
-              </Field>
-            </div>
-          ) : (
-            <Field label={pageT("fields.sourceText", "Source text")} hint={hintT("sourceText")}>
-              <TextArea aria-label={pageT("fields.sourceText", "Source text")} className="min-h-28" value={sourcePayloadForm.text} onChange={(event) => updateSourcePayloadForm({ text: event.target.value })} />
-            </Field>
-          )}
-          <Button disabled={ingestLoading || !corpusId || !ingestProfileId} onClick={handleIngestSubmit}>
-            {ingestLoading ? pageT("actions.submittingIngest", "Submitting ingest...") : pageT("actions.submitIngest", "Submit ingest")}
-          </Button>
-        </div>
-        {ingestResult ? (
-          <div className="mt-5 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("ingest.resultTitle", "Ingest result")}</p>
-            <div className="mt-3 grid gap-2 text-sm">
-              <InspectorRow label={pageT("result.status", "Status")} value={formatRagStatusLabel(ingestResult.status ?? "unknown", t)} />
-              <InspectorRow label={pageT("result.sourceCode", "Source code")} value={ingestResult.sourceCode ?? sourcePayloadForm.sourceCode} />
-              <InspectorRow label={pageT("result.textUnits", "Text units")} value={String(ingestResult.textUnitCount ?? 0)} />
-              <InspectorRow label={pageT("result.fulltextIndex", "Fulltext index")} value={formatRagStatusLabel(ingestResult.fulltextStatus ?? "not started", t)} />
-              <InspectorRow label={pageT("result.vectorIndex", "Vector index")} value={formatRagStatusLabel(ingestResult.embeddingStatus ?? "not started", t)} />
-            </div>
-          </div>
-        ) : null}
-        <StageResultsList results={ingestResult?.stageResults} title={pageT("stageResults.ingestTitle", "Ingest stage results")} />
-        {ingestFeedback ? (
-          <p className="mt-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3 text-sm text-[var(--color-on-surface)]">
-            {ingestFeedback}
-          </p>
-        ) : null}
-        </div>
-      </SurfaceCard>
+        </SurfaceCard>
       ) : (
-      <SurfaceCard>
-        <div
-          aria-labelledby="rag-workbench-retrieval-tab"
-          id="rag-workbench-retrieval-panel"
-          role="tabpanel"
-        >
-        <SectionTitle
-          icon={<Search size={17} aria-hidden="true" />}
-          title={pageT("retrieval.title", "Retrieval test")}
-        />
-        <div className="mt-4 grid gap-3">
-          <Field label={pageT("fields.retrievalProfile", "Retrieval profile")} hint={hintT("retrievalProfile")}>
-            <SelectInput
-              aria-label={pageT("fields.retrievalProfile", "Retrieval profile")}
-              value={retrievalProfileId}
-              onChange={(event) => {
-                setRetrievalProfileId(event.target.value);
-                setContextStrategy("RESULT_LIST");
-                setFilterRows([]);
-                setReturnFieldRows([]);
-              }}
-            >
-              {retrievalProfiles.map((profile) => (
-                <option key={profile.id} value={profile.id}>{profile.id}</option>
-              ))}
-            </SelectInput>
-          </Field>
-          <Field label={pageT("fields.query", "Query")} hint={hintT("query")}>
-            <TextArea aria-label={pageT("fields.query", "Query")} className="min-h-24" value={query} onChange={(event) => setQuery(event.target.value)} />
-          </Field>
-          <Field label={pageT("fields.contextStrategy", "Context strategy")} hint={hintT("contextStrategy")}>
-            <SelectInput aria-label={pageT("fields.contextStrategy", "Context strategy")} value={contextStrategy} onChange={(event) => setContextStrategy(event.target.value)}>
-              {contextStrategyOptions.map((strategy) => (
-                <option key={strategy} value={strategy}>{strategy}</option>
-              ))}
-            </SelectInput>
-          </Field>
-          <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("returnFields.title", "Return fields")}</p>
-              <Button
-                disabled={returnFieldOptions.length === 0}
-                size="sm"
-                type="button"
-                variant="secondary"
-                onClick={() => setReturnFieldRows((current) => [...current, createWorkbenchReturnFieldRow(current.length)])}
-              >
-                {pageT("returnFields.add", "Add return field")}
-              </Button>
-            </div>
-            {returnFieldRows.length > 0 ? (
-              <div className="mt-3 grid gap-3">
-                {returnFieldRows.map((row, index) => (
-                  <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_auto]" key={row.formId}>
-                    <Field label={pageT("returnFields.label", "Return field {{index}}", { index: index + 1 })} hint={hintT("returnField")}>
-                      <SelectInput
-                        aria-label={pageT("returnFields.label", "Return field {{index}}", { index: index + 1 })}
-                        value={row.field}
-                        onChange={(event) => setReturnFieldRows((current) => current.map((item) => (
-                          item.formId === row.formId ? { ...item, field: event.target.value } : item
-                        )))}
-                      >
-                        <option value="">{pageT("fields.selectField", "Select field")}</option>
-                        {returnFieldOptions.map((option) => (
-                          <option key={option.field} value={option.field}>{option.field}</option>
-                        ))}
-                      </SelectInput>
-                    </Field>
-                    <Button
-                      aria-label={pageT("returnFields.removeAria", "Remove return field {{index}}", { index: index + 1 })}
-                      className="self-end"
-                      size="sm"
-                      type="button"
-                      variant="ghost"
-                      onClick={() => setReturnFieldRows((current) => current.filter((item) => item.formId !== row.formId))}
-                    >
-                      {pageT("actions.remove", "Remove")}
-                    </Button>
+        <SurfaceCard>
+          <div
+            aria-labelledby="rag-workbench-retrieval-tab"
+            id="rag-workbench-retrieval-panel"
+            role="tabpanel"
+          >
+            <SectionTitle
+              icon={<Search size={17} aria-hidden="true" />}
+              title={pageT("retrieval.title", "Retrieval test")}
+            />
+            <div className="mt-4 grid gap-3">
+              <Field label={pageT("fields.retrievalProfile", "Retrieval profile")} hint={hintT("retrievalProfile")}>
+                <SelectInput
+                  aria-label={pageT("fields.retrievalProfile", "Retrieval profile")}
+                  value={retrievalProfileId}
+                  onValueChange={(event) => {
+                    setRetrievalProfileId(event!);
+                    setContextStrategy("RESULT_LIST");
+                    setFilterRows([]);
+                    setReturnFieldRows([]);
+                  }}
+                >
+                  {retrievalProfiles.map((profile) => (
+                    <SelectItem key={profile.id} value={profile.id}>{profile.id}</SelectItem>
+                  ))}
+                </SelectInput>
+              </Field>
+              <Field label={pageT("fields.query", "Query")} hint={hintT("query")}>
+                <TextArea aria-label={pageT("fields.query", "Query")} className="min-h-24" value={query} onChange={(event) => setQuery(event.target.value)} />
+              </Field>
+              <Field label={pageT("fields.contextStrategy", "Context strategy")} hint={hintT("contextStrategy")}>
+                <SelectInput aria-label={pageT("fields.contextStrategy", "Context strategy")} value={contextStrategy} onValueChange={(event) => setContextStrategy(event!)}>
+                  {contextStrategyOptions.map((strategy) => (
+                    <SelectItem key={strategy} value={strategy}>{strategy}</SelectItem>
+                  ))}
+                </SelectInput>
+              </Field>
+              <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("returnFields.title", "Return fields")}</p>
+                  <Button
+                    disabled={returnFieldOptions.length === 0}
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setReturnFieldRows((current) => [...current, createWorkbenchReturnFieldRow(current.length)])}
+                  >
+                    {pageT("returnFields.add", "Add return field")}
+                  </Button>
+                </div>
+                {returnFieldRows.length > 0 ? (
+                  <div className="mt-3 grid gap-3">
+                    {returnFieldRows.map((row, index) => (
+                      <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_auto]" key={row.formId}>
+                        <Field label={pageT("returnFields.label", "Return field {{index}}", { index: index + 1 })} hint={hintT("returnField")}>
+                          <SelectInput
+                            aria-label={pageT("returnFields.label", "Return field {{index}}", { index: index + 1 })}
+                            value={row.field}
+                            onValueChange={(event) => setReturnFieldRows((current) => current.map((item) => (
+                              item.formId === row.formId ? { ...item, field: event! } : item
+                            )))}
+                          >
+                            <SelectItem value="">{pageT("fields.selectField", "Select field")}</SelectItem>
+                            {returnFieldOptions.map((option) => (
+                              <SelectItem key={option.field} value={option.field}>{option.field}</SelectItem>
+                            ))}
+                          </SelectInput>
+                        </Field>
+                        <Button
+                          aria-label={pageT("returnFields.removeAria", "Remove return field {{index}}", { index: index + 1 })}
+                          className="self-end"
+                          size="sm"
+                          type="button"
+                          variant="ghost"
+                          onClick={() => setReturnFieldRows((current) => current.filter((item) => item.formId !== row.formId))}
+                        >
+                          {pageT("actions.remove", "Remove")}
+                        </Button>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                ) : null}
               </div>
-            ) : null}
-          </div>
-          <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("filters.title", "Filters")}</p>
-              <Button
-                size="sm"
-                type="button"
-                variant="secondary"
-                onClick={() => setFilterRows((current) => [...current, createWorkbenchFilterRow(current.length)])}
-              >
-                {pageT("filters.add", "Add filter")}
+              <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("filters.title", "Filters")}</p>
+                  <Button
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setFilterRows((current) => [...current, createWorkbenchFilterRow(current.length)])}
+                  >
+                    {pageT("filters.add", "Add filter")}
+                  </Button>
+                </div>
+                {filterRows.length > 0 ? (
+                  <div className="mt-3 grid gap-3">
+                    {filterRows.map((row, index) => {
+                      const selectedField = filterFieldSchema[row.field];
+                      const operators = selectedField?.operators?.length ? selectedField.operators : [...workbenchFilterOperators];
+                      return (
+                        <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)_auto]" key={row.formId}>
+                          <Field label={pageT("filters.fieldLabel", "Filter {{index}} field", { index: index + 1 })} hint={hintT("filterField")}>
+                            <SelectInput
+                              aria-label={pageT("filters.fieldLabel", "Filter {{index}} field", { index: index + 1 })}
+                              value={row.field}
+                              onValueChange={(event) => setFilterRows((current) => current.map((item) => (
+                                item.formId === row.formId ? { ...item, field: event! } : item
+                              )))}
+                            >
+                              <SelectItem value="">{pageT("fields.selectField", "Select field")}</SelectItem>
+                              {filterFieldOptions.map((option) => (
+                                <SelectItem key={option.field} value={option.field}>{option.field}</SelectItem>
+                              ))}
+                            </SelectInput>
+                          </Field>
+                          <Field label={pageT("filters.operatorLabel", "Filter {{index}} operator", { index: index + 1 })} hint={hintT("filterOperator")}>
+                            <SelectInput
+                              aria-label={pageT("filters.operatorLabel", "Filter {{index}} operator", { index: index + 1 })}
+                              value={row.operator}
+                              onValueChange={(event) => setFilterRows((current) => current.map((item) => (
+                                item.formId === row.formId ? { ...item, operator: event! } : item
+                              )))}
+                            >
+                              {operators.map((operator) => (
+                                <SelectItem key={operator} value={operator}>{operator}</SelectItem>
+                              ))}
+                            </SelectInput>
+                          </Field>
+                          <Field label={pageT("filters.valueLabel", "Filter {{index}} value", { index: index + 1 })} hint={hintT("filterValue")}>
+                            <TextInput
+                              aria-label={pageT("filters.valueLabel", "Filter {{index}} value", { index: index + 1 })}
+                              value={row.value}
+                              onChange={(event) => setFilterRows((current) => current.map((item) => (
+                                item.formId === row.formId ? { ...item, value: event.target.value } : item
+                              )))}
+                            />
+                          </Field>
+                          <Button
+                            aria-label={pageT("filters.removeAria", "Remove filter {{index}}", { index: index + 1 })}
+                            className="self-end"
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                            onClick={() => setFilterRows((current) => current.filter((item) => item.formId !== row.formId))}
+                          >
+                            {pageT("actions.remove", "Remove")}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field label={pageT("fields.limit", "Limit")} hint={hintT("limit")}>
+                  <TextInput aria-label={pageT("fields.limit", "Limit")} type="number" value={limit} onChange={(event) => setLimit(event.target.value)} />
+                </Field>
+                <Field label={pageT("fields.tokenBudget", "Token budget")} hint={hintT("tokenBudget")}>
+                  <TextInput aria-label={pageT("fields.tokenBudget", "Token budget")} type="number" value={tokenBudget} onChange={(event) => setTokenBudget(event.target.value)} />
+                </Field>
+              </div>
+              <ToggleSwitch checked={traceEnabled} label={pageT("fields.traceEnabled", "Enable tracing")} onCheckedChange={onTraceEnabledChange} />
+              <Button disabled={searchLoading || retrievalProfileDetailLoading || !retrievalProfileId || !query.trim()} onClick={handleSearchSubmit}>
+                {searchLoading ? pageT("actions.searching", "Searching...") : pageT("actions.runSearch", "Run retrieval")}
               </Button>
             </div>
-            {filterRows.length > 0 ? (
-              <div className="mt-3 grid gap-3">
-                {filterRows.map((row, index) => {
-                  const selectedField = filterFieldSchema[row.field];
-                  const operators = selectedField?.operators?.length ? selectedField.operators : [...workbenchFilterOperators];
+            <div className="mt-5 grid gap-3">
+              <PreviewLine title={pageT("preview.firstHit", "First hit")} value={searchResult?.hits?.[0]?.title ?? searchResult?.hits?.[0]?.sourceCode ?? pageT("preview.waiting", "Waiting")} />
+              <PreviewLine title={pageT("preview.contextPack", "Context pack")} value={String(searchResult?.contextPack?.tokenCount ?? 0)} />
+              <PreviewLine title={pageT("preview.traceCode", "Trace code")} value={searchResult?.traceCode ?? (traceEnabled ? pageT("preview.enabled", "Enabled") : pageT("preview.disabled", "Disabled"))} />
+            </div>
+            <StageResultsList results={searchResult?.stageResults} title={pageT("stageResults.retrievalTitle", "Retrieval stage results")} />
+            {searchHits.length > 0 ? (
+              <div className="mt-5 space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("results.title", "Retrieval results")}</p>
+                {searchHits.map((hit, index) => {
+                  const returnedFields = selectedReturnFields
+                    .map((field) => [field, hit[field]] as const)
+                    .filter(([, value]) => value !== undefined && value !== null);
+                  const treeMetadataRows = treeHitMetadataRows(hit);
                   return (
-                    <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)_auto]" key={row.formId}>
-                      <Field label={pageT("filters.fieldLabel", "Filter {{index}} field", { index: index + 1 })} hint={hintT("filterField")}>
-                        <SelectInput
-                          aria-label={pageT("filters.fieldLabel", "Filter {{index}} field", { index: index + 1 })}
-                          value={row.field}
-                          onChange={(event) => setFilterRows((current) => current.map((item) => (
-                            item.formId === row.formId ? { ...item, field: event.target.value } : item
-                          )))}
-                        >
-                          <option value="">{pageT("fields.selectField", "Select field")}</option>
-                          {filterFieldOptions.map((option) => (
-                            <option key={option.field} value={option.field}>{option.field}</option>
+                    <article
+                      className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm"
+                      key={`${hit.corpusId ?? "hit"}-${hit.sourceCode ?? index}-${hit.sourceVersion ?? "v"}`}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="font-medium text-[var(--color-on-surface)]">
+                            {hit.title ?? hit.sourceCode ?? pageT("results.hitFallback", "Hit {{index}}", { index: index + 1 })}
+                          </p>
+                          <p className="mt-1 break-all font-mono text-[12px] text-[var(--color-on-surface-variant)]">
+                            {[hit.corpusId, hit.sourceCode, hit.sourceVersion].filter(Boolean).join(" · ")}
+                          </p>
+                        </div>
+                        <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">
+                          {pageT("results.score", "Score {{score}}", { score: formatScore(hit.score) })}
+                        </span>
+                      </div>
+                      {returnedFields.length > 0 ? (
+                        <dl className="mt-3 grid gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 sm:grid-cols-2">
+                          {returnedFields.map(([field, value]) => (
+                            <div key={field}>
+                              <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{field}</dt>
+                              <dd className="mt-1 break-all text-[var(--color-on-surface)]">{formatFieldValue(value)}</dd>
+                            </div>
                           ))}
-                        </SelectInput>
-                      </Field>
-                      <Field label={pageT("filters.operatorLabel", "Filter {{index}} operator", { index: index + 1 })} hint={hintT("filterOperator")}>
-                        <SelectInput
-                          aria-label={pageT("filters.operatorLabel", "Filter {{index}} operator", { index: index + 1 })}
-                          value={row.operator}
-                          onChange={(event) => setFilterRows((current) => current.map((item) => (
-                            item.formId === row.formId ? { ...item, operator: event.target.value } : item
-                          )))}
-                        >
-                          {operators.map((operator) => (
-                            <option key={operator} value={operator}>{operator}</option>
+                        </dl>
+                      ) : null}
+                      {treeMetadataRows.length > 0 ? (
+                        <dl className="mt-3 grid gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 sm:grid-cols-2">
+                          {treeMetadataRows.map((row) => (
+                            <div key={row.label}>
+                              <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{row.label}</dt>
+                              <dd className="mt-1 break-all text-[var(--color-on-surface)]">{formatFieldValue(row.value)}</dd>
+                            </div>
                           ))}
-                        </SelectInput>
-                      </Field>
-                      <Field label={pageT("filters.valueLabel", "Filter {{index}} value", { index: index + 1 })} hint={hintT("filterValue")}>
-                        <TextInput
-                          aria-label={pageT("filters.valueLabel", "Filter {{index}} value", { index: index + 1 })}
-                          value={row.value}
-                          onChange={(event) => setFilterRows((current) => current.map((item) => (
-                            item.formId === row.formId ? { ...item, value: event.target.value } : item
-                          )))}
-                        />
-                      </Field>
-                      <Button
-                        aria-label={pageT("filters.removeAria", "Remove filter {{index}}", { index: index + 1 })}
-                        className="self-end"
-                        size="sm"
-                        type="button"
-                        variant="ghost"
-                        onClick={() => setFilterRows((current) => current.filter((item) => item.formId !== row.formId))}
-                      >
-                        {pageT("actions.remove", "Remove")}
-                      </Button>
-                    </div>
+                        </dl>
+                      ) : null}
+                      {hit.text ? (
+                        <p className="mt-3 line-clamp-4 text-[var(--color-on-surface-variant)]">
+                          {hit.text}
+                        </p>
+                      ) : null}
+                    </article>
                   );
                 })}
               </div>
             ) : null}
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label={pageT("fields.limit", "Limit")} hint={hintT("limit")}>
-              <TextInput aria-label={pageT("fields.limit", "Limit")} type="number" value={limit} onChange={(event) => setLimit(event.target.value)} />
-            </Field>
-            <Field label={pageT("fields.tokenBudget", "Token budget")} hint={hintT("tokenBudget")}>
-              <TextInput aria-label={pageT("fields.tokenBudget", "Token budget")} type="number" value={tokenBudget} onChange={(event) => setTokenBudget(event.target.value)} />
-            </Field>
-          </div>
-          <ToggleSwitch checked={traceEnabled} label={pageT("fields.traceEnabled", "Enable tracing")} onCheckedChange={onTraceEnabledChange} />
-          <Button disabled={searchLoading || retrievalProfileDetailLoading || !retrievalProfileId || !query.trim()} onClick={handleSearchSubmit}>
-            {searchLoading ? pageT("actions.searching", "Searching...") : pageT("actions.runSearch", "Run retrieval")}
-          </Button>
-        </div>
-        <div className="mt-5 grid gap-3">
-          <PreviewLine title={pageT("preview.firstHit", "First hit")} value={searchResult?.hits?.[0]?.title ?? searchResult?.hits?.[0]?.sourceCode ?? pageT("preview.waiting", "Waiting")} />
-          <PreviewLine title={pageT("preview.contextPack", "Context pack")} value={String(searchResult?.contextPack?.tokenCount ?? 0)} />
-          <PreviewLine title={pageT("preview.traceCode", "Trace code")} value={searchResult?.traceCode ?? (traceEnabled ? pageT("preview.enabled", "Enabled") : pageT("preview.disabled", "Disabled"))} />
-        </div>
-        <StageResultsList results={searchResult?.stageResults} title={pageT("stageResults.retrievalTitle", "Retrieval stage results")} />
-        {searchHits.length > 0 ? (
-          <div className="mt-5 space-y-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("results.title", "Retrieval results")}</p>
-            {searchHits.map((hit, index) => {
-              const returnedFields = selectedReturnFields
-                .map((field) => [field, hit[field]] as const)
-                .filter(([, value]) => value !== undefined && value !== null);
-              const treeMetadataRows = treeHitMetadataRows(hit);
-              return (
-                <article
-                  className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm"
-                  key={`${hit.corpusId ?? "hit"}-${hit.sourceCode ?? index}-${hit.sourceVersion ?? "v"}`}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-medium text-[var(--color-on-surface)]">
-                        {hit.title ?? hit.sourceCode ?? pageT("results.hitFallback", "Hit {{index}}", { index: index + 1 })}
+            {contextPackItems.length > 0 ? (
+              <div className="mt-5 space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("contextItems.title", "Context pack items")}</p>
+                {contextPackItems.map((item, index) => (
+                  <article
+                    className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm"
+                    key={`${item.sourceCode ?? "context"}-${index}`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="break-all font-mono text-[12px] text-[var(--color-on-surface-variant)]">
+                        {item.sourceCode ?? pageT("contextItems.itemFallback", "Context item {{index}}", { index: index + 1 })}
                       </p>
-                      <p className="mt-1 break-all font-mono text-[12px] text-[var(--color-on-surface-variant)]">
-                        {[hit.corpusId, hit.sourceCode, hit.sourceVersion].filter(Boolean).join(" · ")}
-                      </p>
+                      <span className="font-mono text-[12px] text-[var(--color-on-surface-variant)]">
+                        {pageT("contextItems.tokens", "{{count}} tokens", { count: item.tokens ?? 0 })}
+                      </span>
                     </div>
-                    <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">
-                      {pageT("results.score", "Score {{score}}", { score: formatScore(hit.score) })}
-                    </span>
-                  </div>
-                  {returnedFields.length > 0 ? (
-                    <dl className="mt-3 grid gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 sm:grid-cols-2">
-                      {returnedFields.map(([field, value]) => (
-                        <div key={field}>
-                          <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{field}</dt>
-                          <dd className="mt-1 break-all text-[var(--color-on-surface)]">{formatFieldValue(value)}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  ) : null}
-                  {treeMetadataRows.length > 0 ? (
-                    <dl className="mt-3 grid gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 sm:grid-cols-2">
-                      {treeMetadataRows.map((row) => (
-                        <div key={row.label}>
-                          <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{row.label}</dt>
-                          <dd className="mt-1 break-all text-[var(--color-on-surface)]">{formatFieldValue(row.value)}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  ) : null}
-                  {hit.text ? (
-                    <p className="mt-3 line-clamp-4 text-[var(--color-on-surface-variant)]">
-                      {hit.text}
-                    </p>
-                  ) : null}
-                </article>
-              );
-            })}
+                    {item.text ? (
+                      <p className="mt-3 line-clamp-3 text-[var(--color-on-surface-variant)]">
+                        {item.text}
+                      </p>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            ) : null}
+            {searchFeedback ? (
+              <p className="mt-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3 text-sm text-[var(--color-on-surface)]">
+                {searchFeedback}
+              </p>
+            ) : null}
           </div>
-        ) : null}
-        {contextPackItems.length > 0 ? (
-          <div className="mt-5 space-y-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("contextItems.title", "Context pack items")}</p>
-            {contextPackItems.map((item, index) => (
-              <article
-                className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm"
-                key={`${item.sourceCode ?? "context"}-${index}`}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="break-all font-mono text-[12px] text-[var(--color-on-surface-variant)]">
-                    {item.sourceCode ?? pageT("contextItems.itemFallback", "Context item {{index}}", { index: index + 1 })}
-                  </p>
-                  <span className="font-mono text-[12px] text-[var(--color-on-surface-variant)]">
-                    {pageT("contextItems.tokens", "{{count}} tokens", { count: item.tokens ?? 0 })}
-                  </span>
-                </div>
-                {item.text ? (
-                  <p className="mt-3 line-clamp-3 text-[var(--color-on-surface-variant)]">
-                    {item.text}
-                  </p>
-                ) : null}
-              </article>
-            ))}
-          </div>
-        ) : null}
-        {searchFeedback ? (
-          <p className="mt-4 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3 text-sm text-[var(--color-on-surface)]">
-            {searchFeedback}
-          </p>
-        ) : null}
-        </div>
-      </SurfaceCard>
+        </SurfaceCard>
       )}
     </div>
   );

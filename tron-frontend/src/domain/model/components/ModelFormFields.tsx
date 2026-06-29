@@ -24,6 +24,7 @@ import {
 } from "@/domain/model/constants/modelPageOptions";
 import type { ModelMutationPayload } from "@/domain/model/api";
 import type { ModelCapability, ModelRecord, ModelType } from "@/domain/model/model";
+import { SelectGroup, SelectGroupLabel, SelectItem } from "@/components/ui/select";
 
 const MASKED_API_KEY_VALUE = "*****";
 const DEFAULT_TEMPERATURE = "0.2";
@@ -240,8 +241,8 @@ export function ModelFormFields({
         <Field label="Protocol">
           <SelectInput
             value={state.protocol}
-            onChange={(event) => {
-              const nextProtocol = event.target.value as ModelFormState["protocol"];
+            onValueChange={(event) => {
+              const nextProtocol = event as ModelFormState["protocol"];
               const nextValidModelTypes = getValidModelTypesForProtocol(nextProtocol);
               const nextModelCapabilities = state.modelCapabilities.filter((value) => (
                 nextValidModelTypes.includes(getModelTypeFromCapability(value))
@@ -270,9 +271,9 @@ export function ModelFormFields({
             disabled={readOnly}
           >
             {protocolOptions.map((item) => (
-              <option key={item.value} value={item.value}>
+              <SelectItem key={item.value} value={item.value}>
                 {item.label}
-              </option>
+              </SelectItem>
             ))}
           </SelectInput>
         </Field>
@@ -281,10 +282,9 @@ export function ModelFormFields({
             className="h-auto min-h-32 py-2"
             value={state.modelCapabilities}
             multiple
-            size={10}
-            onChange={(event) => {
-              const nextModelCapabilities = Array.from(event.target.selectedOptions, (option) => (
-                option.value as ModelCapability
+            onValueChange={(event) => {
+              const nextModelCapabilities = Array.from(event, (option) => (
+                option as ModelCapability
               ));
               const nextModelType = getPrimaryModelTypeFromCapabilities(
                 state.protocol,
@@ -305,13 +305,16 @@ export function ModelFormFields({
             disabled={readOnly}
           >
             {modelCapabilityGroups.map((group) => (
-              <optgroup key={group.label} label={group.label}>
-                {group.options.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </optgroup>
+              <SelectGroup key={group.label} >
+                <SelectGroupLabel>{group.label}</SelectGroupLabel>
+                {
+                  group.options.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))
+                }
+              </SelectGroup>
             ))}
           </SelectInput>
         </Field>
@@ -410,11 +413,11 @@ export function ModelFormFields({
         <Field label={t("common:responsesState.label", "Responses State")}>
           <SelectInput
             value={state.responsesStatefulEnabled ? "true" : "false"}
-            onChange={(event) => patch("responsesStatefulEnabled", event.target.value === "true")}
+            onValueChange={(event) => patch("responsesStatefulEnabled", event === "true")}
             disabled={readOnly}
           >
-            <option value="false">{t("common:responsesState.stateless", "Stateless")}</option>
-            <option value="true">{t("common:responsesState.stateful", "Stateful")}</option>
+            <SelectItem value="false">{t("common:responsesState.stateless", "Stateless")}</SelectItem>
+            <SelectItem value="true">{t("common:responsesState.stateful", "Stateful")}</SelectItem>
           </SelectInput>
         </Field>
       ) : null}

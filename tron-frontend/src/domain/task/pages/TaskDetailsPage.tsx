@@ -85,6 +85,7 @@ import type {
   AutomationAgentOption,
   AutomationModelOption,
 } from "@/domain/automation/pages/automationExecutionOptions";
+import { SelectItem } from "@/components/ui/select";
 
 function ProgressBar({ value }: { value: number }) {
   return (
@@ -374,16 +375,16 @@ export function TaskDetailsPage() {
             ))}
             {!task.subtasks.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">No active subtasks.</p> : null}
           </div>
-            {!archived ? (
-              <>
-                <div className="mt-4">
-                  <Field label="New Subtask Title">
-                    <TextInput aria-label="New subtask title" value={childTitle} onChange={(event) => setChildTitle(event.target.value)} />
-                  </Field>
-                </div>
-                <Button className="mt-3 w-full" disabled={!childTitle.trim()} variant="secondary" onClick={addSubtask}><Plus size={14} aria-hidden="true" />Add Subtask</Button>
-              </>
-            ) : null}
+          {!archived ? (
+            <>
+              <div className="mt-4">
+                <Field label="New Subtask Title">
+                  <TextInput aria-label="New subtask title" value={childTitle} onChange={(event) => setChildTitle(event.target.value)} />
+                </Field>
+              </div>
+              <Button className="mt-3 w-full" disabled={!childTitle.trim()} variant="secondary" onClick={addSubtask}><Plus size={14} aria-hidden="true" />Add Subtask</Button>
+            </>
+          ) : null}
         </div>
       </SurfaceCard>
     </InspectorPanel>
@@ -669,16 +670,16 @@ export function TaskDetailsPage() {
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Task Status">
-              <SelectInput aria-label="Task detail status" value={status} onChange={(event) => {
-                void handleStatusChange(event.target.value as TaskStatus);
+              <SelectInput aria-label="Task detail status" value={status} onValueChange={(event) => {
+                void handleStatusChange(event as TaskStatus);
               }}>
-                {availableStatuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
+                {availableStatuses.map((item) => <SelectItem key={item} value={item}>{statusLabel(item)}</SelectItem>)}
               </SelectInput>
             </Field>
             <Field label="Priority">
               {updatesEditable ? (
-                <SelectInput aria-label="Task detail priority" value={priority} onChange={(event) => handlePriorityChange(event.target.value as TaskPriority)}>
-                  {options.priorities.map((item) => <option key={item}>{item}</option>)}
+                <SelectInput aria-label="Task detail priority" value={priority} onValueChange={(event) => handlePriorityChange(event as TaskPriority)}>
+                  {options.priorities.map((item) => <SelectItem key={item}>{item}</SelectItem>)}
                 </SelectInput>
               ) : (
                 <ReadValue>{task.priority}</ReadValue>
@@ -759,8 +760,8 @@ export function TaskDetailsPage() {
             </Field>
             <Field label="Task Type">
               {detailEditable ? (
-                <SelectInput aria-label="Task detail type" value={taskType} onChange={(event) => setTaskType(event.target.value as TaskType)}>
-                  {options.taskTypes.map((item) => <option key={item}>{item}</option>)}
+                <SelectInput aria-label="Task detail type" value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
+                  {options.taskTypes.map((item) => <SelectItem key={item}>{item}</SelectItem>)}
                 </SelectInput>
               ) : (
                 <ReadValue>{task.taskType}</ReadValue>
@@ -768,8 +769,8 @@ export function TaskDetailsPage() {
             </Field>
             <Field label="Source Type">
               {detailEditable ? (
-                <SelectInput aria-label="Task detail source type" value={sourceType} onChange={(event) => setSourceType(event.target.value as TaskSourceType)}>
-                  {options.sourceTypes.map((item) => <option key={item}>{item}</option>)}
+                <SelectInput aria-label="Task detail source type" value={sourceType} onValueChange={(event) => setSourceType(event as TaskSourceType)}>
+                  {options.sourceTypes.map((item) => <SelectItem key={item}>{item}</SelectItem>)}
                 </SelectInput>
               ) : (
                 <ReadValue>{task.sourceType}</ReadValue>

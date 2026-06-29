@@ -30,6 +30,7 @@ import {
 } from "@/shared";
 import { sharedShellPreviewRows } from "@/domain/shared-shell/constants";
 import { AuthUserMenuPanel } from "@/domain/auth";
+import { SelectItem } from "@/components/ui/select";
 
 
 export function SharedShellPreviewPage() {
@@ -166,9 +167,9 @@ export function SharedShellPreviewPage() {
             </Field>
             <Field label="Scope">
               <SelectInput defaultValue="workspace">
-                <option value="workspace">Workspace</option>
-                <option value="app">Application</option>
-                <option value="global">Global</option>
+                <SelectItem value="workspace">Workspace</SelectItem>
+                <SelectItem value="app">Application</SelectItem>
+                <SelectItem value="global">Global</SelectItem>
               </SelectInput>
             </Field>
             <Field label="Notes">

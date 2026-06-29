@@ -38,6 +38,7 @@ import {
 } from "@/domain/admin/constants";
 import { cn } from "@/shared/lib/utils";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { SelectItem } from "@/components/ui/select";
 
 type PermissionCode = (typeof adminPermissionCodes)[number];
 type RoleKind = "System" | "Custom";
@@ -144,9 +145,9 @@ function serializeRoles(roles: readonly EditableRole[], domains: readonly string
 function normalizeRoleRecord(role: RoleRecord, domains: readonly string[]): EditableRole {
   const code = normalizeRoleCodeInput(
     role.code
-      ?? SYSTEM_ROLE_CODES_BY_ID[role.id]
-      ?? SYSTEM_ROLE_CODES_BY_NAME[role.name]
-      ?? role.id,
+    ?? SYSTEM_ROLE_CODES_BY_ID[role.id]
+    ?? SYSTEM_ROLE_CODES_BY_NAME[role.name]
+    ?? role.id,
   );
 
   return {
@@ -659,12 +660,12 @@ export function RoleMatrixPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <SearchField ariaLabel="Search roles" placeholder="Search roles, codes, or descriptions..." value={query} onChange={setQuery} />
-            <SelectInput aria-label="Filter by role type" className="h-9 min-w-36" value={roleType} onChange={(event) => setRoleType(event.target.value as RoleTypeFilter)}>
-              {ROLE_TYPE_OPTIONS.map((option) => <option key={option}>{option}</option>)}
+            <SelectInput aria-label="Filter by role type" className="h-9 min-w-36" value={roleType} onValueChange={(event) => setRoleType(event as RoleTypeFilter)}>
+              {ROLE_TYPE_OPTIONS.map((option) => <SelectItem key={option}>{option}</SelectItem>)}
             </SelectInput>
-            <SelectInput aria-label="Filter by permission domain" className="h-9 min-w-40" value={domainFilter} onChange={(event) => setDomainFilter(event.target.value)}>
-              <option value={ALL_DOMAINS}>{ALL_DOMAINS}</option>
-              {allDomains.map((domain) => <option key={domain} value={domain}>{domain}</option>)}
+            <SelectInput aria-label="Filter by permission domain" className="h-9 min-w-40" value={domainFilter} onValueChange={(event) => setDomainFilter(event!)}>
+              <SelectItem value={ALL_DOMAINS}>{ALL_DOMAINS}</SelectItem>
+              {allDomains.map((domain) => <SelectItem key={domain} value={domain}>{domain}</SelectItem>)}
             </SelectInput>
             <ToggleSwitch checked={showChangedOnly} label="Show changed only" onCheckedChange={setShowChangedOnly} />
           </div>

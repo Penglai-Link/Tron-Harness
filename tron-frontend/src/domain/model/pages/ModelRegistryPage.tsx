@@ -58,6 +58,7 @@ import type {
   WorkspaceModelCatalog,
 } from "@/domain/model/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { SelectItem } from "@/components/ui/select";
 
 interface RowMenuState {
   left: number;
@@ -397,10 +398,10 @@ export function ModelRegistryPage() {
             </div>
             <div className="min-w-0">
               <Field label="Status">
-                <SelectInput className="w-full" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                  <option value="ALL">All</option>
-                  <option value="ENABLED">Enabled</option>
-                  <option value="DISABLED">Disabled</option>
+                <SelectInput className="w-full" value={statusFilter} onValueChange={(event) => setStatusFilter(event!)}>
+                  <SelectItem value="ALL">All</SelectItem>
+                  <SelectItem value="ENABLED">Enabled</SelectItem>
+                  <SelectItem value="DISABLED">Disabled</SelectItem>
                 </SelectInput>
               </Field>
             </div>
@@ -410,13 +411,13 @@ export function ModelRegistryPage() {
                   aria-label="Protocol"
                   className="w-full"
                   value={protocolFilter}
-                  onChange={(event) => setProtocolFilter(event.target.value)}
+                  onValueChange={(event) => setProtocolFilter(event!)}
                 >
-                  <option value="ALL">All</option>
+                  <SelectItem value="ALL">All</SelectItem>
                   {protocolOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
+                    <SelectItem key={option.value} value={option.value}>
                       {option.label}
-                    </option>
+                    </SelectItem>
                   ))}
                 </SelectInput>
               </Field>
@@ -427,13 +428,13 @@ export function ModelRegistryPage() {
                   aria-label="Type"
                   className="w-full"
                   value={typeFilter}
-                  onChange={(event) => setTypeFilter(event.target.value)}
+                  onValueChange={(event) => setTypeFilter(event!)}
                 >
-                  <option value="ALL">All</option>
+                  <SelectItem value="ALL">All</SelectItem>
                   {typeOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
+                    <SelectItem key={option.value} value={option.value}>
                       {option.label}
-                    </option>
+                    </SelectItem>
                   ))}
                 </SelectInput>
               </Field>
@@ -442,11 +443,11 @@ export function ModelRegistryPage() {
         </SurfaceCard>
 
         <DataTable<ModelRecord>
-        rows={pagination.visibleItems}
-        pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "models")} {...pagination.paginationProps} />}
-        rowKey={(row) => row.modelCode}
-        onRowClick={(row) => navigate(`/models/detail?modelCode=${encodeURIComponent(row.modelCode)}`)}
-        columns={[
+          rows={pagination.visibleItems}
+          pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "models")} {...pagination.paginationProps} />}
+          rowKey={(row) => row.modelCode}
+          onRowClick={(row) => navigate(`/models/detail?modelCode=${encodeURIComponent(row.modelCode)}`)}
+          columns={[
             {
               id: "displayName",
               header: "Display Name",

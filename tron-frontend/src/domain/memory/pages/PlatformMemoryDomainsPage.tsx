@@ -47,6 +47,7 @@ import {
   useToast,
 } from "@/shared";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { SelectItem } from "@/components/ui/select";
 
 interface RowMenuState {
   domainCode: string;
@@ -306,10 +307,10 @@ function DomainEditorDialog({
                   <Field label="Status">
                     <SelectInput
                       value={form.status}
-                      onChange={(event) => onChange({ ...form, status: event.target.value as MemoryWorkDomainRecord["status"] })}
+                      onValueChange={(event) => onChange({ ...form, status: event as MemoryWorkDomainRecord["status"] })}
                     >
-                      <option value="ACTIVE">ACTIVE</option>
-                      <option value="DISABLED">DISABLED</option>
+                      <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                      <SelectItem value="DISABLED">DISABLED</SelectItem>
                     </SelectInput>
                   </Field>
                 </div>
@@ -616,10 +617,10 @@ export function PlatformMemoryDomainsPage() {
                 className="w-full"
                 disabled={loading}
                 value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value as DomainStatusFilter)}
+                onValueChange={(event) => setStatusFilter(event as DomainStatusFilter)}
               >
                 {domainStatusFilterOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
               </SelectInput>
             </Field>
@@ -629,10 +630,10 @@ export function PlatformMemoryDomainsPage() {
                 className="w-full"
                 disabled={loading}
                 value={sortMode}
-                onChange={(event) => setSortMode(event.target.value as DomainSortMode)}
+                onValueChange={(event) => setSortMode(event as DomainSortMode)}
               >
                 {domainSortOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                 ))}
               </SelectInput>
             </Field>

@@ -16,6 +16,7 @@ import {
   appStatusTone,
   formatAppTimestamp,
 } from "@/domain/app/model";
+import { SelectItem } from "@/components/ui/select";
 
 export interface AppFormState {
   defaultBranch: string;
@@ -78,7 +79,7 @@ export function buildAppPayload(form: AppFormState): CreateAppPayload {
 export function canSubmitAppForm(form: AppFormState) {
   return Boolean(
     form.name.trim()
-      && form.localDirectory.trim(),
+    && form.localDirectory.trim(),
   );
 }
 
@@ -134,11 +135,11 @@ export function AppFormFields({
           aria-label="Runtime role"
           disabled={disabled}
           value={form.runtimeRole}
-          onChange={(event) => onChange("runtimeRole", event.target.value as AppRuntimeRole)}
+          onValueChange={(event) => onChange("runtimeRole", event as AppRuntimeRole)}
         >
-          <option value="Frontend">Frontend</option>
-          <option value="Backend">Backend</option>
-          <option value="Mono">Mono</option>
+          <SelectItem value="Frontend">Frontend</SelectItem>
+          <SelectItem value="Backend">Backend</SelectItem>
+          <SelectItem value="Mono">Mono</SelectItem>
         </SelectInput>
       </Field>
       <Field label="Local Directory" hint={localDirectoryHint}>

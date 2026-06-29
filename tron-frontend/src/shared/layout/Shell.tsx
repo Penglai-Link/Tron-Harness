@@ -68,6 +68,7 @@ import type {
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { usePanel } from "../hooks/usePanel";
 import DraggleLine from "../ui/DraggleLine";
+import { SelectItem } from "@/components/ui/select";
 
 
 interface TronShellProps {
@@ -842,12 +843,14 @@ export function TronShell({
                           className="w-full"
                           id="tron-theme-select"
                           value={theme}
-                          onChange={(event) => setTheme(event.target.value === "matrix-dark" ? "matrix-dark" : "light")}
+                          onValueChange={(event) => {
+                            setTheme(event! === "matrix-dark" ? "matrix-dark" : "light");
+                          }}
                         >
                           {themes.map((themeOption) => (
-                            <option key={themeOption.value} value={themeOption.value}>
+                            <SelectItem key={themeOption.value} value={themeOption.value}>
                               {t(themeOption.labelKey)}
-                            </option>
+                            </SelectItem>
                           ))}
                         </SelectInput>
                       </div>
@@ -859,12 +862,12 @@ export function TronShell({
                           className="w-full"
                           id="tron-locale-select"
                           value={currentLocale}
-                          onChange={(event) => void changeLocale(event.target.value as typeof currentLocale)}
+                          onValueChange={(event) => void changeLocale(event as typeof currentLocale)}
                         >
                           {locales.map((locale) => (
-                            <option key={locale.code} value={locale.code}>
+                            <SelectItem key={locale.code} value={locale.code}>
                               {t(locale.labelKey)}
-                            </option>
+                            </SelectItem>
                           ))}
                         </SelectInput>
                       </div>

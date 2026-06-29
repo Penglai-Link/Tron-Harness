@@ -37,6 +37,7 @@ import {
   resourceStatusFilters,
   resourceTypeFilters,
 } from "@/domain/resource/constants";
+import { SelectItem } from "@/components/ui/select";
 
 function ResourceIcon({ resource }: { resource: ResourceRecord }) {
   const iconClassName = "size-4";
@@ -151,32 +152,32 @@ export function ResourcesPage() {
               aria-label={pageT("filters.typeAriaLabel", "Filter resources by type")}
               className="h-9 w-full sm:w-52"
               value={typeFilter}
-              onChange={(event) => {
-                setTypeFilter(event.target.value as (typeof resourceTypeFilters)[number]);
-                setNotice(pageT("messages.typeFilter", "Type filter changed to {{value}}", { value: event.target.value }));
+              onValueChange={(event) => {
+                setTypeFilter(event as (typeof resourceTypeFilters)[number]);
+                setNotice(pageT("messages.typeFilter", "Type filter changed to {{value}}", { value: event }));
               }}
             >
               {resourceTypeFilters.map((item) => (
-                <option key={item} value={item}>
+                <SelectItem key={item} value={item}>
                   {item === "All" ? pageT("filters.allTypes", "All Types") : item}
-                </option>
+                </SelectItem>
               ))}
             </SelectInput>
             <SelectInput
               aria-label={pageT("filters.statusAriaLabel", "Filter resources by status")}
               className="h-9 w-full sm:w-44"
               value={statusFilter}
-              onChange={(event) => {
-                setStatusFilter(event.target.value as (typeof resourceStatusFilters)[number] | "All");
-                setNotice(pageT("messages.statusFilter", "Status filter changed to {{value}}", { value: event.target.value }));
+              onValueChange={(event) => {
+                setStatusFilter(event as (typeof resourceStatusFilters)[number] | "All");
+                setNotice(pageT("messages.statusFilter", "Status filter changed to {{value}}", { value: event }));
               }}
             >
               {resourceStatusFilters.map((item) => (
-                <option key={item} value={item}>
+                <SelectItem key={item} value={item}>
                   {item}
-                </option>
+                </SelectItem>
               ))}
-              <option value="All">{pageT("filters.allStatuses", "All Statuses")}</option>
+              <SelectItem value="All">{pageT("filters.allStatuses", "All Statuses")}</SelectItem>
             </SelectInput>
             <Button size="sm" type="button" variant="secondary" onClick={toggleAllSelected}>
               {allSelected ? pageT("actions.clearVisible", "Clear Visible") : pageT("actions.selectVisible", "Select Visible")}

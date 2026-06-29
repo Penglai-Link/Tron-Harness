@@ -52,6 +52,7 @@ import type {
   AutomationStatus,
 } from "@/domain/automation/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { SelectItem } from "@/components/ui/select";
 
 function pageBounds(page: number, pageSize: number, total: number, visible: number) {
   if (!total || !visible) return { end: 0, start: 0 };
@@ -306,12 +307,12 @@ export function AutomationsPage() {
               className="h-9 w-full sm:w-44"
               aria-label={pt("Automation status filter")}
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as AutomationStatus | "")}
+              onValueChange={(event) => setStatusFilter(event as AutomationStatus | "")}
             >
-              <option value="">{pt("All active states")}</option>
-              <option value="Active">{pt("Active")}</option>
-              <option value="Paused">{pt("Paused")}</option>
-              <option value="Archived">{pt("Archived")}</option>
+              <SelectItem value="">{pt("All active states")}</SelectItem>
+              <SelectItem value="Active">{pt("Active")}</SelectItem>
+              <SelectItem value="Paused">{pt("Paused")}</SelectItem>
+              <SelectItem value="Archived">{pt("Archived")}</SelectItem>
             </SelectInput>
           </>
         }

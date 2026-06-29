@@ -52,6 +52,7 @@ import {
   restoreAdminUser,
 } from "@/domain/admin/api";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { SelectItem } from "@/components/ui/select";
 
 const ALL_FILTER = "All";
 
@@ -193,12 +194,12 @@ export function UsersPage() {
               setQuery(value);
               setCurrentPage(1);
             }} />
-            <SelectInput className="h-9 min-w-32" aria-label={pt("Filter by status")} value={statusFilter} onChange={(event) => {
-              setStatusFilter(event.target.value as UserStatus | typeof ALL_FILTER);
+            <SelectInput className="h-9 min-w-32" aria-label={pt("Filter by status")} value={statusFilter} onValueChange={(event) => {
+              setStatusFilter(event as UserStatus | typeof ALL_FILTER);
               setCurrentPage(1);
             }}>
-              <option value={ALL_FILTER}>{pt("All Status")}</option>
-              {statusOptions.map((item) => <option key={item}>{pt(item)}</option>)}
+              <SelectItem value={ALL_FILTER}>{pt("All Status")}</SelectItem>
+              {statusOptions.map((item) => <SelectItem key={item}>{pt(item)}</SelectItem>)}
             </SelectInput>
           </>
         }

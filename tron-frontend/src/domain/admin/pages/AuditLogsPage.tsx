@@ -21,6 +21,7 @@ import {
   adminAuditStatusOptions,
   getStatusTone,
 } from "@/domain/admin/constants";
+import { SelectItem } from "@/components/ui/select";
 
 export function AuditLogsPage() {
   const rows = useAuditLogList();
@@ -52,8 +53,8 @@ export function AuditLogsPage() {
         toolbar={
           <>
             <TextInput className="h-8 w-60" placeholder="Search audit logs..." value={query} onChange={(event) => setQuery(event.target.value)} />
-            <SelectInput className="h-8 w-36" value={status} onChange={(event) => setStatus(event.target.value)}>
-              {adminAuditStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            <SelectInput className="h-8 w-36" value={status} onValueChange={(event) => setStatus(event!)}>
+              {adminAuditStatusOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
             </SelectInput>
           </>
         }

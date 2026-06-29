@@ -39,6 +39,7 @@ import {
   mainAutomationAgentOption,
   type AutomationAgentOption,
 } from "./automationExecutionOptions";
+import { SelectItem } from "@/components/ui/select";
 
 export function CreateAutomationPage() {
   const navigate = useNavigate();
@@ -218,9 +219,9 @@ export function CreateAutomationPage() {
               <TextInput aria-label="Automation name" placeholder="Daily workspace release digest" value={name} onChange={(event) => setName(event.target.value)} />
             </Field>
             <Field label="Automation status">
-              <SelectInput aria-label="Automation status" value={status} onChange={(event) => setStatus(event.target.value as AutomationOperationalStatus)}>
+              <SelectInput aria-label="Automation status" value={status} onValueChange={(event) => setStatus(event as AutomationOperationalStatus)}>
                 {editableAutomationStatuses.map((item) => (
-                  <option key={item} value={item}>{item}</option>
+                  <SelectItem key={item} value={item}>{item}</SelectItem>
                 ))}
               </SelectInput>
             </Field>

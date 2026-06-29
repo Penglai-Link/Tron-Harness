@@ -24,6 +24,7 @@ import {
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 import { SelectInput } from "@/shared/ui/Forms";
+import { SelectItem } from "@/components/ui/select";
 
 const statusFilters = ["All", "Active", "Indexing", "Draft"] as const;
 
@@ -169,12 +170,12 @@ export function KnowledgeBasePage() {
             <SelectInput
               className="min-w-[180px]"
               value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value as (typeof statusFilters)[number])}
+              onValueChange={(event) => setStatusFilter(event! as (typeof statusFilters)[number])}
             >
               {statusFilters.map((status) => (
-                <option key={status} value={status}>
+                <SelectItem key={status} value={status}>
                   {status === "All" ? "All statuses" : status}
-                </option>
+                </SelectItem>
               ))}
             </SelectInput>
           </div>

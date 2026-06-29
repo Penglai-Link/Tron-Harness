@@ -101,6 +101,7 @@ import {
   validateRetrievalProfileForm,
 } from "@/domain/rag/model/ragProfileForm";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { SelectItem } from "@/components/ui/select";
 
 type ProfileReturnType = "ingest" | "retrieval";
 
@@ -620,11 +621,10 @@ function IngestTemplateCard({
           return (
             <button
               aria-pressed={selected}
-              className={`relative min-w-0 rounded-xl border p-4 text-left transition ${
-                selected
-                  ? "border-[var(--color-primary)] bg-[var(--color-surface-container-low)] shadow-[inset_4px_0_0_var(--color-primary)]"
-                  : "border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] hover:border-[var(--color-outline)]"
-              } ${disabled ? "cursor-not-allowed opacity-55" : ""}`}
+              className={`relative min-w-0 rounded-xl border p-4 text-left transition ${selected
+                ? "border-[var(--color-primary)] bg-[var(--color-surface-container-low)] shadow-[inset_4px_0_0_var(--color-primary)]"
+                : "border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] hover:border-[var(--color-outline)]"
+                } ${disabled ? "cursor-not-allowed opacity-55" : ""}`}
               disabled={disabled}
               key={template.templateId}
               type="button"
@@ -632,24 +632,22 @@ function IngestTemplateCard({
             >
               <div className="flex min-w-0 items-center justify-between gap-3">
                 <p className="min-w-0 break-words font-medium">{templateName(template)}</p>
-                <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] ${
-                  selected
-                    ? "border-[var(--color-primary)] bg-[var(--color-primary-container)] text-[var(--color-on-primary-container)]"
-                    : "border-[var(--color-outline-variant)]"
-                }`}>
-                    {selected ? pageT("templates.selected", "Selected") : pageT("templates.nodeCount", "{{count}} nodes", { count: template.pipeline.nodes.length })}
-                  </span>
+                <span className={`rounded-full border px-2 py-0.5 font-mono text-[11px] ${selected
+                  ? "border-[var(--color-primary)] bg-[var(--color-primary-container)] text-[var(--color-on-primary-container)]"
+                  : "border-[var(--color-outline-variant)]"
+                  }`}>
+                  {selected ? pageT("templates.selected", "Selected") : pageT("templates.nodeCount", "{{count}} nodes", { count: template.pipeline.nodes.length })}
+                </span>
               </div>
               {templateDescription(template) ? (
                 <p className="mt-2 break-words text-sm text-[var(--color-on-surface-variant)]">{templateDescription(template)}</p>
               ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
                 {capabilities.length > 0 ? capabilities.map((capability) => (
-                  <span className={`rounded-full px-2 py-0.5 font-mono text-[11px] ${
-                    selected
-                      ? "bg-[var(--color-primary-container)] text-[var(--color-on-primary-container)]"
-                      : "bg-[var(--color-surface)]"
-                  }`} key={capability}>
+                  <span className={`rounded-full px-2 py-0.5 font-mono text-[11px] ${selected
+                    ? "bg-[var(--color-primary-container)] text-[var(--color-on-primary-container)]"
+                    : "bg-[var(--color-surface)]"
+                    }`} key={capability}>
                     {capabilityLabel(capability)}
                   </span>
                 )) : (
@@ -1015,11 +1013,11 @@ function RouteRow({
             aria-label={pageT("routes.corpusAria", "Route {{index}} corpus", { index: index + 1 })}
             className="w-full"
             value={row.corpusId}
-            onChange={(event) => onUpdate({ corpusId: event.target.value, strategyId: "" })}
+            onValueChange={(event) => onUpdate({ corpusId: event!, strategyId: "" })}
           >
-            <option value="">{pageT("fields.selectCorpus", "Select corpus")}</option>
+            <SelectItem value="">{pageT("fields.selectCorpus", "Select corpus")}</SelectItem>
             {corpusOptions.map((corpus) => (
-              <option key={corpus.code} value={corpus.code}>{corpus.code}</option>
+              <SelectItem key={corpus.code} value={corpus.code}>{corpus.code}</SelectItem>
             ))}
           </SelectInput>
         </Field>
@@ -1028,10 +1026,10 @@ function RouteRow({
             aria-label={pageT("routes.strategyAria", "Route {{index}} retrieval strategy", { index: index + 1 })}
             className="w-full font-mono"
             value={row.strategyId}
-            onChange={(event) => onUpdate({ strategyId: event.target.value })}
+            onValueChange={(event) => onUpdate({ strategyId: event! })}
           >
-            <option value="">{strategyOptions.length > 0 ? pageT("routes.selectStrategy", "Select route strategy") : pageT("routes.noStrategies", "No supported strategies")}</option>
-            {strategyOptions.map((strategyId) => <option key={strategyId} value={strategyId}>{strategyId}</option>)}
+            <SelectItem value="">{strategyOptions.length > 0 ? pageT("routes.selectStrategy", "Select route strategy") : pageT("routes.noStrategies", "No supported strategies")}</SelectItem>
+            {strategyOptions.map((strategyId) => <SelectItem key={strategyId} value={strategyId}>{strategyId}</SelectItem>)}
           </SelectInput>
         </Field>
         {canRemove ? (
@@ -1081,10 +1079,10 @@ function FilterRow({
             aria-label={pageT("filters.fieldAria", "Filter {{index}} field", { index: index + 1 })}
             className="w-full"
             value={row.field}
-            onChange={(event) => onUpdate({ field: event.target.value })}
+            onValueChange={(event) => onUpdate({ field: event! })}
           >
-            <option value="">{pageT("fields.selectMappedField", "Select mapped field")}</option>
-            {fieldOptions.map((field) => <option key={field} value={field}>{field}</option>)}
+            <SelectItem value="">{pageT("fields.selectMappedField", "Select mapped field")}</SelectItem>
+            {fieldOptions.map((field) => <SelectItem key={field} value={field}>{field}</SelectItem>)}
           </SelectInput>
         </Field>
         <Field label={pageT("fields.operator", "Operator")} error={error?.operator} hint={retrievalHintT("filterOperator")}>
@@ -1092,9 +1090,9 @@ function FilterRow({
             aria-label={pageT("filters.operatorAria", "Filter {{index}} operator", { index: index + 1 })}
             className="w-full"
             value={row.operator}
-            onChange={(event) => onUpdate({ operator: event.target.value })}
+            onValueChange={(event) => onUpdate({ operator: event! })}
           >
-            {operatorOptions.map((operator) => <option key={operator} value={operator}>{operator}</option>)}
+            {operatorOptions.map((operator) => <SelectItem key={operator} value={operator}>{operator}</SelectItem>)}
           </SelectInput>
         </Field>
         <Field label={pageT("fields.value", "Value")} error={error?.value} hint={retrievalHintT("filterValue")}>
@@ -1419,14 +1417,14 @@ export function RagIngestProfileFormPage() {
               />
             </Field>
             <Field label={pageT("fields.status", "Status")} error={errors.status} hint={ingestHintT("status")}>
-              <SelectInput aria-label={pageT("fields.status", "Status")} value={form.status} onChange={(event) => updateForm("status", event.target.value as RagProfileStatus)}>
-                {listProfileStatuses().map((status) => <option key={status} value={status}>{formatRagStatusLabel(status, t)}</option>)}
+              <SelectInput aria-label={pageT("fields.status", "Status")} value={form.status} onValueChange={(event) => updateForm("status", event!)}>
+                {listProfileStatuses().map((status) => <SelectItem key={status} value={status}>{formatRagStatusLabel(status, t)}</SelectItem>)}
               </SelectInput>
             </Field>
             <Field label={pageT("fields.primaryCorpus", "Primary corpus")} error={errors.primaryCorpusId} hint={ingestHintT("primaryCorpus")}>
-              <SelectInput aria-label={pageT("fields.primaryCorpus", "Primary corpus")} value={form.primaryCorpusId} onChange={(event) => updateForm("primaryCorpusId", event.target.value)}>
-                <option value="">{pageT("fields.selectCorpus", "Select corpus")}</option>
-                {corpusOptions.map((corpus) => <option key={corpus.code} value={corpus.code}>{corpus.code}</option>)}
+              <SelectInput aria-label={pageT("fields.primaryCorpus", "Primary corpus")} value={form.primaryCorpusId} onValueChange={(event) => updateForm("primaryCorpusId", event!)}>
+                <SelectItem value="">{pageT("fields.selectCorpus", "Select corpus")}</SelectItem>
+                {corpusOptions.map((corpus) => <SelectItem key={corpus.code} value={corpus.code}>{corpus.code}</SelectItem>)}
               </SelectInput>
             </Field>
             <Field label={pageT("fields.description", "Description")} hint={ingestHintT("description")}>
@@ -1510,160 +1508,160 @@ export function RagIngestProfileFormPage() {
               const stageDefinition = findPipelineStageDefinition(pipelineCatalog, stageType);
               const configSchema = strategySchemaForNode(stageDefinition, stage.strategyId);
               return (
-              <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4" key={stage.id}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-medium">{stageDisplayName(pipelineCatalog, stageType)}</p>
-                    <p className="mt-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">{stageType}</p>
-                  </div>
-                  <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 font-mono text-[11px] text-[var(--color-on-surface-variant)]">{ingestStageNodeId(stage.id)}</span>
-                </div>
-                <div className="mt-3 grid gap-4 lg:grid-cols-2">
-                  <Field label={pageT("fields.strategy", "Strategy")} error={errors.stageRows?.[stage.id]?.strategyId} hint={ingestHintT("strategy")}>
-                    <SelectInput
-                      aria-label={pageT("ingest.stageStrategies.strategyAria", "{{stage}} strategy ID", { stage: stageType })}
-                      value={stage.strategyId}
-                      onChange={(event) => updateStageStrategy(stage.id, event.target.value)}
-                    >
-                      <option value="">{(allowedStageStrategies[stage.id]?.length ?? 0) > 0 ? pageT("ingest.stageStrategies.selectStrategy", "Select stage strategy") : pageT("ingest.stageStrategies.noStrategy", "No supported strategy")}</option>
-                      {(allowedStageStrategies[stage.id] ?? []).map((strategyId) => (
-                        <option key={strategyId} value={strategyId}>{strategyOptionLabel(stageDefinition, strategyId)}</option>
-                      ))}
-                    </SelectInput>
-                  </Field>
-
-                  {stage.id === "resolveSource" ? (
-                    <>
-                      <Field label={pageT("fields.allowedUriSchemes", "Allowed URI schemes")} hint={ingestHintT("resolveSourceAllowedUriSchemes")}>
-                        <TextInput
-                          aria-label={pageT("fields.allowedUriSchemes", "Allowed URI schemes")}
-                          className="font-mono"
-                          value={form.resolveSourceAllowedUriSchemesText}
-                          onChange={(event) => updateForm("resolveSourceAllowedUriSchemesText", event.target.value)}
-                        />
-                      </Field>
-                      <Field label={pageT("fields.maxBytes", "Max bytes")} error={errors.resolveSourceMaxBytes} hint={ingestHintT("resolveSourceMaxBytes")}>
-                        <TextInput
-                          aria-label={pageT("fields.maxBytes", "Max bytes")}
-                          className="font-mono"
-                          value={form.resolveSourceMaxBytes}
-                          onChange={(event) => updateForm("resolveSourceMaxBytes", event.target.value)}
-                        />
-                      </Field>
-                    </>
-                  ) : null}
-
-                  {stage.id === "parseDocument" ? (
-                    <>
-                      <Field
-                        label={stage.strategyId.trim() === mineruParseStrategyId ? pageT("fields.supportedFormats", "Supported formats") : pageT("fields.documentFormat", "Document format")}
-                        error={errors.parseDocumentFormat}
-                        hint={parseDocumentFormatHint(stage.strategyId)}
-                      >
-                        <TextInput
-                          aria-label={stage.strategyId.trim() === mineruParseStrategyId ? pageT("fields.supportedFormats", "Supported formats") : pageT("fields.documentFormat", "Document format")}
-                          className="font-mono"
-                          value={form.parseDocumentFormat}
-                          onChange={(event) => updateForm("parseDocumentFormat", event.target.value)}
-                        />
-                      </Field>
-                      <Field label={pageT("fields.unsupportedFormatPolicy", "Unsupported format policy")} hint={ingestHintT("parseDocumentUnsupportedFormatPolicy")}>
-                        <TextInput
-                          aria-label={pageT("fields.unsupportedFormatPolicy", "Unsupported format policy")}
-                          className="font-mono"
-                          value={form.parseDocumentUnsupportedFormatPolicy}
-                          onChange={(event) => updateForm("parseDocumentUnsupportedFormatPolicy", event.target.value)}
-                        />
-                      </Field>
-                    </>
-                  ) : null}
-
-                  {stage.id === "splitText" ? (
-                    <>
-                      <Field label={pageT("fields.splitterType", "Splitter type")} error={errors.splitTextType} hint={ingestHintT("splitTextType")}>
-                        <TextInput
-                          aria-label={pageT("fields.splitterType", "Splitter type")}
-                          className="font-mono"
-                          value={form.splitTextType}
-                          onChange={(event) => updateForm("splitTextType", event.target.value)}
-                        />
-                      </Field>
-                      <Field label={pageT("fields.maxTokens", "Max tokens")} error={errors.splitTextMaxTokens} hint={ingestHintT("splitTextMaxTokens")}>
-                        <TextInput
-                          aria-label={pageT("fields.maxTokens", "Max tokens")}
-                          className="font-mono"
-                          value={form.splitTextMaxTokens}
-                          onChange={(event) => updateForm("splitTextMaxTokens", event.target.value)}
-                        />
-                      </Field>
-                      <Field label={pageT("fields.overlapTokens", "Overlap tokens")} error={errors.splitTextOverlapTokens} hint={ingestHintT("splitTextOverlapTokens")}>
-                        <TextInput
-                          aria-label={pageT("fields.overlapTokens", "Overlap tokens")}
-                          className="font-mono"
-                          value={form.splitTextOverlapTokens}
-                          onChange={(event) => updateForm("splitTextOverlapTokens", event.target.value)}
-                        />
-                      </Field>
-                      <Field label={pageT("fields.headingDepth", "Heading depth")} error={errors.splitTextHeadingDepth} hint={ingestHintT("splitTextHeadingDepth")}>
-                        <TextInput
-                          aria-label={pageT("fields.headingDepth", "Heading depth")}
-                          className="font-mono"
-                          value={form.splitTextHeadingDepth}
-                          onChange={(event) => updateForm("splitTextHeadingDepth", event.target.value)}
-                        />
-                      </Field>
-                    </>
-                  ) : null}
-
-                  {stage.id === "summarizeTree" && stage.strategyId.trim() === treeLlmSummaryStrategyId ? (
-                    <Field label={pageT("fields.treeSummaryModelCode", "Tree summary model code")} error={errors.treeSummaryModelCode} hint={ingestHintT("treeSummaryModelCode")}>
-                      <TextInput
-                        aria-label={pageT("fields.treeSummaryModelCode", "Tree summary model code")}
-                        className="font-mono"
-                        value={form.treeSummaryModelCode}
-                        onChange={(event) => updateForm("treeSummaryModelCode", event.target.value)}
-                      />
-                    </Field>
-                  ) : null}
-
-                  {stage.id === "vectorIndex" ? (
-                    <>
-                      <Field label={pageT("fields.embeddingModelCode", "Embedding model code")} hint={ingestHintT("embeddingModelCode")}>
-                        <TextInput
-                          aria-label={pageT("fields.embeddingModelCode", "Embedding model code")}
-                          className="font-mono"
-                          value={form.embeddingModelCode}
-                          onChange={(event) => updateForm("embeddingModelCode", event.target.value)}
-                        />
-                      </Field>
-                      <Field label={pageT("fields.embeddingVersion", "Embedding version")} hint={ingestHintT("embeddingVersion")}>
-                        <TextInput
-                          aria-label={pageT("fields.embeddingVersion", "Embedding version")}
-                          className="font-mono"
-                          value={form.embeddingVersion}
-                          onChange={(event) => updateForm("embeddingVersion", event.target.value)}
-                        />
-                      </Field>
-                    </>
-                  ) : null}
-                </div>
-                {(allowedStageStrategies[stage.id]?.length ?? 0) === 0 ? (
-                  <p className="mt-3 text-[12px] text-[var(--color-on-surface-variant)]">
-                    {pageT("ingest.stageStrategies.noAvailableStrategy", "No available strategy for this stage and corpus.")}
-                  </p>
-                ) : null}
-                <details className="mt-4 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface)] p-3">
-                  <summary className="cursor-pointer text-sm font-medium">{pageT("ingest.developerContract.title", "Developer contract")}</summary>
-                  <div className="mt-3 grid gap-3">
-                    <div className="grid gap-2 text-[12px] text-[var(--color-on-surface-variant)] lg:grid-cols-2">
-                      <p><span className="font-semibold">{pageT("ingest.developerContract.input", "Input:")}</span>{stageDefinition?.inputArtifactKeys.join(", ") || pageT("values.none", "None")}</p>
-                      <p><span className="font-semibold">{pageT("ingest.developerContract.output", "Output:")}</span>{stageDefinition?.outputArtifactKeys.join(", ") || pageT("values.none", "None")}</p>
+                <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4" key={stage.id}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{stageDisplayName(pipelineCatalog, stageType)}</p>
+                      <p className="mt-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">{stageType}</p>
                     </div>
-                    <JsonPreview value={configSchema} />
+                    <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 font-mono text-[11px] text-[var(--color-on-surface-variant)]">{ingestStageNodeId(stage.id)}</span>
                   </div>
-                </details>
-              </div>
-            );
+                  <div className="mt-3 grid gap-4 lg:grid-cols-2">
+                    <Field label={pageT("fields.strategy", "Strategy")} error={errors.stageRows?.[stage.id]?.strategyId} hint={ingestHintT("strategy")}>
+                      <SelectInput
+                        aria-label={pageT("ingest.stageStrategies.strategyAria", "{{stage}} strategy ID", { stage: stageType })}
+                        value={stage.strategyId}
+                        onValueChange={(event) => updateStageStrategy(stage.id, event!)}
+                      >
+                        <SelectItem value="">{(allowedStageStrategies[stage.id]?.length ?? 0) > 0 ? pageT("ingest.stageStrategies.selectStrategy", "Select stage strategy") : pageT("ingest.stageStrategies.noStrategy", "No supported strategy")}</SelectItem>
+                        {(allowedStageStrategies[stage.id] ?? []).map((strategyId) => (
+                          <SelectItem key={strategyId} value={strategyId}>{strategyOptionLabel(stageDefinition, strategyId)}</SelectItem>
+                        ))}
+                      </SelectInput>
+                    </Field>
+
+                    {stage.id === "resolveSource" ? (
+                      <>
+                        <Field label={pageT("fields.allowedUriSchemes", "Allowed URI schemes")} hint={ingestHintT("resolveSourceAllowedUriSchemes")}>
+                          <TextInput
+                            aria-label={pageT("fields.allowedUriSchemes", "Allowed URI schemes")}
+                            className="font-mono"
+                            value={form.resolveSourceAllowedUriSchemesText}
+                            onChange={(event) => updateForm("resolveSourceAllowedUriSchemesText", event.target.value)}
+                          />
+                        </Field>
+                        <Field label={pageT("fields.maxBytes", "Max bytes")} error={errors.resolveSourceMaxBytes} hint={ingestHintT("resolveSourceMaxBytes")}>
+                          <TextInput
+                            aria-label={pageT("fields.maxBytes", "Max bytes")}
+                            className="font-mono"
+                            value={form.resolveSourceMaxBytes}
+                            onChange={(event) => updateForm("resolveSourceMaxBytes", event.target.value)}
+                          />
+                        </Field>
+                      </>
+                    ) : null}
+
+                    {stage.id === "parseDocument" ? (
+                      <>
+                        <Field
+                          label={stage.strategyId.trim() === mineruParseStrategyId ? pageT("fields.supportedFormats", "Supported formats") : pageT("fields.documentFormat", "Document format")}
+                          error={errors.parseDocumentFormat}
+                          hint={parseDocumentFormatHint(stage.strategyId)}
+                        >
+                          <TextInput
+                            aria-label={stage.strategyId.trim() === mineruParseStrategyId ? pageT("fields.supportedFormats", "Supported formats") : pageT("fields.documentFormat", "Document format")}
+                            className="font-mono"
+                            value={form.parseDocumentFormat}
+                            onChange={(event) => updateForm("parseDocumentFormat", event.target.value)}
+                          />
+                        </Field>
+                        <Field label={pageT("fields.unsupportedFormatPolicy", "Unsupported format policy")} hint={ingestHintT("parseDocumentUnsupportedFormatPolicy")}>
+                          <TextInput
+                            aria-label={pageT("fields.unsupportedFormatPolicy", "Unsupported format policy")}
+                            className="font-mono"
+                            value={form.parseDocumentUnsupportedFormatPolicy}
+                            onChange={(event) => updateForm("parseDocumentUnsupportedFormatPolicy", event.target.value)}
+                          />
+                        </Field>
+                      </>
+                    ) : null}
+
+                    {stage.id === "splitText" ? (
+                      <>
+                        <Field label={pageT("fields.splitterType", "Splitter type")} error={errors.splitTextType} hint={ingestHintT("splitTextType")}>
+                          <TextInput
+                            aria-label={pageT("fields.splitterType", "Splitter type")}
+                            className="font-mono"
+                            value={form.splitTextType}
+                            onChange={(event) => updateForm("splitTextType", event.target.value)}
+                          />
+                        </Field>
+                        <Field label={pageT("fields.maxTokens", "Max tokens")} error={errors.splitTextMaxTokens} hint={ingestHintT("splitTextMaxTokens")}>
+                          <TextInput
+                            aria-label={pageT("fields.maxTokens", "Max tokens")}
+                            className="font-mono"
+                            value={form.splitTextMaxTokens}
+                            onChange={(event) => updateForm("splitTextMaxTokens", event.target.value)}
+                          />
+                        </Field>
+                        <Field label={pageT("fields.overlapTokens", "Overlap tokens")} error={errors.splitTextOverlapTokens} hint={ingestHintT("splitTextOverlapTokens")}>
+                          <TextInput
+                            aria-label={pageT("fields.overlapTokens", "Overlap tokens")}
+                            className="font-mono"
+                            value={form.splitTextOverlapTokens}
+                            onChange={(event) => updateForm("splitTextOverlapTokens", event.target.value)}
+                          />
+                        </Field>
+                        <Field label={pageT("fields.headingDepth", "Heading depth")} error={errors.splitTextHeadingDepth} hint={ingestHintT("splitTextHeadingDepth")}>
+                          <TextInput
+                            aria-label={pageT("fields.headingDepth", "Heading depth")}
+                            className="font-mono"
+                            value={form.splitTextHeadingDepth}
+                            onChange={(event) => updateForm("splitTextHeadingDepth", event.target.value)}
+                          />
+                        </Field>
+                      </>
+                    ) : null}
+
+                    {stage.id === "summarizeTree" && stage.strategyId.trim() === treeLlmSummaryStrategyId ? (
+                      <Field label={pageT("fields.treeSummaryModelCode", "Tree summary model code")} error={errors.treeSummaryModelCode} hint={ingestHintT("treeSummaryModelCode")}>
+                        <TextInput
+                          aria-label={pageT("fields.treeSummaryModelCode", "Tree summary model code")}
+                          className="font-mono"
+                          value={form.treeSummaryModelCode}
+                          onChange={(event) => updateForm("treeSummaryModelCode", event.target.value)}
+                        />
+                      </Field>
+                    ) : null}
+
+                    {stage.id === "vectorIndex" ? (
+                      <>
+                        <Field label={pageT("fields.embeddingModelCode", "Embedding model code")} hint={ingestHintT("embeddingModelCode")}>
+                          <TextInput
+                            aria-label={pageT("fields.embeddingModelCode", "Embedding model code")}
+                            className="font-mono"
+                            value={form.embeddingModelCode}
+                            onChange={(event) => updateForm("embeddingModelCode", event.target.value)}
+                          />
+                        </Field>
+                        <Field label={pageT("fields.embeddingVersion", "Embedding version")} hint={ingestHintT("embeddingVersion")}>
+                          <TextInput
+                            aria-label={pageT("fields.embeddingVersion", "Embedding version")}
+                            className="font-mono"
+                            value={form.embeddingVersion}
+                            onChange={(event) => updateForm("embeddingVersion", event.target.value)}
+                          />
+                        </Field>
+                      </>
+                    ) : null}
+                  </div>
+                  {(allowedStageStrategies[stage.id]?.length ?? 0) === 0 ? (
+                    <p className="mt-3 text-[12px] text-[var(--color-on-surface-variant)]">
+                      {pageT("ingest.stageStrategies.noAvailableStrategy", "No available strategy for this stage and corpus.")}
+                    </p>
+                  ) : null}
+                  <details className="mt-4 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface)] p-3">
+                    <summary className="cursor-pointer text-sm font-medium">{pageT("ingest.developerContract.title", "Developer contract")}</summary>
+                    <div className="mt-3 grid gap-3">
+                      <div className="grid gap-2 text-[12px] text-[var(--color-on-surface-variant)] lg:grid-cols-2">
+                        <p><span className="font-semibold">{pageT("ingest.developerContract.input", "Input:")}</span>{stageDefinition?.inputArtifactKeys.join(", ") || pageT("values.none", "None")}</p>
+                        <p><span className="font-semibold">{pageT("ingest.developerContract.output", "Output:")}</span>{stageDefinition?.outputArtifactKeys.join(", ") || pageT("values.none", "None")}</p>
+                      </div>
+                      <JsonPreview value={configSchema} />
+                    </div>
+                  </details>
+                </div>
+              );
             })}
             {graphBackedCorpus ? (
               <Field label={pageT("fields.graphWritePolicy", "Graph write policy")} hint={ingestHintT("graphWritePolicy")}>
@@ -2067,14 +2065,14 @@ export function RagRetrievalProfileFormPage() {
               />
             </Field>
             <Field label={pageT("fields.status", "Status")} error={errors.status} hint={retrievalHintT("status")}>
-              <SelectInput aria-label={pageT("fields.status", "Status")} value={form.status} onChange={(event) => updateForm("status", event.target.value as RagProfileStatus)}>
-                {listProfileStatuses().map((status) => <option key={status} value={status}>{formatRagStatusLabel(status, t)}</option>)}
+              <SelectInput aria-label={pageT("fields.status", "Status")} value={form.status} onValueChange={(event) => updateForm("status", event as RagProfileStatus)}>
+                {listProfileStatuses().map((status) => <SelectItem key={status} value={status}>{formatRagStatusLabel(status, t)}</SelectItem>)}
               </SelectInput>
             </Field>
             <Field label={pageT("fields.primaryCorpus", "Primary corpus")} error={errors.primaryCorpusId} hint={retrievalHintT("primaryCorpus")}>
-              <SelectInput aria-label={pageT("fields.primaryCorpus", "Primary corpus")} value={form.primaryCorpusId} onChange={(event) => updateForm("primaryCorpusId", event.target.value)}>
-                <option value="">{pageT("fields.selectCorpus", "Select corpus")}</option>
-                {corpusOptions.map((corpus) => <option key={corpus.code} value={corpus.code}>{corpus.code}</option>)}
+              <SelectInput aria-label={pageT("fields.primaryCorpus", "Primary corpus")} value={form.primaryCorpusId} onValueChange={(event) => updateForm("primaryCorpusId", event!)}>
+                <SelectItem value="">{pageT("fields.selectCorpus", "Select corpus")}</SelectItem>
+                {corpusOptions.map((corpus) => <SelectItem key={corpus.code} value={corpus.code}>{corpus.code}</SelectItem>)}
               </SelectInput>
             </Field>
             <Field label={pageT("fields.description", "Description")} hint={retrievalHintT("description")}>
@@ -2120,18 +2118,18 @@ export function RagRetrievalProfileFormPage() {
           <h2 className="text-base font-semibold">{pageT("retrieval.resultPolicy.title", "Result policy")}</h2>
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <Field label={pageT("fields.fusionPolicy", "Fusion policy")} hint={retrievalHintT("fusionPolicy")}>
-              <SelectInput aria-label={pageT("fields.fusionPolicy", "Fusion policy")} className="font-mono" value={form.fusionPolicy} onChange={(event) => updateForm("fusionPolicy", event.target.value)}>
-                {fusionPolicyOptions.map((policy) => <option key={policy} value={policy}>{policy}</option>)}
+              <SelectInput aria-label={pageT("fields.fusionPolicy", "Fusion policy")} className="font-mono" value={form.fusionPolicy} onValueChange={(event) => updateForm("fusionPolicy", event!)}>
+                {fusionPolicyOptions.map((policy) => <SelectItem key={policy} value={policy}>{policy}</SelectItem>)}
               </SelectInput>
             </Field>
             <Field label={pageT("fields.dedupPolicy", "Dedup policy")} hint={retrievalHintT("dedupPolicy")}>
-              <SelectInput aria-label={pageT("fields.dedupPolicy", "Dedup policy")} className="font-mono" value={form.dedupPolicy} onChange={(event) => updateForm("dedupPolicy", event.target.value)}>
-                {dedupPolicyOptions.map((policy) => <option key={policy} value={policy}>{policy}</option>)}
+              <SelectInput aria-label={pageT("fields.dedupPolicy", "Dedup policy")} className="font-mono" value={form.dedupPolicy} onValueChange={(event) => updateForm("dedupPolicy", event!)}>
+                {dedupPolicyOptions.map((policy) => <SelectItem key={policy} value={policy}>{policy}</SelectItem>)}
               </SelectInput>
             </Field>
             <Field label={pageT("fields.topicPolicy", "Topic policy")} hint={retrievalHintT("topicPolicy")}>
-              <SelectInput aria-label={pageT("fields.topicPolicy", "Topic policy")} className="font-mono" value={form.topicPolicy} onChange={(event) => updateForm("topicPolicy", event.target.value)}>
-                {topicPolicyOptions.map((policy) => <option key={policy} value={policy}>{policy}</option>)}
+              <SelectInput aria-label={pageT("fields.topicPolicy", "Topic policy")} className="font-mono" value={form.topicPolicy} onValueChange={(event) => updateForm("topicPolicy", event!)}>
+                {topicPolicyOptions.map((policy) => <SelectItem key={policy} value={policy}>{policy}</SelectItem>)}
               </SelectInput>
             </Field>
             <Field label={pageT("fields.rerankModelCode", "Rerank model code")} hint={retrievalHintT("rerankModelCode")}>

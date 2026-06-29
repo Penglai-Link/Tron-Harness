@@ -15,6 +15,7 @@ import type {
   MemoryStatus,
   MemoryType,
 } from "@/domain/memory/model";
+import { SelectItem } from "@/components/ui/select";
 
 export type MemoryTargetFormValue = "space:current" | "user:current" | "domain";
 
@@ -209,8 +210,8 @@ export function MemoryFormFields({
           <Field label="Target">
             <SelectInput
               value={targetValue}
-              onChange={(event) => {
-                const nextValue = event.target.value as MemoryTargetFormValue;
+              onValueChange={(event) => {
+                const nextValue = event as MemoryTargetFormValue;
                 if (nextValue === "domain") {
                   patch("targetId", selectedDomainId || firstDomainId);
                   return;
@@ -218,20 +219,20 @@ export function MemoryFormFields({
                 patch("targetId", nextValue);
               }}
             >
-              <option value="space:current">Current space</option>
-              <option value="user:current">Current user</option>
-              <option value="domain">Work domain</option>
+              <SelectItem value="space:current">Current space</SelectItem>
+              <SelectItem value="user:current">Current user</SelectItem>
+              <SelectItem value="domain">Work domain</SelectItem>
             </SelectInput>
           </Field>
           <Field label="Work domain">
             <SelectInput
               disabled={targetValue !== "domain"}
               value={selectedDomainId}
-              onChange={(event) => patch("targetId", event.target.value)}
+              onValueChange={(event) => patch("targetId", event!)}
             >
-              <option value="">Not applicable</option>
+              <SelectItem value="">Not applicable</SelectItem>
               {domainTargets.map((target) => (
-                <option key={target.id} value={target.id}>{target.label}</option>
+                <SelectItem key={target.id} value={target.id}>{target.label}</SelectItem>
               ))}
             </SelectInput>
           </Field>
@@ -268,30 +269,30 @@ export function MemoryFormFields({
         <Field label="Memory type">
           <SelectInput
             value={state.memoryType}
-            onChange={(event) => patch("memoryType", event.target.value as MemoryType)}
+            onValueChange={(event) => patch("memoryType", event as MemoryType)}
           >
             {memoryTypeOptions.map((value) => (
-              <option key={value} value={value}>{value}</option>
+              <SelectItem key={value} value={value}>{value}</SelectItem>
             ))}
           </SelectInput>
         </Field>
         <Field label="Memory status">
           <SelectInput
             value={state.memoryStatus}
-            onChange={(event) => patch("memoryStatus", event.target.value as MemoryStatus)}
+            onValueChange={(event) => patch("memoryStatus", event as MemoryStatus)}
           >
             {memoryStatusValues.map((value) => (
-              <option key={value} value={value}>{value}</option>
+              <SelectItem key={value} value={value}>{value}</SelectItem>
             ))}
           </SelectInput>
         </Field>
         <Field label="Review status">
           <SelectInput
             value={state.reviewStatus}
-            onChange={(event) => patch("reviewStatus", event.target.value as MemoryReviewStatus)}
+            onValueChange={(event) => patch("reviewStatus", event as MemoryReviewStatus)}
           >
             {memoryReviewStatusValues.map((value) => (
-              <option key={value} value={value}>{value}</option>
+              <SelectItem key={value} value={value}>{value}</SelectItem>
             ))}
           </SelectInput>
         </Field>

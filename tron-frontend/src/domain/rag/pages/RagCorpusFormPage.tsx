@@ -67,32 +67,33 @@ import {
 } from "@/domain/rag/model/ragCorpusForm";
 import { formatRagStorageBinding } from "@/domain/rag/model/RagModel";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { SelectItem } from "@/components/ui/select";
 
 const segmentBindingMeta: Array<{
   key: RagEditableStorageSegmentKey;
   label: string;
 }> = [
-  {
-    key: "source",
-    label: "Source",
-  },
-  {
-    key: "textUnit",
-    label: "Text unit",
-  },
-  {
-    key: "fulltext",
-    label: "Fulltext index",
-  },
-  {
-    key: "vector",
-    label: "Vector",
-  },
-  {
-    key: "tree",
-    label: "Summary tree",
-  },
-];
+    {
+      key: "source",
+      label: "Source",
+    },
+    {
+      key: "textUnit",
+      label: "Text unit",
+    },
+    {
+      key: "fulltext",
+      label: "Fulltext index",
+    },
+    {
+      key: "vector",
+      label: "Vector",
+    },
+    {
+      key: "tree",
+      label: "Summary tree",
+    },
+  ];
 
 type FieldConfigTabKey = "source" | "textUnit" | "filters";
 
@@ -191,10 +192,10 @@ function StorageTargetCard({
               aria-label={pageT("storageTargets.backendAria", "Storage target {{index}} backend", { index: index + 1 })}
               className="w-full"
               value={target.backend}
-              onChange={(event) => updateTarget(target.formId, { backend: event.target.value as RagStorageTargetFormState["backend"] })}
+              onValueChange={(event) => updateTarget(target.formId, { backend: event as RagStorageTargetFormState["backend"] })}
             >
-              <option value="SQLITE">{pageT("storageTargets.sqlite", "Local table storage")}</option>
-              <option value="GRAPH">{pageT("storageTargets.graph", "Graph storage")}</option>
+              <SelectItem value="SQLITE">{pageT("storageTargets.sqlite", "Local table storage")}</SelectItem>
+              <SelectItem value="GRAPH">{pageT("storageTargets.graph", "Graph storage")}</SelectItem>
             </SelectInput>
           </Field>
           <Field label={pageT("fields.table", "Table")} error={error?.table} hint={hintT("storageTable")}>
@@ -230,10 +231,10 @@ function StorageTargetCard({
                 aria-label={pageT("storageTargets.backendAria", "Storage target {{index}} backend", { index: index + 1 })}
                 className="w-full"
                 value={target.backend}
-                onChange={(event) => updateTarget(target.formId, { backend: event.target.value as RagStorageTargetFormState["backend"] })}
+                onValueChange={(event) => updateTarget(target.formId, { backend: event as RagStorageTargetFormState["backend"] })}
               >
-                <option value="SQLITE">{pageT("storageTargets.sqlite", "Local table storage")}</option>
-                <option value="GRAPH">{pageT("storageTargets.graph", "Graph storage")}</option>
+                <SelectItem value="SQLITE">{pageT("storageTargets.sqlite", "Local table storage")}</SelectItem>
+                <SelectItem value="GRAPH">{pageT("storageTargets.graph", "Graph storage")}</SelectItem>
               </SelectInput>
             </Field>
             <Field label={pageT("fields.graphNamespace", "Graph namespace")} error={error?.namespace} hint={hintT("storageNamespace")}>
@@ -477,14 +478,14 @@ function FilterFieldsSection({
                   aria-label={pageT("filters.nameAria", "Filter field {{index}} name", { index: index + 1 })}
                   className="w-full"
                   value={row.name}
-                  onChange={(event) => onUpdate(index, { name: event.target.value })}
+                  onValueChange={(event) => onUpdate(index, { name: event! })}
                 >
-                  <option value="">{filterFieldOptions.length ? pageT("filters.selectMappedField", "Select mapped field") : pageT("filters.noMappedFields", "No mapped fields available")}</option>
+                  <SelectItem value="">{filterFieldOptions.length ? pageT("filters.selectMappedField", "Select mapped field") : pageT("filters.noMappedFields", "No mapped fields available")}</SelectItem>
                   {row.name && !filterFieldOptions.some((option) => option.logicalName === row.name) ? (
-                    <option value={row.name}>{pageT("filters.missingMapping", "{{name}} (missing mapping)", { name: row.name })}</option>
+                    <SelectItem value={row.name}>{pageT("filters.missingMapping", "{{name}} (missing mapping)", { name: row.name })}</SelectItem>
                   ) : null}
                   {filterFieldOptions.map((option) => (
-                    <option key={option.logicalName} value={option.logicalName}>{option.logicalName}</option>
+                    <SelectItem key={option.logicalName} value={option.logicalName}>{option.logicalName}</SelectItem>
                   ))}
                 </SelectInput>
               </Field>
@@ -493,11 +494,11 @@ function FilterFieldsSection({
                   aria-label={pageT("filters.typeAria", "Filter field {{index}} type", { index: index + 1 })}
                   className="w-full"
                   value={row.type}
-                  onChange={(event) => onUpdate(index, { type: event.target.value as RagFilterFieldFormRow["type"] })}
+                  onValueChange={(event) => onUpdate(index, { type: event as RagFilterFieldFormRow["type"] })}
                 >
-                  <option value="string">{pageT("filterTypes.string", "String")}</option>
-                  <option value="integer">{pageT("filterTypes.integer", "Integer")}</option>
-                  <option value="boolean">{pageT("filterTypes.boolean", "Boolean")}</option>
+                  <SelectItem value="string">{pageT("filterTypes.string", "String")}</SelectItem>
+                  <SelectItem value="integer">{pageT("filterTypes.integer", "Integer")}</SelectItem>
+                  <SelectItem value="boolean">{pageT("filterTypes.boolean", "Boolean")}</SelectItem>
                 </SelectInput>
               </Field>
               <Field label={pageT("fields.operators", "Operators")} hint={hintT("filterOperators")}>
@@ -1290,13 +1291,13 @@ export function RagCorpusFormPage() {
                         aria-label={pageT(`segmentBindings.${segmentMeta.key}`, "{{label}} target", { label: pageT(`segments.${segmentMeta.key}`, segmentMeta.label) })}
                         className="w-full"
                         value={form.segmentBindings[segmentMeta.key]}
-                        onChange={(event) => updateSegmentBinding(segmentMeta.key, event.target.value)}
+                        onValueChange={(event) => updateSegmentBinding(segmentMeta.key, event!)}
                       >
-                        <option value="">{pageT("storageTargets.select", "Select storage target")}</option>
+                        <SelectItem value="">{pageT("storageTargets.select", "Select storage target")}</SelectItem>
                         {form.storageTargets.map((target, targetIndex) => (
-                          <option key={target.formId} value={target.id.trim()}>
+                          <SelectItem key={target.formId} value={target.id.trim()}>
                             {ragStorageTargetOptionLabel(target, targetIndex)}
-                          </option>
+                          </SelectItem>
                         ))}
                       </SelectInput>
                     </Field>

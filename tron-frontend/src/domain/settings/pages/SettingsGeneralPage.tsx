@@ -21,6 +21,7 @@ import {
   minimumAguiWorkReplayTurnLimit,
   useAguiWorkReplayPreferences,
 } from "@/domain/settings/model/aguiWorkReplayPreferences";
+import { SelectItem } from "@/components/ui/select";
 
 export function SettingsGeneralPage() {
   const { t } = useTranslation(["common", "shell"]);
@@ -51,12 +52,12 @@ export function SettingsGeneralPage() {
             </span>
             <SelectInput
               value={theme}
-              onChange={(event) => setTheme(event.target.value === "matrix-dark" ? "matrix-dark" : "light")}
+              onValueChange={(event) => setTheme(event === "matrix-dark" ? "matrix-dark" : "light")}
             >
               {themes.map((themeOption) => (
-                <option key={themeOption.value} value={themeOption.value}>
+                <SelectItem key={themeOption.value} value={themeOption.value}>
                   {t(themeOption.labelKey)}
-                </option>
+                </SelectItem>
               ))}
             </SelectInput>
           </label>
@@ -70,12 +71,12 @@ export function SettingsGeneralPage() {
             </span>
             <SelectInput
               value={currentLocale}
-              onChange={(event) => void changeLocale(event.target.value as typeof currentLocale)}
+              onValueChange={(event) => void changeLocale(event as typeof currentLocale)}
             >
               {supportedLocales.map((locale) => (
-                <option key={locale.code} value={locale.code}>
+                <SelectItem key={locale.code} value={locale.code}>
                   {t(locale.labelKey)}
-                </option>
+                </SelectItem>
               ))}
             </SelectInput>
           </label>
@@ -94,12 +95,12 @@ export function SettingsGeneralPage() {
             <SelectInput
               aria-label="AG-UI event card visibility"
               value={aguiDebugPreferences.mode}
-              onChange={(event) => setAguiDebugMode(event.target.value as AguiDebugMode)}
+              onValueChange={(event) => setAguiDebugMode(event as AguiDebugMode)}
             >
               {aguiDebugModeOptions.map((option) => (
-                <option key={option.value} value={option.value}>
+                <SelectItem key={option.value} value={option.value}>
                   {option.label}
-                </option>
+                </SelectItem>
               ))}
             </SelectInput>
           </Field>

@@ -50,6 +50,7 @@ import {
   isSensitiveRecord,
   matchesPlatformVariableSearch,
 } from "./platformVariablePageHelpers";
+import { SelectItem } from "@/components/ui/select";
 
 interface RowMenuState {
   left: number;
@@ -317,12 +318,12 @@ export function PlatformVariablesPage() {
                 aria-label="Filter platform variables by sensitive data"
                 className="w-full"
                 value={sensitiveFilter}
-                onChange={(event) => setSensitiveFilter(sensitiveFilterValue(event.target.value))}
+                onValueChange={(event) => setSensitiveFilter(sensitiveFilterValue(event!))}
               >
                 {platformSensitiveFilters.map((filter) => (
-                  <option key={filter} value={filter}>
+                  <SelectItem key={filter} value={filter}>
                     {sensitiveFilterLabel(filter)}
-                  </option>
+                  </SelectItem>
                 ))}
               </SelectInput>
             </Field>

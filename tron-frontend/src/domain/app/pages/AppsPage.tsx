@@ -51,6 +51,7 @@ import type {
 } from "@/domain/app/model";
 import { formatAppTimestamp } from "@/domain/app/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { SelectItem } from "@/components/ui/select";
 
 type StatusFilter = "Active" | "Archived" | "All";
 type OpenRowMenuState = {
@@ -249,16 +250,16 @@ export function AppsPage() {
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
             />
-            <SelectInput aria-label="Runtime role filter" className="h-8 min-w-36" value={runtimeRole} onChange={(event) => setRuntimeRole(event.target.value as "" | AppRuntimeRole)}>
-              <option value="">All roles</option>
-              <option value="Frontend">Frontend</option>
-              <option value="Backend">Backend</option>
-              <option value="Mono">Mono</option>
+            <SelectInput aria-label="Runtime role filter" className="h-8 min-w-36" value={runtimeRole} onValueChange={(event) => setRuntimeRole(event as "" | AppRuntimeRole)}>
+              <SelectItem value="">All roles</SelectItem>
+              <SelectItem value="Frontend">Frontend</SelectItem>
+              <SelectItem value="Backend">Backend</SelectItem>
+              <SelectItem value="Mono">Mono</SelectItem>
             </SelectInput>
-            <SelectInput aria-label="App status filter" className="h-8 min-w-36" value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)}>
-              <option value="Active">Active</option>
-              <option value="Archived">Archived</option>
-              <option value="All">All</option>
+            <SelectInput aria-label="App status filter" className="h-8 min-w-36" value={status} onValueChange={(event) => setStatus(event as StatusFilter)}>
+              <SelectItem value="Active">Active</SelectItem>
+              <SelectItem value="Archived">Archived</SelectItem>
+              <SelectItem value="All">All</SelectItem>
             </SelectInput>
           </>
         )}
@@ -358,25 +359,25 @@ export function AppsPage() {
             align: "right",
             header: "Actions",
             render: (app) => (
-                <AppActions
-                  app={app}
-                  isOpen={openRowMenu?.appCode === app.appCode}
-                  onToggleOpen={(event) => {
-                    const anchorRect = event.currentTarget.getBoundingClientRect();
-                    setOpenRowMenu((currentMenu) => (
-                      currentMenu?.appCode === app.appCode
-                        ? null
-                        : {
-                          appCode: app.appCode,
-                          anchorRect,
-                          triggerElement: event.currentTarget,
-                        }
-                    ));
-                  }}
-                />
-              ),
-            },
-          ]}
+              <AppActions
+                app={app}
+                isOpen={openRowMenu?.appCode === app.appCode}
+                onToggleOpen={(event) => {
+                  const anchorRect = event.currentTarget.getBoundingClientRect();
+                  setOpenRowMenu((currentMenu) => (
+                    currentMenu?.appCode === app.appCode
+                      ? null
+                      : {
+                        appCode: app.appCode,
+                        anchorRect,
+                        triggerElement: event.currentTarget,
+                      }
+                  ));
+                }}
+              />
+            ),
+          },
+        ]}
       />
       {openMenuApp && openRowMenu
         ? createPortal(
@@ -419,10 +420,10 @@ export function AppsPage() {
                 type="button"
                 disabled={pendingLifecycleCode === openMenuApp.appCode}
                 onClick={() => void updateLifecycle(openMenuApp, "archive")}
-            >
-              <Archive size={14} aria-hidden="true" />
-              Archive
-            </button>
+              >
+                <Archive size={14} aria-hidden="true" />
+                Archive
+              </button>
             )}
             <div className="my-1 border-t border-[var(--color-outline-variant)]" aria-hidden="true" />
             <button

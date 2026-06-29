@@ -24,6 +24,7 @@ import {
 import { cn } from "@/shared/lib/utils";
 import { useKnowledgeGraphByDomain } from "@/domain/knowledge-graph/hooks";
 import type { GraphEntity } from "@/domain/knowledge-graph/model";
+import { SelectItem } from "@/components/ui/select";
 
 function Notice({ value }: { value: string }) {
   return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
@@ -60,10 +61,10 @@ export function GraphPage({ domainFiltering = false }: { domainFiltering?: boole
             <h1 className="text-xl font-semibold">Entities</h1>
             {domainFiltering ? (
               <Field label="Domain">
-                <SelectInput value={domain} onChange={(event) => setDomain(event.target.value)}>
-                  <option value="customer-support">Domain: Customer Support</option>
-                  <option value="supply-chain">Domain: Supply Chain</option>
-                  <option value="hr">Domain: HR</option>
+                <SelectInput value={domain} onValueChange={(event) => setDomain(event!)}>
+                  <SelectItem value="customer-support">Domain: Customer Support</SelectItem>
+                  <SelectItem value="supply-chain">Domain: Supply Chain</SelectItem>
+                  <SelectItem value="hr">Domain: HR</SelectItem>
                 </SelectInput>
               </Field>
             ) : null}

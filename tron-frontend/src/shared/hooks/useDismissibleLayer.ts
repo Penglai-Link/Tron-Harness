@@ -6,6 +6,7 @@ import {
 
 interface DismissibleLayerOptions {
   dismissOnViewportChange?: boolean;
+  nestedLayerSelectors?: string[];
   open: boolean;
   onDismiss: () => void;
   popupRef: RefObject<HTMLElement | null>;
@@ -13,8 +14,13 @@ interface DismissibleLayerOptions {
   triggerElement?: HTMLElement | null;
 }
 
+const defaultNestedLayerSelectors = [
+  "[data-slot='select-positioner']",
+];
+
 export function useDismissibleLayer({
   dismissOnViewportChange = true,
+  nestedLayerSelectors = defaultNestedLayerSelectors,
   open,
   onDismiss,
   popupRef,
@@ -36,7 +42,9 @@ export function useDismissibleLayer({
     const isWithinLayer = (target: EventTarget | null) => {
       if (!(target instanceof Node)) return false;
       if (popupRef.current?.contains(target)) return true;
-      return Boolean(triggerElement?.contains(target));
+      if (triggerElement?.contains(target)) return true;
+      if (!(target instanceof Element)) return false;
+      return nestedLayerSelectors.some((selector) => Boolean(target.closest(selector)));
     };
 
     const handlePointerDown = (event: MouseEvent) => {
@@ -73,6 +81,7 @@ export function useDismissibleLayer({
     };
   }, [
     dismissOnViewportChange,
+    nestedLayerSelectors,
     onDismiss,
     open,
     popupRef,

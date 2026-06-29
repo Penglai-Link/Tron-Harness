@@ -14,6 +14,7 @@ import {
   useTablePagination,
   useToast,
 } from "@/shared";
+import { SelectItem } from "@/components/ui/select";
 
 export function PlatformToolsPage() {
   const { t } = useTranslation(["pages", "common"]);
@@ -230,17 +231,17 @@ export function PlatformToolsPage() {
                 className="min-w-[180px] sm:max-w-[220px]"
                 disabled={loading}
                 value={selectedToolDomainCode}
-                onChange={(event) => {
-                  setSelectedToolDomainCode(event.target.value);
+                onValueChange={(event) => {
+                  setSelectedToolDomainCode(event!);
                 }}
               >
-                <option value="all">
+                <SelectItem value="all">
                   {pageT("tools.domainFilterAll", "All domains")}
-                </option>
+                </SelectItem>
                 {domains.map((domain) => (
-                  <option key={domain.domainCode} value={domain.domainCode}>
+                  <SelectItem key={domain.domainCode} value={domain.domainCode}>
                     {domain.name}
-                  </option>
+                  </SelectItem>
                 ))}
               </SelectInput>
             </div>
