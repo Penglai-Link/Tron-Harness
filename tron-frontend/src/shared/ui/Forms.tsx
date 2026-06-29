@@ -109,36 +109,6 @@ export const TextArea = forwardRef(function TextArea(
 
 
 
-<<<<<<< HEAD
-type SelectInputProps<Value, Multiple extends boolean | undefined = false> = SelectPrimitive.Root.Props<Value, Multiple> & {
-  "aria-describedby"?: string;
-  "aria-label"?: string;
-  className?: string;
-  id?: string;
-};
-
-export function SelectInput<Value, Multiple extends boolean | undefined = false>({
-  "aria-describedby": ariaDescribedBy,
-  "aria-label": ariaLabel,
-  className,
-  children,
-  id,
-  ...props
-}: SelectInputProps<Value, Multiple>) {
-  return (
-    <>
-      <Select {...props}>
-        <SelectTrigger
-          aria-describedby={ariaDescribedBy}
-          aria-label={ariaLabel}
-          size={props.size || "lg"}
-          className={cn(
-            disabledControlClasses,
-            className,
-          )}
-          id={id}
-        >
-=======
 export function SelectInput<Value, Multiple extends boolean | undefined = false>({ className, children, ...props }: SelectPrimitive.Root.Props<Value, Multiple> & { className?: string; size?: 'sm' | 'lg' }) {
   return (
     <>
@@ -147,7 +117,6 @@ export function SelectInput<Value, Multiple extends boolean | undefined = false>
           disabledControlClasses,
           className,
         )}>
->>>>>>> e8454589 (style: 统一样式)
           <SelectValue />
         </SelectTrigger>
         <SelectPopup alignItemWithTrigger={false}>
