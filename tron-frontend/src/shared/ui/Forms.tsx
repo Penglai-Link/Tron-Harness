@@ -3,16 +3,17 @@ import type {
   InputHTMLAttributes,
   ReactElement,
   ReactNode,
-  SelectHTMLAttributes,
   TextareaHTMLAttributes,
 } from "react";
 import { cloneElement, forwardRef, isValidElement, useId } from "react";
 
 import { cn } from "@/shared/lib/utils";
 import { InfoTooltip } from "@/shared/ui/InfoTooltip";
-import { Select, SelectLabel, SelectPopup, SelectPrimitive, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectPopup, SelectPrimitive, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 
 interface FieldProps {
   children: ReactNode;
@@ -79,9 +80,9 @@ export const TextInput = forwardRef(function TextInput(
 ) {
   return (
     <Input
+      size={props.size || 'lg'}
       ref={ref}
       className={cn(
-        "h-10 min-w-0 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 text-sm text-[var(--color-on-surface)] outline-none transition-colors placeholder:text-[var(--color-outline)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-focus-ring)]/20",
         disabledControlClasses,
         className,
       )}
@@ -98,7 +99,6 @@ export const TextArea = forwardRef(function TextArea(
     <Textarea
       ref={ref}
       className={cn(
-        "min-h-28 min-w-0 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm text-[var(--color-on-surface)] outline-none transition-colors placeholder:text-[var(--color-outline)] focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-focus-ring)]/20",
         disabledControlClasses,
         className,
       )}
@@ -109,6 +109,7 @@ export const TextArea = forwardRef(function TextArea(
 
 
 
+<<<<<<< HEAD
 type SelectInputProps<Value, Multiple extends boolean | undefined = false> = SelectPrimitive.Root.Props<Value, Multiple> & {
   "aria-describedby"?: string;
   "aria-label"?: string;
@@ -124,20 +125,29 @@ export function SelectInput<Value, Multiple extends boolean | undefined = false>
   id,
   ...props
 }: SelectInputProps<Value, Multiple>) {
-
   return (
     <>
       <Select {...props}>
         <SelectTrigger
           aria-describedby={ariaDescribedBy}
           aria-label={ariaLabel}
+          size={props.size || "lg"}
           className={cn(
-            "h-10 min-w-0 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 text-sm text-[var(--color-on-surface)] outline-none transition-colors focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-focus-ring)]/20",
             disabledControlClasses,
             className,
           )}
           id={id}
         >
+=======
+export function SelectInput<Value, Multiple extends boolean | undefined = false>({ className, children, ...props }: SelectPrimitive.Root.Props<Value, Multiple> & { className?: string; size?: 'sm' | 'lg' }) {
+  return (
+    <>
+      <Select {...props}>
+        <SelectTrigger size={props.size || 'lg'} className={cn(
+          disabledControlClasses,
+          className,
+        )}>
+>>>>>>> e8454589 (style: 统一样式)
           <SelectValue />
         </SelectTrigger>
         <SelectPopup alignItemWithTrigger={false}>
@@ -158,30 +168,14 @@ interface ToggleSwitchProps {
 
 export function ToggleSwitch({ checked, disabled = false, ariaLabel, label, onCheckedChange }: ToggleSwitchProps) {
   return (
-    <button
-      className={cn(
-        "flex items-center gap-3 text-sm text-[var(--color-on-surface)]",
-        disabled ? "cursor-not-allowed opacity-60" : undefined,
-      )}
-      type="button"
-      aria-label={ariaLabel ?? label}
-      aria-disabled={disabled}
-      aria-pressed={checked}
-      disabled={disabled}
-      onClick={() => {
-        if (disabled) return;
-        onCheckedChange(!checked);
-      }}
-    >
-      <span
-        className={cn(
-          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-          checked ? "bg-[var(--color-primary)]" : "bg-[var(--color-surface-container-highest)]",
-        )}
-      >
-        <span className={cn("absolute size-4 rounded-full bg-[var(--color-elevated-surface-strong)] shadow transition-transform", checked ? "translate-x-[18px]" : "translate-x-0.5")} />
-      </span>
-      {label ? <span>{label}</span> : null}
-    </button>
+    <>
+      <Label className="text-[var(--color-on-surface)]" title={'12'} aria-label={ariaLabel ?? label}>
+        <Switch disabled={disabled} onCheckedChange={() => {
+          if (disabled) return;
+          onCheckedChange(!checked);
+        }} />
+        {label ? <span>{label}</span> : null}
+      </Label>
+    </>
   );
 }

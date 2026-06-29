@@ -41,3 +41,4 @@ Pagable response body format:
 If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
 
 <!-- Note: `make fe-unit-test` currently fails in some chat-react tests because the test environment's `window.localStorage` is not a full Storage implementation (`clear`/`setItem` can be missing). -->
+<!-- Note: `make fe-check` currently fails on an existing TypeScript error in `tron-frontend/src/domain/admin/pages/WorkspaceManagementPage.tsx` where `Select` is passed an `onChange` prop that is not part of the component's typed API. -->

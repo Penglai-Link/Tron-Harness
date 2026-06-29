@@ -279,7 +279,6 @@ export function ModelFormFields({
         </Field>
         <Field label="Model Type">
           <SelectInput
-            className="h-auto min-h-32 py-2"
             value={state.modelCapabilities}
             multiple
             onValueChange={(event) => {
