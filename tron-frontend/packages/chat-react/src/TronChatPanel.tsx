@@ -495,15 +495,10 @@ function ReasoningCard({
   const hasRunningTool = card.toolCards.some(
     (toolCard) => toolCard.started && !toolCard.ended && !toolCard.result,
   );
-  const shouldStayExpanded = !card.ended || hasRunningTool;
   const summary =
     deriveReasoningPreview(card.content) ||
     (card.ended ? "Reasoning captured." : "Thinking...");
-  const [expanded, setExpanded] = useState(() => shouldStayExpanded);
-
-  useEffect(() => {
-    setExpanded(shouldStayExpanded);
-  }, [shouldStayExpanded]);
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <section className="tron-chat__rail-entry" aria-label="Thinking">
@@ -569,28 +564,13 @@ function AguiRunWorkRail({
     ?? (latestTerminalSummaryRef.current?.runCode === currentRunCode
       ? latestTerminalSummaryRef.current
       : null);
-  const collapsedTerminalRunCodeRef = useRef(displayedTerminalSummary?.runCode ?? "");
-  const [expanded, setExpanded] = useState(() => !displayedTerminalSummary);
-
-  useEffect(() => {
-    if (!currentRunCode) return;
-    if (displayedTerminalSummary?.runCode) {
-      if (collapsedTerminalRunCodeRef.current === displayedTerminalSummary.runCode)
-        return;
-      collapsedTerminalRunCodeRef.current = displayedTerminalSummary.runCode;
-      setExpanded(false);
-      return;
-    }
-    if (collapsedTerminalRunCodeRef.current === currentRunCode) return;
-    collapsedTerminalRunCodeRef.current = "";
-    setExpanded(true);
-  }, [currentRunCode, displayedTerminalSummary?.runCode]);
+  const [expanded, setExpanded] = useState(false);
 
   if (!displayedTerminalSummary && !userCards.length && !debugEvents.length)
     return null;
   return (
     <section className="tron-chat__rail" aria-label="AG-UI run work">
-      {displayedTerminalSummary ? (
+      {displayedTerminalSummary || userCards.length || debugEvents.length ? (
         <button
           className="tron-chat__rail-summary"
           type="button"
@@ -598,7 +578,7 @@ function AguiRunWorkRail({
           onClick={() => setExpanded((value) => !value)}
         >
           <span className="tron-chat__rail-summary-label">
-            <span>{`Worked for ${displayedTerminalSummary.duration}`}</span>
+            <span>{`Worked for ${aguiWorkDuration(events)}`}</span>
           </span>
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
@@ -606,7 +586,7 @@ function AguiRunWorkRail({
       {expanded ? (
         <div
           className="tron-chat__rail-stack"
-          style={{ marginTop: displayedTerminalSummary ? 8 : 0 }}
+          style={{ marginTop: displayedTerminalSummary || userCards.length || debugEvents.length ? 8 : 0 }}
         >
           {userCards.length ? (
             <section

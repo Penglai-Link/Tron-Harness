@@ -278,6 +278,11 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   await page.getByPlaceholder("Enter to send, Shift+Enter for newline").fill("show grouped agui cards");
   await page.getByPlaceholder("Enter to send, Shift+Enter for newline").press("Enter");
   await expect(page.getByLabel("Waiting for model")).toContainText("Waiting for model...");
+  const streamingRunWork = page.getByLabel("AG-UI run work");
+  const streamingRunSummary = streamingRunWork.getByRole("button", { name: /Worked for/ });
+  await expect(streamingRunSummary).toBeVisible();
+  await expect(streamingRunSummary).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByLabel("Agent work rail")).toHaveCount(0);
 
   const transcript = page.getByLabel("Chat transcript");
   const userMessageBubble = transcript.locator("article").first();

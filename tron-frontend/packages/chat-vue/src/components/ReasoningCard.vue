@@ -9,7 +9,7 @@ export type ReasoningValue = Extract<
 
 <script setup lang="ts">
 import { BrainCircuit, ChevronDown, ChevronRight } from "lucide-vue-next";
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { deriveReasoningPreview } from "@tron/chat-core";
 import { cx } from "../utils";
 import MarkdownBlock from "./MarkdownBlock.vue";
@@ -18,21 +18,7 @@ const props = defineProps<{
   card: ReasoningValue;
 }>();
 
-const hasRunningTool = computed(() =>
-  props.card.toolCards.some((tc) => tc.started && !tc.ended && !tc.result),
-);
-const shouldStayExpanded = computed(
-  () => !props.card.ended || hasRunningTool.value,
-);
 const expanded = ref(false);
-
-watch(
-  shouldStayExpanded,
-  () => {
-    expanded.value = shouldStayExpanded.value;
-  },
-  { immediate: true },
-);
 
 const summary = computed(
   () =>

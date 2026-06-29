@@ -48,10 +48,6 @@ function terminalAguiEvent(events: ChatAguiStreamEvent[]) {
 const userCards = computed(() => buildAguiUserWorkCards(props.events));
 const terminalEvent = computed(() => terminalAguiEvent(props.events));
 const expanded = ref(false);
-
-watch(terminalEvent, () => {
-  expanded.value = !terminalEvent.value;
-}, { immediate: true });
 </script>
 
 <template>

@@ -39,3 +39,5 @@ Pagable response body format:
 
 ## What's more
 If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
+
+<!-- Note: `make fe-unit-test` currently fails in some chat-react tests because the test environment's `window.localStorage` is not a full Storage implementation (`clear`/`setItem` can be missing). -->
