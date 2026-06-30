@@ -44,6 +44,24 @@ async fn corpus_management_routes_require_auth_and_expose_targeted_projection() 
     );
     assert!(memory_card["retrievalProfileId"].as_str().is_some());
     assert_eq!(memory_card["metadataGroups"][0]["name"], json!("memory"));
+    for (corpus_id, ingest_profile_id) in [
+        ("project-doc", "project-doc-mineru-ingest-v1"),
+        ("skill", "skill-ingest-v1"),
+        ("skill-graph", "skill-graph-ingest-v1"),
+    ] {
+        let record = list_body["data"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|record| record["corpusId"] == json!(corpus_id))
+            .cloned()
+            .unwrap_or_else(|| panic!("{corpus_id} should appear in corpus management list"));
+        assert_eq!(
+            record["ingestProfileId"],
+            json!(ingest_profile_id),
+            "{record}"
+        );
+    }
 
     let detail = authenticated_request(
         &router,
@@ -582,6 +600,15 @@ async fn profile_catalog_exposes_graph_tree_routes_and_storage_summary() {
     assert_eq!(catalog.status(), StatusCode::OK);
     let catalog_body = response_json(catalog).await;
     assert!(
+        catalog_body["data"]["corpora"]
+            .as_array()
+            .is_some_and(|rows| rows.iter().any(|row| {
+                row["corpusId"] == json!("team-playbook")
+                    && row["filterSchema"]["fields"]["scopeType"]["column"] == json!("scope_type")
+            })),
+        "{catalog_body}"
+    );
+    assert!(
         catalog_body["data"]["retrievalRouteTypes"]
             .as_array()
             .is_some_and(|rows| rows.iter().any(|row| {
@@ -734,6 +761,22 @@ async fn profile_management_list_detail_catalog_validate_and_save_runtime_readab
             .iter()
             .any(|profile| profile["profileId"] == json!("memory-project-doc-fusion-v1"))
     }));
+    let fusion_profile = list_body["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|profile| profile["profileId"] == json!("memory-project-doc-fusion-v1"))
+        .expect("fusion profile should appear in profile management list");
+    let fusion_routes = fusion_profile["routes"]
+        .as_array()
+        .expect("profile list should expose retrieval routes");
+    assert_eq!(fusion_routes.len(), 4);
+    let fusion_route_corpora = fusion_routes
+        .iter()
+        .filter_map(|route| route["corpusId"].as_str())
+        .collect::<Vec<_>>();
+    assert!(fusion_route_corpora.contains(&"memory-card"));
+    assert!(fusion_route_corpora.contains(&"project-doc"));
 
     let ingest_detail = authenticated_request(
         &router,
@@ -1231,6 +1274,97 @@ async fn profile_management_saved_ingest_profile_is_loaded_by_ingest_api() {
         ingest_body["data"]["profileId"],
         json!("memory-card-runtime-ingest-v1")
     );
+}
+
+#[tokio::test]
+async fn corpus_delete_blocks_retrieval_bindings_and_cascades_ingest_profiles() {
+    let database_url = temp_database_path("rag-management-delete-corpus")
+        .to_string_lossy()
+        .to_string();
+    let router = app_with_database(&database_url);
+
+    let create_corpus = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/corpora",
+        Some(ui_tree_corpus_request()),
+    )
+    .await;
+    assert_eq!(create_corpus.status(), StatusCode::CREATED);
+
+    let create_ingest = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/profiles",
+        Some(ui_tree_ingest_profile_request("ui-tree-ingest-v1")),
+    )
+    .await;
+    assert_eq!(create_ingest.status(), StatusCode::CREATED);
+
+    let create_retrieval = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/profiles",
+        Some(ui_tree_retrieval_profile_request("ui-tree-search-v1")),
+    )
+    .await;
+    assert_eq!(create_retrieval.status(), StatusCode::CREATED);
+
+    let blocked_delete = authenticated_request(
+        &router,
+        Method::DELETE,
+        "/api/v1/rag/corpora/ui-tree-memory",
+        None,
+    )
+    .await;
+    assert_eq!(blocked_delete.status(), StatusCode::CONFLICT);
+    let blocked_body = response_json(blocked_delete).await;
+    assert_eq!(
+        blocked_body["code"],
+        json!("RAG_CORPUS_BOUND_TO_RETRIEVAL_PROFILE")
+    );
+
+    let delete_retrieval = authenticated_request(
+        &router,
+        Method::DELETE,
+        "/api/v1/rag/profiles/ui-tree-search-v1",
+        None,
+    )
+    .await;
+    assert_eq!(delete_retrieval.status(), StatusCode::OK);
+
+    let delete_corpus = authenticated_request(
+        &router,
+        Method::DELETE,
+        "/api/v1/rag/corpora/ui-tree-memory",
+        None,
+    )
+    .await;
+    assert_eq!(delete_corpus.status(), StatusCode::OK);
+    let delete_body = response_json(delete_corpus).await;
+    assert_eq!(delete_body["data"]["corpusId"], json!("ui-tree-memory"));
+    assert_eq!(
+        delete_body["data"]["deletedIngestProfileIds"],
+        json!(["ui-tree-ingest-v1"])
+    );
+
+    let connection = Connection::open(&database_url).expect("database should open");
+    let corpus_count: i64 = connection
+        .query_row(
+            "SELECT count(1) FROM rag_corpora WHERE corpus_id = 'ui-tree-memory'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("corpus count should query");
+    let ingest_count: i64 = connection
+        .query_row(
+            "SELECT count(1) FROM rag_profiles WHERE profile_id = 'ui-tree-ingest-v1'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("ingest profile count should query");
+    assert_eq!(corpus_count, 0);
+    assert_eq!(ingest_count, 0);
 }
 
 #[tokio::test]

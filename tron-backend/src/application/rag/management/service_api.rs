@@ -136,6 +136,47 @@ where
         self.create_corpus(input)
     }
 
+    pub fn delete_corpus(&self, corpus_id: &str) -> Result<RagCorpusDeleteResult, RagError> {
+        let corpus_id = corpus_id.trim();
+        if corpus_id.is_empty() {
+            return Err(RagError::ManagementRequestInvalid);
+        }
+        self.repository
+            .get_managed_corpus(corpus_id)?
+            .ok_or(RagError::CorpusNotFound)?;
+
+        let profiles = self
+            .repository
+            .list_profiles(RagProfileListQuery::default())?;
+        let has_retrieval_binding = profiles.iter().any(|profile| {
+            profile.profile_type == RagProfileType::Retrieval
+                && profile_references_corpus(profile, corpus_id)
+        });
+        if has_retrieval_binding {
+            return Err(RagError::CorpusBoundToRetrievalProfile);
+        }
+
+        let deleted_ingest_profile_ids = profiles
+            .iter()
+            .filter(|profile| {
+                profile.profile_type == RagProfileType::Ingest
+                    && profile_references_corpus(profile, corpus_id)
+            })
+            .map(|profile| profile.profile_id.clone())
+            .collect::<Vec<_>>();
+        for profile_id in &deleted_ingest_profile_ids {
+            self.repository.delete_profile(profile_id)?;
+        }
+
+        if !self.repository.delete_managed_corpus(corpus_id)? {
+            return Err(RagError::CorpusNotFound);
+        }
+        Ok(RagCorpusDeleteResult {
+            corpus_id: corpus_id.to_string(),
+            deleted_ingest_profile_ids,
+        })
+    }
+
     pub fn list_profiles(
         &self,
         profile_type: Option<&str>,
@@ -148,14 +189,18 @@ where
             .repository
             .list_profiles(query)?
             .into_iter()
-            .map(|profile| RagProfileManagementListItem {
-                profile_id: profile.profile_id,
-                profile_type: profile.profile_type.as_str().to_string(),
-                status: profile.status.as_str().to_string(),
-                description: profile_description(&profile.config),
-                primary_corpus_id: profile.primary_corpus_id,
-                corpus_ids: profile.corpus_ids,
-                required_source_version: profile.required_source_version,
+            .map(|profile| {
+                let view = project_profile_view(&profile);
+                RagProfileManagementListItem {
+                    profile_id: view.profile_id,
+                    profile_type: view.profile_type,
+                    status: view.status,
+                    description: view.description,
+                    primary_corpus_id: view.primary_corpus_id,
+                    corpus_ids: view.corpus_ids,
+                    required_source_version: view.required_source_version,
+                    routes: view.routes,
+                }
             })
             .collect())
     }
@@ -168,6 +213,22 @@ where
         Ok(project_profile_view(&profile))
     }
 
+    pub fn delete_profile(&self, profile_id: &str) -> Result<RagProfileDeleteResult, RagError> {
+        let profile_id = profile_id.trim();
+        if profile_id.is_empty() {
+            return Err(RagError::ManagementRequestInvalid);
+        }
+        self.repository
+            .get_profile(profile_id)?
+            .ok_or(RagError::ProfileNotFound)?;
+        if !self.repository.delete_profile(profile_id)? {
+            return Err(RagError::ProfileNotFound);
+        }
+        Ok(RagProfileDeleteResult {
+            profile_id: profile_id.to_string(),
+        })
+    }
+
     pub fn profile_catalog(&self) -> Result<RagProfileCatalogView, RagError> {
         let corpus_records = self.repository.list_corpora()?;
         let corpora = corpus_records
@@ -177,6 +238,7 @@ where
                 display_name: corpus.display_name.clone(),
                 status: corpus.status.as_str().to_string(),
                 capabilities: capabilities_from_value(&corpus.capabilities),
+                filter_schema: corpus.filter_schema.clone(),
                 storage_summary: storage_summary(&corpus.storage_binding),
             })
             .collect();
@@ -396,4 +458,44 @@ fn build_corpus_record(
         text_unit_field_mapping: input.field_mapping.text_unit.clone(),
         storage_binding,
     })
+}
+
+fn profile_references_corpus(profile: &RagProfileRecord, corpus_id: &str) -> bool {
+    let corpus_id = corpus_id.trim();
+    if corpus_id.is_empty() {
+        return false;
+    }
+    if profile.primary_corpus_id.as_deref() == Some(corpus_id)
+        || profile.corpus_ids.iter().any(|value| value == corpus_id)
+    {
+        return true;
+    }
+
+    profile
+        .config
+        .get("routes")
+        .and_then(Value::as_array)
+        .is_some_and(|routes| {
+            routes.iter().any(|route| {
+                route
+                    .get("corpusId")
+                    .and_then(Value::as_str)
+                    .or(profile.primary_corpus_id.as_deref())
+                    == Some(corpus_id)
+            })
+        })
+        || profile
+            .config
+            .get("pipeline")
+            .and_then(|pipeline| pipeline.get("nodes"))
+            .and_then(Value::as_array)
+            .is_some_and(|nodes| {
+                nodes.iter().any(|node| {
+                    node
+                        .get("config")
+                        .and_then(|config| config.get("corpusId"))
+                        .and_then(Value::as_str)
+                        == Some(corpus_id)
+                })
+            })
 }

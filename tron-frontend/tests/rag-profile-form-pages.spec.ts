@@ -133,9 +133,13 @@ async function openAdvancedNodeConfig(page: Page, stageId: string) {
   await openAdvancedNodeControls(page);
   const nodeCard = page.getByTestId(`advanced-node-${stageId}`);
   const trigger = page.getByTestId(`advanced-node-trigger-${stageId}`);
+  await expect(trigger).toBeVisible();
   if (await trigger.isDisabled()) {
-    const toggle = nodeCard.locator("button[aria-pressed]").first();
-    await toggle.click();
+    const toggle = nodeCard.getByRole("switch").first();
+    if (await toggle.count() > 0 && !(await toggle.isDisabled())) {
+      await toggle.click();
+    }
+    await expect(trigger).toBeEnabled();
   }
   if (await trigger.getAttribute("aria-expanded") !== "true") await trigger.click();
   await expect(page.getByTestId(`advanced-node-config-${stageId}`)).toBeVisible();
@@ -199,7 +203,7 @@ const buttonName = {
   addFilter: /Add filter|添加筛选条件/i,
   addRetrievalProfile: /(?:Add|New) retrieval profile|新增检索配置|新建检索配置/i,
   addRoute: /Add route|添加路由/i,
-  editProjectDocIngest: /Edit project-doc-ingest-v1|编辑 project-doc-ingest-v1/,
+  editProjectDocIngest: /Edit project-doc-mineru-ingest-v1|编辑 project-doc-mineru-ingest-v1/,
   editSupportNotesIngest: /Edit support-notes-ingest-v1|编辑 support-notes-ingest-v1/,
   enablePersistSource: /Enable (?:PERSIST_SOURCE|Persist source) node|启用 持久化来源 节点/i,
   enablePreparePayload: /Enable (?:PREPARE_PAYLOAD|Prepare payload) node|启用 (?:准备 payload|准备载荷) 节点/i,
@@ -216,15 +220,11 @@ const buttonName = {
 };
 
 const headingName = {
+  ingestTest: /Ingest test|写入测试/i,
   newRetrievalProfile: /(?:Create|New) retrieval profile|新建检索配置/i,
-  ragManagement: /RAG Management|知识检索管理/i,
   retrievalFlow: /Retrieval flow|检索流程/i,
   retrievalRoutes: /Retrieval routes|检索路由/i,
-};
-
-const tabName = {
   retrievalTest: /Retrieval test|检索测试/i,
-  workbench: /Workbench|调试台/i,
 };
 
 test.beforeAll(async () => {
@@ -244,7 +244,7 @@ test.beforeAll(async () => {
   });
   frontendProcess.stdout.on("data", appendFrontendLog);
   frontendProcess.stderr.on("data", appendFrontendLog);
-  await waitForFrontend(`${frontendBaseUrl}/rag?tab=profiles`);
+  await waitForFrontend(`${frontendBaseUrl}/rag`);
 });
 
 test.afterAll(async () => {
@@ -261,13 +261,14 @@ test("pipeline flow draws connected edges for serial and parallel branches", asy
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
-  await page.goto(`${frontendBaseUrl}/rag/profiles/ingest/new?returnProfileType=ingest`);
+  await page.goto(`${frontendBaseUrl}/rag/profiles/ingest/new?returnProfileType=ingest&corpusId=project-doc`);
   const templateHeading = page.getByRole("heading", { name: /Pipeline templates|流水线模板/i });
   await expect(templateHeading).toBeVisible();
   await expect(page.getByRole("heading", { name: /Write pipeline|写入流水线/i })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Advanced pipeline settings|高级流水线设置/i })).toHaveCount(0);
   await expect(page.getByText(/Pipeline flow|流水线流向/i)).toBeVisible();
-  await chooseSelectOption(page, page.getByLabel(label.primaryCorpus), "project-doc");
+  await expect(page.getByLabel(label.primaryCorpus)).toHaveValue("project-doc");
+  await expect(page.getByLabel(label.primaryCorpus)).toHaveAttribute("readonly");
   await expect(page.getByTestId("advanced-node-controls")).not.toHaveAttribute("open", "");
 
   const flow = page.getByTestId("pipeline-flow");
@@ -290,19 +291,19 @@ test("pipeline flow draws connected edges for serial and parallel branches", asy
   await expect(flow.getByTestId("pipeline-flow-edge-extract-tree-summarize-tree")).toHaveCount(1);
 
   await openAdvancedNodeControls(page);
-  const vectorToggle = page.getByRole("button", { name: buttonName.enableVectorIndex });
+  const vectorToggle = page.getByRole("switch", { name: buttonName.enableVectorIndex });
   const vectorTrigger = page.getByTestId("advanced-node-trigger-vectorIndex");
-  await expect(vectorToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(vectorToggle).toHaveAttribute("aria-checked", "true");
   await vectorTrigger.click();
   await page.getByLabel(label.embeddingVersion).fill("custom-v2");
   await expect(page.getByLabel(label.embeddingVersion)).toHaveValue("custom-v2");
   await vectorToggle.click();
-  await expect(vectorToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(vectorToggle).toHaveAttribute("aria-checked", "false");
   await expect(vectorTrigger).toBeDisabled();
   await expect(vectorTrigger).toContainText(/Enable first|先启用/i);
   await expectAdvancedNodeConfigClosed(page, "vectorIndex");
   await vectorToggle.click();
-  await expect(vectorToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(vectorToggle).toHaveAttribute("aria-checked", "true");
   await expect(vectorTrigger).toBeEnabled();
   await expect(page.getByTestId("advanced-node-config-vectorIndex")).toBeVisible();
   await expect(page.getByLabel(label.embeddingVersion)).toHaveValue("v1");
@@ -315,11 +316,7 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
-  await page.goto(`${frontendBaseUrl}/rag?tab=profiles&profileType=ingest`);
-  await expect(page.getByRole("heading", { name: /RAG Management|知识检索管理/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: /Profiles|配置档案/ })).toBeVisible();
-
-  await page.getByRole("button", { name: buttonName.addIngestProfile }).click();
+  await page.goto(`${frontendBaseUrl}/rag/profiles/ingest/new?returnProfileType=ingest&corpusId=project-doc`);
   await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/new(\?.*)?$/);
   await expect(page.getByRole("heading", { name: /(?:Create|New) Ingest Profile|新建写入配置/i })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Write pipeline|写入流水线/i })).toHaveCount(0);
@@ -331,7 +328,8 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await expect(page.getByRole("heading", { name: "Stage Bindings" })).toHaveCount(0);
 
   await page.getByLabel(label.profileId).fill("support-notes-ingest-v1");
-  await chooseSelectOption(page, page.getByLabel(label.primaryCorpus), "project-doc");
+  await expect(page.getByLabel(label.primaryCorpus)).toHaveValue("project-doc");
+  await expect(page.getByLabel(label.primaryCorpus)).toHaveAttribute("readonly");
   await page.getByLabel(label.description).fill("Ingest support notes and incident runbooks.");
   await expectNoStageStrategyPlaceholder(page, "validateSource", /VALIDATE_SOURCE (strategy ID|策略标识)/);
   await expectNoStageStrategyPlaceholder(page, "preparePayload", /PREPARE_PAYLOAD (strategy ID|策略标识)/);
@@ -375,11 +373,10 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await page.getByLabel(label.supportedSourceTypes).fill("RUNBOOK, INCIDENT_NOTE");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
-  await expect(page).toHaveURL(/\/rag\?tab=profiles(&profileType=ingest)?$/);
+  await expect(page).toHaveURL(/\/rag$/);
   await expect(notifications(page, /support-notes-ingest-v1 (created|已创建)/)).toBeVisible();
-  await expect(page.getByRole("button", { name: buttonName.editSupportNotesIngest })).toBeVisible();
 
-  await page.getByRole("button", { name: buttonName.editSupportNotesIngest }).click();
+  await page.goto(`${frontendBaseUrl}/rag/profiles/ingest/support-notes-ingest-v1/edit?returnProfileType=ingest`);
   await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/support-notes-ingest-v1\/edit(\?.*)?$/);
   await expect(page.getByLabel(label.profileId)).toBeDisabled();
   await expect(page.getByLabel(label.description)).toHaveValue("Ingest support notes and incident runbooks.");
@@ -399,10 +396,12 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await chooseSelectOption(page, page.getByLabel(label.vectorStrategy), "RAG_VECTOR_INDEX");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
-  await expect(page).toHaveURL(/\/rag\?tab=profiles(&profileType=ingest)?$/);
+  await expect(page).toHaveURL(/\/rag$/);
   await expect(notifications(page, /support-notes-ingest-v1 (saved|已保存)/)).toBeVisible();
-  await page.getByRole("tab", { name: /Workbench|调试台/ }).click();
-  await expectSelectOptionAvailable(page, page.getByLabel(label.ingestProfile), "support-notes-ingest-v1");
+  await page.goto(`${frontendBaseUrl}/rag/corpora/project-doc/ingest-test`);
+  await expect(page.getByRole("heading", { name: headingName.ingestTest })).toBeVisible();
+  await expect(page.getByLabel(label.ingestProfile)).toHaveValue("project-doc-mineru-ingest-v1");
+  await expect(page.getByLabel(label.ingestProfile)).toHaveAttribute("readonly");
 
   expect(requests.some((request) => request.pathname === "/api/v1/rag/profiles" && request.method === "GET")).toBeTruthy();
   expect(requests.some((request) => request.pathname === "/api/v1/rag/profiles/catalog" && request.method === "GET")).toBeTruthy();
@@ -517,7 +516,7 @@ test("preserves legacy split strategy when editing existing ingest profiles", as
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
-  await page.goto(`${frontendBaseUrl}/rag/profiles/ingest/project-doc-ingest-v1/edit`);
+  await page.goto(`${frontendBaseUrl}/rag/profiles/ingest/project-doc-mineru-ingest-v1/edit`);
   await expect(page.getByRole("heading", { name: /Edit ingest profile|编辑写入配置/i })).toBeVisible();
   await openAdvancedNodeConfig(page, "splitText");
   const splitStrategySelect = page.getByLabel(label.splitStrategy);
@@ -529,11 +528,11 @@ test("preserves legacy split strategy when editing existing ingest profiles", as
 
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
-  await expect(page).toHaveURL(/\/rag\?tab=profiles(&profileType=ingest)?$/);
-  await expect(notifications(page, /project-doc-ingest-v1 (saved|已保存)/)).toBeVisible();
+  await expect(page).toHaveURL(/\/rag$/);
+  await expect(notifications(page, /project-doc-mineru-ingest-v1 (saved|已保存)/)).toBeVisible();
 
-  const updateBodies = requestBodies(requests, "/api/v1/rag/profiles/project-doc-ingest-v1", "PUT");
-  const updateBody = updateBodies.find((body) => body.profileId === "project-doc-ingest-v1");
+  const updateBodies = requestBodies(requests, "/api/v1/rag/profiles/project-doc-mineru-ingest-v1", "PUT");
+  const updateBody = updateBodies.find((body) => body.profileId === "project-doc-mineru-ingest-v1");
   expect(pipelineNode(updateBody, "SPLIT_TEXT")).toEqual(expect.objectContaining({
     config: expect.objectContaining({
       splitter: expect.objectContaining({
@@ -544,13 +543,12 @@ test("preserves legacy split strategy when editing existing ingest profiles", as
   }));
 });
 
-test("workbench displays summary tree hit metadata", async ({ page }) => {
+test("retrieval test page displays summary tree hit metadata", async ({ page }) => {
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
-  await page.goto(`${frontendBaseUrl}/rag?tab=workbench`);
-  await expect(page.getByRole("heading", { name: headingName.ragManagement })).toBeVisible();
-  await page.getByRole("tab", { name: tabName.retrievalTest }).click();
+  await page.goto(`${frontendBaseUrl}/rag/profiles/retrieval/skill-graph-related-v1/test`);
+  await expect(page.getByRole("heading", { level: 1, name: headingName.retrievalTest })).toBeVisible();
   await page.getByRole("textbox", { name: /^(Query|查询)$/ }).fill("How does summary tree retrieval surface metadata?");
   await page.getByRole("button", { name: buttonName.runRetrieval }).click();
 
@@ -575,16 +573,18 @@ test("retrieval profile keeps summary tree route types", async ({ page }) => {
   await expect(page.getByRole("heading", { name: headingName.newRetrievalProfile })).toBeVisible();
 
   await page.getByLabel(label.profileId).fill("project-doc-tree-related-v1");
-  await chooseSelectOption(page, page.getByLabel(label.primaryCorpus), "project-doc");
+  await expect(page.getByLabel(label.primaryCorpus)).toHaveCount(0);
   await page.getByLabel(label.description).fill("Search project documentation summary tree nodes.");
   await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(1)), "project-doc");
+  await expectSelectOptionUnavailable(page, page.getByLabel(routeCorpusLabel(1)), /Select corpus|选择语料库/i);
+  await expectSelectOptionUnavailable(page, page.getByLabel(routeStrategyLabel(1)), /Select route strategy|选择路由策略/i);
   await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(1)), "TREE_FULLTEXT_V1");
   await page.getByRole("button", { name: buttonName.addRoute }).click();
   await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(2)), "project-doc");
   await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(2)), "TREE_VECTOR_V1");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
-  await expect(page).toHaveURL(/\/rag\?tab=profiles/);
+  await expect(page).toHaveURL(/\/rag\?section=retrieval/);
 
   const createBodies = requestBodies(requests, "/api/v1/rag/profiles", "POST")
     .filter((body) => body.profileId === "project-doc-tree-related-v1");
@@ -626,7 +626,7 @@ test("API catalog exposes summary tree strategies for graph tree corpora", async
   }));
 
   await page.getByLabel(label.profileId).fill("support-tree-graph-related-v1");
-  await chooseSelectOption(page, page.getByLabel(label.primaryCorpus), "support-tree-graph");
+  await expect(page.getByLabel(label.primaryCorpus)).toHaveCount(0);
   await page.getByLabel(label.description).fill("Search support summary tree graph nodes.");
   await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(1)), "support-tree-graph");
   await expectSelectOptionAvailable(page, page.getByLabel(routeStrategyLabel(1)), "TREE_FULLTEXT_V1");
@@ -637,7 +637,7 @@ test("API catalog exposes summary tree strategies for graph tree corpora", async
   await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(2)), "TREE_VECTOR_V1");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
-  await expect(page).toHaveURL(/\/rag\?tab=profiles&profileType=retrieval$/);
+  await expect(page).toHaveURL(/\/rag\?section=retrieval$/);
 
   const createBodies = requestBodies(requests, "/api/v1/rag/profiles", "POST")
     .filter((body) => body.profileId === "support-tree-graph-related-v1");
@@ -664,9 +664,15 @@ test("API catalog exposes summary tree strategies for graph tree corpora", async
 
 test("creates and edits multi-corpus retrieval profiles through management APIs", async ({ page }) => {
   const requests: CapturedRequest[] = [];
+  const pageErrors: string[] = [];
   await installRagManagementApiMock(page, requests);
+  page.on("pageerror", (error) => pageErrors.push(error.message));
 
-  await page.goto(`${frontendBaseUrl}/rag?tab=profiles&profileType=retrieval`);
+  await page.goto(`${frontendBaseUrl}/rag?section=retrieval`);
+  await expect(page.getByRole("heading", { name: /Retrieval profiles|检索配置/i })).toBeVisible();
+  await expect(page.getByPlaceholder(/Search retrieval profiles|搜索检索配置/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: buttonName.addIngestProfile })).toHaveCount(0);
+  await expect(page.getByText(/Retrieval policy|检索策略/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: buttonName.addRetrievalProfile })).toBeVisible();
   await page.getByRole("button", { name: buttonName.addRetrievalProfile }).click();
 
@@ -678,13 +684,19 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
   await expect(page.getByTestId("retrieval-advanced-settings")).not.toHaveAttribute("open", "");
   await expect(page.getByTestId("retrieval-filters")).not.toHaveAttribute("open", "");
   await expect(page.getByRole("heading", { name: /Verification result|Verify Result|校验结果/i })).toHaveCount(0);
+  await expect(page.getByLabel(label.primaryCorpus)).toHaveCount(0);
+  await expect(page.getByText(/Enable route|启用路由/i)).toHaveCount(0);
 
   await page.getByLabel(label.profileId).fill("support-fusion-v1");
   await chooseSelectOption(page, page.getByLabel(/Status|状态/), "Ready");
-  await chooseSelectOption(page, page.getByLabel(label.primaryCorpus), "memory-card");
   await page.getByLabel(label.description).fill("Fuse memory and project documentation support answers.");
   await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(1)), "memory-card");
   await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(1)), "FULLTEXT_SQLITE_FTS5_SIMPLE_V1");
+  await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(1)), "project-doc");
+  await expect(page.getByLabel(routeStrategyLabel(1))).not.toContainText("FULLTEXT_SQLITE_FTS5_SIMPLE_V1");
+  await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(1)), "memory-card");
+  await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(1)), "FULLTEXT_SQLITE_FTS5_SIMPLE_V1");
+  expect(pageErrors).toEqual([]);
   await page.getByRole("button", { name: buttonName.addRoute }).click();
   await chooseSelectOption(page, page.getByLabel(routeCorpusLabel(2)), "project-doc");
   await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(2)), "VECTOR_SQLITE_VEC0_COSINE_V1");
@@ -696,17 +708,29 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
   await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(4)), "TREE_VECTOR_V1");
   await openRetrievalFilters(page);
   await page.getByRole("button", { name: buttonName.addFilter }).click();
-  await chooseSelectOption(page, page.getByLabel(/Filter 1 field|筛选条件 1 字段/), "scopeCode");
+  const filterFieldSelect = page.getByLabel(/Filter 1 field|筛选条件 1 字段/);
+  await expect(filterFieldSelect).toBeEnabled();
+  await expectSelectOptionUnavailable(page, filterFieldSelect, /Select mapped field|选择映射字段/i);
+  await chooseSelectOption(page, filterFieldSelect, "scopeCode");
   await chooseSelectOption(page, page.getByLabel(/Filter 1 operator|筛选条件 1 操作符/), "eq");
   await page.getByLabel(/Filter 1 value|筛选条件 1 值/).fill("TRON_CORE");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
-  await expect(page).toHaveURL(/\/rag\?tab=profiles&profileType=retrieval$/);
+  await expect(page).toHaveURL(/\/rag\?section=retrieval$/);
   await expect(notifications(page, /support-fusion-v1 (created|已创建)|检索配置已创建/)).toBeVisible();
-  await expect(page.getByRole("button", { name: /Edit support-fusion-v1|编辑 support-fusion-v1/ })).toBeVisible();
+  const supportFusionEditButton = page.getByRole("button", { name: /Edit support-fusion-v1|编辑 support-fusion-v1/ });
+  const supportFusionRow = page.locator("tr").filter({ has: supportFusionEditButton });
+  await expect(supportFusionRow).toContainText("memory-card");
+  await expect(supportFusionRow).toContainText("project-doc");
+  await expect(supportFusionRow).toContainText("4 routes");
+  await expect(supportFusionRow).toContainText("FULLTEXT");
+  await expect(supportFusionRow).toContainText("VECTOR");
+  await expect(supportFusionRow).toContainText("TREE_FULLTEXT");
+  await expect(supportFusionRow).toContainText("TREE_VECTOR");
 
-  await page.getByRole("button", { name: /Edit support-fusion-v1|编辑 support-fusion-v1/ }).click();
+  await supportFusionEditButton.click();
   await expect(page).toHaveURL(/\/rag\/profiles\/retrieval\/support-fusion-v1\/edit(\?.*)?$/);
+  await expect(page.getByLabel(label.primaryCorpus)).toHaveCount(0);
   await expectSelectedOption(page.getByLabel(routeCorpusLabel(1)), "memory-card");
   await expectSelectedOption(page.getByLabel(routeCorpusLabel(2)), "project-doc");
   await openRetrievalFilters(page);
@@ -717,11 +741,12 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
   await chooseSelectOption(page, page.getByLabel(label.topicPolicy), "EMBEDDING_MMR_V1");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
-  await expect(page).toHaveURL(/\/rag\?tab=profiles&profileType=retrieval$/);
+  await expect(page).toHaveURL(/\/rag\?section=retrieval$/);
   await expect(notifications(page, /support-fusion-v1 (saved|已保存)|配置已更新/)).toBeVisible();
-  await page.getByRole("tab", { name: tabName.workbench }).click();
-  await page.getByRole("tab", { name: tabName.retrievalTest }).click();
-  await expectSelectOptionAvailable(page, page.getByRole("combobox", { name: label.retrievalProfile }), "support-fusion-v1");
+  await page.goto(`${frontendBaseUrl}/rag/profiles/retrieval/support-fusion-v1/test`);
+  await expect(page.getByRole("heading", { level: 1, name: headingName.retrievalTest })).toBeVisible();
+  await expect(page.getByLabel(label.retrievalProfile)).toHaveValue("support-fusion-v1");
+  await expect(page.getByLabel(label.retrievalProfile)).toHaveAttribute("readonly");
 
   const verifyBodies = requestBodies(requests, "/api/v1/rag/profiles/verify", "POST")
     .filter((body) => body.profileType === "RETRIEVAL");
@@ -776,20 +801,20 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
   expect(updateBody).not.toHaveProperty("routes");
 });
 
-test("runs ingest and search from the workbench through runtime APIs", async ({ page }) => {
+test("runs ingest and search from contextual RAG test pages through runtime APIs", async ({ page }) => {
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
-  await page.goto(`${frontendBaseUrl}/rag?tab=workbench`);
-  await expect(page.getByRole("heading", { name: headingName.ragManagement })).toBeVisible();
+  await page.goto(`${frontendBaseUrl}/rag/corpora/project-doc/ingest-test`);
+  await expect(page.getByRole("heading", { name: headingName.ingestTest })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Ingest request|写入请求/i })).toBeVisible();
-  await expect(page.getByRole("tab", { name: tabName.retrievalTest })).toBeVisible();
+  await expect(page.getByRole("tab", { name: headingName.retrievalTest })).toHaveCount(0);
 
-  await expect(page.getByLabel("Corpus", { exact: true })).toContainText("memory-card");
-  await expect(page.getByLabel("Ingest profile", { exact: true })).toContainText("project-doc-ingest-v1");
+  await expect(page.getByLabel("Corpus", { exact: true })).toHaveValue("project-doc");
+  await expect(page.getByLabel("Corpus", { exact: true })).toHaveAttribute("readonly");
+  await expect(page.getByLabel("Ingest profile", { exact: true })).toHaveValue("project-doc-mineru-ingest-v1");
+  await expect(page.getByLabel("Ingest profile", { exact: true })).toHaveAttribute("readonly");
 
-  await chooseSelectOption(page, page.getByLabel("Corpus", { exact: true }), "project-doc");
-  await chooseSelectOption(page, page.getByLabel("Ingest profile", { exact: true }), "project-doc-ingest-v1");
   await expectSelectedOption(page.getByLabel("Scope type", { exact: true }), "SPACE");
   await page.getByLabel("Source code", { exact: true }).fill("docs/features/rag-storage-runtime-workbench");
   await chooseSelectOption(page, page.getByLabel("Source type", { exact: true }), "MARKDOWN");
@@ -825,8 +850,10 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
   await expect(page.getByText("textUnits.generated")).toBeVisible();
   await expect(page.getByText("Warnings: splitter used default overlap")).toBeVisible();
 
-  await page.getByRole("tab", { name: tabName.retrievalTest }).click();
-  await chooseSelectOption(page, page.getByRole("combobox", { name: label.retrievalProfile }), "project-doc-related-v1");
+  await page.goto(`${frontendBaseUrl}/rag/profiles/retrieval/project-doc-related-v1/test`);
+  await expect(page.getByRole("heading", { level: 1, name: headingName.retrievalTest })).toBeVisible();
+  await expect(page.getByLabel(label.retrievalProfile)).toHaveValue("project-doc-related-v1");
+  await expect(page.getByLabel(label.retrievalProfile)).toHaveAttribute("readonly");
   await page.getByLabel(label.query).fill("How does the runtime workbench call backend search?");
   await chooseSelectOption(page, page.getByLabel(label.contextStrategy), "DOC_QA_CONTEXT_PACK");
   await page.getByRole("button", { name: "Add return field" }).click();
@@ -839,10 +866,11 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
   await page.getByLabel("Filter 1 value", { exact: true }).fill("TRON_CORE");
   await page.getByLabel(label.limit).fill("5");
   await page.getByLabel(label.tokenBudget).fill("2048");
-  await page.getByRole("button", { name: "Enable tracing" }).click();
-  await expect(page.getByRole("button", { name: "Enable tracing" })).toHaveAttribute("aria-pressed", "false");
-  await page.getByRole("button", { name: "Enable tracing" }).click();
-  await expect(page.getByRole("button", { name: "Enable tracing" })).toHaveAttribute("aria-pressed", "true");
+  const traceSwitch = page.getByRole("switch", { name: "Enable tracing" });
+  if ((await traceSwitch.getAttribute("aria-checked")) === "true") await traceSwitch.click();
+  await expect(traceSwitch).toHaveAttribute("aria-checked", "false");
+  await traceSwitch.click();
+  await expect(traceSwitch).toHaveAttribute("aria-checked", "true");
   await page.getByRole("button", { name: buttonName.runRetrieval }).click();
 
   await expect(page.getByText("Retrieval returned 1 hits.").first()).toBeVisible();
@@ -885,7 +913,7 @@ test("runs ingest and search from the workbench through runtime APIs", async ({ 
         workspaceCode: "ENTERPRISE",
       }),
       corpusId: "project-doc",
-      ingestProfileId: "project-doc-ingest-v1",
+      ingestProfileId: "project-doc-mineru-ingest-v1",
       payload: expect.objectContaining({
         domainFields: {
           documentCode: "rag-storage-runtime-workbench",

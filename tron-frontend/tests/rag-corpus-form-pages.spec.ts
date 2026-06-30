@@ -1,6 +1,7 @@
 import {
   expect,
   test,
+  type Locator,
   type Page,
 } from "@playwright/test";
 import {
@@ -68,6 +69,32 @@ function notifications(page: Page, message: string | RegExp) {
   return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
 }
 
+async function chooseSelectOption(page: Page, control: Locator, name: string | RegExp) {
+  await control.click();
+  await expect(control).toHaveAttribute("aria-expanded", "true");
+  const option = typeof name === "string"
+    ? page.getByRole("option", { name, exact: true })
+    : page.getByRole("option", { name });
+  await option.click();
+  await expect(control).toHaveAttribute("aria-expanded", "false");
+}
+
+async function expectSelectedOption(control: Locator, value: string) {
+  await expect(control).toContainText(value);
+}
+
+function storageTargetBackendSelect(page: Page) {
+  return page.getByRole("combobox").filter({ hasText: /SQLITE|Local table storage|本地表存储/ }).last();
+}
+
+function storageTargetGraphNamespaceInput(page: Page) {
+  return page.getByRole("textbox", { name: /Storage target \d+ graph namespace|存储目标 \d+ 图命名空间/ }).last();
+}
+
+function storageTargetNodeLabelInput(page: Page) {
+  return page.getByRole("textbox", { name: /Storage target \d+ node label|存储目标 \d+ 节点标签/ }).last();
+}
+
 function requestBodies(requests: CapturedRequest[], pathname: string, method: string) {
   return requests
     .filter((request) => request.pathname === pathname && request.method === method)
@@ -124,23 +151,23 @@ test("summary tree corpus form submits tree segment and graph tree payload", asy
   await page.getByLabel(/Corpus code|语料库编码/).fill("support-tree");
   await page.getByLabel(/Corpus name|语料库名称/).fill("Support Tree");
   await expect(page.getByText(/Default storage is ready|默认存储已就绪/)).toBeVisible();
-  const summaryTreeToggle = page.getByRole("button", { name: /Enable summary tree|启用摘要树/ });
-  await expect(summaryTreeToggle).toHaveAttribute("aria-pressed", "false");
+  const summaryTreeToggle = page.getByRole("switch", { name: /Enable summary tree|启用摘要树/ });
+  await expect(summaryTreeToggle).toHaveAttribute("aria-checked", "false");
   await expect(page.getByLabel(/Storage target 4 table|存储目标 4 表名/)).toBeHidden();
 
   await page.getByRole("button", { name: /Advanced storage settings|高级存储设置/ }).click();
   await expect(page.getByLabel(/Summary tree target|Tree target|摘要树目标/)).toHaveCount(0);
   await summaryTreeToggle.click();
-  await expect(summaryTreeToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(summaryTreeToggle).toHaveAttribute("aria-checked", "true");
   await expect(page.getByLabel(/Storage target 4 table|存储目标 4 表名/)).toHaveValue("rag_support_tree_tree_nodes");
-  await expect(page.getByLabel(/Summary tree target|Tree target|摘要树目标/)).toHaveValue("tree-store");
+  await expectSelectedOption(page.getByLabel(/Summary tree target|Tree target|摘要树目标/), "tree-store");
 
   await page.getByRole("button", { name: /Add custom storage|添加自定义存储/ }).click();
-  await page.getByLabel(/Storage target 5 backend|存储目标 5 后端/).selectOption("GRAPH");
-  await page.getByLabel(/Storage target 5 graph namespace|存储目标 5 图命名空间/).fill("rag_support_tree_tree");
-  await page.getByLabel(/Storage target 5 node label|存储目标 5 节点标签/).fill("RagTreeNode");
+  await chooseSelectOption(page, storageTargetBackendSelect(page), /GRAPH|Graph storage|图存储/);
+  await storageTargetGraphNamespaceInput(page).fill("rag_support_tree_tree");
+  await storageTargetNodeLabelInput(page).fill("RagTreeNode");
   await expect(page.getByLabel(/Enable graph capability|Graph enabled|启用图能力/)).toBeHidden();
-  await page.getByLabel(/Summary tree target|Tree target|摘要树目标/).selectOption("target-5");
+  await chooseSelectOption(page, page.getByLabel(/Summary tree target|Tree target|摘要树目标/), "rag_support_tree_tree/RagTreeNode");
   await page.getByRole("button", { name: /^Save$|^保存$/ }).click();
 
   await expect(page).toHaveURL(/\/rag$/);
@@ -179,6 +206,42 @@ test("loads corpora from management APIs and persists create/edit through verify
 
   await page.goto(`${frontendBaseUrl}/rag`);
   await expect(page.getByRole("heading", { name: /RAG Management|RAG 管理|知识检索管理/ })).toBeVisible();
+  const corpusTable = page.getByRole("table").first();
+  await expect(page.getByRole("cell", { name: "Project Document project-doc" })).toBeVisible();
+  await expect(corpusTable.getByRole("columnheader", { name: /Ingest profile|写入配置/ })).toBeVisible();
+  await expect(corpusTable.getByRole("columnheader", { name: /Actions|操作/ })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "project-doc-mineru-ingest-v1" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "memory-card-ingest-v1" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "skill-ingest-v1" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: "skill-graph-ingest-v1" })).toBeVisible();
+  await expect(page.getByRole("cell", { name: /Unbound|未绑定/ })).toBeVisible();
+
+  await page.getByRole("button", { name: /Open actions for Project Document|打开 Project Document 的操作/ }).click();
+  await page.getByRole("menuitem", { name: /Edit ingest profile|编辑写入配置/ }).click();
+  await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/project-doc-mineru-ingest-v1\/edit\?returnProfileType=ingest$/);
+  await page.goto(`${frontendBaseUrl}/rag`);
+  await expect(page.getByRole("cell", { name: "Memory Card memory-card" })).toBeVisible();
+  await page.getByRole("button", { name: /Open actions for Memory Card|打开 Memory Card 的操作/ }).click();
+  await page.getByRole("menuitem", { name: /Edit ingest profile|编辑写入配置/ }).click();
+  await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/memory-card-ingest-v1\/edit\?returnProfileType=ingest$/);
+  await page.goto(`${frontendBaseUrl}/rag`);
+  await expect(page.getByRole("cell", { name: "Skill skill" })).toBeVisible();
+  await page.getByRole("button", { name: "Open actions for Skill", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Edit ingest profile|编辑写入配置/ }).click();
+  await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/skill-ingest-v1\/edit\?returnProfileType=ingest$/);
+  await page.goto(`${frontendBaseUrl}/rag`);
+  await expect(page.getByRole("cell", { name: "Skill Graph skill-graph" })).toBeVisible();
+  await page.getByRole("button", { name: "Open actions for Skill Graph", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Edit ingest profile|编辑写入配置/ }).click();
+  await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/skill-graph-ingest-v1\/edit\?returnProfileType=ingest$/);
+  await page.goto(`${frontendBaseUrl}/rag`);
+  await expect(page.getByRole("cell", { name: "Support Graph Tree support-tree-graph" })).toBeVisible();
+  await page.getByRole("button", { name: /Open actions for Support Graph Tree|打开 Support Graph Tree 的操作/ }).click();
+  await page.getByRole("menuitem", { name: /Create ingest profile|新建写入配置/ }).click();
+  await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/new\?returnProfileType=ingest&corpusId=support-tree-graph$/);
+  await expect(page.getByLabel(/Primary corpus|主语料库/)).toHaveValue("support-tree-graph");
+  await expect(page.getByLabel(/Primary corpus|主语料库/)).toHaveAttribute("readonly");
+  await page.goto(`${frontendBaseUrl}/rag`);
   await expect(page.getByRole("cell", { name: "Project Document project-doc" })).toBeVisible();
 
   await page.getByRole("button", { name: /New corpus|新建语料库/ }).click();
@@ -191,7 +254,7 @@ test("loads corpora from management APIs and persists create/edit through verify
   await expect(page.getByLabel(/Source target|来源目标/)).toBeHidden();
   await expect(page.getByLabel(/Enable fulltext index|启用全文索引/)).toBeHidden();
   await expect(page.getByLabel(/Enable vector index|启用向量索引/)).toBeHidden();
-  await expect(page.getByRole("button", { name: /Enable summary tree|启用摘要树/ })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("switch", { name: /Enable summary tree|启用摘要树/ })).toHaveAttribute("aria-checked", "false");
   await expect(page.getByLabel(/Enable graph capability|Graph enabled|启用图能力/)).toBeHidden();
   await expect(page.getByLabel(/Reserved corpus|保留语料库/)).toHaveCount(0);
   await expect(page.getByRole("heading", { name: /Field configuration|字段配置/ })).toBeVisible();
@@ -201,7 +264,7 @@ test("loads corpora from management APIs and persists create/edit through verify
   await expect(page.getByRole("tab", { name: /Source fields|来源字段/ })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tab", { name: /Text unit fields|文本单元字段/ })).toBeVisible();
   await page.getByRole("tab", { name: /Filter fields|筛选字段/ }).click();
-  await expect(page.getByLabel(/Filter field 1 name|筛选字段 1 名称/)).toBeVisible();
+  await expect(page.getByText(/1 filter fields|1 个筛选字段/).first()).toBeVisible();
   await expect(page.getByRole("heading", { name: /Backend payload preview|后端 payload 预览/ })).toHaveCount(0);
   await page.getByRole("button", { name: /^Save$|^保存$/ }).click();
 
@@ -216,8 +279,8 @@ test("loads corpora from management APIs and persists create/edit through verify
   await expect(page.getByLabel(/Corpus code|语料库编码/)).toBeDisabled();
   await expect(page.getByLabel(/Text unit target|Text Unit target|文本单元目标/)).toHaveCount(0);
   await page.getByRole("button", { name: /Advanced storage settings|高级存储设置/ }).click();
-  await expect(page.getByLabel(/Text unit target|Text Unit target|文本单元目标/)).toHaveValue("content-store");
-  await expect(page.getByLabel(/Fulltext index target|Fulltext target|全文索引目标/)).toHaveValue("content-store");
+  await expectSelectedOption(page.getByLabel(/Text unit target|Text Unit target|文本单元目标/), "content-store");
+  await expectSelectedOption(page.getByLabel(/Fulltext index target|Fulltext target|全文索引目标/), "content-store");
 
   await page.getByLabel(/Corpus name|语料库名称/).fill("Project Documents QA");
   await page.getByLabel(/Storage target 2 table|存储目标 2 表名/).fill("rag_project_doc_text_units_qa");
@@ -310,14 +373,14 @@ test("allows mixed graph and sqlite segment bindings", async ({ page }) => {
 
   await page.getByLabel(/Corpus code|语料库编码/).fill("support-mixed");
   await page.getByLabel(/Corpus name|语料库名称/).fill("Support Mixed");
-  await page.getByRole("button", { name: /Enable summary tree|启用摘要树/ }).click();
+  await page.getByRole("switch", { name: /Enable summary tree|启用摘要树/ }).click();
   await page.getByRole("button", { name: /Advanced storage settings|高级存储设置/ }).click();
   await page.getByRole("button", { name: /Add custom storage|添加自定义存储/ }).click();
-  await page.getByLabel(/Storage target 5 backend|存储目标 5 后端/).selectOption("GRAPH");
-  await page.getByLabel(/Storage target 5 graph namespace|存储目标 5 图命名空间/).fill("rag_support_mixed_tree");
-  await page.getByLabel(/Storage target 5 node label|存储目标 5 节点标签/).fill("RagTreeNode");
+  await chooseSelectOption(page, storageTargetBackendSelect(page), /GRAPH|Graph storage|图存储/);
+  await storageTargetGraphNamespaceInput(page).fill("rag_support_mixed_tree");
+  await storageTargetNodeLabelInput(page).fill("RagTreeNode");
   await expect(page.getByLabel(/Enable graph capability|Graph enabled|启用图能力/)).toBeHidden();
-  await page.getByLabel(/Summary tree target|Tree target|摘要树目标/).selectOption("target-5");
+  await chooseSelectOption(page, page.getByLabel(/Summary tree target|Tree target|摘要树目标/), "rag_support_mixed_tree/RagTreeNode");
   await page.getByRole("button", { name: /^Save$|^保存$/ }).click();
 
   await expect(page).toHaveURL(/\/rag$/);

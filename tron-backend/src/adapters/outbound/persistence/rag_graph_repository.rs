@@ -81,8 +81,16 @@ impl RagManagementRepository for GraphBackedRagRepository {
         self.sqlite.save_managed_corpus(record)
     }
 
+    fn delete_managed_corpus(&self, corpus_id: &str) -> Result<bool, RagError> {
+        self.sqlite.delete_managed_corpus(corpus_id)
+    }
+
     fn save_profile(&self, record: &RagProfileRecord) -> Result<(), RagError> {
         self.sqlite.save_profile(record)
+    }
+
+    fn delete_profile(&self, profile_id: &str) -> Result<bool, RagError> {
+        self.sqlite.delete_profile(profile_id)
     }
 }
 

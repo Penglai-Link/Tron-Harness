@@ -382,6 +382,10 @@ fn best_profile_reference<'a>(
     profile_type: RagProfileType,
     corpus_id: &str,
 ) -> Option<&'a RagProfileRecord> {
+    let preferred_profile_id = match profile_type {
+        RagProfileType::Ingest => preferred_ingest_profile_id_for_corpus(corpus_id),
+        RagProfileType::Retrieval => None,
+    };
     profiles
         .iter()
         .filter(|profile| {
@@ -389,11 +393,22 @@ fn best_profile_reference<'a>(
         })
         .min_by_key(|profile| {
             (
+                usize::from(Some(profile.profile_id.as_str()) != preferred_profile_id),
                 usize::from(profile.primary_corpus_id.as_deref() != Some(corpus_id)),
                 profile.corpus_ids.len(),
                 profile.profile_id.as_str(),
             )
         })
+}
+
+fn preferred_ingest_profile_id_for_corpus(corpus_id: &str) -> Option<&'static str> {
+    match corpus_id {
+        "memory-card" => Some("memory-card-ingest-v1"),
+        "project-doc" => Some("project-doc-mineru-ingest-v1"),
+        "skill" => Some("skill-ingest-v1"),
+        "skill-graph" => Some("skill-graph-ingest-v1"),
+        _ => None,
+    }
 }
 
 fn storage_summary(binding: &RagStorageBinding) -> String {

@@ -114,6 +114,17 @@ pub async fn update_corpus_management(
     }
 }
 
+pub async fn delete_corpus_management(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+    Path(corpus_id): Path<String>,
+) -> Response {
+    match rag.delete_corpus_management(&corpus_id) {
+        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
 pub async fn search(
     State(workspaces): State<WorkspaceService>,
     State(rag): State<AppRagService>,
@@ -211,6 +222,17 @@ pub async fn update_profile_management(
     Json(request): Json<RagProfileManagementInput>,
 ) -> Response {
     match rag.update_profile_management(&profile_id, request) {
+        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Err(error) => rag_error_response(error),
+    }
+}
+
+pub async fn delete_profile_management(
+    State(rag): State<AppRagService>,
+    _auth: RequestAuthContext,
+    Path(profile_id): Path<String>,
+) -> Response {
+    match rag.delete_profile_management(&profile_id) {
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => rag_error_response(error),
     }

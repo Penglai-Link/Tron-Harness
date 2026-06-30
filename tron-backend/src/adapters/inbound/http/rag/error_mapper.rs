@@ -43,6 +43,11 @@ pub fn rag_error_response(error: RagError) -> Response {
             "RAG_PROFILE_CORPUS_INVALID",
             "rag profile corpus reference is invalid",
         ),
+        RagError::CorpusBoundToRetrievalProfile => (
+            StatusCode::CONFLICT,
+            "RAG_CORPUS_BOUND_TO_RETRIEVAL_PROFILE",
+            "rag corpus is bound to a retrieval profile",
+        ),
         RagError::IngestRequestInvalid => (
             StatusCode::BAD_REQUEST,
             "RAG_INGEST_REQUEST_INVALID",

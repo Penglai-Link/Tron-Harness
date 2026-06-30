@@ -31,7 +31,7 @@ export const corpora: CorpusRecord[] = [
     description: "Project documentation sources and text units.",
     filters: ["scopeType", "scopeCode", "documentCode", "repoCode"],
     fulltextHealth: "Healthy",
-    ingestProfile: "project-doc-ingest-v1",
+    ingestProfile: "project-doc-mineru-ingest-v1",
     lastIndexed: "8 min ago",
     name: "Project Document",
     retrievalProfile: "project-doc-related-v1",
@@ -123,6 +123,7 @@ export const corpora: CorpusRecord[] = [
 ];
 
 export const RAG_MOCK_CORPORA_STORAGE_KEY = "tron.rag.mock.corpora";
+const RAG_MOCK_DELETED_CORPORA_STORAGE_KEY = "tron.rag.mock.deletedCorpora";
 
 const corpusStatuses = new Set<CorpusRecord["status"]>(["Active", "Disabled", "Indexing", "Warning", "Reserved"]);
 
@@ -567,6 +568,37 @@ function canUseBrowserStorage() {
   return typeof window !== "undefined" && Boolean(window.localStorage);
 }
 
+function readStoredStringSet(storageKey: string) {
+  if (!canUseBrowserStorage()) return new Set<string>();
+
+  try {
+    const rawValue = window.localStorage.getItem(storageKey);
+    if (!rawValue) return new Set<string>();
+    const parsedValue: unknown = JSON.parse(rawValue);
+    if (!Array.isArray(parsedValue)) return new Set<string>();
+    return new Set(parsedValue.filter((value): value is string => typeof value === "string"));
+  } catch {
+    return new Set<string>();
+  }
+}
+
+function writeStoredStringSet(storageKey: string, values: Set<string>) {
+  if (!canUseBrowserStorage()) return;
+  window.localStorage.setItem(storageKey, JSON.stringify(Array.from(values)));
+}
+
+function removeStoredString(storageKey: string, value: string) {
+  const values = readStoredStringSet(storageKey);
+  values.delete(value);
+  writeStoredStringSet(storageKey, values);
+}
+
+function addStoredString(storageKey: string, value: string) {
+  const values = readStoredStringSet(storageKey);
+  values.add(value);
+  writeStoredStringSet(storageKey, values);
+}
+
 function isCorpusRecord(value: unknown): value is CorpusRecord {
   if (!value || typeof value !== "object") return false;
 
@@ -605,9 +637,12 @@ function readStoredRagCorpora(): CorpusRecord[] {
 export function getRagMockCorpora(): CorpusRecord[] {
   const storedCorpora = readStoredRagCorpora().map(withStructuredConfig);
   const storedByCode = new Map(storedCorpora.map((corpus) => [corpus.code, corpus]));
+  const deletedCodes = readStoredStringSet(RAG_MOCK_DELETED_CORPORA_STORAGE_KEY);
   const seedCodes = new Set(corpora.map((corpus) => corpus.code));
-  const mergedSeedCorpora = corpora.map((corpus) => storedByCode.get(corpus.code) ?? withStructuredConfig(corpus));
-  const createdCorpora = storedCorpora.filter((corpus) => !seedCodes.has(corpus.code));
+  const mergedSeedCorpora = corpora
+    .filter((corpus) => !deletedCodes.has(corpus.code))
+    .map((corpus) => storedByCode.get(corpus.code) ?? withStructuredConfig(corpus));
+  const createdCorpora = storedCorpora.filter((corpus) => !seedCodes.has(corpus.code) && !deletedCodes.has(corpus.code));
 
   return [...mergedSeedCorpora, ...createdCorpora];
 }
@@ -618,6 +653,7 @@ export function findRagMockCorpus(corpusCode: string) {
 
 export function saveRagMockCorpus(corpus: CorpusRecord) {
   const structuredCorpus = withStructuredConfig(corpus);
+  removeStoredString(RAG_MOCK_DELETED_CORPORA_STORAGE_KEY, structuredCorpus.code);
   if (!canUseBrowserStorage()) return structuredCorpus;
 
   const storedCorpora = readStoredRagCorpora();
@@ -630,7 +666,42 @@ export function saveRagMockCorpus(corpus: CorpusRecord) {
   return structuredCorpus;
 }
 
+function profileReferencesCorpus(profile: ProfileRecord, corpusCode: string) {
+  if (profile.primaryCorpusId === corpusCode || profile.corpus === corpusCode || profile.corpusIds.includes(corpusCode)) {
+    return true;
+  }
+  if (profile.type === "Retrieval") {
+    return profile.config.routesConfig.some((route) => route.corpusId === corpusCode);
+  }
+  return false;
+}
+
+export function deleteRagMockCorpus(corpusCode: string) {
+  const normalizedCorpusCode = corpusCode.trim();
+  const corpus = findRagMockCorpus(normalizedCorpusCode);
+  if (!corpus) throw new Error("RAG corpus was not found");
+  if (getRagMockProfiles().some((profile) => profile.type === "Retrieval" && profileReferencesCorpus(profile, normalizedCorpusCode))) {
+    throw new Error("RAG corpus is bound to a retrieval profile");
+  }
+
+  const deletedIngestProfileIds = getRagMockProfiles()
+    .filter((profile) => profile.type === "Ingest" && profileReferencesCorpus(profile, normalizedCorpusCode))
+    .map((profile) => profile.id);
+  deletedIngestProfileIds.forEach((profileId) => deleteRagMockProfile(profileId));
+
+  if (canUseBrowserStorage()) {
+    const nextCorpora = readStoredRagCorpora().filter((storedCorpus) => storedCorpus.code !== normalizedCorpusCode);
+    window.localStorage.setItem(RAG_MOCK_CORPORA_STORAGE_KEY, JSON.stringify(nextCorpora));
+    addStoredString(RAG_MOCK_DELETED_CORPORA_STORAGE_KEY, normalizedCorpusCode);
+  }
+  return {
+    corpusId: normalizedCorpusCode,
+    deletedIngestProfileIds,
+  };
+}
+
 export const RAG_MOCK_PROFILES_STORAGE_KEY = "tron.rag.mock.profiles";
+const RAG_MOCK_DELETED_PROFILES_STORAGE_KEY = "tron.rag.mock.deletedProfiles";
 
 type RagMockStrategyStatus = "Enabled" | "Reserved" | "Unsupported";
 
@@ -1038,7 +1109,7 @@ function summarizeProfileRoutes(profile: ProfileRecord) {
   }
 
   return profile.config.routesConfig
-    .filter((route) => route.enabled)
+    .filter((route) => route.enabled !== false)
     .map((route) => route.strategyId);
 }
 
@@ -1132,7 +1203,7 @@ const seedProfiles: ProfileRecord[] = [
       },
     }),
     description: "Parse docs, normalize frontmatter, split by sections, then index fulltext and vectors.",
-    id: "project-doc-ingest-v1",
+    id: "project-doc-mineru-ingest-v1",
     primaryCorpusId: "project-doc",
     status: "Ready",
     type: "Ingest",
@@ -1659,9 +1730,12 @@ function readStoredRagProfiles(): ProfileRecord[] {
 export function getRagMockProfiles(): ProfileRecord[] {
   const storedProfiles = readStoredRagProfiles().map(withStructuredProfile);
   const storedById = new Map(storedProfiles.map((profile) => [profile.id, profile]));
+  const deletedIds = readStoredStringSet(RAG_MOCK_DELETED_PROFILES_STORAGE_KEY);
   const seedIds = new Set(seedProfiles.map((profile) => profile.id));
-  const mergedSeedProfiles = seedProfiles.map((profile) => storedById.get(profile.id) ?? profile);
-  const createdProfiles = storedProfiles.filter((profile) => !seedIds.has(profile.id));
+  const mergedSeedProfiles = seedProfiles
+    .filter((profile) => !deletedIds.has(profile.id))
+    .map((profile) => storedById.get(profile.id) ?? profile);
+  const createdProfiles = storedProfiles.filter((profile) => !seedIds.has(profile.id) && !deletedIds.has(profile.id));
   return [...mergedSeedProfiles, ...createdProfiles];
 }
 
@@ -1671,6 +1745,7 @@ export function findRagMockProfile(profileId: string) {
 
 export function saveRagMockProfile(profile: ProfileRecord) {
   const structuredProfile = withStructuredProfile(profile);
+  removeStoredString(RAG_MOCK_DELETED_PROFILES_STORAGE_KEY, structuredProfile.id);
   if (!canUseBrowserStorage()) return structuredProfile;
 
   const storedProfiles = readStoredRagProfiles();
@@ -1681,6 +1756,20 @@ export function saveRagMockProfile(profile: ProfileRecord) {
 
   window.localStorage.setItem(RAG_MOCK_PROFILES_STORAGE_KEY, JSON.stringify(nextProfiles));
   return structuredProfile;
+}
+
+export function deleteRagMockProfile(profileId: string) {
+  const normalizedProfileId = profileId.trim();
+  const profile = findRagMockProfile(normalizedProfileId);
+  if (!profile) throw new Error("RAG profile was not found");
+  if (canUseBrowserStorage()) {
+    const nextProfiles = readStoredRagProfiles().filter((storedProfile) => storedProfile.id !== normalizedProfileId);
+    window.localStorage.setItem(RAG_MOCK_PROFILES_STORAGE_KEY, JSON.stringify(nextProfiles));
+    addStoredString(RAG_MOCK_DELETED_PROFILES_STORAGE_KEY, normalizedProfileId);
+  }
+  return {
+    profileId: normalizedProfileId,
+  };
 }
 
 export const sources: SourceRecord[] = [

@@ -1,23 +1,29 @@
 import {
-  type KeyboardEvent,
-  useEffect,
+  useRef,
   useState,
 } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { createPortal } from "react-dom";
+import { useNavigate } from "react-router";
 import {
-  FolderSync,
+  MoreHorizontal,
   Search,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { SurfaceCard } from "@/shared";
+import {
+  DataTable,
+  SurfaceCard,
+  TablePagination,
+  TextInput,
+  useDismissibleLayer,
+  useTablePagination,
+} from "@/shared";
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
 
 import type {
-  IngestProfileRecord,
   ProfileRecord,
-  RagProfileType,
+  RagRetrievalRouteConfig,
   RetrievalProfileRecord,
 } from "@/domain/rag/model/RagModel";
 import {
@@ -27,237 +33,293 @@ import {
   statusTone,
 } from "@/domain/rag/components/RagShared";
 
-const profileTabs: Array<{ value: RagProfileType }> = [
-  { value: "Ingest" },
-  { value: "Retrieval" },
-];
-
-const profileTypeStorageKey = "tron.rag.profiles.profileType";
-
-function profileTypeFromValue(value: string | null): RagProfileType | null {
-  const normalizedValue = value?.toLowerCase();
-  if (normalizedValue === "retrieval") return "Retrieval";
-  if (normalizedValue === "ingest") return "Ingest";
-  return null;
+interface RowMenuState {
+  left: number;
+  profileId: string;
+  top: number;
+  triggerElement: HTMLButtonElement;
 }
 
-function rememberProfileType(value: RagProfileType) {
-  if (typeof window === "undefined") return;
-  try {
-    window.sessionStorage.setItem(profileTypeStorageKey, profileTypeToSearch(value));
-  } catch {
-    // URL state still handles the normal path if browser storage is unavailable.
-  }
+function activeRetrievalRoutes(profile: RetrievalProfileRecord) {
+  return profile.config.routesConfig.filter((route) => (
+    route.enabled !== false
+    && route.corpusId.trim()
+    && route.strategyId.trim()
+  ));
 }
 
-function readRememberedProfileType(): RagProfileType {
-  if (typeof window === "undefined") return "Ingest";
-  try {
-    return profileTypeFromValue(window.sessionStorage.getItem(profileTypeStorageKey)) ?? "Ingest";
-  } catch {
-    return "Ingest";
-  }
+function uniqueRouteCorpusIds(profile: RetrievalProfileRecord) {
+  return Array.from(new Set(activeRetrievalRoutes(profile).map((route) => route.corpusId.trim()).filter(Boolean)));
 }
 
-function profileTypeToSearch(value: RagProfileType) {
-  return value === "Retrieval" ? "retrieval" : "ingest";
+function routeTypeLabel(route: RagRetrievalRouteConfig) {
+  const routeType = String(route.routeType || "").trim();
+  return routeType && routeType !== "ROUTE_SEARCH" ? routeType : route.strategyId.trim();
+}
+
+function routeTypeCounts(routes: RagRetrievalRouteConfig[]) {
+  const counts = new Map<string, number>();
+  routes.forEach((route) => {
+    const label = routeTypeLabel(route);
+    if (!label) return;
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+  });
+  return Array.from(counts.entries());
+}
+
+function normalizeSearchValue(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function profileMatchesQuery(profile: RetrievalProfileRecord, query: string) {
+  const normalizedQuery = normalizeSearchValue(query);
+  if (!normalizedQuery) return true;
+  const activeRoutes = activeRetrievalRoutes(profile);
+  const searchableValues = [
+    profile.id,
+    profile.description,
+    profile.status,
+    profile.primaryCorpusId,
+    ...uniqueRouteCorpusIds(profile),
+    ...activeRoutes.map((route) => route.strategyId),
+    ...activeRoutes.map((route) => routeTypeLabel(route)),
+  ];
+  return searchableValues.some((value) => value.toLowerCase().includes(normalizedQuery));
 }
 
 export function RagProfilesTab({
+  onDeleteProfile,
+  onTestProfile,
   profiles,
 }: {
+  onDeleteProfile: (profile: RetrievalProfileRecord) => Promise<void> | void;
+  onTestProfile: (profile: RetrievalProfileRecord) => void;
   profiles: ProfileRecord[];
 }) {
   const navigate = useNavigate();
   const { t } = useTranslation(["pages"]);
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [openRowMenu, setOpenRowMenu] = useState<RowMenuState | null>(null);
+  const [query, setQuery] = useState("");
+  const [rowBusyId, setRowBusyId] = useState("");
+  const rowMenuRef = useRef<HTMLDivElement | null>(null);
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:rag.profiles.${key}`, { defaultValue, ...options })
   );
-  const requestedProfileType = profileTypeFromValue(searchParams.get("profileType"));
-  const [rememberedProfileType, setRememberedProfileType] = useState<RagProfileType>(() => readRememberedProfileType());
-  const activeProfileType = requestedProfileType ?? rememberedProfileType;
-  const ingestProfiles = profiles.filter((profile): profile is IngestProfileRecord => profile.type === "Ingest");
   const retrievalProfiles = profiles.filter((profile): profile is RetrievalProfileRecord => profile.type === "Retrieval");
-  const visibleProfiles = activeProfileType === "Ingest" ? ingestProfiles : retrievalProfiles;
-  const activeProfileTypeSearch = profileTypeToSearch(activeProfileType);
-  const addPath = activeProfileType === "Ingest"
-    ? `/rag/profiles/ingest/new?returnProfileType=${activeProfileTypeSearch}`
-    : `/rag/profiles/retrieval/new?returnProfileType=${activeProfileTypeSearch}`;
-  const addLabel = activeProfileType === "Ingest" ? pageT("actions.newIngest", "New ingest profile") : pageT("actions.newRetrieval", "New retrieval profile");
-  const icon = activeProfileType === "Ingest"
-    ? <FolderSync size={17} aria-hidden="true" />
-    : <Search size={17} aria-hidden="true" />;
+  const filteredRetrievalProfiles = retrievalProfiles.filter((profile) => profileMatchesQuery(profile, query));
+  const retrievalPagination = useTablePagination(filteredRetrievalProfiles, 10);
+  const openMenuProfile = openRowMenu
+    ? retrievalProfiles.find((profile) => profile.id === openRowMenu.profileId) ?? null
+    : null;
 
-  useEffect(() => {
-    if (!requestedProfileType) {
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.set("tab", "profiles");
-      nextParams.set("profileType", profileTypeToSearch(rememberedProfileType));
-      setSearchParams(nextParams, { replace: true });
-      return;
-    }
-    rememberProfileType(requestedProfileType);
-    setRememberedProfileType(requestedProfileType);
-  }, [rememberedProfileType, requestedProfileType, searchParams, setSearchParams]);
-
-  function setActiveProfileType(nextProfileType: RagProfileType) {
-    rememberProfileType(nextProfileType);
-    setRememberedProfileType(nextProfileType);
-    const nextParams = new URLSearchParams(searchParams);
-    nextParams.set("tab", "profiles");
-    nextParams.set("profileType", profileTypeToSearch(nextProfileType));
-    setSearchParams(nextParams, { replace: true });
-  }
+  useDismissibleLayer({
+    open: Boolean(openRowMenu),
+    onDismiss: () => setOpenRowMenu(null),
+    popupRef: rowMenuRef,
+    triggerElement: openRowMenu?.triggerElement ?? null,
+  });
 
   function openAddProfile() {
-    rememberProfileType(activeProfileType);
-    navigate(addPath);
+    navigate("/rag/profiles/retrieval/new?returnProfileType=retrieval");
   }
 
-  function openProfile(profile: ProfileRecord) {
-    rememberProfileType(profile.type);
-    navigate(profile.type === "Ingest"
-      ? `/rag/profiles/ingest/${encodeURIComponent(profile.id)}/edit?returnProfileType=ingest`
-      : `/rag/profiles/retrieval/${encodeURIComponent(profile.id)}/edit?returnProfileType=retrieval`);
+  function openProfile(profile: RetrievalProfileRecord) {
+    navigate(`/rag/profiles/retrieval/${encodeURIComponent(profile.id)}/edit?returnProfileType=retrieval`);
   }
 
-  return (
-    <SurfaceCard>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <SectionTitle
-          icon={icon}
-          title={pageT("title", "Profiles")}
-        />
-        <Button onClick={openAddProfile}>
-          {addLabel}
-        </Button>
-      </div>
+  function toggleRowMenu(profile: RetrievalProfileRecord, triggerElement: HTMLButtonElement) {
+    const rect = triggerElement.getBoundingClientRect();
+    const menuWidth = 176;
+    const menuHeight = 136;
+    const preferredTop = rect.bottom + 8;
+    const top = preferredTop + menuHeight > window.innerHeight - 16
+      ? Math.max(16, rect.top - menuHeight - 8)
+      : preferredTop;
+    setOpenRowMenu((current) => (
+      current?.profileId === profile.id
+        ? null
+        : {
+          left: Math.max(16, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 16)),
+          profileId: profile.id,
+          top,
+          triggerElement,
+        }
+    ));
+  }
 
-      <div className="mt-5 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-1">
-        <div className="grid gap-1 sm:grid-cols-2">
-          {profileTabs.map((tab) => {
-            const selected = activeProfileType === tab.value;
-            const count = tab.value === "Ingest" ? ingestProfiles.length : retrievalProfiles.length;
-            return (
-              <button
-                aria-pressed={selected}
-                className={`rounded-xl px-4 py-3 text-left transition ${
-                  selected
-                    ? "bg-[var(--color-elevated-surface)] shadow-sm"
-                    : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-surface)]"
-                }`}
-                key={tab.value}
-                type="button"
-                onClick={() => setActiveProfileType(tab.value)}
-              >
-                <span className="flex items-center justify-between gap-3">
-                  <span className="font-medium">{pageT(`tabs.${tab.value}`, tab.value === "Ingest" ? "Ingest profiles" : "Retrieval profiles")}</span>
-                  <span className="rounded-full border border-[var(--color-outline-variant)] px-2 py-0.5 font-mono text-[12px]">
-                    {count}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="mt-5 overflow-x-auto rounded-2xl border border-[var(--color-outline-variant)]">
-        <div className="grid min-w-[780px] grid-cols-[minmax(220px,1.1fr)_minmax(180px,0.8fr)_minmax(220px,1fr)_minmax(160px,0.7fr)] gap-4 bg-[var(--color-surface-container-low)] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-          <span>{pageT("table.columns.profile", "Profile")}</span>
-          <span>{pageT("table.columns.corpus", "Corpus")}</span>
-          <span>{activeProfileType === "Ingest" ? pageT("table.columns.pipeline", "Pipeline") : pageT("table.columns.routes", "Routes")}</span>
-          <span>{activeProfileType === "Ingest" ? pageT("table.columns.inputContract", "Input contract") : pageT("table.columns.retrievalPolicy", "Retrieval policy")}</span>
-        </div>
-
-        {visibleProfiles.length > 0 ? visibleProfiles.map((profile) => (
-          <ProfileRow
-            key={profile.id}
-            profile={profile}
-            onEdit={() => openProfile(profile)}
-          />
-        )) : (
-          <div className="min-w-[780px] px-4 py-8 text-center text-sm text-[var(--color-on-surface-variant)]">
-            {activeProfileType === "Ingest" ? pageT("empty.ingest", "No ingest profiles.") : pageT("empty.retrieval", "No retrieval profiles.")}
-          </div>
-        )}
-      </div>
-    </SurfaceCard>
-  );
-}
-
-function ProfileRow({
-  onEdit,
-  profile,
-}: {
-  onEdit: () => void;
-  profile: ProfileRecord;
-}) {
-  const { t } = useTranslation(["pages"]);
-  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
-    t(`pages:rag.profiles.${key}`, { defaultValue, ...options })
-  );
-
-  function handleKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onEdit();
+  async function deleteProfile(profile: RetrievalProfileRecord) {
+    if (rowBusyId === profile.id) return;
+    setRowBusyId(profile.id);
+    setOpenRowMenu(null);
+    try {
+      await onDeleteProfile(profile);
+    } finally {
+      setRowBusyId("");
     }
   }
 
   return (
-    <div
-      aria-label={pageT("row.editAria", "Edit {{id}}", { id: profile.id })}
-      className="grid min-w-[780px] cursor-pointer grid-cols-[minmax(220px,1.1fr)_minmax(180px,0.8fr)_minmax(220px,1fr)_minmax(160px,0.7fr)] gap-4 border-t border-[var(--color-outline-variant)] px-4 py-4 text-sm hover:bg-[var(--color-hover-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-elevated-surface)]"
-      role="button"
-      tabIndex={0}
-      onClick={onEdit}
-      onKeyDown={handleKeyDown}
-    >
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="truncate font-medium">{profile.id}</p>
-          <Badge tone={statusTone(profile.status)}>{formatRagStatusLabel(profile.status, t)}</Badge>
+    <>
+      <SurfaceCard className="p-0">
+        <div className="border-b border-[var(--color-outline-variant)] px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <SectionTitle
+              icon={<Search size={17} aria-hidden="true" />}
+              title={pageT("title", "Retrieval profiles")}
+            />
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(260px,1fr)_auto] md:items-center">
+            <div className="relative min-w-0">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
+              <TextInput
+                className="w-full pl-9"
+                placeholder={pageT("searchPlaceholder", "Search retrieval profiles, corpora, routes, or strategies...")}
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </div>
+            <Button className="justify-self-start md:justify-self-end" onClick={openAddProfile}>
+              {pageT("actions.newRetrieval", "New retrieval profile")}
+            </Button>
+          </div>
         </div>
-        {profile.description ? (
-          <p className="mt-1 line-clamp-2 text-[13px] text-[var(--color-on-surface-variant)]">{profile.description}</p>
-        ) : null}
-      </div>
 
-      <div className="grid content-start gap-2">
-        <Pill>{profile.primaryCorpusId || pageT("row.noPrimaryCorpus", "No primary corpus")}</Pill>
-        {profile.type === "Retrieval" && profile.corpusIds.length > 1 ? (
-          <span className="text-[12px] text-[var(--color-on-surface-variant)]">
-            {pageT("row.corpusCount", "{{count}} corpora", { count: profile.corpusIds.length })}
-          </span>
-        ) : null}
-      </div>
+        <DataTable<RetrievalProfileRecord>
+          rows={retrievalPagination.visibleItems}
+          rowKey={(profile) => profile.id}
+          variant="embedded"
+          onRowClick={openProfile}
+          pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "retrieval profiles")} {...retrievalPagination.paginationProps} />}
+          emptyState={pageT("empty.retrieval", "No retrieval profiles.")}
+          columns={[
+            {
+              id: "profile",
+              header: pageT("table.columns.profile", "Profile"),
+              render: (profile) => (
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      aria-label={pageT("row.editAria", "Edit {{id}}", { id: profile.id })}
+                      className="truncate text-left font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-elevated-surface)]"
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openProfile(profile);
+                      }}
+                    >
+                      {profile.id}
+                    </button>
+                    <Badge tone={statusTone(profile.status)}>{formatRagStatusLabel(profile.status, t)}</Badge>
+                  </div>
+                  {profile.description ? (
+                    <p className="mt-1 line-clamp-2 text-[13px] text-[var(--color-on-surface-variant)]">{profile.description}</p>
+                  ) : null}
+                </div>
+              ),
+            },
+            {
+              id: "corpus",
+              header: pageT("table.columns.corpus", "Corpus"),
+              render: (profile) => {
+                const routeCorpusIds = uniqueRouteCorpusIds(profile);
+                return routeCorpusIds.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {routeCorpusIds.map((corpusId) => <Pill key={corpusId}>{corpusId}</Pill>)}
+                  </div>
+                ) : (
+                  <span className="text-[13px] text-[var(--color-on-surface-variant)]">
+                    {pageT("row.noRouteCorpora", "No route corpora")}
+                  </span>
+                );
+              },
+            },
+            {
+              id: "routes",
+              header: pageT("table.columns.routes", "Routes"),
+              render: (profile) => <RetrievalProfileSummary profile={profile} />,
+            },
+            {
+              align: "right",
+              cellClassName: "w-24",
+              header: pageT("table.columns.actions", "Actions"),
+              headerClassName: "w-24",
+              id: "actions",
+              render: (profile) => {
+                const isMenuOpen = openRowMenu?.profileId === profile.id;
+                return (
+                  <div className="flex justify-end">
+                    <Button
+                      aria-expanded={isMenuOpen}
+                      aria-label={pageT("actions.openRowActions", "Open actions for {{id}}", { id: profile.id })}
+                      disabled={rowBusyId === profile.id}
+                      size="icon"
+                      type="button"
+                      variant="ghost"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleRowMenu(profile, event.currentTarget);
+                      }}
+                    >
+                      <MoreHorizontal size={16} aria-hidden="true" />
+                    </Button>
+                  </div>
+                );
+              },
+            },
+          ]}
+        />
+      </SurfaceCard>
 
-      {profile.type === "Ingest" ? <IngestProfileSummary profile={profile} /> : <RetrievalProfileSummary profile={profile} />}
-
-      {profile.type === "Ingest" ? <IngestContractSummary profile={profile} /> : <RetrievalPolicySummary profile={profile} />}
-    </div>
-  );
-}
-
-function IngestProfileSummary({ profile }: { profile: IngestProfileRecord }) {
-  const { t } = useTranslation(["pages"]);
-  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
-    t(`pages:rag.profiles.${key}`, { defaultValue, ...options })
-  );
-  const enabledStages = profile.config.dag.nodes;
-  const payloadStrategy = profile.config.stages.preparePayload?.strategyId || profile.strategy || pageT("row.notSet", "Not set");
-  return (
-    <div className="grid content-start gap-2">
-      <span className="font-mono text-[12px]">{payloadStrategy}</span>
-      <span className="text-[12px] text-[var(--color-on-surface-variant)]">
-        {pageT("row.stageEdgeCount", "{{stages}} stages · {{edges}} edges", { edges: profile.config.dag.edges.length, stages: enabledStages.length })}
-      </span>
-      <div className="flex flex-wrap gap-1.5">
-        {enabledStages.slice(0, 4).map((stage) => <Pill key={stage}>{stage}</Pill>)}
-      </div>
-    </div>
+      {openRowMenu && openMenuProfile
+        ? createPortal(
+          <div
+            ref={rowMenuRef}
+            aria-label={pageT("actions.rowMenuAria", "Actions for {{id}}", { id: openMenuProfile.id })}
+            className="fixed z-[80] w-44 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-2 text-left text-sm shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
+            role="menu"
+            style={{ left: openRowMenu.left, top: openRowMenu.top }}
+          >
+            <button
+              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={rowBusyId === openMenuProfile.id}
+              role="menuitem"
+              type="button"
+              onClick={() => {
+                setOpenRowMenu(null);
+                openProfile(openMenuProfile);
+              }}
+            >
+              {pageT("actions.editRetrievalProfile", "Edit retrieval profile")}
+            </button>
+            <button
+              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={rowBusyId === openMenuProfile.id}
+              role="menuitem"
+              type="button"
+              onClick={() => {
+                setOpenRowMenu(null);
+                onTestProfile(openMenuProfile);
+              }}
+            >
+              {pageT("actions.testRetrievalProfile", "Retrieval test")}
+            </button>
+            <button
+              className="block w-full rounded-lg px-3 py-2 text-left text-[var(--color-error)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+              disabled={rowBusyId === openMenuProfile.id}
+              role="menuitem"
+              type="button"
+              onClick={() => {
+                void deleteProfile(openMenuProfile);
+              }}
+            >
+              {pageT("actions.deleteRetrievalProfile", "Delete retrieval profile")}
+            </button>
+          </div>,
+          document.body,
+        )
+        : null}
+    </>
   );
 }
 
@@ -266,47 +328,20 @@ function RetrievalProfileSummary({ profile }: { profile: RetrievalProfileRecord 
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:rag.profiles.${key}`, { defaultValue, ...options })
   );
-  const enabledRoutes = profile.config.routesConfig.filter((route) => route.enabled);
+  const enabledRoutes = activeRetrievalRoutes(profile);
+  const routeTypes = routeTypeCounts(enabledRoutes);
   return (
     <div className="grid content-start gap-2">
       <span className="text-[12px] text-[var(--color-on-surface-variant)]">
-        {pageT("row.enabledRoutes", "{{count}} enabled routes", { count: enabledRoutes.length })}
+        {pageT("row.enabledRoutes", "{{count}} routes", { count: enabledRoutes.length })}
       </span>
-      <div className="flex flex-wrap gap-1.5">
-        {enabledRoutes.slice(0, 4).map((route) => (
-          <Pill key={`${route.corpusId}-${route.routeType}-${route.strategyId}`}>{route.routeType}</Pill>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function IngestContractSummary({ profile }: { profile: IngestProfileRecord }) {
-  const { t } = useTranslation(["pages"]);
-  const pageT = (key: string, defaultValue: string) => t(`pages:rag.profiles.${key}`, { defaultValue });
-  const sourceTypes = profile.config.sourceInputPolicy.supportedSourceTypes;
-  return (
-    <div className="grid content-start gap-1.5 text-[13px]">
-      <span>{pageT("row.sourceVersion", "Source version")} {profile.config.requiredSourceVersion || pageT("row.notSet", "Not set")}</span>
-      <span className="text-[var(--color-on-surface-variant)]">
-        {sourceTypes.length > 0 ? sourceTypes.join(", ") : pageT("row.noSourceTypes", "No source types")}
-      </span>
-    </div>
-  );
-}
-
-function RetrievalPolicySummary({ profile }: { profile: RetrievalProfileRecord }) {
-  const { t } = useTranslation(["pages"]);
-  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
-    t(`pages:rag.profiles.${key}`, { defaultValue, ...options })
-  );
-
-  return (
-    <div className="grid content-start gap-1.5 text-[13px]">
-      <span>{profile.config.fusionPolicy || pageT("row.noFusionPolicy", "No fusion policy")}</span>
-      <span className="text-[var(--color-on-surface-variant)]">
-        {pageT("row.contextStrategyCount", "{{count}} context strategies", { count: profile.config.contextStrategies.length })}
-      </span>
+      {routeTypes.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {routeTypes.map(([routeType, count]) => (
+            <Pill key={routeType}>{count > 1 ? `${routeType} x${count}` : routeType}</Pill>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }

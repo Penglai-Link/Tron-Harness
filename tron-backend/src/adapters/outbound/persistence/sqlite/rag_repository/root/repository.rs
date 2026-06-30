@@ -416,6 +416,14 @@ impl RagManagementRepository for SqliteRagRepository {
         Ok(())
     }
 
+    fn delete_managed_corpus(&self, corpus_id: &str) -> Result<bool, RagError> {
+        let deleted_rows = self
+            .connection
+            .execute("DELETE FROM rag_corpora WHERE corpus_id = ?1", [corpus_id])
+            .map_err(storage_error)?;
+        Ok(deleted_rows > 0)
+    }
+
     fn save_profile(&self, record: &RagProfileRecord) -> Result<(), RagError> {
         let now = current_timestamp_millis();
         self.connection
@@ -459,6 +467,14 @@ impl RagManagementRepository for SqliteRagRepository {
             )
             .map_err(storage_error)?;
         Ok(())
+    }
+
+    fn delete_profile(&self, profile_id: &str) -> Result<bool, RagError> {
+        let deleted_rows = self
+            .connection
+            .execute("DELETE FROM rag_profiles WHERE profile_id = ?1", [profile_id])
+            .map_err(storage_error)?;
+        Ok(deleted_rows > 0)
     }
 }
 

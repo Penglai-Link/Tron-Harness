@@ -74,7 +74,11 @@ pub trait RagManagementRepository {
 
     fn save_managed_corpus(&self, record: &RagCorpusRecord) -> Result<(), RagError>;
 
+    fn delete_managed_corpus(&self, corpus_id: &str) -> Result<bool, RagError>;
+
     fn save_profile(&self, record: &RagProfileRecord) -> Result<(), RagError>;
+
+    fn delete_profile(&self, profile_id: &str) -> Result<bool, RagError>;
 }
 
 impl<T> RagManagementRepository for Arc<Mutex<T>>
@@ -96,10 +100,22 @@ where
             .save_managed_corpus(record)
     }
 
+    fn delete_managed_corpus(&self, corpus_id: &str) -> Result<bool, RagError> {
+        self.lock()
+            .expect("RAG repository mutex poisoned")
+            .delete_managed_corpus(corpus_id)
+    }
+
     fn save_profile(&self, record: &RagProfileRecord) -> Result<(), RagError> {
         self.lock()
             .expect("RAG repository mutex poisoned")
             .save_profile(record)
+    }
+
+    fn delete_profile(&self, profile_id: &str) -> Result<bool, RagError> {
+        self.lock()
+            .expect("RAG repository mutex poisoned")
+            .delete_profile(profile_id)
     }
 }
 
@@ -365,6 +381,22 @@ pub struct RagProfileManagementListItem {
     pub corpus_ids: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub required_source_version: Option<String>,
+    #[serde(default)]
+    pub routes: Vec<RagRetrievalRoutePayload>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagCorpusDeleteResult {
+    pub corpus_id: String,
+    #[serde(default)]
+    pub deleted_ingest_profile_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RagProfileDeleteResult {
+    pub profile_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -420,6 +452,7 @@ pub struct RagCorpusOptionView {
     pub display_name: String,
     pub status: String,
     pub capabilities: RagCorpusCapabilitiesPayload,
+    pub filter_schema: Value,
     pub storage_summary: String,
 }
 

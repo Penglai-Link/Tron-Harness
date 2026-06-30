@@ -1,7 +1,4 @@
 import { i18n } from "@/i18n";
-
-export type RagTab = "corpora" | "profiles" | "workbench" | "data" | "diagnostics";
-export type DataView = "sources" | "textUnits" | "warnings" | "traces";
 export type BadgeTone = "neutral" | "accent" | "success" | "warning" | "error";
 export type RagStorageBackend = "SQLITE" | "GRAPH";
 export type RagStorageTargetLayout = "TABLE" | "GRAPH_SINGLE_NODE" | "GRAPH_TREE";
@@ -298,21 +295,6 @@ export interface TraceRecord {
   route: string;
   tokens: number;
 }
-
-export const ragTabs = [
-  { label: "Corpora", value: "corpora" },
-  { label: "Profiles", value: "profiles" },
-  { label: "Workbench", value: "workbench" },
-  { label: "Data", value: "data" },
-  { label: "Diagnostics", value: "diagnostics" },
-] as const;
-
-export const dataViews = [
-  { label: "Sources", value: "sources" },
-  { label: "Text units", value: "textUnits" },
-  { label: "Warnings", value: "warnings" },
-  { label: "Retrieval traces", value: "traces" },
-] as const;
 
 export const pipelineStages = ["source", "parse", "normalize", "split", "extractTree", "summarizeTree", "persist", "fulltextIndex", "vectorIndex", "treeFulltextIndex", "treeVectorIndex"] as const;
 

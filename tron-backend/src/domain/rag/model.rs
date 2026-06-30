@@ -197,6 +197,7 @@ pub enum RagError {
     FilterOperatorUnsupported,
     ProfileStrategyInvalid,
     ProfileCorpusInvalid,
+    CorpusBoundToRetrievalProfile,
     IngestRequestInvalid,
     IngestProfileInvalid,
     IngestScopeInvalid,
@@ -248,6 +249,9 @@ impl fmt::Display for RagError {
             }
             Self::ProfileStrategyInvalid => formatter.write_str("RAG profile strategy invalid"),
             Self::ProfileCorpusInvalid => formatter.write_str("RAG profile corpus invalid"),
+            Self::CorpusBoundToRetrievalProfile => {
+                formatter.write_str("RAG corpus is bound to a retrieval profile")
+            }
             Self::IngestRequestInvalid => formatter.write_str("RAG ingest request invalid"),
             Self::IngestProfileInvalid => formatter.write_str("RAG ingest profile invalid"),
             Self::IngestScopeInvalid => formatter.write_str("RAG ingest scope invalid"),

@@ -88,11 +88,33 @@ export const TextArea = forwardRef(function TextArea(
 
 
 
-export function SelectInput<Value, Multiple extends boolean | undefined = false>({ className, children, ...props }: SelectPrimitive.Root.Props<Value, Multiple> & { className?: string; size?: 'sm' | 'lg' }) {
+export function SelectInput<Value, Multiple extends boolean | undefined = false>({
+  "aria-describedby": ariaDescribedBy,
+  "aria-label": ariaLabel,
+  "aria-labelledby": ariaLabelledBy,
+  children,
+  className,
+  id,
+  size,
+  ...props
+}: SelectPrimitive.Root.Props<Value, Multiple> & {
+  "aria-describedby"?: string;
+  "aria-label"?: string;
+  "aria-labelledby"?: string;
+  className?: string;
+  id?: string;
+  size?: 'sm' | 'lg';
+}) {
   return (
     <>
       <Select {...props}>
-        <SelectTrigger size={props.size || 'lg'} className={cn(
+        <SelectTrigger
+          aria-describedby={ariaDescribedBy}
+          aria-label={ariaLabel}
+          aria-labelledby={ariaLabelledBy}
+          id={id}
+          size={size || 'lg'}
+          className={cn(
           disabledControlClasses,
           className,
         )}>
@@ -118,7 +140,7 @@ export function ToggleSwitch({ checked, disabled = false, ariaLabel, label, onCh
   return (
     <>
       <Label className="text-[var(--color-on-surface)]" title={'12'} aria-label={ariaLabel ?? label}>
-        <Switch disabled={disabled} onCheckedChange={() => {
+        <Switch checked={checked} disabled={disabled} onCheckedChange={() => {
           if (disabled) return;
           onCheckedChange(!checked);
         }} />

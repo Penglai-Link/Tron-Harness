@@ -120,7 +120,7 @@ function rememberProfileReturnType(value: ProfileReturnType) {
 
 function profileFormReturnPath(profileType: ProfileReturnType, searchParams?: URLSearchParams) {
   const returnProfileType = profileReturnTypeFromSearch(searchParams?.get("returnProfileType") ?? null) ?? profileType;
-  return `/rag?tab=profiles&profileType=${returnProfileType}`;
+  return returnProfileType === "ingest" ? "/rag" : "/rag?section=retrieval";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -154,30 +154,34 @@ function hasTreeCapableCorpus(corpusCode: string, corpusOptions: CorpusRecord[])
   if (!corpus) return false;
   if (corpus.config?.capabilities.tree || corpus.config?.storageBinding.bindings.tree) return true;
   return corpus.strategies.some((strategy) => {
-    const normalized = strategy.toUpperCase();
+    const normalized = normalizeStrategyId(strategy);
     return normalized.includes("TREE") || normalized.includes("SUMMARY_TREE");
   });
 }
 
-function inferStrategyBackend(strategyId: string): CorpusStorageBackend | undefined {
-  const normalized = strategyId.toUpperCase();
+function normalizeStrategyId(strategyId: unknown) {
+  return String(strategyId ?? "").trim().toUpperCase();
+}
+
+function inferStrategyBackend(strategyId: unknown): CorpusStorageBackend | undefined {
+  const normalized = normalizeStrategyId(strategyId);
   if (normalized.includes("GRAPH")) return "GRAPH";
   if (normalized.includes("SQLITE")) return "SQLITE";
   return undefined;
 }
 
-function isTreeRetrievalStrategy(strategyId: string) {
-  const normalized = strategyId.toUpperCase();
+function isTreeRetrievalStrategy(strategyId: unknown) {
+  const normalized = normalizeStrategyId(strategyId);
   return normalized.includes("TREE_FULLTEXT") || normalized.includes("TREE_VECTOR");
 }
 
-function isGraphRetrievalStrategy(strategyId: string) {
-  const normalized = strategyId.toUpperCase();
+function isGraphRetrievalStrategy(strategyId: unknown) {
+  const normalized = normalizeStrategyId(strategyId);
   return normalized === "GRAPH" || normalized.includes("GRAPH") && !normalized.includes("GRAPH_EXPANSION");
 }
 
-function isRetrievalRouteStrategy(strategyId: string) {
-  const normalized = strategyId.toUpperCase();
+function isRetrievalRouteStrategy(strategyId: unknown) {
+  const normalized = normalizeStrategyId(strategyId);
   if (normalized.includes("GRAPH_EXPANSION")) return false;
   return normalized === "FULLTEXT"
     || normalized === "VECTOR"
@@ -1106,12 +1110,12 @@ function defaultRetrievalHiddenFields(): RagRetrievalProfileHiddenFields {
 
 function RetrievalFlowCard({ form }: { form: RagRetrievalProfileFormState }) {
   const { pageT } = useProfileFormCopy();
-  const enabledRoutes = form.routes.filter((route) => route.enabled && route.strategyId.trim());
+  const routes = form.routes.filter((route) => route.strategyId.trim());
   const contextStrategy = form.contextStrategies[0] || "RESULT_LIST";
   const steps = [
     {
       label: pageT("retrievalFlow.routeSearch", "Route search"),
-      value: enabledRoutes.length > 0 ? pageT("retrievalFlow.enabledRoutes", "{{count}} enabled routes", { count: enabledRoutes.length }) : pageT("retrievalFlow.noRoutes", "No routes selected"),
+      value: routes.length > 0 ? pageT("retrievalFlow.enabledRoutes", "{{count}} routes", { count: routes.length }) : pageT("retrievalFlow.noRoutes", "No routes selected"),
     },
     { label: pageT("retrievalFlow.fusion", "Result fusion"), value: form.fusionPolicy || "SUM_SCORE" },
     { label: pageT("retrievalFlow.dedup", "Result deduplication"), value: form.dedupPolicy || "TEXT_UNIT" },
@@ -1128,7 +1132,7 @@ function RetrievalFlowCard({ form }: { form: RagRetrievalProfileFormState }) {
           </p>
         </div>
         <span className="rounded-full border border-[var(--color-outline-variant)] px-3 py-1 text-sm">
-          {pageT("retrievalFlow.routeCount", "{{count}} routes", { count: enabledRoutes.length })}
+          {pageT("retrievalFlow.routeCount", "{{count}} routes", { count: routes.length })}
         </span>
       </div>
       <div className="mt-5 grid gap-3 lg:grid-cols-[1fr_auto_1fr_auto_1fr_auto_1fr] lg:items-center">
@@ -1177,9 +1181,8 @@ function RouteRow({
             aria-label={pageT("routes.corpusAria", "Route {{index}} corpus", { index: index + 1 })}
             className="w-full"
             value={row.corpusId}
-            onValueChange={(event) => onUpdate({ corpusId: event!, strategyId: "" })}
+            onValueChange={(event) => onUpdate({ corpusId: String(event ?? ""), strategyId: "" })}
           >
-            <SelectItem value="">{pageT("fields.selectCorpus", "Select corpus")}</SelectItem>
             {corpusOptions.map((corpus) => (
               <SelectItem key={corpus.code} value={corpus.code}>{corpus.code}</SelectItem>
             ))}
@@ -1189,10 +1192,10 @@ function RouteRow({
           <SelectInput
             aria-label={pageT("routes.strategyAria", "Route {{index}} retrieval strategy", { index: index + 1 })}
             className="w-full font-mono"
+            disabled={strategyOptions.length === 0}
             value={row.strategyId}
-            onValueChange={(event) => onUpdate({ strategyId: event! })}
+            onValueChange={(event) => onUpdate({ strategyId: String(event ?? "") })}
           >
-            <SelectItem value="">{strategyOptions.length > 0 ? pageT("routes.selectStrategy", "Select route strategy") : pageT("routes.noStrategies", "No supported strategies")}</SelectItem>
             {strategyOptions.map((strategyId) => <SelectItem key={strategyId} value={strategyId}>{strategyId}</SelectItem>)}
           </SelectInput>
         </Field>
@@ -1209,7 +1212,6 @@ function RouteRow({
           {pageT("routes.noBackendStrategies", "This corpus has no backend-supported retrieval strategies.")}
         </p>
       ) : null}
-      <ToggleSwitch checked={row.enabled} label={pageT("routes.enableLabel", "Enable route {{index}}", { index: index + 1 })} onCheckedChange={(checked) => onUpdate({ enabled: checked })} />
     </div>
   );
 }
@@ -1242,10 +1244,10 @@ function FilterRow({
           <SelectInput
             aria-label={pageT("filters.fieldAria", "Filter {{index}} field", { index: index + 1 })}
             className="w-full"
+            disabled={fieldOptions.length === 0}
             value={row.field}
             onValueChange={(event) => onUpdate({ field: event! })}
           >
-            <SelectItem value="">{pageT("fields.selectMappedField", "Select mapped field")}</SelectItem>
             {fieldOptions.map((field) => <SelectItem key={field} value={field}>{field}</SelectItem>)}
           </SelectInput>
         </Field>
@@ -1301,6 +1303,7 @@ export function RagIngestProfileFormPage() {
   const [submitting, setSubmitting] = useState(false);
   const title = mode === "create" ? pageT("ingest.title.create", "New ingest profile") : pageT("ingest.title.edit", "Edit ingest profile");
   const returnPath = profileFormReturnPath("ingest", searchParams);
+  const requestedCorpusId = mode === "create" ? searchParams.get("corpusId")?.trim() ?? "" : "";
   const validationMessages = useMemo(() => flattenIngestErrors(errors), [errors]);
   const profileRecords = useMemo(() => (isApiMode ? [] : getRagMockProfiles()), [isApiMode]);
   const existingIds = useMemo(() => profileRecords.map((profile) => profile.id), [profileRecords]);
@@ -1401,6 +1404,26 @@ export function RagIngestProfileFormPage() {
   }, [ingestTemplates, mode, selectedTemplateId]);
 
   useEffect(() => {
+    if (mode !== "create" || !requestedCorpusId || form.primaryCorpusId) return;
+    if (isApiMode && (catalogLoading || !catalog || !pipelineCatalog)) return;
+    if (!corpusOptions.some((corpus) => corpus.code === requestedCorpusId)) return;
+    setForm((currentForm) => {
+      if (currentForm.primaryCorpusId) return currentForm;
+      return applyDefaultIngestPipeline(currentForm, requestedCorpusId, corpusOptions, isApiMode, catalog, pipelineCatalog);
+    });
+    setSelectedTemplateId("auto");
+  }, [
+    catalog,
+    catalogLoading,
+    corpusOptions,
+    form.primaryCorpusId,
+    isApiMode,
+    mode,
+    pipelineCatalog,
+    requestedCorpusId,
+  ]);
+
+  useEffect(() => {
     if (errors.pipeline || advancedNodeErrorId) setAdvancedNodesOpen(true);
     if (advancedNodeErrorId) setExpandedAdvancedNodeId(advancedNodeErrorId);
   }, [advancedNodeErrorId, errors.pipeline]);
@@ -1411,33 +1434,6 @@ export function RagIngestProfileFormPage() {
       if (!(key in currentErrors)) return currentErrors;
       const nextErrors = { ...currentErrors };
       delete nextErrors[key as keyof RagIngestProfileFormErrors];
-      return nextErrors;
-    });
-  }
-
-  function updatePrimaryCorpus(corpusCode: string) {
-    setForm((currentForm) => {
-      const shouldApplyDefaultPipeline = mode === "create"
-        && currentForm.primaryCorpusId !== corpusCode
-        && currentForm.pipelineStages.every((stage) => !stage.enabled && !stage.strategyId.trim());
-      if (!shouldApplyDefaultPipeline) {
-        return {
-          ...currentForm,
-          primaryCorpusId: corpusCode,
-          supportedSourceTypesText: currentForm.supportedSourceTypesText.trim()
-            ? currentForm.supportedSourceTypesText
-            : defaultSourceTypeForCorpus(corpusCode),
-        };
-      }
-      return applyDefaultIngestPipeline(currentForm, corpusCode, corpusOptions, isApiMode, catalog, pipelineCatalog);
-    });
-    if (mode === "create" && corpusCode) setSelectedTemplateId("auto");
-    setErrors((currentErrors) => {
-      const nextErrors = { ...currentErrors };
-      delete nextErrors.primaryCorpusId;
-      delete nextErrors.supportedSourceTypesText;
-      delete nextErrors.pipeline;
-      delete nextErrors.stageRows;
       return nextErrors;
     });
   }
@@ -1625,12 +1621,13 @@ export function RagIngestProfileFormPage() {
               </SelectInput>
             </Field>
             <Field label={pageT("fields.primaryCorpus", "Primary corpus")} error={errors.primaryCorpusId} hint={ingestHintT("primaryCorpus")}>
-
-              <SelectInput aria-label={pageT("fields.primaryCorpus", "Primary corpus")} value={form.primaryCorpusId} onValueChange={(event) => updatePrimaryCorpus(event!)}>
-                <SelectItem value="">{pageT("fields.selectCorpus", "Select corpus")}</SelectItem>
-                {corpusOptions.map((corpus) => <SelectItem key={corpus.code} value={corpus.code}>{corpus.code}</SelectItem>)}
-
-              </SelectInput>
+              <TextInput
+                aria-label={pageT("fields.primaryCorpus", "Primary corpus")}
+                className="font-mono"
+                placeholder={pageT("fields.noCorpusContext", "No corpus selected")}
+                readOnly
+                value={form.primaryCorpusId}
+              />
             </Field>
             <Field label={pageT("fields.description", "Description")} hint={ingestHintT("description")}>
               <TextArea aria-label={pageT("fields.description", "Description")} className="min-h-28" value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
@@ -1975,7 +1972,7 @@ export function RagRetrievalProfileFormPage() {
     [catalog?.routeStrategiesByCorpus, corpusOptions, form.routes, isApiMode, pipelineCatalog],
   );
   const enabledGraphRouteExists = useMemo(
-    () => form.routes.some((route) => route.enabled && isGraphRetrievalStrategy(route.strategyId)),
+    () => form.routes.some((route) => isGraphRetrievalStrategy(route.strategyId)),
     [form.routes],
   );
   const loading = isApiMode && (catalogLoading || (mode === "edit" && detailLoading && !existingProfile));
@@ -2279,15 +2276,11 @@ export function RagRetrievalProfileFormPage() {
                 {listProfileStatuses().map((status) => <SelectItem key={status} value={status}>{formatRagStatusLabel(status, t)}</SelectItem>)}
               </SelectInput>
             </Field>
-            <Field label={pageT("fields.primaryCorpus", "Primary corpus")} error={errors.primaryCorpusId} hint={retrievalHintT("primaryCorpus")}>
-              <SelectInput aria-label={pageT("fields.primaryCorpus", "Primary corpus")} value={form.primaryCorpusId} onValueChange={(event) => updateForm("primaryCorpusId", event!)}>
-                <SelectItem value="">{pageT("fields.selectCorpus", "Select corpus")}</SelectItem>
-                {corpusOptions.map((corpus) => <SelectItem key={corpus.code} value={corpus.code}>{corpus.code}</SelectItem>)}
-              </SelectInput>
-            </Field>
-            <Field label={pageT("fields.description", "Description")} hint={retrievalHintT("description")}>
-              <TextArea aria-label={pageT("fields.description", "Description")} className="min-h-28" value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
-            </Field>
+            <div className="lg:col-span-2">
+              <Field label={pageT("fields.description", "Description")} hint={retrievalHintT("description")}>
+                <TextArea aria-label={pageT("fields.description", "Description")} className="min-h-28" value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
+              </Field>
+            </div>
           </div>
         </SurfaceCard>
 
@@ -2386,7 +2379,7 @@ export function RagRetrievalProfileFormPage() {
                       <TextInput
                         aria-label={pageT("fields.graphExpansionPolicy", "Graph expansion policy")}
                         className="font-mono"
-                        placeholder={enabledGraphRouteExists ? "" : pageT("retrieval.graphExpansion.disabledPlaceholder", "Select an enabled graph strategy before using this policy")}
+                        placeholder={enabledGraphRouteExists ? "" : pageT("retrieval.graphExpansion.disabledPlaceholder", "Select a graph strategy before using this policy")}
                         value={form.graphExpansionPolicy}
                         onChange={(event) => updateForm("graphExpansionPolicy", event.target.value)}
                       />

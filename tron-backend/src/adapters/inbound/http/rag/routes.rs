@@ -7,10 +7,11 @@ use crate::app::AppState;
 
 use super::handler::{
     corpus_catalog, create_corpus_management, create_profile_management, debug_profile,
-    debug_source, get_corpus_management, get_profile_management, ingest, list_corpora_management,
-    list_profiles_management, pipeline_catalog, profile_catalog, retry_index, search,
-    update_corpus_management, update_profile_management, update_profile_management_post,
-    validate_filters_management, verify_corpus_management, verify_profile_management,
+    debug_source, delete_corpus_management, delete_profile_management, get_corpus_management,
+    get_profile_management, ingest, list_corpora_management, list_profiles_management,
+    pipeline_catalog, profile_catalog, retry_index, search, update_corpus_management,
+    update_profile_management, update_profile_management_post, validate_filters_management,
+    verify_corpus_management, verify_profile_management,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -23,7 +24,9 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/rag/corpora/verify", post(verify_corpus_management))
         .route(
             "/api/v1/rag/corpora/{corpus_id}",
-            get(get_corpus_management).put(update_corpus_management),
+            get(get_corpus_management)
+                .put(update_corpus_management)
+                .delete(delete_corpus_management),
         )
         .route(
             "/api/v1/rag/profiles",
@@ -41,7 +44,9 @@ pub fn routes() -> Router<AppState> {
         )
         .route(
             "/api/v1/rag/profiles/{profile_id}",
-            get(get_profile_management).put(update_profile_management),
+            get(get_profile_management)
+                .put(update_profile_management)
+                .delete(delete_profile_management),
         )
         .route(
             "/api/v1/rag/filters/validate",

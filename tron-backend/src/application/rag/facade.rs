@@ -2,17 +2,18 @@ use crate::domain::rag::{RagError, RagStorageBinding};
 use crate::shared::event_bus::EventBusHandle;
 
 use super::{
-    RagConfigRepository, RagConfigService, RagCorpusCatalogView, RagCorpusManagementInput,
-    RagCorpusManagementListItem, RagCorpusManagementView, RagCorpusVerifyView, RagCorpusView,
-    RagDebugProfileResult, RagDebugSourceRequest, RagDebugSourceResult, RagDiagnosticsRepository,
-    RagDiagnosticsService, RagDocumentSourceRuntime, RagEmbeddingRuntime, RagFilterValidateInput,
-    RagFilterValidateView, RagFilterValidationRequest, RagFilterValidationView,
-    RagIngestRepository, RagIngestRequest, RagIngestResult, RagIngestService,
-    RagManagementRepository, RagManagementService, RagPipelineCatalogView, RagProfileCatalogView,
-    RagProfileListQuery, RagProfileManagementInput, RagProfileManagementListItem,
-    RagProfileManagementView, RagProfileValidationView, RagProfileVerifyView, RagProfileView,
-    RagRetryIndexRepository, RagRetryIndexRequest, RagRetryIndexResult, RagRetryIndexService,
-    RagSearchRepository, RagSearchRequest, RagSearchResult, RagSearchRuntime, RagSearchService,
+    RagConfigRepository, RagConfigService, RagCorpusCatalogView, RagCorpusDeleteResult,
+    RagCorpusManagementInput, RagCorpusManagementListItem, RagCorpusManagementView,
+    RagCorpusVerifyView, RagCorpusView, RagDebugProfileResult, RagDebugSourceRequest,
+    RagDebugSourceResult, RagDiagnosticsRepository, RagDiagnosticsService,
+    RagDocumentSourceRuntime, RagEmbeddingRuntime, RagFilterValidateInput, RagFilterValidateView,
+    RagFilterValidationRequest, RagFilterValidationView, RagIngestRepository, RagIngestRequest,
+    RagIngestResult, RagIngestService, RagManagementRepository, RagManagementService,
+    RagPipelineCatalogView, RagProfileCatalogView, RagProfileDeleteResult, RagProfileListQuery,
+    RagProfileManagementInput, RagProfileManagementListItem, RagProfileManagementView,
+    RagProfileValidationView, RagProfileVerifyView, RagProfileView, RagRetryIndexRepository,
+    RagRetryIndexRequest, RagRetryIndexResult, RagRetryIndexService, RagSearchRepository,
+    RagSearchRequest, RagSearchResult, RagSearchRuntime, RagSearchService,
     RagSourceLifecycleRepository, RagStrategyRegistry,
 };
 
@@ -147,6 +148,13 @@ where
         self.management_service().update_corpus(corpus_id, request)
     }
 
+    pub fn delete_corpus_management(
+        &self,
+        corpus_id: &str,
+    ) -> Result<RagCorpusDeleteResult, RagError> {
+        self.management_service().delete_corpus(corpus_id)
+    }
+
     pub fn list_profiles_management(
         &self,
         profile_type: Option<&str>,
@@ -190,6 +198,13 @@ where
     ) -> Result<RagProfileManagementView, RagError> {
         self.management_service()
             .update_profile(profile_id, request)
+    }
+
+    pub fn delete_profile_management(
+        &self,
+        profile_id: &str,
+    ) -> Result<RagProfileDeleteResult, RagError> {
+        self.management_service().delete_profile(profile_id)
     }
 
     pub fn validate_filters_management(

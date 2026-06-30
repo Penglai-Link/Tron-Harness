@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   useState,
 } from "react";
 import {
@@ -489,6 +490,13 @@ function workspaceCodeForAccessContext(
 
 export function RagWorkbenchTab({
   corpora,
+  hidePanelSwitcher = false,
+  initialCorpusId,
+  initialIngestProfileId,
+  initialPanel = "ingest",
+  initialRetrievalProfileId,
+  lockIngestContext = false,
+  lockRetrievalContext = false,
   profiles,
   traceEnabled,
   userCode,
@@ -497,6 +505,13 @@ export function RagWorkbenchTab({
   onTraceEnabledChange,
 }: {
   corpora: RagCorpusRecord[];
+  hidePanelSwitcher?: boolean;
+  initialCorpusId?: string;
+  initialIngestProfileId?: string;
+  initialPanel?: WorkbenchPanel;
+  initialRetrievalProfileId?: string;
+  lockIngestContext?: boolean;
+  lockRetrievalContext?: boolean;
   profiles: RagProfileRecord[];
   traceEnabled: boolean;
   userCode: string;
@@ -516,15 +531,24 @@ export function RagWorkbenchTab({
   const retrievalProfiles = profiles.filter((profile): profile is RagRetrievalProfileRecord => (
     profile.type === "Retrieval" && profile.status !== "Draft"
   ));
-  const [corpusId, setCorpusId] = useState(visibleCorpora[0]?.code ?? "");
-  const [ingestProfileId, setIngestProfileId] = useState(ingestProfiles[0]?.id ?? "");
+  const initialVisibleCorpusId = initialCorpusId && visibleCorpora.some((corpus) => corpus.code === initialCorpusId)
+    ? initialCorpusId
+    : visibleCorpora[0]?.code ?? "";
+  const [corpusId, setCorpusId] = useState(initialCorpusId ?? initialVisibleCorpusId);
+  const initialIngestId = initialIngestProfileId && ingestProfiles.some((profile) => profile.id === initialIngestProfileId)
+    ? initialIngestProfileId
+    : ingestProfiles[0]?.id ?? "";
+  const [ingestProfileId, setIngestProfileId] = useState(initialIngestProfileId ?? initialIngestId);
   const [targetScopeType, setTargetScopeType] = useState<WorkbenchScopeType>("SPACE");
   const [sourcePayloadEdited, setSourcePayloadEdited] = useState(false);
   const [sourcePayloadForm, setSourcePayloadForm] = useState<WorkbenchSourcePayloadForm>(() => (
-    buildDefaultPayloadForm(visibleCorpora[0]?.code ?? "", ingestProfiles[0])
+    buildDefaultPayloadForm(initialCorpusId ?? visibleCorpora[0]?.code ?? "", ingestProfiles[0])
   ));
   const [businessAttributeRows, setBusinessAttributeRows] = useState<WorkbenchBusinessAttributeRow[]>([]);
-  const [retrievalProfileId, setRetrievalProfileId] = useState(retrievalProfiles[0]?.id ?? "");
+  const initialRetrievalId = initialRetrievalProfileId && retrievalProfiles.some((profile) => profile.id === initialRetrievalProfileId)
+    ? initialRetrievalProfileId
+    : retrievalProfiles[0]?.id ?? "";
+  const [retrievalProfileId, setRetrievalProfileId] = useState(initialRetrievalProfileId ?? initialRetrievalId);
   const [query, setQuery] = useState(() => pageT("defaults.query", "How should the RAG context pack respect tokenBudget?"));
   const [contextStrategy, setContextStrategy] = useState(retrievalProfiles[0]?.config.contextStrategies[0] ?? "DOC_QA_CONTEXT_PACK");
   const [returnFieldRows, setReturnFieldRows] = useState<WorkbenchReturnFieldRow[]>([]);
@@ -537,7 +561,10 @@ export function RagWorkbenchTab({
   const [searchResult, setSearchResult] = useState<RagSearchResponseApi | null>(null);
   const [ingestFeedback, setIngestFeedback] = useState("");
   const [searchFeedback, setSearchFeedback] = useState("");
-  const [activeWorkbenchPanel, setActiveWorkbenchPanel] = useState<WorkbenchPanel>("ingest");
+  const [activeWorkbenchPanel, setActiveWorkbenchPanel] = useState<WorkbenchPanel>(initialPanel);
+  const appliedInitialCorpusIdRef = useRef<string | undefined>(undefined);
+  const appliedInitialIngestProfileIdRef = useRef<string | undefined>(undefined);
+  const appliedInitialRetrievalProfileIdRef = useRef<string | undefined>(undefined);
   const { loading: retrievalProfileDetailLoading, profile: retrievalProfileDetail } = useRagProfileDetail(retrievalProfileId);
   const selectedIngestCorpus = corpora.find((corpus) => corpus.code === corpusId);
   const selectedIngestProfile = ingestProfiles.find((profile) => profile.id === ingestProfileId);
@@ -583,22 +610,60 @@ export function RagWorkbenchTab({
   const targetScope = buildTargetScope(targetScopeType, userCode, workspaceCode);
 
   useEffect(() => {
-    if (!corpusId && visibleCorpora[0]?.code) {
-      setCorpusId(visibleCorpora[0].code);
+    if (initialCorpusId && visibleCorpora.some((corpus) => corpus.code === initialCorpusId)) {
+      if (appliedInitialCorpusIdRef.current !== initialCorpusId) {
+        appliedInitialCorpusIdRef.current = initialCorpusId;
+        if (corpusId !== initialCorpusId) {
+          setCorpusId(initialCorpusId);
+          setBusinessAttributeRows([]);
+          setSourcePayloadEdited(false);
+        }
+      }
+      return;
     }
-  }, [corpusId, visibleCorpora]);
+    if (!corpusId && initialVisibleCorpusId) {
+      setCorpusId(initialVisibleCorpusId);
+    }
+  }, [corpusId, initialCorpusId, initialVisibleCorpusId, visibleCorpora]);
 
   useEffect(() => {
-    if (!ingestProfileId && ingestProfiles[0]?.id) {
-      setIngestProfileId(ingestProfiles[0].id);
+    if (initialIngestProfileId && ingestProfiles.some((profile) => profile.id === initialIngestProfileId)) {
+      if (appliedInitialIngestProfileIdRef.current !== initialIngestProfileId) {
+        appliedInitialIngestProfileIdRef.current = initialIngestProfileId;
+        if (ingestProfileId !== initialIngestProfileId) {
+          setIngestProfileId(initialIngestProfileId);
+          setBusinessAttributeRows([]);
+          setSourcePayloadEdited(false);
+        }
+      }
+      return;
     }
-  }, [ingestProfileId, ingestProfiles]);
+    if (!ingestProfileId && initialIngestId) {
+      setIngestProfileId(initialIngestId);
+    }
+  }, [ingestProfileId, initialIngestId, initialIngestProfileId, ingestProfiles]);
 
   useEffect(() => {
-    if (!retrievalProfileId && retrievalProfiles[0]?.id) {
-      setRetrievalProfileId(retrievalProfiles[0].id);
+    if (initialRetrievalProfileId && retrievalProfiles.some((profile) => profile.id === initialRetrievalProfileId)) {
+      if (appliedInitialRetrievalProfileIdRef.current !== initialRetrievalProfileId) {
+        appliedInitialRetrievalProfileIdRef.current = initialRetrievalProfileId;
+        if (retrievalProfileId !== initialRetrievalProfileId) {
+          setRetrievalProfileId(initialRetrievalProfileId);
+          setContextStrategy("RESULT_LIST");
+          setFilterRows([]);
+          setReturnFieldRows([]);
+        }
+      }
+      return;
     }
-  }, [retrievalProfileId, retrievalProfiles]);
+    if (!retrievalProfileId && initialRetrievalId) {
+      setRetrievalProfileId(initialRetrievalId);
+    }
+  }, [initialRetrievalId, initialRetrievalProfileId, retrievalProfileId, retrievalProfiles]);
+
+  useEffect(() => {
+    setActiveWorkbenchPanel(initialPanel);
+  }, [initialPanel]);
 
   useEffect(() => {
     if (!sourcePayloadEdited) {
@@ -749,36 +814,39 @@ export function RagWorkbenchTab({
 
   return (
     <div className="grid gap-5">
-      <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-1">
-        <div className="grid gap-1 sm:grid-cols-2" role="tablist" aria-label={pageT("tabs.ariaLabel", "Workbench mode")}>
-          {workbenchPanels.map((panel) => {
-            const selected = activeWorkbenchPanel === panel.value;
-            return (
-              <button
-                aria-controls={`rag-workbench-${panel.value}-panel`}
-                aria-selected={selected}
-                className={`rounded-xl px-4 py-3 text-left transition ${selected
-                  ? "bg-[var(--color-elevated-surface)] shadow-sm"
-                  : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-surface)]"
-                  }`}
-                id={`rag-workbench-${panel.value}-tab`}
-                key={panel.value}
-                role="tab"
-                type="button"
-                onClick={() => setActiveWorkbenchPanel(panel.value)}
-              >
-                <span className="block font-medium">{pageT(`tabs.${panel.value}.label`, panel.label)}</span>
-                <span className="mt-1 block text-[13px] text-[var(--color-on-surface-variant)]">{pageT(`tabs.${panel.value}.summary`, panel.summary)}</span>
-              </button>
-            );
-          })}
+      {hidePanelSwitcher ? null : (
+        <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-1">
+          <div className="grid gap-1 sm:grid-cols-2" role="tablist" aria-label={pageT("tabs.ariaLabel", "Workbench mode")}>
+            {workbenchPanels.map((panel) => {
+              const selected = activeWorkbenchPanel === panel.value;
+              return (
+                <button
+                  aria-controls={`rag-workbench-${panel.value}-panel`}
+                  aria-selected={selected}
+                  className={`rounded-xl px-4 py-3 text-left transition ${selected
+                    ? "bg-[var(--color-elevated-surface)] shadow-sm"
+                    : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-surface)]"
+                    }`}
+                  id={`rag-workbench-${panel.value}-tab`}
+                  key={panel.value}
+                  role="tab"
+                  type="button"
+                  onClick={() => setActiveWorkbenchPanel(panel.value)}
+                >
+                  <span className="block font-medium">{pageT(`tabs.${panel.value}.label`, panel.label)}</span>
+                  <span className="mt-1 block text-[13px] text-[var(--color-on-surface-variant)]">{pageT(`tabs.${panel.value}.summary`, panel.summary)}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {activeWorkbenchPanel === "ingest" ? (
         <SurfaceCard>
           <div
-            aria-labelledby="rag-workbench-ingest-tab"
+            aria-label={hidePanelSwitcher ? pageT("ingest.title", "Ingest request") : undefined}
+            aria-labelledby={hidePanelSwitcher ? undefined : "rag-workbench-ingest-tab"}
             id="rag-workbench-ingest-panel"
             role="tabpanel"
           >
@@ -788,34 +856,52 @@ export function RagWorkbenchTab({
             />
             <div className="mt-4 grid gap-3">
               <Field label={pageT("fields.corpus", "Corpus")} hint={hintT("corpus")}>
-                <SelectInput
-                  aria-label={pageT("fields.corpus", "Corpus")}
-                  value={corpusId}
-                  onValueChange={(event) => {
-                    setCorpusId(event!);
-                    setBusinessAttributeRows([]);
-                    setSourcePayloadEdited(false);
-                  }}
-                >
-                  {visibleCorpora.map((corpus) => (
-                    <SelectItem key={corpus.code} value={corpus.code}>{corpus.code}</SelectItem>
-                  ))}
-                </SelectInput>
+                {lockIngestContext ? (
+                  <TextInput
+                    aria-label={pageT("fields.corpus", "Corpus")}
+                    className="font-mono"
+                    readOnly
+                    value={corpusId}
+                  />
+                ) : (
+                  <SelectInput
+                    aria-label={pageT("fields.corpus", "Corpus")}
+                    value={corpusId}
+                    onValueChange={(event) => {
+                      setCorpusId(event!);
+                      setBusinessAttributeRows([]);
+                      setSourcePayloadEdited(false);
+                    }}
+                  >
+                    {visibleCorpora.map((corpus) => (
+                      <SelectItem key={corpus.code} value={corpus.code}>{corpus.code}</SelectItem>
+                    ))}
+                  </SelectInput>
+                )}
               </Field>
               <Field label={pageT("fields.ingestProfile", "Ingest profile")} hint={hintT("ingestProfile")}>
-                <SelectInput
-                  aria-label={pageT("fields.ingestProfile", "Ingest profile")}
-                  value={ingestProfileId}
-                  onValueChange={(event) => {
-                    setIngestProfileId(event!);
-                    setBusinessAttributeRows([]);
-                    setSourcePayloadEdited(false);
-                  }}
-                >
-                  {ingestProfiles.map((profile) => (
-                    <SelectItem key={profile.id} value={profile.id}>{profile.id}</SelectItem>
-                  ))}
-                </SelectInput>
+                {lockIngestContext ? (
+                  <TextInput
+                    aria-label={pageT("fields.ingestProfile", "Ingest profile")}
+                    className="font-mono"
+                    readOnly
+                    value={ingestProfileId}
+                  />
+                ) : (
+                  <SelectInput
+                    aria-label={pageT("fields.ingestProfile", "Ingest profile")}
+                    value={ingestProfileId}
+                    onValueChange={(event) => {
+                      setIngestProfileId(event!);
+                      setBusinessAttributeRows([]);
+                      setSourcePayloadEdited(false);
+                    }}
+                  >
+                    {ingestProfiles.map((profile) => (
+                      <SelectItem key={profile.id} value={profile.id}>{profile.id}</SelectItem>
+                    ))}
+                  </SelectInput>
+                )}
               </Field>
               <Field label={pageT("fields.scopeType", "Scope type")} hint={hintT("scopeType")}>
                 <SelectInput
@@ -961,7 +1047,8 @@ export function RagWorkbenchTab({
       ) : (
         <SurfaceCard>
           <div
-            aria-labelledby="rag-workbench-retrieval-tab"
+            aria-label={hidePanelSwitcher ? pageT("retrieval.title", "Retrieval test") : undefined}
+            aria-labelledby={hidePanelSwitcher ? undefined : "rag-workbench-retrieval-tab"}
             id="rag-workbench-retrieval-panel"
             role="tabpanel"
           >
@@ -971,20 +1058,29 @@ export function RagWorkbenchTab({
             />
             <div className="mt-4 grid gap-3">
               <Field label={pageT("fields.retrievalProfile", "Retrieval profile")} hint={hintT("retrievalProfile")}>
-                <SelectInput
-                  aria-label={pageT("fields.retrievalProfile", "Retrieval profile")}
-                  value={retrievalProfileId}
-                  onValueChange={(event) => {
-                    setRetrievalProfileId(event!);
-                    setContextStrategy("RESULT_LIST");
-                    setFilterRows([]);
-                    setReturnFieldRows([]);
-                  }}
-                >
-                  {retrievalProfiles.map((profile) => (
-                    <SelectItem key={profile.id} value={profile.id}>{profile.id}</SelectItem>
-                  ))}
-                </SelectInput>
+                {lockRetrievalContext ? (
+                  <TextInput
+                    aria-label={pageT("fields.retrievalProfile", "Retrieval profile")}
+                    className="font-mono"
+                    readOnly
+                    value={retrievalProfileId}
+                  />
+                ) : (
+                  <SelectInput
+                    aria-label={pageT("fields.retrievalProfile", "Retrieval profile")}
+                    value={retrievalProfileId}
+                    onValueChange={(event) => {
+                      setRetrievalProfileId(event!);
+                      setContextStrategy("RESULT_LIST");
+                      setFilterRows([]);
+                      setReturnFieldRows([]);
+                    }}
+                  >
+                    {retrievalProfiles.map((profile) => (
+                      <SelectItem key={profile.id} value={profile.id}>{profile.id}</SelectItem>
+                    ))}
+                  </SelectInput>
+                )}
               </Field>
               <Field label={pageT("fields.query", "Query")} hint={hintT("query")}>
                 <TextArea aria-label={pageT("fields.query", "Query")} className="min-h-24" value={query} onChange={(event) => setQuery(event.target.value)} />

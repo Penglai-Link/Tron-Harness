@@ -449,8 +449,8 @@ export function createRetrievalRouteFormRow(index = 0): RagRetrievalRouteFormRow
   };
 }
 
-function inferRetrievalRouteType(strategyId: string): RagRetrievalRouteType {
-  const normalized = strategyId.trim().toUpperCase();
+export function inferRetrievalRouteType(strategyId: unknown): RagRetrievalRouteType {
+  const normalized = String(strategyId ?? "").trim().toUpperCase();
   if (normalized.includes("STRUCTURED_FILTER")) return "STRUCTURED_FILTER";
   if (normalized.includes("TREE_FULLTEXT")) return "TREE_FULLTEXT";
   if (normalized.includes("TREE_VECTOR")) return "TREE_VECTOR";
@@ -537,6 +537,7 @@ export function buildIngestProfileFormState(existing?: IngestProfileRecord): Rag
 
 export function buildRetrievalProfileFormState(existing?: RetrievalProfileRecord): RagRetrievalProfileFormState {
   if (existing) {
+    const activeRoutes = existing.config.routesConfig.filter((route) => route.enabled !== false);
     return {
       contextStrategies: existing.config.contextStrategies,
       dedupPolicy: existing.config.dedupPolicy,
@@ -551,8 +552,9 @@ export function buildRetrievalProfileFormState(existing?: RetrievalProfileRecord
       primaryCorpusId: existing.primaryCorpusId,
       rerankEnabled: existing.config.rerankEnabled,
       rerankModelCode: existing.config.rerankModelCode,
-      routes: existing.config.routesConfig.map((route, index) => ({
+      routes: activeRoutes.map((route, index) => ({
         ...route,
+        enabled: true,
         formId: nextFormId("route", index),
       })),
       status: existing.status,
@@ -700,9 +702,15 @@ export function buildIngestPipelineFromForm(
   };
 }
 
+export function deriveRetrievalPrimaryCorpusId(form: RagRetrievalProfileFormState) {
+  return form.routes.find((route) => route.corpusId.trim())?.corpusId.trim()
+    ?? form.primaryCorpusId.trim();
+}
+
 export function buildRetrievalProfileRecordFromForm(form: RagRetrievalProfileFormState): RetrievalProfileRecord {
   const enabledCorpusIds = Array.from(new Set(form.routes.map((route) => route.corpusId.trim()).filter(Boolean)));
-  const corpusIds = Array.from(new Set([form.primaryCorpusId.trim(), ...enabledCorpusIds].filter(Boolean)));
+  const primaryCorpusId = deriveRetrievalPrimaryCorpusId(form);
+  const corpusIds = Array.from(new Set([primaryCorpusId, ...enabledCorpusIds].filter(Boolean)));
 
   return {
     config: {
@@ -722,7 +730,7 @@ export function buildRetrievalProfileRecordFromForm(form: RagRetrievalProfileFor
       routesConfig: form.routes
         .map((route) => ({
           corpusId: route.corpusId.trim(),
-          enabled: route.enabled,
+          enabled: true,
           routeId: route.routeId?.trim(),
           routeType: inferRetrievalRouteType(route.strategyId),
           strategyId: route.strategyId.trim(),
@@ -734,7 +742,7 @@ export function buildRetrievalProfileRecordFromForm(form: RagRetrievalProfileFor
     corpusIds,
     description: form.description.trim(),
     id: form.id.trim(),
-    primaryCorpusId: form.primaryCorpusId.trim(),
+    primaryCorpusId,
     routes: [],
     status: form.status,
     strategy: "",
@@ -744,7 +752,7 @@ export function buildRetrievalProfileRecordFromForm(form: RagRetrievalProfileFor
 
 export function buildRetrievalPipelineFromForm(form: RagRetrievalProfileFormState): RagProfilePipeline {
   const routeNodes = form.routes
-    .filter((route) => route.enabled)
+    .filter((route) => route.corpusId.trim() && route.strategyId.trim())
     .map<RagPipelineNode>((route, index) => ({
       config: {
         corpusId: route.corpusId.trim(),
@@ -816,7 +824,7 @@ export function buildRetrievalProfilePayloadPreview(form: RagRetrievalProfileFor
     corpusIds: record.corpusIds,
     description: form.description.trim(),
     pipeline: buildRetrievalPipelineFromForm(form),
-    primaryCorpusId: form.primaryCorpusId.trim(),
+    primaryCorpusId: record.primaryCorpusId,
     profileId: form.id.trim(),
     profileType: "Retrieval",
     status: form.status,
@@ -953,8 +961,11 @@ export function listRetrievalFilterFieldOptions(
   routes.forEach((route) => {
     const corpus = corporaByCode.get(route.corpusId);
     if (!corpus) return;
-    const schemaFields = corpus.config ? Object.keys(corpus.config.filterSchema.fields) : corpus.filters;
-    schemaFields.forEach((field) => fields.add(field));
+    const schemaFields = Object.keys(corpus.config?.filterSchema.fields ?? {});
+    [...schemaFields, ...corpus.filters].forEach((field) => {
+      const normalizedField = field.trim();
+      if (normalizedField) fields.add(normalizedField);
+    });
   });
 
   return Array.from(fields).sort((left, right) => left.localeCompare(right));
@@ -975,10 +986,6 @@ export function validateRetrievalProfileForm(
     errors.id = ragProfileFormT("errors.idUnique", "Profile ID must be unique.");
   }
 
-  if (!form.primaryCorpusId.trim()) {
-    errors.primaryCorpusId = ragProfileFormT("errors.primaryCorpusRequired", "Primary corpus is required.");
-  }
-
   if (form.status !== "Ready") {
     errors.status = ragProfileFormT("errors.readyStatusOnly", "The current RAG runtime only allows saving Ready profiles.");
   }
@@ -988,7 +995,7 @@ export function validateRetrievalProfileForm(
   }
 
   const corporaByCode = new Set(corpora.map((corpus) => corpus.code));
-  const enabledRoutes = form.routes.filter((route) => route.enabled);
+  const routes = form.routes;
   const routeRows: NonNullable<RagRetrievalProfileFormErrors["routeRows"]> = {};
 
   form.routes.forEach((route) => {
@@ -1013,25 +1020,18 @@ export function validateRetrievalProfileForm(
     }
   });
 
-  if (enabledRoutes.length === 0) {
-    errors.routes = ragProfileFormT("errors.routeRequired", "At least one route must be enabled.");
-  }
-
-  if (form.primaryCorpusId.trim() && !enabledRoutes.some((route) => route.corpusId.trim() === form.primaryCorpusId.trim())) {
-    errors.routes = errors.routes ?? ragProfileFormT(
-      "errors.primaryCorpusInRoutes",
-      "Primary corpus must appear in at least one enabled route.",
-    );
+  if (routes.length === 0) {
+    errors.routes = ragProfileFormT("errors.routeRequired", "At least one route must be added.");
   }
 
   if (Object.keys(routeRows).length > 0) {
     errors.routeRows = routeRows;
   }
 
-  if (form.graphExpansionPolicy.trim() && !enabledRoutes.some((route) => inferRetrievalRouteType(route.strategyId) === "GRAPH")) {
+  if (form.graphExpansionPolicy.trim() && !routes.some((route) => inferRetrievalRouteType(route.strategyId) === "GRAPH")) {
     errors.graphExpansionPolicy = ragProfileFormT(
       "errors.graphExpansionRequiresGraph",
-      "Graph expansion requires at least one enabled graph strategy.",
+      "Graph expansion requires at least one graph strategy.",
     );
   }
 

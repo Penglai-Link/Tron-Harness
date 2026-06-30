@@ -304,7 +304,7 @@ function createProjectDocCorpus(): RagCorpusDetailApi {
         scopeType: { column: "scope_type", operators: ["eq", "in"], type: "string" },
       },
     },
-    ingestProfileId: "project-doc-ingest-v1",
+    ingestProfileId: "",
     metadataGroups: [{ groupId: "provenance", labels: ["scopeType", "scopeCode"] }],
     retrievalProfileId: "project-doc-related-v1",
     runtimeProjection: {
@@ -373,9 +373,146 @@ function createMemoryCardCorpus(): RagCorpusDetailApi {
         scopeType: { column: "scope_type", operators: ["eq", "in"], type: "string" },
       },
     },
-    ingestProfileId: "memory-card-ingest-v1",
+    ingestProfileId: "",
     metadataGroups: [{ groupId: "governance", labels: ["memoryType"] }],
     retrievalProfileId: "memory-related-v1",
+    runtimeProjection: {
+      compatible: true,
+      issues: [],
+      storageBinding,
+    },
+    status: "enabled",
+    storageBinding,
+    storageSummary: formatStorageSummary(storageBinding),
+  };
+}
+
+function createSkillCorpus(): RagCorpusDetailApi {
+  const storageBinding: RagStorageBindingApi = {
+    bindings: {
+      diagnostics: "diagnostics-store",
+      fulltext: "skill-store",
+      source: "skill-store",
+      textUnit: "skill-store",
+      vector: "skill-store",
+    },
+    mode: "TARGETED",
+    targets: [
+      makeSqliteTarget("skill-store", "rag_skill_text_units"),
+      makeSqliteTarget("diagnostics-store", "rag_diagnostics"),
+    ],
+  };
+
+  return {
+    capabilities: {
+      fulltext: true,
+      graph: false,
+      tree: false,
+      vector: true,
+    },
+    corpusId: "skill",
+    description: "Workspace-scoped skill names and descriptions.",
+    displayName: "Skill",
+    fieldMapping: {
+      source: {
+        scopeCode: "scope_code",
+        scopeType: "scope_type",
+        skillDescription: "skill_description",
+        skillName: "skill_name",
+        sourceCode: "source_code",
+        sourceType: "source_type",
+        sourceVersion: "source_version",
+        status: "source_status",
+        title: "title",
+      },
+      textUnit: {
+        scopeCode: "scope_code",
+        scopeType: "scope_type",
+        sourceCode: "source_code",
+        sourceVersion: "source_version",
+        text: "text",
+        textUnitStatus: "status",
+      },
+    },
+    filterSchema: {
+      fields: {
+        scopeCode: { column: "scope_code", operators: ["eq", "in"], type: "string" },
+        scopeType: { column: "scope_type", operators: ["eq", "in"], type: "string" },
+        skillName: { column: "skill_name", operators: ["eq", "in"], type: "string" },
+      },
+    },
+    ingestProfileId: "",
+    metadataGroups: [{ groupId: "skill", labels: ["skillName"] }],
+    retrievalProfileId: "skill-related-v1",
+    runtimeProjection: {
+      compatible: true,
+      issues: [],
+      storageBinding,
+    },
+    status: "enabled",
+    storageBinding,
+    storageSummary: formatStorageSummary(storageBinding),
+  };
+}
+
+function createSkillGraphCorpus(): RagCorpusDetailApi {
+  const storageBinding: RagStorageBindingApi = {
+    bindings: {
+      diagnostics: "diagnostics-store",
+      fulltext: "skill-graph-store",
+      source: "skill-graph-store",
+      textUnit: "skill-graph-store",
+      vector: "skill-graph-store",
+    },
+    mode: "TARGETED",
+    targets: [
+      makeGraphTarget("skill-graph-store", "rag_skill", "RagSkill", "GRAPH_SINGLE_NODE"),
+      makeSqliteTarget("diagnostics-store", "rag_diagnostics"),
+    ],
+  };
+
+  return {
+    capabilities: {
+      fulltext: true,
+      graph: true,
+      tree: false,
+      vector: true,
+    },
+    corpusId: "skill-graph",
+    description: "Graph-backed workspace-scoped skill nodes and related graph data.",
+    displayName: "Skill Graph",
+    fieldMapping: {
+      source: {
+        scopeCode: "scopeCode",
+        scopeType: "scopeType",
+        skillDescription: "skillDescription",
+        skillName: "skillName",
+        sourceCode: "sourceCode",
+        sourceType: "sourceType",
+        sourceVersion: "sourceVersion",
+        status: "sourceStatus",
+        title: "title",
+      },
+      textUnit: {
+        scopeCode: "scopeCode",
+        scopeType: "scopeType",
+        sourceCode: "sourceCode",
+        sourceVersion: "sourceVersion",
+        targetCode: "targetCode",
+        text: "text",
+        textUnitStatus: "textUnitStatus",
+      },
+    },
+    filterSchema: {
+      fields: {
+        scopeCode: { column: "scopeCode", operators: ["eq", "in"], type: "string" },
+        scopeType: { column: "scopeType", operators: ["eq", "in"], type: "string" },
+        skillName: { column: "skillName", operators: ["eq", "in"], type: "string" },
+      },
+    },
+    ingestProfileId: "",
+    metadataGroups: [{ groupId: "skill", labels: ["skillName"] }],
+    retrievalProfileId: "skill-graph-related-v1",
     runtimeProjection: {
       compatible: true,
       issues: [],
@@ -676,11 +813,80 @@ function createProjectDocIngestProfile(): RagProfileDetailApi {
       { enabled: true, id: "persistSource", strategyId: "RAG_PERSIST_SOURCE" },
     ],
     primaryCorpusId: "project-doc",
-    profileId: "project-doc-ingest-v1",
+    profileId: "project-doc-mineru-ingest-v1",
     profileType: "INGEST",
     requiredSourceVersion: "v1",
     sourceInputPolicy: {
       supportedSourceTypes: ["DOC", "MARKDOWN"],
+    },
+    status: "enabled",
+  };
+}
+
+function createMemoryCardIngestProfile(): RagProfileDetailApi {
+  return {
+    corpusIds: ["memory-card"],
+    description: "Primary memory card ingest profile.",
+    embeddingModelCode: "text-embedding-3-large",
+    embeddingVersion: "v1",
+    graphWritePolicy: "",
+    pipelineStages: [
+      { enabled: true, id: "preparePayload", strategyId: "RAG_TEXT_CONTRACT_PAYLOAD_V1" },
+      { enabled: true, id: "splitText", strategyId: "RAG_SPLIT_TEXT", config: { splitter: { maxTokens: 800, overlapTokens: 80, type: "plainText" } } },
+      { enabled: true, id: "persistSource", strategyId: "RAG_PERSIST_SOURCE" },
+    ],
+    primaryCorpusId: "memory-card",
+    profileId: "memory-card-ingest-v1",
+    profileType: "INGEST",
+    requiredSourceVersion: "v1",
+    sourceInputPolicy: {
+      supportedSourceTypes: ["MEMORY_CARD"],
+    },
+    status: "enabled",
+  };
+}
+
+function createSkillIngestProfile(): RagProfileDetailApi {
+  return {
+    corpusIds: ["skill"],
+    description: "Primary skill ingest profile.",
+    embeddingModelCode: "text-embedding-3-large",
+    embeddingVersion: "v1",
+    graphWritePolicy: "",
+    pipelineStages: [
+      { enabled: true, id: "preparePayload", strategyId: "RAG_TEXT_CONTRACT_PAYLOAD_V1" },
+      { enabled: true, id: "splitText", strategyId: "RAG_SPLIT_TEXT", config: { splitter: { maxTokens: 800, overlapTokens: 80, type: "plainText" } } },
+      { enabled: true, id: "persistSource", strategyId: "RAG_PERSIST_SOURCE" },
+    ],
+    primaryCorpusId: "skill",
+    profileId: "skill-ingest-v1",
+    profileType: "INGEST",
+    requiredSourceVersion: "v1",
+    sourceInputPolicy: {
+      supportedSourceTypes: ["SKILL"],
+    },
+    status: "enabled",
+  };
+}
+
+function createSkillGraphIngestProfile(): RagProfileDetailApi {
+  return {
+    corpusIds: ["skill-graph"],
+    description: "Primary skill graph ingest profile.",
+    embeddingModelCode: "text-embedding-3-large",
+    embeddingVersion: "v1",
+    graphWritePolicy: "{\"maxRelatedNodes\":500,\"maxRelatedEdges\":500}",
+    pipelineStages: [
+      { enabled: true, id: "preparePayload", strategyId: "RAG_TEXT_CONTRACT_PAYLOAD_V1" },
+      { enabled: true, id: "splitText", strategyId: "RAG_SPLIT_TEXT", config: { splitter: { maxTokens: 1200, overlapTokens: 0, type: "singleNode" } } },
+      { enabled: true, id: "persistSource", strategyId: "RAG_PERSIST_SOURCE" },
+    ],
+    primaryCorpusId: "skill-graph",
+    profileId: "skill-graph-ingest-v1",
+    profileType: "INGEST",
+    requiredSourceVersion: "v1",
+    sourceInputPolicy: {
+      supportedSourceTypes: ["SKILL"],
     },
     status: "enabled",
   };
@@ -711,7 +917,13 @@ function createProjectDocRetrievalProfile(): RagProfileDetailApi {
 
 function createSeedState(): RagManagementState {
   const corpora = new Map<string, RagCorpusDetailApi>();
-  [createProjectDocCorpus(), createMemoryCardCorpus(), createSupportTreeGraphCorpus()].forEach((corpus) => {
+  [
+    createProjectDocCorpus(),
+    createMemoryCardCorpus(),
+    createSkillCorpus(),
+    createSkillGraphCorpus(),
+    createSupportTreeGraphCorpus(),
+  ].forEach((corpus) => {
     corpora.set(corpus.corpusId, corpus);
   });
   const catalogCorpora = Array.from(corpora.values()).map((corpus) => ({
@@ -723,7 +935,13 @@ function createSeedState(): RagManagementState {
     storageSummary: corpus.storageSummary,
   }));
   const profiles = new Map<string, RagProfileDetailApi>();
-  [createProjectDocIngestProfile(), createProjectDocRetrievalProfile()].forEach((profile) => {
+  [
+    createMemoryCardIngestProfile(),
+    createProjectDocIngestProfile(),
+    createProjectDocRetrievalProfile(),
+    createSkillGraphIngestProfile(),
+    createSkillIngestProfile(),
+  ].forEach((profile) => {
     profiles.set(profile.profileId, profile);
   });
   return {
@@ -1254,6 +1472,27 @@ function listProfiles(state: RagManagementState, requestedType?: "INGEST" | "RET
     .sort((left, right) => left.profileId.localeCompare(right.profileId));
 }
 
+function profileReferencesCorpus(profile: RagProfileDetailApi, corpusId: string) {
+  if (profile.primaryCorpusId === corpusId || profile.corpusIds.includes(corpusId)) {
+    return true;
+  }
+  if (profile.routes?.some((route) => route.corpusId === corpusId)) {
+    return true;
+  }
+  return profile.pipeline?.nodes.some((node) => node.config?.corpusId === corpusId) ?? false;
+}
+
+function clearProfileReferences(state: RagManagementState, profileId: string) {
+  state.corpora.forEach((corpus) => {
+    if (corpus.ingestProfileId === profileId) {
+      corpus.ingestProfileId = "";
+    }
+    if (corpus.retrievalProfileId === profileId) {
+      corpus.retrievalProfileId = "";
+    }
+  });
+}
+
 function fulfillJson(route: Route, data: unknown, status = 200) {
   return route.fulfill({
     body: JSON.stringify({
@@ -1503,6 +1742,31 @@ export async function installRagManagementApiMock(page: Page, requests: Captured
       return;
     }
 
+    if (corpusMatch && method === "DELETE") {
+      const corpusId = decodeURIComponent(corpusMatch[1] ?? "");
+      if (!state.corpora.has(corpusId)) {
+        await fulfillError(route, 404, "RAG_CORPUS_NOT_FOUND", "Corpus not found");
+        return;
+      }
+      const hasRetrievalBinding = Array.from(state.profiles.values()).some((profile) => (
+        profile.profileType === "RETRIEVAL" && profileReferencesCorpus(profile, corpusId)
+      ));
+      if (hasRetrievalBinding) {
+        await fulfillError(route, 409, "RAG_CORPUS_BOUND_TO_RETRIEVAL_PROFILE", "Corpus is bound to a retrieval profile");
+        return;
+      }
+      const deletedIngestProfileIds = Array.from(state.profiles.values())
+        .filter((profile) => profile.profileType === "INGEST" && profileReferencesCorpus(profile, corpusId))
+        .map((profile) => profile.profileId);
+      deletedIngestProfileIds.forEach((profileId) => {
+        state.profiles.delete(profileId);
+        clearProfileReferences(state, profileId);
+      });
+      state.corpora.delete(corpusId);
+      await fulfillJson(route, { corpusId, deletedIngestProfileIds });
+      return;
+    }
+
     if (pathname === "/api/v1/rag/profiles" && method === "GET") {
       const profileTypeParam = readString(url.searchParams.get("profileType"));
       const requestedType = profileTypeParam ? normalizeProfileType(profileTypeParam) : undefined;
@@ -1567,6 +1831,18 @@ export async function installRagManagementApiMock(page: Page, requests: Captured
         return;
       }
       await fulfillJson(route, upsertProfile(body, state));
+      return;
+    }
+
+    if (profileMatch && method === "DELETE") {
+      const profileId = decodeURIComponent(profileMatch[1] ?? "");
+      if (!state.profiles.has(profileId)) {
+        await fulfillError(route, 404, "RAG_PROFILE_NOT_FOUND", "Profile not found");
+        return;
+      }
+      state.profiles.delete(profileId);
+      clearProfileReferences(state, profileId);
+      await fulfillJson(route, { profileId });
       return;
     }
 

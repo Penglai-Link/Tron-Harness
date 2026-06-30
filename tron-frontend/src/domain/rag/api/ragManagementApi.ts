@@ -31,6 +31,7 @@ import {
   buildIngestProfileRecordFromForm,
   buildRetrievalPipelineFromForm,
   buildRetrievalProfileRecordFromForm,
+  inferRetrievalRouteType,
   ingestStageIdToStageType,
   ingestStageNodeId,
   ingestStageTypeToStageId,
@@ -42,6 +43,8 @@ import {
 export const ragManagementApiEndpoints = {
   createCorpus: "POST /api/v1/rag/corpora",
   createProfile: "POST /api/v1/rag/profiles",
+  deleteCorpus: "DELETE /api/v1/rag/corpora/{corpusId}",
+  deleteProfile: "DELETE /api/v1/rag/profiles/{profileId}",
   getCorpusCatalog: "GET /api/v1/rag/corpora/catalog",
   getCorpusDetail: "GET /api/v1/rag/corpora/{corpusId}",
   getPipelineCatalog: "GET /api/v1/rag/pipeline/catalog",
@@ -105,6 +108,11 @@ export interface RagCorpusVerifyResultApi {
   errors?: RagManagementValidationIssue[];
   runtimeProjection?: RagCorpusDetailApi["runtimeProjection"];
   valid?: boolean;
+}
+
+export interface RagCorpusDeleteResultApi {
+  corpusId?: string;
+  deletedIngestProfileIds?: string[];
 }
 
 export interface RagProfilePipelineStageApi {
@@ -184,6 +192,10 @@ export interface RagProfileCatalogApi {
 export interface RagProfileVerifyResultApi {
   errors?: RagManagementValidationIssue[];
   valid?: boolean;
+}
+
+export interface RagProfileDeleteResultApi {
+  profileId?: string;
 }
 
 export interface RagFilterValidateInputApi {
@@ -403,7 +415,21 @@ function summarizeRetrievalStrategy(profile: RagProfileDetailApi) {
 }
 
 function summarizeRetrievalRoutes(routes: RagRetrievalRouteConfig[]) {
-  return routes.filter((route) => route.enabled).map((route) => route.strategyId);
+  return routes.filter((route) => route.enabled !== false).map((route) => route.strategyId);
+}
+
+function isRetrievalRoutePipelineNode(node: RagPipelineNode) {
+  if (readString(node.stageType) === "ROUTE_SEARCH") return true;
+  const config = isRecord(node.config) ? node.config : {};
+  return Boolean(readString(config.corpusId) && readString(node.strategyId));
+}
+
+function retrievalRouteTypeFromPipelineNode(node: RagPipelineNode) {
+  const config = isRecord(node.config) ? node.config : {};
+  const configuredRouteType = readString(config.routeType);
+  if (configuredRouteType) return configuredRouteType;
+  const stageType = readString(node.stageType);
+  return stageType && stageType !== "ROUTE_SEARCH" ? stageType : inferRetrievalRouteType(readString(node.strategyId));
 }
 
 function sanitizeRouteIdPart(value: string) {
@@ -503,13 +529,13 @@ function pipelineFromLegacyRetrievalRoutes(routes: RagProfileRouteApi[]): RagPro
     .map<RagPipelineNode>((route, index) => ({
       config: {
         corpusId: readString(route.corpusId),
-        routeType: readString(route.routeType),
+        routeType: readString(route.routeType) || inferRetrievalRouteType(readString(route.strategyId)),
       },
       enabled: true,
       failurePolicy: "CONTINUE_WITH_WARNING",
       joinPolicy: "BEST_EFFORT",
       nodeId: derivedRetrievalRouteId(route, index),
-      stageType: readString(route.routeType),
+      stageType: "ROUTE_SEARCH",
       strategyId: readString(route.strategyId),
     }));
   return {
@@ -654,14 +680,18 @@ export function mapRagProfileDetailToRecord(payload: RagProfileDetailApi): Profi
 
   const pipeline = readProfilePipeline(payload.pipeline) ?? pipelineFromLegacyRetrievalRoutes(payload.routes ?? []);
   const routesConfig: RagRetrievalRouteConfig[] = pipeline.nodes
-    .filter((node) => readString(node.stageType) === "ROUTE_SEARCH")
-    .map((node, index) => ({
-      corpusId: readString(isRecord(node.config) ? node.config.corpusId : ""),
-      enabled: node.enabled,
-      routeId: node.nodeId || `route-${index + 1}`,
-      routeType: "ROUTE_SEARCH" as RagRetrievalRouteConfig["routeType"],
-      strategyId: readString(node.strategyId),
-    }));
+    .filter(isRetrievalRoutePipelineNode)
+    .map((node, index) => {
+      const config = isRecord(node.config) ? node.config : {};
+      const strategyId = readString(node.strategyId);
+      return {
+        corpusId: readString(config.corpusId),
+        enabled: node.enabled,
+        routeId: node.nodeId || `route-${index + 1}`,
+        routeType: retrievalRouteTypeFromPipelineNode(node) as RagRetrievalRouteConfig["routeType"],
+        strategyId,
+      };
+    });
   const routeCorpusIds = routesConfig.map((route) => route.corpusId).filter(Boolean);
   const record: RetrievalProfileRecord = {
     config: {
@@ -958,6 +988,12 @@ export function updateRagCorpus(corpusId: string, payload: RagCorpusDetailApi) {
   });
 }
 
+export function deleteRagCorpus(corpusId: string) {
+  return requestApi<RagCorpusDeleteResultApi>(ragManagementApiEndpoints.deleteCorpus, {
+    pathParams: { corpusId },
+  });
+}
+
 export function fetchRagProfiles(signal?: AbortSignal) {
   return requestApi<RagProfileDetailApi[]>(ragManagementApiEndpoints.listProfiles, { signal });
 }
@@ -1004,6 +1040,12 @@ export function createRagProfile(payload: RagProfileDetailApi) {
 export function updateRagProfile(profileId: string, payload: RagProfileDetailApi) {
   return requestApi<RagProfileDetailApi>(ragManagementApiEndpoints.updateProfile, {
     body: payload,
+    pathParams: { profileId },
+  });
+}
+
+export function deleteRagProfile(profileId: string) {
+  return requestApi<RagProfileDeleteResultApi>(ragManagementApiEndpoints.deleteProfile, {
     pathParams: { profileId },
   });
 }
