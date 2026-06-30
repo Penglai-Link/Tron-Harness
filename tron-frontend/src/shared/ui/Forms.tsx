@@ -14,6 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Field as FieldPrimitive, FieldLabel, FieldError } from "@/components/ui/field";
 
 interface FieldProps {
   children: ReactNode;
@@ -36,41 +37,19 @@ function mergeAriaReferences(...references: Array<string | undefined>) {
 }
 
 export function Field({ children, error, hint, label }: FieldProps) {
-  const fieldId = useId().replace(/:/g, "");
-  const tooltipLabel = typeof label === "string" ? label : "Field";
-  const hintId = hint ? `field-hint-${fieldId}` : undefined;
-  const errorId = error ? `field-error-${fieldId}` : undefined;
-  let controlId: string | undefined;
-  let content = children;
-
-  if (isValidElement<FieldChildProps>(children)) {
-    const child = children as ReactElement<FieldChildProps>;
-    controlId = child.props.id ?? `field-control-${fieldId}`;
-    content = cloneElement(child, {
-      id: controlId,
-      "aria-describedby": mergeAriaReferences(child.props["aria-describedby"], hintId, errorId),
-    });
-  }
-
   return (
-    <div className="grid min-w-0 gap-1.5">
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-        {controlId ? (
-          <label className="min-w-0 break-words text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]" htmlFor={controlId}>
-            {label}
-          </label>
-        ) : (
-          <span className="min-w-0 break-words text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{label}</span>
-        )}
-        {hint ? (
-          <InfoTooltip ariaLabel="打开字段说明">
-            <p id={hintId}>{hint}</p>
+    <FieldPrimitive>
+      <FieldLabel>
+        {label}
+        {
+          hint && <InfoTooltip ariaLabel="打开字段说明">
+            {hint}
           </InfoTooltip>
-        ) : null}
-      </div>
-      {content}
-      {error ? <span className="text-[12px] text-[var(--color-error)]" id={errorId}>{error}</span> : null}
-    </div>
+        }
+      </FieldLabel>
+      {children}
+      {error && <FieldError match>{error}</FieldError>}
+    </FieldPrimitive>
   );
 }
 
