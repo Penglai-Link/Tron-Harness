@@ -95,6 +95,7 @@ export function SelectInput<Value, Multiple extends boolean | undefined = false>
   children,
   className,
   id,
+  placeholder,
   size,
   ...props
 }: SelectPrimitive.Root.Props<Value, Multiple> & {
@@ -103,6 +104,7 @@ export function SelectInput<Value, Multiple extends boolean | undefined = false>
   "aria-labelledby"?: string;
   className?: string;
   id?: string;
+  placeholder?: ReactNode;
   size?: 'sm' | 'lg';
 }) {
   return (
@@ -118,7 +120,7 @@ export function SelectInput<Value, Multiple extends boolean | undefined = false>
           disabledControlClasses,
           className,
         )}>
-          <SelectValue />
+          <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectPopup alignItemWithTrigger={false}>
           {children}

@@ -131,7 +131,7 @@ export const pages = {
         },
         noDescription: "暂无说明",
         noIngestProfile: "未绑定",
-        title: "语料库列表",
+        title: "语料库",
         visible: "显示 {{count}} 个语料库",
       },
     },
@@ -167,11 +167,13 @@ export const pages = {
       },
       table: {
         columns: {
+          actions: "操作",
           corpus: "语料库",
           inputContract: "输入契约",
           pipeline: "流水线",
           profile: "配置",
           routes: "路由",
+          status: "状态",
         },
         visible: "显示 {{count}} 个检索配置",
       },
@@ -192,10 +194,12 @@ export const pages = {
       },
       businessAttributes: {
         add: "添加业务属性",
-        fieldLabel: "业务属性 {{index}} 字段",
+        fieldAria: "业务属性 {{index}} 字段",
+        fieldLabel: "字段",
         removeAria: "移除业务属性 {{index}}",
         title: "业务属性",
-        valueLabel: "业务属性 {{index}} 值",
+        valueAria: "业务属性 {{index}} 值",
+        valueLabel: "值",
       },
       contextItems: {
         itemFallback: "上下文项 {{index}}",
@@ -239,11 +243,14 @@ export const pages = {
       },
       filters: {
         add: "添加筛选条件",
-        fieldLabel: "筛选条件 {{index}} 字段",
-        operatorLabel: "筛选条件 {{index}} 操作符",
+        fieldAria: "筛选条件 {{index}} 字段",
+        fieldLabel: "字段",
+        operatorAria: "筛选条件 {{index}} 条件",
+        operatorLabel: "条件",
         removeAria: "移除筛选条件 {{index}}",
         title: "筛选条件",
-        valueLabel: "筛选条件 {{index}} 值",
+        valueAria: "筛选条件 {{index}} 值",
+        valueLabel: "值",
       },
       hints: {
         businessField: "写入 payload.domainFields 的业务字段，来源于当前语料库字段映射。",
@@ -298,8 +305,12 @@ export const pages = {
       },
       returnFields: {
         add: "添加返回字段",
+        empty: "暂无可用返回字段。",
         label: "返回字段 {{index}}",
         removeAria: "移除返回字段 {{index}}",
+        searchEmpty: "没有匹配的返回字段。",
+        searchPlaceholder: "搜索返回字段...",
+        select: "选择返回字段",
         title: "返回字段",
       },
       scope: {

@@ -128,7 +128,7 @@ export function RagCorporaTab({
       <SurfaceCard className="p-0">
         <div className="border-b border-[var(--color-outline-variant)] px-5 py-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-base font-semibold">{pageT("table.title", "Corpus list")}</h2>
+            <h2 className="text-base font-semibold">{pageT("table.title", "Corpus")}</h2>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-[minmax(260px,1fr)_180px_auto] md:items-center">
             <div className="relative min-w-0">
@@ -152,7 +152,7 @@ export function RagCorporaTab({
                 </SelectItem>
               ))}
             </SelectInput>
-            <Button className="justify-self-start md:justify-self-end" size="sm" variant="secondary" onClick={onCreateCorpus}>
+            <Button className="justify-self-start md:justify-self-end" onClick={onCreateCorpus}>
               <Sparkles size={17} aria-hidden="true" />
               {pageT("actions.newCorpus", "New corpus")}
             </Button>

@@ -131,7 +131,7 @@ export const pages = {
         },
         noDescription: "No description",
         noIngestProfile: "Unbound",
-        title: "Corpus list",
+        title: "Corpus",
         visible: "{{count}} corpora visible",
       },
     },
@@ -167,11 +167,13 @@ export const pages = {
       },
       table: {
         columns: {
+          actions: "Actions",
           corpus: "Corpus",
           inputContract: "Input contract",
           pipeline: "Pipeline",
           profile: "Profile",
           routes: "Routes",
+          status: "Status",
         },
         visible: "{{count}} retrieval profiles visible",
       },
@@ -192,10 +194,12 @@ export const pages = {
       },
       businessAttributes: {
         add: "Add business attribute",
-        fieldLabel: "Business attribute {{index}} field",
+        fieldAria: "Business attribute {{index}} field",
+        fieldLabel: "Field",
         removeAria: "Remove business attribute {{index}}",
         title: "Business attributes",
-        valueLabel: "Business attribute {{index}} value",
+        valueAria: "Business attribute {{index}} value",
+        valueLabel: "Value",
       },
       contextItems: {
         itemFallback: "Context item {{index}}",
@@ -239,11 +243,14 @@ export const pages = {
       },
       filters: {
         add: "Add filter",
-        fieldLabel: "Filter {{index}} field",
-        operatorLabel: "Filter {{index}} operator",
+        fieldAria: "Filter {{index}} field",
+        fieldLabel: "Field",
+        operatorAria: "Filter {{index}} condition",
+        operatorLabel: "Condition",
         removeAria: "Remove filter {{index}}",
         title: "Filters",
-        valueLabel: "Filter {{index}} value",
+        valueAria: "Filter {{index}} value",
+        valueLabel: "Value",
       },
       hints: {
         businessField: "Business field written to payload.domainFields, sourced from the current corpus field mapping.",
@@ -298,8 +305,12 @@ export const pages = {
       },
       returnFields: {
         add: "Add return field",
+        empty: "No return fields available.",
         label: "Return field {{index}}",
         removeAria: "Remove return field {{index}}",
+        searchEmpty: "No matching return fields.",
+        searchPlaceholder: "Search return fields...",
+        select: "Select return fields",
         title: "Return fields",
       },
       scope: {

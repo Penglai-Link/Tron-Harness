@@ -210,7 +210,6 @@ export function RagProfilesTab({
                     >
                       {profile.id}
                     </button>
-                    <Badge tone={statusTone(profile.status)}>{formatRagStatusLabel(profile.status, t)}</Badge>
                   </div>
                   {profile.description ? (
                     <p className="mt-1 line-clamp-2 text-[13px] text-[var(--color-on-surface-variant)]">{profile.description}</p>
@@ -238,6 +237,12 @@ export function RagProfilesTab({
               id: "routes",
               header: pageT("table.columns.routes", "Routes"),
               render: (profile) => <RetrievalProfileSummary profile={profile} />,
+            },
+            {
+              id: "status",
+              header: pageT("table.columns.status", "Status"),
+              render: (profile) => <Badge tone={statusTone(profile.status)}>{formatRagStatusLabel(profile.status, t)}</Badge>,
+              width: "120px",
             },
             {
               align: "right",

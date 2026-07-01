@@ -1720,12 +1720,11 @@ export function RagIngestProfileFormPage() {
                             <Field label={pageT("fields.strategy", "Strategy")} error={errors.stageRows?.[stage.id]?.strategyId} hint={ingestHintT("strategy")}>
                               <SelectInput
                                 aria-label={pageT("ingest.stageStrategies.strategyAria", "{{stage}} strategy ID", { stage: stageType })}
+                                disabled={stageStrategyOptions.length === 0}
+                                placeholder={pageT("ingest.stageStrategies.noStrategy", "No supported strategy")}
                                 value={stage.strategyId}
                                 onValueChange={(event) => updateStageStrategy(stage.id, event!)}
                               >
-                                {stageStrategyOptions.length === 0 ? (
-                                  <SelectItem value="">{pageT("ingest.stageStrategies.noStrategy", "No supported strategy")}</SelectItem>
-                                ) : null}
                                 {stageStrategyOptions.map((strategyId) => (
                                   <SelectItem key={strategyId} value={strategyId}>{strategyOptionLabel(stageDefinition, strategyId)}</SelectItem>
                                 ))}

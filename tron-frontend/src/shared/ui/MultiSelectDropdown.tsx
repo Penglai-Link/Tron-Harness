@@ -124,7 +124,7 @@ export function MultiSelectDropdown({
   });
 
   return (
-    <div className="relative">
+    <div className="relative w-full">
       <button
         ref={triggerRef}
         aria-expanded={open}

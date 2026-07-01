@@ -12,6 +12,7 @@ import { useTranslation } from "react-i18next";
 
 import {
   Field,
+  MultiSelectDropdown,
   SelectInput,
   SurfaceCard,
   TextArea,
@@ -66,11 +67,6 @@ type WorkbenchFilterRow = {
   formId: string;
   operator: string;
   value: string;
-};
-
-type WorkbenchReturnFieldRow = {
-  field: string;
-  formId: string;
 };
 
 type WorkbenchFieldOption = {
@@ -260,13 +256,6 @@ function createWorkbenchBusinessAttributeRow(index: number): WorkbenchBusinessAt
   };
 }
 
-function createWorkbenchReturnFieldRow(index: number): WorkbenchReturnFieldRow {
-  return {
-    field: "",
-    formId: `return-field-${index + 1}`,
-  };
-}
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -362,10 +351,6 @@ function buildDomainFields(
     domainFields[field] = parseFilterValue(rawValue, valueType, field);
   });
   return domainFields;
-}
-
-function buildReturnFields(rows: WorkbenchReturnFieldRow[]) {
-  return [...new Set(rows.map((row) => row.field.trim()).filter(Boolean))];
 }
 
 function formatFieldValue(value: unknown) {
@@ -551,7 +536,7 @@ export function RagWorkbenchTab({
   const [retrievalProfileId, setRetrievalProfileId] = useState(initialRetrievalProfileId ?? initialRetrievalId);
   const [query, setQuery] = useState(() => pageT("defaults.query", "How should the RAG context pack respect tokenBudget?"));
   const [contextStrategy, setContextStrategy] = useState(retrievalProfiles[0]?.config.contextStrategies[0] ?? "DOC_QA_CONTEXT_PACK");
-  const [returnFieldRows, setReturnFieldRows] = useState<WorkbenchReturnFieldRow[]>([]);
+  const [selectedReturnFields, setSelectedReturnFields] = useState<string[]>([]);
   const [filterRows, setFilterRows] = useState<WorkbenchFilterRow[]>([]);
   const [limit, setLimit] = useState("8");
   const [tokenBudget, setTokenBudget] = useState("4096");
@@ -606,7 +591,11 @@ export function RagWorkbenchTab({
   );
   const businessFieldSchema = Object.fromEntries(businessFieldOptions.map((option) => [option.field, option]));
   const returnFieldOptions = collectWorkbenchFieldOptions(selectedRetrievalCorpora, workbenchReservedReturnFields);
-  const selectedReturnFields = buildReturnFields(returnFieldRows);
+  const returnFieldSelectOptions = returnFieldOptions.map((option) => ({
+    description: option.type,
+    label: option.field,
+    value: option.field,
+  }));
   const targetScope = buildTargetScope(targetScopeType, userCode, workspaceCode);
 
   useEffect(() => {
@@ -651,7 +640,7 @@ export function RagWorkbenchTab({
           setRetrievalProfileId(initialRetrievalProfileId);
           setContextStrategy("RESULT_LIST");
           setFilterRows([]);
-          setReturnFieldRows([]);
+          setSelectedReturnFields([]);
         }
       }
       return;
@@ -676,6 +665,14 @@ export function RagWorkbenchTab({
       setContextStrategy(contextStrategyOptions[0] ?? "DOC_QA_CONTEXT_PACK");
     }
   }, [contextStrategy, contextStrategyOptions]);
+
+  function toggleReturnField(field: string) {
+    setSelectedReturnFields((current) => (
+      current.includes(field)
+        ? current.filter((currentField) => currentField !== field)
+        : [...current, field]
+    ));
+  }
 
   function updateSourcePayloadForm(patch: Partial<WorkbenchSourcePayloadForm>) {
     setSourcePayloadForm((current) => ({ ...current, ...patch }));
@@ -966,43 +963,54 @@ export function RagWorkbenchTab({
                 </div>
                 {businessAttributeRows.length > 0 ? (
                   <div className="mt-3 grid gap-3">
-                    {businessAttributeRows.map((row, index) => (
-                      <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" key={row.formId}>
-                        <Field label={pageT("businessAttributes.fieldLabel", "Business attribute {{index}} field", { index: index + 1 })} hint={hintT("businessField")}>
-                          <SelectInput
-                            aria-label={pageT("businessAttributes.fieldLabel", "Business attribute {{index}} field", { index: index + 1 })}
-                            value={row.field}
-                            onValueChange={(event) => setBusinessAttributeRows((current) => current.map((item) => (
-                              item.formId === row.formId ? { ...item, field: event! } : item
-                            )))}
+                    {businessAttributeRows.map((row, index) => {
+                      const selectedFieldsInOtherRows = new Set(
+                        businessAttributeRows
+                          .filter((item) => item.formId !== row.formId)
+                          .map((item) => item.field)
+                          .filter(Boolean),
+                      );
+                      const availableBusinessFieldOptions = businessFieldOptions.filter((option) => (
+                        option.field === row.field || !selectedFieldsInOtherRows.has(option.field)
+                      ));
+                      return (
+                        <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" key={row.formId}>
+                          <Field label={pageT("businessAttributes.fieldLabel", "Field")} hint={hintT("businessField")}>
+                            <SelectInput
+                              aria-label={pageT("businessAttributes.fieldAria", "Business attribute {{index}} field", { index: index + 1 })}
+                              placeholder={pageT("fields.selectField", "Select field")}
+                              value={row.field}
+                              onValueChange={(event) => setBusinessAttributeRows((current) => current.map((item) => (
+                                item.formId === row.formId ? { ...item, field: event! } : item
+                              )))}
+                            >
+                              {availableBusinessFieldOptions.map((option) => (
+                                <SelectItem key={option.field} value={option.field}>{option.field}</SelectItem>
+                              ))}
+                            </SelectInput>
+                          </Field>
+                          <Field label={pageT("businessAttributes.valueLabel", "Value")} hint={hintT("businessValue")}>
+                            <TextInput
+                              aria-label={pageT("businessAttributes.valueAria", "Business attribute {{index}} value", { index: index + 1 })}
+                              value={row.value}
+                              onChange={(event) => setBusinessAttributeRows((current) => current.map((item) => (
+                                item.formId === row.formId ? { ...item, value: event.target.value } : item
+                              )))}
+                            />
+                          </Field>
+                          <Button
+                            aria-label={pageT("businessAttributes.removeAria", "Remove business attribute {{index}}", { index: index + 1 })}
+                            className="self-end"
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                            onClick={() => setBusinessAttributeRows((current) => current.filter((item) => item.formId !== row.formId))}
                           >
-                            <SelectItem value="">{pageT("fields.selectField", "Select field")}</SelectItem>
-                            {businessFieldOptions.map((option) => (
-                              <SelectItem key={option.field} value={option.field}>{option.field}</SelectItem>
-                            ))}
-                          </SelectInput>
-                        </Field>
-                        <Field label={pageT("businessAttributes.valueLabel", "Business attribute {{index}} value", { index: index + 1 })} hint={hintT("businessValue")}>
-                          <TextInput
-                            aria-label={pageT("businessAttributes.valueLabel", "Business attribute {{index}} value", { index: index + 1 })}
-                            value={row.value}
-                            onChange={(event) => setBusinessAttributeRows((current) => current.map((item) => (
-                              item.formId === row.formId ? { ...item, value: event.target.value } : item
-                            )))}
-                          />
-                        </Field>
-                        <Button
-                          aria-label={pageT("businessAttributes.removeAria", "Remove business attribute {{index}}", { index: index + 1 })}
-                          className="self-end"
-                          size="sm"
-                          type="button"
-                          variant="ghost"
-                          onClick={() => setBusinessAttributeRows((current) => current.filter((item) => item.formId !== row.formId))}
-                        >
-                          {pageT("actions.remove", "Remove")}
-                        </Button>
-                      </div>
-                    ))}
+                            {pageT("actions.remove", "Remove")}
+                          </Button>
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : null}
               </div>
@@ -1073,7 +1081,7 @@ export function RagWorkbenchTab({
                       setRetrievalProfileId(event!);
                       setContextStrategy("RESULT_LIST");
                       setFilterRows([]);
-                      setReturnFieldRows([]);
+                      setSelectedReturnFields([]);
                     }}
                   >
                     {retrievalProfiles.map((profile) => (
@@ -1092,52 +1100,19 @@ export function RagWorkbenchTab({
                   ))}
                 </SelectInput>
               </Field>
-              <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("returnFields.title", "Return fields")}</p>
-                  <Button
-                    disabled={returnFieldOptions.length === 0}
-                    size="sm"
-                    type="button"
-                    variant="secondary"
-                    onClick={() => setReturnFieldRows((current) => [...current, createWorkbenchReturnFieldRow(current.length)])}
-                  >
-                    {pageT("returnFields.add", "Add return field")}
-                  </Button>
-                </div>
-                {returnFieldRows.length > 0 ? (
-                  <div className="mt-3 grid gap-3">
-                    {returnFieldRows.map((row, index) => (
-                      <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_auto]" key={row.formId}>
-                        <Field label={pageT("returnFields.label", "Return field {{index}}", { index: index + 1 })} hint={hintT("returnField")}>
-                          <SelectInput
-                            aria-label={pageT("returnFields.label", "Return field {{index}}", { index: index + 1 })}
-                            value={row.field}
-                            onValueChange={(event) => setReturnFieldRows((current) => current.map((item) => (
-                              item.formId === row.formId ? { ...item, field: event! } : item
-                            )))}
-                          >
-                            <SelectItem value="">{pageT("fields.selectField", "Select field")}</SelectItem>
-                            {returnFieldOptions.map((option) => (
-                              <SelectItem key={option.field} value={option.field}>{option.field}</SelectItem>
-                            ))}
-                          </SelectInput>
-                        </Field>
-                        <Button
-                          aria-label={pageT("returnFields.removeAria", "Remove return field {{index}}", { index: index + 1 })}
-                          className="self-end"
-                          size="sm"
-                          type="button"
-                          variant="ghost"
-                          onClick={() => setReturnFieldRows((current) => current.filter((item) => item.formId !== row.formId))}
-                        >
-                          {pageT("actions.remove", "Remove")}
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
+              <Field label={pageT("returnFields.title", "Return fields")}>
+                <MultiSelectDropdown
+                  ariaLabel={pageT("returnFields.title", "Return fields")}
+                  disabled={returnFieldOptions.length === 0}
+                  emptyMessage={pageT("returnFields.empty", "No return fields available.")}
+                  options={returnFieldSelectOptions}
+                  placeholder={pageT("returnFields.select", "Select return fields")}
+                  searchEmptyMessage={pageT("returnFields.searchEmpty", "No matching return fields.")}
+                  searchPlaceholder={pageT("returnFields.searchPlaceholder", "Search return fields...")}
+                  selectedValues={selectedReturnFields}
+                  onToggle={toggleReturnField}
+                />
+              </Field>
               <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("filters.title", "Filters")}</p>
@@ -1155,25 +1130,34 @@ export function RagWorkbenchTab({
                     {filterRows.map((row, index) => {
                       const selectedField = filterFieldSchema[row.field];
                       const operators = selectedField?.operators?.length ? selectedField.operators : [...workbenchFilterOperators];
+                      const selectedFieldsInOtherRows = new Set(
+                        filterRows
+                          .filter((item) => item.formId !== row.formId)
+                          .map((item) => item.field)
+                          .filter(Boolean),
+                      );
+                      const availableFilterFieldOptions = filterFieldOptions.filter((option) => (
+                        option.field === row.field || !selectedFieldsInOtherRows.has(option.field)
+                      ));
                       return (
-                        <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_120px_minmax(0,1fr)_auto]" key={row.formId}>
-                          <Field label={pageT("filters.fieldLabel", "Filter {{index}} field", { index: index + 1 })} hint={hintT("filterField")}>
+                        <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 lg:grid-cols-[minmax(220px,1fr)_160px_minmax(220px,1fr)_auto]" key={row.formId}>
+                          <Field label={pageT("filters.fieldLabel", "Field")} hint={hintT("filterField")}>
                             <SelectInput
-                              aria-label={pageT("filters.fieldLabel", "Filter {{index}} field", { index: index + 1 })}
+                              aria-label={pageT("filters.fieldAria", "Filter {{index}} field", { index: index + 1 })}
+                              placeholder={pageT("fields.selectField", "Select field")}
                               value={row.field}
                               onValueChange={(event) => setFilterRows((current) => current.map((item) => (
                                 item.formId === row.formId ? { ...item, field: event! } : item
                               )))}
                             >
-                              <SelectItem value="">{pageT("fields.selectField", "Select field")}</SelectItem>
-                              {filterFieldOptions.map((option) => (
+                              {availableFilterFieldOptions.map((option) => (
                                 <SelectItem key={option.field} value={option.field}>{option.field}</SelectItem>
                               ))}
                             </SelectInput>
                           </Field>
-                          <Field label={pageT("filters.operatorLabel", "Filter {{index}} operator", { index: index + 1 })} hint={hintT("filterOperator")}>
+                          <Field label={pageT("filters.operatorLabel", "Condition")} hint={hintT("filterOperator")}>
                             <SelectInput
-                              aria-label={pageT("filters.operatorLabel", "Filter {{index}} operator", { index: index + 1 })}
+                              aria-label={pageT("filters.operatorAria", "Filter {{index}} condition", { index: index + 1 })}
                               value={row.operator}
                               onValueChange={(event) => setFilterRows((current) => current.map((item) => (
                                 item.formId === row.formId ? { ...item, operator: event! } : item
@@ -1184,9 +1168,9 @@ export function RagWorkbenchTab({
                               ))}
                             </SelectInput>
                           </Field>
-                          <Field label={pageT("filters.valueLabel", "Filter {{index}} value", { index: index + 1 })} hint={hintT("filterValue")}>
+                          <Field label={pageT("filters.valueLabel", "Value")} hint={hintT("filterValue")}>
                             <TextInput
-                              aria-label={pageT("filters.valueLabel", "Filter {{index}} value", { index: index + 1 })}
+                              aria-label={pageT("filters.valueAria", "Filter {{index}} value", { index: index + 1 })}
                               value={row.value}
                               onChange={(event) => setFilterRows((current) => current.map((item) => (
                                 item.formId === row.formId ? { ...item, value: event.target.value } : item

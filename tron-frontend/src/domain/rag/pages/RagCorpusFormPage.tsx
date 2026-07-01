@@ -477,10 +477,10 @@ function FilterFieldsSection({
                 <SelectInput
                   aria-label={pageT("filters.nameAria", "Filter field {{index}} name", { index: index + 1 })}
                   className="w-full"
+                  placeholder={filterFieldOptions.length ? pageT("filters.selectMappedField", "Select mapped field") : pageT("filters.noMappedFields", "No mapped fields available")}
                   value={row.name}
                   onValueChange={(event) => onUpdate(index, { name: event! })}
                 >
-                  <SelectItem value="">{filterFieldOptions.length ? pageT("filters.selectMappedField", "Select mapped field") : pageT("filters.noMappedFields", "No mapped fields available")}</SelectItem>
                   {row.name && !filterFieldOptions.some((option) => option.logicalName === row.name) ? (
                     <SelectItem value={row.name}>{pageT("filters.missingMapping", "{{name}} (missing mapping)", { name: row.name })}</SelectItem>
                   ) : null}
@@ -1290,10 +1290,10 @@ export function RagCorpusFormPage() {
                       <SelectInput
                         aria-label={pageT(`segmentBindings.${segmentMeta.key}`, "{{label}} target", { label: pageT(`segments.${segmentMeta.key}`, segmentMeta.label) })}
                         className="w-full"
+                        placeholder={pageT("storageTargets.select", "Select storage target")}
                         value={form.segmentBindings[segmentMeta.key]}
                         onValueChange={(event) => updateSegmentBinding(segmentMeta.key, event!)}
                       >
-                        <SelectItem value="">{pageT("storageTargets.select", "Select storage target")}</SelectItem>
                         {form.storageTargets.map((target, targetIndex) => (
                           <SelectItem key={target.formId} value={target.id.trim()}>
                             {ragStorageTargetOptionLabel(target, targetIndex)}
