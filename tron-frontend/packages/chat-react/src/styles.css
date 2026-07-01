@@ -120,6 +120,7 @@
   min-height: 0;
   min-width: 0;
   flex: 1;
+  position: relative;
 }
 
 .tron-chat__content--with-sidebar {
@@ -132,6 +133,12 @@
   background: var(--tron-chat-transcript-bg, var(--tron-chat-surface-muted));
   padding: 20px;
   position: relative;
+}
+
+.tron-chat__turn {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .tron-chat__sidebar {
@@ -148,6 +155,98 @@
   margin: 0 auto;
   flex-direction: column;
   gap: 20px;
+}
+
+.tron-chat-history-rail {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  z-index: 5;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: auto;
+  width: 24px;
+}
+
+.tron-chat-history-rail__line {
+  width: 1px;
+  align-self: stretch;
+  background: color-mix(in srgb, var(--tron-chat-border) 70%, transparent);
+}
+
+.tron-chat-history-rail__markers {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.tron-chat-history-rail__marker {
+  position: relative;
+  display: block;
+  height: 2px;
+  border: 0;
+  background: color-mix(in srgb, var(--color-on-surface) 30%, white 12%);
+  transition: width 0.2s;
+}
+
+.tron-chat-history-rail__marker--active {
+  background: var(--color-on-surface);
+  opacity: 1;
+}
+
+.tron-chat-history-rail__marker[data-hovered="true"] {
+  background: var(--color-on-surface);
+  box-shadow:
+    inset 0 0 0 1px rgba(15, 23, 42, 0.06),
+    0 0 0 1px rgba(15, 23, 42, 0.05);
+}
+
+.tron-chat-history-rail__marker:focus-visible {
+  outline: 2px solid var(--tron-chat-focus);
+  outline-offset: 3px;
+}
+
+.tron-chat-history-rail__preview {
+  position: absolute;
+  left: calc(100% + 16px);
+  transform: translateY(-50%);
+  display: flex;
+  min-width: 320px;
+  width: clamp(360px, 32vw, 520px);
+  max-width: min(520px, calc(100vw - 180px));
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  background: color-mix(in srgb, var(--tron-chat-surface-strong) 96%, white 4%);
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.14);
+  padding: 12px;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  z-index: 8;
+}
+
+.tron-chat-history-rail__preview--compact {
+  gap: 0;
+  padding-block: 16px;
+}
+
+.tron-chat-history-rail__preview-user {
+  color: var(--tron-chat-text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.tron-chat-history-rail__preview-assistant {
+  color: var(--tron-chat-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .tron-chat__transcript__bot {

@@ -47,6 +47,8 @@ import {
   type ReactNode,
 } from "react";
 import "github-markdown-css/github-markdown.css";
+import { ChatHistoryRail } from "./ChatHistoryRail";
+import { buildChatHistoryTurns } from "./chatHistory";
 
 function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
@@ -740,6 +742,33 @@ export function TronChatPanel({
       session?.sessionCode,
     ],
   );
+  const historyTurns = useMemo(
+    () => buildChatHistoryTurns(messages, presentation),
+    [messages, presentation],
+  );
+  const turnByMessageCode = useMemo(() => {
+    const next = new Map<string, string>();
+    historyTurns.forEach((turn) => {
+      turn.messageCodes.forEach((messageCode) => {
+        next.set(messageCode, turn.id);
+      });
+    });
+    return next;
+  }, [historyTurns]);
+  const messagesByTurnId = useMemo(() => {
+    const next = new Map<string, ChatMessage[]>();
+    historyTurns.forEach((turn) => {
+      next.set(turn.id, []);
+    });
+    messages.forEach((message) => {
+      const turnId = turnByMessageCode.get(message.messageCode);
+      if (!turnId) return;
+      const bucket = next.get(turnId);
+      if (!bucket) return;
+      bucket.push(message);
+    });
+    return next;
+  }, [historyTurns, messages, turnByMessageCode]);
 
   function scrollToBottom(behavior: ScrollBehavior = "auto") {
     const element = transcriptRef.current;
@@ -812,6 +841,11 @@ export function TronChatPanel({
               Boolean(sidebarContent) && "tron-chat__content--with-sidebar",
             )}
           >
+            <ChatHistoryRail
+              messages={messages}
+              presentation={presentation}
+              transcriptRef={transcriptRef}
+            />
             <section
               className="tron-chat__transcript"
               aria-label="Chat transcript"
@@ -820,36 +854,44 @@ export function TronChatPanel({
             >
               <div className="tron-chat__transcript-inner">
                 {messages.length ? (
-                  messages.map((message) => (
-                    <Fragment key={message.messageCode}>
-                      <ChatBubble
-                        currentUserDisplayName={currentUserDisplayName}
-                        message={message}
-                        onEditMessage={onEditMessage}
-                      />
-                      {showAgui &&
-                        message.messageCode ===
-                        presentation.waitingForModelAnchorMessageCode ? (
-                        <WaitingRail />
-                      ) : null}
-                      {showAgui
-                        ? (
-                          presentation.workRailsByMessageCode.get(
-                            message.messageCode,
-                          ) ?? []
-                        ).map((run) => (
-                          <AguiRunWorkRail
-                            debugEvents={(
-                              presentation.debugEventsByRunCode.get(
-                                run.runCode,
-                              ) ?? []
-                            ).map(describeDebugEvent)}
-                            events={run.events as ChatAguiStreamEvent[]}
-                            key={run.runCode}
+                  historyTurns.map((turn) => (
+                    <section
+                      className="tron-chat__turn"
+                      data-chat-turn-id={turn.id}
+                      key={turn.id}
+                    >
+                      {(messagesByTurnId.get(turn.id) ?? []).map((message) => (
+                        <Fragment key={message.messageCode}>
+                          <ChatBubble
+                            currentUserDisplayName={currentUserDisplayName}
+                            message={message}
+                            onEditMessage={onEditMessage}
                           />
-                        ))
-                        : null}
-                    </Fragment>
+                          {showAgui &&
+                            message.messageCode ===
+                            presentation.waitingForModelAnchorMessageCode ? (
+                            <WaitingRail />
+                          ) : null}
+                          {showAgui
+                            ? (
+                              presentation.workRailsByMessageCode.get(
+                                message.messageCode,
+                              ) ?? []
+                            ).map((run) => (
+                              <AguiRunWorkRail
+                                debugEvents={(
+                                  presentation.debugEventsByRunCode.get(
+                                    run.runCode,
+                                  ) ?? []
+                                ).map(describeDebugEvent)}
+                                events={run.events as ChatAguiStreamEvent[]}
+                                key={run.runCode}
+                              />
+                            ))
+                            : null}
+                        </Fragment>
+                      ))}
+                    </section>
                   ))
                 ) : (
                   <Bot
