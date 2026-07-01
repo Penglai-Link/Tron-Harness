@@ -1,4 +1,27 @@
 export const pages = {
+  knowledgeGraph: {
+    actions: {
+      export: "Export",
+      refresh: "Refresh Graph",
+      runTraversal: "Run Traversal",
+    },
+    metrics: {
+      aria: "Knowledge graph metrics",
+      edges: "Edges",
+      edgesTrend: "indexed relationships",
+      namespaces: "Namespaces",
+      namespacesTrend: "graph storage targets",
+      nodes: "Nodes",
+      nodesTrend: "visible workspace lineage",
+    },
+    shellSearch: "Search graph nodes and relationships...",
+    tabs: {
+      explore: "Explore",
+      ontology: "Ontology",
+      search: "Search",
+    },
+    title: "Knowledge Graph",
+  },
   chat: {
     shortTermMemory: {
       workingState: "Working State",

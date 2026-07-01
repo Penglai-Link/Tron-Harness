@@ -1,4 +1,27 @@
 export const pages = {
+  knowledgeGraph: {
+    actions: {
+      export: "导出",
+      refresh: "刷新图谱",
+      runTraversal: "运行遍历",
+    },
+    metrics: {
+      aria: "知识图谱指标",
+      edges: "边",
+      edgesTrend: "已索引关系",
+      namespaces: "命名空间",
+      namespacesTrend: "图谱存储目标",
+      nodes: "节点",
+      nodesTrend: "可见工作区血缘",
+    },
+    shellSearch: "搜索图谱节点和关系...",
+    tabs: {
+      explore: "探索",
+      ontology: "本体",
+      search: "搜索",
+    },
+    title: "知识图谱",
+  },
   chat: {
     shortTermMemory: {
       workingState: "工作状态",

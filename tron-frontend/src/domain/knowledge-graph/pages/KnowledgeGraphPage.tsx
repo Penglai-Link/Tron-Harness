@@ -3,172 +3,168 @@ import {
   useState,
 } from "react";
 import {
-  Database,
-  Maximize2,
-  Minus,
-  Network,
-  Plus,
-  Search,
-  X,
+  Download,
+  GitBranch,
+  RefreshCw,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
-import { Button } from "@/shared/ui/Button";
 import {
-  Field,
-  InspectorPanel,
-  SelectInput,
+  GraphCanvas,
+  GraphInspector,
+  GraphResultRail,
+  GraphToolbar,
+} from "@/domain/knowledge-graph/components";
+import { useKnowledgeGraphExplorer } from "@/domain/knowledge-graph/hooks";
+import type { KnowledgeGraphExplorerFilters } from "@/domain/knowledge-graph/model";
+import {
+  Button,
+  MetricCard,
+  PageHeader,
+  SegmentedTabs,
+  SurfaceCard,
   useConsoleShellConfig,
   useOpenRightSidebar,
 } from "@/shared";
 
-import { cn } from "@/shared/lib/utils";
-import { useKnowledgeGraphByDomain } from "@/domain/knowledge-graph/hooks";
-import type { GraphEntity } from "@/domain/knowledge-graph/model";
-import { SelectItem } from "@/components/ui/select";
-
-function Notice({ value }: { value: string }) {
-  return value ? <p className="sr-only" aria-live="polite">{value}</p> : null;
+function numberText(value: number) {
+  return new Intl.NumberFormat("en-US").format(value);
 }
 
-export function GraphPage({ domainFiltering = false }: { domainFiltering?: boolean }) {
+export function GraphPage() {
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string) => t(`pages:knowledgeGraph.${key}`, { defaultValue });
   const openRightSidebar = useOpenRightSidebar();
-  const [domain, setDomain] = useState("customer-support");
-  const [query, setQuery] = useState("");
+  const [selectedNodeCode, setSelectedNodeCode] = useState("RAG_REVIEWER");
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [filters, setFilters] = useState<KnowledgeGraphExplorerFilters>({
+    labels: [],
+    namespace: "rag_skill",
+    query: "",
+    relationship: "all",
+    workspaceCode: "TRON_CORE",
+  });
   const [zoom, setZoom] = useState(100);
-  const graph = useKnowledgeGraphByDomain(domain);
-  const visibleEntities = graph.entities.filter((entity) => entity.label.toLowerCase().includes(query.toLowerCase()) || entity.type.toLowerCase().includes(query.toLowerCase()));
-  const [selectedId, setSelectedId] = useState("customer-0192");
-  const selected = graph.entities.find((entity) => entity.id === selectedId) ?? graph.entities[0];
+  const [tab, setTab] = useState("explore");
+  const graph = useKnowledgeGraphExplorer(filters, selectedNodeCode);
+  const relationships = useMemo(
+    () => Array.from(new Set(graph.edges.map((edge) => edge.relationship))).sort(),
+    [graph.edges],
+  );
   const rightPanel = useMemo(
-    () => (inspectorOpen ? <GraphInspector selected={selected} onClose={() => setInspectorOpen(false)} /> : undefined),
-    [inspectorOpen, selected],
+    () => (inspectorOpen ? (
+      <GraphInspector
+        edges={graph.selectedNodeEdges}
+        node={graph.selectedNode}
+        scope={graph.scope}
+        onClose={() => setInspectorOpen(false)}
+      />
+    ) : undefined),
+    [graph.scope, graph.selectedNode, graph.selectedNodeEdges, inspectorOpen],
   );
 
-  useConsoleShellConfig({ rightPanel });
+  useConsoleShellConfig({
+    rightPanel,
+    searchPlaceholder: pageT("shellSearch", "Search graph nodes and relationships..."),
+  });
 
-  function selectEntity(entityId: string) {
-    setSelectedId(entityId);
+  function selectNode(nodeCode: string) {
+    setSelectedNodeCode(nodeCode);
     setInspectorOpen(true);
     openRightSidebar();
   }
 
-  return (
-    <>
-      <div className="grid min-h-[720px] overflow-hidden rounded-xl border border-[var(--color-outline-variant)] bg-white xl:grid-cols-[300px_minmax(520px,1fr)]">
-        <aside className="border-r border-[var(--color-outline-variant)] bg-white">
-          <div className="border-b border-[var(--color-outline-variant)] p-4">
-            <h1 className="text-xl font-semibold">Entities</h1>
-            {domainFiltering ? (
-              <Field label="Domain">
-                <SelectInput value={domain} onValueChange={(event) => setDomain(event!)}>
-                  <SelectItem value="customer-support">Domain: Customer Support</SelectItem>
-                  <SelectItem value="supply-chain">Domain: Supply Chain</SelectItem>
-                  <SelectItem value="hr">Domain: HR</SelectItem>
-                </SelectInput>
-              </Field>
-            ) : null}
-            <div className="mt-3 flex h-10 items-center gap-2 rounded-lg border border-[var(--color-outline-variant)] px-3">
-              <Search size={16} aria-hidden="true" />
-              <input className="min-w-0 flex-1 bg-transparent text-sm outline-none" placeholder={domainFiltering ? `Search ${graph.domainLabel}...` : "Filter nodes..."} value={query} onChange={(event) => setQuery(event.target.value)} />
-            </div>
-          </div>
-          <div className="space-y-1 p-3">
-            {visibleEntities.map((entity) => (
-              <button
-                className={cn("flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-[var(--color-hover-surface)]", selected.id === entity.id ? "bg-[var(--color-surface-container-high)]" : "")}
-                key={entity.id}
-                type="button"
-                onClick={() => selectEntity(entity.id)}
-              >
-                <span className="flex size-8 items-center justify-center rounded-full bg-[var(--color-surface-container)]">
-                  <Database size={15} aria-hidden="true" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium">{entity.label}</span>
-                  <span className="block truncate text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{entity.type}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </aside>
-        <GraphCanvas entities={graph.entities} selected={selected} onSelectEntity={selectEntity} setZoom={setZoom} zoom={zoom} />
-      </div>
-    </>
-  );
-}
-
-function GraphCanvas({ entities, selected, onSelectEntity, setZoom, zoom }: { entities: GraphEntity[]; selected: GraphEntity; onSelectEntity: (entityId: string) => void; setZoom: React.Dispatch<React.SetStateAction<number>>; zoom: number }) {
-  return (
-    <section className="relative min-h-[720px] overflow-hidden bg-[var(--color-surface-container-low)]">
-      <div className="absolute right-4 top-4 z-10 flex overflow-hidden rounded-lg border border-[var(--color-outline-variant)] bg-white">
-        <Button size="icon" variant="ghost" onClick={() => setZoom((current) => current + 10)}><Plus size={16} /></Button>
-        <Button size="icon" variant="ghost" onClick={() => setZoom((current) => Math.max(60, current - 10))}><Minus size={16} /></Button>
-        <Button size="icon" variant="ghost" onClick={() => setZoom(100)}><Maximize2 size={16} /></Button>
-      </div>
-      <span className="absolute left-4 top-4 rounded-full bg-white px-3 py-1 text-[12px] text-[var(--color-on-surface-variant)]">Zoom {zoom}%</span>
-      <svg className="absolute inset-0 h-full w-full" aria-hidden="true">
-        <path d="M 350 250 L 500 400" fill="none" stroke="#c4c7c7" strokeDasharray="4 4" strokeWidth="2" />
-        <path d="M 350 250 L 200 400" fill="none" stroke="#c4c7c7" strokeWidth="2" />
-        <path d="M 500 400 L 650 300" fill="none" stroke="#c4c7c7" strokeWidth="2" />
-      </svg>
-      {entities.map((entity) => (
-        <button
-          className="absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
-          style={{ left: entity.x, top: entity.y, transform: `translate(-50%, -50%) scale(${zoom / 100})` }}
-          key={entity.id}
-          type="button"
-          onClick={() => onSelectEntity(entity.id)}
-        >
-          <span className={cn("flex rounded-full shadow-sm", selected.id === entity.id ? "size-14 bg-[var(--color-primary)] text-white ring-4 ring-[var(--color-accent-container)]" : "size-12 border border-[var(--color-outline-variant)] bg-white")}>
-            <Network className="m-auto" size={20} aria-hidden="true" />
-          </span>
-          <span className="mt-2 whitespace-nowrap rounded-lg border border-[var(--color-outline-variant)] bg-white px-2 py-1 text-sm shadow-sm">{entity.label}</span>
-        </button>
-      ))}
-    </section>
-  );
-}
-
-function GraphInspector({ onClose, selected }: { onClose: () => void; selected: GraphEntity }) {
-  const [notice, setNotice] = useState("");
+  function setFilter<K extends keyof KnowledgeGraphExplorerFilters>(key: K, value: KnowledgeGraphExplorerFilters[K]) {
+    setFilters((current) => ({
+      ...current,
+      [key]: value,
+    }));
+  }
 
   return (
-    <InspectorPanel title="Node Inspector">
-      <div className="flex items-start justify-between border-b border-[var(--color-outline-variant)] p-4">
-        <div>
-          <h2 className="text-xl font-semibold">{selected?.label}</h2>
-          <p className="text-[12px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{selected?.type} Node</p>
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col gap-6">
+      <PageHeader
+        title={pageT("title", "Knowledge Graph")}
+        actions={(
+          <>
+            <SegmentedTabs
+              value={tab}
+              onValueChange={setTab}
+              items={[
+                { label: pageT("tabs.explore", "Explore"), value: "explore" },
+                { label: pageT("tabs.search", "Search"), value: "search" },
+                { label: pageT("tabs.ontology", "Ontology"), value: "ontology" },
+              ]}
+            />
+            <Button type="button" variant="secondary">
+              <GitBranch size={16} aria-hidden="true" />
+              {pageT("actions.runTraversal", "Run Traversal")}
+            </Button>
+            <Button type="button" variant="secondary">
+              <Download size={16} aria-hidden="true" />
+              {pageT("actions.export", "Export")}
+            </Button>
+            <Button type="button">
+              <RefreshCw size={16} aria-hidden="true" />
+              {pageT("actions.refresh", "Refresh Graph")}
+            </Button>
+          </>
+        )}
+      />
+
+      <section className="grid gap-4 xl:grid-cols-3" aria-label={pageT("metrics.aria", "Knowledge graph metrics")}>
+        <MetricCard
+          label={pageT("metrics.nodes", "Nodes")}
+          value={numberText(graph.metrics.nodeCount)}
+          trend={pageT("metrics.nodesTrend", "visible workspace lineage")}
+        />
+        <MetricCard
+          label={pageT("metrics.edges", "Edges")}
+          value={numberText(graph.metrics.edgeCount)}
+          trend={pageT("metrics.edgesTrend", "indexed relationships")}
+        />
+        <MetricCard
+          label={pageT("metrics.namespaces", "Namespaces")}
+          value={numberText(graph.metrics.namespaceCount)}
+          trend={pageT("metrics.namespacesTrend", "graph storage targets")}
+        />
+      </section>
+
+      <SurfaceCard className="overflow-hidden p-0">
+        <GraphToolbar
+          activeLabels={filters.labels}
+          facets={graph.facets}
+          namespace={filters.namespace}
+          namespaces={graph.namespaces}
+          query={filters.query}
+          relationship={filters.relationship}
+          relationships={relationships}
+          workspaceCode={filters.workspaceCode}
+          onActiveLabelsChange={(labels) => setFilter("labels", labels)}
+          onNamespaceChange={(namespace) => setFilter("namespace", namespace)}
+          onQueryChange={(query) => setFilter("query", query)}
+          onZoomChange={(delta) => setZoom((current) => Math.min(140, Math.max(70, current + delta)))}
+          setRelationship={(relationship) => setFilter("relationship", relationship)}
+        />
+
+        <div className="grid min-h-[620px] xl:grid-cols-[280px_minmax(0,1fr)]">
+          <GraphResultRail
+            nodes={graph.resultNodes}
+            selectedNodeCode={graph.selectedNode.nodeCode}
+            onSelectNode={selectNode}
+          />
+          <GraphCanvas
+            edges={graph.visibleEdges}
+            highlightedEdgeCodes={graph.highlightedEdgeCodes}
+            highlightedNodeCodes={graph.highlightedNodeCodes}
+            nodes={graph.visibleNodes}
+            selectedNodeCode={graph.selectedNode.nodeCode}
+            zoom={zoom}
+            onSelectNode={selectNode}
+          />
         </div>
-        <Button size="icon" variant="ghost" onClick={onClose}><X size={16} /></Button>
-      </div>
-      <div className="space-y-5 p-4">
-        <section>
-          <h3 className="mb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Properties</h3>
-          <div className="overflow-hidden rounded-lg border border-[var(--color-outline-variant)]">
-            {Object.entries(selected?.properties || {}).map(([key, value]) => (
-              <div className="flex justify-between gap-3 border-b border-[var(--color-outline-variant)] px-3 py-2 text-sm last:border-0" key={key}>
-                <span className="text-[var(--color-on-surface-variant)]">{key}</span>
-                <span className="text-right font-medium">{value}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-        <section>
-          <h3 className="mb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Relationships ({selected?.relationships.length})</h3>
-          <div className="space-y-2">
-            {selected?.relationships.map((relationship) => (
-              <div className="rounded-lg border border-[var(--color-outline-variant)] p-3 text-sm" key={`${relationship.label}-${relationship.target}`}>
-                <p className="text-[var(--color-on-surface-variant)]">{relationship.label}</p>
-                <p className="font-medium">{relationship.target}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-        <Button className="w-full" onClick={() => setNotice(`Editing ${selected?.label}`)}>Edit Entity</Button>
-        <Notice value={notice} />
-      </div>
-    </InspectorPanel>
+      </SurfaceCard>
+    </div>
   );
 }
 
