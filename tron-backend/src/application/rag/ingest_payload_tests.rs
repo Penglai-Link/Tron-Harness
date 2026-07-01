@@ -78,7 +78,7 @@ mod tests {
             source: RagIngestSource {
                 code: "skill:workspace-alpha:reviewer".into(),
                 version: "v1".into(),
-                source_type: "SKILL".into(),
+                source_type: String::new(),
             },
             payload,
         }
@@ -93,7 +93,6 @@ mod tests {
             stage_metadata: Default::default(),
             payload_strategy_id: "RAG_TEXT_CONTRACT_PAYLOAD_V1".into(),
             split_strategy_id: "RAG_SPLIT_TEXT".into(),
-            supported_source_types: vec!["SKILL".into()],
             source_resolver_strategy_id: None,
             document_parser_strategy_id: None,
             source_resolver_max_bytes: 1024,

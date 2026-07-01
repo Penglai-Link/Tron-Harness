@@ -114,7 +114,7 @@ where
         match kind {
             IngestStageKind::ValidateSource => {
                 let _payload = store.get::<Value>("request.payload")?;
-                self.execute_validate_source_stage(request, bundle)?;
+                self.execute_validate_source_stage(request, compiled, bundle)?;
                 store.put_json("source.validated", json!({"nodeId": node.node_id}));
             }
             IngestStageKind::PreparePayload => {
@@ -196,17 +196,18 @@ where
     fn execute_validate_source_stage(
         &self,
         request: &RagIngestRequest,
+        compiled: &CompiledRagIngestProfile,
         bundle: &mut ArtifactBundle,
     ) -> Result<(), RagError> {
         let payload = bundle.raw_source_payload()?.clone();
-        if request.source.source_type == "PROJECT_DOC_REF" {
+        if compiled.payload_strategy_id == "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1" {
             validate_project_doc_ref_request(request)?;
         }
         bundle.append(
             request,
             ARTIFACT_VALIDATED_SOURCE,
             RagArtifactPayload::ValidatedSource(payload),
-            json!({ "sourceType": request.source.source_type }),
+            json!({}),
         );
         publish_ingest_stage_event(
             &self.event_bus,
@@ -466,7 +467,6 @@ where
             profile_id: compiled.profile_id.clone(),
             source_code: request.source.code.clone(),
             source_version: request.source.version.clone(),
-            source_type: request.source.source_type.clone(),
             scope: request.target_scope.clone(),
             source_status: source_status.into(),
             title: prepared.title,

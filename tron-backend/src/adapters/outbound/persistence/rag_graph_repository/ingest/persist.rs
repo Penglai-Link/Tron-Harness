@@ -45,7 +45,6 @@ impl GraphBackedRagRepository {
         push_text_prop(&mut properties, "corpusId", &command.corpus_id);
         push_text_prop(&mut properties, "sourceCode", &command.source_code);
         push_text_prop(&mut properties, "sourceVersion", &command.source_version);
-        push_text_prop(&mut properties, "sourceType", &command.source_type);
         push_text_prop(&mut properties, "sourceStatus", &command.source_status);
         push_text_prop(&mut properties, "scopeType", &command.scope.scope_type);
         push_text_prop(&mut properties, "scopeCode", &command.scope.scope_code);

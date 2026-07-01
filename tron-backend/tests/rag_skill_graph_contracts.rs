@@ -1516,7 +1516,7 @@ fn skill_graph_request(skill_name: &str, description: &str) -> RagIngestRequest 
         source: RagIngestSource {
             code: format!("skill:TRON_CORE:{skill_name}"),
             version: "v1".into(),
-            source_type: "SKILL".into(),
+            source_type: String::new(),
         },
         payload: json!({
             "source": {
@@ -1598,7 +1598,7 @@ fn skill_graph_tree_text_request(
         source: RagIngestSource {
             code: format!("skill:TRON_CORE:{skill_name}"),
             version: "v1".into(),
-            source_type: "SKILL".into(),
+            source_type: String::new(),
         },
         payload: json!({
             "source": {
@@ -1630,7 +1630,7 @@ fn ui_tree_graph_live_memory_card_request(profile_id: &str, text: &str) -> RagIn
         source: RagIngestSource {
             code: "ui-tree-graph-live-source-fixed".into(),
             version: "v1".into(),
-            source_type: "MEMORY_CARD".into(),
+            source_type: String::new(),
         },
         payload: json!({
             "source": {
@@ -2605,7 +2605,6 @@ fn tree_route_command(
         profile_id: "skill-graph-tree-ingest-v1".into(),
         source_code: source_code.clone(),
         source_version: "v1".into(),
-        source_type: "SKILL".into(),
         scope: RagIngestScope {
             scope_type: "SPACE".into(),
             scope_code: "TRON_CORE".into(),

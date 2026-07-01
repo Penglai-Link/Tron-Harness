@@ -181,10 +181,7 @@ fn ingest_profiles_declare_contract_payload_strategies_for_memory_and_project_do
         memory.config["stages"]["preparePayload"]["strategyId"],
         json!("RAG_TEXT_CONTRACT_PAYLOAD_V1")
     );
-    assert_eq!(
-        memory.config["sourceInputPolicy"]["supportedSourceTypes"],
-        json!(["MEMORY_CARD"])
-    );
+    assert!(memory.config["sourceInputPolicy"]["supportedSourceTypes"].is_null());
     assert_eq!(
         memory.degrade_policy, "SKIP_VECTOR_WITH_WARNING",
         "memory-card ingest should keep fulltext persistence available when vector embedding is unavailable",

@@ -28,7 +28,6 @@ fn build_tree_graph_artifact(
         "code": request.source.code,
         "sourceCode": request.source.code,
         "sourceVersion": request.source.version,
-        "sourceType": request.source.source_type,
         "title": prepared.title
     })];
     let mut edges = Vec::new();
@@ -223,9 +222,6 @@ fn encode_embedding(values: &[f32]) -> Vec<u8> {
 }
 
 fn validate_project_doc_ref_request(request: &RagIngestRequest) -> Result<(), RagError> {
-    if request.source.source_type != "PROJECT_DOC_REF" {
-        return Err(RagError::IngestRequestInvalid);
-    }
     if request
         .payload
         .get("text")
@@ -375,7 +371,7 @@ mod tests {
             source: RagIngestSource {
                 code: "source".into(),
                 version: "v1".into(),
-                source_type: "MEMORY_CARD".into(),
+                source_type: String::new(),
             },
             payload: json!({}),
         }

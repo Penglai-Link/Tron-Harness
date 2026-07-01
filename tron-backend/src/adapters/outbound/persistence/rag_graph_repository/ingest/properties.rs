@@ -32,7 +32,6 @@ fn source_base_properties(
     push_text_prop(&mut properties, "corpusId", &command.corpus_id);
     push_text_prop(&mut properties, "sourceCode", &command.source_code);
     push_text_prop(&mut properties, "sourceVersion", &command.source_version);
-    push_text_prop(&mut properties, "sourceType", &command.source_type);
     push_text_prop(&mut properties, "sourceStatus", &command.source_status);
     push_text_prop(&mut properties, "scopeType", &command.scope.scope_type);
     push_text_prop(&mut properties, "scopeCode", &command.scope.scope_code);
@@ -218,7 +217,6 @@ fn is_reserved_main_node_property(name: &str) -> bool {
         "corpusId"
             | "sourceCode"
             | "sourceVersion"
-            | "sourceType"
             | "sourceStatus"
             | "scopeType"
             | "scopeCode"

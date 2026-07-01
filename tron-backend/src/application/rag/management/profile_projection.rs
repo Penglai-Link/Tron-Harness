@@ -432,7 +432,7 @@ fn project_ingest_profile_view(profile: &RagProfileRecord) -> RagProfileManageme
             .and_then(Value::as_str)
             .map(ToOwned::to_owned),
         graph_write_policy: profile.config.get("graphWritePolicy").cloned(),
-        source_input_policy: profile.config.get("sourceInputPolicy").cloned(),
+        source_input_policy: sanitize_source_input_policy(profile.config.get("sourceInputPolicy")),
         routes: Vec::new(),
         filters: Vec::new(),
         fusion_policy: None,

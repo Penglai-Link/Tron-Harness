@@ -25,7 +25,6 @@ pub struct CompiledRagIngestProfile {
     pub stage_metadata: BTreeMap<String, CompiledRagIngestStage>,
     pub payload_strategy_id: String,
     pub split_strategy_id: String,
-    pub supported_source_types: Vec<String>,
     pub source_resolver_strategy_id: Option<String>,
     pub document_parser_strategy_id: Option<String>,
     pub source_resolver_max_bytes: usize,
@@ -139,7 +138,6 @@ where
     let split_strategy_id =
         optional_stage_strategy_id(&stages, "splitText")?.ok_or(RagError::IngestProfileInvalid)?;
     validate_summary_tree_config(&stages)?;
-    let supported_source_types = supported_source_types(&profile.config)?;
     let source_resolver_strategy_id = optional_stage_strategy_id(&stages, "resolveSource")?;
     let document_parser_strategy_id = optional_stage_strategy_id(&stages, "parseDocument")?;
 
@@ -189,7 +187,6 @@ where
         stage_metadata,
         payload_strategy_id,
         split_strategy_id,
-        supported_source_types,
         source_resolver_strategy_id,
         document_parser_strategy_id,
         source_resolver_max_bytes,
@@ -318,31 +315,6 @@ fn payload_strategy_id(
         return Ok(strategy_id);
     }
     Err(RagError::IngestProfileInvalid)
-}
-
-fn supported_source_types(config: &Value) -> Result<Vec<String>, RagError> {
-    let Some(values) = config
-        .get("sourceInputPolicy")
-        .and_then(Value::as_object)
-        .and_then(|policy| policy.get("supportedSourceTypes"))
-        .and_then(Value::as_array)
-    else {
-        return Ok(Vec::new());
-    };
-    if values.is_empty() {
-        return Err(RagError::IngestProfileInvalid);
-    }
-    values
-        .iter()
-        .map(|value| {
-            value
-                .as_str()
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(ToOwned::to_owned)
-                .ok_or(RagError::IngestProfileInvalid)
-        })
-        .collect()
 }
 
 fn optional_stage_strategy_id(

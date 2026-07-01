@@ -371,7 +371,6 @@ fn has_required_request_fields(request: &crate::application::rag::RagIngestReque
         request.target_scope.scope_code.as_str(),
         request.source.code.as_str(),
         request.source.version.as_str(),
-        request.source.source_type.as_str(),
     ]
     .into_iter()
     .all(|value| !value.trim().is_empty())

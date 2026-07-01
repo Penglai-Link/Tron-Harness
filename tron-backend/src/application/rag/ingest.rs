@@ -43,7 +43,6 @@ pub struct RagPersistIngestCommand {
     pub profile_id: String,
     pub source_code: String,
     pub source_version: String,
-    pub source_type: String,
     pub scope: RagIngestScope,
     pub source_status: String,
     pub title: Option<String>,
@@ -188,6 +187,7 @@ pub struct RagIngestRequest {
 pub struct RagIngestSource {
     pub code: String,
     pub version: String,
+    /// Legacy inbound compatibility only; RAG no longer consumes source type.
     pub source_type: String,
 }
 
@@ -441,7 +441,6 @@ fn validate_ingest_request(request: &RagIngestRequest) -> Result<(), RagError> {
         request.target_scope.scope_code.as_str(),
         request.source.code.as_str(),
         request.source.version.as_str(),
-        request.source.source_type.as_str(),
     ] {
         if value.trim().is_empty() {
             return Err(RagError::IngestRequestInvalid);
@@ -462,11 +461,7 @@ fn validate_payload_source(request: &RagIngestRequest) -> Result<(), RagError> {
         .ok_or(RagError::IngestRequestInvalid)?;
     let source_code = source_string(source, "code")?;
     let source_version = source_string(source, "version")?;
-    let source_type = source_string(source, "type")?;
-    if source_code != request.source.code
-        || source_version != request.source.version
-        || source_type != request.source.source_type
-    {
+    if source_code != request.source.code || source_version != request.source.version {
         return Err(RagError::IngestRequestInvalid);
     }
     Ok(())

@@ -225,8 +225,11 @@ fn rag_domain_fields_migration_adds_memory_governance_columns_and_indexes_idempo
         .expect("second RAG migration should be idempotent");
 
     let columns = repository.table_columns("rag_memory_text_units").unwrap();
+    assert!(
+        !columns.contains("source_type"),
+        "rag_memory_text_units should not expose legacy RAG source_type",
+    );
     for required in [
-        "source_type",
         "source_status",
         "title",
         "source_content_hash",
@@ -327,8 +330,11 @@ fn rag_memory_fresh_schema_embeds_source_fields_without_legacy_source_table() {
     );
 
     let columns = repository.table_columns("rag_memory_text_units").unwrap();
+    assert!(
+        !columns.contains("source_type"),
+        "rag_memory_text_units should not expose legacy RAG source_type",
+    );
     for required in [
-        "source_type",
         "source_status",
         "title",
         "source_content_hash",

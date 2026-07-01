@@ -41,10 +41,9 @@ const SUPPORTED_CONTEXT_STRATEGIES: [&str; 4] = [
     "DOC_QA_CONTEXT_PACK",
 ];
 
-const SOURCE_CONTRACT_FIELDS: [(&str, &str); 8] = [
+const SOURCE_CONTRACT_FIELDS: [(&str, &str); 7] = [
     ("sourceCode", "source_code"),
     ("sourceVersion", "source_version"),
-    ("sourceType", "source_type"),
     ("scopeType", "scope_type"),
     ("scopeCode", "scope_code"),
     ("status", "status"),

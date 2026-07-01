@@ -796,6 +796,10 @@ async fn profile_management_list_detail_catalog_validate_and_save_runtime_readab
                     && stage["strategyId"] == json!("RAG_TEXT_CONTRACT_PAYLOAD_V1")
             }))
     );
+    assert!(
+        ingest_body["data"]["sourceInputPolicy"]["supportedSourceTypes"].is_null(),
+        "profile detail must not expose legacy supported source types: {ingest_body}"
+    );
 
     let retrieval_detail = authenticated_request(
         &router,

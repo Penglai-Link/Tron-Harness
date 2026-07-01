@@ -722,7 +722,7 @@ fn ingest_request() -> RagIngestRequest {
         source: RagIngestSource {
             code: "memory-ingest-events".into(),
             version: "v1".into(),
-            source_type: "MEMORY_CARD".into(),
+            source_type: String::new(),
         },
         payload: json!({
             "source": {
@@ -889,11 +889,11 @@ fn seed_retry_fixture(database_url: &str) {
     connection
         .execute(
             "INSERT INTO rag_project_doc_sources (
-                source_code, source_version, source_type, scope_type, scope_code, status,
+                source_code, source_version, scope_type, scope_code, status,
                 title, content_hash, document_code, document_type, path, body_hash, metadata,
                 created_at, updated_at, repo_code
             )
-            VALUES (?1, 'v1', 'MARKDOWN', 'SPACE', 'TRON_CORE', 'ACTIVE',
+            VALUES (?1, 'v1', 'SPACE', 'TRON_CORE', 'ACTIVE',
                 'Debug Doc', 'hash', 'DOC_DEBUG', 'DESIGN', 'docs/debug.md', 'body-hash',
                 '{}', 1, 1, 'REPO_TRON')",
             params!["doc-retry"],
@@ -915,11 +915,11 @@ fn seed_retry_fixture(database_url: &str) {
     connection
         .execute(
             "INSERT INTO rag_project_doc_sources (
-                source_code, source_version, source_type, scope_type, scope_code, status,
+                source_code, source_version, scope_type, scope_code, status,
                 title, content_hash, document_code, document_type, path, body_hash, metadata,
                 created_at, updated_at, repo_code
             )
-            VALUES ('doc-debug', 'v1', 'MARKDOWN', 'SPACE', 'TRON_CORE', 'ACTIVE',
+            VALUES ('doc-debug', 'v1', 'SPACE', 'TRON_CORE', 'ACTIVE',
                 'Debug Doc', 'hash', 'DOC_DEBUG', 'DESIGN', 'docs/debug.md', 'body-hash',
                 '{}', 1, 1, 'REPO_TRON')",
             [],

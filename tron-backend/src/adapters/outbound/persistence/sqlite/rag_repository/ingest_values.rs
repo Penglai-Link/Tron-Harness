@@ -71,12 +71,6 @@ pub(crate) fn push_embedded_source_values(
     command: &RagPersistIngestCommand,
     now: i64,
 ) -> Result<(), RagError> {
-    push_text(
-        values,
-        &plan.text_unit_columns,
-        "source_type",
-        &command.source_type,
-    );
     push_dynamic_text(
         values,
         &plan.text_unit_columns,

@@ -262,7 +262,7 @@ fn build_ingest_profile_config(input: &RagProfileManagementInput) -> Value {
             "strategyId".into(),
             Value::String(stage.strategy_id.clone()),
         )]);
-        if let Some(config) = stage.config.clone() {
+        if let Some(config) = sanitize_stage_config(stage.config.as_ref()) {
             stage_object.insert("config".into(), config);
         }
         stages.insert(stage.id.clone(), Value::Object(stage_object));
@@ -278,13 +278,6 @@ fn build_ingest_profile_config(input: &RagProfileManagementInput) -> Value {
                 "nodes": nodes,
                 "edges": edges,
             }),
-        ),
-        (
-            "sourceInputPolicy".into(),
-            input
-                .source_input_policy
-                .clone()
-                .unwrap_or_else(|| json!({ "supportedSourceTypes": [] })),
         ),
         ("stages".into(), Value::Object(stages)),
         (
@@ -318,6 +311,10 @@ fn build_ingest_profile_config(input: &RagProfileManagementInput) -> Value {
     }
     if let Some(graph_write_policy) = input.graph_write_policy.clone() {
         config.insert("graphWritePolicy".into(), graph_write_policy);
+    }
+    if let Some(source_input_policy) = sanitize_source_input_policy(input.source_input_policy.as_ref())
+    {
+        config.insert("sourceInputPolicy".into(), source_input_policy);
     }
     Value::Object(config)
 }
@@ -380,18 +377,13 @@ fn build_ingest_pipeline_profile_config(
             "strategyId".into(),
             Value::String(node.strategy_id.clone()),
         )]);
-        if let Some(config) = node.config.clone() {
+        if let Some(config) = sanitize_stage_config(node.config.as_ref()) {
             stage_object.insert("config".into(), config);
         }
         stage_object.insert("nodeId".into(), Value::String(node.node_id.clone()));
         stage_object.insert("stageType".into(), Value::String(node.stage_type.clone()));
         stages.insert(node.execution_stage_id.clone(), Value::Object(stage_object));
     }
-    let source_input_policy = input
-        .source_input_policy
-        .clone()
-        .or_else(|| source_input_policy_from_pipeline_nodes(&compiled_nodes))
-        .unwrap_or_else(|| json!({ "supportedSourceTypes": [] }));
     let mut config = serde_json::Map::from_iter([
         (
             "description".into(),
@@ -408,7 +400,6 @@ fn build_ingest_pipeline_profile_config(
                 "edges": edges,
             }),
         ),
-        ("sourceInputPolicy".into(), source_input_policy),
         ("stages".into(), Value::Object(stages)),
         (
             "embeddingVersion".into(),
@@ -442,17 +433,29 @@ fn build_ingest_pipeline_profile_config(
     if let Some(graph_write_policy) = input.graph_write_policy.clone() {
         config.insert("graphWritePolicy".into(), graph_write_policy);
     }
+    if let Some(source_input_policy) = sanitize_source_input_policy(input.source_input_policy.as_ref())
+    {
+        config.insert("sourceInputPolicy".into(), source_input_policy);
+    }
     Value::Object(config)
 }
 
-fn source_input_policy_from_pipeline_nodes(nodes: &[CompiledRagPipelineNode]) -> Option<Value> {
-    nodes
-        .iter()
-        .find(|node| node.stage_type == "PREPARE_PAYLOAD")
-        .and_then(|node| node.config.as_ref())
-        .and_then(|config| config.get("supportedSourceTypes"))
-        .cloned()
-        .map(|supported| json!({ "supportedSourceTypes": supported }))
+fn sanitize_stage_config(config: Option<&Value>) -> Option<Value> {
+    let Some(Value::Object(config)) = config else {
+        return config.cloned();
+    };
+    let mut sanitized = config.clone();
+    sanitized.remove("supportedSourceTypes");
+    (!sanitized.is_empty()).then_some(Value::Object(sanitized))
+}
+
+fn sanitize_source_input_policy(policy: Option<&Value>) -> Option<Value> {
+    let Some(Value::Object(policy)) = policy else {
+        return None;
+    };
+    let mut sanitized = policy.clone();
+    sanitized.remove("supportedSourceTypes");
+    (!sanitized.is_empty()).then_some(Value::Object(sanitized))
 }
 
 fn retrieval_routes_from_pipeline(
@@ -488,4 +491,3 @@ fn retrieval_routes_from_pipeline(
         })
         .collect()
 }
-

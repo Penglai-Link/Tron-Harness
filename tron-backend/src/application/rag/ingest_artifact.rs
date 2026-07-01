@@ -35,7 +35,7 @@ impl ArtifactBundle {
             request,
             ARTIFACT_RAW_SOURCE,
             RagArtifactPayload::RawSource(request.payload.clone()),
-            json!({ "sourceType": request.source.source_type }),
+            json!({}),
         );
         bundle
     }

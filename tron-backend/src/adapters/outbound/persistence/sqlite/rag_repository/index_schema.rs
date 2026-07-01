@@ -247,7 +247,6 @@ fn ensure_source_table(
     let mut columns = BTreeSet::from([
         "source_code".to_string(),
         "source_version".to_string(),
-        "source_type".to_string(),
         "scope_type".to_string(),
         "scope_code".to_string(),
         "status".to_string(),
@@ -304,11 +303,7 @@ fn ensure_text_unit_table(
         "updated_at".to_string(),
     ]);
     if has_embedded_sqlite_source(corpus) {
-        columns.extend([
-            "source_type".to_string(),
-            "title".to_string(),
-            "body_hash".to_string(),
-        ]);
+        columns.extend(["title".to_string(), "body_hash".to_string()]);
     }
     extend_columns_from_mapping(&mut columns, corpus.text_unit_field_mapping.values())?;
     if has_embedded_sqlite_source(corpus) {

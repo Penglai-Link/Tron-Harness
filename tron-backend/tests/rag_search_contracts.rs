@@ -2094,7 +2094,7 @@ fn memory_request(
         source: RagIngestSource {
             code: source_code.into(),
             version: source_version.into(),
-            source_type: "MEMORY_CARD".into(),
+            source_type: String::new(),
         },
         payload: json!({
             "source": {
@@ -2136,7 +2136,7 @@ fn project_doc_request() -> RagIngestRequest {
         source: RagIngestSource {
             code: "doc-rag-mvp".into(),
             version: "v1".into(),
-            source_type: "PROJECT_DOC_REF".into(),
+            source_type: String::new(),
         },
         payload: json!({
             "source": {
@@ -2178,7 +2178,7 @@ fn skill_request() -> RagIngestRequest {
         source: RagIngestSource {
             code: "skill:TRON_CORE:rag-reviewer".into(),
             version: "v1".into(),
-            source_type: "SKILL".into(),
+            source_type: String::new(),
         },
         payload: json!({
             "source": {
@@ -2928,7 +2928,6 @@ fn tree_scope_filter_command(
         profile_id: "memory-card-tree-pipeline-v1".into(),
         source_code: "scope-filter-source".into(),
         source_version: "v1".into(),
-        source_type: "MEMORY_CARD".into(),
         scope: RagIngestScope {
             scope_type: scope_type.into(),
             scope_code: scope_code.into(),

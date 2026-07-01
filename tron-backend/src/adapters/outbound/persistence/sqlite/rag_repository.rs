@@ -7,6 +7,7 @@ mod ingest_values;
 mod lifecycle;
 mod retry;
 mod search;
+mod source_type_removal;
 mod sql_plan;
 
 include!("rag_repository/root/repository.rs");

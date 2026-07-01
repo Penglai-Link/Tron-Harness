@@ -72,6 +72,7 @@ impl SqliteRagRepository {
         self.apply_rag_memory_timestamp_return_fields_migration()?;
         self.apply_rag_memory_ingest_vector_degrade_migration()?;
         self.apply_rag_project_doc_mineru_ingest_profile_migration()?;
+        self.apply_rag_source_type_removal_migration()?;
         self.apply_rag_sqlite_extension_index_migration()
     }
 
@@ -159,6 +160,10 @@ impl SqliteRagRepository {
         self.connection
             .execute_batch(RAG_PROJECT_DOC_MINERU_INGEST_PROFILE_MIGRATION)
             .map_err(storage_error)
+    }
+
+    pub fn apply_rag_source_type_removal_migration(&self) -> Result<(), RagError> {
+        source_type_removal::apply(&self.connection)
     }
 
     pub fn apply_rag_sqlite_extension_index_migration(&self) -> Result<(), RagError> {

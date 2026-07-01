@@ -161,12 +161,6 @@ fn persist_source(
     push_text(
         &mut values,
         &plan.source_columns,
-        "source_type",
-        &command.source_type,
-    );
-    push_text(
-        &mut values,
-        &plan.source_columns,
         "scope_type",
         &command.scope.scope_type,
     );
@@ -250,12 +244,6 @@ fn persist_source_only_row(
         &plan.source_columns,
         "source_version",
         &command.source_version,
-    );
-    push_text(
-        &mut values,
-        &plan.source_columns,
-        "source_type",
-        &command.source_type,
     );
     push_text(
         &mut values,

@@ -752,7 +752,6 @@ fn tree_only_command(scope_code: &str) -> RagPersistIngestCommand {
         profile_id: "memory-card-tree-pipeline-v1".into(),
         source_code: "memory-rag-rule".into(),
         source_version: "v1".into(),
-        source_type: "MEMORY_CARD".into(),
         scope: RagIngestScope {
             scope_type: "SPACE".into(),
             scope_code: scope_code.into(),
@@ -1936,7 +1935,7 @@ fn memory_request(source_version: &str) -> RagIngestRequest {
         source: RagIngestSource {
             code: "memory-rag-rule".into(),
             version: source_version.into(),
-            source_type: "MEMORY_CARD".into(),
+            source_type: String::new(),
         },
         payload: json!({
             "source": {
@@ -1984,7 +1983,7 @@ fn skill_request(source_version: &str) -> RagIngestRequest {
         source: RagIngestSource {
             code: "skill:TRON_CORE:rag-reviewer".into(),
             version: source_version.into(),
-            source_type: "SKILL".into(),
+            source_type: String::new(),
         },
         payload: json!({
             "source": {
@@ -2022,7 +2021,7 @@ fn project_doc_request(source_version: &str) -> RagIngestRequest {
         source: RagIngestSource {
             code: "doc-rag-mvp".into(),
             version: source_version.into(),
-            source_type: "PROJECT_DOC_REF".into(),
+            source_type: String::new(),
         },
         payload: json!({
             "source": {
@@ -3023,7 +3022,6 @@ fn tree_scope_command(
         profile_id: "memory-card-tree-pipeline-v1".into(),
         source_code: "scope-collision-source".into(),
         source_version: "v1".into(),
-        source_type: "MEMORY_CARD".into(),
         scope: RagIngestScope {
             scope_type: scope_type.into(),
             scope_code: scope_code.into(),

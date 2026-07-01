@@ -170,3 +170,45 @@ async fn ingest_api_requires_authenticated_workspace_access() {
     let body = response_json(unknown_workspace).await;
     assert_eq!(body["code"], json!("RAG_INGEST_SCOPE_INVALID"));
 }
+
+#[tokio::test]
+async fn ingest_api_accepts_source_without_type() {
+    let router = app();
+
+    let response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/rag/ingest",
+        Some(json!({
+            "corpusId": "memory-card",
+            "ingestProfileId": "memory-card-ingest-v1",
+            "accessContext": {
+                "userCode": "USR-AUTH-0001",
+                "agentCode": "AGENT_CODEX",
+                "workspaceCode": "TRON_CORE"
+            },
+            "targetScope": {
+                "scopeType": "SPACE",
+                "scopeCode": "TRON_CORE"
+            },
+            "payload": {
+                "source": {
+                    "code": "memory-rag-rule-without-source-type",
+                    "version": "v1"
+                },
+                "title": "RAG citation rule",
+                "text": "Always cite source titles."
+            }
+        })),
+    )
+    .await;
+    let status = response.status();
+    let body = response_json(response).await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["data"]["sourceCode"],
+        json!("memory-rag-rule-without-source-type")
+    );
+    assert!(body["data"].get("sourceType").is_none());
+}

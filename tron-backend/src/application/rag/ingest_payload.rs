@@ -113,7 +113,6 @@ fn prepare_text_contract_payload(
     request: &RagIngestRequest,
     compiled: &CompiledRagIngestProfile,
 ) -> Result<PreparedIngestPayload, RagError> {
-    validate_contract_source_type(request, compiled)?;
     let text = payload_string(&request.payload, "text").ok_or(RagError::IngestRequestInvalid)?;
     let text = text.trim().to_string();
     if text.is_empty() {
@@ -145,10 +144,6 @@ fn prepare_document_ref_contract_payload(
     compiled: &CompiledRagIngestProfile,
     bundle: &ArtifactBundle,
 ) -> Result<PreparedIngestPayload, RagError> {
-    validate_contract_source_type(request, compiled)?;
-    if request.source.source_type != "PROJECT_DOC_REF" {
-        return Err(RagError::IngestRequestInvalid);
-    }
     if request
         .payload
         .get("text")
@@ -260,22 +255,6 @@ fn contract_metadata(payload: &Value) -> Result<Value, RagError> {
         return Err(RagError::IngestRequestInvalid);
     }
     Ok(Value::Object(object.clone()))
-}
-
-fn validate_contract_source_type(
-    request: &RagIngestRequest,
-    compiled: &CompiledRagIngestProfile,
-) -> Result<(), RagError> {
-    if compiled.supported_source_types.is_empty()
-        || compiled
-            .supported_source_types
-            .iter()
-            .any(|source_type| source_type == &request.source.source_type)
-    {
-        Ok(())
-    } else {
-        Err(RagError::IngestRequestInvalid)
-    }
 }
 
 #[derive(Clone, Copy)]

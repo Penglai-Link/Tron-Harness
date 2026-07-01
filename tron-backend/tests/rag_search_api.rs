@@ -328,13 +328,13 @@ fn seed_search_fixture(database_url: &str) {
     connection
         .execute(
             "INSERT INTO rag_memory_text_units (
-                text_unit_code, source_code, source_version, source_type, scope_type, scope_code,
+                text_unit_code, source_code, source_version, scope_type, scope_code,
                 source_status, title, source_content_hash, source_metadata, source_created_at,
                 source_updated_at, memory_type, memory_status, review_status, version, injectable,
                 unit_type, text, heading_path, ordinal, token_count,
                 content_hash, status, metadata, created_at, updated_at
             )
-            VALUES (?1, ?2, 'v1', 'MEMORY_CARD', 'SPACE', 'TRON_CORE',
+            VALUES (?1, ?2, 'v1', 'SPACE', 'TRON_CORE',
                 'ACTIVE', 'API memory rule', 'hash', '{}', 1, 1, 'RULE', 'ACTIVE', 'APPROVED', 'v1', 1,
                 'LEAF',
                 'Always cite sources in API answers.',
