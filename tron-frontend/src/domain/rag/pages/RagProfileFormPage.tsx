@@ -393,7 +393,6 @@ const ingestFieldHints = {
   splitTextType: "Splitter implementation. Use markdownHeading after document parsing and plainText for direct text payloads.",
   status: "Only Ready profiles are saved as runtime-available RAG profiles.",
   strategy: "Execution strategy for this stage. Selecting a strategy fills recommended defaults below.",
-  supportedSourceTypes: "Source types accepted by this profile. Separate multiple values with commas, such as PROJECT_DOC_REF, MEMORY_CARD, or SKILL.",
   treeSummaryModelCode: "Optional model code used by the LLM tree summary stage. Leave empty to use the workspace default LLM model.",
 } satisfies Record<string, string>;
 
@@ -554,14 +553,6 @@ function applyIngestTemplateToForm(
   return nextForm;
 }
 
-function defaultSourceTypeForCorpus(corpusCode: string) {
-  const normalized = corpusCode.trim();
-  if (normalized === "project-doc") return "PROJECT_DOC_REF";
-  if (normalized === "skill" || normalized === "skill-graph") return "SKILL";
-  if (!normalized) return "";
-  return "MEMORY_CARD";
-}
-
 function listIngestStageStrategyOptions(
   stageId: RagIngestStageId,
   corpusCode: string,
@@ -630,9 +621,6 @@ function applyDefaultIngestPipeline(
   let nextForm: RagIngestProfileFormState = {
     ...currentForm,
     primaryCorpusId: corpusCode,
-    supportedSourceTypesText: currentForm.supportedSourceTypesText.trim()
-      ? currentForm.supportedSourceTypesText
-      : defaultSourceTypeForCorpus(corpusCode),
     pipelineStages: currentForm.pipelineStages.map((stage) => {
       const strategyId = stageStrategies[stage.id] ?? "";
       return {
@@ -993,11 +981,6 @@ function mapIngestApiErrors(
 
     if (field === "status") {
       nextErrors.status = nextErrors.status ?? message;
-      return;
-    }
-
-    if (field === "sourceInputPolicy" || field === "sourceInputPolicy.supportedSourceTypes") {
-      nextErrors.supportedSourceTypesText = nextErrors.supportedSourceTypesText ?? message;
       return;
     }
 
@@ -1631,9 +1614,6 @@ export function RagIngestProfileFormPage() {
             </Field>
             <Field label={pageT("fields.description", "Description")} hint={ingestHintT("description")}>
               <TextArea aria-label={pageT("fields.description", "Description")} className="min-h-28" value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
-            </Field>
-            <Field label={pageT("fields.supportedSourceTypes", "Supported source types")} error={errors.supportedSourceTypesText} hint={ingestHintT("supportedSourceTypes")}>
-              <TextInput aria-label={pageT("fields.supportedSourceTypes", "Supported source types")} className="font-mono" value={form.supportedSourceTypesText} onChange={(event) => updateForm("supportedSourceTypesText", event.target.value)} />
             </Field>
             <Field label={pageT("fields.requiredSourceVersion", "Required source version")} hint={ingestHintT("requiredSourceVersion")}>
               <TextInput aria-label={pageT("fields.requiredSourceVersion", "Required source version")} className="font-mono" value={form.requiredSourceVersion} onChange={(event) => updateForm("requiredSourceVersion", event.target.value)} />

@@ -199,9 +199,6 @@ export interface RagIngestProfileConfig {
   embeddingVersion: string;
   graphWritePolicy: string;
   requiredSourceVersion: string;
-  sourceInputPolicy: {
-    supportedSourceTypes: string[];
-  };
   stages: Partial<Record<RagIngestStageId, RagIngestStageBinding>>;
 }
 
@@ -261,7 +258,6 @@ export interface SourceRecord {
   corpus: string;
   indexedAt: string;
   owner: string;
-  sourceType: string;
   status: "Active" | "Indexing" | "Warning";
   textUnits: number;
   version: string;

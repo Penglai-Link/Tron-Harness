@@ -32,6 +32,7 @@ const defaultIngestStageOrder: RagIngestStageId[] = [
 const defaultRouteTypes: Array<RagRetrievalRouteType> = ["FULLTEXT", "VECTOR", "TREE_FULLTEXT", "TREE_VECTOR", "GRAPH", "STRUCTURED_FILTER"];
 const defaultProfileStatuses: RagProfileStatus[] = ["Draft", "Ready", "Needs Review"];
 const defaultFilterOperators = ["eq", "in", "gt", "gte", "lt", "lte"];
+const hiddenRetrievalFilterFields = new Set(["sourceType", "derivedSourceType"]);
 export const mineruParseStrategyId = "RAG_PARSE_MINERU_DOCUMENT";
 export const legacySplitTextStrategyId = "RAG_SPLIT_TEXT";
 export const splitMarkdownHeadingStrategyId = "RAG_SPLIT_MARKDOWN_HEADING_V1";
@@ -81,7 +82,6 @@ export interface RagIngestProfileFormState {
   splitTextOverlapTokens: string;
   splitTextType: string;
   status: RagProfileStatus;
-  supportedSourceTypesText: string;
   treeSummaryModelCode: string;
 }
 
@@ -129,7 +129,6 @@ export interface RagIngestProfileFormErrors {
   splitTextOverlapTokens?: string;
   splitTextType?: string;
   stageRows?: Partial<Record<RagIngestStageId, { strategyId?: string }>>;
-  supportedSourceTypesText?: string;
   treeSummaryModelCode?: string;
 }
 
@@ -210,13 +209,6 @@ function parseDocumentStageConfig(strategyId: string, form: RagIngestProfileForm
   };
 }
 
-function defaultSourceTypeForCorpus(corpusId: string) {
-  const normalized = corpusId.trim();
-  if (normalized === "project-doc") return "PROJECT_DOC_REF";
-  if (normalized === "skill" || normalized === "skill-graph") return "SKILL";
-  return "MEMORY_CARD";
-}
-
 function profileUsesDocumentReference(form: RagIngestProfileFormState) {
   return form.pipelineStages.some((stage) => (
     stage.id === "preparePayload"
@@ -261,13 +253,6 @@ export function applyIngestStageStrategyDefaults(
         ...nextForm,
         resolveSourceAllowedUriSchemesText: "project-doc",
         resolveSourceMaxBytes: defaultDocumentReferenceMaxBytes,
-        supportedSourceTypesText: "PROJECT_DOC_REF",
-      };
-    }
-    if (normalizedStrategyId === "RAG_TEXT_CONTRACT_PAYLOAD_V1") {
-      return {
-        ...nextForm,
-        supportedSourceTypesText: defaultSourceTypeForCorpus(nextForm.primaryCorpusId),
       };
     }
   }
@@ -288,7 +273,6 @@ export function applyIngestStageStrategyDefaults(
         parseDocumentUnsupportedFormatPolicy: "FAIL_FAST",
         resolveSourceAllowedUriSchemesText: "project-doc",
         resolveSourceMaxBytes: defaultDocumentReferenceMaxBytes,
-        supportedSourceTypesText: "PROJECT_DOC_REF",
       }, "markdownHeading");
     }
     if (normalizedStrategyId === "RAG_PARSE_MARKDOWN_DOCUMENT") {
@@ -507,7 +491,6 @@ export function buildIngestProfileFormState(existing?: IngestProfileRecord): Rag
       splitTextOverlapTokens: typeof splitterConfig?.overlapTokens === "number" ? String(splitterConfig.overlapTokens) : "80",
       splitTextType: splitterTypeForStrategy(splitTextStrategyId, storedSplitterType),
       status: existing.status,
-      supportedSourceTypesText: existing.config.sourceInputPolicy.supportedSourceTypes.join(", "),
       treeSummaryModelCode: typeof summarizeTreeConfig?.modelCode === "string" ? summarizeTreeConfig.modelCode : "",
     };
   }
@@ -530,7 +513,6 @@ export function buildIngestProfileFormState(existing?: IngestProfileRecord): Rag
     splitTextOverlapTokens: "80",
     splitTextType: "plainText",
     status: "Ready",
-    supportedSourceTypesText: "",
     treeSummaryModelCode: "",
   };
 }
@@ -654,9 +636,6 @@ export function buildIngestProfileRecordFromForm(
       embeddingVersion: form.embeddingVersion.trim(),
       graphWritePolicy: form.graphWritePolicy.trim(),
       requiredSourceVersion: form.requiredSourceVersion.trim(),
-      sourceInputPolicy: {
-        supportedSourceTypes: splitCommaSeparatedTokens(form.supportedSourceTypesText),
-      },
       stages,
     },
     corpus: form.primaryCorpusId.trim(),
@@ -944,10 +923,6 @@ export function validateIngestProfileForm(
     }
   }
 
-  if (splitCommaSeparatedTokens(form.supportedSourceTypesText).length === 0) {
-    errors.supportedSourceTypesText = ragProfileFormT("errors.sourceTypesRequired", "Supported source types are required.");
-  }
-
   return errors;
 }
 
@@ -964,7 +939,7 @@ export function listRetrievalFilterFieldOptions(
     const schemaFields = Object.keys(corpus.config?.filterSchema.fields ?? {});
     [...schemaFields, ...corpus.filters].forEach((field) => {
       const normalizedField = field.trim();
-      if (normalizedField) fields.add(normalizedField);
+      if (normalizedField && !hiddenRetrievalFilterFields.has(normalizedField)) fields.add(normalizedField);
     });
   });
 

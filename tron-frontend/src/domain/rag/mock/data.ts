@@ -334,7 +334,6 @@ function defaultFilterSchema(corpus: CorpusRecord): RagCorpusConfig["filterSchem
         qualityScore: { column: "quality_score", operators: ["eq", "in", "gt", "gte", "lt", "lte"], type: "integer" },
         pinLevel: { column: "pin_level", operators: ["eq", "in", "gt", "gte", "lt", "lte"], type: "integer" },
         expiresAt: { column: "expires_at", operators: ["eq", "in", "gt", "gte", "lt", "lte"], type: "integer" },
-        derivedSourceType: { column: "derived_source_type", operators: ["eq", "in"], type: "string" },
         derivedSourceCode: { column: "derived_source_code", operators: ["eq", "in"], type: "string" },
       },
     };
@@ -380,7 +379,6 @@ function defaultFieldMapping(corpus: CorpusRecord): RagCorpusConfig["fieldMappin
       source: {
         sourceCode: "source_code",
         sourceVersion: "source_version",
-        sourceType: "source_type",
         scopeType: "scope_type",
         scopeCode: "scope_code",
         status: "status",
@@ -409,7 +407,6 @@ function defaultFieldMapping(corpus: CorpusRecord): RagCorpusConfig["fieldMappin
       source: {
         sourceCode: "source_code",
         sourceVersion: "source_version",
-        sourceType: "source_type",
         scopeType: "scope_type",
         scopeCode: "scope_code",
         status: "source_status",
@@ -430,7 +427,6 @@ function defaultFieldMapping(corpus: CorpusRecord): RagCorpusConfig["fieldMappin
         qualityScore: "quality_score",
         pinLevel: "pin_level",
         expiresAt: "expires_at",
-        derivedSourceType: "derived_source_type",
         derivedSourceCode: "derived_source_code",
       },
       textUnit: {
@@ -448,7 +444,6 @@ function defaultFieldMapping(corpus: CorpusRecord): RagCorpusConfig["fieldMappin
       source: {
         sourceCode: "source_code",
         sourceVersion: "source_version",
-        sourceType: "source_type",
         scopeType: "scope_type",
         scopeCode: "scope_code",
         status: "source_status",
@@ -474,7 +469,6 @@ function defaultFieldMapping(corpus: CorpusRecord): RagCorpusConfig["fieldMappin
       source: {
         sourceCode: "sourceCode",
         sourceVersion: "sourceVersion",
-        sourceType: "sourceType",
         scopeType: "scopeType",
         scopeCode: "scopeCode",
         status: "sourceStatus",
@@ -1020,9 +1014,6 @@ type BuildIngestConfigOverrides = {
   embeddingVersion?: string;
   graphWritePolicy?: string;
   requiredSourceVersion?: string;
-  sourceInputPolicy?: {
-    supportedSourceTypes: string[];
-  };
   stageBindings?: Partial<Record<RagIngestStageId, BuildIngestStageBinding>>;
 };
 
@@ -1049,7 +1040,6 @@ function buildIngestConfig(
     embeddingVersion: overrides.embeddingVersion ?? "v1",
     graphWritePolicy: overrides.graphWritePolicy ?? "",
     requiredSourceVersion: overrides.requiredSourceVersion ?? "v1",
-    sourceInputPolicy: overrides.sourceInputPolicy ?? { supportedSourceTypes: [] },
     stages,
   };
 }
@@ -1163,7 +1153,6 @@ function buildSeedRetrievalProfile(
 const seedProfiles: ProfileRecord[] = [
   buildSeedIngestProfile({
     config: buildIngestConfig(["validateSource", "preparePayload", "resolveSource", "parseDocument", "splitText", "extractTree", "summarizeTree", "fulltextIndex", "vectorIndex", "treeFulltextIndex", "treeVectorIndex", "persistTree", "persistSource"], {
-      sourceInputPolicy: { supportedSourceTypes: ["PROJECT_DOC_REF"] },
       stageBindings: {
         extractTree: { strategyId: "RAG_MARKDOWN_TREE_EXTRACT_V1" },
         fulltextIndex: { strategyId: "RAG_FULLTEXT_INDEX" },
@@ -1210,7 +1199,6 @@ const seedProfiles: ProfileRecord[] = [
   }),
   buildSeedIngestProfile({
     config: buildIngestConfig(["validateSource", "preparePayload", "splitText", "fulltextIndex", "vectorIndex", "persistSource"], {
-      sourceInputPolicy: { supportedSourceTypes: ["MEMORY_CARD"] },
       stageBindings: {
         fulltextIndex: { strategyId: "RAG_FULLTEXT_INDEX" },
         persistSource: { strategyId: "RAG_PERSIST_SOURCE" },
@@ -1237,7 +1225,6 @@ const seedProfiles: ProfileRecord[] = [
   }),
   buildSeedIngestProfile({
     config: buildIngestConfig(["validateSource", "preparePayload", "splitText", "fulltextIndex", "vectorIndex", "persistSource"], {
-      sourceInputPolicy: { supportedSourceTypes: ["SKILL"] },
       stageBindings: {
         fulltextIndex: { strategyId: "RAG_FULLTEXT_INDEX" },
         persistSource: { strategyId: "RAG_PERSIST_SOURCE" },
@@ -1265,7 +1252,6 @@ const seedProfiles: ProfileRecord[] = [
   buildSeedIngestProfile({
     config: buildIngestConfig(["validateSource", "preparePayload", "splitText", "fulltextIndex", "vectorIndex", "persistSource"], {
       graphWritePolicy: "{\"maxRelatedNodes\":50,\"maxRelatedEdges\":100}",
-      sourceInputPolicy: { supportedSourceTypes: ["SKILL"] },
       stageBindings: {
         fulltextIndex: { strategyId: "RAG_FULLTEXT_INDEX" },
         persistSource: { strategyId: "RAG_PERSIST_SOURCE" },
@@ -1468,10 +1454,7 @@ function isIngestProfileRecord(value: unknown): value is IngestProfileRecord {
     && Array.isArray(record.config.dag.edges)
     && record.config.stages !== undefined
     && typeof record.config.stages === "object"
-    && Object.values(record.config.stages).every(isIngestStageBinding)
-    && record.config.sourceInputPolicy !== undefined
-    && typeof record.config.sourceInputPolicy === "object"
-    && Array.isArray(record.config.sourceInputPolicy.supportedSourceTypes);
+    && Object.values(record.config.stages).every(isIngestStageBinding);
 }
 
 function isRetrievalProfileRecord(value: unknown): value is RetrievalProfileRecord {
@@ -1509,7 +1492,6 @@ type LegacyIngestProfileRecord = Omit<IngestProfileRecord, "config"> & {
     primaryStrategy?: string;
     requiredSourceVersion?: string;
     sourceResolverMaxBytes?: string;
-    supportedSourceTypes?: string[];
   };
 };
 
@@ -1602,9 +1584,6 @@ function normalizeStoredIngestProfile(value: unknown): IngestProfileRecord | und
       embeddingVersion: legacyConfig.embeddingVersion ?? "v1",
       graphWritePolicy: legacyConfig.graphWritePolicy ?? "",
       requiredSourceVersion: legacyConfig.requiredSourceVersion ?? "v1",
-      sourceInputPolicy: {
-        supportedSourceTypes: legacyConfig.supportedSourceTypes ?? [],
-      },
       stages,
     },
     corpus: record.primaryCorpusId,
@@ -1778,7 +1757,6 @@ export const sources: SourceRecord[] = [
     corpus: "project-doc",
     indexedAt: "8 min ago",
     owner: "TRON_CORE",
-    sourceType: "feature-spec",
     status: "Active",
     textUnits: 348,
     version: "2026-06-04",
@@ -1789,7 +1767,6 @@ export const sources: SourceRecord[] = [
     corpus: "memory-card",
     indexedAt: "3 min ago",
     owner: "main-agent",
-    sourceType: "memory-fragment",
     status: "Active",
     textUnits: 92,
     version: "v12",
@@ -1800,7 +1777,6 @@ export const sources: SourceRecord[] = [
     corpus: "skill-graph",
     indexedAt: "22 min ago",
     owner: "TRON_CORE",
-    sourceType: "skill",
     status: "Indexing",
     textUnits: 128,
     version: "v1",
@@ -1811,7 +1787,6 @@ export const sources: SourceRecord[] = [
     corpus: "project-doc",
     indexedAt: "17 min ago",
     owner: "TRON_CORE",
-    sourceType: "feature-spec",
     status: "Warning",
     textUnits: 283,
     version: "2026-06-03",

@@ -160,9 +160,6 @@ export interface RagProfileDetailApi {
   rerankModelCode?: string;
   requiredSourceVersion?: string;
   routes?: RagProfileRouteApi[];
-  sourceInputPolicy?: {
-    supportedSourceTypes?: string[];
-  };
   status?: string;
   topicPolicy?: string;
 }
@@ -659,9 +656,6 @@ export function mapRagProfileDetailToRecord(payload: RagProfileDetailApi): Profi
         embeddingVersion: readString(payload.embeddingVersion),
         graphWritePolicy: readString(payload.graphWritePolicy),
         requiredSourceVersion: readString(payload.requiredSourceVersion) || "v1",
-        sourceInputPolicy: {
-          supportedSourceTypes: readStringArray(payload.sourceInputPolicy?.supportedSourceTypes),
-        },
         stages,
       },
       corpus: primaryCorpusId,
@@ -921,9 +915,6 @@ export function buildRagIngestProfileMutationPayload(
     profileId: record.id,
     profileType: "INGEST",
     requiredSourceVersion: record.config.requiredSourceVersion,
-    sourceInputPolicy: {
-      supportedSourceTypes: record.config.sourceInputPolicy.supportedSourceTypes,
-    },
     status: profileStatusToApiCode(record.status),
   };
 }

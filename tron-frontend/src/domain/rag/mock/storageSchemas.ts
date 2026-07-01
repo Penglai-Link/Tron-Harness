@@ -55,7 +55,6 @@ export const ragMockTableSchemas: Record<string, RagMockTableSchema> = {
       "metadata",
       "created_at",
       "updated_at",
-      "source_type",
       "source_status",
       "title",
       "source_content_hash",
@@ -75,7 +74,6 @@ export const ragMockTableSchemas: Record<string, RagMockTableSchema> = {
       "quality_score",
       "pin_level",
       "expires_at",
-      "derived_source_type",
       "derived_source_code",
     ],
     label: "Memory Text Units",
@@ -85,7 +83,6 @@ export const ragMockTableSchemas: Record<string, RagMockTableSchema> = {
     columns: [
       "source_code",
       "source_version",
-      "source_type",
       "scope_type",
       "scope_code",
       "status",
@@ -154,7 +151,6 @@ export const ragMockTableSchemas: Record<string, RagMockTableSchema> = {
       "source_version",
       "scope_type",
       "scope_code",
-      "source_type",
       "source_status",
       "title",
       "source_content_hash",
@@ -187,7 +183,6 @@ export const ragMockGraphSchemas: Record<string, RagMockGraphSchema> = {
     properties: [
       "sourceCode",
       "sourceVersion",
-      "sourceType",
       "scopeType",
       "scopeCode",
       "sourceStatus",
@@ -231,7 +226,6 @@ export const ragMockGraphSchemas: Record<string, RagMockGraphSchema> = {
     properties: [
       "sourceCode",
       "sourceVersion",
-      "sourceType",
       "scopeType",
       "scopeCode",
       "sourceStatus",

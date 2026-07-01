@@ -69,6 +69,10 @@ function notifications(page: Page, message: string | RegExp) {
   return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
 }
 
+function controlByAriaLabel(page: Page, label: string) {
+  return page.locator(`[aria-label="${label}"]`);
+}
+
 async function chooseSelectOption(page: Page, control: Locator, value: string) {
   await control.click();
   await expect(control).toHaveAttribute("aria-expanded", "true");
@@ -330,6 +334,7 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await page.getByLabel(label.profileId).fill("support-notes-ingest-v1");
   await expect(page.getByLabel(label.primaryCorpus)).toHaveValue("project-doc");
   await expect(page.getByLabel(label.primaryCorpus)).toHaveAttribute("readonly");
+  await expect(page.getByLabel(label.supportedSourceTypes)).toHaveCount(0);
   await page.getByLabel(label.description).fill("Ingest support notes and incident runbooks.");
   await expectNoStageStrategyPlaceholder(page, "validateSource", /VALIDATE_SOURCE (strategy ID|策略标识)/);
   await expectNoStageStrategyPlaceholder(page, "preparePayload", /PREPARE_PAYLOAD (strategy ID|策略标识)/);
@@ -370,7 +375,6 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await openAdvancedNodeConfig(page, "persistSource");
   await expectSelectOptionUnavailable(page, page.getByLabel(/PERSIST_SOURCE (strategy ID|策略标识)/), /Select stage strategy|选择阶段策略/i);
   await chooseSelectOption(page, page.getByLabel(/PERSIST_SOURCE (strategy ID|策略标识)/), "RAG_PERSIST_SOURCE");
-  await page.getByLabel(label.supportedSourceTypes).fill("RUNBOOK, INCIDENT_NOTE");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
   await expect(page).toHaveURL(/\/rag$/);
@@ -457,10 +461,8 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
     }),
     profileId: "support-notes-ingest-v1",
     status: "enabled",
-    sourceInputPolicy: expect.objectContaining({
-      supportedSourceTypes: ["RUNBOOK", "INCIDENT_NOTE"],
-    }),
   }));
+  expect(createBody).not.toHaveProperty("sourceInputPolicy");
   expect(pipelineNode(createBody, "SPLIT_TEXT")).toEqual(expect.objectContaining({
     config: expect.objectContaining({
       splitter: expect.objectContaining({
@@ -493,6 +495,7 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
     profileId: "support-notes-ingest-v1",
     status: "enabled",
   }));
+  expect(updateBody).not.toHaveProperty("sourceInputPolicy");
   expect(pipelineNode(updateBody, "SPLIT_TEXT")).toEqual(expect.objectContaining({
     config: expect.objectContaining({
       splitter: expect.objectContaining({
@@ -708,12 +711,12 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
   await chooseSelectOption(page, page.getByLabel(routeStrategyLabel(4)), "TREE_VECTOR_V1");
   await openRetrievalFilters(page);
   await page.getByRole("button", { name: buttonName.addFilter }).click();
-  const filterFieldSelect = page.getByLabel(/Filter 1 field|筛选条件 1 字段/);
+  const filterFieldSelect = controlByAriaLabel(page, "Filter 1 field");
   await expect(filterFieldSelect).toBeEnabled();
   await expectSelectOptionUnavailable(page, filterFieldSelect, /Select mapped field|选择映射字段/i);
   await chooseSelectOption(page, filterFieldSelect, "scopeCode");
-  await chooseSelectOption(page, page.getByLabel(/Filter 1 operator|筛选条件 1 操作符/), "eq");
-  await page.getByLabel(/Filter 1 value|筛选条件 1 值/).fill("TRON_CORE");
+  await chooseSelectOption(page, controlByAriaLabel(page, "Filter 1 operator"), "eq");
+  await controlByAriaLabel(page, "Filter 1 value").fill("TRON_CORE");
   await page.getByRole("button", { name: buttonName.saveProfile }).click();
 
   await expect(page).toHaveURL(/\/rag\?section=retrieval$/);
@@ -734,7 +737,7 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
   await expectSelectedOption(page.getByLabel(routeCorpusLabel(1)), "memory-card");
   await expectSelectedOption(page.getByLabel(routeCorpusLabel(2)), "project-doc");
   await openRetrievalFilters(page);
-  await expect(page.getByLabel(/Filter 1 value|筛选条件 1 值/)).toHaveValue("TRON_CORE");
+  await expect(controlByAriaLabel(page, "Filter 1 value")).toHaveValue("TRON_CORE");
 
   await page.getByLabel(label.description).fill("Fuse memory, documentation, and curated support signals.");
   await openRetrievalAdvancedSettings(page);
@@ -817,16 +820,16 @@ test("runs ingest and search from contextual RAG test pages through runtime APIs
 
   await expectSelectedOption(page.getByLabel("Scope type", { exact: true }), "SPACE");
   await page.getByLabel("Source code", { exact: true }).fill("docs/features/rag-storage-runtime-workbench");
-  await chooseSelectOption(page, page.getByLabel("Source type", { exact: true }), "MARKDOWN");
+  await expect(page.getByLabel("Source type", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Source version", { exact: true })).toHaveValue("v1");
   await page.getByLabel("Language", { exact: true }).fill("en-US");
   await page.getByLabel("Metadata source path", { exact: true }).fill("docs/features/rag-storage-runtime-workbench");
   await page.getByRole("button", { name: "Add business attribute" }).click();
-  await chooseSelectOption(page, page.getByLabel("Business attribute 1 field", { exact: true }), "documentCode");
-  await page.getByLabel("Business attribute 1 value", { exact: true }).fill("rag-storage-runtime-workbench");
+  await chooseSelectOption(page, controlByAriaLabel(page, "Business attribute 1 field"), "documentCode");
+  await controlByAriaLabel(page, "Business attribute 1 value").fill("rag-storage-runtime-workbench");
   await page.getByRole("button", { name: "Add business attribute" }).click();
-  await chooseSelectOption(page, page.getByLabel("Business attribute 2 field", { exact: true }), "repoCode");
-  await page.getByLabel("Business attribute 2 value", { exact: true }).fill("tron");
+  await chooseSelectOption(page, controlByAriaLabel(page, "Business attribute 2 field"), "repoCode");
+  await controlByAriaLabel(page, "Business attribute 2 value").fill("tron");
   await page.getByLabel("Source text", { exact: true }).fill("Workbench ingest verifies backend runtime writes from the frontend.");
   await page.getByRole("button", { name: "Submit ingest" }).click();
 
@@ -856,14 +859,16 @@ test("runs ingest and search from contextual RAG test pages through runtime APIs
   await expect(page.getByLabel(label.retrievalProfile)).toHaveAttribute("readonly");
   await page.getByLabel(label.query).fill("How does the runtime workbench call backend search?");
   await chooseSelectOption(page, page.getByLabel(label.contextStrategy), "DOC_QA_CONTEXT_PACK");
-  await page.getByRole("button", { name: "Add return field" }).click();
-  await chooseSelectOption(page, page.getByLabel("Return field 1", { exact: true }), "documentCode");
-  await page.getByRole("button", { name: "Add return field" }).click();
-  await chooseSelectOption(page, page.getByLabel("Return field 2", { exact: true }), "repoCode");
+  const returnFields = controlByAriaLabel(page, "Return fields");
+  await returnFields.click();
+  await expect(returnFields).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("option").filter({ hasText: /\bsourceType\b/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(returnFields).toHaveAttribute("aria-expanded", "false");
   await page.getByRole("button", { name: buttonName.addFilter }).click();
-  await chooseSelectOption(page, page.getByLabel("Filter 1 field", { exact: true }), "scopeCode");
-  await chooseSelectOption(page, page.getByLabel("Filter 1 operator", { exact: true }), "eq");
-  await page.getByLabel("Filter 1 value", { exact: true }).fill("TRON_CORE");
+  await chooseSelectOption(page, controlByAriaLabel(page, "Filter 1 field"), "scopeCode");
+  await chooseSelectOption(page, controlByAriaLabel(page, "Filter 1 condition"), "eq");
+  await controlByAriaLabel(page, "Filter 1 value").fill("TRON_CORE");
   await page.getByLabel(label.limit).fill("5");
   await page.getByLabel(label.tokenBudget).fill("2048");
   const traceSwitch = page.getByRole("switch", { name: "Enable tracing" });
@@ -880,8 +885,6 @@ test("runs ingest and search from contextual RAG test pages through runtime APIs
   await expect(page.getByText("tree-runtime-workbench")).toBeVisible();
   await expect(page.getByText("Runtime Workbench Summary")).toBeVisible();
   await expect(page.getByText("0.880")).toBeVisible();
-  await expect(page.getByText("rag-storage-runtime-workbench", { exact: true })).toBeVisible();
-  await expect(page.getByText("tron", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("RAG workbench can execute retrieval through the backend API.")).toBeVisible();
   await expect(page.getByText("Workbench search result from mocked runtime.")).toBeVisible();
   const searchStageHeading = page.getByRole("heading", { name: "Retrieval stage results" });
@@ -921,7 +924,6 @@ test("runs ingest and search from contextual RAG test pages through runtime APIs
         },
         source: expect.objectContaining({
           code: "docs/features/rag-storage-runtime-workbench",
-          type: "MARKDOWN",
           version: "v1",
         }),
       }),
@@ -931,6 +933,8 @@ test("runs ingest and search from contextual RAG test pages through runtime APIs
       },
     }),
   ]));
+  const ingestBody = ingestBodies.find((body) => body.corpusId === "project-doc" && body.ingestProfileId === "project-doc-mineru-ingest-v1");
+  expect((ingestBody?.payload as Record<string, unknown> | undefined)?.source).not.toHaveProperty("type");
   const ingestResponses = responseBodies(requests, "/api/v1/rag/ingest", "POST");
   expect(ingestResponses).toEqual(expect.arrayContaining([
     expect.objectContaining({
@@ -967,7 +971,7 @@ test("runs ingest and search from contextual RAG test pages through runtime APIs
         workspaceCode: "ENTERPRISE",
       }),
       context: expect.objectContaining({
-        returnFields: ["documentCode", "repoCode"],
+        returnFields: [],
         strategy: "DOC_QA_CONTEXT_PACK",
       }),
       filters: {

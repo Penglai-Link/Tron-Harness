@@ -51,7 +51,6 @@ type WorkbenchSourcePayloadForm = {
   language: string;
   metadataSourcePath: string;
   sourceCode: string;
-  sourceType: string;
   sourceVersion: string;
   text: string;
 };
@@ -115,14 +114,15 @@ const workbenchFieldHints = {
   scopeType: "Target request scope. The scope code is filled automatically from the selected type.",
   sourceCode: "Unique source code for this ingest request. The same code and version support idempotent updates.",
   sourceText: "Body text for direct text ingest. Document reference ingest uses document URI and format instead.",
-  sourceType: "Source type. It must satisfy the selected ingest profile input contract.",
   sourceVersion: "Source version, usually v1. It cannot be edited when the ingest profile requires a fixed version.",
   tokenBudget: "Maximum token budget for the context pack returned to the model.",
 } satisfies Record<string, string>;
 
 const workbenchFilterOperators = ["eq", "in", "gt", "gte", "lt", "lte"] as const;
+const hiddenSourceTypeFields = new Set(["sourceType", "derivedSourceType"]);
 const workbenchReservedReturnFields = new Set([
   "corpusId",
+  ...hiddenSourceTypeFields,
   "metadata",
   "preview",
   "routeIds",
@@ -139,7 +139,6 @@ const workbenchReservedReturnFields = new Set([
 const workbenchFixedPayloadFields = new Set([
   ...workbenchReservedReturnFields,
   "sourceStatus",
-  "sourceType",
   "status",
   "textUnitStatus",
 ]);
@@ -149,7 +148,6 @@ function isDocumentPayloadProfile(profile?: RagIngestProfileRecord) {
 }
 
 function buildDefaultPayloadForm(corpusId: string, profile?: RagIngestProfileRecord): WorkbenchSourcePayloadForm {
-  const sourceType = profile?.config.sourceInputPolicy.supportedSourceTypes[0] ?? "TEXT";
   const sourceVersion = profile?.config.requiredSourceVersion || "v1";
   const sourceCode = `${corpusId || "rag"}-workbench-source`;
   return {
@@ -158,7 +156,6 @@ function buildDefaultPayloadForm(corpusId: string, profile?: RagIngestProfileRec
     language: "zh-CN",
     metadataSourcePath: "",
     sourceCode,
-    sourceType,
     sourceVersion,
     text: i18n.t("pages:rag.workbench.defaults.sampleText", {
       corpusId: corpusId || "RAG",
@@ -180,7 +177,6 @@ function buildPayloadFromForm(
     metadata,
     source: {
       code: form.sourceCode.trim(),
-      type: form.sourceType.trim(),
       version: form.sourceVersion.trim(),
     },
   };
@@ -557,7 +553,6 @@ export function RagWorkbenchTab({
     ? retrievalProfileDetail
     : retrievalProfiles.find((profile) => profile.id === retrievalProfileId);
   const usesDocumentPayload = isDocumentPayloadProfile(selectedIngestProfile);
-  const sourceTypeOptions = selectedIngestProfile?.config.sourceInputPolicy.supportedSourceTypes ?? [];
   const requiredSourceVersion = selectedIngestProfile?.config.requiredSourceVersion ?? "";
   const contextStrategyOptions = selectedRetrievalProfile?.config.contextStrategies.length
     ? selectedRetrievalProfile.config.contextStrategies
@@ -582,6 +577,7 @@ export function RagWorkbenchTab({
         type: "string" as const,
       }));
     })
+    .filter((option) => !hiddenSourceTypeFields.has(option.field))
     .filter((option, index, options) => options.findIndex((item) => item.field === option.field) === index)
     .sort((left, right) => left.field.localeCompare(right.field));
   const filterFieldSchema = Object.fromEntries(filterFieldOptions.map((option) => [option.field, option]));
@@ -715,8 +711,8 @@ export function RagWorkbenchTab({
       return;
     }
     const payload = buildPayloadFromForm(sourcePayloadForm, usesDocumentPayload, domainFields);
-    if (!sourcePayloadForm.sourceCode.trim() || !sourcePayloadForm.sourceType.trim() || !sourcePayloadForm.sourceVersion.trim()) {
-      const message = pageT("errors.sourceIdentityRequired", "Source code, type, and version are required.");
+    if (!sourcePayloadForm.sourceCode.trim() || !sourcePayloadForm.sourceVersion.trim()) {
+      const message = pageT("errors.sourceIdentityRequired", "Source code and version are required.");
       setIngestFeedback(message);
       onNotice(message);
       return;
@@ -917,21 +913,6 @@ export function RagWorkbenchTab({
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label={pageT("fields.sourceCode", "Source code")} hint={hintT("sourceCode")}>
                   <TextInput aria-label={pageT("fields.sourceCode", "Source code")} value={sourcePayloadForm.sourceCode} onChange={(event) => updateSourcePayloadForm({ sourceCode: event.target.value })} />
-                </Field>
-                <Field label={pageT("fields.sourceType", "Source type")} hint={hintT("sourceType")}>
-                  {sourceTypeOptions.length > 0 ? (
-                    <SelectInput
-                      aria-label={pageT("fields.sourceType", "Source type")}
-                      value={sourcePayloadForm.sourceType}
-                      onValueChange={(event) => updateSourcePayloadForm({ sourceType: event! })}
-                    >
-                      {sourceTypeOptions.map((sourceType) => (
-                        <SelectItem key={sourceType} value={sourceType}>{sourceType}</SelectItem>
-                      ))}
-                    </SelectInput>
-                  ) : (
-                    <TextInput aria-label={pageT("fields.sourceType", "Source type")} value={sourcePayloadForm.sourceType} onChange={(event) => updateSourcePayloadForm({ sourceType: event.target.value })} />
-                  )}
                 </Field>
                 <Field label={pageT("fields.sourceVersion", "Source version")} hint={hintT("sourceVersion")}>
                   <TextInput

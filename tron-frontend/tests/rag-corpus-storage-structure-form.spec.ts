@@ -1,6 +1,7 @@
 import {
   expect,
   test,
+  type Locator,
   type Page,
 } from "@playwright/test";
 import {
@@ -75,6 +76,26 @@ async function captureApiRequests(page: Page, requests: CapturedRequest[]) {
   });
 }
 
+function controlByAriaLabel(page: Page, label: string) {
+  return page.locator(`[aria-label="${label}"]`);
+}
+
+async function chooseSelectOption(page: Page, control: Locator, optionName: string) {
+  await control.click();
+  await expect(control).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("option", { name: optionName, exact: true }).click();
+  await expect(control).toHaveAttribute("aria-expanded", "false");
+}
+
+async function selectOptionTexts(page: Page, control: Locator) {
+  await control.click();
+  await expect(control).toHaveAttribute("aria-expanded", "true");
+  const texts = await page.getByRole("option").allTextContents();
+  await page.keyboard.press("Escape");
+  await expect(control).toHaveAttribute("aria-expanded", "false");
+  return texts;
+}
+
 async function openCreatePage(page: Page) {
   await page.goto(`${frontendBaseUrl}/rag`);
   await expect(page.getByRole("heading", { name: "RAG Management" })).toBeVisible();
@@ -84,18 +105,18 @@ async function openCreatePage(page: Page) {
 }
 
 async function openAdvancedStorage(page: Page) {
-  if (await page.getByLabel("Storage target 1 table").count() === 0) {
+  if (await controlByAriaLabel(page, "Storage target 1 table").count() === 0) {
     await page.getByRole("button", { name: "Advanced storage settings" }).click();
   }
-  await expect(page.getByLabel("Storage target 1 table")).toBeVisible();
+  await expect(controlByAriaLabel(page, "Storage target 1 table")).toBeVisible();
 }
 
 async function enableSummaryTree(page: Page) {
-  const summaryTreeToggle = page.getByRole("button", { name: "Enable summary tree" });
-  if ((await summaryTreeToggle.getAttribute("aria-pressed")) !== "true") {
+  const summaryTreeToggle = page.getByRole("switch", { name: "Enable summary tree" });
+  if ((await summaryTreeToggle.getAttribute("aria-checked")) !== "true") {
     await summaryTreeToggle.click();
   }
-  await expect(summaryTreeToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(summaryTreeToggle).toHaveAttribute("aria-checked", "true");
 }
 
 async function openFieldConfig(page: Page, tabName: "Source fields" | "Text unit fields" | "Filter fields") {
@@ -153,8 +174,8 @@ test("creates target-first mixed-media corpus config and derives the registry su
   await expect(page.getByRole("heading", { name: "Backend Payload Preview" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Storage targets" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Segment bindings" })).toHaveCount(0);
-  await expect(page.getByLabel("Storage target 1 id")).toHaveCount(0);
-  await expect(page.getByLabel("Filter field 1 name")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Storage target 1 id")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Filter field 1 name")).toHaveCount(0);
   const sectionHeadings = await page.locator("h2").allTextContents();
   expect(sectionHeadings.indexOf("Storage binding")).toBeLessThan(sectionHeadings.indexOf("Field configuration"));
 
@@ -163,32 +184,32 @@ test("creates target-first mixed-media corpus config and derives the registry su
   await page.getByLabel("Description").fill("Support playbooks and incident review notes.");
   await expect(page.getByText("3 targets")).toBeVisible();
   await openAdvancedStorage(page);
-  await expect(page.getByLabel("Storage target 1 table")).toHaveValue("rag_support_notes_sources");
-  await expect(page.getByLabel("Storage target 2 table")).toHaveValue("rag_support_notes_text_units");
-  await expect(page.getByLabel("Storage target 3 table")).toHaveValue("rag_support_notes_vectors");
-  await expect(page.getByLabel("Storage target 4 table")).toHaveCount(0);
-  await expect(page.getByLabel("Source target")).toHaveValue("source-store");
-  await expect(page.getByLabel("Text unit target")).toHaveValue("text-unit-store");
-  await expect(page.getByLabel("Fulltext index target")).toHaveValue("text-unit-store");
-  await expect(page.getByLabel("Vector target")).toHaveValue("vector-store");
-  await expect(page.getByLabel("Summary tree target")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Storage target 1 table")).toHaveValue("rag_support_notes_sources");
+  await expect(controlByAriaLabel(page, "Storage target 2 table")).toHaveValue("rag_support_notes_text_units");
+  await expect(controlByAriaLabel(page, "Storage target 3 table")).toHaveValue("rag_support_notes_vectors");
+  await expect(controlByAriaLabel(page, "Storage target 4 table")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Source target")).toContainText("source-store");
+  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("text-unit-store");
+  await expect(controlByAriaLabel(page, "Fulltext index target")).toContainText("text-unit-store");
+  await expect(controlByAriaLabel(page, "Vector target")).toContainText("vector-store");
+  await expect(controlByAriaLabel(page, "Summary tree target")).toHaveCount(0);
   await enableSummaryTree(page);
-  await expect(page.getByLabel("Storage target 4 table")).toHaveValue("rag_support_notes_tree_nodes");
-  await expect(page.getByLabel("Summary tree target")).toHaveValue("tree-store");
-  await page.getByLabel("Fulltext index target").selectOption("vector-store");
-  await page.getByLabel("Storage target 3 backend").selectOption("GRAPH");
-  await page.getByLabel("Storage target 3 graph namespace").fill("rag_doc");
-  await page.getByLabel("Storage target 3 node label").fill("RagDocUnit");
+  await expect(controlByAriaLabel(page, "Storage target 4 table")).toHaveValue("rag_support_notes_tree_nodes");
+  await expect(controlByAriaLabel(page, "Summary tree target")).toContainText("tree-store");
+  await chooseSelectOption(page, controlByAriaLabel(page, "Fulltext index target"), "rag_support_notes_vectors");
+  await chooseSelectOption(page, controlByAriaLabel(page, "Storage target 3 backend"), "Graph storage");
+  await controlByAriaLabel(page, "Storage target 3 graph namespace").fill("rag_doc");
+  await controlByAriaLabel(page, "Storage target 3 node label").fill("RagDocUnit");
   await expect(page.getByLabel("Enable graph capability")).toHaveCount(0);
 
   await openFieldConfig(page, "Source fields");
   await page.getByRole("button", { name: "Add source field" }).click();
-  await page.getByLabel("Source mapping 1 logical name").fill("documentCode");
-  await page.getByLabel("Source mapping 1 column").fill("document_code");
+  await controlByAriaLabel(page, "Source mapping 1 logical name").fill("documentCode");
+  await controlByAriaLabel(page, "Source mapping 1 column").fill("document_code");
   await openFieldConfig(page, "Filter fields");
-  await page.getByLabel("Filter field 1 name").selectOption("documentCode");
-  await page.getByLabel("Filter field 1 type").selectOption("string");
-  await page.getByLabel("Filter field 1 operators").fill("eq, in");
+  await chooseSelectOption(page, controlByAriaLabel(page, "Filter field 1 name"), "documentCode");
+  await chooseSelectOption(page, controlByAriaLabel(page, "Filter field 1 type"), "String");
+  await controlByAriaLabel(page, "Filter field 1 operators").fill("eq, in");
 
   await page.getByRole("button", { name: "Save" }).click();
 
@@ -256,19 +277,19 @@ test("validates target definitions and missing bindings", async ({ page }) => {
   await page.getByLabel("Corpus code").fill("broken-notes");
   await page.getByLabel("Corpus name").fill("Broken Notes");
   await openAdvancedStorage(page);
-  await page.getByLabel("Storage target 1 table").fill("bad-table");
-  await page.getByLabel("Storage target 2 table").fill("");
-  await page.getByLabel("Vector target").selectOption("");
+  await controlByAriaLabel(page, "Storage target 1 table").fill("bad-table");
+  await controlByAriaLabel(page, "Storage target 2 table").fill("");
+  await page.getByRole("button", { name: "Remove storage target 3" }).click();
   await openFieldConfig(page, "Source fields");
   await page.getByRole("button", { name: "Add source field" }).click();
-  await page.getByLabel("Source mapping 1 logical name").fill("missingField");
-  await page.getByLabel("Source mapping 1 column").fill("missing_column");
+  await controlByAriaLabel(page, "Source mapping 1 logical name").fill("missingField");
+  await controlByAriaLabel(page, "Source mapping 1 column").fill("missing_column");
   await openFieldConfig(page, "Text unit fields");
   await page.getByRole("button", { name: "Add text unit field" }).click();
-  await page.getByLabel("Text unit mapping 1 logical name").fill("missingText");
-  await page.getByLabel("Text unit mapping 1 column").fill("missing_column");
+  await controlByAriaLabel(page, "Text unit mapping 1 logical name").fill("missingText");
+  await controlByAriaLabel(page, "Text unit mapping 1 column").fill("missing_column");
   await openFieldConfig(page, "Filter fields");
-  await page.getByLabel("Filter field 1 name").selectOption("missingField");
+  await chooseSelectOption(page, controlByAriaLabel(page, "Filter field 1 name"), "missingField");
   await page.getByRole("button", { name: "Save" }).click();
 
   await expect(page.getByText("Storage target 1 table name must start with rag_ and use only lowercase letters, numbers, or underscores.")).toBeVisible();
@@ -291,10 +312,10 @@ test("infers graph capability from a graph-backed business segment binding", asy
   await expect(page.getByLabel("Enable graph capability")).toHaveCount(0);
   await openAdvancedStorage(page);
   await page.getByRole("button", { name: "Add custom storage" }).click();
-  await page.getByLabel("Storage target 4 backend").selectOption("GRAPH");
-  await page.getByLabel("Storage target 4 graph namespace").fill("rag_doc");
-  await page.getByLabel("Storage target 4 node label").fill("RagDocUnit");
-  await page.getByLabel("Vector target").selectOption("target-4");
+  await chooseSelectOption(page, controlByAriaLabel(page, "Storage target 4 backend"), "Graph storage");
+  await controlByAriaLabel(page, "Storage target 4 graph namespace").fill("rag_doc");
+  await controlByAriaLabel(page, "Storage target 4 node label").fill("RagDocUnit");
+  await chooseSelectOption(page, controlByAriaLabel(page, "Vector target"), "rag_doc/RagDocUnit");
   await page.getByRole("button", { name: "Save" }).click();
 
   await expect(page).toHaveURL(/\/rag$/);
@@ -318,18 +339,18 @@ test("starts with three default storage targets and can add more", async ({ page
   await openAdvancedStorage(page);
   const addTargetButton = page.getByRole("button", { name: "Add custom storage" });
   await expect(addTargetButton).toBeEnabled();
-  await expect(page.getByLabel("Storage target 1 table")).toBeVisible();
-  await expect(page.getByLabel("Storage target 2 table")).toBeVisible();
-  await expect(page.getByLabel("Storage target 3 table")).toBeVisible();
-  await expect(page.getByLabel("Storage target 4 table")).toHaveCount(0);
-  await expect(page.getByLabel("Storage target 1 id")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Storage target 1 table")).toBeVisible();
+  await expect(controlByAriaLabel(page, "Storage target 2 table")).toBeVisible();
+  await expect(controlByAriaLabel(page, "Storage target 3 table")).toBeVisible();
+  await expect(controlByAriaLabel(page, "Storage target 4 table")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Storage target 1 id")).toHaveCount(0);
   await enableSummaryTree(page);
-  await expect(page.getByLabel("Storage target 4 table")).toBeVisible();
+  await expect(controlByAriaLabel(page, "Storage target 4 table")).toBeVisible();
   await page.getByRole("button", { name: "Add custom storage" }).click();
 
-  await expect(page.getByLabel("Storage target 5 table")).toBeVisible();
+  await expect(controlByAriaLabel(page, "Storage target 5 table")).toBeVisible();
   await expect(addTargetButton).toBeEnabled();
-  await expect(page.getByLabel("Storage target 5 id")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Storage target 5 id")).toHaveCount(0);
 });
 
 test("keeps at least one storage target and shows physical target names in segment bindings", async ({ page }) => {
@@ -337,55 +358,55 @@ test("keeps at least one storage target and shows physical target names in segme
 
   await page.getByLabel("Corpus code").fill("test");
   await openAdvancedStorage(page);
-  await expect(page.locator('select[aria-label="Source target"] option:checked')).toHaveText("rag_test_sources");
-  await expect(page.locator('select[aria-label="Text unit target"] option:checked')).toHaveText("rag_test_text_units");
-  await expect(page.locator('select[aria-label="Vector target"] option:checked')).toHaveText("rag_test_vectors");
-  await expect(page.locator('select[aria-label="Summary tree target"]')).toHaveCount(0);
-  const sourceTargetOptionTexts = await page.locator('select[aria-label="Source target"] option').allTextContents();
+  await expect(controlByAriaLabel(page, "Source target")).toContainText("source-store");
+  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("text-unit-store");
+  await expect(controlByAriaLabel(page, "Vector target")).toContainText("vector-store");
+  await expect(controlByAriaLabel(page, "Summary tree target")).toHaveCount(0);
+  const sourceTargetOptionTexts = await selectOptionTexts(page, controlByAriaLabel(page, "Source target"));
   expect(sourceTargetOptionTexts.join(" ")).not.toContain("Storage Target");
 
   await page.getByRole("button", { name: "Remove storage target 3" }).click();
   await page.getByRole("button", { name: "Remove storage target 2" }).click();
 
-  await expect(page.getByLabel("Storage target 1 table")).toBeVisible();
+  await expect(controlByAriaLabel(page, "Storage target 1 backend")).toBeVisible();
   await expect(page.getByRole("button", { name: /Remove storage target/ })).toHaveCount(0);
 });
 
 test("hides contract mappings by default while keeping custom rows removable", async ({ page }) => {
   await openCreatePage(page);
 
-  await expect(page.getByLabel("Source mapping 1 logical name")).toHaveCount(0);
-  await expect(page.getByLabel("Text unit mapping 1 logical name")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Source mapping 1 logical name")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Text unit mapping 1 logical name")).toHaveCount(0);
   await openFieldConfig(page, "Source fields");
   await page.getByRole("button", { name: "Show source contract fields" }).click();
-  await expect(page.getByLabel("Source contract field 1 logical name")).toBeDisabled();
-  await expect(page.locator('input[aria-label$="logical name"][value="sourceType"]')).toBeVisible();
+  await expect(controlByAriaLabel(page, "Source contract field 1 logical name")).toBeDisabled();
+  await expect(page.locator('input[aria-label$="logical name"][value="sourceType"]')).toHaveCount(0);
   await expect(page.locator('input[aria-label$="logical name"][value="status"]')).toBeVisible();
   await expect(page.locator('input[aria-label$="logical name"][value="title"]')).toBeVisible();
   await expect(page.locator('input[aria-label$="logical name"][value="metadata"]')).toBeVisible();
   await page.getByRole("button", { name: "Hide source contract fields" }).click();
 
   await page.getByRole("button", { name: "Add source field" }).click();
-  await page.getByLabel("Source mapping 1 logical name").fill("documentCode");
-  await page.getByLabel("Source mapping 1 column").fill("document_code");
+  await controlByAriaLabel(page, "Source mapping 1 logical name").fill("documentCode");
+  await controlByAriaLabel(page, "Source mapping 1 column").fill("document_code");
   await page.getByRole("button", { name: "Remove Source mapping 1" }).click();
 
   await openFieldConfig(page, "Text unit fields");
   await page.getByRole("button", { name: "Show text unit contract fields" }).click();
-  await expect(page.getByLabel("Text unit contract field 1 logical name")).toBeDisabled();
+  await expect(controlByAriaLabel(page, "Text unit contract field 1 logical name")).toBeDisabled();
   await expect(page.locator('input[aria-label$="logical name"][value="textUnitStatus"]')).toBeVisible();
   await page.getByRole("button", { name: "Hide text unit contract fields" }).click();
   await page.getByRole("button", { name: "Add text unit field" }).click();
-  await page.getByLabel("Text unit mapping 1 logical name").fill("documentCode");
-  await page.getByLabel("Text unit mapping 1 column").fill("document_code");
+  await controlByAriaLabel(page, "Text unit mapping 1 logical name").fill("documentCode");
+  await controlByAriaLabel(page, "Text unit mapping 1 column").fill("document_code");
   await page.getByRole("button", { name: "Remove Text unit mapping 1" }).click();
 
   await openFieldConfig(page, "Filter fields");
   await page.getByRole("button", { name: "Remove filter field 1" }).click();
 
-  await expect(page.getByLabel("Source mapping 1 logical name")).toHaveCount(0);
-  await expect(page.getByLabel("Text unit mapping 1 logical name")).toHaveCount(0);
-  await expect(page.getByLabel("Filter field 1 name")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Source mapping 1 logical name")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Text unit mapping 1 logical name")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Filter field 1 name")).toHaveCount(0);
   await openFieldConfig(page, "Source fields");
   await expect(page.getByRole("button", { name: "Add source field" })).toBeVisible();
   await openFieldConfig(page, "Text unit fields");
@@ -406,21 +427,21 @@ test("edits seeded project document storage structure with target reuse in previ
   await expect(page).toHaveURL(/\/rag\/corpora\/project-doc\/edit$/);
 
   await expect(page.getByLabel("Corpus code")).toHaveValue("project-doc");
-  await expect(page.getByLabel("Storage target 1 table")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Storage target 1 table")).toHaveCount(0);
   await openAdvancedStorage(page);
-  await expect(page.getByLabel("Storage target 1 id")).toHaveCount(0);
-  await expect(page.getByLabel("Storage target 1 table")).toHaveValue("rag_project_doc_sources");
-  await expect(page.getByLabel("Storage target 2 table")).toHaveValue("rag_project_doc_text_units");
-  await expect(page.getByLabel("Source target")).toHaveValue("source-store");
-  await expect(page.getByLabel("Text unit target")).toHaveValue("content-store");
-  await expect(page.getByLabel("Fulltext index target")).toHaveValue("content-store");
-  await expect(page.getByLabel("Vector target")).toHaveValue("content-store");
+  await expect(controlByAriaLabel(page, "Storage target 1 id")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Storage target 1 table")).toHaveValue("rag_project_doc_sources");
+  await expect(controlByAriaLabel(page, "Storage target 2 table")).toHaveValue("rag_project_doc_text_units");
+  await expect(controlByAriaLabel(page, "Source target")).toContainText("source-store");
+  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("content-store");
+  await expect(controlByAriaLabel(page, "Fulltext index target")).toContainText("content-store");
+  await expect(controlByAriaLabel(page, "Vector target")).toContainText("content-store");
 
-  await page.getByLabel("Storage target 2 backend").selectOption("GRAPH");
-  await page.getByLabel("Storage target 2 graph namespace").fill("rag_doc");
-  await page.getByLabel("Storage target 2 node label").fill("RagDocUnit");
-  await expect(page.getByLabel("Text unit target")).toHaveValue("content-store");
-  await expect(page.getByLabel("Vector target")).toHaveValue("content-store");
+  await chooseSelectOption(page, controlByAriaLabel(page, "Storage target 2 backend"), "Graph storage");
+  await controlByAriaLabel(page, "Storage target 2 graph namespace").fill("rag_doc");
+  await controlByAriaLabel(page, "Storage target 2 node label").fill("RagDocUnit");
+  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("content-store");
+  await expect(controlByAriaLabel(page, "Vector target")).toContainText("content-store");
   await page.getByRole("button", { name: "Save" }).click();
 
   await expect(page).toHaveURL(/\/rag$/);
@@ -466,16 +487,16 @@ test("seeded memory-card edit preserves target-first bindings", async ({ page })
   await expect(page).toHaveURL(/\/rag\/corpora\/memory-card\/edit$/);
 
   await expect(page.getByLabel("Corpus code")).toHaveValue("memory-card");
-  await expect(page.getByLabel("Storage target 1 table")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Storage target 1 table")).toHaveCount(0);
   await openAdvancedStorage(page);
-  await expect(page.getByLabel("Storage target 1 id")).toHaveCount(0);
-  await expect(page.getByLabel("Storage target 1 table")).toHaveValue("rag_memory_text_units");
-  await expect(page.getByLabel("Source target")).toHaveValue("content-store");
-  await expect(page.getByLabel("Text unit target")).toHaveValue("content-store");
-  await expect(page.getByLabel("Fulltext index target")).toHaveValue("content-store");
-  await expect(page.getByLabel("Vector target")).toHaveValue("content-store");
+  await expect(controlByAriaLabel(page, "Storage target 1 id")).toHaveCount(0);
+  await expect(controlByAriaLabel(page, "Storage target 1 table")).toHaveValue("rag_memory_text_units");
+  await expect(controlByAriaLabel(page, "Source target")).toContainText("content-store");
+  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("content-store");
+  await expect(controlByAriaLabel(page, "Fulltext index target")).toContainText("content-store");
+  await expect(controlByAriaLabel(page, "Vector target")).toContainText("content-store");
   await expect(page.getByRole("heading", { name: "Linked Profiles" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Filters And Route Summary" })).toHaveCount(0);
   await openFieldConfig(page, "Filter fields");
-  await expect(page.getByLabel("Filter field 1 name")).toHaveValue("scopeType");
+  await expect(controlByAriaLabel(page, "Filter field 1 name")).toContainText("scopeType");
 });

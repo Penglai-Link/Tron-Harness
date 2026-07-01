@@ -153,9 +153,6 @@ type RagProfileDetailApi = {
   rerankModelCode?: string;
   requiredSourceVersion: string;
   routes?: RagRouteApi[];
-  sourceInputPolicy?: {
-    supportedSourceTypes?: string[];
-  };
   status: string;
   topicPolicy?: string;
 };
@@ -281,7 +278,6 @@ function createProjectDocCorpus(): RagCorpusDetailApi {
         scopeCode: "scope_code",
         scopeType: "scope_type",
         sourceCode: "source_code",
-        sourceType: "source_type",
         sourceVersion: "source_version",
         status: "status",
         title: "title",
@@ -352,7 +348,6 @@ function createMemoryCardCorpus(): RagCorpusDetailApi {
         scopeCode: "scope_code",
         scopeType: "scope_type",
         sourceCode: "source_code",
-        sourceType: "source_type",
         sourceVersion: "source_version",
         status: "source_status",
         title: "title",
@@ -420,7 +415,6 @@ function createSkillCorpus(): RagCorpusDetailApi {
         skillDescription: "skill_description",
         skillName: "skill_name",
         sourceCode: "source_code",
-        sourceType: "source_type",
         sourceVersion: "source_version",
         status: "source_status",
         title: "title",
@@ -488,7 +482,6 @@ function createSkillGraphCorpus(): RagCorpusDetailApi {
         skillDescription: "skillDescription",
         skillName: "skillName",
         sourceCode: "sourceCode",
-        sourceType: "sourceType",
         sourceVersion: "sourceVersion",
         status: "sourceStatus",
         title: "title",
@@ -554,7 +547,6 @@ function createSupportTreeGraphCorpus(): RagCorpusDetailApi {
         scopeCode: "scopeCode",
         scopeType: "scopeType",
         sourceCode: "sourceCode",
-        sourceType: "sourceType",
         sourceVersion: "sourceVersion",
         status: "status",
         title: "title",
@@ -816,9 +808,6 @@ function createProjectDocIngestProfile(): RagProfileDetailApi {
     profileId: "project-doc-mineru-ingest-v1",
     profileType: "INGEST",
     requiredSourceVersion: "v1",
-    sourceInputPolicy: {
-      supportedSourceTypes: ["DOC", "MARKDOWN"],
-    },
     status: "enabled",
   };
 }
@@ -839,9 +828,6 @@ function createMemoryCardIngestProfile(): RagProfileDetailApi {
     profileId: "memory-card-ingest-v1",
     profileType: "INGEST",
     requiredSourceVersion: "v1",
-    sourceInputPolicy: {
-      supportedSourceTypes: ["MEMORY_CARD"],
-    },
     status: "enabled",
   };
 }
@@ -862,9 +848,6 @@ function createSkillIngestProfile(): RagProfileDetailApi {
     profileId: "skill-ingest-v1",
     profileType: "INGEST",
     requiredSourceVersion: "v1",
-    sourceInputPolicy: {
-      supportedSourceTypes: ["SKILL"],
-    },
     status: "enabled",
   };
 }
@@ -885,9 +868,6 @@ function createSkillGraphIngestProfile(): RagProfileDetailApi {
     profileId: "skill-graph-ingest-v1",
     profileType: "INGEST",
     requiredSourceVersion: "v1",
-    sourceInputPolicy: {
-      supportedSourceTypes: ["SKILL"],
-    },
     status: "enabled",
   };
 }
@@ -1339,9 +1319,6 @@ function validateProfilePayload(
         errors.push({ field: `pipeline.nodes[${index}].strategyId`, message: "Strategy ID is required." });
       }
     });
-    if (!isRecord(record.sourceInputPolicy) || readStringArray(record.sourceInputPolicy.supportedSourceTypes).length === 0) {
-      errors.push({ field: "sourceInputPolicy.supportedSourceTypes", message: "Supported source types are required." });
-    }
     return errors;
   }
 
@@ -1421,9 +1398,6 @@ function upsertProfile(payload: unknown, state: RagManagementState): RagProfileD
         profileId,
         profileType,
         requiredSourceVersion: readString(record.requiredSourceVersion) || "v1",
-        sourceInputPolicy: isRecord(record.sourceInputPolicy) ? {
-          supportedSourceTypes: readStringArray(record.sourceInputPolicy.supportedSourceTypes),
-        } : { supportedSourceTypes: [] },
         status: normalizeProfileStatus(record.status) || "disabled",
       }
     : {

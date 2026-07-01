@@ -111,7 +111,6 @@ function ragCorpusFormT(key: string, defaultValue: string, options?: Record<stri
 const baseSourceContractFieldDefinitions: RagContractFieldDefinition[] = [
   { column: "source_code", logicalName: "sourceCode" },
   { column: "source_version", logicalName: "sourceVersion" },
-  { column: "source_type", logicalName: "sourceType" },
   { column: "scope_type", logicalName: "scopeType" },
   { column: "scope_code", logicalName: "scopeCode" },
   { column: "status", logicalName: "status" },
@@ -135,6 +134,7 @@ const baseTextUnitContractFieldDefinitions: RagContractFieldDefinition[] = [
   { column: "text", logicalName: "text" },
   { column: "status", logicalName: "textUnitStatus" },
 ];
+const hiddenFieldLogicalNames = new Set(["sourceType", "derivedSourceType"]);
 
 function contractFieldDefinitions(
   baseDefinitions: RagContractFieldDefinition[],
@@ -465,12 +465,14 @@ function createContractMappingRows(definitions: RagContractFieldDefinition[], pr
 }
 
 function rowsFromFilterSchema(schema: RagCorpusFilterSchema): RagFilterFieldFormRow[] {
-  const rows = Object.entries(schema.fields).map(([name, field], index) => ({
-    id: `filter-${index + 1}`,
-    name,
-    operatorsInput: (field.operators?.length ? field.operators : ["eq", "in"]).join(", "),
-    type: field.type,
-  }));
+  const rows = Object.entries(schema.fields)
+    .filter(([name]) => !hiddenFieldLogicalNames.has(name))
+    .map(([name, field], index) => ({
+      id: `filter-${index + 1}`,
+      name,
+      operatorsInput: (field.operators?.length ? field.operators : ["eq", "in"]).join(", "),
+      type: field.type,
+    }));
   return rows.length ? rows : [{ ...defaultFilterField }];
 }
 
@@ -487,6 +489,7 @@ function rowsFromMapping(
   let nextIndex = rows.length + 1;
   Object.entries(mapping).forEach(([logicalName, column]) => {
     if (seenLogicalNames.has(logicalName)) return;
+    if (hiddenFieldLogicalNames.has(logicalName)) return;
     rows.push({
       column,
       id: `${prefix}-${nextIndex}`,
@@ -506,6 +509,7 @@ function collectFieldMappingOptionsFromRows(
   rows.forEach((row) => {
     const logicalName = row.logicalName.trim();
     const column = row.column.trim();
+    if (hiddenFieldLogicalNames.has(logicalName)) return;
     if (!logicalName || !column) return;
     const current = existing.get(logicalName) ?? {
       column,
@@ -1000,6 +1004,7 @@ function filterSchemaFromRows(
     fields: rows.reduce<RagCorpusFilterSchema["fields"]>((fields, row) => {
       const logicalName = row.name.trim();
       const column = resolveColumn(logicalName);
+      if (hiddenFieldLogicalNames.has(logicalName)) return fields;
       if (!logicalName || !column) return fields;
       fields[logicalName] = {
         column,
@@ -1015,6 +1020,7 @@ function mappingFromRows(rows: RagFieldMappingFormRow[]): Record<string, string>
   return Object.fromEntries(
     rows
       .filter((row) => row.logicalName.trim() && row.column.trim())
+      .filter((row) => !hiddenFieldLogicalNames.has(row.logicalName.trim()))
       .map((row) => [row.logicalName.trim(), row.column.trim()]),
   );
 }
