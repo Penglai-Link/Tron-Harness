@@ -11,4 +11,5 @@ mod source_type_removal;
 mod sql_plan;
 
 include!("rag_repository/root/repository.rs");
+include!("rag_repository/root/runtime_cleanup.rs");
 include!("rag_repository/root/row_mapping.rs");

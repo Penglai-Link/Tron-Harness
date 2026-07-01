@@ -1295,6 +1295,20 @@ async fn corpus_delete_blocks_retrieval_bindings_and_cascades_ingest_profiles() 
     )
     .await;
     assert_eq!(create_corpus.status(), StatusCode::CREATED);
+    let connection = Connection::open(&database_url).expect("database should open");
+    for table_name in [
+        "rag_ui_sources",
+        "rag_ui_text_units",
+        "rag_ui_vectors",
+        "rag_ui_tree_nodes",
+        "rag_diagnostics",
+    ] {
+        assert!(
+            sqlite_table_exists(&connection, table_name),
+            "{table_name} should exist after corpus creation"
+        );
+    }
+    drop(connection);
 
     let create_ingest = authenticated_request(
         &router,
@@ -1369,6 +1383,21 @@ async fn corpus_delete_blocks_retrieval_bindings_and_cascades_ingest_profiles() 
         .expect("ingest profile count should query");
     assert_eq!(corpus_count, 0);
     assert_eq!(ingest_count, 0);
+    for table_name in [
+        "rag_ui_sources",
+        "rag_ui_text_units",
+        "rag_ui_vectors",
+        "rag_ui_tree_nodes",
+    ] {
+        assert!(
+            !sqlite_table_exists(&connection, table_name),
+            "{table_name} should be dropped after corpus deletion"
+        );
+    }
+    assert!(
+        sqlite_table_exists(&connection, "rag_diagnostics"),
+        "shared diagnostics table should remain after corpus deletion"
+    );
 }
 
 #[tokio::test]
@@ -1616,6 +1645,20 @@ fn assert_table_columns_include(connection: &Connection, table_name: &str, expec
             "{table_name} should include column {column}; actual columns: {columns:?}"
         );
     }
+}
+
+fn sqlite_table_exists(connection: &Connection, table_name: &str) -> bool {
+    connection
+        .query_row(
+            "SELECT count(1)
+             FROM sqlite_master
+             WHERE type = 'table'
+               AND name = ?1",
+            [table_name],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("table existence should query")
+        > 0
 }
 
 fn team_playbook_sqlite_request() -> Value {

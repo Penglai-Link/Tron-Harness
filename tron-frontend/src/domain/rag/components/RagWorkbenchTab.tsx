@@ -147,12 +147,41 @@ function isDocumentPayloadProfile(profile?: RagIngestProfileRecord) {
   return profile?.config.stages.preparePayload?.strategyId === "RAG_DOCUMENT_REF_CONTRACT_PAYLOAD_V1";
 }
 
-function buildDefaultPayloadForm(corpusId: string, profile?: RagIngestProfileRecord): WorkbenchSourcePayloadForm {
+function defaultDocumentFormat(profile?: RagIngestProfileRecord) {
+  const parseDocument = profile?.config.stages.parseDocument;
+  const config = parseDocument?.config;
+  if (Array.isArray(config?.supportedFormats)) {
+    const supportedFormat = config.supportedFormats.find((format): format is string => (
+      typeof format === "string" && Boolean(format.trim())
+    ));
+    if (supportedFormat) return supportedFormat.trim();
+  }
+  if (typeof config?.format === "string" && config.format.trim()) {
+    return config.format.trim();
+  }
+  if (parseDocument?.strategyId === "RAG_PARSE_MINERU_DOCUMENT") return "PDF";
+  return "MARKDOWN";
+}
+
+function defaultDocumentExtension(documentFormat: string) {
+  const normalized = documentFormat.trim().toUpperCase();
+  if (normalized === "DOCX") return "docx";
+  if (normalized === "PDF") return "pdf";
+  return "md";
+}
+
+function buildDefaultPayloadForm(
+  corpusId: string,
+  profile?: RagIngestProfileRecord,
+  workspaceCode = "TRON_CORE",
+): WorkbenchSourcePayloadForm {
   const sourceVersion = profile?.config.requiredSourceVersion || "v1";
   const sourceCode = `${corpusId || "rag"}-workbench-source`;
+  const documentFormat = defaultDocumentFormat(profile);
+  const normalizedWorkspaceCode = workspaceCode.trim() || "TRON_CORE";
   return {
-    documentFormat: "MARKDOWN",
-    documentUri: `project-doc://${sourceCode}`,
+    documentFormat,
+    documentUri: `project-doc://${normalizedWorkspaceCode}/docs/${sourceCode}.${defaultDocumentExtension(documentFormat)}`,
     language: "zh-CN",
     metadataSourcePath: "",
     sourceCode,
@@ -523,7 +552,7 @@ export function RagWorkbenchTab({
   const [targetScopeType, setTargetScopeType] = useState<WorkbenchScopeType>("SPACE");
   const [sourcePayloadEdited, setSourcePayloadEdited] = useState(false);
   const [sourcePayloadForm, setSourcePayloadForm] = useState<WorkbenchSourcePayloadForm>(() => (
-    buildDefaultPayloadForm(initialCorpusId ?? visibleCorpora[0]?.code ?? "", ingestProfiles[0])
+    buildDefaultPayloadForm(initialCorpusId ?? visibleCorpora[0]?.code ?? "", ingestProfiles[0], workspaceCode)
   ));
   const [businessAttributeRows, setBusinessAttributeRows] = useState<WorkbenchBusinessAttributeRow[]>([]);
   const initialRetrievalId = initialRetrievalProfileId && retrievalProfiles.some((profile) => profile.id === initialRetrievalProfileId)
@@ -546,9 +575,12 @@ export function RagWorkbenchTab({
   const appliedInitialCorpusIdRef = useRef<string | undefined>(undefined);
   const appliedInitialIngestProfileIdRef = useRef<string | undefined>(undefined);
   const appliedInitialRetrievalProfileIdRef = useRef<string | undefined>(undefined);
+  const { loading: ingestProfileDetailLoading, profile: ingestProfileDetail } = useRagProfileDetail(ingestProfileId);
   const { loading: retrievalProfileDetailLoading, profile: retrievalProfileDetail } = useRagProfileDetail(retrievalProfileId);
   const selectedIngestCorpus = corpora.find((corpus) => corpus.code === corpusId);
-  const selectedIngestProfile = ingestProfiles.find((profile) => profile.id === ingestProfileId);
+  const selectedIngestProfile = ingestProfileDetail?.type === "Ingest"
+    ? ingestProfileDetail
+    : ingestProfiles.find((profile) => profile.id === ingestProfileId);
   const selectedRetrievalProfile = retrievalProfileDetail?.type === "Retrieval"
     ? retrievalProfileDetail
     : retrievalProfiles.find((profile) => profile.id === retrievalProfileId);
@@ -652,9 +684,9 @@ export function RagWorkbenchTab({
 
   useEffect(() => {
     if (!sourcePayloadEdited) {
-      setSourcePayloadForm(buildDefaultPayloadForm(corpusId, selectedIngestProfile));
+      setSourcePayloadForm(buildDefaultPayloadForm(corpusId, selectedIngestProfile, workspaceCode));
     }
-  }, [corpusId, selectedIngestProfile, sourcePayloadEdited]);
+  }, [corpusId, selectedIngestProfile, sourcePayloadEdited, workspaceCode]);
 
   useEffect(() => {
     if (!contextStrategyOptions.includes(contextStrategy)) {
@@ -1009,7 +1041,7 @@ export function RagWorkbenchTab({
                   <TextArea aria-label={pageT("fields.sourceText", "Source text")} className="min-h-28" value={sourcePayloadForm.text} onChange={(event) => updateSourcePayloadForm({ text: event.target.value })} />
                 </Field>
               )}
-              <Button disabled={ingestLoading || !corpusId || !ingestProfileId} onClick={handleIngestSubmit}>
+              <Button disabled={ingestLoading || ingestProfileDetailLoading || !corpusId || !ingestProfileId} onClick={handleIngestSubmit}>
                 {ingestLoading ? pageT("actions.submittingIngest", "Submitting ingest...") : pageT("actions.submitIngest", "Submit ingest")}
               </Button>
             </div>

@@ -422,11 +422,37 @@ impl RagManagementRepository for SqliteRagRepository {
     }
 
     fn delete_managed_corpus(&self, corpus_id: &str) -> Result<bool, RagError> {
-        let deleted_rows = self
-            .connection
-            .execute("DELETE FROM rag_corpora WHERE corpus_id = ?1", [corpus_id])
+        let Some(managed) = self.get_managed_corpus(corpus_id)? else {
+            return Ok(false);
+        };
+        let runtime_tables = self.unshared_sqlite_runtime_tables(corpus_id, &managed.record)?;
+
+        self.connection
+            .execute_batch("BEGIN IMMEDIATE")
             .map_err(storage_error)?;
-        Ok(deleted_rows > 0)
+        let result = (|| {
+            let deleted_rows = self
+                .connection
+                .execute("DELETE FROM rag_corpora WHERE corpus_id = ?1", [corpus_id])
+                .map_err(storage_error)?;
+            if deleted_rows == 0 {
+                return Ok(false);
+            }
+            for table in &runtime_tables {
+                drop_sqlite_runtime_table_family(&self.connection, table)?;
+            }
+            Ok(true)
+        })();
+        match result {
+            Ok(deleted) => {
+                self.connection.execute_batch("COMMIT").map_err(storage_error)?;
+                Ok(deleted)
+            }
+            Err(error) => {
+                let _ = self.connection.execute_batch("ROLLBACK");
+                Err(error)
+            }
+        }
     }
 
     fn save_profile(&self, record: &RagProfileRecord) -> Result<(), RagError> {
