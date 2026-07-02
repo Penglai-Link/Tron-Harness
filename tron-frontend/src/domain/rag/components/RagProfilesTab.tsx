@@ -31,6 +31,7 @@ import {
   SectionTitle,
   statusTone,
 } from "@/domain/rag/components/RagShared";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 interface RowMenuState {
   left: number;
@@ -107,9 +108,6 @@ export function RagProfilesTab({
   const retrievalProfiles = profiles.filter((profile): profile is RetrievalProfileRecord => profile.type === "Retrieval");
   const filteredRetrievalProfiles = retrievalProfiles.filter((profile) => profileMatchesQuery(profile, query));
   const retrievalPagination = useTablePagination(filteredRetrievalProfiles, 10);
-  const openMenuProfile = openRowMenu
-    ? retrievalProfiles.find((profile) => profile.id === openRowMenu.profileId) ?? null
-    : null;
 
   useDismissibleLayer({
     open: Boolean(openRowMenu),
@@ -124,26 +122,6 @@ export function RagProfilesTab({
 
   function openProfile(profile: RetrievalProfileRecord) {
     navigate(`/rag/profiles/retrieval/${encodeURIComponent(profile.id)}/edit?returnProfileType=retrieval`);
-  }
-
-  function toggleRowMenu(profile: RetrievalProfileRecord, triggerElement: HTMLButtonElement) {
-    const rect = triggerElement.getBoundingClientRect();
-    const menuWidth = 176;
-    const menuHeight = 136;
-    const preferredTop = rect.bottom + 8;
-    const top = preferredTop + menuHeight > window.innerHeight - 16
-      ? Math.max(16, rect.top - menuHeight - 8)
-      : preferredTop;
-    setOpenRowMenu((current) => (
-      current?.profileId === profile.id
-        ? null
-        : {
-          left: Math.max(16, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 16)),
-          profileId: profile.id,
-          top,
-          triggerElement,
-        }
-    ));
   }
 
   async function deleteProfile(profile: RetrievalProfileRecord) {
@@ -245,23 +223,31 @@ export function RagProfilesTab({
               headerClassName: "w-24",
               id: "actions",
               render: (profile) => {
-                const isMenuOpen = openRowMenu?.profileId === profile.id;
                 return (
                   <div className="flex justify-end">
-                    <Button
-                      aria-expanded={isMenuOpen}
-                      aria-label={pageT("actions.openRowActions", "Open actions for {{id}}", { id: profile.id })}
-                      disabled={rowBusyId === profile.id}
-                      size="icon"
-                      type="button"
-                      variant="ghost"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleRowMenu(profile, event.currentTarget);
-                      }}
-                    >
-                      <MoreHorizontal size={16} aria-hidden="true" />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger>
+                        <MoreHorizontal onClick={(e) => e.stopPropagation()} size={16} aria-hidden="true" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="w-40" align="start">
+                        <DropdownMenuItem onClick={() => {
+                          openProfile(profile);
+                        }} disabled={rowBusyId === profile.id}>
+                          {pageT("actions.editRetrievalProfile", "Edit retrieval profile")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                          onTestProfile(profile);
+                        }} disabled={rowBusyId === profile.id}>
+
+                          {pageT("actions.testRetrievalProfile", "Retrieval test")}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className='text-red-500' onClick={() => {
+                          void deleteProfile(profile!);
+                        }} disabled={rowBusyId === profile?.id}>
+                          {pageT("actions.deleteRetrievalProfile", "Delete retrieval profile")}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 );
               },
@@ -269,55 +255,6 @@ export function RagProfilesTab({
           ]}
         />
       </SurfaceCard>
-
-      {openRowMenu && openMenuProfile
-        ? createPortal(
-          <div
-            ref={rowMenuRef}
-            aria-label={pageT("actions.rowMenuAria", "Actions for {{id}}", { id: openMenuProfile.id })}
-            className="fixed z-[80] w-44 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-2 text-left text-sm shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
-            role="menu"
-            style={{ left: openRowMenu.left, top: openRowMenu.top }}
-          >
-            <button
-              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={rowBusyId === openMenuProfile.id}
-              role="menuitem"
-              type="button"
-              onClick={() => {
-                setOpenRowMenu(null);
-                openProfile(openMenuProfile);
-              }}
-            >
-              {pageT("actions.editRetrievalProfile", "Edit retrieval profile")}
-            </button>
-            <button
-              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={rowBusyId === openMenuProfile.id}
-              role="menuitem"
-              type="button"
-              onClick={() => {
-                setOpenRowMenu(null);
-                onTestProfile(openMenuProfile);
-              }}
-            >
-              {pageT("actions.testRetrievalProfile", "Retrieval test")}
-            </button>
-            <button
-              className="block w-full rounded-lg px-3 py-2 text-left text-[var(--color-error)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={rowBusyId === openMenuProfile.id}
-              role="menuitem"
-              type="button"
-              onClick={() => {
-                void deleteProfile(openMenuProfile);
-              }}
-            >
-              {pageT("actions.deleteRetrievalProfile", "Delete retrieval profile")}
-            </button>
-          </div>,
-          document.body,
-        )
-        : null}
     </>
   );
 }
