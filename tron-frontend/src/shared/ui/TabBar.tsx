@@ -31,7 +31,7 @@ export function TabBar({ className }: TabBarProps) {
   return (
     <div
       className={cn(
-        "inline-flex w-full items-center gap-1 overflow-x-auto bg-muted p-1",
+        "inline-flex w-full items-center gap-1 overflow-x-auto bg-[var(--color-surface-container)] p-1 border-b-[1px] border-[var(--color-card-border)]",
         className
       )}
       role="tablist"
@@ -42,10 +42,10 @@ export function TabBar({ className }: TabBarProps) {
           <div
             key={tab.id}
             className={cn(
-              "group relative inline-flex h-8 max-w-[200px] shrink-0 items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-all cursor-pointer",
+              "group relative text-[var(--color-on-surface-variant)] inline-flex h-8 max-w-[200px] shrink-0 items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-all cursor-pointer",
               isActive
-                ? "bg-background text-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                ? "bg-[var(--color-elevated-surface)] text-foreground"
+                : "hover:text-foreground hover:bg-background/50"
             )}
             role="tab"
             aria-selected={isActive}

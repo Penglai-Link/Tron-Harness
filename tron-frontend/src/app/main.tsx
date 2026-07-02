@@ -14,7 +14,7 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <ToastProvider position="top-right">
+    <ToastProvider position="top-center">
       <AnchoredToastProvider>
         <App />
       </AnchoredToastProvider>
