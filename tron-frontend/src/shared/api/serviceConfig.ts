@@ -14,6 +14,7 @@ import {
   parseEndpoint,
 } from "@/shared/api/httpClient";
 import { useToast } from "@/shared/ui/Toast";
+import { toastManager } from "@/components/ui/toast";
 
 export type ServiceDataSource = "mock" | "api";
 
@@ -199,8 +200,9 @@ export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true
         const toastKey = `${request.method} ${request.url}: ${message}`;
         if (lastFailureToastKey.current === toastKey) return;
         lastFailureToastKey.current = toastKey;
-        toast.error(message, {
-          title: "API request failed",
+        toastManager.add({
+          type: "error",
+          description: message
         });
       });
 

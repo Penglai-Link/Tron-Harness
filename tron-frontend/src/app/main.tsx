@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-
+import { AnchoredToastProvider, ToastProvider } from "@/components/ui/toast"
 import { App } from "./App";
 import "@/i18n";
 import "@tron/chat-theme";
@@ -14,6 +14,10 @@ if (!root) {
 
 createRoot(root).render(
   <StrictMode>
-    <App />
+    <ToastProvider position="top-right">
+      <AnchoredToastProvider>
+        <App />
+      </AnchoredToastProvider>
+    </ToastProvider>
   </StrictMode>,
 );

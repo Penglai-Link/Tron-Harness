@@ -18,6 +18,7 @@ import {
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 import { useToast } from "@/shared/ui/Toast";
+import { toastManager } from "@/components/ui/toast";
 
 interface UseMemoryFragmentListOptions {
   activeTarget?: MemorySearchTarget;
@@ -123,7 +124,6 @@ export function useMemoryTargets(workspaceCode?: string, refreshKey = 0) {
 }
 
 export function useMemoryFragmentList(options: UseMemoryFragmentListOptions | number = {}) {
-  const toast = useToast();
   const dataSource = getServiceDataSource("memory");
   const normalizedOptions = typeof options === "number" ? { refreshKey: options } : options;
   const {
@@ -137,9 +137,17 @@ export function useMemoryFragmentList(options: UseMemoryFragmentListOptions | nu
     dataSource === "mock" ? getMemoryFragments() : []
   ));
 
-  const apiQuery = useMemo<MemoryRecordListQuery | null>(() => {
-    if (!activeTarget) return null;
-    return {
+  useEffect(() => {
+    if (dataSource === "mock") {
+      setRecords(getMemoryFragments());
+      return;
+    }
+    if (!workspaceCode || !activeTarget) {
+      setRecords([]);
+      return;
+    }
+
+    const apiQuery: MemoryRecordListQuery = {
       injectable: filters?.injectable ?? "all",
       memoryStatus: filters?.status ?? "all",
       query,
@@ -147,29 +155,33 @@ export function useMemoryFragmentList(options: UseMemoryFragmentListOptions | nu
       scope: activeTarget.scope,
       scopeCode: activeTarget.code,
     };
-  }, [activeTarget, filters?.injectable, filters?.reviewStatus, filters?.status, query]);
-
-  useEffect(() => {
-    if (dataSource === "mock") {
-      setRecords(getMemoryFragments());
-      return;
-    }
-    if (!workspaceCode || !apiQuery) {
-      setRecords([]);
-      return;
-    }
 
     const controller = new AbortController();
     fetchMemoryRecords(workspaceCode, apiQuery, controller.signal)
       .then(setRecords)
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        toast.error(error instanceof Error ? error.message : "Memories could not be loaded");
+        toastManager.add({
+          type: "error",
+          description: error instanceof Error
+            ? error.message
+            : "Memories could not be loaded"
+        });
         setRecords([]);
       });
 
     return () => controller.abort();
-  }, [apiQuery, dataSource, refreshKey, toast, workspaceCode]);
+  }, [
+    dataSource,
+    refreshKey,
+    workspaceCode,
+    activeTarget?.scope,
+    activeTarget?.code,
+    filters?.injectable,
+    filters?.reviewStatus,
+    filters?.status,
+    query,
+  ]);
 
   return records;
 }
