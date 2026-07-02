@@ -1,19 +1,24 @@
-import { useMemo } from "react";
 import {
-  Boxes,
-  Database,
-  FileText,
-  GitBranch,
-  Network,
-  Shapes,
-  Tag,
-  Wrench,
-  type LucideIcon,
-} from "lucide-react";
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import {
+  CanvasEvent,
+  Graph,
+  GraphEvent,
+  NodeEvent,
+  type GraphData,
+  type IElementEvent,
+  type Point,
+} from "@antv/g6";
 
 import { GraphLegend } from "@/domain/knowledge-graph/components/GraphLegend";
 import type {
   GraphEdgeView,
+  GraphLayoutMode,
   GraphNodeView,
 } from "@/domain/knowledge-graph/model";
 import { cn } from "@/shared/lib/utils";
@@ -22,27 +27,68 @@ interface GraphCanvasProps {
   edges: GraphEdgeView[];
   highlightedEdgeCodes: string[];
   highlightedNodeCodes: string[];
+  layoutMode: GraphLayoutMode;
   nodes: GraphNodeView[];
+  onCameraZoomChange: (zoom: number) => void;
+  onClearSelection: () => void;
   onSelectNode: (nodeCode: string) => void;
   selectedNodeCode: string;
   zoom: number;
 }
 
-type NodeKind = "skill" | "tool" | "tag" | "prompt" | "text" | "vector" | "ontology" | "lineage" | "default";
+type NodeKind = "skill" | "tool" | "tag" | "prompt" | "text" | "vector" | "ontology" | "lineage" | "code" | "default";
 
 interface PositionedNode extends GraphNodeView {
-  cluster: string;
-  depth: number;
+  degree: number;
   kind: NodeKind;
   layoutX: number;
   layoutY: number;
 }
 
-const canvasWidth = 860;
-const canvasHeight = 620;
-const focusPoint = { x: 430, y: 305 };
+interface ViewportPoint {
+  x: number;
+  y: number;
+}
+
+interface GraphBounds {
+  height: number;
+  maxX: number;
+  maxY: number;
+  minX: number;
+  minY: number;
+  width: number;
+}
+
+interface MinimapViewport {
+  height: number;
+  left: number;
+  top: number;
+  visibleHeight: number;
+  visibleWidth: number;
+  width: number;
+}
+
+interface MinimapDragState {
+  offsetXRatio: number;
+  offsetYRatio: number;
+  pointerId: number;
+}
+
+interface EdgeLike {
+  edgeCode: string;
+  sourceNodeCode: string;
+  targetNodeCode: string;
+}
+
+interface GraphZoomStyleData {
+  edges: NonNullable<GraphData["edges"]>;
+  nodes: NonNullable<GraphData["nodes"]>;
+}
+
+type ResolvedGraphLayoutMode = Exclude<GraphLayoutMode, "Smart">;
 
 const nodePalette: Record<NodeKind, { border: string; color: string; soft: string }> = {
+  code: { border: "#ccd8e8", color: "#315f8d", soft: "rgba(49,95,141,0.1)" },
   default: { border: "#d3d7d7", color: "#7b7f80", soft: "rgba(123,127,128,0.1)" },
   lineage: { border: "#d3d7d7", color: "#7b7f80", soft: "rgba(123,127,128,0.1)" },
   ontology: { border: "#d9c9ef", color: "#7a5e9a", soft: "rgba(122,94,154,0.1)" },
@@ -54,50 +100,17 @@ const nodePalette: Record<NodeKind, { border: string; color: string; soft: strin
   vector: { border: "#eadbac", color: "#8a6a1f", soft: "rgba(138,106,31,0.12)" },
 };
 
-const nodeIcons: Record<NodeKind, LucideIcon> = {
-  default: Network,
-  lineage: GitBranch,
-  ontology: Shapes,
-  prompt: FileText,
-  skill: Network,
-  tag: Tag,
-  text: Database,
-  tool: Wrench,
-  vector: Boxes,
+const fallbackMinimapViewport: MinimapViewport = {
+  height: 58,
+  left: 26,
+  top: 18,
+  visibleHeight: 58,
+  visibleWidth: 52,
+  width: 52,
 };
-
-const firstHopAnchors: Record<NodeKind, Array<{ x: number; y: number }>> = {
-  default: [{ x: 255, y: 330 }, { x: 640, y: 455 }],
-  lineage: [{ x: 235, y: 365 }, { x: 210, y: 455 }],
-  ontology: [{ x: 690, y: 205 }, { x: 735, y: 305 }],
-  prompt: [{ x: 635, y: 190 }, { x: 690, y: 255 }],
-  skill: [{ x: 485, y: 515 }, { x: 365, y: 505 }],
-  tag: [{ x: 310, y: 448 }, { x: 250, y: 310 }],
-  text: [{ x: 640, y: 405 }, { x: 700, y: 360 }],
-  tool: [{ x: 255, y: 238 }, { x: 225, y: 148 }],
-  vector: [{ x: 700, y: 485 }, { x: 760, y: 415 }],
-};
-
-const remoteAnchors: Record<NodeKind, Array<{ x: number; y: number }>> = {
-  default: [{ x: 155, y: 500 }, { x: 745, y: 525 }],
-  lineage: [{ x: 120, y: 300 }, { x: 120, y: 430 }],
-  ontology: [{ x: 770, y: 150 }, { x: 780, y: 285 }, { x: 770, y: 420 }],
-  prompt: [{ x: 720, y: 210 }, { x: 745, y: 300 }],
-  skill: [{ x: 500, y: 520 }, { x: 570, y: 470 }],
-  tag: [{ x: 185, y: 405 }, { x: 205, y: 275 }, { x: 515, y: 505 }],
-  text: [{ x: 695, y: 360 }, { x: 755, y: 325 }],
-  tool: [{ x: 205, y: 165 }, { x: 190, y: 310 }],
-  vector: [{ x: 755, y: 475 }, { x: 715, y: 535 }],
-};
-
-const zoneLabels = [
-  { color: "#2f5f9f", label: "Tooling", width: 190, x: 205, y: 88 },
-  { color: "#4f6f52", label: "Knowledge tags", width: 220, x: 190, y: 390 },
-  { color: "#7a5e9a", label: "Ontology scope", width: 175, x: 650, y: 88 },
-  { color: "#747878", label: "Indexed content", width: 235, x: 570, y: 360 },
-] as const;
 
 function nodeKind(labels: string[]): NodeKind {
+  if (labels.some((label) => label.includes("Code") || label.includes("Symbol") || label.includes("Method") || label.includes("Function"))) return "code";
   if (labels.includes("RagSkill")) return "skill";
   if (labels.includes("RagTool")) return "tool";
   if (labels.includes("RagTag")) return "tag";
@@ -109,329 +122,1263 @@ function nodeKind(labels: string[]): NodeKind {
   return "default";
 }
 
-function nodeColor(labels: string[]) {
-  return nodePalette[nodeKind(labels)].color;
-}
-
-function findNode<T extends GraphNodeView>(nodes: T[], nodeCode: string) {
-  return nodes.find((node) => node.nodeCode === nodeCode);
-}
-
 function nodeRadius(node: PositionedNode) {
-  if (node.depth === 0) return 34;
-  if (node.depth === 1) return 25;
-  return 20;
+  if (node.degree >= 4) return 9;
+  if (node.degree >= 2) return 7;
+  return 5.5;
 }
 
-function edgeLevel(edge: GraphEdgeView, selectedNodeCode: string, highlightedEdgeCodes: string[]) {
-  if (edge.sourceNodeCode === selectedNodeCode || edge.targetNodeCode === selectedNodeCode) return "primary";
-  if (highlightedEdgeCodes.includes(edge.edgeCode)) return "path";
-  return "context";
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
-function edgePath(source: PositionedNode, target: PositionedNode) {
-  const dx = target.layoutX - source.layoutX;
-  const dy = target.layoutY - source.layoutY;
-  const length = Math.hypot(dx, dy) || 1;
-  const startX = source.layoutX + (dx / length) * (nodeRadius(source) + 3);
-  const startY = source.layoutY + (dy / length) * (nodeRadius(source) + 3);
-  const endX = target.layoutX - (dx / length) * (nodeRadius(target) + 8);
-  const endY = target.layoutY - (dy / length) * (nodeRadius(target) + 8);
-  const normalX = -dy / length;
-  const normalY = dx / length;
-  const direction = source.layoutX <= target.layoutX ? -1 : 1;
-  const bend = Math.min(68, Math.max(28, length / 6)) * direction;
-  const controlX = (startX + endX) / 2 + normalX * bend;
-  const controlY = (startY + endY) / 2 + normalY * bend;
-  return `M ${startX} ${startY} Q ${controlX} ${controlY} ${endX} ${endY}`;
-}
-
-function relationshipLabelOffset(relationship: string) {
-  if (relationship === "REQUIRES_TOOL") return { x: -16, y: -14 };
-  if (relationship === "HAS_TAG") return { x: -14, y: 14 };
-  if (relationship === "USES_PROMPT_TEMPLATE") return { x: 14, y: -16 };
-  if (relationship === "LINKS") return { x: 16, y: 12 };
-  return { x: 0, y: 0 };
-}
-
-function edgeLabelPoint(source: PositionedNode, target: PositionedNode, edge: GraphEdgeView, level: ReturnType<typeof edgeLevel>) {
-  const dx = target.layoutX - source.layoutX;
-  const dy = target.layoutY - source.layoutY;
-  const length = Math.hypot(dx, dy) || 1;
-  const normalX = -dy / length;
-  const normalY = dx / length;
-  const direction = source.layoutX <= target.layoutX ? -1 : 1;
-  const bend = Math.min(58, Math.max(20, length / 8)) * direction;
-  const relationOffset = relationshipLabelOffset(edge.relationship);
-
-  if (level === "primary" && (source.depth === 0 || target.depth === 0)) {
-    const focus = source.depth === 0 ? source : target;
-    const neighbor = source.depth === 0 ? target : source;
-    return {
-      x: focus.layoutX + (neighbor.layoutX - focus.layoutX) * 0.62 + normalX * 12 + relationOffset.x,
-      y: focus.layoutY + (neighbor.layoutY - focus.layoutY) * 0.62 + normalY * 12 + relationOffset.y,
-    };
+function stableHash(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
   }
+  return hash >>> 0;
+}
 
-  return {
-    x: (source.layoutX + target.layoutX) / 2 + normalX * bend + relationOffset.x,
-    y: (source.layoutY + target.layoutY) / 2 + normalY * bend - 10 + relationOffset.y,
+function pointX(point: Point) {
+  return point[0] ?? 0;
+}
+
+function pointY(point: Point) {
+  return point[1] ?? 0;
+}
+
+function zoomToScale(zoom: number) {
+  return clamp(zoom / 100, 0.6, 2.2);
+}
+
+function scaleToZoom(scale: number) {
+  return Math.round(clamp(scale, 0.6, 2.2) * 100);
+}
+
+function labelViewportScale(zoom: number) {
+  return 1 / zoomToScale(zoom);
+}
+
+function edgeActive(edge: EdgeLike, selectedNodeCode: string, highlightedEdgeCodes: string[]) {
+  return edge.sourceNodeCode === selectedNodeCode
+    || edge.targetNodeCode === selectedNodeCode
+    || highlightedEdgeCodes.includes(edge.edgeCode);
+}
+
+function propertyText(node: GraphNodeView) {
+  const candidates = [
+    node.properties.skillName,
+    node.properties.sourceCode,
+    node.properties.promptCode,
+    node.properties.category,
+    node.properties.provider,
+    node.properties.resourceType,
+    node.fullText?.split("\n")[0],
+  ];
+  return candidates.find((item) => typeof item === "string" && item.trim().length > 0)?.toString() ?? node.labels[0] ?? "Graph node";
+}
+
+function hasExplicitCoordinates(node: GraphNodeView) {
+  return Number.isFinite(node.x) && Number.isFinite(node.y);
+}
+
+function compareNodesByGraphWeight(degreeByNode: Map<string, number>) {
+  return (first: GraphNodeView, second: GraphNodeView) => {
+    const degreeDelta = (degreeByNode.get(second.nodeCode) ?? 0) - (degreeByNode.get(first.nodeCode) ?? 0);
+    if (degreeDelta !== 0) return degreeDelta;
+
+    const scoreDelta = (second.score ?? 0) - (first.score ?? 0);
+    if (scoreDelta !== 0) return scoreDelta;
+
+    return first.nodeCode.localeCompare(second.nodeCode);
   };
 }
 
-function assignAnchor(kind: NodeKind, index: number, firstHop: boolean) {
-  const anchors = firstHop ? firstHopAnchors[kind] : remoteAnchors[kind];
-  const anchor = anchors[index % anchors.length];
-  const round = Math.floor(index / anchors.length);
-  const offset = firstHop ? 34 : 42;
-  const direction = index % 2 === 0 ? 1 : -1;
-  return {
-    x: anchor.x + round * 28 * direction,
-    y: anchor.y + round * offset,
-  };
-}
-
-function buildSemanticLayout(nodes: GraphNodeView[], edges: GraphEdgeView[], selectedNodeCode: string) {
-  const selectedNode = findNode(nodes, selectedNodeCode) ?? nodes[0];
-  const selectedCode = selectedNode?.nodeCode ?? "";
-  const firstHopCodes = new Set<string>();
+function buildAdjacency(nodes: GraphNodeView[], edges: GraphEdgeView[]) {
+  const visibleNodeCodes = new Set(nodes.map((node) => node.nodeCode));
+  const adjacency = new Map<string, Set<string>>();
+  for (const node of nodes) {
+    adjacency.set(node.nodeCode, new Set());
+  }
 
   for (const edge of edges) {
-    if (edge.sourceNodeCode === selectedCode) firstHopCodes.add(edge.targetNodeCode);
-    if (edge.targetNodeCode === selectedCode) firstHopCodes.add(edge.sourceNodeCode);
+    if (!visibleNodeCodes.has(edge.sourceNodeCode) || !visibleNodeCodes.has(edge.targetNodeCode)) continue;
+    adjacency.get(edge.sourceNodeCode)?.add(edge.targetNodeCode);
+    adjacency.get(edge.targetNodeCode)?.add(edge.sourceNodeCode);
   }
 
-  const firstHopCounts = new Map<NodeKind, number>();
-  const remoteCounts = new Map<NodeKind, number>();
-  const sortedNodes = [...nodes].sort((left, right) => {
-    if (left.nodeCode === selectedCode) return -1;
-    if (right.nodeCode === selectedCode) return 1;
-    const leftFirst = firstHopCodes.has(left.nodeCode);
-    const rightFirst = firstHopCodes.has(right.nodeCode);
-    if (leftFirst !== rightFirst) return leftFirst ? -1 : 1;
-    return left.nodeCode.localeCompare(right.nodeCode);
-  });
+  return adjacency;
+}
 
-  return sortedNodes.map<PositionedNode>((node) => {
-    const kind = nodeKind(node.labels);
-    if (node.nodeCode === selectedCode) {
-      return {
-        ...node,
-        cluster: "Focus",
-        depth: 0,
-        kind,
-        layoutX: focusPoint.x,
-        layoutY: focusPoint.y,
-      };
+function buildGraphComponents(nodes: GraphNodeView[], adjacency: Map<string, Set<string>>, degreeByNode: Map<string, number>) {
+  const compareNodes = compareNodesByGraphWeight(degreeByNode);
+  const nodeByCode = new Map(nodes.map((node) => [node.nodeCode, node]));
+  const visited = new Set<string>();
+  const components: GraphNodeView[][] = [];
+
+  for (const start of [...nodes].sort(compareNodes)) {
+    if (visited.has(start.nodeCode)) continue;
+
+    const component: GraphNodeView[] = [];
+    const queue = [start.nodeCode];
+    visited.add(start.nodeCode);
+
+    while (queue.length) {
+      const nodeCode = queue.shift() ?? "";
+      const node = nodeByCode.get(nodeCode);
+      if (node) component.push(node);
+
+      const neighbors = [...(adjacency.get(nodeCode) ?? [])]
+        .map((neighborCode) => nodeByCode.get(neighborCode))
+        .filter((neighbor): neighbor is GraphNodeView => Boolean(neighbor))
+        .sort(compareNodes);
+
+      for (const neighbor of neighbors) {
+        if (visited.has(neighbor.nodeCode)) continue;
+        visited.add(neighbor.nodeCode);
+        queue.push(neighbor.nodeCode);
+      }
     }
 
-    const firstHop = firstHopCodes.has(node.nodeCode);
-    const counts = firstHop ? firstHopCounts : remoteCounts;
-    const index = counts.get(kind) ?? 0;
-    counts.set(kind, index + 1);
-    const anchor = assignAnchor(kind, index, firstHop);
+    components.push(component.sort(compareNodes));
+  }
 
+  return components.sort((first, second) => second.length - first.length || compareNodes(first[0], second[0]));
+}
+
+function buildDepthGroups(component: GraphNodeView[], adjacency: Map<string, Set<string>>, degreeByNode: Map<string, number>) {
+  const compareNodes = compareNodesByGraphWeight(degreeByNode);
+  const componentNodeCodes = new Set(component.map((node) => node.nodeCode));
+  const nodeByCode = new Map(component.map((node) => [node.nodeCode, node]));
+  const depthByNode = new Map<string, number>();
+  const root = [...component].sort(compareNodes)[0];
+  const queue = [root.nodeCode];
+  depthByNode.set(root.nodeCode, 0);
+
+  while (queue.length) {
+    const nodeCode = queue.shift() ?? "";
+    const depth = depthByNode.get(nodeCode) ?? 0;
+    const neighbors = [...(adjacency.get(nodeCode) ?? [])]
+      .filter((neighborCode) => componentNodeCodes.has(neighborCode))
+      .map((neighborCode) => nodeByCode.get(neighborCode))
+      .filter((neighbor): neighbor is GraphNodeView => Boolean(neighbor))
+      .sort(compareNodes);
+
+    for (const neighbor of neighbors) {
+      if (depthByNode.has(neighbor.nodeCode)) continue;
+      depthByNode.set(neighbor.nodeCode, depth + 1);
+      queue.push(neighbor.nodeCode);
+    }
+  }
+
+  const groups = new Map<number, GraphNodeView[]>();
+  for (const node of component) {
+    const depth = depthByNode.get(node.nodeCode) ?? 0;
+    groups.set(depth, [...(groups.get(depth) ?? []), node]);
+  }
+
+  return [...groups.entries()]
+    .sort(([firstDepth], [secondDepth]) => firstDepth - secondDepth)
+    .map(([depth, group]) => [depth, group.sort(compareNodes)] as const);
+}
+
+function buildGeneratedLayout(nodes: GraphNodeView[], edges: GraphEdgeView[], degreeByNode: Map<string, number>) {
+  const layout = new Map<string, ViewportPoint>();
+  const adjacency = buildAdjacency(nodes, edges);
+  const components = buildGraphComponents(nodes, adjacency, degreeByNode);
+  const componentOrbitRadius = components.length <= 1 ? 0 : Math.max(430, components.length * 92);
+
+  components.forEach((component, componentIndex) => {
+    const componentAngle = -Math.PI / 2 + (componentIndex / Math.max(1, components.length)) * Math.PI * 2;
+    const componentCenter = {
+      x: Math.cos(componentAngle) * componentOrbitRadius,
+      y: Math.sin(componentAngle) * componentOrbitRadius,
+    };
+    const depthGroups = buildDepthGroups(component, adjacency, degreeByNode);
+
+    for (const [depth, group] of depthGroups) {
+      if (depth === 0 && group.length === 1) {
+        layout.set(group[0].nodeCode, componentCenter);
+        continue;
+      }
+
+      const ringRadius = depth === 0
+        ? 84
+        : Math.max(148 + (depth - 1) * 142, group.length * 28);
+      const angleStep = Math.PI * 2 / Math.max(1, group.length);
+      const angleOffset = -Math.PI / 2 + componentIndex * 0.41 + depth * 0.29;
+
+      group.forEach((node, nodeIndex) => {
+        const angle = angleOffset + nodeIndex * angleStep;
+        layout.set(node.nodeCode, {
+          x: componentCenter.x + Math.cos(angle) * ringRadius,
+          y: componentCenter.y + Math.sin(angle) * ringRadius,
+        });
+      });
+    }
+  });
+
+  return layout;
+}
+
+function looksLikeCodeGraph(nodes: GraphNodeView[], edges: GraphEdgeView[]) {
+  const codeNodeCount = nodes.filter((node) => nodeKind(node.labels) === "code").length;
+  const codeRelationshipCount = edges.filter((edge) => /CALL|DEPEND|IMPORT|REFERENCE|EXTEND|IMPLEMENT|DEFINE|CONTAIN/i.test(edge.relationship)).length;
+
+  return codeNodeCount >= Math.max(3, nodes.length * 0.28) || codeRelationshipCount >= Math.max(3, edges.length * 0.36);
+}
+
+function resolveGraphLayoutMode(layoutMode: GraphLayoutMode, nodes: GraphNodeView[], edges: GraphEdgeView[]): ResolvedGraphLayoutMode {
+  if (layoutMode !== "Smart") return layoutMode;
+  return looksLikeCodeGraph(nodes, edges) ? "Hierarchy" : "Force";
+}
+
+function buildForceLayout(nodes: GraphNodeView[], edges: GraphEdgeView[], degreeByNode: Map<string, number>) {
+  if (nodes.length > 140) return buildGeneratedLayout(nodes, edges, degreeByNode);
+
+  const layout = new Map<string, ViewportPoint>();
+  const adjacency = buildAdjacency(nodes, edges);
+  const components = buildGraphComponents(nodes, adjacency, degreeByNode);
+  const componentOrbitRadius = components.length <= 1 ? 0 : Math.max(430, components.length * 96);
+
+  components.forEach((component, componentIndex) => {
+    const componentAngle = -Math.PI / 2 + (componentIndex / Math.max(1, components.length)) * Math.PI * 2;
+    const center = {
+      x: Math.cos(componentAngle) * componentOrbitRadius,
+      y: Math.sin(componentAngle) * componentOrbitRadius,
+    };
+    const positions = new Map<string, ViewportPoint>();
+    const velocity = new Map<string, ViewportPoint>();
+    const componentNodeCodes = new Set(component.map((node) => node.nodeCode));
+    const componentEdges = edges.filter((edge) => componentNodeCodes.has(edge.sourceNodeCode) && componentNodeCodes.has(edge.targetNodeCode));
+    const initialRadius = Math.max(145, Math.sqrt(component.length) * 62);
+
+    component.forEach((node, nodeIndex) => {
+      const angle = -Math.PI / 2 + (nodeIndex / Math.max(1, component.length)) * Math.PI * 2 + (stableHash(node.nodeCode) % 29) / 120;
+      positions.set(node.nodeCode, {
+        x: center.x + Math.cos(angle) * initialRadius,
+        y: center.y + Math.sin(angle) * initialRadius,
+      });
+      velocity.set(node.nodeCode, { x: 0, y: 0 });
+    });
+
+    for (let iteration = 0; iteration < 120; iteration += 1) {
+      const forces = new Map<string, ViewportPoint>();
+      component.forEach((node) => forces.set(node.nodeCode, { x: 0, y: 0 }));
+
+      for (let firstIndex = 0; firstIndex < component.length; firstIndex += 1) {
+        for (let secondIndex = firstIndex + 1; secondIndex < component.length; secondIndex += 1) {
+          const first = component[firstIndex];
+          const second = component[secondIndex];
+          const firstPosition = positions.get(first.nodeCode);
+          const secondPosition = positions.get(second.nodeCode);
+          if (!firstPosition || !secondPosition) continue;
+
+          const dx = firstPosition.x - secondPosition.x;
+          const dy = firstPosition.y - secondPosition.y;
+          const distance = Math.max(28, Math.hypot(dx, dy));
+          const force = 4600 / (distance * distance);
+          const fx = (dx / distance) * force;
+          const fy = (dy / distance) * force;
+          const firstForce = forces.get(first.nodeCode);
+          const secondForce = forces.get(second.nodeCode);
+          if (!firstForce || !secondForce) continue;
+
+          firstForce.x += fx;
+          firstForce.y += fy;
+          secondForce.x -= fx;
+          secondForce.y -= fy;
+        }
+      }
+
+      for (const edge of componentEdges) {
+        const sourcePosition = positions.get(edge.sourceNodeCode);
+        const targetPosition = positions.get(edge.targetNodeCode);
+        const sourceForce = forces.get(edge.sourceNodeCode);
+        const targetForce = forces.get(edge.targetNodeCode);
+        if (!sourcePosition || !targetPosition || !sourceForce || !targetForce) continue;
+
+        const dx = targetPosition.x - sourcePosition.x;
+        const dy = targetPosition.y - sourcePosition.y;
+        const distance = Math.max(1, Math.hypot(dx, dy));
+        const targetDistance = 158;
+        const force = (distance - targetDistance) * 0.028;
+        const fx = (dx / distance) * force;
+        const fy = (dy / distance) * force;
+        sourceForce.x += fx;
+        sourceForce.y += fy;
+        targetForce.x -= fx;
+        targetForce.y -= fy;
+      }
+
+      for (const node of component) {
+        const position = positions.get(node.nodeCode);
+        const nodeVelocity = velocity.get(node.nodeCode);
+        const force = forces.get(node.nodeCode);
+        if (!position || !nodeVelocity || !force) continue;
+
+        force.x += (center.x - position.x) * 0.014;
+        force.y += (center.y - position.y) * 0.014;
+        nodeVelocity.x = (nodeVelocity.x + force.x) * 0.78;
+        nodeVelocity.y = (nodeVelocity.y + force.y) * 0.78;
+        position.x += clamp(nodeVelocity.x, -12, 12);
+        position.y += clamp(nodeVelocity.y, -12, 12);
+      }
+    }
+
+    for (const node of component) {
+      const position = positions.get(node.nodeCode);
+      if (position) layout.set(node.nodeCode, position);
+    }
+  });
+
+  return layout;
+}
+
+function buildHierarchyLayout(nodes: GraphNodeView[], edges: GraphEdgeView[], degreeByNode: Map<string, number>) {
+  const layout = new Map<string, ViewportPoint>();
+  const adjacency = buildAdjacency(nodes, edges);
+  const components = buildGraphComponents(nodes, adjacency, degreeByNode);
+  const componentGap = 260;
+  let nextComponentTop = 0;
+
+  components.forEach((component) => {
+    const depthGroups = buildDepthGroups(component, adjacency, degreeByNode);
+    const maxGroupSize = Math.max(1, ...depthGroups.map(([, group]) => group.length));
+    const componentHeight = Math.max(220, (maxGroupSize - 1) * 92);
+    const componentTop = nextComponentTop;
+    const componentCenterY = componentTop + componentHeight / 2;
+    const columnGap = 210;
+    const rowGap = 92;
+
+    depthGroups.forEach(([depth, group]) => {
+      const groupHeight = (group.length - 1) * rowGap;
+      const startY = componentCenterY - groupHeight / 2;
+      group.forEach((node, nodeIndex) => {
+        layout.set(node.nodeCode, {
+          x: (depth - (depthGroups.length - 1) / 2) * columnGap,
+          y: startY + nodeIndex * rowGap,
+        });
+      });
+    });
+
+    nextComponentTop += componentHeight + componentGap;
+  });
+
+  const yOffset = (nextComponentTop - componentGap) / 2;
+  for (const [nodeCode, point] of layout) {
+    layout.set(nodeCode, {
+      x: point.x,
+      y: point.y - yOffset,
+    });
+  }
+
+  return layout;
+}
+
+function buildGridLayout(nodes: GraphNodeView[], degreeByNode: Map<string, number>) {
+  const layout = new Map<string, ViewportPoint>();
+  const sortedNodes = [...nodes].sort(compareNodesByGraphWeight(degreeByNode));
+  const columns = Math.max(1, Math.ceil(Math.sqrt(sortedNodes.length * 1.35)));
+  const rows = Math.max(1, Math.ceil(sortedNodes.length / columns));
+  const columnGap = 148;
+  const rowGap = 108;
+
+  sortedNodes.forEach((node, nodeIndex) => {
+    const column = nodeIndex % columns;
+    const row = Math.floor(nodeIndex / columns);
+    layout.set(node.nodeCode, {
+      x: (column - (columns - 1) / 2) * columnGap,
+      y: (row - (rows - 1) / 2) * rowGap,
+    });
+  });
+
+  return layout;
+}
+
+function edgesShareEndpoint(first: EdgeLike, second: EdgeLike) {
+  return first.sourceNodeCode === second.sourceNodeCode
+    || first.sourceNodeCode === second.targetNodeCode
+    || first.targetNodeCode === second.sourceNodeCode
+    || first.targetNodeCode === second.targetNodeCode;
+}
+
+function crossProduct(origin: ViewportPoint, first: ViewportPoint, second: ViewportPoint) {
+  return (first.x - origin.x) * (second.y - origin.y) - (first.y - origin.y) * (second.x - origin.x);
+}
+
+function segmentsCross(
+  firstStart: ViewportPoint,
+  firstEnd: ViewportPoint,
+  secondStart: ViewportPoint,
+  secondEnd: ViewportPoint,
+) {
+  const epsilon = 0.001;
+  const firstSideA = crossProduct(firstStart, firstEnd, secondStart);
+  const firstSideB = crossProduct(firstStart, firstEnd, secondEnd);
+  const secondSideA = crossProduct(secondStart, secondEnd, firstStart);
+  const secondSideB = crossProduct(secondStart, secondEnd, firstEnd);
+
+  return ((firstSideA > epsilon && firstSideB < -epsilon) || (firstSideA < -epsilon && firstSideB > epsilon))
+    && ((secondSideA > epsilon && secondSideB < -epsilon) || (secondSideA < -epsilon && secondSideB > epsilon));
+}
+
+function layoutEdgeCrossingCount(layout: Map<string, ViewportPoint>, edges: EdgeLike[]) {
+  let count = 0;
+
+  for (let firstIndex = 0; firstIndex < edges.length; firstIndex += 1) {
+    for (let secondIndex = firstIndex + 1; secondIndex < edges.length; secondIndex += 1) {
+      const first = edges[firstIndex];
+      const second = edges[secondIndex];
+      if (edgesShareEndpoint(first, second)) continue;
+
+      const firstSource = layout.get(first.sourceNodeCode);
+      const firstTarget = layout.get(first.targetNodeCode);
+      const secondSource = layout.get(second.sourceNodeCode);
+      const secondTarget = layout.get(second.targetNodeCode);
+      if (!firstSource || !firstTarget || !secondSource || !secondTarget) continue;
+
+      if (segmentsCross(firstSource, firstTarget, secondSource, secondTarget)) count += 1;
+    }
+  }
+
+  return count;
+}
+
+function layoutEdgeLength(layout: Map<string, ViewportPoint>, edges: EdgeLike[]) {
+  return edges.reduce((total, edge) => {
+    const source = layout.get(edge.sourceNodeCode);
+    const target = layout.get(edge.targetNodeCode);
+    if (!source || !target) return total;
+    return total + Math.hypot(target.x - source.x, target.y - source.y);
+  }, 0);
+}
+
+function layoutScore(layout: Map<string, ViewportPoint>, edges: EdgeLike[]) {
+  return layoutEdgeCrossingCount(layout, edges) * 10000 + layoutEdgeLength(layout, edges) * 0.01;
+}
+
+function reduceLayoutEdgeCrossings(
+  nodes: GraphNodeView[],
+  edges: GraphEdgeView[],
+  layout: Map<string, ViewportPoint>,
+  degreeByNode: Map<string, number>,
+) {
+  const visibleEdges = edges.filter((edge) => layout.has(edge.sourceNodeCode) && layout.has(edge.targetNodeCode));
+  if (nodes.length < 4 || visibleEdges.length < 3 || nodes.length > 90 || visibleEdges.length > 160) return layout;
+
+  const optimizedLayout = new Map(layout);
+  const adjacency = buildAdjacency(nodes, visibleEdges);
+  const components = buildGraphComponents(nodes, adjacency, degreeByNode);
+
+  for (const component of components) {
+    const componentNodeCodes = new Set(component.map((node) => node.nodeCode));
+    const componentEdges = visibleEdges.filter((edge) => componentNodeCodes.has(edge.sourceNodeCode) && componentNodeCodes.has(edge.targetNodeCode));
+    if (component.length < 4 || componentEdges.length < 3) continue;
+
+    const maxDegree = Math.max(...component.map((node) => degreeByNode.get(node.nodeCode) ?? 0));
+    const lockedNodeCodes = new Set(
+      component
+        .filter((node) => (degreeByNode.get(node.nodeCode) ?? 0) >= Math.max(4, maxDegree))
+        .map((node) => node.nodeCode),
+    );
+    const movableNodes = component
+      .filter((node) => !lockedNodeCodes.has(node.nodeCode))
+      .sort((first, second) => first.nodeCode.localeCompare(second.nodeCode));
+    let bestScore = layoutScore(optimizedLayout, componentEdges);
+
+    for (let pass = 0; pass < 4; pass += 1) {
+      let improved = false;
+
+      for (let firstIndex = 0; firstIndex < movableNodes.length; firstIndex += 1) {
+        for (let secondIndex = firstIndex + 1; secondIndex < movableNodes.length; secondIndex += 1) {
+          const first = movableNodes[firstIndex];
+          const second = movableNodes[secondIndex];
+          const firstDegree = degreeByNode.get(first.nodeCode) ?? 0;
+          const secondDegree = degreeByNode.get(second.nodeCode) ?? 0;
+          if (Math.abs(firstDegree - secondDegree) > 2) continue;
+
+          const firstPoint = optimizedLayout.get(first.nodeCode);
+          const secondPoint = optimizedLayout.get(second.nodeCode);
+          if (!firstPoint || !secondPoint) continue;
+
+          optimizedLayout.set(first.nodeCode, secondPoint);
+          optimizedLayout.set(second.nodeCode, firstPoint);
+          const candidateScore = layoutScore(optimizedLayout, componentEdges);
+
+          if (candidateScore + 0.5 < bestScore) {
+            bestScore = candidateScore;
+            improved = true;
+          } else {
+            optimizedLayout.set(first.nodeCode, firstPoint);
+            optimizedLayout.set(second.nodeCode, secondPoint);
+          }
+        }
+      }
+
+      if (!improved) break;
+    }
+  }
+
+  return optimizedLayout;
+}
+
+function buildLayout(nodes: GraphNodeView[], edges: GraphEdgeView[], degreeByNode: Map<string, number>, layoutMode: ResolvedGraphLayoutMode) {
+  if (layoutMode === "Force") {
+    return reduceLayoutEdgeCrossings(nodes, edges, buildForceLayout(nodes, edges, degreeByNode), degreeByNode);
+  }
+
+  if (layoutMode === "Hierarchy") return buildHierarchyLayout(nodes, edges, degreeByNode);
+  if (layoutMode === "Grid") return buildGridLayout(nodes, degreeByNode);
+
+  return reduceLayoutEdgeCrossings(nodes, edges, buildGeneratedLayout(nodes, edges, degreeByNode), degreeByNode);
+}
+
+function buildPositionedNodes(nodes: GraphNodeView[], edges: GraphEdgeView[], layoutMode: GraphLayoutMode) {
+  const degreeByNode = new Map<string, number>();
+  for (const edge of edges) {
+    degreeByNode.set(edge.sourceNodeCode, (degreeByNode.get(edge.sourceNodeCode) ?? 0) + 1);
+    degreeByNode.set(edge.targetNodeCode, (degreeByNode.get(edge.targetNodeCode) ?? 0) + 1);
+  }
+
+  const allNodesHaveCoordinates = nodes.length > 0 && nodes.every(hasExplicitCoordinates);
+  const resolvedLayoutMode = resolveGraphLayoutMode(layoutMode, nodes, edges);
+  const useExplicitCoordinates = allNodesHaveCoordinates && layoutMode === "Smart";
+  const generatedLayout = useExplicitCoordinates ? undefined : buildLayout(nodes, edges, degreeByNode, resolvedLayoutMode);
+
+  return nodes.map<PositionedNode>((node) => {
+    const kind = nodeKind(node.labels);
+    const generatedPoint = generatedLayout?.get(node.nodeCode);
     return {
       ...node,
-      cluster: firstHop ? "Primary relationships" : "Context",
-      depth: firstHop ? 1 : 2,
+      degree: degreeByNode.get(node.nodeCode) ?? 0,
       kind,
-      layoutX: anchor.x,
-      layoutY: anchor.y,
+      layoutX: useExplicitCoordinates ? node.x ?? 0 : generatedPoint?.x ?? 0,
+      layoutY: useExplicitCoordinates ? node.y ?? 0 : generatedPoint?.y ?? 0,
     };
   });
 }
 
-function edgeStroke(level: ReturnType<typeof edgeLevel>) {
-  if (level === "primary") return "#2f5f9f";
-  if (level === "path") return "#7a5e9a";
-  return "#cfd4d4";
+function buildGraphBounds(nodes: PositionedNode[]): GraphBounds {
+  if (!nodes.length) {
+    return {
+      height: 1,
+      maxX: 1,
+      maxY: 1,
+      minX: 0,
+      minY: 0,
+      width: 1,
+    };
+  }
+
+  const xValues = nodes.map((node) => node.layoutX);
+  const yValues = nodes.map((node) => node.layoutY);
+  const minX = Math.min(...xValues);
+  const maxX = Math.max(...xValues);
+  const minY = Math.min(...yValues);
+  const maxY = Math.max(...yValues);
+  const rawWidth = Math.max(1, maxX - minX);
+  const rawHeight = Math.max(1, maxY - minY);
+  const padding = Math.max(80, Math.max(rawWidth, rawHeight) * 0.16);
+
+  return {
+    height: rawHeight + padding * 2,
+    maxX: maxX + padding,
+    maxY: maxY + padding,
+    minX: minX - padding,
+    minY: minY - padding,
+    width: rawWidth + padding * 2,
+  };
+}
+
+function graphPointForNode(node: PositionedNode): ViewportPoint {
+  return {
+    x: node.layoutX,
+    y: node.layoutY,
+  };
+}
+
+function graphCenter(bounds: GraphBounds): ViewportPoint {
+  return {
+    x: bounds.minX + bounds.width / 2,
+    y: bounds.minY + bounds.height / 2,
+  };
+}
+
+function minimapNodePosition(node: PositionedNode, bounds: GraphBounds) {
+  const point = graphPointForNode(node);
+  return {
+    left: `${clamp(((point.x - bounds.minX) / bounds.width) * 100, 4, 96)}%`,
+    top: `${clamp(((point.y - bounds.minY) / bounds.height) * 100, 4, 96)}%`,
+  };
+}
+
+function minimapVisibleSizeRatio(visibleMin: number, visibleMax: number, boundsSize: number) {
+  return clamp((visibleMax - visibleMin) / boundsSize, 0.001, 1);
+}
+
+function minimapDisplaySizeRatio(visibleSizeRatio: number) {
+  return Math.min(1, Math.max(0.08, visibleSizeRatio));
+}
+
+function minimapDisplayStartRatio(centerRatio: number, displaySizeRatio: number) {
+  return displaySizeRatio >= 1
+    ? 0
+    : clamp(centerRatio - displaySizeRatio / 2, 0, 1 - displaySizeRatio);
+}
+
+function minimapContentCenterRatio(displayStartRatio: number, displaySizeRatio: number, visibleSizeRatio: number) {
+  if (displaySizeRatio >= 1) return 0.5;
+  if (displayStartRatio <= 0.0001) return visibleSizeRatio / 2;
+  if (displayStartRatio >= 1 - displaySizeRatio - 0.0001) return 1 - visibleSizeRatio / 2;
+
+  return clamp(displayStartRatio + displaySizeRatio / 2, visibleSizeRatio / 2, 1 - visibleSizeRatio / 2);
+}
+
+function buildMinimapViewport(graph: Graph, bounds: GraphBounds): MinimapViewport {
+  const [width, height] = graph.getSize();
+  if (!width || !height) return fallbackMinimapViewport;
+
+  const topLeft = graph.getCanvasByViewport([0, 0]);
+  const bottomRight = graph.getCanvasByViewport([width, height]);
+  const visibleMinX = Math.min(pointX(topLeft), pointX(bottomRight));
+  const visibleMaxX = Math.max(pointX(topLeft), pointX(bottomRight));
+  const visibleMinY = Math.min(pointY(topLeft), pointY(bottomRight));
+  const visibleMaxY = Math.max(pointY(topLeft), pointY(bottomRight));
+  const visibleWidthRatio = minimapVisibleSizeRatio(visibleMinX, visibleMaxX, bounds.width);
+  const visibleHeightRatio = minimapVisibleSizeRatio(visibleMinY, visibleMaxY, bounds.height);
+  const displayWidthRatio = minimapDisplaySizeRatio(visibleWidthRatio);
+  const displayHeightRatio = minimapDisplaySizeRatio(visibleHeightRatio);
+  const centerXRatio = clamp(((visibleMinX + visibleMaxX) / 2 - bounds.minX) / bounds.width, 0, 1);
+  const centerYRatio = clamp(((visibleMinY + visibleMaxY) / 2 - bounds.minY) / bounds.height, 0, 1);
+  const leftRatio = minimapDisplayStartRatio(centerXRatio, displayWidthRatio);
+  const topRatio = minimapDisplayStartRatio(centerYRatio, displayHeightRatio);
+
+  return {
+    height: displayHeightRatio * 100,
+    left: leftRatio * 100,
+    top: topRatio * 100,
+    visibleHeight: visibleHeightRatio * 100,
+    visibleWidth: visibleWidthRatio * 100,
+    width: displayWidthRatio * 100,
+  };
+}
+
+function edgeCurveOffset(source: ViewportPoint, target: ViewportPoint, active: boolean, center: ViewportPoint) {
+  const dx = target.x - source.x;
+  const dy = target.y - source.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const normal = { x: -dy / length, y: dx / length };
+  const midpoint = { x: (source.x + target.x) / 2, y: (source.y + target.y) / 2 };
+  const outward = normal.x * (midpoint.x - center.x) + normal.y * (midpoint.y - center.y);
+  const direction = Math.abs(outward) > 0.001 ? Math.sign(outward) : (source.x <= target.x ? -1 : 1);
+  const offset = Math.min(active ? 78 : 48, Math.max(active ? 26 : 14, length * (active ? 0.13 : 0.07)));
+
+  return offset * direction;
+}
+
+function buildNodeZoomStyle(selected: boolean, highlighted: boolean, zoom: number) {
+  const labelVisible = zoom >= 112;
+  const labelScale = labelViewportScale(zoom);
+
+  return {
+    label: selected || highlighted || labelVisible,
+    labelFontSize: (selected || highlighted ? 9 : 10) * labelScale,
+    labelOffsetX: 7 * labelScale,
+  };
+}
+
+function buildEdgeZoomStyle(edge: EdgeLike, active: boolean, zoom: number) {
+  const labelScale = labelViewportScale(zoom);
+
+  return {
+    label: active && zoom >= 116,
+    labelBackgroundLineWidth: labelScale,
+    labelBackgroundRadius: 10 * labelScale,
+    labelFontSize: 10 * labelScale,
+    labelPadding: [2 * labelScale, 8 * labelScale],
+  };
+}
+
+function buildG6Data(
+  nodes: PositionedNode[],
+  edges: GraphEdgeView[],
+  bounds: GraphBounds,
+  selectedNodeCode: string,
+  highlightedNodeCodes: string[],
+  highlightedEdgeCodes: string[],
+  zoom: number,
+): GraphData {
+  const highlightedNodes = new Set(highlightedNodeCodes);
+  const nodeByCode = new Map(nodes.map((node) => [node.nodeCode, node]));
+  const center = graphCenter(bounds);
+
+  return {
+    nodes: nodes.map((node) => {
+      const selected = node.nodeCode === selectedNodeCode;
+      const highlighted = selected || highlightedNodes.has(node.nodeCode);
+      const palette = nodePalette[node.kind];
+      const point = graphPointForNode(node);
+      const radius = nodeRadius(node);
+      const displayRadius = selected ? radius + 2 : highlighted ? radius + 1 : radius;
+      return {
+        id: node.nodeCode,
+        data: {
+          degree: node.degree,
+          detail: propertyText(node),
+          kind: node.kind,
+          nodeCode: node.nodeCode,
+          primaryLabel: node.labels[0] ?? "GraphNode",
+        },
+        states: [],
+        style: {
+          cursor: "pointer",
+          fill: selected ? "#1c1b1b" : highlighted ? "#2f5f9f" : palette.color,
+          halo: false,
+          labelBackground: false,
+          labelFill: "#1f2933",
+          labelFontFamily: "Inter Variable, Inter, sans-serif",
+          labelFontWeight: 700,
+          labelPadding: 0,
+          labelPlacement: "right",
+          labelText: node.nodeCode,
+          lineWidth: selected ? 1.5 : 0,
+          opacity: selected || highlighted ? 1 : 0.92,
+          r: displayRadius,
+          size: displayRadius * 2,
+          stroke: selected ? "#ffffff" : "transparent",
+          x: point.x,
+          y: point.y,
+          zIndex: selected ? 10 : highlighted ? 6 : Math.max(1, Math.min(5, node.degree)),
+          ...buildNodeZoomStyle(selected, highlighted, zoom),
+        },
+        type: "circle",
+      };
+    }),
+    edges: edges.map((edge) => {
+      const source = nodeByCode.get(edge.sourceNodeCode);
+      const target = nodeByCode.get(edge.targetNodeCode);
+      const active = edgeActive(edge, selectedNodeCode, highlightedEdgeCodes);
+      const sourcePoint = source ? graphPointForNode(source) : graphCenter(bounds);
+      const targetPoint = target ? graphPointForNode(target) : graphCenter(bounds);
+      return {
+        id: edge.edgeCode,
+        data: {
+          edgeCode: edge.edgeCode,
+          relationship: edge.relationship,
+          sourceNodeCode: edge.sourceNodeCode,
+          targetNodeCode: edge.targetNodeCode,
+        },
+        source: edge.sourceNodeCode,
+        states: [],
+        style: {
+          badge: false,
+          curveOffset: edgeCurveOffset(sourcePoint, targetPoint, active, center),
+          endArrow: active,
+          endArrowFill: "#2f5f9f",
+          endArrowStroke: "#2f5f9f",
+          labelAutoRotate: false,
+          labelBackground: true,
+          labelBackgroundFill: "#ffffff",
+          labelBackgroundOpacity: 0.86,
+          labelBackgroundStroke: "#c6d6f1",
+          labelFill: "#2f5f9f",
+          labelFontFamily: "Inter Variable, Inter, sans-serif",
+          labelFontWeight: 700,
+          labelOffsetX: 0,
+          labelOffsetY: 0,
+          labelPlacement: "center",
+          labelText: edge.relationship,
+          labelTextBaseline: "middle",
+          lineWidth: active ? 1.35 : 0.8,
+          opacity: active ? 0.72 : 0.38,
+          stroke: active ? "#2f5f9f" : "#cfd6d6",
+          zIndex: active ? 4 : 1,
+          ...buildEdgeZoomStyle(edge, active, zoom),
+        },
+        target: edge.targetNodeCode,
+        type: "quadratic",
+      };
+    }),
+  };
+}
+
+function buildG6ZoomStyleData(
+  nodes: PositionedNode[],
+  edges: GraphEdgeView[],
+  selectedNodeCode: string,
+  highlightedNodeCodes: string[],
+  highlightedEdgeCodes: string[],
+  zoom: number,
+): GraphZoomStyleData {
+  const highlightedNodes = new Set(highlightedNodeCodes);
+
+  return {
+    edges: edges.map((edge) => {
+      const active = edgeActive(edge, selectedNodeCode, highlightedEdgeCodes);
+      return {
+        id: edge.edgeCode,
+        source: edge.sourceNodeCode,
+        style: buildEdgeZoomStyle(edge, active, zoom),
+        target: edge.targetNodeCode,
+      };
+    }),
+    nodes: nodes.map((node) => {
+      const selected = node.nodeCode === selectedNodeCode;
+      const highlighted = selected || highlightedNodes.has(node.nodeCode);
+      return {
+        id: node.nodeCode,
+        style: buildNodeZoomStyle(selected, highlighted, zoom),
+      };
+    }),
+  };
+}
+
+function centerGraphAt(graph: Graph, point: ViewportPoint, duration: number) {
+  const [width, height] = graph.getSize();
+  const viewportPosition = graph.getViewportByCanvas([point.x, point.y]);
+
+  return graph.translateBy([
+    width / 2 - pointX(viewportPosition),
+    height / 2 - pointY(viewportPosition),
+  ], duration ? { duration } : false);
+}
+
+async function centerGraphNode(graph: Graph, nodeCode: string, duration: number) {
+  const [width, height] = graph.getSize();
+  if (!width || !height) return;
+
+  try {
+    const nodePosition = graph.getElementPosition(nodeCode);
+    const viewportPosition = graph.getViewportByCanvas(nodePosition);
+    await graph.translateBy([
+      width / 2 - pointX(viewportPosition),
+      height / 2 - pointY(viewportPosition),
+    ], duration ? { duration } : false);
+  } catch {
+    // Fall back to G6's element focus when the rendered node position is not ready yet.
+    await graph.focusElement(nodeCode, duration ? { duration } : false);
+  }
+}
+
+function nodeCodeFromEvent(event: IElementEvent) {
+  const target = event.target as { id?: string };
+  return target.id ?? "";
 }
 
 export function GraphCanvas({
   edges,
   highlightedEdgeCodes,
   highlightedNodeCodes,
+  layoutMode,
   nodes,
+  onCameraZoomChange,
+  onClearSelection,
   onSelectNode,
   selectedNodeCode,
   zoom,
 }: GraphCanvasProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const minimapRef = useRef<HTMLButtonElement | null>(null);
+  const minimapDragRef = useRef<MinimapDragState | null>(null);
+  const graphRef = useRef<Graph | null>(null);
+  const pendingGraphTasksRef = useRef(new WeakMap<Graph, Set<Promise<unknown>>>());
+  const syncFrameRef = useRef<number | null>(null);
+  const onCameraZoomChangeRef = useRef(onCameraZoomChange);
+  const onClearSelectionRef = useRef(onClearSelection);
+  const onSelectNodeRef = useRef(onSelectNode);
+  const suppressZoomReportRef = useRef(false);
+  const zoomRef = useRef(zoom);
+  const cameraZoomRef = useRef(zoom);
+  const zoomStyleDataRef = useRef<GraphZoomStyleData>({ edges: [], nodes: [] });
+  const graphReadyRef = useRef(false);
+  const [cameraZoom, setCameraZoom] = useState(zoom);
+  const [minimapViewport, setMinimapViewport] = useState<MinimapViewport>(fallbackMinimapViewport);
+
   const positionedNodes = useMemo(
-    () => buildSemanticLayout(nodes, edges, selectedNodeCode),
-    [edges, nodes, selectedNodeCode],
+    () => buildPositionedNodes(nodes, edges, layoutMode),
+    [edges, layoutMode, nodes],
+  );
+  const graphBounds = useMemo(
+    () => buildGraphBounds(positionedNodes),
+    [positionedNodes],
   );
   const nodeByCode = useMemo(
     () => new Map(positionedNodes.map((node) => [node.nodeCode, node])),
     [positionedNodes],
   );
-  const visibleNodeCodes = new Set(positionedNodes.map((node) => node.nodeCode));
-  const renderEdges = edges.filter((edge) => visibleNodeCodes.has(edge.sourceNodeCode) && visibleNodeCodes.has(edge.targetNodeCode));
-  const scale = zoom / 100;
+  const visibleNodeCodes = useMemo(
+    () => new Set(positionedNodes.map((node) => node.nodeCode)),
+    [positionedNodes],
+  );
+  const renderEdges = useMemo(
+    () => edges.filter((edge) => visibleNodeCodes.has(edge.sourceNodeCode) && visibleNodeCodes.has(edge.targetNodeCode)),
+    [edges, visibleNodeCodes],
+  );
+  const g6Data = useMemo(
+    () => buildG6Data(positionedNodes, renderEdges, graphBounds, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes, cameraZoomRef.current),
+    [graphBounds, highlightedEdgeCodes, highlightedNodeCodes, positionedNodes, renderEdges, selectedNodeCode],
+  );
+  const zoomStyleData = useMemo(
+    () => buildG6ZoomStyleData(positionedNodes, renderEdges, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes, cameraZoom),
+    [cameraZoom, highlightedEdgeCodes, highlightedNodeCodes, positionedNodes, renderEdges, selectedNodeCode],
+  );
+
+  function trackGraphTask(graph: Graph, task: () => Promise<unknown>) {
+    let tasks = pendingGraphTasksRef.current.get(graph);
+    if (!tasks) {
+      tasks = new Set<Promise<unknown>>();
+      pendingGraphTasksRef.current.set(graph, tasks);
+    }
+
+    const promise = Promise.resolve()
+      .then(task)
+      .catch(() => undefined);
+    tasks.add(promise);
+    void promise.finally(() => {
+      tasks?.delete(promise);
+    });
+    return promise;
+  }
+
+  function destroyGraphWhenIdle(graph: Graph) {
+    const tasks = pendingGraphTasksRef.current.get(graph);
+    const destroy = () => {
+      try {
+        graph.destroy();
+      } catch {
+        // G6 can throw if a development remount already disposed the instance.
+      }
+      pendingGraphTasksRef.current.delete(graph);
+    };
+
+    if (!tasks?.size) {
+      destroy();
+      return;
+    }
+
+    void Promise.allSettled(Array.from(tasks)).finally(destroy);
+  }
+
+  function reportZoom(graph: Graph) {
+    const nextZoom = scaleToZoom(graph.getZoom());
+    cameraZoomRef.current = nextZoom;
+    setCameraZoom((current) => (current === nextZoom ? current : nextZoom));
+    if (!suppressZoomReportRef.current && Math.abs(nextZoom - zoomRef.current) >= 1) {
+      zoomRef.current = nextZoom;
+      onCameraZoomChangeRef.current(nextZoom);
+    }
+  }
+
+  function syncViewportState(graph: Graph) {
+    reportZoom(graph);
+    setMinimapViewport(buildMinimapViewport(graph, graphBounds));
+  }
+
+  function scheduleSyncViewportState(targetGraph = graphRef.current) {
+    const graph = targetGraph;
+    if (!graph) return;
+    if (syncFrameRef.current !== null) window.cancelAnimationFrame(syncFrameRef.current);
+    syncFrameRef.current = window.requestAnimationFrame(() => {
+      syncFrameRef.current = null;
+      if (graphRef.current !== graph) return;
+      syncViewportState(graph);
+    });
+  }
+
+  function panCameraFromMinimapPointer(event: ReactPointerEvent<HTMLButtonElement>) {
+    const graph = graphRef.current;
+    const minimap = minimapRef.current;
+    const dragState = minimapDragRef.current;
+    if (!graph || !minimap || !dragState) return;
+
+    const rect = minimap.getBoundingClientRect();
+    const pointerXRatio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+    const pointerYRatio = clamp((event.clientY - rect.top) / rect.height, 0, 1);
+    const viewportWidthRatio = clamp(minimapViewport.width / 100, 0.001, 1);
+    const viewportHeightRatio = clamp(minimapViewport.height / 100, 0.001, 1);
+    const visibleWidthRatio = clamp(minimapViewport.visibleWidth / 100, 0.001, 1);
+    const visibleHeightRatio = clamp(minimapViewport.visibleHeight / 100, 0.001, 1);
+    const targetLeftRatio = viewportWidthRatio >= 1
+      ? 0
+      : clamp(pointerXRatio - dragState.offsetXRatio, 0, 1 - viewportWidthRatio);
+    const targetTopRatio = viewportHeightRatio >= 1
+      ? 0
+      : clamp(pointerYRatio - dragState.offsetYRatio, 0, 1 - viewportHeightRatio);
+    const targetCenterXRatio = minimapContentCenterRatio(targetLeftRatio, viewportWidthRatio, visibleWidthRatio);
+    const targetCenterYRatio = minimapContentCenterRatio(targetTopRatio, viewportHeightRatio, visibleHeightRatio);
+    const targetCenter = {
+      x: graphBounds.minX + targetCenterXRatio * graphBounds.width,
+      y: graphBounds.minY + targetCenterYRatio * graphBounds.height,
+    };
+
+    void trackGraphTask(graph, async () => {
+      await centerGraphAt(graph, targetCenter, 0);
+      scheduleSyncViewportState(graph);
+    });
+  }
+
+  function handleMinimapPointerDown(event: ReactPointerEvent<HTMLButtonElement>) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pointerXRatio = clamp((event.clientX - rect.left) / rect.width, 0, 1);
+    const pointerYRatio = clamp((event.clientY - rect.top) / rect.height, 0, 1);
+    const viewportLeftRatio = minimapViewport.left / 100;
+    const viewportTopRatio = minimapViewport.top / 100;
+    const viewportWidthRatio = clamp(minimapViewport.width / 100, 0.001, 1);
+    const viewportHeightRatio = clamp(minimapViewport.height / 100, 0.001, 1);
+    const pointerInsideViewport = pointerXRatio >= viewportLeftRatio
+      && pointerXRatio <= viewportLeftRatio + viewportWidthRatio
+      && pointerYRatio >= viewportTopRatio
+      && pointerYRatio <= viewportTopRatio + viewportHeightRatio;
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    minimapDragRef.current = {
+      offsetXRatio: pointerInsideViewport ? pointerXRatio - viewportLeftRatio : viewportWidthRatio / 2,
+      offsetYRatio: pointerInsideViewport ? pointerYRatio - viewportTopRatio : viewportHeightRatio / 2,
+      pointerId: event.pointerId,
+    };
+    panCameraFromMinimapPointer(event);
+  }
+
+  function handleMinimapPointerMove(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (minimapDragRef.current?.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    panCameraFromMinimapPointer(event);
+  }
+
+  function handleMinimapPointerEnd(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (minimapDragRef.current?.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    minimapDragRef.current = null;
+  }
+
+  useEffect(() => {
+    onCameraZoomChangeRef.current = onCameraZoomChange;
+    onClearSelectionRef.current = onClearSelection;
+    onSelectNodeRef.current = onSelectNode;
+    zoomRef.current = zoom;
+  }, [onCameraZoomChange, onClearSelection, onSelectNode, zoom]);
+
+  useEffect(() => {
+    zoomStyleDataRef.current = zoomStyleData;
+  }, [zoomStyleData]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return undefined;
+
+    const graph = new Graph({
+      animation: false,
+      background: "transparent",
+      behaviors: [
+        { direction: "both", key: "drag-canvas", range: Infinity, type: "drag-canvas" },
+        { key: "zoom-canvas", preventDefault: true, sensitivity: 0.9, type: "zoom-canvas" },
+      ],
+      container,
+      data: g6Data,
+      edge: { type: "quadratic" },
+      node: { type: "circle" },
+      padding: 42,
+      zoom: zoomToScale(zoom),
+      zoomRange: [0.6, 2.2],
+    });
+
+    graphRef.current = graph;
+    graphReadyRef.current = false;
+    let active = true;
+
+    const handleNodeClick = (event: IElementEvent) => {
+      const nodeCode = nodeCodeFromEvent(event);
+      if (!nodeCode) return;
+
+      onSelectNodeRef.current(nodeCode);
+      void trackGraphTask(graph, async () => {
+        await centerGraphNode(graph, nodeCode, 240);
+        if (active) scheduleSyncViewportState(graph);
+      });
+    };
+    const handleCanvasClick = () => {
+      onClearSelectionRef.current();
+    };
+
+    const handleCanvasDoubleClick = () => {
+      void trackGraphTask(graph, async () => {
+        await graph.zoomBy(1.28, { duration: 220 });
+        if (active) scheduleSyncViewportState(graph);
+      });
+    };
+    const handleGraphTransform = () => {
+      scheduleSyncViewportState();
+    };
+    const resizeObserver = new ResizeObserver(() => {
+      graph.resize();
+      scheduleSyncViewportState();
+    });
+
+    graph.on(NodeEvent.CLICK, handleNodeClick);
+    graph.on(CanvasEvent.CLICK, handleCanvasClick);
+    graph.on(CanvasEvent.DBLCLICK, handleCanvasDoubleClick);
+    graph.on(GraphEvent.AFTER_TRANSFORM, handleGraphTransform);
+    resizeObserver.observe(container);
+
+    void trackGraphTask(graph, async () => {
+      await graph.render();
+      if (!active) return;
+      graphReadyRef.current = true;
+      const selectedNode = selectedNodeCode ? nodeByCode.get(selectedNodeCode) : undefined;
+      const center = selectedNode ? graphPointForNode(selectedNode) : graphCenter(graphBounds);
+      await centerGraphAt(graph, center, 0);
+      if (active) scheduleSyncViewportState(graph);
+    });
+
+    return () => {
+      active = false;
+      if (syncFrameRef.current !== null) {
+        window.cancelAnimationFrame(syncFrameRef.current);
+        syncFrameRef.current = null;
+      }
+      resizeObserver.disconnect();
+      graph.off(NodeEvent.CLICK, handleNodeClick);
+      graph.off(CanvasEvent.CLICK, handleCanvasClick);
+      graph.off(CanvasEvent.DBLCLICK, handleCanvasDoubleClick);
+      graph.off(GraphEvent.AFTER_TRANSFORM, handleGraphTransform);
+      if (graphRef.current === graph) {
+        graphRef.current = null;
+        graphReadyRef.current = false;
+      }
+      destroyGraphWhenIdle(graph);
+    };
+    // The graph instance is intentionally created once per canvas mount.
+    // Data, selection, zoom, and layout changes are synchronized in the effects below.
+  }, []);
+
+  useEffect(() => {
+    const graph = graphRef.current;
+    if (!graph) return;
+
+    void trackGraphTask(graph, async () => {
+      graph.setData(g6Data);
+      await graph.draw();
+      if (graphRef.current === graph) {
+        setMinimapViewport(buildMinimapViewport(graph, graphBounds));
+      }
+    });
+  }, [g6Data, graphBounds]);
+
+  useEffect(() => {
+    const graph = graphRef.current;
+    if (!graph || !graphReadyRef.current) return;
+
+    void trackGraphTask(graph, async () => {
+      const currentZoomStyleData = zoomStyleDataRef.current;
+      graph.updateNodeData(currentZoomStyleData.nodes);
+      graph.updateEdgeData(currentZoomStyleData.edges);
+      await graph.draw();
+      if (graphRef.current === graph) {
+        setMinimapViewport(buildMinimapViewport(graph, graphBounds));
+      }
+    });
+  }, [cameraZoom, graphBounds]);
+
+  useEffect(() => {
+    const graph = graphRef.current;
+    if (!graph || !graphReadyRef.current) return;
+    const targetScale = zoomToScale(zoom);
+    if (Math.abs(graph.getZoom() - targetScale) < 0.01) return;
+
+    suppressZoomReportRef.current = true;
+    void trackGraphTask(graph, async () => {
+      try {
+        await graph.zoomTo(targetScale, { duration: 180 });
+      } finally {
+        suppressZoomReportRef.current = false;
+        if (graphRef.current === graph) {
+          scheduleSyncViewportState(graph);
+          reportZoom(graph);
+        }
+      }
+    });
+  }, [zoom]);
+
+  useEffect(() => {
+    const graph = graphRef.current;
+    const selectedNode = selectedNodeCode ? nodeByCode.get(selectedNodeCode) : undefined;
+    if (!graph || !graphReadyRef.current || !selectedNode) return;
+
+    suppressZoomReportRef.current = true;
+    const targetScale = Math.max(graph.getZoom(), zoomToScale(126));
+    void trackGraphTask(graph, async () => {
+      try {
+        await graph.zoomTo(targetScale, { duration: 160 });
+        await centerGraphNode(graph, selectedNode.nodeCode, 260);
+      } finally {
+        suppressZoomReportRef.current = false;
+        if (graphRef.current === graph) {
+          scheduleSyncViewportState(graph);
+          reportZoom(graph);
+        }
+      }
+    });
+  }, [graphBounds, nodeByCode, selectedNodeCode]);
 
   return (
     <section
-      className="relative min-h-[620px] min-w-0 overflow-hidden bg-[var(--color-surface-container-lowest)]"
-      aria-label="Semantic focus graph canvas"
+      className="relative h-full min-h-[620px] min-w-0 overflow-hidden bg-[var(--color-surface-container-lowest)]"
+      aria-label="G6 semantic knowledge graph canvas"
       style={{
-        backgroundImage: "radial-gradient(circle at 1px 1px, rgba(68,71,72,0.14) 1px, transparent 0), linear-gradient(135deg, rgba(255,255,255,0.72), rgba(243,244,244,0.52))",
+        backgroundImage: "radial-gradient(circle at 1px 1px, rgba(68,71,72,0.13) 1px, transparent 0), linear-gradient(135deg, rgba(255,255,255,0.76), rgba(243,244,244,0.58))",
         backgroundSize: "20px 20px, 100% 100%",
       }}
     >
-      <div
-        className="relative origin-top-left transition-transform"
-        style={{
-          height: canvasHeight,
-          transform: `scale(${scale})`,
-          width: canvasWidth,
-        }}
-      >
-        <div className="absolute left-5 top-5 z-20 rounded-full border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)] shadow-sm">
-          Primary relationships
-        </div>
-        <svg
-          className="absolute inset-0"
-          height={canvasHeight}
-          viewBox={`0 0 ${canvasWidth} ${canvasHeight}`}
-          width={canvasWidth}
-          aria-hidden="true"
-        >
-          <defs>
-            <marker id="graph-arrow" markerHeight="8" markerWidth="8" orient="auto" refX="7" refY="4">
-              <path d="M 0 0 L 8 4 L 0 8 z" fill="#aeb5b5" />
-            </marker>
-            <marker id="graph-arrow-active" markerHeight="9" markerWidth="9" orient="auto" refX="8" refY="4.5">
-              <path d="M 0 0 L 9 4.5 L 0 9 z" fill="#2f5f9f" />
-            </marker>
-            <filter id="graph-soft-shadow" height="150%" width="150%" x="-25%" y="-25%">
-              <feDropShadow dx="0" dy="8" floodColor="#1f2933" floodOpacity="0.12" stdDeviation="8" />
-            </filter>
-          </defs>
-
-          {zoneLabels.map((zone) => (
-            <g key={zone.label} opacity="0.72">
-              <rect
-                fill="transparent"
-                height="148"
-                rx="18"
-                stroke={zone.color}
-                strokeDasharray="3 8"
-                strokeOpacity="0.16"
-                width={zone.width}
-                x={zone.x}
-                y={zone.y}
-              />
-              <text
-                fill={zone.color}
-                fontSize="11"
-                fontWeight="700"
-                letterSpacing="0.4"
-                x={zone.x + 14}
-                y={zone.y + 24}
-              >
-                {zone.label}
-              </text>
-            </g>
-          ))}
-
-          {renderEdges.map((edge) => {
-            const source = nodeByCode.get(edge.sourceNodeCode);
-            const target = nodeByCode.get(edge.targetNodeCode);
-            if (!source || !target) return null;
-            const level = edgeLevel(edge, selectedNodeCode, highlightedEdgeCodes);
-            const active = level !== "context";
-            const labelPoint = edgeLabelPoint(source, target, edge, level);
-            return (
-              <g key={edge.edgeCode} opacity={active ? 1 : 0.58}>
-                <path
-                  d={edgePath(source, target)}
-                  fill="none"
-                  markerEnd={active ? "url(#graph-arrow-active)" : "url(#graph-arrow)"}
-                  stroke={edgeStroke(level)}
-                  strokeDasharray={active ? undefined : "6 8"}
-                  strokeLinecap="round"
-                  strokeWidth={level === "primary" ? 3 : level === "path" ? 2.2 : 1.4}
-                />
-                {active ? (
-                  <foreignObject height="30" width="178" x={labelPoint.x - 89} y={labelPoint.y - 15}>
-                    <div className="flex justify-center">
-                      <span className="max-w-[170px] truncate rounded-full border border-[#c6d6f1] bg-white/95 px-2.5 py-1 font-mono text-[10px] font-semibold text-[#2f5f9f] shadow-[0_6px_16px_rgba(47,95,159,0.12)]">
-                        {edge.relationship}
-                      </span>
-                    </div>
-                  </foreignObject>
-                ) : null}
-              </g>
-            );
-          })}
-        </svg>
-
-        {positionedNodes.map((node) => {
-          const selected = node.nodeCode === selectedNodeCode;
-          const highlighted = highlightedNodeCodes.includes(node.nodeCode) || node.depth <= 1;
-          const primaryLabel = node.labels[0] ?? "GraphNode";
-          const palette = nodePalette[node.kind];
-          const Icon = nodeIcons[node.kind];
-          return (
-            <button
-              className="absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center outline-none"
-              key={node.nodeCode}
-              type="button"
-              aria-label={selected ? `Selected ${node.nodeCode} graph node` : `Select ${node.nodeCode} graph node`}
-              style={{ left: node.layoutX, top: node.layoutY }}
-              onClick={() => onSelectNode(node.nodeCode)}
-            >
-              <span
-                className={cn(
-                  "relative flex items-center justify-center rounded-full border bg-white shadow-[0_9px_24px_rgba(15,23,42,0.12)] transition-[box-shadow,transform]",
-                  selected ? "size-[70px] text-white ring-[10px] ring-[#2f5f9f]/10" : node.depth === 1 ? "size-[52px] ring-4 ring-white/80" : "size-11 opacity-90",
-                  highlighted && !selected ? "ring-4 ring-[#2f5f9f]/12" : undefined,
-                )}
-                style={{
-                  backgroundColor: selected ? "var(--color-primary)" : "#ffffff",
-                  borderColor: selected ? "var(--color-primary)" : palette.border,
-                  color: selected ? "var(--color-on-primary)" : palette.color,
-                }}
-              >
-                {selected ? (
-                  <span className="absolute inset-[-9px] rounded-full border border-[#2f5f9f]/25" />
-                ) : null}
-                <Icon size={selected ? 28 : node.depth === 1 ? 20 : 17} strokeWidth={selected ? 2.4 : 2.1} aria-hidden="true" />
-              </span>
-              <span
-                className={cn(
-                  "mt-2 max-w-[156px] truncate rounded-md border bg-white/95 px-2 py-1 text-center font-mono shadow-[0_6px_16px_rgba(15,23,42,0.08)]",
-                  selected ? "border-[var(--color-primary)] text-[12px] font-bold text-[var(--color-on-surface)]" : "border-[var(--color-outline-variant)] text-[10px] font-semibold text-[var(--color-on-surface-variant)]",
-                )}
-                title={`${node.nodeCode} / ${primaryLabel}`}
-              >
-                {node.nodeCode}
-              </span>
-              {selected ? (
-                <span className="mt-1 rounded-full px-2 py-0.5 text-[10px] font-semibold" style={{ backgroundColor: palette.soft, color: palette.color }}>
-                  {primaryLabel}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
+      <div ref={containerRef} className="absolute inset-0 z-0" />
 
       <div className="absolute bottom-4 left-4 z-20 rounded-xl border border-[var(--color-card-border)] bg-white/88 p-2 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-sm">
-        <div className="relative h-28 w-40 overflow-hidden rounded-lg bg-[var(--color-surface-container-low)]">
-          {positionedNodes.slice(0, 18).map((node) => (
+        <button
+          ref={minimapRef}
+          aria-label="Pan graph viewport"
+          className="relative block h-28 w-40 cursor-grab overflow-hidden rounded-lg bg-[var(--color-surface-container-low)] text-left active:cursor-grabbing"
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+          onPointerCancel={handleMinimapPointerEnd}
+          onPointerDown={handleMinimapPointerDown}
+          onPointerMove={handleMinimapPointerMove}
+          onPointerUp={handleMinimapPointerEnd}
+        >
+          {positionedNodes.map((node) => (
             <span
-              className={cn("absolute rounded-full", node.depth === 0 ? "size-2.5" : "size-1.5")}
+              className={cn(
+                "absolute -translate-x-1/2 -translate-y-1/2 rounded-full",
+                node.nodeCode === selectedNodeCode ? "size-2.5 ring-2 ring-[#2f5f9f]/25" : "size-1.5",
+              )}
               key={`mini-${node.nodeCode}`}
               style={{
-                backgroundColor: nodeColor(node.labels),
-                left: `${Math.min(95, Math.max(4, (node.layoutX / canvasWidth) * 100))}%`,
-                top: `${Math.min(92, Math.max(5, (node.layoutY / canvasHeight) * 100))}%`,
+                backgroundColor: nodePalette[node.kind].color,
+                ...minimapNodePosition(node, graphBounds),
               }}
             />
           ))}
-          <span className="absolute left-[28%] top-[22%] h-[56%] w-[48%] rounded-md border border-[var(--color-accent)]/50" />
-        </div>
+          <span
+            className="absolute rounded-md border border-[var(--color-accent)]/60 bg-white/22 shadow-[0_0_0_1px_rgba(255,255,255,0.55)_inset]"
+            style={{
+              height: `${minimapViewport.height}%`,
+              left: `${minimapViewport.left}%`,
+              top: `${minimapViewport.top}%`,
+              width: `${minimapViewport.width}%`,
+            }}
+          />
+        </button>
       </div>
 
       <GraphLegend />

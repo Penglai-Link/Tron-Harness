@@ -1,5 +1,7 @@
 export type GraphPropertyValue = string | number | boolean | null;
 
+export type GraphLayoutMode = "Radial" | "Smart" | "Force" | "Hierarchy" | "Grid";
+
 export interface GraphScopeView {
   appCode: string;
   currentWorkspaceCode: string;
@@ -27,8 +29,8 @@ export interface GraphNodeView {
   properties: Record<string, GraphPropertyValue>;
   score?: number;
   updatedAt: string;
-  x: number;
-  y: number;
+  x?: number;
+  y?: number;
 }
 
 export interface GraphEdgeView {

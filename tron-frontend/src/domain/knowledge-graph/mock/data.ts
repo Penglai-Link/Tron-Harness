@@ -27,8 +27,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "RAG_REVIEWER",
       labels: ["RagSkill"],
-      x: 430,
-      y: 290,
       score: 0.98,
       fullText: "Skill: rag-reviewer\nDescription: Reviews RAG retrieval changes before release.",
       embeddingText: "Reviews RAG retrieval changes before release.",
@@ -45,8 +43,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "GIT",
       labels: ["RagTool"],
-      x: 245,
-      y: 190,
       score: 0.95,
       fullText: "Git operations",
       properties: {
@@ -59,8 +55,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "RAG_REVIEW",
       labels: ["RagTag"],
-      x: 250,
-      y: 400,
       score: 0.91,
       fullText: "RAG review workflow",
       properties: {
@@ -70,8 +64,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "RAG_PROMPT_TEMPLATE",
       labels: ["RagPromptTemplate"],
-      x: 640,
-      y: 165,
       score: 0.89,
       fullText: "Prompt template for RAG graph search reviews.",
       properties: {
@@ -83,8 +75,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "RAG_SKILL_TEXT_UNIT_001",
       labels: ["RagSkillTextUnit"],
-      x: 645,
-      y: 390,
       score: 0.84,
       fullText: "Reviews RAG retrieval changes before release.",
       properties: {
@@ -96,8 +86,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "RAG_SKILL_FULLTEXT_001",
       labels: ["RagSkillFulltext"],
-      x: 790,
-      y: 305,
       score: 0.78,
       properties: {
         indexStatus: "INDEXED",
@@ -107,8 +95,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "RAG_SKILL_VECTOR_001",
       labels: ["RagSkillVector"],
-      x: 780,
-      y: 475,
       score: 0.76,
       embeddingText: "Reviews RAG retrieval changes before release.",
       properties: {
@@ -119,8 +105,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "ROOT_NODE",
       labels: ["TronGraphNode"],
-      x: 118,
-      y: 302,
       score: 0.72,
       fullText: "root task",
       properties: {
@@ -131,8 +115,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "CHILD_NODE",
       labels: ["TronGraphNode"],
-      x: 118,
-      y: 500,
       score: 0.7,
       fullText: "child task",
       properties: {
@@ -143,8 +125,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "RAG_MAPPER",
       labels: ["RagSkill"],
-      x: 472,
-      y: 92,
       score: 0.68,
       properties: {
         corpusId: "skill-graph",
@@ -155,8 +135,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "RAG_PROMPTER",
       labels: ["RagSkill"],
-      x: 548,
-      y: 526,
       score: 0.66,
       properties: {
         corpusId: "skill-graph",
@@ -167,8 +145,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "CODE_SEARCH",
       labels: ["RagTool"],
-      x: 362,
-      y: 62,
       score: 0.64,
       properties: {
         provider: "search",
@@ -178,8 +154,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "SOURCE_CONTROL",
       labels: ["RagTag"],
-      x: 90,
-      y: 154,
       score: 0.61,
       properties: {
         category: "tooling",
@@ -188,8 +162,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "TASK",
       labels: ["OntologyClass"],
-      x: 900,
-      y: 125,
       score: 0.6,
       properties: {
         ontologyDomain: "Development",
@@ -199,8 +171,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "TASK_PROPERTY",
       labels: ["OntologyProperty"],
-      x: 920,
-      y: 250,
       score: 0.58,
       properties: {
         ontologyDomain: "Development",
@@ -210,8 +180,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "TASK_SHAPE",
       labels: ["OntologyShape"],
-      x: 916,
-      y: 382,
       score: 0.57,
       properties: {
         ontologyDomain: "Development",
@@ -221,8 +189,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "MEMORY_CONTEXT",
       labels: ["RagTag"],
-      x: 360,
-      y: 550,
       score: 0.55,
       properties: {
         category: "memory",
@@ -231,8 +197,6 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     node({
       nodeCode: "SKILL_SOURCE_001",
       labels: ["RagSkillSource"],
-      x: 565,
-      y: 650,
       score: 0.53,
       properties: {
         sourceCode: "skill:TRON_CORE:rag-reviewer",

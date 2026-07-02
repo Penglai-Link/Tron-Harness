@@ -62,12 +62,16 @@ export function useKnowledgeGraphExplorer(filters: KnowledgeGraphExplorerFilters
       ?? resultNodes[0]
       ?? graph.nodes[0];
     const selectedNodeEdges = graph.edges.filter((edge) => edgeTouchesNode(edge, selectedNode.nodeCode));
-    const highlightedPath = graph.paths[0];
+    const highlightedNodeCodes = new Set<string>([selectedNode.nodeCode]);
+    for (const edge of selectedNodeEdges) {
+      highlightedNodeCodes.add(edge.sourceNodeCode);
+      highlightedNodeCodes.add(edge.targetNodeCode);
+    }
 
     return {
       ...graph,
-      highlightedEdgeCodes: highlightedPath?.edgeCodes ?? [],
-      highlightedNodeCodes: highlightedPath?.nodeCodes ?? [],
+      highlightedEdgeCodes: selectedNodeEdges.map((edge) => edge.edgeCode),
+      highlightedNodeCodes: Array.from(highlightedNodeCodes),
       resultNodes,
       selectedNode,
       selectedNodeEdges,
