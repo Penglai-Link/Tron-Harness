@@ -2329,8 +2329,8 @@ function SessionSidebar({
         className={cn(
           "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md px-3 py-2 text-left transition",
           activeSessionCode === session.sessionCode
-            ? "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]"
-            : "text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]",
+            ? "bg-[var(--color-surface-container-high)]"
+            : "hover:bg-[var(--color-surface-container-high)]",
         )}
         key={session.sessionCode}
       >
