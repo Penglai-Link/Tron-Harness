@@ -241,27 +241,26 @@ export function AppsPage() {
           ? "No apps match the current filters."
           : "Select a workspace in the shell header to load apps."}
         toolbar={(
-          <>
+          <div className="w-full grid gap-4 lg:grid-cols-3 sm:grid-cols-1">
             <TextInput
               aria-label="Search apps"
-              className="h-8 min-w-[20rem] w-[30rem] max-w-full"
               placeholder="Search apps, repos, branches, or tags..."
               type="search"
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
             />
-            <SelectInput aria-label="Runtime role filter" className="h-8 min-w-36" value={runtimeRole} onValueChange={(event) => setRuntimeRole(event as "" | AppRuntimeRole)}>
+            <SelectInput aria-label="Runtime role filter" value={runtimeRole} onValueChange={(event) => setRuntimeRole(event as "" | AppRuntimeRole)}>
               <SelectItem value="">All roles</SelectItem>
               <SelectItem value="Frontend">Frontend</SelectItem>
               <SelectItem value="Backend">Backend</SelectItem>
               <SelectItem value="Mono">Mono</SelectItem>
             </SelectInput>
-            <SelectInput aria-label="App status filter" className="h-8 min-w-36" value={status} onValueChange={(event) => setStatus(event as StatusFilter)}>
+            <SelectInput aria-label="App status filter" value={status} onValueChange={(event) => setStatus(event as StatusFilter)}>
               <SelectItem value="Active">Active</SelectItem>
               <SelectItem value="Archived">Archived</SelectItem>
               <SelectItem value="All">All</SelectItem>
             </SelectInput>
-          </>
+          </div>
         )}
         pagination={(
           <TablePagination
