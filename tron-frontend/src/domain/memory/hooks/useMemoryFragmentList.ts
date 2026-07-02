@@ -125,6 +125,7 @@ export function useMemoryTargets(workspaceCode?: string, refreshKey = 0) {
 
 export function useMemoryFragmentList(options: UseMemoryFragmentListOptions | number = {}) {
   const dataSource = getServiceDataSource("memory");
+  const toast = useToast()
   const normalizedOptions = typeof options === "number" ? { refreshKey: options } : options;
   const {
     activeTarget,
@@ -161,12 +162,9 @@ export function useMemoryFragmentList(options: UseMemoryFragmentListOptions | nu
       .then(setRecords)
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        toastManager.add({
-          type: "error",
-          description: error instanceof Error
-            ? error.message
-            : "Memories could not be loaded"
-        });
+        toast.error(error instanceof Error
+          ? error.message
+          : "Memories could not be loaded")
         setRecords([]);
       });
 

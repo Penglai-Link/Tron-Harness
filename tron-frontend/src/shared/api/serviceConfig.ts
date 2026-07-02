@@ -200,10 +200,7 @@ export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true
         const toastKey = `${request.method} ${request.url}: ${message}`;
         if (lastFailureToastKey.current === toastKey) return;
         lastFailureToastKey.current = toastKey;
-        toastManager.add({
-          type: "error",
-          description: message
-        });
+        toast.error(message)
       });
 
     return () => controller.abort();

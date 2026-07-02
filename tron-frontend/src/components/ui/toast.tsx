@@ -158,7 +158,7 @@ function Toasts({
                       data-slot="toast-title"
                     />
                     <Toast.Description
-                      className="text-muted-foreground"
+                      className="text-muted-foreground break-all"
                       data-slot="toast-description"
                     />
                   </div>

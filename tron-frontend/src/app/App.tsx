@@ -31,7 +31,6 @@ import {
 import {
   SettingsShell,
   ThemeProvider,
-  ToastProvider,
   type ConsoleShellConfig,
   ConsoleShellConfigContext,
   TronShell,
@@ -459,9 +458,7 @@ export function App() {
   return (
     <BrowserRouter>
       <ThemeProvider>
-        <ToastProvider>
-          <RoutedApp />
-        </ToastProvider>
+        <RoutedApp />
       </ThemeProvider>
     </BrowserRouter>
   );
