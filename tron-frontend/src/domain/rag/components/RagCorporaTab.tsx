@@ -5,8 +5,7 @@ import {
 import { createPortal } from "react-dom";
 import {
   MoreHorizontal,
-  Search,
-  Sparkles,
+  Sparkles
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
@@ -20,8 +19,8 @@ import {
   useDismissibleLayer,
   useTablePagination,
 } from "@/shared";
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 import type { CorpusRecord } from "@/domain/rag/model/RagModel";
 import {
@@ -126,17 +125,14 @@ export function RagCorporaTab({
   return (
     <>
       <SurfaceCard className="p-0">
-        <div className="border-b border-[var(--color-outline-variant)] px-5 py-4">
+        <div className="border-b border-[var(--color-outline-variant)] p-4 flex items-center justify-between">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-base font-semibold">{pageT("table.title", "Corpus")}</h2>
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(260px,1fr)_180px_auto] md:items-center">
+          <div className="grid gap-3 md:grid-cols-[minmax(260px,1fr)_180px_auto] md:items-center">
             <div className="relative min-w-0">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
               <TextInput
-                className="w-full pl-9"
                 placeholder={pageT("searchPlaceholder", "Search corpora, codes, or descriptions...")}
-                type="search"
                 value={query}
                 onChange={(event) => onQueryChange(event.target.value)}
               />
@@ -152,8 +148,7 @@ export function RagCorporaTab({
                 </SelectItem>
               ))}
             </SelectInput>
-            <Button className="justify-self-start md:justify-self-end" onClick={onCreateCorpus}>
-              <Sparkles size={17} aria-hidden="true" />
+            <Button size={'lg'} onClick={onCreateCorpus}>
               {pageT("actions.newCorpus", "New corpus")}
             </Button>
           </div>
@@ -205,7 +200,7 @@ export function RagCorporaTab({
             {
               id: "status",
               header: pageT("table.columns.status", "Status"),
-              render: (corpus) => <Badge tone={statusTone(corpus.status)}>{formatRagStatusLabel(corpus.status, t)}</Badge>,
+              render: (corpus) => <Badge variant={statusTone(corpus.status)}>{formatRagStatusLabel(corpus.status, t)}</Badge>,
             },
             {
               align: "right",

@@ -5,8 +5,7 @@ import {
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import {
-  MoreHorizontal,
-  Search,
+  MoreHorizontal
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -18,8 +17,8 @@ import {
   useDismissibleLayer,
   useTablePagination,
 } from "@/shared";
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 import type {
   ProfileRecord,
@@ -161,25 +160,20 @@ export function RagProfilesTab({
   return (
     <>
       <SurfaceCard className="p-0">
-        <div className="border-b border-[var(--color-outline-variant)] px-5 py-4">
+        <div className="border-b border-[var(--color-outline-variant)] p-4 flex items-center justify-between">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <SectionTitle
-              icon={<Search size={17} aria-hidden="true" />}
-              title={pageT("title", "Retrieval profiles")}
-            />
+            <h2 className="text-base font-semibold">{pageT("title", "Retrieval profiles")}</h2>
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-[minmax(260px,1fr)_auto] md:items-center">
             <div className="relative min-w-0">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
               <TextInput
-                className="w-full pl-9"
                 placeholder={pageT("searchPlaceholder", "Search retrieval profiles, corpora, routes, or strategies...")}
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
-            <Button className="justify-self-start md:justify-self-end" onClick={openAddProfile}>
+            <Button size={'lg'} onClick={openAddProfile}>
               {pageT("actions.newRetrieval", "New retrieval profile")}
             </Button>
           </div>
@@ -241,7 +235,7 @@ export function RagProfilesTab({
             {
               id: "status",
               header: pageT("table.columns.status", "Status"),
-              render: (profile) => <Badge tone={statusTone(profile.status)}>{formatRagStatusLabel(profile.status, t)}</Badge>,
+              render: (profile) => <Badge variant={statusTone(profile.status)}>{formatRagStatusLabel(profile.status, t)}</Badge>,
               width: "120px",
             },
             {

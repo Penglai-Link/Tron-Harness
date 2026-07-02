@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
+import { type BadgeProps } from "@/components/ui/badge"
 
 import {
   type BadgeTone,
@@ -11,7 +12,7 @@ import {
   type WarningRecord,
 } from "@/domain/rag/model/RagModel";
 
-export function statusTone(status: CorpusRecord["status"] | ProfileRecord["status"] | SourceRecord["status"] | TextUnitRecord["embeddingStatus"] | WarningRecord["severity"]): BadgeTone {
+export function statusTone(status: CorpusRecord["status"] | ProfileRecord["status"] | SourceRecord["status"] | TextUnitRecord["embeddingStatus"] | WarningRecord["severity"]): BadgeProps['variant'] {
   switch (status) {
     case "Active":
     case "Ready":
@@ -20,7 +21,7 @@ export function statusTone(status: CorpusRecord["status"] | ProfileRecord["statu
       return "success";
     case "Indexing":
     case "Pending":
-      return "accent";
+      return "outline";
     case "Warning":
     case "Needs Review":
     case "Medium":
@@ -29,7 +30,7 @@ export function statusTone(status: CorpusRecord["status"] | ProfileRecord["statu
     case "High":
       return "error";
     default:
-      return "neutral";
+      return "secondary";
   }
 }
 
