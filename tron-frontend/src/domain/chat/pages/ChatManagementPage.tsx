@@ -355,11 +355,14 @@ function sessionGroupKey(group: ChatSessionGroup) {
 }
 
 function sessionGroupKeyForSession(session: ChatSession) {
+  // 提取不含查询参数的 sessionCode
+  const cleanSessionCode = session.sessionCode.split("?")[0];
   return [
     session.sourceType ?? "Manual",
     session.sourceCode ?? "",
     session.taskCode ?? "",
     session.taskCode ? session.taskCode : "Chat",
+    cleanSessionCode,
   ].join(":");
 }
 
@@ -3598,7 +3601,7 @@ export function ChatManagementPage() {
   const rightPanel = useMemo(() => {
     if (!hasActiveSession) return undefined;
     return (
-      <Tabs defaultValue="1" className="w-full h-full">
+      <Tabs key={activeSession?.sessionCode} defaultValue="1" className="w-full h-full">
         <TabsList className="mx-4 my-2">
           <TabsTrigger value="1">Run Context</TabsTrigger>
           <TabsTrigger value="2">页面</TabsTrigger>

@@ -226,6 +226,7 @@ function AppRoutePage() {
       const currentPath = `${pathname}${search}`;
       const navItem = resolveActiveItem(pathname);
       const tabTitle = navItem ? t(navItem.translationKey) : resolved.route.activeNav;
+      const activeNav = resolved.route.activeNav;
       const existingTab = useTabStore.getState().getTabByPath(currentPath);
 
       if (existingTab && existingTab.title !== tabTitle) {
@@ -237,6 +238,7 @@ function AppRoutePage() {
           title: tabTitle,
           path: currentPath,
           closable: true,
+          activeNav,
         });
       }
     }

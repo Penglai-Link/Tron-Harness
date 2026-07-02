@@ -5,6 +5,7 @@ export interface TabItem {
   title: string;
   path: string;
   closable: boolean;
+  activeNav?: string;
 }
 
 interface TabState {
@@ -16,6 +17,7 @@ interface TabState {
   updateTab: (tabId: string, updates: Partial<Omit<TabItem, "id">>) => void;
   clearAllTabs: () => void;
   getTabByPath: (path: string) => TabItem | undefined;
+  getTabByActiveNav: (activeNav: string) => TabItem | undefined;
 }
 
 function generateTabId(): string {
@@ -27,6 +29,24 @@ export const useTabStore = create<TabState>()((set, get) => ({
   activeTabId: null,
 
   addTab: (tab) => {
+    // 如果有 activeNav，优先根据 activeNav 查找已存在的 tab
+    if (tab.activeNav) {
+      const existingTabByNav = get().tabs.find(t => t.activeNav === tab.activeNav);
+      if (existingTabByNav) {
+        // 更新现有 tab 的 path 和 title
+        set((state) => ({
+          tabs: state.tabs.map(t =>
+            t.id === existingTabByNav.id
+              ? { ...t, path: tab.path, title: tab.title }
+              : t
+          ),
+          activeTabId: existingTabByNav.id,
+        }));
+        return existingTabByNav.id;
+      }
+    }
+
+    // 否则按原逻辑根据 path 查找
     const existingTab = get().tabs.find(t => t.path === tab.path);
 
     if (existingTab) {
@@ -90,5 +110,9 @@ export const useTabStore = create<TabState>()((set, get) => ({
 
   getTabByPath: (path) => {
     return get().tabs.find(t => t.path === path);
+  },
+
+  getTabByActiveNav: (activeNav) => {
+    return get().tabs.find(t => t.activeNav === activeNav);
   },
 }));
