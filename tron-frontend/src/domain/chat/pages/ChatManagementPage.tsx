@@ -110,6 +110,7 @@ import { useInspection } from "../hooks/useInspection";
 import DraggleLine from "@/shared/ui/DraggleLine";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { throttle } from "lodash-es";
 
 function formatTime(value: string) {
   const date = new Date(value);
@@ -3094,6 +3095,7 @@ export function ChatManagementPage() {
     requestedSourceTab ?? defaultChatSessionSourceTab
   ));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
   const [composer, setComposer] = useState("");
   const [optimisticActiveSession, setOptimisticActiveSession] = useState<ChatSession | null>(null);
   const requestedSession = requestedSessionCode ? findSession(sessionGroups, requestedSessionCode) : undefined;
@@ -4331,8 +4333,36 @@ export function ChatManagementPage() {
     }
   }
 
+  // Monitor main width and auto-collapse sidebar when width < 500
+  useEffect(() => {
+    const mainElement = mainRef.current;
+    if (!mainElement) return;
+    const resizeObserver = new ResizeObserver(
+      throttle((entries) => {
+        for (const entry of entries) {
+          if (entry.contentBoxSize) {
+            const width = entry.contentBoxSize[0].inlineSize;
+            setSidebarCollapsed((current) => {
+              const shouldCollapse = width < 600;
+              if (current !== shouldCollapse) {
+                return shouldCollapse;
+              }
+              return current;
+            });
+          }
+        }
+      }, 10)
+    );
+
+    resizeObserver.observe(mainElement);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
   return (
-    <div className="relative z-0 flex h-full min-h-0 min-w-0 overflow-hidden overscroll-none bg-white">
+    <div className="relative z-0 flex h-full min-h-0 min-w-0 overflow-hidden overscroll-none bg-white" ref={mainRef}>
       <SessionSidebar
         activeSessionCode={activeSession?.sessionCode ?? activeSessionCode}
         activeSourceTab={activeSourceTab}
