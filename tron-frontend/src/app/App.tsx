@@ -49,6 +49,7 @@ import { LinkButton } from "@/shared/ui/Button";
 import { appRoutes } from "@/router/routes";
 import { routePages } from "@/router/pageRegistry";
 import { settingsNavigation } from "@/domain/settings/constants/settingsNavigation";
+import { useTabStore } from "@/store/tabStore";
 
 const DesignStandardPage = lazy(() => import("@/domain/design-standard/pages/DesignStandardPage").then((module) => ({ default: module.DesignStandardPage })));
 const SharedShellPreviewPage = lazy(() => import("@/domain/shared-shell/pages/SharedShellPreviewPage").then((module) => ({ default: module.SharedShellPreviewPage })));
@@ -77,7 +78,7 @@ const appRoutePaths = Array.from(
 );
 
 function resolveActiveItem(pathname: string) {
-  return tronNavigation.flatMap((section) => section.items).find((item) => item.href === pathname)?.label ?? "Dashboard";
+  return tronNavigation.flatMap((section) => section.items).find((item) => item.href === pathname);
 }
 
 function isAdministrationRoute(pathname: string) {
@@ -191,6 +192,8 @@ function AppRoutePage() {
   const { pathname, search } = useLocation();
   const { session } = useAuthSession();
   const toast = useToast();
+  const { t } = useTranslation();
+  const addTab = useTabStore((state) => state.addTab);
   const resolved = resolveAppRoute(pathname, search);
   const routeRenderKey = routeRenderKeyForLocation(pathname, search, resolved?.route.pageId);
   const isAdmin = session?.user.roleCodes.includes("ADMIN") ?? false;
@@ -217,6 +220,27 @@ function AppRoutePage() {
       setPageShellConfig((current) => (isConsoleShellConfigEqual(current, config) ? current : config));
     },
   }), []);
+
+  useEffect(() => {
+    if (resolved && resolved.route.layout !== "settings") {
+      const currentPath = `${pathname}${search}`;
+      const navItem = resolveActiveItem(pathname);
+      const tabTitle = navItem ? t(navItem.translationKey) : resolved.route.activeNav;
+      const existingTab = useTabStore.getState().getTabByPath(currentPath);
+
+      if (existingTab && existingTab.title !== tabTitle) {
+        useTabStore.getState().updateTab(existingTab.id, {
+          title: tabTitle,
+        });
+      } else {
+        addTab({
+          title: tabTitle,
+          path: currentPath,
+          closable: true,
+        });
+      }
+    }
+  }, [pathname, search, resolved, addTab, t]);
 
   useEffect(() => {
     setPageShellConfig((current) => (isConsoleShellConfigEmpty(current) ? current : {}));
@@ -278,7 +302,7 @@ function AppRoutePage() {
   }
 
   return (
-    <TronShell activeItem={resolveActiveItem(pathname)}>
+    <TronShell activeItem={resolveActiveItem(pathname)?.label ?? "Dashboard"}>
       <ConsoleFallbackPage />
     </TronShell>
   );
@@ -289,7 +313,7 @@ function ConsoleFallbackRoutePage() {
   const { session } = useAuthSession();
 
   return (
-    <TronShell activeItem={resolveActiveItem(pathname)} roleCodes={session?.user.roleCodes} userMenuContent={<AuthUserMenuPanel />}>
+    <TronShell activeItem={resolveActiveItem(pathname)?.label ?? "Dashboard"} roleCodes={session?.user.roleCodes} userMenuContent={<AuthUserMenuPanel />}>
       <ConsoleFallbackPage />
     </TronShell>
   );

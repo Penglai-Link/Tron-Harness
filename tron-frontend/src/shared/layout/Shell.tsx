@@ -69,6 +69,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { usePanel } from "../hooks/usePanel";
 import DraggleLine from "../ui/DraggleLine";
 import { SelectItem } from "@/components/ui/select";
+import { TabBar } from "@/shared/ui/TabBar";
 
 
 interface TronShellProps {
@@ -959,8 +960,9 @@ export function TronShell({
             </div>
           ) : null}
 
-          <section className={cn("relative z-0 min-w-0 pt-14 transition-[padding-left] duration-200", sidebarCollapsed ? "lg:pl-[76px]" : TRON_DESKTOP_SIDEBAR_EXPANDED_PADDING_CLASS)}>
-            <div className={cn("relative z-0 grid min-h-[calc(100vh-3.5rem)] grid-cols-1")}>
+          <section className={cn("relative z-0 min-w-0 pt-14 transition-[padding-left] duration-200 h-screen flex flex-col", sidebarCollapsed ? "lg:pl-[76px]" : TRON_DESKTOP_SIDEBAR_EXPANDED_PADDING_CLASS)}>
+            <TabBar className="h-10 flex-initial" />
+            <div className={cn("relative z-0 grid grid-cols-1 h-1/2 flex-1")}>
               <style>{`
               #resize-panel {
                 display: none !important;
@@ -977,7 +979,7 @@ export function TronShell({
                 className="w-full"
               >
                 <ResizablePanel defaultSize="100%">
-                  <main className={cn("relative z-0 min-w-0 overflow-x-hidden px-6 py-6 h-[calc(100vh-3.5rem)] overflow-y-auto", contentClassName)}>{children}</main>
+                  <main className={cn("relative z-0 min-w-0 overflow-x-hidden px-6 py-6 overflow-y-auto", "h-[calc(100vh-3.5rem-2.5rem)]", contentClassName)}>{children}</main>
                 </ResizablePanel>
                 {hasRightPanel ? (
                   <>
@@ -993,7 +995,8 @@ export function TronShell({
                     />
                     <ResizablePanel panelRef={panelRef} id="resize-panel" collapsible={true} collapsedSize={0} defaultSize="0%" minSize={400} maxSize="80%" onResize={panelResize}>
                       <aside
-                        className="relative z-10 hidden h-[calc(100vh-3.5rem)] overflow-y-auto bg-[var(--color-elevated-surface)] lg:block"
+                        className="relative z-10 hidden overflow-y-auto bg-[var(--color-elevated-surface)] lg:block"
+                        style={{ height: "calc(100vh - 3.5rem - 2.5rem)" }}
                         data-testid="tron-right-sidebar"
                       >
                         {rightPanel}
